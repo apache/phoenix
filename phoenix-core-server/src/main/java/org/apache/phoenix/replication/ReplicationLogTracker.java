@@ -18,7 +18,6 @@
 package org.apache.phoenix.replication;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -64,36 +63,33 @@ public class ReplicationLogTracker {
      */
     private static final long DEFAULT_FILE_DELETE_RETRY_DELAY_MS = 1000L;
 
-    private final URI rootURI;
-    private final DirectoryType directoryType;
     private final FileSystem fileSystem;
     private Path inProgressDirPath;
-    private ReplicationShardDirectoryManager replicationShardDirectoryManager;
+    private final ReplicationShardDirectoryManager replicationShardDirectoryManager;
     protected final Configuration conf;
     protected final String haGroupName;
     protected MetricsReplicationLogTracker metrics;
 
-    public ReplicationLogTracker(final Configuration conf, final String haGroupName,
-        final FileSystem fileSystem, final URI rootURI, final DirectoryType directoryType,
+    public ReplicationLogTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem,
+        final ReplicationShardDirectoryManager replicationShardDirectoryManager,
         final MetricsReplicationLogTracker metrics) {
         this.conf = conf;
-        this.fileSystem = fileSystem;
         this.haGroupName = haGroupName;
-        this.rootURI = rootURI;
-        this.directoryType = directoryType;
+        this.fileSystem = fileSystem;
+        this.replicationShardDirectoryManager = replicationShardDirectoryManager;
         this.metrics = metrics;
-    }
-
-    protected String getNewLogSubDirectoryName() {
-        return this.directoryType.getName();
     }
 
     protected MetricsReplicationLogTracker getMetricsSource() {
         return this.metrics;
     }
 
+    protected String getInSubDirectoryName() {
+        return getReplicationShardDirectoryManager().getRootDirectoryPath().getName();
+    }
+
     protected String getInProgressLogSubDirectoryName() {
-        return getNewLogSubDirectoryName() + "_progress";
+        return getInSubDirectoryName() + "_progress";
     }
 
     /**
@@ -102,11 +98,11 @@ public class ReplicationLogTracker {
      * exist.
      */
     public void init() throws IOException {
-        Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName),
-            getNewLogSubDirectoryName());
-        this.replicationShardDirectoryManager = new ReplicationShardDirectoryManager(conf,
-            newFilesDirectory);
-        this.inProgressDirPath = new Path(new Path(rootURI.getPath(), haGroupName),
+//        Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName),
+//            getNewLogSubDirectoryName());
+//        this.replicationShardDirectoryManager = new ReplicationShardDirectoryManager(conf,
+//            newFilesDirectory);
+        this.inProgressDirPath = new Path(getReplicationShardDirectoryManager().getRootDirectoryPath().getParent(),
             getInProgressLogSubDirectoryName());
         createDirectoryIfNotExists(inProgressDirPath);
     }
@@ -358,14 +354,14 @@ public class ReplicationLogTracker {
                     newNameBuilder.append(parts[i]);
                 }
                 String extension = fileName.substring(fileName.lastIndexOf("."));
-                newNameBuilder.append("_").append(UUID.randomUUID().toString()).append(extension);
+                newNameBuilder.append("_").append(UUID.randomUUID()).append(extension);
                 newFileName = newNameBuilder.toString();
                 targetDirectory = file.getParent();
             } else {
                 // File is not in in-progress directory, add UUID and move to IN_PROGRESS directory
                 String baseName = fileName.substring(0, fileName.lastIndexOf("."));
                 String extension = fileName.substring(fileName.lastIndexOf("."));
-                newFileName = baseName + "_" + UUID.randomUUID().toString() + extension;
+                newFileName = baseName + "_" + UUID.randomUUID() + extension;
                 targetDirectory = getInProgressDirPath();
             }
 
@@ -493,26 +489,6 @@ public class ReplicationLogTracker {
             if (!fileSystem.mkdirs(directoryPath)) {
                 throw new IOException("Failed to create directory: " + directoryPath);
             }
-        }
-    }
-
-    /**
-     * Enum representing the type of replication log directory.
-     * IN: Directory created on standby cluster for Incoming replication log files
-     * OUT: Directory created on primary cluster for Outgoing replication log files
-     */
-    public enum DirectoryType {
-        IN("in"),
-        OUT("out");
-
-        private final String name;
-
-        DirectoryType(final String name) {
-            this.name = name;
-        }
-
-        public String getName() {
-            return this.name;
         }
     }
 }

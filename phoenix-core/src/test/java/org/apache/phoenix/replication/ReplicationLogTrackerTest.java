@@ -41,6 +41,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTracker;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTrackerReplayImpl;
+import org.apache.phoenix.replication.reader.ReplicationLogReplay;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -1303,7 +1304,10 @@ public class ReplicationLogTrackerTest {
     }
 
     private ReplicationLogTracker createReplicationLogFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
-        return new ReplicationLogTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogTracker.DirectoryType.IN, metrics);
+        Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName), ReplicationLogReplay.IN_DIRECTORY_NAME);
+        ReplicationShardDirectoryManager replicationShardDirectoryManager =
+                new ReplicationShardDirectoryManager(conf, newFilesDirectory);
+        return new ReplicationLogTracker(conf, haGroupName, fileSystem, replicationShardDirectoryManager, metrics);
     }
 
 

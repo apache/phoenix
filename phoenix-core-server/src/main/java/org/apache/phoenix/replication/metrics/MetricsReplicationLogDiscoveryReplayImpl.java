@@ -32,8 +32,5 @@ public class MetricsReplicationLogDiscoveryReplayImpl
             MetricsReplicationLogDiscoveryImpl.METRICS_CONTEXT,
             MetricsReplicationLogDiscoveryReplayImpl.METRICS_JMX_CONTEXT
                     + ",haGroup=" + haGroupName);
-        super.groupMetricsContext =
-            MetricsReplicationLogDiscoveryReplayImpl.METRICS_JMX_CONTEXT
-                    + ",haGroup=" + haGroupName;
     }
 }

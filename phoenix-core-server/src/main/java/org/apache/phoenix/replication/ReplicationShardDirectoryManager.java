@@ -82,7 +82,10 @@ public class ReplicationShardDirectoryManager {
 
     private final Path shardDirectoryPath;
 
+    private final Path rootDirectoryPath;
+
     public ReplicationShardDirectoryManager(final Configuration conf, final Path rootPath) {
+        this.rootDirectoryPath = rootPath;
         this.shardDirectoryPath = new Path(rootPath.toUri().getPath(),
             REPLICATION_SHARD_SUB_DIRECTORY_NAME);
         this.numShards = conf.getInt(REPLICATION_NUM_SHARDS_KEY, DEFAULT_REPLICATION_NUM_SHARDS);
@@ -187,6 +190,10 @@ public class ReplicationShardDirectoryManager {
 
     public Path getShardDirectoryPath() {
         return this.shardDirectoryPath;
+    }
+
+    public Path getRootDirectoryPath() {
+        return this.rootDirectoryPath;
     }
 
     public int getNumShards() {

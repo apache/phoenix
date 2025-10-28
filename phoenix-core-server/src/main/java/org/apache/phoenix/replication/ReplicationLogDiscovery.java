@@ -296,14 +296,15 @@ public abstract class ReplicationLogDiscovery {
     protected void processInProgressDirectory() throws IOException {
         // Increase the count for number of times in progress directory is processed
         getMetrics().incrementNumInProgressDirectoryProcessed();
-        LOG.info("Starting in progress directory processing");
+        LOG.info("Starting {} directory processing", replicationLogTracker.getInProgressLogSubDirectoryName());
         long startTime = EnvironmentEdgeManager.currentTime();
         long oldestTimestampToProcess = replicationLogTracker.getReplicationShardDirectoryManager()
                 .getNearestRoundStartTimestamp(EnvironmentEdgeManager.currentTime())
                 - getReplayIntervalSeconds() * 1000L;
         List<Path> files = replicationLogTracker.getOlderInProgressFiles(oldestTimestampToProcess);
-        LOG.info("Number of In Progress files with oldestTimestampToProcess {} is {}",
-                oldestTimestampToProcess, files.size());
+        LOG.info("Number of {} files with oldestTimestampToProcess {} is {}",
+                replicationLogTracker.getInProgressLogSubDirectoryName(), oldestTimestampToProcess,
+                files.size());
         while (!files.isEmpty()) {
             processOneRandomFile(files);
             files = replicationLogTracker.getOlderInProgressFiles(oldestTimestampToProcess);
@@ -325,7 +326,7 @@ public abstract class ReplicationLogDiscovery {
         try {
             optionalInProgressFilePath = replicationLogTracker.markInProgress(file);
             if (optionalInProgressFilePath.isPresent()) {
-                processFile(file);
+                processFile(optionalInProgressFilePath.get());
                 replicationLogTracker.markCompleted(optionalInProgressFilePath.get());
             }
         } catch (IOException exception) {
@@ -363,15 +364,15 @@ public abstract class ReplicationLogDiscovery {
         Optional<Long> minTimestampFromInProgressFiles =
                 getMinTimestampFromInProgressFiles();
         if (minTimestampFromInProgressFiles.isPresent()) {
-            LOG.info("Initializing lastRoundProcessed from IN PROGRESS files with minimum "
-                    + "timestamp as {}", minTimestampFromInProgressFiles.get());
+            LOG.info("Initializing lastRoundProcessed from {} files with minimum "
+                    + "timestamp as {}", replicationLogTracker.getInProgressLogSubDirectoryName(), minTimestampFromInProgressFiles.get());
             this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
                     .getReplicationRoundFromEndTime(minTimestampFromInProgressFiles.get());
         } else {
             Optional<Long> minTimestampFromNewFiles = getMinTimestampFromNewFiles();
             if (minTimestampFromNewFiles.isPresent()) {
-                LOG.info("Initializing lastRoundProcessed from IN files with minimum timestamp "
-                        + "as {}", minTimestampFromNewFiles.get());
+                LOG.info("Initializing lastRoundProcessed from {} files with minimum timestamp "
+                        + "as {}", replicationLogTracker.getInSubDirectoryName(), minTimestampFromNewFiles.get());
                 this.lastRoundProcessed = replicationLogTracker
                         .getReplicationShardDirectoryManager()
                         .getReplicationRoundFromEndTime(minTimestampFromNewFiles.get());

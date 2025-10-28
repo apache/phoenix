@@ -47,6 +47,7 @@ import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTracker;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTrackerReplayImpl;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscoveryReplayImpl;
+import org.apache.phoenix.replication.reader.ReplicationLogReplay;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.junit.After;
 import org.junit.Before;
@@ -80,7 +81,10 @@ public class ReplicationLogDiscoveryTest {
         localFs = FileSystem.getLocal(conf);
         rootURI = new Path(testFolder.getRoot().toString()).toUri();
         testFolderPath = new Path(testFolder.getRoot().getAbsolutePath());
-        fileTracker = Mockito.spy(new TestableReplicationLogTracker(conf, haGroupName, localFs, rootURI));
+        Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName), ReplicationLogReplay.IN_DIRECTORY_NAME);
+        ReplicationShardDirectoryManager replicationShardDirectoryManager =
+                new ReplicationShardDirectoryManager(conf, newFilesDirectory);
+        fileTracker = Mockito.spy(new TestableReplicationLogTracker(conf, haGroupName, localFs, replicationShardDirectoryManager));
         fileTracker.init();
 
         discovery = Mockito.spy(new TestableReplicationLogDiscovery(fileTracker));
@@ -185,44 +189,125 @@ public class ReplicationLogDiscoveryTest {
         List<Path> processedFiles = discovery.getProcessedFiles();
         assertEquals("Invalid number of files processed", 7, processedFiles.size());
 
-        // Create set of expected files that should be processed
-        Set<String> expectedProcessedPaths = new HashSet<>();
+        // Create set of expected files that should be processed (by prefix, since UUIDs are added during markInProgress)
+        Set<String> expectedProcessedFilePrefixes = new HashSet<>();
         for (Path file : newFilesForRound) {
-            expectedProcessedPaths.add(file.toUri().getPath());
+            // Extract prefix before the file extension (for new files before markInProgress)
+            // After markInProgress, files will have format: {timestamp}_{rs-n}_{UUID}.plog
+            String fileName = file.getName();
+            String prefix = fileName.substring(0, fileName.lastIndexOf("."));
+            expectedProcessedFilePrefixes.add(prefix);
         }
         for (Path file : inProgressFiles0004) {
-            expectedProcessedPaths.add(file.toUri().getPath());
+            // For in-progress files, they already have format: {timestamp}_{rs-n}_{UUID}.plog
+            // Extract prefix before the UUID (everything before the last underscore)
+            String fileName = file.getName();
+            String prefix = fileName.substring(0, fileName.lastIndexOf("_"));
+            expectedProcessedFilePrefixes.add(prefix);
         }
         for (Path file : inProgressFiles0102) {
-            expectedProcessedPaths.add(file.toUri().getPath());
+            // For in-progress files, they already have format: {timestamp}_{rs-n}_{UUID}.plog
+            // Extract prefix before the UUID (everything before the last underscore)
+            String fileName = file.getName();
+            String prefix = fileName.substring(0, fileName.lastIndexOf("_"));
+            expectedProcessedFilePrefixes.add(prefix);
         }
 
-        // Create set of actually processed file paths
-        Set<String> actualProcessedPaths = new HashSet<>();
+        // Create set of actually processed file paths (extract prefixes)
+        // Files after markInProgress will have format: {timestamp}_{rs-n}_{UUID}.plog
+        Set<String> actualProcessedFilePrefixes = new HashSet<>();
         for (Path file : processedFiles) {
-            actualProcessedPaths.add(file.toUri().getPath());
+            String fileName = file.getName();
+            // Extract prefix before UUID and extension (everything before the last underscore before .plog)
+            // Remove the extension first
+            String withoutExtension = fileName.substring(0, fileName.lastIndexOf("."));
+            // Then get everything before the last underscore (which is the UUID)
+            String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+            actualProcessedFilePrefixes.add(prefix);
         }
 
         // Validate that sets are equal
-        assertEquals("Expected and actual processed files should match", expectedProcessedPaths, actualProcessedPaths);
+        assertEquals("Expected and actual processed files should match", expectedProcessedFilePrefixes, actualProcessedFilePrefixes);
+        
+        // Verify that markInProgress was called 7 times (3 new files + 4 in-progress files)
+        // markInProgress is called before each file is processed
+        Mockito.verify(fileTracker, Mockito.times(7)).markInProgress(Mockito.any(Path.class));
+        
+        // Verify that markInProgress was called for each expected file
+        // For new files
+        for (Path expectedFile : newFilesForRound) {
+            Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                    Mockito.argThat(path -> path.getName().startsWith(expectedFile.getName().split("\\.")[0])));
+        }
+        // For in-progress files
+        for (Path expectedFile : inProgressFiles0004) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
+            Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                    Mockito.argThat(path -> path.getName().substring(0, path.getName().lastIndexOf("_")).equals(expectedPrefix)));
+        }
+        for (Path expectedFile : inProgressFiles0102) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
+            Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                    Mockito.argThat(path -> path.getName().substring(0, path.getName().lastIndexOf("_")).equals(expectedPrefix)));
+        }
+        
+        // Verify that markCompleted was called 7 times (once for each successfully processed file)
+        Mockito.verify(fileTracker, Mockito.times(7)).markCompleted(Mockito.any(Path.class));
+        
+        // Verify that markCompleted was called for each expected file with correct paths
+        // For new files (they will have format: {timestamp}_{rs-n}_{UUID}.plog in in-progress dir)
+        for (Path expectedFile : newFilesForRound) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("."));
+            Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                        String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
+        }
+        // For in-progress files (they will have updated UUIDs, but same prefix)
+        for (Path expectedFile : inProgressFiles0004) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
+            Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                        String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
+        }
+        for (Path expectedFile : inProgressFiles0102) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
+            Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                        String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
+        }
 
         // Verify that shouldProcessInProgressDirectory was called once
         Mockito.verify(discovery, Mockito.times(1)).shouldProcessInProgressDirectory();
 
-        // Validate that files from other rounds were NOT processed
+        // Validate that files from other rounds were NOT processed (using prefix comparison)
         for (Path unexpectedFile : differentRoundSameShardFiles) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("."));
             assertFalse("Should NOT have processed shard count round file: " + unexpectedFile.getName(),
-                processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
 
         for (Path unexpectedFile : round0100NewFiles) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("."));
             assertFalse("Should NOT have processed round 00:01:00 file: " + unexpectedFile.getName(),
-                processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
 
         for (Path unexpectedFile : round0200NewFiles) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("."));
             assertFalse("Should NOT have processed round 00:02:00 file: " + unexpectedFile.getName(),
-                processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
     }
 
@@ -265,49 +350,83 @@ public class ReplicationLogDiscoveryTest {
         List<Path> processedFiles = discovery.getProcessedFiles();
         assertEquals("Invalid number of files processed", 3, processedFiles.size());
 
-        // Create set of expected files that should be processed (only new files)
-        Set<String> expectedProcessedPaths = new HashSet<>();
+        // Create set of expected files that should be processed (by prefix, since UUIDs are added during markInProgress)
+        Set<String> expectedProcessedFilePrefixes = new HashSet<>();
         for (Path file : newFilesForRound) {
-            expectedProcessedPaths.add(file.toUri().getPath());
+            String fileName = file.getName();
+            String prefix = fileName.substring(0, fileName.lastIndexOf("."));
+            expectedProcessedFilePrefixes.add(prefix);
         }
 
-        // Create set of actually processed file paths
-        Set<String> actualProcessedPaths = new HashSet<>();
+        // Create set of actually processed file paths (extract prefixes)
+        Set<String> actualProcessedFilePrefixes = new HashSet<>();
         for (Path file : processedFiles) {
-            actualProcessedPaths.add(file.toUri().getPath());
+            String fileName = file.getName();
+            String withoutExtension = fileName.substring(0, fileName.lastIndexOf("."));
+            String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+            actualProcessedFilePrefixes.add(prefix);
         }
 
         // Validate that sets are equal
-        assertEquals("Expected and actual processed files should match", expectedProcessedPaths, actualProcessedPaths);
+        assertEquals("Expected and actual processed files should match", expectedProcessedFilePrefixes, actualProcessedFilePrefixes);
+
+        // Verify that markInProgress was called 3 times (only new files, no in-progress files)
+        Mockito.verify(fileTracker, Mockito.times(3)).markInProgress(Mockito.any(Path.class));
+        
+        // Verify that markInProgress was called for each expected file
+        for (Path expectedFile : newFilesForRound) {
+            Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                    Mockito.argThat(path -> path.getName().startsWith(expectedFile.getName().split("\\.")[0])));
+        }
+        
+        // Verify that markCompleted was called 3 times
+        Mockito.verify(fileTracker, Mockito.times(3)).markCompleted(Mockito.any(Path.class));
+        
+        // Verify that markCompleted was called for each expected file with correct paths
+        for (Path expectedFile : newFilesForRound) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("."));
+            Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                        String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
+        }
 
         // Verify that shouldProcessInProgressDirectory was called once
         Mockito.verify(discovery, Mockito.times(1)).shouldProcessInProgressDirectory();
 
-        // Validate that files from other rounds were NOT processed
+        // Validate that files from other rounds were NOT processed (using prefix comparison)
         for (Path unexpectedFile : differentRoundSameShardFiles) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("."));
             assertFalse("Should NOT have processed shard count round file: " + unexpectedFile.getName(),
-                    processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                    actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
 
         for (Path unexpectedFile : round0100NewFiles) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("."));
             assertFalse("Should NOT have processed round 00:01:00 file: " + unexpectedFile.getName(),
-                    processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                    actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
 
         for (Path unexpectedFile : round0200NewFiles) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("."));
             assertFalse("Should NOT have processed round 00:02:00 file: " + unexpectedFile.getName(),
-                    processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                    actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
 
         // Validate that in-progress files were NOT processed
         for (Path unexpectedFile : inProgressFiles0004) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("_"));
             assertFalse("Should NOT have processed in-progress file from 00:00:04: " + unexpectedFile.getName(),
-                    processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                    actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
 
         for (Path unexpectedFile : inProgressFiles0102) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("_"));
             assertFalse("Should NOT have processed in-progress file from 00:01:02: " + unexpectedFile.getName(),
-                    processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                    actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
     }
 
@@ -387,54 +506,80 @@ public class ReplicationLogDiscoveryTest {
         List<Path> processedFiles = discovery.getProcessedFiles();
         assertEquals("Invalid number of files processed", 3, processedFiles.size());
 
-        // Create set of expected files that should be processed (only new files)
-        Set<String> expectedProcessedPaths = new HashSet<>();
+        // Create set of expected files that should be processed (by prefix, since UUIDs are added during markInProgress)
+        Set<String> expectedProcessedFilePrefixes = new HashSet<>();
         for (Path file : newFilesForRound) {
-            expectedProcessedPaths.add(file.toUri().getPath());
+            String fileName = file.getName();
+            String prefix = fileName.substring(0, fileName.lastIndexOf("."));
+            expectedProcessedFilePrefixes.add(prefix);
         }
 
-        // Create set of actually processed file paths
-        Set<String> actualProcessedPaths = new HashSet<>();
+        // Create set of actually processed file paths (extract prefixes)
+        Set<String> actualProcessedFilePrefixes = new HashSet<>();
         for (Path file : processedFiles) {
-            actualProcessedPaths.add(file.toUri().getPath());
+            String fileName = file.getName();
+            String withoutExtension = fileName.substring(0, fileName.lastIndexOf("."));
+            String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+            actualProcessedFilePrefixes.add(prefix);
         }
 
         // Validate that sets are equal
-        assertEquals("Expected and actual processed files should match", expectedProcessedPaths, actualProcessedPaths);
+        assertEquals("Expected and actual processed files should match", expectedProcessedFilePrefixes, actualProcessedFilePrefixes);
 
+        // Verify that markInProgress was called 3 times
+        Mockito.verify(fileTracker, Mockito.times(3)).markInProgress(Mockito.any(Path.class));
+        
+        // Verify that markInProgress was called for each expected file
+        for (Path expectedFile : newFilesForRound) {
+            Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                    Mockito.argThat(path -> path.getName().startsWith(expectedFile.getName().split("\\.")[0])));
+        }
+
+        // Verify that markCompleted was called 3 times
         Mockito.verify(fileTracker, Mockito.times(3)).markCompleted(Mockito.any(Path.class));
 
         // Verify that markCompleted was called for each processed file with correct paths
         for (Path expectedFile : newFilesForRound) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("."));
             Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-                    Mockito.argThat(path -> path.getName().startsWith(expectedFile.getName().split("\\.")[0])));
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                        String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
         }
 
-        // Validate that files from other rounds were NOT processed
+        // Validate that files from other rounds were NOT processed (using prefix comparison)
         for (Path unexpectedFile : differentRoundSameShardFiles) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("."));
             assertFalse("Should NOT have processed shard count round file: " + unexpectedFile.getName(),
-                processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
 
         for (Path unexpectedFile : round0100NewFiles) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("."));
             assertFalse("Should NOT have processed round 00:01:00 file: " + unexpectedFile.getName(),
-                processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
 
         for (Path unexpectedFile : round0200NewFiles) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("."));
             assertFalse("Should NOT have processed round 00:02:00 file: " + unexpectedFile.getName(),
-                processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
 
         // Validate that in-progress files were NOT processed (processNewFilesForRound only processes new files)
         for (Path unexpectedFile : inProgressFiles0004) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("_"));
             assertFalse("Should NOT have processed in-progress file from 00:00:04: " + unexpectedFile.getName(),
-                processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
 
         for (Path unexpectedFile : inProgressFiles0102) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("_"));
             assertFalse("Should NOT have processed in-progress file from 00:01:02: " + unexpectedFile.getName(),
-                processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
     }
 
@@ -448,56 +593,136 @@ public class ReplicationLogDiscoveryTest {
         ReplicationRound replicationRound = new ReplicationRound(1704153600000L, 1704153660000L); // 00:00:00 - 00:01:00
         List<Path> newFilesForRound = createNewFilesForRound(replicationRound, 5);
 
-        // Mock processFile to throw exception for specific files (files 1 and 3)
+        // Mock processFile to throw exception for specific files (files 1 and 3) - using prefix matching
+        String file1Prefix = newFilesForRound.get(1).getName().substring(0, newFilesForRound.get(1).getName().lastIndexOf("."));
         Mockito.doThrow(new IOException("Processing failed for file 1"))
-            .when(discovery).processFile(Mockito.argThat(path -> path.toUri().getPath().equals(newFilesForRound.get(1).toUri().getPath())));
+            .when(discovery).processFile(Mockito.argThat(path -> {
+                String pathName = path.getName();
+                String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                return prefix.equals(file1Prefix);
+            }));
+        String file3Prefix = newFilesForRound.get(3).getName().substring(0, newFilesForRound.get(3).getName().lastIndexOf("."));
         Mockito.doThrow(new IOException("Processing failed for file 3"))
-                .when(discovery).processFile(Mockito.argThat(path -> path.toUri().getPath().equals(newFilesForRound.get(3).toUri().getPath())));
+                .when(discovery).processFile(Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(file3Prefix);
+                }));
 
         // Process new files for the round
         discovery.processNewFilesForRound(replicationRound);
 
+        // Verify that markInProgress was called 5 times (for all files)
+        Mockito.verify(fileTracker, Mockito.times(5)).markInProgress(Mockito.any(Path.class));
+        
+        // Verify that markInProgress was called for each expected file
+        for (Path expectedFile : newFilesForRound) {
+            Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                    Mockito.argThat(path -> path.getName().startsWith(expectedFile.getName().split("\\.")[0])));
+        }
+
         // Verify that processFile was called for each file in the round
         Mockito.verify(discovery, Mockito.times(5)).processFile(Mockito.any(Path.class));
 
-        // Verify that processFile was called for each specific file
+        // Verify that processFile was called for each specific file (using prefix matching)
         for (Path expectedFile : newFilesForRound) {
-            System.out.println("Checking for " + expectedFile);
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("."));
             Mockito.verify(discovery, Mockito.times(1)).processFile(
-                Mockito.argThat(path -> path.toUri().getPath().equals(expectedFile.toString())));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(expectedPrefix);
+                }));
         }
 
         // Verify that markCompleted was called for each successfully processed file
         Mockito.verify(fileTracker, Mockito.times(3)).markCompleted(Mockito.any(Path.class));
 
         // Verify that markCompleted was called for each successfully processed file with correct paths
-        System.out.println("Called for " + newFilesForRound.get(0).getName() + " but received");
+        String expectedPrefix0 = newFilesForRound.get(0).getName().substring(0, newFilesForRound.get(0).getName().lastIndexOf("."));
         Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-                Mockito.argThat(path -> path.getName().startsWith(newFilesForRound.get(0).getName().split("\\.")[0])));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(expectedPrefix0);
+                }));
+        String expectedPrefix2 = newFilesForRound.get(2).getName().substring(0, newFilesForRound.get(2).getName().lastIndexOf("."));
         Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-                Mockito.argThat(path -> path.getName().startsWith(newFilesForRound.get(2).getName().split("\\.")[0])));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(expectedPrefix2);
+                }));
+        String expectedPrefix4 = newFilesForRound.get(4).getName().substring(0, newFilesForRound.get(4).getName().lastIndexOf("."));
         Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-                Mockito.argThat(path -> path.getName().startsWith(newFilesForRound.get(4).getName().split("\\.")[0])));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(expectedPrefix4);
+                }));
 
         // Verify that markCompleted was NOT called for failed files
+        String unexpectedPrefix1 = newFilesForRound.get(1).getName().substring(0, newFilesForRound.get(1).getName().lastIndexOf("."));
         Mockito.verify(fileTracker, Mockito.never()).markCompleted(
-                Mockito.argThat(path -> path.getName().startsWith(newFilesForRound.get(1).getName().split("\\.")[0])));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(unexpectedPrefix1);
+                }));
+        String unexpectedPrefix3 = newFilesForRound.get(3).getName().substring(0, newFilesForRound.get(3).getName().lastIndexOf("."));
         Mockito.verify(fileTracker, Mockito.never()).markCompleted(
-                Mockito.argThat(path -> path.getName().startsWith(newFilesForRound.get(3).getName().split("\\.")[0])));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(unexpectedPrefix3);
+                }));
 
         // Verify that markFailed was called for failed files
         Mockito.verify(fileTracker, Mockito.times(1)).markFailed(
-                Mockito.argThat(path -> path.getName().startsWith(newFilesForRound.get(1).getName().split("\\.")[0])));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(unexpectedPrefix1);
+                }));
         Mockito.verify(fileTracker, Mockito.times(1)).markFailed(
-                Mockito.argThat(path -> path.getName().startsWith(newFilesForRound.get(3).getName().split("\\.")[0])));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(unexpectedPrefix3);
+                }));
 
         // Verify that markFailed was NOT called for successfully processed files
         Mockito.verify(fileTracker, Mockito.never()).markFailed(
-                Mockito.argThat(path -> path.getName().startsWith(newFilesForRound.get(0).getName().split("\\.")[0])));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(expectedPrefix0);
+                }));
         Mockito.verify(fileTracker, Mockito.never()).markFailed(
-                Mockito.argThat(path -> path.getName().startsWith(newFilesForRound.get(2).getName().split("\\.")[0])));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(expectedPrefix2);
+                }));
         Mockito.verify(fileTracker, Mockito.never()).markFailed(
-                Mockito.argThat(path -> path.getName().startsWith(newFilesForRound.get(4).getName().split("\\.")[0])));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(expectedPrefix4);
+                }));
     }
 
     /**
@@ -510,10 +735,16 @@ public class ReplicationLogDiscoveryTest {
         ReplicationRound replicationRound = new ReplicationRound(1704153600000L, 1704153660000L); // 00:00:00 - 00:01:00
         List<Path> newFilesForRound = createNewFilesForRound(replicationRound, 5);
 
-        // Mock processFile to throw exception for all files
+        // Mock processFile to throw exception for all files (using prefix matching since files are moved to in-progress)
         for (Path file : newFilesForRound) {
+            String filePrefix = file.getName().substring(0, file.getName().lastIndexOf("."));
             Mockito.doThrow(new IOException("Processing failed for file: " + file.getName()))
-                .when(discovery).processFile(Mockito.argThat(path -> path.toUri().getPath().equals(file.toUri().getPath())));
+                .when(discovery).processFile(Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(filePrefix);
+                }));
         }
 
         // Process new files for the round
@@ -522,10 +753,25 @@ public class ReplicationLogDiscoveryTest {
         // Verify that processFile was called for each file in the round
         Mockito.verify(discovery, Mockito.times(5)).processFile(Mockito.any(Path.class));
 
-        // Verify that processFile was called for each specific file
+        // Verify that markInProgress was called 5 times (before processing fails)
+        Mockito.verify(fileTracker, Mockito.times(5)).markInProgress(Mockito.any(Path.class));
+        
+        // Verify that markInProgress was called for each expected file
         for (Path expectedFile : newFilesForRound) {
+            Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                    Mockito.argThat(path -> path.getName().startsWith(expectedFile.getName().split("\\.")[0])));
+        }
+
+        // Verify that processFile was called for each specific file (using prefix matching)
+        for (Path expectedFile : newFilesForRound) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("."));
             Mockito.verify(discovery, Mockito.times(1)).processFile(
-                Mockito.argThat(path -> path.toUri().getPath().equals(expectedFile.toString())));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(expectedPrefix);
+                }));
         }
 
         // Verify that markCompleted was NOT called for any file (all failed)
@@ -536,10 +782,13 @@ public class ReplicationLogDiscoveryTest {
 
         // Verify that markFailed was called for each specific file with correct paths
         for (Path failedFile : newFilesForRound) {
+            String expectedPrefix = failedFile.getName().substring(0, failedFile.getName().lastIndexOf("."));
             Mockito.verify(fileTracker, Mockito.times(1)).markFailed(
                 Mockito.argThat(path -> {
-                    System.out.println("Checking for " + fileTracker.getFilePrefix(path) + " and " + fileTracker.getFilePrefix(failedFile));
-                    return fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(failedFile));
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(expectedPrefix);
                 }));
         }
     }
@@ -571,48 +820,108 @@ public class ReplicationLogDiscoveryTest {
         List<Path> processedFiles = discovery.getProcessedFiles();
         assertEquals("Invalid number of files processed", 7, processedFiles.size());
 
-        // Create set of expected files that should be processed (only in-progress files)
-        Set<String> expectedProcessedPaths = new HashSet<>();
+        // Create set of expected files that should be processed (by prefix, since UUIDs are updated during markInProgress)
+        Set<String> expectedProcessedFilePrefixes = new HashSet<>();
         for (Path file : inProgressFiles0004) {
-            expectedProcessedPaths.add(file.toUri().getPath());
+            String fileName = file.getName();
+            String prefix = fileName.substring(0, fileName.lastIndexOf("_"));
+            expectedProcessedFilePrefixes.add(prefix);
         }
         for (Path file : inProgressFiles0102) {
-            expectedProcessedPaths.add(file.toUri().getPath());
+            String fileName = file.getName();
+            String prefix = fileName.substring(0, fileName.lastIndexOf("_"));
+            expectedProcessedFilePrefixes.add(prefix);
         }
         for (Path file : inProgressFiles0206) {
-            expectedProcessedPaths.add(file.toUri().getPath());
+            String fileName = file.getName();
+            String prefix = fileName.substring(0, fileName.lastIndexOf("_"));
+            expectedProcessedFilePrefixes.add(prefix);
         }
 
-        // Create set of actually processed file paths
-        Set<String> actualProcessedPaths = new HashSet<>();
+        // Create set of actually processed file paths (extract prefixes)
+        Set<String> actualProcessedFilePrefixes = new HashSet<>();
         for (Path file : processedFiles) {
-            actualProcessedPaths.add(file.toUri().getPath());
+            String fileName = file.getName();
+            String withoutExtension = fileName.substring(0, fileName.lastIndexOf("."));
+            String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+            actualProcessedFilePrefixes.add(prefix);
         }
 
         // Validate that sets are equal
-        assertEquals("Expected and actual processed files should match", expectedProcessedPaths, actualProcessedPaths);
+        assertEquals("Expected and actual processed files should match", expectedProcessedFilePrefixes, actualProcessedFilePrefixes);
+
+        // Verify that markInProgress was called 7 times
+        Mockito.verify(fileTracker, Mockito.times(7)).markInProgress(Mockito.any(Path.class));
+        
+        // Verify that markInProgress was called for each expected file
+        for (Path expectedFile : inProgressFiles0004) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
+            Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String prefix = pathName.substring(0, pathName.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
+        }
+        for (Path expectedFile : inProgressFiles0102) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
+            Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String prefix = pathName.substring(0, pathName.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
+        }
+        for (Path expectedFile : inProgressFiles0206) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
+            Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String prefix = pathName.substring(0, pathName.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
+        }
 
         // Verify that markCompleted was called for each processed file
         Mockito.verify(fileTracker, Mockito.times(7)).markCompleted(Mockito.any(Path.class));
 
         // Verify that markCompleted was called for each processed file with correct paths
         for (Path expectedFile : inProgressFiles0004) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
             Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-                    Mockito.argThat(path -> path.getName().startsWith(fileTracker.getFilePrefix(expectedFile))));
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                        String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
         }
         for (Path expectedFile : inProgressFiles0102) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
             Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-                    Mockito.argThat(path -> path.getName().startsWith(fileTracker.getFilePrefix(expectedFile))));
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                        String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
         }
         for (Path expectedFile : inProgressFiles0206) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
             Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-                    Mockito.argThat(path -> path.getName().startsWith(fileTracker.getFilePrefix(expectedFile))));
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                        String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
         }
 
         // Validate that new files were NOT processed (processInProgressDirectory only processes in-progress files)
         for (Path unexpectedFile : newFilesForRound) {
+            String unexpectedPrefix = unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("."));
             assertFalse("Should NOT have processed new file: " + unexpectedFile.getName(),
-                processedFiles.stream().anyMatch(p -> p.toUri().getPath().equals(unexpectedFile.toUri().getPath())));
+                actualProcessedFilePrefixes.contains(unexpectedPrefix));
         }
     }
 
@@ -630,22 +939,54 @@ public class ReplicationLogDiscoveryTest {
         allInProgressFiles.addAll(inProgressFiles0004);
         allInProgressFiles.addAll(inProgressFiles0102);
 
-        // Mock processFile to throw exception for specific files (files 1 and 3)
+        // Mock processFile to throw exception for specific files (files 1 and 3) - using prefix matching
+        String file1Prefix = allInProgressFiles.get(1).getName().substring(0, allInProgressFiles.get(1).getName().lastIndexOf("_"));
         Mockito.doThrow(new IOException("Processing failed for file 1"))
-            .when(discovery).processFile(Mockito.argThat(path -> path.toUri().getPath().equals(allInProgressFiles.get(1).toUri().getPath())));
+            .when(discovery).processFile(Mockito.argThat(path -> {
+                String pathName = path.getName();
+                String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                return prefix.equals(file1Prefix);
+            }));
+        String file3Prefix = allInProgressFiles.get(3).getName().substring(0, allInProgressFiles.get(3).getName().lastIndexOf("_"));
         Mockito.doThrow(new IOException("Processing failed for file 3"))
-                .when(discovery).processFile(Mockito.argThat(path -> path.toUri().getPath().equals(allInProgressFiles.get(3).toUri().getPath())));
+                .when(discovery).processFile(Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(file3Prefix);
+                }));
 
         // Process in-progress directory
         discovery.processInProgressDirectory();
 
+        // Verify that markInProgress was called 5 times (for all in-progress files initially)
+        Mockito.verify(fileTracker, Mockito.times(5)).markInProgress(Mockito.any(Path.class));
+        
+        // Verify that markInProgress was called for each expected file
+        for (Path expectedFile : allInProgressFiles) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
+            Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String prefix = pathName.substring(0, pathName.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
+        }
+
         // Verify that processFile was called for each file in the directory (i.e. 5 + 2 times for failed once that would succeed in next retry)
         Mockito.verify(discovery, Mockito.times(7)).processFile(Mockito.any(Path.class));
 
-        // Verify that processFile was called for each specific file
+        // Verify that processFile was called for each specific file (using prefix matching)
         for (Path expectedFile : allInProgressFiles) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
             Mockito.verify(discovery, Mockito.times(1)).processFile(
-                Mockito.argThat(path -> path.toUri().getPath().equals(expectedFile.toString())));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(expectedPrefix);
+                }));
         }
 
         // Verify that markCompleted was called for each successfully processed file
@@ -655,23 +996,59 @@ public class ReplicationLogDiscoveryTest {
         Mockito.verify(fileTracker, Mockito.times(2)).markFailed(Mockito.any(Path.class));
 
         // Verify that markFailed was called once ONLY for failed files
+        String failedPrefix1 = allInProgressFiles.get(1).getName().substring(0, allInProgressFiles.get(1).getName().lastIndexOf("_"));
         Mockito.verify(fileTracker, Mockito.times(1)).markFailed(
-                Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(allInProgressFiles.get(1)))));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(failedPrefix1);
+                }));
+        String failedPrefix3 = allInProgressFiles.get(3).getName().substring(0, allInProgressFiles.get(3).getName().lastIndexOf("_"));
         Mockito.verify(fileTracker, Mockito.times(1)).markFailed(
-                Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(allInProgressFiles.get(3)))));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(failedPrefix3);
+                }));
 
         // Verify that markFailed was NOT called for files processed successfully in first iteration
+        String successPrefix0 = allInProgressFiles.get(0).getName().substring(0, allInProgressFiles.get(0).getName().lastIndexOf("_"));
         Mockito.verify(fileTracker, Mockito.never()).markFailed(
-                Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(allInProgressFiles.get(0)))));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(successPrefix0);
+                }));
+        String successPrefix2 = allInProgressFiles.get(2).getName().substring(0, allInProgressFiles.get(2).getName().lastIndexOf("_"));
         Mockito.verify(fileTracker, Mockito.never()).markFailed(
-                Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(allInProgressFiles.get(2)))));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(successPrefix2);
+                }));
+        String successPrefix4 = allInProgressFiles.get(4).getName().substring(0, allInProgressFiles.get(4).getName().lastIndexOf("_"));
         Mockito.verify(fileTracker, Mockito.never()).markFailed(
-                Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(allInProgressFiles.get(4)))));
+                Mockito.argThat(path -> {
+                    String pathName = path.getName();
+                    String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                    String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                    return prefix.equals(successPrefix4);
+                }));
 
         // Verify that markCompleted was called for each successfully processed file with correct paths
         for (Path expectedFile : allInProgressFiles) {
+            String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
             Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-                    Mockito.argThat(path -> fileTracker.getFilePrefix(path).equals(fileTracker.getFilePrefix(expectedFile))));
+                    Mockito.argThat(path -> {
+                        String pathName = path.getName();
+                        String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                        String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                        return prefix.equals(expectedPrefix);
+                    }));
         }
     }
 
@@ -740,38 +1117,90 @@ public class ReplicationLogDiscoveryTest {
             // Verify that only old files were processed (2 old files, 0 recent files)
             assertEquals("Should process only old files based on timestamp filtering", 2, processedFiles.size());
 
-            // Create set of expected processed files (only old files)
-            Set<String> expectedProcessedPaths = new HashSet<>();
+            // Create set of expected processed files (by prefix, since UUIDs are updated during markInProgress)
+            Set<String> expectedProcessedFilePrefixes = new HashSet<>();
             for (Path file : veryOldFiles) {
-                expectedProcessedPaths.add(file.toUri().getPath());
+                String fileName = file.getName();
+                String prefix = fileName.substring(0, fileName.lastIndexOf("_"));
+                expectedProcessedFilePrefixes.add(prefix);
             }
             for (Path file : oldFiles) {
-                expectedProcessedPaths.add(file.toUri().getPath());
+                String fileName = file.getName();
+                String prefix = fileName.substring(0, fileName.lastIndexOf("_"));
+                expectedProcessedFilePrefixes.add(prefix);
             }
 
-            // Create set of actually processed file paths
-            Set<String> actualProcessedPaths = new HashSet<>();
+            // Create set of actually processed file paths (extract prefixes)
+            Set<String> actualProcessedFilePrefixes = new HashSet<>();
             for (Path file : processedFiles) {
-                actualProcessedPaths.add(file.toUri().getPath());
+                String fileName = file.getName();
+                String withoutExtension = fileName.substring(0, fileName.lastIndexOf("."));
+                String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                actualProcessedFilePrefixes.add(prefix);
             }
 
             // Validate that only old files were processed
             assertEquals("Expected and actual processed files should match (only old files)",
-                    expectedProcessedPaths, actualProcessedPaths);
+                    expectedProcessedFilePrefixes, actualProcessedFilePrefixes);
+
+            // Verify that markInProgress was called 2 times (only old files)
+            Mockito.verify(fileTracker, Mockito.times(2)).markInProgress(Mockito.any(Path.class));
+            
+            // Verify that markInProgress was called for each expected file
+            for (Path expectedFile : veryOldFiles) {
+                String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
+                Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                        Mockito.argThat(path -> {
+                            String pathName = path.getName();
+                            String prefix = pathName.substring(0, pathName.lastIndexOf("_"));
+                            return prefix.equals(expectedPrefix);
+                        }));
+            }
+            for (Path expectedFile : oldFiles) {
+                String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
+                Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+                        Mockito.argThat(path -> {
+                            String pathName = path.getName();
+                            String prefix = pathName.substring(0, pathName.lastIndexOf("_"));
+                            return prefix.equals(expectedPrefix);
+                        }));
+            }
+            
+            // Verify that markCompleted was called 2 times
+            Mockito.verify(fileTracker, Mockito.times(2)).markCompleted(Mockito.any(Path.class));
+            
+            // Verify that markCompleted was called for each expected file with correct paths
+            for (Path expectedFile : veryOldFiles) {
+                String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
+                Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
+                        Mockito.argThat(path -> {
+                            String pathName = path.getName();
+                            String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                            String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                            return prefix.equals(expectedPrefix);
+                        }));
+            }
+            for (Path expectedFile : oldFiles) {
+                String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
+                Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
+                        Mockito.argThat(path -> {
+                            String pathName = path.getName();
+                            String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
+                            String prefix = withoutExtension.substring(0, withoutExtension.lastIndexOf("_"));
+                            return prefix.equals(expectedPrefix);
+                        }));
+            }
 
             // Verify that recent files were NOT processed
-            Set<String> recentFilePaths = new HashSet<>();
             for (Path file : recentFiles) {
-                recentFilePaths.add(file.toUri().getPath());
+                String unexpectedPrefix = file.getName().substring(0, file.getName().lastIndexOf("_"));
+                assertFalse("Recent files should not be processed due to timestamp filtering: " + file.getName(),
+                        actualProcessedFilePrefixes.contains(unexpectedPrefix));
             }
             for (Path file : veryRecentFiles) {
-                recentFilePaths.add(file.toUri().getPath());
-            }
-
-            // Ensure no recent files are in the processed set
-            for (String recentPath : recentFilePaths) {
-                assertFalse("Recent files should not be processed due to timestamp filtering",
-                        actualProcessedPaths.contains(recentPath));
+                String unexpectedPrefix = file.getName().substring(0, file.getName().lastIndexOf("_"));
+                assertFalse("Recent files should not be processed due to timestamp filtering: " + file.getName(),
+                        actualProcessedFilePrefixes.contains(unexpectedPrefix));
             }
 
         } finally {
@@ -1174,7 +1603,7 @@ public class ReplicationLogDiscoveryTest {
         localFs.mkdirs(shardPath);
         List<Path> newFiles = new ArrayList<>();
         for(int i = 0; i < fileCount; i++) {
-            Path file = new Path(shardPath, replicationRound.getStartTime() + (2000L * i) + "_rs-" + i + ".plog");
+            Path file = new Path(shardPath, replicationRound.getStartTime() + (1234L * i) + "_rs-" + i + ".plog");
             localFs.create(file, true).close();
             newFiles.add(file);
         }
@@ -1485,8 +1914,8 @@ public class ReplicationLogDiscoveryTest {
      * Exposes protected methods and provides minimal implementation for testing.
      */
     private static class TestableReplicationLogTracker extends ReplicationLogTracker {
-        public TestableReplicationLogTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
-            super(conf, haGroupName, fileSystem, rootURI, DirectoryType.IN, metricsLogTracker);
+        public TestableReplicationLogTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final ReplicationShardDirectoryManager replicationShardDirectoryManager) {
+            super(conf, haGroupName, fileSystem, replicationShardDirectoryManager, metricsLogTracker);
         }
     }
 
@@ -1513,7 +1942,6 @@ public class ReplicationLogDiscoveryTest {
         @Override
         protected void processFile(Path path) throws IOException {
             // Simulate file processing
-            System.out.println("Simulating file processing");
             processedFiles.add(path);
         }
 

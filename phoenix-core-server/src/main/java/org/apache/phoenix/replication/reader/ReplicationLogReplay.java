@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.replication.ReplicationLogTracker;
+import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTrackerReplayImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,6 +47,7 @@ public class ReplicationLogReplay {
     public static final String REPLICATION_LOG_REPLAY_HDFS_URL_KEY =
             "phoenix.replication.log.replay.hdfs.url";
 
+    public static final String IN_DIRECTORY_NAME = "in";
     /**
      * Singleton instances per group name
      */
@@ -106,8 +108,11 @@ public class ReplicationLogReplay {
      */
     protected void init() throws IOException {
         initializeFileSystem();
+        Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName), ReplicationLogReplay.IN_DIRECTORY_NAME);
+        ReplicationShardDirectoryManager replicationShardDirectoryManager =
+                new ReplicationShardDirectoryManager(conf, newFilesDirectory);
         ReplicationLogTracker replicationLogReplayFileTracker = new ReplicationLogTracker(
-            conf, haGroupName, fileSystem, rootURI, ReplicationLogTracker.DirectoryType.IN,
+            conf, haGroupName, fileSystem, replicationShardDirectoryManager,
             new MetricsReplicationLogTrackerReplayImpl(haGroupName));
         replicationLogReplayFileTracker.init();
         this.replicationLogDiscoveryReplay =

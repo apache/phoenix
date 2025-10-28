@@ -33,6 +33,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.replication.ReplicationLogTracker;
 import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.ReplicationRound;
+import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTrackerReplayImpl;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTracker;
 import org.junit.After;
@@ -1241,7 +1242,10 @@ public class ReplicationLogDiscoveryReplayTest {
     }
 
     private TestableReplicationLogTracker createReplicationLogTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) throws IOException {
-        TestableReplicationLogTracker testableReplicationLogTracker = new TestableReplicationLogTracker(conf, haGroupName, fileSystem, rootURI, ReplicationLogTracker.DirectoryType.IN, METRICS_REPLICATION_LOG_TRACKER);
+        Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName), ReplicationLogReplay.IN_DIRECTORY_NAME);
+        ReplicationShardDirectoryManager replicationShardDirectoryManager =
+                new ReplicationShardDirectoryManager(conf, newFilesDirectory);
+        TestableReplicationLogTracker testableReplicationLogTracker = new TestableReplicationLogTracker(conf, haGroupName, fileSystem, replicationShardDirectoryManager, METRICS_REPLICATION_LOG_TRACKER);
         testableReplicationLogTracker.init();
         return testableReplicationLogTracker;
     }
@@ -1251,8 +1255,8 @@ public class ReplicationLogDiscoveryReplayTest {
      * Exposes protected methods to allow test access.
      */
     private static class TestableReplicationLogTracker extends ReplicationLogTracker {
-        public TestableReplicationLogTracker(Configuration conf, String haGroupName, FileSystem fileSystem, URI rootURI, DirectoryType directoryType, MetricsReplicationLogTracker metrics) {
-            super(conf, haGroupName, fileSystem, rootURI, directoryType, metrics);
+        public TestableReplicationLogTracker(Configuration conf, String haGroupName, FileSystem fileSystem, ReplicationShardDirectoryManager replicationShardDirectoryManager, MetricsReplicationLogTracker metrics) {
+            super(conf, haGroupName, fileSystem, replicationShardDirectoryManager, metrics);
         }
         public Path getInProgressDirPath() {
             return super.getInProgressDirPath();
