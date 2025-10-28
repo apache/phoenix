@@ -127,10 +127,6 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     private final AtomicReference<ReplicationReplayState> replicationReplayState =
             new AtomicReference<>(ReplicationReplayState.NOT_INITIALIZED);
 
-    private static final List<HAGroupStoreRecord.HAGroupState> WRITER_DEGRADED_STATES =
-            Arrays.asList(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER,
-                    HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
-
     private final AtomicBoolean failoverPending = new AtomicBoolean(false);
 
     public ReplicationLogDiscoveryReplay(final ReplicationLogTracker
@@ -140,24 +136,23 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
 
     @Override
     public void init() throws IOException {
-        HAGroupStateListener degradedListener = (groupName, toState, modifiedTime, clusterType) -> {
-            if (clusterType == ClusterType.LOCAL && WRITER_DEGRADED_STATES.contains(toState)) {
+        HAGroupStateListener degradedListener = (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+            if (clusterType == ClusterType.LOCAL && HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.equals(toState)) {
                 replicationReplayState.set(ReplicationReplayState.DEGRADED);
                 LOG.info("Cluster degraded detected for {}. replicationReplayState={}",
                         haGroupName, ReplicationReplayState.DEGRADED);
             }
         };
 
-        HAGroupStateListener recoveryListener = (groupName, toState, modifiedTime, clusterType) -> {
-            if (clusterType == ClusterType.LOCAL && !WRITER_DEGRADED_STATES.contains(toState)) {
+        HAGroupStateListener recoveryListener = (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+            if (clusterType == ClusterType.LOCAL && HAGroupStoreRecord.HAGroupState.STANDBY.equals(toState)) {
                 replicationReplayState.set(ReplicationReplayState.SYNCED_RECOVERY);
                 LOG.info("Cluster recovered detected for {}. replicationReplayState={}",
                         haGroupName, getReplicationReplayState());
             }
         };
 
-        HAGroupStateListener triggerFailoverListner = (groupName, toState, modifiedTime,
-                clusterType) -> {
+        HAGroupStateListener triggerFailoverListner = (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
             if (clusterType == ClusterType.LOCAL
                     && HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(toState)) {
                 failoverPending.set(true);
@@ -167,8 +162,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
             }
         };
 
-        HAGroupStateListener abortFailoverListner = (groupName, toState, modifiedTime,
-                clusterType) -> {
+        HAGroupStateListener abortFailoverListner = (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
             if (clusterType == ClusterType.LOCAL
                     && HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY.equals(toState)) {
                 failoverPending.set(false);
@@ -182,9 +176,6 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
 
         // Subscribe degraded states
         haGroupStoreManager.subscribeToTargetState(haGroupName,
-                HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY_FOR_WRITER, ClusterType.LOCAL,
-                degradedListener);
-        haGroupStoreManager.subscribeToTargetState(haGroupName,
                 HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, ClusterType.LOCAL,
                 degradedListener);
 
@@ -192,19 +183,12 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
         haGroupStoreManager.subscribeToTargetState(haGroupName,
                 HAGroupStoreRecord.HAGroupState.STANDBY, ClusterType.LOCAL, recoveryListener);
 
-        // TODO: Add recoveryLister for DEGRADED_STANDBY_FOR_READER state when it goes from
-        // DEGRADED_STANDBY -> DEGRADED_STANDBY_FOR_READER.
-        // For this need to have source state as part of callback method, because we only want to
-        // re-calculate currentRoundTimestamp when cluster switch from DEGRADED_STANDBY ->
-        // DEGRADED_STANDBY_FOR_READER (and not when STANDBY -> DEGRADED_STANDBY_FOR_READER)
-
-
         // Subscribe to trigger failover state
         haGroupStoreManager.subscribeToTargetState(haGroupName,
                 HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, ClusterType.LOCAL,
                 triggerFailoverListner);
 
-        // Subscribe to trigger failover state
+        // Subscribe to abort failover state
         haGroupStoreManager.subscribeToTargetState(haGroupName,
                 HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY, ClusterType.LOCAL,
                 abortFailoverListner);
@@ -240,7 +224,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     @Override
     protected void initializeLastRoundProcessed() throws IOException {
         HAGroupStoreRecord haGroupStoreRecord = getHAGroupRecord();
-        if (WRITER_DEGRADED_STATES.contains(haGroupStoreRecord.getHAGroupState())) {
+        if (HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.equals(haGroupStoreRecord.getHAGroupState())) {
             replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED,
                     ReplicationReplayState.DEGRADED);
             long minimumTimestampFromFiles = EnvironmentEdgeManager.currentTime();
@@ -324,7 +308,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
                 break; // stop this run, retry later
             }
 
-            // Always read latest listener state
+            // Always read the latest listener state
             ReplicationReplayState currentState = replicationReplayState.get();
 
             switch (currentState) {
