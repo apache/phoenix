@@ -472,7 +472,8 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices
   }
 
   @Override
-  public void deleteAllStreamMetadataForTable(Connection conn, String tableName) throws SQLException {
-      getDelegate().deleteAllStreamMetadataForTable(conn, tableName);
+  public void deleteAllStreamMetadataForTable(Connection conn, String tableName)
+    throws SQLException {
+    getDelegate().deleteAllStreamMetadataForTable(conn, tableName);
   }
 }

@@ -6912,26 +6912,26 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   }
 
   /*
-   Delete any metadata related to this table in the System tables for Streams.
+   * Delete any metadata related to this table in the System tables for Streams.
    */
   @Override
   public void deleteAllStreamMetadataForTable(java.sql.Connection conn, String tableName)
-          throws SQLException {
-      String deleteStreamStatusQuery =
-              "DELETE FROM " + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME = ?";
-      String deleteStreamPartitionsQuery =
-              "DELETE FROM " + SYSTEM_CDC_STREAM_NAME + " WHERE TABLE_NAME = ?";
-      LOGGER.info("Deleting Stream Metadata for table {}", tableName);
-      try (PreparedStatement ps = conn.prepareStatement(deleteStreamStatusQuery)) {
-          ps.setString(1, tableName);
-          ps.executeUpdate();
-          conn.commit();
-      }
-      try (PreparedStatement ps = conn.prepareStatement(deleteStreamPartitionsQuery)) {
-          ps.setString(1, tableName);
-          ps.executeUpdate();
-          conn.commit();
-      }
+    throws SQLException {
+    String deleteStreamStatusQuery =
+      "DELETE FROM " + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME = ?";
+    String deleteStreamPartitionsQuery =
+      "DELETE FROM " + SYSTEM_CDC_STREAM_NAME + " WHERE TABLE_NAME = ?";
+    LOGGER.info("Deleting Stream Metadata for table {}", tableName);
+    try (PreparedStatement ps = conn.prepareStatement(deleteStreamStatusQuery)) {
+      ps.setString(1, tableName);
+      ps.executeUpdate();
+      conn.commit();
+    }
+    try (PreparedStatement ps = conn.prepareStatement(deleteStreamPartitionsQuery)) {
+      ps.setString(1, tableName);
+      ps.executeUpdate();
+      conn.commit();
+    }
   }
 
   /**

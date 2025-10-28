@@ -90,7 +90,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYNC_INDEX_CREATED_DATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
@@ -4063,7 +4062,8 @@ public class MetaDataClient {
     String parentTableName = statement.getTableName().getTableName();
     String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
     // Mark CDC Stream as Disabled
-    long cdcIndexTimestamp = connection.getTable(SchemaUtil.getTableName(schemaName, indexName)).getTimeStamp();
+    long cdcIndexTimestamp =
+      connection.getTable(SchemaUtil.getTableName(schemaName, indexName)).getTimeStamp();
     String fullParentTableName = SchemaUtil.getTableName(schemaName, parentTableName);
     String streamName = String.format(CDC_STREAM_NAME_FORMAT, fullParentTableName, cdcTableName,
       cdcIndexTimestamp, CDCUtil.getCDCCreationUTCDateTime(cdcIndexTimestamp));
@@ -4079,24 +4079,6 @@ public class MetaDataClient {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.fromErrorCode(e.getErrorCode()))
         .setTableName(statement.getCdcObjName().getName()).setRootCause(e.getCause()).build()
         .buildException();
-    }
-  }
-
-  private void deleteAllStreamMetadataForTable(String tableName) throws SQLException {
-    String deleteStreamStatusQuery =
-      "DELETE FROM " + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME = ?";
-    String deleteStreamPartitionsQuery =
-      "DELETE FROM " + SYSTEM_CDC_STREAM_NAME + " WHERE TABLE_NAME = ?";
-    LOGGER.info("Deleting Stream Metadata for table {}", tableName);
-    try (PreparedStatement ps = connection.prepareStatement(deleteStreamStatusQuery)) {
-      ps.setString(1, tableName);
-      ps.executeUpdate();
-      connection.commit();
-    }
-    try (PreparedStatement ps = connection.prepareStatement(deleteStreamPartitionsQuery)) {
-      ps.setString(1, tableName);
-      ps.executeUpdate();
-      connection.commit();
     }
   }
 
@@ -4164,7 +4146,7 @@ public class MetaDataClient {
       PTable ptable = connection.getTable(fullTableName);
       if (PTableType.TABLE.equals(ptable.getType())) {
         connection.unwrap(PhoenixConnection.class).getQueryServices()
-                .deleteAllStreamMetadataForTable(connection, fullTableName);
+          .deleteAllStreamMetadataForTable(connection, fullTableName);
       }
       if (
         parentTableName != null && !parentTableName.equals(ptable.getParentTableName().getString())
@@ -4747,9 +4729,9 @@ public class MetaDataClient {
           /**
            * To check if TTL is defined at any of the child below we are checking it at
            * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#mutateColumn(List, ColumnMutator, int, PTable, PTable, boolean)}
-           * level where in function
-           * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl# validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[], byte[], List, int)}
-           * we are already traversing through allDescendantViews.
+           * level where in function {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#
+           * validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[],
+           * byte[], List, int)} we are already traversing through allDescendantViews.
            */
         }
 

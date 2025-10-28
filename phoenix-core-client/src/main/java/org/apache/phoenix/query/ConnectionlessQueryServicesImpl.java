@@ -902,7 +902,8 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
   }
 
   @Override
-  public void deleteAllStreamMetadataForTable(Connection conn, String tableName) throws SQLException {
+  public void deleteAllStreamMetadataForTable(Connection conn, String tableName)
+    throws SQLException {
     // No-op
   }
 }
