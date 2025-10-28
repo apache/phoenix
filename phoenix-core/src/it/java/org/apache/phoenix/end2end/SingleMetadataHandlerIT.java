@@ -87,22 +87,19 @@ public class SingleMetadataHandlerIT extends BaseTest {
   @Test
   public void testSingleMetadataHandler() throws Exception {
     try (Connection conn = getConnection(props)) {
-      try (Connection conn2 = getConnection(props)) {
-        String tableName = "TBL_" + generateUniqueName();
+      String tableName = "TBL_" + generateUniqueName();
 
-        conn.setAutoCommit(true);
-        conn2.setAutoCommit(true);
-        createTable(conn, tableName);
-        createIndexOnTable(conn, tableName, "IDX_" + generateUniqueName());
+      conn.setAutoCommit(true);
+      createTable(conn, tableName);
+      createIndexOnTable(conn, tableName, "IDX_" + generateUniqueName());
 
-        String view1DDL = "CREATE VIEW IF NOT EXISTS VIEW1"
-          + " ( VIEW_COL1 VARCHAR, VIEW_COL2 VARCHAR) AS SELECT * FROM " + tableName;
-        conn.createStatement().execute(view1DDL);
-        String indexDDL =
-          "CREATE INDEX IF NOT EXISTS V1IDX1" + " ON VIEW1" + " (V1) include (V2, V3, VIEW_COL2) ";
-        conn.createStatement().execute(indexDDL);
-        conn.commit();
-      }
+      String view1DDL = "CREATE VIEW IF NOT EXISTS VIEW1"
+        + " ( VIEW_COL1 VARCHAR, VIEW_COL2 VARCHAR) AS SELECT * FROM " + tableName;
+      conn.createStatement().execute(view1DDL);
+      String indexDDL =
+        "CREATE INDEX IF NOT EXISTS V1IDX1" + " ON VIEW1" + " (V1) include (V2, V3, VIEW_COL2) ";
+      conn.createStatement().execute(indexDDL);
+      conn.commit();
     }
   }
 }
