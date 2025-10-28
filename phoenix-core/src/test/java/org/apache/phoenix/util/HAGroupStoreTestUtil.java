@@ -48,7 +48,7 @@ public class HAGroupStoreTestUtil {
     String peerZKUrl, ClusterRoleRecord.ClusterRole localClusterRole,
     ClusterRoleRecord.ClusterRole peerClusterRole, String overrideConnZkUrl) throws SQLException {
     upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZKUrl, zkUrl, peerZKUrl,
-      localClusterRole, peerClusterRole, 1L, 1L, overrideConnZkUrl, HighAvailabilityPolicy.FAILOVER,
+      localClusterRole, peerClusterRole, 1L, overrideConnZkUrl, HighAvailabilityPolicy.FAILOVER,
       new Properties());
   }
 
@@ -57,7 +57,7 @@ public class HAGroupStoreTestUtil {
     ClusterRoleRecord.ClusterRole localClusterRole, ClusterRoleRecord.ClusterRole peerClusterRole,
     String overrideConnZkUrl) throws SQLException {
     upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZKUrl, clusterUrl1, clusterUrl2,
-      localClusterRole, peerClusterRole, 1L, 1L, overrideConnZkUrl, HighAvailabilityPolicy.FAILOVER,
+      localClusterRole, peerClusterRole, 1L, overrideConnZkUrl, HighAvailabilityPolicy.FAILOVER,
       new Properties());
   }
 
@@ -66,16 +66,16 @@ public class HAGroupStoreTestUtil {
    * @param haGroupName       the HA group name
    * @param zkUrl             the ZooKeeper URL for the local cluster
    * @param peerZKUrl         the ZooKeeper URL for the peer cluster
-   * @param localClusterRole  the role of the local cluster
-   * @param peerClusterRole   the role of the peer cluster
+   * @param clusterRole1      the role of the local cluster
+   * @param clusterRole2      the role of the peer cluster
    * @param overrideConnZkUrl optional override for the connection ZK URL
    * @throws SQLException if the database operation fails
    */
   public static void upsertHAGroupRecordInSystemTable(String haGroupName, String zkUrl,
     String peerZKUrl, String clusterUrl1, String clusterUrl2,
-    ClusterRoleRecord.ClusterRole localClusterRole, ClusterRoleRecord.ClusterRole peerClusterRole,
-    long version1, long version2, String overrideConnZkUrl, HighAvailabilityPolicy policy,
-    Properties props) throws SQLException {
+    ClusterRoleRecord.ClusterRole clusterRole1, ClusterRoleRecord.ClusterRole clusterRole2,
+    long version1, String overrideConnZkUrl, HighAvailabilityPolicy policy, Properties props)
+    throws SQLException {
     try (
       PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(JDBC_PROTOCOL_ZK
         + JDBC_PROTOCOL_SEPARATOR + (overrideConnZkUrl != null ? overrideConnZkUrl : zkUrl), props);
@@ -89,10 +89,10 @@ public class HAGroupStoreTestUtil {
       if (peerZKUrl != null) {
         queryBuilder.append("ZK_URL_2, ");
       }
-      if (localClusterRole != null) {
+      if (clusterRole1 != null) {
         queryBuilder.append("CLUSTER_ROLE_1, ");
       }
-      if (peerClusterRole != null) {
+      if (clusterRole2 != null) {
         queryBuilder.append("CLUSTER_ROLE_2, ");
       }
       if (clusterUrl1 != null) {
@@ -101,7 +101,7 @@ public class HAGroupStoreTestUtil {
       if (clusterUrl2 != null) {
         queryBuilder.append("CLUSTER_URL_2, ");
       }
-      queryBuilder.append("POLICY, VERSION_CLUSTER_1, VERSION_CLUSTER_2) ");
+      queryBuilder.append("POLICY, VERSION) ");
       queryBuilder.append("VALUES ('" + haGroupName + "', ");
       if (zkUrl != null) {
         queryBuilder.append("'" + zkUrl + "', ");
@@ -109,11 +109,11 @@ public class HAGroupStoreTestUtil {
       if (peerZKUrl != null) {
         queryBuilder.append("'" + peerZKUrl + "', ");
       }
-      if (localClusterRole != null) {
-        queryBuilder.append("'" + localClusterRole + "', ");
+      if (clusterRole1 != null) {
+        queryBuilder.append("'" + clusterRole1 + "', ");
       }
-      if (peerClusterRole != null) {
-        queryBuilder.append("'" + peerClusterRole + "', ");
+      if (clusterRole2 != null) {
+        queryBuilder.append("'" + clusterRole2 + "', ");
       }
       if (clusterUrl1 != null) {
         queryBuilder.append("'" + clusterUrl1 + "', ");
@@ -121,7 +121,7 @@ public class HAGroupStoreTestUtil {
       if (clusterUrl2 != null) {
         queryBuilder.append("'" + clusterUrl2 + "', ");
       }
-      queryBuilder.append("'" + policy.name() + "', " + version1 + ", " + version2 + ")");
+      queryBuilder.append("'" + policy.name() + "', " + version1 + ")");
       stmt.executeUpdate(queryBuilder.toString());
       conn.commit();
     }

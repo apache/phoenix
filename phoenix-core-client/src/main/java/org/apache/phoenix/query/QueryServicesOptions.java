@@ -60,6 +60,7 @@ import static org.apache.phoenix.query.QueryServices.GLOBAL_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_SYNC_INTERVAL_SECONDS;
 import static org.apache.phoenix.query.QueryServices.HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.IMMUTABLE_ROWS_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
@@ -96,6 +97,7 @@ import static org.apache.phoenix.query.QueryServices.REGIONSERVER_INFO_PORT_ATTR
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_THRESHOLD_MILLISECONDS;
+import static org.apache.phoenix.query.QueryServices.REPLICATION_LOG_ROTATION_TIME_MS_KEY;
 import static org.apache.phoenix.query.QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.RPC_TIMEOUT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
@@ -510,6 +512,11 @@ public class QueryServicesOptions {
 
   public static final Boolean DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED = false;
 
+  // Default HA Group Store sync job interval in seconds (15 minutes = 900 seconds)
+  public static final int DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS = 900;
+
+  public static final long DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS = 60 * 1000L;
+
   private final Configuration config;
 
   private QueryServicesOptions(Configuration config) {
@@ -629,7 +636,10 @@ public class QueryServicesOptions {
       .setIfUnset(CQSI_THREAD_POOL_METRICS_ENABLED, DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED)
       .setIfUnset(CDC_TTL_MUTATION_MAX_RETRIES, DEFAULT_CDC_TTL_MUTATION_MAX_RETRIES)
       .setIfUnset(CDC_TTL_MUTATION_BATCH_SIZE, DEFAULT_CDC_TTL_MUTATION_BATCH_SIZE)
-      .setIfUnset(CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS, DEFAULT_CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS);
+      .setIfUnset(CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS, DEFAULT_CDC_TTL_SHARED_CACHE_EXPIRY_SECONDS)
+      .setIfUnset(REPLICATION_LOG_ROTATION_TIME_MS_KEY, DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS)
+      .setIfUnset(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS,
+        DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS);
 
     // HBase sets this to 1, so we reset it to something more appropriate.
     // Hopefully HBase will change this, because we can't know if a user set

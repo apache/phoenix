@@ -42,13 +42,17 @@ public interface HAGroupStateListener {
    * Implementations should be fast and non-blocking to avoid impacting the HA group state
    * management system. If heavy processing is required, consider delegating to a separate thread.
    * </p>
-   * @param haGroupName  the name of the HA group that transitioned
-   * @param toState      the new state after the transition
-   * @param modifiedTime the time the state transition occurred
-   * @param clusterType  whether this transition occurred on the local or peer cluster
+   * @param haGroupName           the name of the HA group that transitioned
+   * @param fromState             the previous state before the transition can be null for initial
+   *                              state. Also, can be inaccurate in case there is connection loss to
+   *                              ZK and multiple state changes happen in between.
+   * @param toState               the new state after the transition
+   * @param modifiedTime          the time the state transition occurred
+   * @param clusterType           whether this transition occurred on the local or peer cluster
+   * @param lastSyncStateTimeInMs the time we were in sync state, can be null.
    * @throws Exception implementations may throw exceptions, but they will be logged and will not
    *                   prevent other listeners from being notified
    */
-  void onStateChange(String haGroupName, HAGroupState toState, long modifiedTime,
-    ClusterType clusterType);
+  void onStateChange(String haGroupName, HAGroupState fromState, HAGroupState toState,
+    long modifiedTime, ClusterType clusterType, Long lastSyncStateTimeInMs);
 }

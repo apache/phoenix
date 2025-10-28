@@ -60,9 +60,6 @@ public class ReplicationLogGroup {
   public static final String REPLICATION_NUM_SHARDS_KEY = "phoenix.replication.log.shards";
   public static final int DEFAULT_REPLICATION_NUM_SHARDS = 1000;
   public static final int MAX_REPLICATION_NUM_SHARDS = 100000;
-  public static final String REPLICATION_LOG_ROTATION_TIME_MS_KEY =
-    "phoenix.replication.log.rotation.time.ms";
-  public static final long DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS = 60 * 1000L;
   public static final String REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY =
     "phoenix.replication.log.rotation.size.bytes";
   public static final long DEFAULT_REPLICATION_LOG_ROTATION_SIZE_BYTES = 256 * 1024 * 1024L;

@@ -175,8 +175,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VERSION_CLUSTER_1;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VERSION_CLUSTER_2;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VERSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
@@ -614,10 +613,8 @@ public interface QueryConstants {
       CLUSTER_ROLE_2 + " VARCHAR," + // Role for peer cluster might not be accurate, we will use
                                      // only local role for recovery if needed
       POLICY + " VARCHAR," + // There should be only one policy for an HA group
-      VERSION_CLUSTER_1 + " BIGINT," + // Version should be incremented for Admin Updates,
-                                       // only for CLUSTER_URLs and REGISTRY_TYPE
-      VERSION_CLUSTER_2 + " BIGINT," + // Version should be incremented for Admin Updates,
-                                       // only for CLUSTER_URLs and REGISTRY_TYPE
+      VERSION + " BIGINT," + // Version should be incremented for Admin Updates, only for
+                             // CLUSTER_URLs and REGISTRY_TYPE
       "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + HA_GROUP_NAME + "))\n"
       + HConstants.VERSIONS + "=%s,\n" + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n"
       + TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" + UPDATE_CACHE_FREQUENCY + "=" + "7200000";

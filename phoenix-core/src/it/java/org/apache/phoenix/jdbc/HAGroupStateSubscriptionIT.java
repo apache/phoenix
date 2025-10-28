@@ -17,7 +17,8 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE;
+import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
+import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
@@ -84,10 +85,10 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
   @Before
   public void before() throws Exception {
-    haAdmin = new PhoenixHAAdmin(config, ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
+    haAdmin = new PhoenixHAAdmin(config, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
     zkUrl = getLocalZkUrl(config);
     this.peerZKUrl = CLUSTERS.getZkUrl2();
-    peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_GROUP_STATE_NAMESPACE);
+    peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
 
     // Clean up existing HAGroupStoreRecords
     try {
@@ -105,7 +106,8 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
     // Insert a HAGroupStoreRecord into the system table
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl,
-      peerZKUrl, ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+      peerZKUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
   }
 
   // ========== Multi-Cluster & Basic Subscription Tests ==========
@@ -122,37 +124,49 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     AtomicReference<ClusterType> lastPeerClusterType = new AtomicReference<>();
 
     // Create listeners for different target states
-    HAGroupStateListener localListener = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.STANDBY_TO_ACTIVE && clusterType == ClusterType.LOCAL) {
-        localNotifications.incrementAndGet();
-        lastLocalClusterType.set(clusterType);
-        LOGGER.info("Local target state listener called: {} on {}", toState, clusterType);
-      }
-    };
+    HAGroupStateListener localListener =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        LOGGER.info("Local target state listener called: {} -> {} on {}", fromState, toState,
+          clusterType);
+        if (
+          fromState == ACTIVE_NOT_IN_SYNC && toState == HAGroupState.STANDBY_TO_ACTIVE
+            && clusterType == ClusterType.LOCAL
+        ) {
+          localNotifications.incrementAndGet();
+          lastLocalClusterType.set(clusterType);
+          LOGGER.info("Local target state listener called: {} -> {} on {}", fromState, toState,
+            clusterType);
+        }
+      };
 
-    HAGroupStateListener peerListener = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.ACTIVE_NOT_IN_SYNC && clusterType == ClusterType.PEER) {
-        peerNotifications.incrementAndGet();
-        lastPeerClusterType.set(clusterType);
-        LOGGER.info("Peer target state listener called: {} on {}", toState, clusterType);
-      }
-    };
+    HAGroupStateListener peerListener =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        LOGGER.info("Peer target state listener called: {} -> {} on {}", fromState, toState,
+          clusterType);
+        if (fromState == null && toState == ACTIVE_NOT_IN_SYNC && clusterType == ClusterType.PEER) {
+          peerNotifications.incrementAndGet();
+          lastPeerClusterType.set(clusterType);
+          LOGGER.info("Peer target state listener called: {} -> {} on {}", fromState, toState,
+            clusterType);
+        }
+      };
 
     // Subscribe to different target states on different clusters
     manager.subscribeToTargetState(haGroupName, HAGroupState.STANDBY_TO_ACTIVE, ClusterType.LOCAL,
       localListener);
-    manager.subscribeToTargetState(haGroupName, HAGroupState.ACTIVE_NOT_IN_SYNC, ClusterType.PEER,
-      peerListener);
+    manager.subscribeToTargetState(haGroupName, ACTIVE_NOT_IN_SYNC, ClusterType.PEER, peerListener);
 
     // Trigger transition to STANDBY_TO_ACTIVE on LOCAL cluster
     HAGroupStoreRecord localRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY_TO_ACTIVE);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY_TO_ACTIVE, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Trigger transition to STANDBY on PEER cluster
     HAGroupStoreRecord peerRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_NOT_IN_SYNC);
+      new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -177,15 +191,24 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     AtomicInteger totalNotifications = new AtomicInteger(0);
     AtomicReference<ClusterType> lastClusterType = new AtomicReference<>();
 
-    HAGroupStateListener listener = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.STANDBY) {
-        totalNotifications.incrementAndGet();
-        lastClusterType.set(clusterType);
-        LOGGER.info("Listener called: {} on {}", toState, clusterType);
-      }
-    };
+    AtomicReference<HAGroupState> lastFromState = new AtomicReference<>();
 
-    // Subscribe to same target state on both clusters
+    HAGroupStateListener listener =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        // Check for specific transition: ACTIVE -> STANDBY on PEER cluster
+        if (
+          fromState == HAGroupState.ACTIVE_IN_SYNC && toState == HAGroupState.STANDBY
+            && clusterType == ClusterType.PEER
+        ) {
+          totalNotifications.incrementAndGet();
+          lastClusterType.set(clusterType);
+          lastFromState.set(fromState);
+          LOGGER.info("Listener called for specific transition: {} -> {} on {}", fromState, toState,
+            clusterType);
+        }
+      };
+
+    // Subscribe to STANDBY target state on both clusters
     manager.subscribeToTargetState(haGroupName, HAGroupState.STANDBY, ClusterType.LOCAL, listener);
     manager.subscribeToTargetState(haGroupName, HAGroupState.STANDBY, ClusterType.PEER, listener);
 
@@ -193,23 +216,31 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     manager.unsubscribeFromTargetState(haGroupName, HAGroupState.STANDBY, ClusterType.LOCAL,
       listener);
 
-    // Trigger transition to STANDBY on LOCAL → should NOT call listener
-    HAGroupStoreRecord localRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY);
-    haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, 0);
+    // First, establish ACTIVE_IN_SYNC state on PEER cluster
+    HAGroupStoreRecord peerActiveRecord =
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+    peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerActiveRecord);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-    assertEquals("Should receive no notifications from LOCAL cluster", 0, totalNotifications.get());
+    // Should receive no notifications yet (we're looking for ACTIVE_IN_SYNC -> STANDBY transition)
+    assertEquals("Should receive no notifications for ACTIVE_IN_SYNC state", 0,
+      totalNotifications.get());
 
-    // Trigger transition to STANDBY on PEER → should call listener
-    HAGroupStoreRecord peerRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY);
-    peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
+    // Now trigger transition from ACTIVE_IN_SYNC to STANDBY on PEER → should call listener
+    HAGroupStoreRecord peerStandbyRecord =
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+    peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerStandbyRecord, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-    assertEquals("Should receive notification only from PEER cluster", 1, totalNotifications.get());
+    // Verify the specific transition was detected
+    assertEquals("Should receive notification for ACTIVE_IN_SYNC -> STANDBY transition", 1,
+      totalNotifications.get());
     assertEquals("Notification should be from PEER cluster", ClusterType.PEER,
       lastClusterType.get());
+    assertEquals("FromState should be ACTIVE_IN_SYNC", HAGroupState.ACTIVE_IN_SYNC,
+      lastFromState.get());
 
   }
 
@@ -226,27 +257,29 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     AtomicInteger listener1PeerNotifications = new AtomicInteger(0);
     AtomicInteger listener2PeerNotifications = new AtomicInteger(0);
 
-    HAGroupStateListener listener1 = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.DEGRADED_STANDBY) {
-        if (clusterType == ClusterType.LOCAL) {
-          listener1LocalNotifications.incrementAndGet();
-        } else {
-          listener1PeerNotifications.incrementAndGet();
+    HAGroupStateListener listener1 =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (toState == HAGroupState.DEGRADED_STANDBY) {
+          if (clusterType == ClusterType.LOCAL) {
+            listener1LocalNotifications.incrementAndGet();
+          } else {
+            listener1PeerNotifications.incrementAndGet();
+          }
+          LOGGER.info("Listener1 called: {} -> {} on {}", fromState, toState, clusterType);
         }
-        LOGGER.info("Listener1 called: {} on {}", toState, clusterType);
-      }
-    };
+      };
 
-    HAGroupStateListener listener2 = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.DEGRADED_STANDBY) {
-        if (clusterType == ClusterType.LOCAL) {
-          listener2LocalNotifications.incrementAndGet();
-        } else {
-          listener2PeerNotifications.incrementAndGet();
+    HAGroupStateListener listener2 =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (toState == HAGroupState.DEGRADED_STANDBY) {
+          if (clusterType == ClusterType.LOCAL) {
+            listener2LocalNotifications.incrementAndGet();
+          } else {
+            listener2PeerNotifications.incrementAndGet();
+          }
+          LOGGER.info("Listener2 called: {} -> {} on {}", fromState, toState, clusterType);
         }
-        LOGGER.info("Listener2 called: {} on {}", toState, clusterType);
-      }
-    };
+      };
 
     // Register multiple listeners for same target state on both clusters
     manager.subscribeToTargetState(haGroupName, HAGroupState.DEGRADED_STANDBY, ClusterType.LOCAL,
@@ -260,13 +293,15 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
     // Trigger transition to DEGRADED_STANDBY on LOCAL
     HAGroupStoreRecord localRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.DEGRADED_STANDBY);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.DEGRADED_STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Trigger transition to DEGRADED_STANDBY on PEER
     HAGroupStoreRecord peerRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.DEGRADED_STANDBY);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.DEGRADED_STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -291,17 +326,26 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     AtomicReference<ClusterType> lastStateAClusterType = new AtomicReference<>();
     AtomicReference<ClusterType> lastStateBClusterType = new AtomicReference<>();
 
-    HAGroupStateListener sharedListener = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY && clusterType == ClusterType.LOCAL) {
-        stateANotifications.incrementAndGet();
-        lastStateAClusterType.set(clusterType);
-        LOGGER.info("Shared listener - Target State A: {} on {}", toState, clusterType);
-      } else if (toState == HAGroupState.ACTIVE_IN_SYNC && clusterType == ClusterType.PEER) {
-        stateBNotifications.incrementAndGet();
-        lastStateBClusterType.set(clusterType);
-        LOGGER.info("Shared listener - Target State B: {} on {}", toState, clusterType);
-      }
-    };
+    HAGroupStateListener sharedListener =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (
+          fromState == ACTIVE_NOT_IN_SYNC && toState == HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY
+            && clusterType == ClusterType.LOCAL
+        ) {
+          stateANotifications.incrementAndGet();
+          lastStateAClusterType.set(clusterType);
+          LOGGER.info("Shared listener - Target State A: {} -> {} on {}", fromState, toState,
+            clusterType);
+        } else if (
+          fromState == null && toState == HAGroupState.ACTIVE_IN_SYNC
+            && clusterType == ClusterType.PEER
+        ) {
+          stateBNotifications.incrementAndGet();
+          lastStateBClusterType.set(clusterType);
+          LOGGER.info("Shared listener - Target State B: {} -> {} on {}", fromState, toState,
+            clusterType);
+        }
+      };
 
     // Register same listener for different target states on different clusters
     manager.subscribeToTargetState(haGroupName, HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
@@ -311,13 +355,15 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
     // Trigger target state A on LOCAL
     HAGroupStoreRecord localRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Trigger target state B on PEER
     HAGroupStoreRecord peerRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -328,7 +374,6 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
       lastStateAClusterType.get());
     assertEquals("Target state B should be from PEER cluster", ClusterType.PEER,
       lastStateBClusterType.get());
-
   }
 
   // ========== Edge Cases & Error Handling ==========
@@ -338,9 +383,10 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     String nonExistentHAGroup = "nonExistentGroup_" + testName.getMethodName();
     HAGroupStoreManager manager = HAGroupStoreManager.getInstance(config);
 
-    HAGroupStateListener listener = (groupName, toState, modifiedTime, clusterType) -> {
-      // Should not be called
-    };
+    HAGroupStateListener listener =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        // Should not be called
+      };
 
     // Try to subscribe to non-existent HA group
     try {
@@ -364,27 +410,31 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     AtomicInteger goodListener2Notifications = new AtomicInteger(0);
     AtomicInteger badListenerCalls = new AtomicInteger(0);
 
-    HAGroupStateListener goodListener1 = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.ACTIVE_IN_SYNC) {
-        goodListener1Notifications.incrementAndGet();
-        LOGGER.info("Good listener 1 called: {} on {}", toState, clusterType);
-      }
-    };
+    HAGroupStateListener goodListener1 =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (fromState == ACTIVE_NOT_IN_SYNC && toState == HAGroupState.ACTIVE_IN_SYNC) {
+          goodListener1Notifications.incrementAndGet();
+          LOGGER.info("Good listener 1 called: {} -> {} on {}", fromState, toState, clusterType);
+        }
+      };
 
-    HAGroupStateListener badListener = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.ACTIVE_IN_SYNC) {
-        badListenerCalls.incrementAndGet();
-        LOGGER.info("Bad listener called, about to throw exception");
-        throw new RuntimeException("Test exception from bad listener");
-      }
-    };
+    HAGroupStateListener badListener =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (fromState == ACTIVE_NOT_IN_SYNC && toState == HAGroupState.ACTIVE_IN_SYNC) {
+          badListenerCalls.incrementAndGet();
+          LOGGER.info("Bad listener called: {} -> {}, about to throw exception", fromState,
+            toState);
+          throw new RuntimeException("Test exception from bad listener");
+        }
+      };
 
-    HAGroupStateListener goodListener2 = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.ACTIVE_IN_SYNC) {
-        goodListener2Notifications.incrementAndGet();
-        LOGGER.info("Good listener 2 called: {} on {}", toState, clusterType);
-      }
-    };
+    HAGroupStateListener goodListener2 =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (fromState == ACTIVE_NOT_IN_SYNC && toState == HAGroupState.ACTIVE_IN_SYNC) {
+          goodListener2Notifications.incrementAndGet();
+          LOGGER.info("Good listener 2 called: {} -> {} on {}", fromState, toState, clusterType);
+        }
+      };
 
     // Register listeners - bad listener in the middle
     manager.subscribeToTargetState(haGroupName, HAGroupState.ACTIVE_IN_SYNC, ClusterType.LOCAL,
@@ -396,7 +446,8 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
     // Trigger transition to target state
     HAGroupStoreRecord transitionRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, transitionRecord, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -427,9 +478,11 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         try {
           startLatch.await(); // Wait for all threads to be ready
 
-          HAGroupStateListener listener = (groupName, toState, modifiedTime, clusterType) -> {
-            LOGGER.debug("Thread {} listener called: {} on {}", threadIndex, toState, clusterType);
-          };
+          HAGroupStateListener listener =
+            (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+              LOGGER.debug("Thread {} listener called: {} -> {} on {}", threadIndex, fromState,
+                toState, clusterType);
+            };
 
           // Half subscribe to LOCAL, half to PEER
           ClusterType clusterType = (threadIndex % 2 == 0) ? ClusterType.LOCAL : ClusterType.PEER;
@@ -471,14 +524,15 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     AtomicInteger localNotifications = new AtomicInteger(0);
     AtomicInteger peerNotifications = new AtomicInteger(0);
 
-    HAGroupStateListener listener = (groupName, toState, modifiedTime, clusterType) -> {
-      if (clusterType == ClusterType.LOCAL) {
-        localNotifications.incrementAndGet();
-      } else {
-        peerNotifications.incrementAndGet();
-      }
-      LOGGER.debug("High frequency listener: {} on {}", toState, clusterType);
-    };
+    HAGroupStateListener listener =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (clusterType == ClusterType.LOCAL) {
+          localNotifications.incrementAndGet();
+        } else {
+          peerNotifications.incrementAndGet();
+        }
+        LOGGER.debug("High frequency listener: {} -> {} on {}", fromState, toState, clusterType);
+      };
 
     // Subscribe to target state on both clusters
     manager.subscribeToTargetState(haGroupName, HAGroupState.STANDBY, ClusterType.LOCAL, listener);
@@ -487,18 +541,21 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Rapidly alternate state changes on both clusters
     final int changeCount = 5;
     HAGroupStoreRecord initialPeerRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.DEGRADED_STANDBY_FOR_WRITER);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.DEGRADED_STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     peerHaAdmin.createHAGroupStoreRecordInZooKeeper(initialPeerRecord);
 
     for (int i = 0; i < changeCount; i++) {
       // Change local cluster
       HAGroupStoreRecord localRecord = new HAGroupStoreRecord("1.0", haGroupName,
-        (i % 2 == 0) ? HAGroupState.STANDBY : HAGroupState.DEGRADED_STANDBY_FOR_READER);
+        (i % 2 == 0) ? HAGroupState.STANDBY : HAGroupState.DEGRADED_STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
       haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, -1);
 
       // Change peer cluster
       HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("1.0", haGroupName,
-        (i % 2 == 0) ? HAGroupState.STANDBY : HAGroupState.DEGRADED_STANDBY_FOR_WRITER);
+        (i % 2 == 0) ? HAGroupState.STANDBY : HAGroupState.STANDBY_TO_ACTIVE, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
       peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerRecord, -1);
 
       // Small delay between changes
@@ -534,39 +591,43 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     AtomicInteger peerStandbyNotifications = new AtomicInteger(0);
 
     // Create listeners that track which ones are called
-    HAGroupStateListener listener1 = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.ACTIVE_IN_SYNC && clusterType == ClusterType.LOCAL) {
-        localActiveNotifications.incrementAndGet();
-        LOGGER.info("Listener1 LOCAL ACTIVE_IN_SYNC: {}", toState);
-      }
-    };
+    HAGroupStateListener listener1 =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (toState == HAGroupState.ACTIVE_IN_SYNC && clusterType == ClusterType.LOCAL) {
+          localActiveNotifications.incrementAndGet();
+          LOGGER.info("Listener1 LOCAL ACTIVE_IN_SYNC: {} -> {}", fromState, toState);
+        }
+      };
 
-    HAGroupStateListener listener2 = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.ACTIVE_IN_SYNC && clusterType == ClusterType.LOCAL) {
-        localActiveNotifications.incrementAndGet();
-        LOGGER.info("Listener2 LOCAL ACTIVE_IN_SYNC: {}", toState);
-      } else if (toState == HAGroupState.STANDBY_TO_ACTIVE && clusterType == ClusterType.PEER) {
-        peerActiveNotifications.incrementAndGet();
-        LOGGER.info("Listener2 PEER STANDBY_TO_ACTIVE: {}", toState);
-      }
-    };
+    HAGroupStateListener listener2 =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (toState == HAGroupState.ACTIVE_IN_SYNC && clusterType == ClusterType.LOCAL) {
+          localActiveNotifications.incrementAndGet();
+          LOGGER.info("Listener2 LOCAL ACTIVE_IN_SYNC: {} -> {}", fromState, toState);
+        } else if (toState == HAGroupState.STANDBY_TO_ACTIVE && clusterType == ClusterType.PEER) {
+          peerActiveNotifications.incrementAndGet();
+          LOGGER.info("Listener2 PEER STANDBY_TO_ACTIVE: {} -> {}", fromState, toState);
+        }
+      };
 
-    HAGroupStateListener listener3 = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.STANDBY_TO_ACTIVE && clusterType == ClusterType.PEER) {
-        peerActiveNotifications.incrementAndGet();
-        LOGGER.info("Listener3 PEER STANDBY_TO_ACTIVE: {}", toState);
-      }
-    };
+    HAGroupStateListener listener3 =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (toState == HAGroupState.STANDBY_TO_ACTIVE && clusterType == ClusterType.PEER) {
+          peerActiveNotifications.incrementAndGet();
+          LOGGER.info("Listener3 PEER STANDBY_TO_ACTIVE: {} -> {}", fromState, toState);
+        }
+      };
 
-    HAGroupStateListener listener4 = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.ACTIVE_IN_SYNC && clusterType == ClusterType.LOCAL) {
-        localStandbyNotifications.incrementAndGet();
-        LOGGER.info("Listener4 LOCAL ACTIVE_IN_SYNC: {}", toState);
-      } else if (toState == HAGroupState.STANDBY_TO_ACTIVE && clusterType == ClusterType.PEER) {
-        peerStandbyNotifications.incrementAndGet();
-        LOGGER.info("Listener4 PEER STANDBY_TO_ACTIVE: {}", toState);
-      }
-    };
+    HAGroupStateListener listener4 =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (toState == HAGroupState.ACTIVE_IN_SYNC && clusterType == ClusterType.LOCAL) {
+          localStandbyNotifications.incrementAndGet();
+          LOGGER.info("Listener4 LOCAL ACTIVE_IN_SYNC: {} -> {}", fromState, toState);
+        } else if (toState == HAGroupState.STANDBY_TO_ACTIVE && clusterType == ClusterType.PEER) {
+          peerStandbyNotifications.incrementAndGet();
+          LOGGER.info("Listener4 PEER STANDBY_TO_ACTIVE: {} -> {}", fromState, toState);
+        }
+      };
 
     // Subscribe listeners to both clusters for target states
     manager.subscribeToTargetState(haGroupName, HAGroupState.ACTIVE_IN_SYNC, ClusterType.LOCAL,
@@ -584,7 +645,8 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
     // Test initial functionality - trigger ACTIVE_IN_SYNC on LOCAL
     HAGroupStoreRecord localActiveRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localActiveRecord, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -594,7 +656,8 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
     // Test initial functionality - trigger STANDBY_TO_ACTIVE on PEER
     HAGroupStoreRecord peerActiveRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY_TO_ACTIVE);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY_TO_ACTIVE, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerActiveRecord);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -617,12 +680,14 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Test after partial unsubscribe - trigger ACTIVE_IN_SYNC on LOCAL again by first changing to
     // some other state.
     HAGroupStoreRecord localActiveRecord2 =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_NOT_IN_SYNC);
+      new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localActiveRecord2, 1);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     HAGroupStoreRecord localActiveRecord3 =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localActiveRecord3, 2);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -632,12 +697,14 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
     // Test after partial unsubscribe - trigger STANDBY_TO_ACTIVE on PEER again
     HAGroupStoreRecord peerActiveRecord2 =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerActiveRecord2, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     HAGroupStoreRecord peerActiveRecord3 =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY_TO_ACTIVE);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY_TO_ACTIVE, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerActiveRecord3, 1);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -659,12 +726,14 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
     // Test after complete unsubscribe - trigger ACTIVE_NOT_IN_SYNC on both clusters
     HAGroupStoreRecord localActiveRecord4 =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_NOT_IN_SYNC);
+      new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localActiveRecord4, 3);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     HAGroupStoreRecord peerActiveRecord4 =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_NOT_IN_SYNC);
+      new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerActiveRecord4, 2);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -676,13 +745,14 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
     // Test that new subscriptions still work properly
     AtomicInteger newSubscriptionNotifications = new AtomicInteger(0);
-    HAGroupStateListener newTestListener = (groupName, toState, modifiedTime, clusterType) -> {
-      if (toState == HAGroupState.STANDBY && clusterType == ClusterType.LOCAL) {
-        newSubscriptionNotifications.incrementAndGet();
-        LOGGER.info("New subscription triggered: {} on {} at {}", toState, clusterType,
-          modifiedTime);
-      }
-    };
+    HAGroupStateListener newTestListener =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (toState == HAGroupState.STANDBY && clusterType == ClusterType.LOCAL) {
+          newSubscriptionNotifications.incrementAndGet();
+          LOGGER.info("New subscription triggered: {} -> {} on {} at {}", fromState, toState,
+            clusterType, modifiedTime);
+        }
+      };
 
     // Subscribe with new test listener
     manager.subscribeToTargetState(haGroupName, HAGroupState.STANDBY, ClusterType.LOCAL,
@@ -690,7 +760,8 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
     // Trigger STANDBY state and verify new subscription works
     HAGroupStoreRecord standbyRecord =
-      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY);
+      new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, standbyRecord, 4);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -698,9 +769,8 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     assertEquals("New subscription should receive exactly 1 notification", 1,
       newSubscriptionNotifications.get());
 
-    LOGGER.info(
-      "Subscription cleanup test completed successfully with {} notifications from new subscription",
-      newSubscriptionNotifications.get());
+    LOGGER.info("Subscription cleanup test completed successfully with {} notifications from new"
+      + " subscription", newSubscriptionNotifications.get());
 
   }
 
