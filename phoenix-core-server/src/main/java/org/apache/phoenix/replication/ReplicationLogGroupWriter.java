@@ -35,6 +35,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.compress.Compression;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.replication.log.LogFileWriter;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -143,8 +145,8 @@ public abstract class ReplicationLogGroupWriter {
         this.logGroup = logGroup;
         Configuration conf = logGroup.getConfiguration();
         this.rotationTimeMs =
-            conf.getLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_TIME_MS_KEY,
-                ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS);
+            conf.getLong(QueryServices.REPLICATION_LOG_ROTATION_TIME_MS_KEY,
+                QueryServicesOptions.DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS);
         long rotationSize =
             conf.getLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY,
                 ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_SIZE_BYTES);

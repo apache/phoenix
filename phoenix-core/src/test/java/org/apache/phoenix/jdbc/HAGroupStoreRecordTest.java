@@ -365,6 +365,6 @@ public class HAGroupStoreRecordTest {
                                                      String policy, String peerZKUrl, String clusterUrl,
                                                      String peerClusterUrl, long adminCRRVersion) {
         return new HAGroupStoreRecord(protocolVersion, haGroupName, haGroupState,
-        null, policy, peerZKUrl, clusterUrl, peerClusterUrl, adminCRRVersion);
+        0L, policy, peerZKUrl, clusterUrl, peerClusterUrl, adminCRRVersion);
     }
 }

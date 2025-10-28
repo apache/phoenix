@@ -187,9 +187,9 @@ public class HighAvailabilityTestingUtility {
         public void initClusterRole(String haGroupName, HighAvailabilityPolicy policy)
                 throws Exception {
             HAGroupStoreRecord activeRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, ACTIVE.getDefaultHAGroupState(),
-                    null, policy != null ? policy.name() : HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
+                    0L, policy != null ? policy.name() : HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
             HAGroupStoreRecord standbyRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, STANDBY.getDefaultHAGroupState(),
-                    null, policy != null ? policy.name() :HighAvailabilityPolicy.FAILOVER.name(), getZkUrl1(), getMasterAddress2(), getMasterAddress1(), 1L);
+                    0L, policy != null ? policy.name() :HighAvailabilityPolicy.FAILOVER.name(), getZkUrl1(), getMasterAddress2(), getMasterAddress1(), 1L);
             upsertGroupRecordInBothSystemTable(haGroupName, ACTIVE, STANDBY, 1L, 1L,null, policy);
             addOrUpdateRoleRecordToClusters(haGroupName, activeRecord, standbyRecord);
         }
@@ -202,7 +202,7 @@ public class HighAvailabilityTestingUtility {
          */
         public void initClusterRoleRecordFor1Cluster(String haGroupName, HighAvailabilityPolicy policy) throws Exception {
             HAGroupStoreRecord activeRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, ACTIVE.getDefaultHAGroupState(),
-                    null, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
+                    0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
             upsertGroupRecordInASystemTable(haGroupName, ACTIVE, STANDBY, 1L, 1L, null, policy, 1);
             addOrUpdateRoleRecordToClusters(haGroupName, activeRecord, null);
         }
@@ -305,12 +305,12 @@ public class HighAvailabilityTestingUtility {
             HAGroupStoreRecord newRecord;
             if (clusterIndex == 1) {
                 newRecord = new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(), haGroupName, role1.getDefaultHAGroupState(),
-                        null, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
+                        0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
                 refreshSystemTableInOneCluster(haGroupName, role1, role2, newRecord.getAdminCRRVersion(), currentRecord2.getLeft().getAdminCRRVersion(), null, haGroup.getRoleRecord().getPolicy(), clusterIndex);
                 addOrUpdateRoleRecordToClusters(haGroupName, newRecord,null);
             } else {
                 newRecord = new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(), haGroupName, role2.getDefaultHAGroupState(),
-                        null, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
+                        0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
                 refreshSystemTableInOneCluster(haGroupName, role1, role2, currentRecord1.getLeft().getAdminCRRVersion(), newRecord.getAdminCRRVersion(), null, haGroup.getRoleRecord().getPolicy(), clusterIndex);
                 addOrUpdateRoleRecordToClusters(haGroupName, null, newRecord);
             }
@@ -370,8 +370,8 @@ public class HighAvailabilityTestingUtility {
             final Pair<HAGroupStoreRecord, Stat> currentRecord2 = haAdmin2.getHAGroupStoreRecordInZooKeeper(haGroupName);
 
             String policyString = policy != null ? policy.name() : HighAvailabilityPolicy.FAILOVER.name();
-            HAGroupStoreRecord record1 = new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(), haGroupName, role1.getDefaultHAGroupState(), null, policyString, getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
-            HAGroupStoreRecord record2 = new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(), haGroupName, role2.getDefaultHAGroupState(), null, policyString, getZkUrl1(), getMasterAddress2(), getMasterAddress1(), 1L);
+            HAGroupStoreRecord record1 = new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(), haGroupName, role1.getDefaultHAGroupState(), 0L, policyString, getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
+            HAGroupStoreRecord record2 = new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(), haGroupName, role2.getDefaultHAGroupState(), 0L, policyString, getZkUrl1(), getMasterAddress2(), getMasterAddress1(), 1L);
 
             refreshSystemTableInBothClusters(haGroupName, role1, role2, 1L, 1L, null, haGroup.getRoleRecord().getPolicy());
 
@@ -407,7 +407,7 @@ public class HighAvailabilityTestingUtility {
             String haGroupName = haGroup.getGroupInfo().getName();
             final Pair<HAGroupStoreRecord, Stat> currentRecord2 = haAdmin2.getHAGroupStoreRecordInZooKeeper(haGroupName);
 
-            HAGroupStoreRecord record2 = new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(), haGroupName, role2.getDefaultHAGroupState(), null, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl1(), getMasterAddress2(), getMasterAddress1(), 1L);
+            HAGroupStoreRecord record2 = new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(), haGroupName, role2.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl1(), getMasterAddress2(), getMasterAddress1(), 1L);
 
             refreshSystemTableInOneCluster(haGroupName, role1, role2, 1, 1, null, haGroup.getRoleRecord().getPolicy(), 2);
             addOrUpdateRoleRecordToClusters(haGroupName, null, record2);
@@ -419,7 +419,7 @@ public class HighAvailabilityTestingUtility {
             haGroup.refreshClusterRoleRecord(true);
 
             //If cluster 1 is down, server won't be able to reach peer for states and will get version passed in refreshSystemTableInOneCluster and OFFLINE role.
-            HAGroupStoreRecord record1 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, UNKNOWN.getDefaultHAGroupState(), null, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);;
+            HAGroupStoreRecord record1 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, UNKNOWN.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);;
 
             // wait for the cluster roles are populated into client side from RegionServer endpoints.
             ClusterRoleRecord newRoleRecord = generateCRRFromHAGroupStoreRecord(haGroup, record1, record2);
@@ -433,7 +433,7 @@ public class HighAvailabilityTestingUtility {
             String haGroupName = haGroup.getGroupInfo().getName();
             final Pair<HAGroupStoreRecord, Stat> currentRecord1 = haAdmin1.getHAGroupStoreRecordInZooKeeper(haGroupName);
 
-            HAGroupStoreRecord record1 = new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(), haGroupName, role1.getDefaultHAGroupState(), null, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
+            HAGroupStoreRecord record1 = new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(), haGroupName, role1.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
 
             refreshSystemTableInOneCluster(haGroupName, role1, role2, 1, 1, null, haGroup.getRoleRecord().getPolicy(), 1);
             addOrUpdateRoleRecordToClusters(haGroupName, record1, null);
@@ -445,7 +445,7 @@ public class HighAvailabilityTestingUtility {
             haGroup.refreshClusterRoleRecord(true);
 
             //If cluster 2 is down, server won't be able to reach peer for states and will get version passed in refreshSystemTableInOneCluster and OFFLINE role.
-            HAGroupStoreRecord record2 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, UNKNOWN.getDefaultHAGroupState(), null, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
+            HAGroupStoreRecord record2 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, UNKNOWN.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 1L);
 
             // wait for the cluster roles are populated into client side from RegionServer endpoints.
             ClusterRoleRecord newRoleRecord = generateCRRFromHAGroupStoreRecord(haGroup, record1, record2);
@@ -458,8 +458,8 @@ public class HighAvailabilityTestingUtility {
             String haGroupName = haGroup.getGroupInfo().getName();
             //TODO:- Inducing version change, but how would we know that a URL is changed
             // as we don't store url in ZNodes so it doesn't increase version for that change
-            HAGroupStoreRecord record1 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, role1.getDefaultHAGroupState(), null, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 2L);
-            HAGroupStoreRecord record2 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, role2.getDefaultHAGroupState(), null, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl1(), getMasterAddress2(), getMasterAddress1(), 2L);
+            HAGroupStoreRecord record1 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, role1.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), 2L);
+            HAGroupStoreRecord record2 = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, role2.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl1(), getMasterAddress2(), getMasterAddress1(), 2L);
 
             refreshSystemTableInBothClusters(haGroupName, role1, role2, 2, 2, null, haGroup.getRoleRecord().getPolicy());
             addOrUpdateRoleRecordToClusters(haGroupName, record1, record2);

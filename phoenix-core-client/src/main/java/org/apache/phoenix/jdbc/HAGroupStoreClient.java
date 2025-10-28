@@ -51,6 +51,8 @@ import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.JDBCUtil;
@@ -120,6 +122,8 @@ public class HAGroupStoreClient implements Closeable {
     private final PathChildrenCacheListener peerCustomPathChildrenCacheListener;
     // Wait time for sync mode
     private final long waitTimeForSyncModeInMs;
+    // Rotation time for a log
+    private final long rotationTimeMs;
     // State tracking for transition detection
     private volatile HAGroupState lastKnownLocalState;
     private volatile HAGroupState lastKnownPeerState;
@@ -221,6 +225,9 @@ public class HAGroupStoreClient implements Closeable {
         this.zkUrl = zkUrl;
         this.waitTimeForSyncModeInMs =  (long) Math.ceil(conf.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT)
                 * ZK_SESSION_TIMEOUT_MULTIPLIER);
+        this.rotationTimeMs =
+                conf.getLong(QueryServices.REPLICATION_LOG_ROTATION_TIME_MS_KEY,
+                        QueryServicesOptions.DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS);
         // Custom Event Listener
         this.peerCustomPathChildrenCacheListener = peerPathChildrenCacheListener;
         try {
@@ -329,11 +336,9 @@ public class HAGroupStoreClient implements Closeable {
                 if (currentHAGroupStoreRecord.getHAGroupState()
                         == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
                         && haGroupState == HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC) {
-                    lastSyncTimeInMs = System.currentTimeMillis();
-                } else if (haGroupState == HAGroupState.ACTIVE_IN_SYNC
-                        || !(ClusterRole.ACTIVE.equals(clusterRole)
-                            || ClusterRole.ACTIVE_TO_STANDBY.equals(clusterRole))) {
-                    lastSyncTimeInMs = null;
+                    // We record the last round timestamp by subtracting the rotationTime and then 
+                    // taking the beginning of last round (floor) by first integer division and then multiplying again.
+                    lastSyncTimeInMs = ((System.currentTimeMillis() - rotationTimeMs)/rotationTimeMs) * (rotationTimeMs);
                 }
                 HAGroupStoreRecord newHAGroupStoreRecord = new HAGroupStoreRecord(
                         currentHAGroupStoreRecord.getProtocolVersion(),
@@ -427,15 +432,11 @@ public class HAGroupStoreClient implements Closeable {
                     "System Table HAGroupRecord cannot be null");
             HAGroupStoreRecord.HAGroupState defaultHAGroupState
                     = systemTableRecord.getClusterRole().getDefaultHAGroupState();
-            Long lastSyncTimeInMs
-                    = defaultHAGroupState.equals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC)
-                    ? System.currentTimeMillis()
-                    : null;
             HAGroupStoreRecord newHAGroupStoreRecord = new HAGroupStoreRecord(
                     HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                     haGroupName,
                     defaultHAGroupState,
-                    lastSyncTimeInMs,
+                    0L,
                     systemTableRecord.getPolicy().toString(),
                     systemTableRecord.getPeerZKUrl(),
                     systemTableRecord.getClusterUrl(),

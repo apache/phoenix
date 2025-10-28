@@ -87,7 +87,7 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
 
         try (PhoenixHAAdmin peerHAAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(), ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
             HAGroupStoreRecord peerHAGroupStoreRecord = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
-            HAGroupState.STANDBY, null, HighAvailabilityPolicy.FAILOVER.toString(),
+            HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
              CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress2(), CLUSTERS.getMasterAddress1(), 0L);
             peerHAAdmin.createHAGroupStoreRecordInZooKeeper(peerHAGroupStoreRecord);
         }

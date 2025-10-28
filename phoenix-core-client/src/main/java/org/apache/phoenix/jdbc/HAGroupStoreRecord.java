@@ -155,7 +155,7 @@ public class HAGroupStoreRecord {
     private final String protocolVersion;
     private final String haGroupName;
     private final HAGroupState haGroupState;
-    private final Long lastSyncStateTimeInMs;
+    private final long lastSyncStateTimeInMs;
     private final String policy;
     private final String peerZKUrl;
     private final String clusterUrl;
@@ -166,7 +166,7 @@ public class HAGroupStoreRecord {
     public HAGroupStoreRecord(@JsonProperty("protocolVersion") String protocolVersion,
                               @JsonProperty("haGroupName") String haGroupName,
                               @JsonProperty("haGroupState") HAGroupState haGroupState,
-                              @JsonProperty("lastSyncStateTimeInMs") Long lastSyncStateTimeInMs,
+                              @JsonProperty("lastSyncStateTimeInMs") long lastSyncStateTimeInMs,
                               @JsonProperty("policy") String policy,
                               @JsonProperty("peerZKUrl") String peerZKUrl,
                               @JsonProperty("clusterUrl") String clusterUrl,

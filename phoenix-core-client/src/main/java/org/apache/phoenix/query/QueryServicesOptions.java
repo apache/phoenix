@@ -89,6 +89,7 @@ import static org.apache.phoenix.query.QueryServices.REGIONSERVER_INFO_PORT_ATTR
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_ENABLED;
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_THREAD_POOL_SIZE;
 import static org.apache.phoenix.query.QueryServices.RENEW_LEASE_THRESHOLD_MILLISECONDS;
+import static org.apache.phoenix.query.QueryServices.REPLICATION_LOG_ROTATION_TIME_MS_KEY;
 import static org.apache.phoenix.query.QueryServices.ROW_KEY_ORDER_SALTED_TABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.RPC_TIMEOUT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.RUN_RENEW_LEASE_FREQUENCY_INTERVAL_MILLISECONDS;
@@ -477,6 +478,8 @@ public class QueryServicesOptions {
     // Default HA Group Store sync job interval in seconds (15 minutes = 900 seconds)
     public static final int DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS = 900;
 
+    public static final long DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS = 60 * 1000L;
+
     private final Configuration config;
 
     private QueryServicesOptions(Configuration config) {
@@ -592,6 +595,7 @@ public class QueryServicesOptions {
             .setIfUnset(CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT,
                     DEFAULT_CQSI_THREAD_POOL_ALLOW_CORE_THREAD_TIMEOUT)
             .setIfUnset(CQSI_THREAD_POOL_METRICS_ENABLED, DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED)
+            .setIfUnset(REPLICATION_LOG_ROTATION_TIME_MS_KEY, DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS)
             .setIfUnset(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS,
                     DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS);
 

@@ -124,7 +124,7 @@ public class PhoenixHAAdminIT extends BaseTest {
                 HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.STANDBY,
-                null, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
+                0L, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
                 CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
         );
 
@@ -168,7 +168,7 @@ public class PhoenixHAAdminIT extends BaseTest {
                 HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.STANDBY,
-                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                0L, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
                 CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
         );
 
@@ -205,7 +205,7 @@ public class PhoenixHAAdminIT extends BaseTest {
                 HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.STANDBY,
-                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                0L, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
                 CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
         );
 
@@ -216,7 +216,7 @@ public class PhoenixHAAdminIT extends BaseTest {
                 HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
-                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                0L, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
                 CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
         );
 
@@ -293,7 +293,7 @@ public class PhoenixHAAdminIT extends BaseTest {
                 HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.STANDBY,
-                null, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
+                0L, HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl,
                 CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
         );
 
@@ -349,7 +349,7 @@ public class PhoenixHAAdminIT extends BaseTest {
                             HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                             haGroupName,
                             HAGroupStoreRecord.HAGroupState.STANDBY,
-                            null, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
+                            0L, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
                             CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
                     );
 
@@ -428,7 +428,7 @@ public class PhoenixHAAdminIT extends BaseTest {
                             HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                             haGroupName,
                             threadId % 2 == 0 ? HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC : HAGroupStoreRecord.HAGroupState.STANDBY,
-                            null, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
+                            0L, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
                             CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L
                     );
 
@@ -469,7 +469,7 @@ public class PhoenixHAAdminIT extends BaseTest {
                 "v1.0",
                 haGroupName,
                 HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
-                null,
+                0L,
                 HighAvailabilityPolicy.FAILOVER.toString(),
                 CLUSTERS.getZkUrl2(),
                 CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L);

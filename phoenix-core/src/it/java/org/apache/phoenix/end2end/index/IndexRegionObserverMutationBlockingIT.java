@@ -61,6 +61,7 @@ public class IndexRegionObserverMutationBlockingIT {
 
     private String zkUrl;
     private String peerZkUrl;
+    
     @Rule
     public TestName testName = new TestName();
     private Properties clientProps = new Properties();
@@ -82,6 +83,8 @@ public class IndexRegionObserverMutationBlockingIT {
         haAdmin = CLUSTERS.getHaAdmin1();
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
+        this.zkUrl = CLUSTERS.getZkUrl1();
+        this.peerZkUrl = CLUSTERS.getZkUrl2();
     }
 
     @Test
@@ -106,7 +109,7 @@ public class IndexRegionObserverMutationBlockingIT {
             HAGroupStoreRecord haGroupStoreRecord
                     = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                     haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
-                    null, HighAvailabilityPolicy.FAILOVER.toString(),
+                    0L, HighAvailabilityPolicy.FAILOVER.toString(),
                     this.peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L);
             haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
 
@@ -178,7 +181,7 @@ public class IndexRegionObserverMutationBlockingIT {
             HAGroupStoreRecord haGroupStoreRecord
                     = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                     haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
-                    null, HighAvailabilityPolicy.FAILOVER.toString(),
+                    0L, HighAvailabilityPolicy.FAILOVER.toString(),
                     this.peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L);
             haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
             Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -199,7 +202,7 @@ public class IndexRegionObserverMutationBlockingIT {
             haGroupStoreRecord
                     = new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                     haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
-                    null, HighAvailabilityPolicy.FAILOVER.toString(),
+                    0L, HighAvailabilityPolicy.FAILOVER.toString(),
                     this.peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), 0L);
             haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
             Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -249,7 +252,7 @@ public class IndexRegionObserverMutationBlockingIT {
                     HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION,
                     haGroupName,
                     HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
-                    null,
+                    0L,
                     HighAvailabilityPolicy.FAILOVER.toString(),
                     this.peerZkUrl,
                     CLUSTERS.getMasterAddress1(),

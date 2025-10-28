@@ -147,12 +147,12 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         manager.subscribeToTargetState(haGroupName, ACTIVE_NOT_IN_SYNC, ClusterType.PEER, peerListener);
 
         // Trigger transition to STANDBY_TO_ACTIVE on LOCAL cluster
-        HAGroupStoreRecord localRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY_TO_ACTIVE, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord localRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY_TO_ACTIVE, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Trigger transition to STANDBY on PEER cluster
-        HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -193,7 +193,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         manager.unsubscribeFromTargetState(haGroupName, HAGroupState.STANDBY, ClusterType.LOCAL, listener);
 
         // First, establish ACTIVE_IN_SYNC state on PEER cluster
-        HAGroupStoreRecord peerActiveRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord peerActiveRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerActiveRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -201,7 +201,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         assertEquals("Should receive no notifications for ACTIVE_IN_SYNC state", 0, totalNotifications.get());
 
         // Now trigger transition from ACTIVE_IN_SYNC to STANDBY on PEER → should call listener
-        HAGroupStoreRecord peerStandbyRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord peerStandbyRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerStandbyRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -254,12 +254,12 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         manager.subscribeToTargetState(haGroupName, HAGroupState.DEGRADED_STANDBY, ClusterType.PEER, listener2);
 
         // Trigger transition to DEGRADED_STANDBY on LOCAL
-        HAGroupStoreRecord localRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.DEGRADED_STANDBY, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord localRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.DEGRADED_STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Trigger transition to DEGRADED_STANDBY on PEER
-        HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.DEGRADED_STANDBY, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.DEGRADED_STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -299,12 +299,12 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         manager.subscribeToTargetState(haGroupName, HAGroupState.ACTIVE_IN_SYNC, ClusterType.PEER, sharedListener);
 
         // Trigger target state A on LOCAL
-        HAGroupStoreRecord localRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord localRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Trigger target state B on PEER
-        HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -374,7 +374,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         manager.subscribeToTargetState(haGroupName, HAGroupState.ACTIVE_IN_SYNC, ClusterType.LOCAL, goodListener2);
 
         // Trigger transition to target state
-        HAGroupStoreRecord transitionRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord transitionRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, transitionRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -460,18 +460,18 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
 
         // Rapidly alternate state changes on both clusters
         final int changeCount = 5;
-        HAGroupStoreRecord initialPeerRecord = new HAGroupStoreRecord("1.0", haGroupName,HAGroupState.DEGRADED_STANDBY, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord initialPeerRecord = new HAGroupStoreRecord("1.0", haGroupName,HAGroupState.DEGRADED_STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         peerHaAdmin.createHAGroupStoreRecordInZooKeeper(initialPeerRecord);
 
         for (int i = 0; i < changeCount; i++) {
             // Change local cluster
             HAGroupStoreRecord localRecord = new HAGroupStoreRecord("1.0", haGroupName,
-                    (i % 2 == 0) ? HAGroupState.STANDBY : HAGroupState.DEGRADED_STANDBY, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+                    (i % 2 == 0) ? HAGroupState.STANDBY : HAGroupState.DEGRADED_STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
             haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, -1);
 
             // Change peer cluster
             HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("1.0", haGroupName,
-                    (i % 2 == 0) ? HAGroupState.STANDBY : HAGroupState.STANDBY_TO_ACTIVE, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+                    (i % 2 == 0) ? HAGroupState.STANDBY : HAGroupState.STANDBY_TO_ACTIVE, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
             peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerRecord, -1);
 
             // Small delay between changes
@@ -547,7 +547,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         manager.subscribeToTargetState(haGroupName, HAGroupState.STANDBY_TO_ACTIVE, ClusterType.PEER, listener4);
 
         // Test initial functionality - trigger ACTIVE_IN_SYNC on LOCAL
-        HAGroupStoreRecord localActiveRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord localActiveRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localActiveRecord, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -555,7 +555,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         assertEquals("Should have 2 LOCAL ACTIVE_IN_SYNC notifications initially", 2, localActiveNotifications.get());
 
         // Test initial functionality - trigger STANDBY_TO_ACTIVE on PEER
-        HAGroupStoreRecord peerActiveRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY_TO_ACTIVE, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord peerActiveRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY_TO_ACTIVE, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerActiveRecord);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -572,11 +572,11 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         manager.unsubscribeFromTargetState(haGroupName, HAGroupState.ACTIVE_IN_SYNC, ClusterType.LOCAL, listener4);
 
         // Test after partial unsubscribe - trigger ACTIVE_IN_SYNC on LOCAL again by first changing to some other state.
-        HAGroupStoreRecord localActiveRecord2 = new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord localActiveRecord2 = new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localActiveRecord2, 1);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        HAGroupStoreRecord localActiveRecord3 = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord localActiveRecord3 = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.ACTIVE_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localActiveRecord3, 2);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -584,11 +584,11 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         assertEquals("Should have 1 LOCAL ACTIVE_IN_SYNC notification after partial unsubscribe", 1, localActiveNotifications.get());
 
         // Test after partial unsubscribe - trigger STANDBY_TO_ACTIVE on PEER again
-        HAGroupStoreRecord peerActiveRecord2 = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord peerActiveRecord2 = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerActiveRecord2, 0);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        HAGroupStoreRecord peerActiveRecord3 = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY_TO_ACTIVE, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord peerActiveRecord3 = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY_TO_ACTIVE, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerActiveRecord3, 1);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -605,11 +605,11 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         manager.unsubscribeFromTargetState(haGroupName, HAGroupState.STANDBY, ClusterType.PEER, listener4);
 
         // Test after complete unsubscribe - trigger ACTIVE_NOT_IN_SYNC on both clusters
-        HAGroupStoreRecord localActiveRecord4 = new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord localActiveRecord4 = new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localActiveRecord4, 3);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        HAGroupStoreRecord peerActiveRecord4 = new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord peerActiveRecord4 = new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerActiveRecord4, 2);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -630,7 +630,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
         manager.subscribeToTargetState(haGroupName, HAGroupState.STANDBY, ClusterType.LOCAL, newTestListener);
 
         // Trigger STANDBY state and verify new subscription works
-        HAGroupStoreRecord standbyRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY, null, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
+        HAGroupStoreRecord standbyRecord = new HAGroupStoreRecord("1.0", haGroupName, HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl, 0L);
         haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, standbyRecord, 4);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
