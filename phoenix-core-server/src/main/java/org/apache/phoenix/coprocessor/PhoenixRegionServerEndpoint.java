@@ -43,6 +43,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.replication.reader.ReplicationLogReplayService;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
@@ -69,10 +70,14 @@ public class PhoenixRegionServerEndpoint extends
       MetricsPhoenixCoprocessorSourceFactory.getInstance().getMetadataCachingSource();
     initUncoveredIndexThreadPool(this.conf);
     this.zkUrl = getLocalZkUrl(conf);
+    // Start replication log replay
+    ReplicationLogReplayService.getInstance(conf).start();
   }
 
   @Override
   public void stop(CoprocessorEnvironment env) throws IOException {
+    // Stop replication log replay
+    ReplicationLogReplayService.getInstance(conf).stop();
     RegionServerCoprocessor.super.stop(env);
     if (uncoveredIndexThreadPool != null) {
       uncoveredIndexThreadPool

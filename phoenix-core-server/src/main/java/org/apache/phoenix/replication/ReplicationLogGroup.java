@@ -57,9 +57,9 @@ public class ReplicationLogGroup {
     "phoenix.replication.log.standby.hdfs.url";
   public static final String REPLICATION_FALLBACK_HDFS_URL_KEY =
     "phoenix.replication.log.fallback.hdfs.url";
-  public static final String REPLICATION_NUM_SHARDS_KEY = "phoenix.replication.log.shards";
-  public static final int DEFAULT_REPLICATION_NUM_SHARDS = 1000;
-  public static final int MAX_REPLICATION_NUM_SHARDS = 100000;
+  public static final String REPLICATION_LOG_ROTATION_TIME_MS_KEY =
+    "phoenix.replication.log.rotation.time.ms";
+  public static final long DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS = 60 * 1000L;
   public static final String REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY =
     "phoenix.replication.log.rotation.size.bytes";
   public static final long DEFAULT_REPLICATION_LOG_ROTATION_SIZE_BYTES = 256 * 1024 * 1024L;
@@ -85,8 +85,7 @@ public class ReplicationLogGroup {
     "phoenix.replication.log.retry.delay.ms";
   public static final long DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS = 100L;
 
-  public static final String SHARD_DIR_FORMAT = "%05d";
-  public static final String FILE_NAME_FORMAT = "%d-%s.plog";
+  public static final String FILE_NAME_FORMAT = "%d_%s.plog";
 
   /** Cache of ReplicationLogGroup instances by HA Group ID */
   protected static final ConcurrentHashMap<String, ReplicationLogGroup> INSTANCES =
