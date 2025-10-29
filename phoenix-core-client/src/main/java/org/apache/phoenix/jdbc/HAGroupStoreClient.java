@@ -296,7 +296,7 @@ public class HAGroupStoreClient implements Closeable {
         return fetchCacheRecordAndPopulateZKIfNeeded(this.pathChildrenCache, ClusterType.LOCAL).getLeft();
     }
 
-        /**
+    /**
      * Set the HA group status for the specified HA group name.
      * Checks if the status is needed to be updated based on logic in isUpdateNeeded function.
      *
