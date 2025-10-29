@@ -144,7 +144,7 @@ public abstract class ReplicationLogDiscovery {
             scheduler.scheduleAtFixedRate(() -> {
                 try {
                     replay();
-                } catch (IOException e) {
+                } catch (Exception e) {
                     LOG.error("Error during replay", e);
                 }
             }, 0, getReplayIntervalSeconds(), TimeUnit.SECONDS);

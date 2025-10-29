@@ -69,7 +69,6 @@ public class ReplicationLogDiscoveryTest {
     private TestableReplicationLogTracker fileTracker;
     private Configuration conf;
     private FileSystem localFs;
-    private URI rootURI;
     private Path testFolderPath;
     private static final String haGroupName = "testGroup";
     private static final MetricsReplicationLogTracker metricsLogTracker = new MetricsReplicationLogTrackerReplayImpl(haGroupName);
@@ -79,7 +78,7 @@ public class ReplicationLogDiscoveryTest {
     public void setUp() throws IOException {
         conf = HBaseConfiguration.create();
         localFs = FileSystem.getLocal(conf);
-        rootURI = new Path(testFolder.getRoot().toString()).toUri();
+        URI rootURI = new Path(testFolder.getRoot().toString()).toUri();
         testFolderPath = new Path(testFolder.getRoot().getAbsolutePath());
         Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName), ReplicationLogReplay.IN_DIRECTORY_NAME);
         ReplicationShardDirectoryManager replicationShardDirectoryManager =
@@ -939,9 +938,10 @@ public class ReplicationLogDiscoveryTest {
         allInProgressFiles.addAll(inProgressFiles0004);
         allInProgressFiles.addAll(inProgressFiles0102);
 
-        // Mock processFile to throw exception for specific files (files 1 and 3) - using prefix matching
+        // Mock processFile to throw exception for specific files (files 1 and 3) only on first call, succeed on retry
         String file1Prefix = allInProgressFiles.get(1).getName().substring(0, allInProgressFiles.get(1).getName().lastIndexOf("_"));
         Mockito.doThrow(new IOException("Processing failed for file 1"))
+            .doCallRealMethod()
             .when(discovery).processFile(Mockito.argThat(path -> {
                 String pathName = path.getName();
                 String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
@@ -950,6 +950,7 @@ public class ReplicationLogDiscoveryTest {
             }));
         String file3Prefix = allInProgressFiles.get(3).getName().substring(0, allInProgressFiles.get(3).getName().lastIndexOf("_"));
         Mockito.doThrow(new IOException("Processing failed for file 3"))
+                .doCallRealMethod()
                 .when(discovery).processFile(Mockito.argThat(path -> {
                     String pathName = path.getName();
                     String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));
@@ -960,13 +961,16 @@ public class ReplicationLogDiscoveryTest {
         // Process in-progress directory
         discovery.processInProgressDirectory();
 
-        // Verify that markInProgress was called 5 times (for all in-progress files initially)
-        Mockito.verify(fileTracker, Mockito.times(5)).markInProgress(Mockito.any(Path.class));
+        // Verify that markInProgress was called 7 times (5 initially + 2 for retries)
+        Mockito.verify(fileTracker, Mockito.times(7)).markInProgress(Mockito.any(Path.class));
         
         // Verify that markInProgress was called for each expected file
-        for (Path expectedFile : allInProgressFiles) {
+        // Files 1 and 3 are called twice (initial attempt + retry), others once
+        for (int i = 0; i < allInProgressFiles.size(); i++) {
+            Path expectedFile = allInProgressFiles.get(i);
             String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
-            Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+            int expectedTimes = (i == 1 || i == 3) ? 2 : 1; // Files 1 and 3 are retried
+            Mockito.verify(fileTracker, Mockito.times(expectedTimes)).markInProgress(
                     Mockito.argThat(path -> {
                         String pathName = path.getName();
                         String prefix = pathName.substring(0, pathName.lastIndexOf("_"));
@@ -978,9 +982,12 @@ public class ReplicationLogDiscoveryTest {
         Mockito.verify(discovery, Mockito.times(7)).processFile(Mockito.any(Path.class));
 
         // Verify that processFile was called for each specific file (using prefix matching)
-        for (Path expectedFile : allInProgressFiles) {
+        // Files 1 and 3 should be called twice (fail once, succeed on retry), others once
+        for (int i = 0; i < allInProgressFiles.size(); i++) {
+            Path expectedFile = allInProgressFiles.get(i);
             String expectedPrefix = expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("_"));
-            Mockito.verify(discovery, Mockito.times(1)).processFile(
+            int expectedTimes = (i == 1 || i == 3) ? 2 : 1; // Files 1 and 3 are called twice (fail + retry success)
+            Mockito.verify(discovery, Mockito.times(expectedTimes)).processFile(
                 Mockito.argThat(path -> {
                     String pathName = path.getName();
                     String withoutExtension = pathName.substring(0, pathName.lastIndexOf("."));

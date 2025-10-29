@@ -459,7 +459,9 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
 
     protected boolean shouldTriggerFailover() throws IOException {
         return failoverPending.get() && lastRoundInSync.equals(lastRoundProcessed)
-                && replicationLogTracker.getInProgressFiles().isEmpty();
+                && replicationLogTracker.getInProgressFiles().isEmpty()
+                ;
+        // TODO: Check for in files of lastRoundProcessed, lastRoundProcessed + roundTime as well - because there can be new files for upcoming round
     }
 
     protected void triggerFailover() throws IOException, InvalidClusterRoleTransitionException {

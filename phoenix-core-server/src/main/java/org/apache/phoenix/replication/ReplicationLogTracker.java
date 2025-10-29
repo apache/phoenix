@@ -98,10 +98,6 @@ public class ReplicationLogTracker {
      * exist.
      */
     public void init() throws IOException {
-//        Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName),
-//            getNewLogSubDirectoryName());
-//        this.replicationShardDirectoryManager = new ReplicationShardDirectoryManager(conf,
-//            newFilesDirectory);
         this.inProgressDirPath = new Path(getReplicationShardDirectoryManager().getRootDirectoryPath().getParent(),
             getInProgressLogSubDirectoryName());
         createDirectoryIfNotExists(inProgressDirPath);
