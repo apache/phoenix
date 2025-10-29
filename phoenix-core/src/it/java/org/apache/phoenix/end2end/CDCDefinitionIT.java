@@ -32,6 +32,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.CDCUtil;
@@ -257,6 +258,41 @@ public class CDCDefinitionIT extends CDCBaseIT {
         + String.valueOf(NON_ENCODED_QUALIFIERS.getSerializedMetadataValue()));
     PTable indexTable = PhoenixRuntime.getTable(conn, CDCUtil.getCDCIndexName(cdcName));
     assertEquals(indexTable.getEncodingScheme(), NON_ENCODED_QUALIFIERS);
+  }
+
+  @Test
+  public void testIndexNameAfterCreateCDC() throws Exception {
+    Properties props = new Properties();
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    String schemaName = generateUniqueName();
+    String tableName =
+      (generateUniqueName() + "." + generateUniqueName() + "." + generateUniqueName())
+        .toLowerCase();
+    String fullTableName =
+      SchemaUtil.getTableName(schemaName, SchemaUtil.getEscapedArgument(tableName));
+    String viewName =
+      (generateUniqueName() + "." + generateUniqueName() + "." + generateUniqueName())
+        .toLowerCase();
+    String cdcName = "CDC_" + tableName;
+    conn.createStatement().execute("CREATE TABLE  " + fullTableName + " ( k INTEGER PRIMARY KEY,"
+      + " v1 INTEGER," + " v2 DATE)");
+    if (forView) {
+      String fullViewName =
+        SchemaUtil.getTableName(schemaName, SchemaUtil.getEscapedArgument(viewName));
+      conn.createStatement()
+        .execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName);
+      fullTableName = fullViewName;
+    }
+    conn.createStatement().execute("CREATE CDC \"" + cdcName + "\" ON " + fullTableName);
+    PTable ptable = conn.unwrap(PhoenixConnection.class)
+      .getTableNoCache(SchemaUtil.getTableName(schemaName, forView ? viewName : tableName));
+    for (PTable index : ptable.getIndexes()) {
+      if (CDCUtil.isCDCIndex(index.getTableName().getString())) {
+        assertEquals(CDCUtil.getCDCIndexName(cdcName), index.getTableName().getString());
+        assertFalse(index.getTableName().getString().contains(schemaName));
+        break;
+      }
+    }
   }
 
   @Test
