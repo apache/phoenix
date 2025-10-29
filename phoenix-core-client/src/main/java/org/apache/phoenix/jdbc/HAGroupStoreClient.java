@@ -296,7 +296,7 @@ public class HAGroupStoreClient implements Closeable {
         return fetchCacheRecordAndPopulateZKIfNeeded(this.pathChildrenCache, ClusterType.LOCAL).getLeft();
     }
 
-    /**
+        /**
      * Set the HA group status for the specified HA group name.
      * Checks if the status is needed to be updated based on logic in isUpdateNeeded function.
      *
@@ -307,6 +307,25 @@ public class HAGroupStoreClient implements Closeable {
      * @throws SQLException
      */
     public void setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState haGroupState)
+            throws IOException,
+            InvalidClusterRoleTransitionException,
+            SQLException, StaleHAGroupStoreRecordVersionException {
+        setHAGroupStatusIfNeeded(haGroupState, null);
+    }
+
+    /**
+     * Set the HA group status for the specified HA group name.
+     * Checks if the status is needed to be updated based on logic in isUpdateNeeded function.
+     *
+     * @param haGroupState the HA group state to set
+     * @param lastSyncTimeInMsNullable the last sync time in milliseconds, can be null if not known.
+     * @throws IOException if the client is not healthy or the operation fails
+     * @throws StaleHAGroupStoreRecordVersionException if the version is stale
+     * @throws InvalidClusterRoleTransitionException when transition is not valid
+     * @throws SQLException
+     */
+    public void setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState haGroupState, 
+                                         Long lastSyncTimeInMsNullable)
             throws IOException,
             InvalidClusterRoleTransitionException,
             SQLException, StaleHAGroupStoreRecordVersionException {
@@ -330,13 +349,15 @@ public class HAGroupStoreClient implements Closeable {
                 // Once state changes back to ACTIVE_IN_SYNC or the role is
                 // NOT ACTIVE or ACTIVE_TO_STANDBY
                 // set the time to null to mark that we are current(or we don't have any reader).
-                Long lastSyncTimeInMs = currentHAGroupStoreRecord
-                        .getLastSyncStateTimeInMs();
+            long lastSyncTimeInMs 
+                    = lastSyncTimeInMsNullable != null 
+                    ? lastSyncTimeInMsNullable 
+                    : currentHAGroupStoreRecord.getLastSyncStateTimeInMs();
                 ClusterRole clusterRole = haGroupState.getClusterRole();
                 if (currentHAGroupStoreRecord.getHAGroupState()
                         == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
                         && haGroupState == HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC) {
-                    // We record the last round timestamp by subtracting the rotationTime and then 
+                    // We record the last round timestamp by subtracting the rotationTime and then
                     // taking the beginning of last round (floor) by first integer division and then multiplying again.
                     lastSyncTimeInMs = ((System.currentTimeMillis() - rotationTimeMs)/rotationTimeMs) * (rotationTimeMs);
                 }

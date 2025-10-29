@@ -676,9 +676,17 @@ public class HAGroupStoreManager {
                     if (targetState == null) {
                         return;
                     }
+                    
+                    // If the target state is STANDBY and we get an event from 
+                    // PEER cluster, we copy over the lastSyncTimeInMs from PEER event notification.
+                    Long lastSyncTimeInMsNullable = null;
+                    if (targetState.getClusterRole() == ClusterRole.STANDBY 
+                            && clusterType == ClusterType.PEER) {
+                        lastSyncTimeInMsNullable = lastSyncStateTimeInMs;
+                    }
 
                     // Execute transition if valid
-                    client.setHAGroupStatusIfNeeded(targetState);
+                    client.setHAGroupStatusIfNeeded(targetState, lastSyncTimeInMsNullable);
 
                     LOGGER.info("Failover management transition: peer {} -> {}, "
                                     + "local {} -> {} for HA group: {}",
