@@ -656,7 +656,7 @@ public class TableTTLIT extends BaseTest {
       conn.createStatement().execute(cdcSql);
       conn.commit();
 
-      String cdcIndexName = schemaName + "." + CDCUtil.getCDCIndexName(schemaName + "." + cdcName);
+      String cdcIndexName = schemaName + "." + CDCUtil.getCDCIndexName(cdcName);
       String cdcFullName = SchemaUtil.getTableName(null, schemaName + "." + cdcName);
 
       PTable cdcIndex = ((PhoenixConnection) conn).getTableNoCache(cdcIndexName);

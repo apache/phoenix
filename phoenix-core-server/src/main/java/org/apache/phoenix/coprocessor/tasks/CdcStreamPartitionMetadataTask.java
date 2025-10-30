@@ -31,6 +31,7 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -70,6 +71,8 @@ public class CdcStreamPartitionMetadataTask extends BaseTask {
     try {
       pconn =
         QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
+      // clear table region cache to avoid stale data
+      pconn.getQueryServices().clearTableRegionCache(TableName.valueOf(tableName));
       List<HRegionLocation> tableRegions =
         pconn.getQueryServices().getAllTableRegions(tableName.getBytes(), getTableRegionsTimeout);
       upsertPartitionMetadata(pconn, tableName, streamName, tableRegions);

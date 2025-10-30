@@ -69,7 +69,9 @@ public class MetaDataCacheMetricsIT extends MetaDataCachingIT {
 
       currEstimatedUsedCacheSize =
         GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_ESTIMATED_USED_SIZE.getMetric().getValue();
-      assertEquals("Incorrect number of client metadata cache removals", prevCacheRemovalCount + 1,
+      // there are some client cache updates for SYSTEM.CDC_STREAM when we clear stream metadata as
+      // part of drop table
+      assertEquals("Incorrect number of client metadata cache removals", prevCacheRemovalCount + 3,
         GlobalClientMetrics.GLOBAL_CLIENT_METADATA_CACHE_REMOVAL_COUNTER.getMetric().getValue());
       assertTrue(
         String.format(
