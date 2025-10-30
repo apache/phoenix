@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -31,6 +32,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.CDCUtil;
@@ -259,29 +261,114 @@ public class CDCDefinitionIT extends CDCBaseIT {
   }
 
   @Test
+  public void testIndexNameAfterCreateCDC() throws Exception {
+    Properties props = new Properties();
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    String schemaName = generateUniqueName();
+    String tableName =
+      (generateUniqueName() + "." + generateUniqueName() + "." + generateUniqueName())
+        .toLowerCase();
+    String fullTableName =
+      SchemaUtil.getTableName(schemaName, SchemaUtil.getEscapedArgument(tableName));
+    String viewName =
+      (generateUniqueName() + "." + generateUniqueName() + "." + generateUniqueName())
+        .toLowerCase();
+    String cdcName = "CDC_" + tableName;
+    conn.createStatement().execute("CREATE TABLE  " + fullTableName + " ( k INTEGER PRIMARY KEY,"
+      + " v1 INTEGER," + " v2 DATE)");
+    if (forView) {
+      String fullViewName =
+        SchemaUtil.getTableName(schemaName, SchemaUtil.getEscapedArgument(viewName));
+      conn.createStatement()
+        .execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName);
+      fullTableName = fullViewName;
+    }
+    conn.createStatement().execute("CREATE CDC \"" + cdcName + "\" ON " + fullTableName);
+    PTable ptable = conn.unwrap(PhoenixConnection.class)
+      .getTableNoCache(SchemaUtil.getTableName(schemaName, forView ? viewName : tableName));
+    for (PTable index : ptable.getIndexes()) {
+      if (CDCUtil.isCDCIndex(index.getTableName().getString())) {
+        assertEquals(CDCUtil.getCDCIndexName(cdcName), index.getTableName().getString());
+        assertFalse(index.getTableName().getString().contains(schemaName));
+        break;
+      }
+    }
+  }
+
+  @Test
   public void testDropCDC() throws SQLException {
     Properties props = new Properties();
     Connection conn = DriverManager.getConnection(getUrl(), props);
     String tableName = generateUniqueName();
-    conn.createStatement().execute(
-      "CREATE TABLE  " + tableName + " ( k INTEGER PRIMARY KEY," + " v1 INTEGER," + " v2 DATE)");
+    String schemaName = null;
+    String viewName = forView ? generateUniqueName() : null;
     String cdcName = generateUniqueName();
-    String cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+    testDropCDCHelper(conn, schemaName, tableName, viewName, cdcName);
+  }
+
+  @Test
+  public void testDropCDCWithSchema() throws SQLException {
+    Properties props = new Properties();
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    String tableName = generateUniqueName();
+    String schemaName = generateUniqueName();
+    String viewName = forView ? generateUniqueName() : null;
+    String cdcName = generateUniqueName();
+    testDropCDCHelper(conn, schemaName, tableName, viewName, cdcName);
+  }
+
+  @Test
+  public void testDropCDCWithAllCaseSensitiveNames() throws SQLException {
+    Properties props = new Properties();
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    String tableName = SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase());
+    String schemaName = SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase());
+    String viewName =
+      forView ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()) : null;
+    String cdcName = SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase());
+    testDropCDCHelper(conn, schemaName, tableName, viewName, cdcName);
+  }
+
+  @Test
+  public void testDropCDCWithCaseSensitiveTableName() throws SQLException {
+    Properties props = new Properties();
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    String tableName = SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase());
+    String schemaName = generateUniqueName();
+    String viewName =
+      forView ? SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase()) : null;
+    String cdcName = SchemaUtil.getEscapedArgument(generateUniqueName().toLowerCase());
+    testDropCDCHelper(conn, schemaName, tableName, viewName, cdcName);
+  }
+
+  private void testDropCDCHelper(Connection conn, String schemaName, String tableName,
+    String viewName, String cdcName) throws SQLException {
+    String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+    conn.createStatement().execute("CREATE TABLE  " + fullTableName + " ( k INTEGER PRIMARY KEY,"
+      + " v1 INTEGER," + " v2 DATE) TTL=100");
+    if (viewName != null) {
+      String fullViewName = SchemaUtil.getTableName(schemaName, viewName);
+      conn.createStatement()
+        .execute("CREATE VIEW " + fullViewName + " AS SELECT * FROM " + fullTableName);
+      fullTableName = fullViewName;
+    }
+    String cdc_sql = "CREATE CDC " + cdcName + " ON " + fullTableName;
     conn.createStatement().execute(cdc_sql);
 
-    String drop_cdc_sql = "DROP CDC " + cdcName + " ON " + tableName;
+    String drop_cdc_sql = "DROP CDC " + cdcName + " ON " + fullTableName;
     conn.createStatement().execute(drop_cdc_sql);
 
+    cdcName = SchemaUtil.getUnEscapedFullName(cdcName);
     try (ResultSet rs = conn.createStatement()
       .executeQuery("SELECT cdc_include FROM " + "system.catalog WHERE table_name = '" + cdcName
         + "' AND column_name IS NULL and column_family IS NULL")) {
-      assertEquals(false, rs.next());
+      assertFalse(rs.next());
     }
     try (ResultSet rs = conn.createStatement()
       .executeQuery("SELECT index_type FROM " + "system.catalog WHERE table_name = '"
         + CDCUtil.getCDCIndexName(cdcName)
         + "' AND column_name IS NULL and column_family IS NULL")) {
-      assertEquals(false, rs.next());
+      assertFalse(rs.next());
     }
 
     try {
