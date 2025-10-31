@@ -54,7 +54,7 @@ class ServerRpcController extends DelegatingHBaseRpcController {
       .getNameAsString())
     .build();
 
-  public ServerRpcController(HBaseRpcController delegate, Configuration conf) {
+  ServerRpcController(HBaseRpcController delegate, Configuration conf) {
     super(delegate);
     this.priority = IndexUtil.getServerSidePriority(conf);
   }
