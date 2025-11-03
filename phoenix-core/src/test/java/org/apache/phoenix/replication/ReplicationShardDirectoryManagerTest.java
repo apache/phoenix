@@ -595,5 +595,161 @@ public class ReplicationShardDirectoryManagerTest {
             assertEquals("Shard " + i + " should have correct name", expectedShardName, shardPath.getName());
         }
     }
-}
 
+    @Test
+    public void testGetPreviousRound() {
+        // Use a specific day for consistent testing
+        // 2024-01-01 00:00:00 UTC = 1704067200000L
+        long dayStart = 1704067200000L; // 2024-01-01 00:00:00 UTC
+
+        // Default configuration: 60-second rounds
+        long roundDurationMs = 60 * 1000L; // 60 seconds in milliseconds
+
+        // Test 1: First round (00:00:00 to 00:01:00)
+        long firstRoundStart = dayStart; // 00:00:00
+        long firstRoundEnd = firstRoundStart + roundDurationMs; // 00:01:00
+        ReplicationRound firstRound = new ReplicationRound(firstRoundStart, firstRoundEnd);
+        ReplicationRound previousRound = manager.getPreviousRound(firstRound);
+        
+        // Previous round should end at firstRoundStart (00:00:00), which rounds down to 00:00:00
+        // Start time should be end time - round duration = 00:00:00 - 60s = -60s (edge case)
+        long expectedEnd = dayStart; // 00:00:00
+        long expectedStart = expectedEnd - roundDurationMs; // -60 seconds
+        assertEquals("Previous round end time should be start time of current round rounded down",
+                   expectedEnd, previousRound.getEndTime());
+        assertEquals("Previous round start time should be end time - round duration",
+                   expectedStart, previousRound.getStartTime());
+
+        // Test 2: Second round (00:01:00 to 00:02:00)
+        long secondRoundStart = dayStart + roundDurationMs; // 00:01:00
+        long secondRoundEnd = secondRoundStart + roundDurationMs; // 00:02:00
+        ReplicationRound secondRound = new ReplicationRound(secondRoundStart, secondRoundEnd);
+        ReplicationRound previousRound2 = manager.getPreviousRound(secondRound);
+        
+        // Previous round should end at secondRoundStart (00:01:00), which rounds down to 00:01:00
+        // Start time should be 00:01:00 - 60s = 00:00:00
+        long expectedEnd2 = secondRoundStart; // 00:01:00
+        long expectedStart2 = expectedEnd2 - roundDurationMs; // 00:00:00
+        assertEquals("Previous round end time should be start time of current round rounded down",
+                   expectedEnd2, previousRound2.getEndTime());
+        assertEquals("Previous round start time should be end time - round duration",
+                   expectedStart2, previousRound2.getStartTime());
+
+        // Test 3: Round with mid-timestamp start (00:01:30 would round to 00:01:00)
+        long midRoundStart = dayStart + (90 * 1000L); // 00:01:30 (not aligned to round boundary)
+        long midRoundEnd = midRoundStart + roundDurationMs; // 00:02:30
+        ReplicationRound midRound = new ReplicationRound(midRoundStart, midRoundEnd);
+        ReplicationRound previousRound3 = manager.getPreviousRound(midRound);
+        
+        // Previous round should end at midRoundStart rounded down = 00:01:00
+        // Start time should be 00:01:00 - 60s = 00:00:00
+        long expectedEnd3 = dayStart + roundDurationMs; // 00:01:00 (rounded down from 00:01:30)
+        long expectedStart3 = expectedEnd3 - roundDurationMs; // 00:00:00
+        assertEquals("Previous round end time should round down start time of current round",
+                   expectedEnd3, previousRound3.getEndTime());
+        assertEquals("Previous round start time should be end time - round duration",
+                   expectedStart3, previousRound3.getStartTime());
+
+        // Test 4: Multiple rounds later (00:05:00 to 00:06:00)
+        long multipleRoundsStart = dayStart + (5 * roundDurationMs); // 00:05:00
+        long multipleRoundsEnd = multipleRoundsStart + roundDurationMs; // 00:06:00
+        ReplicationRound multipleRounds = new ReplicationRound(multipleRoundsStart, multipleRoundsEnd);
+        ReplicationRound previousRound4 = manager.getPreviousRound(multipleRounds);
+        
+        // Previous round should end at multipleRoundsStart = 00:05:00
+        // Start time should be 00:05:00 - 60s = 00:04:00
+        long expectedEnd4 = multipleRoundsStart; // 00:05:00
+        long expectedStart4 = expectedEnd4 - roundDurationMs; // 00:04:00
+        assertEquals("Previous round end time should be start time of current round",
+                   expectedEnd4, previousRound4.getEndTime());
+        assertEquals("Previous round start time should be end time - round duration",
+                   expectedStart4, previousRound4.getStartTime());
+
+        // Test 5: Verify round duration is consistent
+        long previousRoundDuration = previousRound4.getEndTime() - previousRound4.getStartTime();
+        assertEquals("Previous round duration should be 60 seconds", roundDurationMs, previousRoundDuration);
+    }
+
+    @Test
+    public void testGetNextRound() {
+        // Use a specific day for consistent testing
+        // 2024-01-01 00:00:00 UTC = 1704067200000L
+        long dayStart = 1704067200000L; // 2024-01-01 00:00:00 UTC
+
+        // Default configuration: 60-second rounds
+        long roundDurationMs = 60 * 1000L; // 60 seconds in milliseconds
+
+        // Test 1: First round (00:00:00 to 00:01:00)
+        long firstRoundStart = dayStart; // 00:00:00
+        long firstRoundEnd = firstRoundStart + roundDurationMs; // 00:01:00
+        ReplicationRound firstRound = new ReplicationRound(firstRoundStart, firstRoundEnd);
+        ReplicationRound nextRound = manager.getNextRound(firstRound);
+        
+        // Next round should start at firstRoundEnd (00:01:00), which rounds down to 00:01:00
+        // End time should be 00:01:00 + 60s = 00:02:00
+        long expectedStart = firstRoundEnd; // 00:01:00
+        long expectedEnd = expectedStart + roundDurationMs; // 00:02:00
+        assertEquals("Next round start time should be end time of current round rounded down",
+                   expectedStart, nextRound.getStartTime());
+        assertEquals("Next round end time should be start time + round duration",
+                   expectedEnd, nextRound.getEndTime());
+
+        // Test 2: Second round (00:01:00 to 00:02:00)
+        long secondRoundStart = dayStart + roundDurationMs; // 00:01:00
+        long secondRoundEnd = secondRoundStart + roundDurationMs; // 00:02:00
+        ReplicationRound secondRound = new ReplicationRound(secondRoundStart, secondRoundEnd);
+        ReplicationRound nextRound2 = manager.getNextRound(secondRound);
+        
+        // Next round should start at secondRoundEnd (00:02:00), which rounds down to 00:02:00
+        // End time should be 00:02:00 + 60s = 00:03:00
+        long expectedStart2 = secondRoundEnd; // 00:02:00
+        long expectedEnd2 = expectedStart2 + roundDurationMs; // 00:03:00
+        assertEquals("Next round start time should be end time of current round rounded down",
+                   expectedStart2, nextRound2.getStartTime());
+        assertEquals("Next round end time should be start time + round duration",
+                   expectedEnd2, nextRound2.getEndTime());
+
+        // Test 3: Round with mid-timestamp end (00:02:30 would round to 00:02:00)
+        long midRoundStart = dayStart + (120 * 1000L); // 00:02:00
+        long midRoundEnd = dayStart + (150 * 1000L); // 00:02:30 (not aligned to round boundary)
+        ReplicationRound midRound = new ReplicationRound(midRoundStart, midRoundEnd);
+        ReplicationRound nextRound3 = manager.getNextRound(midRound);
+        
+        // Next round should start at midRoundEnd rounded down = 00:02:00
+        // End time should be 00:02:00 + 60s = 00:03:00
+        long expectedStart3 = dayStart + (120 * 1000L); // 00:02:00 (rounded down from 00:02:30)
+        long expectedEnd3 = expectedStart3 + roundDurationMs; // 00:03:00
+        assertEquals("Next round start time should round down end time of current round",
+                   expectedStart3, nextRound3.getStartTime());
+        assertEquals("Next round end time should be start time + round duration",
+                   expectedEnd3, nextRound3.getEndTime());
+
+        // Test 4: Multiple rounds later (00:05:00 to 00:06:00)
+        long multipleRoundsStart = dayStart + (5 * roundDurationMs); // 00:05:00
+        long multipleRoundsEnd = multipleRoundsStart + roundDurationMs; // 00:06:00
+        ReplicationRound multipleRounds = new ReplicationRound(multipleRoundsStart, multipleRoundsEnd);
+        ReplicationRound nextRound4 = manager.getNextRound(multipleRounds);
+        
+        // Next round should start at multipleRoundsEnd = 00:06:00
+        // End time should be 00:06:00 + 60s = 00:07:00
+        long expectedStart4 = multipleRoundsEnd; // 00:06:00
+        long expectedEnd4 = expectedStart4 + roundDurationMs; // 00:07:00
+        assertEquals("Next round start time should be end time of current round",
+                   expectedStart4, nextRound4.getStartTime());
+        assertEquals("Next round end time should be start time + round duration",
+                   expectedEnd4, nextRound4.getEndTime());
+
+        // Test 5: Verify round duration is consistent
+        long nextRoundDuration = nextRound4.getEndTime() - nextRound4.getStartTime();
+        assertEquals("Next round duration should be 60 seconds", roundDurationMs, nextRoundDuration);
+
+        // Test 6: Verify continuity - next round of previous round should equal original round
+        ReplicationRound originalRound = new ReplicationRound(dayStart + (3 * roundDurationMs), dayStart + (4 * roundDurationMs)); // 00:03:00 to 00:04:00
+        ReplicationRound prevRound = manager.getPreviousRound(originalRound);
+        ReplicationRound nextOfPrev = manager.getNextRound(prevRound);
+        assertEquals("Next round of previous round should equal original round start time",
+                   originalRound.getStartTime(), nextOfPrev.getStartTime());
+        assertEquals("Next round of previous round should equal original round end time",
+                   originalRound.getEndTime(), nextOfPrev.getEndTime());
+    }
+}
