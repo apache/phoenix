@@ -730,7 +730,7 @@ public class HAGroupStoreManager {
 
                     // Resolve target state using TargetStateResolver
                     currentLocalState = currentRecord.getHAGroupState();
-                    targetState = resolver.determineTarget(currentLocalState); //DEGRADED_STANDBY
+                    targetState = resolver.determineTarget(currentLocalState);
 
                     if (targetState == null) {
                         return;

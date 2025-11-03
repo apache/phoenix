@@ -324,7 +324,7 @@ public class HAGroupStoreClient implements Closeable {
      * @throws InvalidClusterRoleTransitionException when transition is not valid
      * @throws SQLException
      */
-    public void setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState haGroupState, 
+    public void setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState haGroupState,
                                          Long lastSyncTimeInMsNullable)
             throws IOException,
             InvalidClusterRoleTransitionException,
@@ -349,9 +349,9 @@ public class HAGroupStoreClient implements Closeable {
                 // Once state changes back to ACTIVE_IN_SYNC or the role is
                 // NOT ACTIVE or ACTIVE_TO_STANDBY
                 // set the time to null to mark that we are current(or we don't have any reader).
-            long lastSyncTimeInMs 
-                    = lastSyncTimeInMsNullable != null 
-                    ? lastSyncTimeInMsNullable 
+            long lastSyncTimeInMs
+                    = lastSyncTimeInMsNullable != null
+                    ? lastSyncTimeInMsNullable
                     : currentHAGroupStoreRecord.getLastSyncStateTimeInMs();
                 ClusterRole clusterRole = haGroupState.getClusterRole();
                 if (currentHAGroupStoreRecord.getHAGroupState()

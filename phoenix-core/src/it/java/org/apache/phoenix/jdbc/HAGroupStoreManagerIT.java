@@ -820,7 +820,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
                 HAGroupStoreRecord.HAGroupState.STANDBY, cluster2Record.get().getHAGroupState());
         assertEquals(0L, (long) cluster1Record.get().getLastSyncStateTimeInMs());
         assertEquals(0L, (long) cluster2Record.get().getLastSyncStateTimeInMs());
-        
+
 
         // === STEP 1: Transition to store-and-forward mode ===
         // Move cluster1 from ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC (store-and-forward mode)
