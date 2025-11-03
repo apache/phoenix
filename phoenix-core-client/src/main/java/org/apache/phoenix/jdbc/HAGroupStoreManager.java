@@ -74,7 +74,12 @@ public class HAGroupStoreManager {
 
   /**
    * Functional interface for resolving target local states based on current local state when peer
-   * cluster transitions occur.
+   * cluster transitions occur. This is used in FailoverManagementListener to determine the target
+   * state based on the current local state.
+   * <p>
+   * For example if peer transitions from AIS -> ANIS, the target state changes from STANDBY ->
+   * DEGRADED_STANDBY
+   * </p>
    */
   @FunctionalInterface
   private interface TargetStateResolver {
@@ -487,19 +492,18 @@ public class HAGroupStoreManager {
   /**
    * Subscribe to be notified when any transition to a target state occurs.
    * @param haGroupName the name of the HA group to monitor
-   * @param targetState the target state to watch for
+   * @param toState     the target state to watch for
    * @param clusterType whether to monitor local or peer cluster
    * @param listener    the listener to notify when any transition to the target state occurs
    * @throws IOException if unable to get HAGroupStoreClient instance
    */
-  public void subscribeToTargetState(String haGroupName,
-    HAGroupStoreRecord.HAGroupState targetState, ClusterType clusterType,
-    HAGroupStateListener listener) throws IOException {
+  public void subscribeToTargetState(String haGroupName, HAGroupStoreRecord.HAGroupState toState,
+    ClusterType clusterType, HAGroupStateListener listener) throws IOException {
     HAGroupStoreClient client = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
-    client.subscribeToTargetState(targetState, clusterType, listener);
+    client.subscribeToTargetState(toState, clusterType, listener);
     LOGGER.debug(
       "Delegated subscription to target state {} " + "for HA group {} on {} cluster to client",
-      targetState, haGroupName, clusterType);
+      toState, haGroupName, clusterType);
   }
 
   /**
@@ -542,6 +546,19 @@ public class HAGroupStoreManager {
    * Helper method to get HAGroupStoreClient instance and setup failover management. NOTE: As soon
    * as the HAGroupStoreClient is initialized, it will setup the failover management as well.
    * Failover management is only set up once per HA group to prevent duplicate subscriptions.
+   * Failover management is responsible for handling the state transitions on the local and peer
+   * clusters and react accordingly. Failover management handles peer state transitions and local
+   * state transitions.
+   * <p>
+   * Example of peer state transition: For example, if the peer cluster transitions from
+   * ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC, the failover management will transition the local cluster
+   * from STANDBY to DEGRADED_STANDBY.
+   * </p>
+   * <p>
+   * Example of local state transition: For example, if the local cluster transitions to
+   * ABORT_TO_STANDBY, the failover management will transition the local cluster from
+   * ABORT_TO_STANDBY to STANDBY.
+   * </p>
    * @param haGroupName name of the HA group
    * @return HAGroupStoreClient instance for the specified HA group
    * @throws IOException when HAGroupStoreClient is not initialized
@@ -564,6 +581,22 @@ public class HAGroupStoreManager {
 
   // ===== Failover Management Related Methods =====
 
+  /**
+   * Setup local failover management for the given HA group. Local failover management is
+   * responsible for handling the state transitions on the local cluster. Local failover management
+   * handles local state transitions.
+   * <p>
+   * Example of local state transition: For example, if the local cluster transitions to
+   * ABORT_TO_STANDBY, the failover management will transition the local cluster from
+   * ABORT_TO_STANDBY to STANDBY.
+   * </p>
+   * When we subscribe to the target state, we provide a FailoverManagementListener instance. The
+   * FailoverManagementListener implements the HAGroupStateListener interface and overrides the
+   * onStateChange method. The onStateChange method is called when a state change event occurs. It
+   * is passed the haGroupName, fromState, toState, clusterType, and lastSyncStateTimeInMs
+   * parameters. It is responsible for determining the target state and transitioning the local
+   * cluster to the target state based on target state resolver.
+   */
   public void setupLocalFailoverManagement(String haGroupName) throws IOException {
     HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
 
@@ -591,6 +624,17 @@ public class HAGroupStoreManager {
       this.resolver = resolver;
     }
 
+    /**
+     * <p>
+     * Example of peer state transition: For example, if the peer cluster transitions from
+     * ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC, the failover management will transition the local
+     * cluster from STANDBY to DEGRADED_STANDBY.
+     * </p>
+     * Example input will look like this: haGroupName: test-ha-group fromState: ACTIVE_IN_SYNC
+     * toState: ACTIVE_NOT_IN_SYNC clusterType: PEER lastSyncStateTimeInMs: 1719859200000 Based on
+     * this input, the failover management will transition the local cluster from STANDBY to
+     * DEGRADED_STANDBY. The output state will be determined by the TargetStateResolver.
+     */
     @Override
     public void onStateChange(String haGroupName, HAGroupState fromState, HAGroupState toState,
       long modifiedTime, ClusterType clusterType, Long lastSyncStateTimeInMs) {
@@ -616,8 +660,18 @@ public class HAGroupStoreManager {
             return;
           }
 
+          // If the target state is STANDBY, and we get an event from
+          // PEER cluster, we copy over the lastSyncTimeInMs from PEER event notification.
+          Long lastSyncTimeInMsNullable = null;
+          if (
+            targetState.getClusterRole() == ClusterRoleRecord.ClusterRole.STANDBY
+              && clusterType == ClusterType.PEER
+          ) {
+            lastSyncTimeInMsNullable = lastSyncStateTimeInMs;
+          }
+
           // Execute transition if valid
-          client.setHAGroupStatusIfNeeded(targetState);
+          client.setHAGroupStatusIfNeeded(targetState, lastSyncTimeInMsNullable);
 
           LOGGER.info(
             "Failover management transition: peer {} -> {}, " + "local {} -> {} for HA group: {}",
@@ -636,6 +690,16 @@ public class HAGroupStoreManager {
     }
   }
 
+  /**
+   * Setup peer failover management for the given HA group. Peer failover management is responsible
+   * for handling the state transitions on the peer cluster. Peer failover management handles peer
+   * state transitions.
+   * <p>
+   * Example of peer state transition: For example, if the peer cluster transitions from
+   * ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC, the failover management will transition the local cluster
+   * from STANDBY to DEGRADED_STANDBY.
+   * </p>
+   */
   public void setupPeerFailoverManagement(String haGroupName) throws IOException {
     HAGroupStoreClient haGroupStoreClient = getHAGroupStoreClient(haGroupName);
 

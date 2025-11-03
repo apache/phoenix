@@ -37,7 +37,19 @@ import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 public interface HAGroupStateListener {
 
   /**
-   * Called when an HA group state transition occurs.
+   * <p>
+   * Called when an HA group state transition occurs. ZK Client listens to changes and sends update
+   * to subscribers using a single thread to guarantee ordering of events. Subscribers get the state
+   * transition callback through this implementation.
+   * </p>
+   * <p>
+   * For example, if subscriber has subscribed to ACTIVE_NOT_IN_SYNC state on peer cluster, and the
+   * state transition happens from ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC, the subscriber will get the
+   * callback with the following parameters: - haGroupName: the name of the HA group that
+   * transitioned - fromState: ACTIVE_IN_SYNC - toState: ACTIVE_NOT_IN_SYNC - modifiedTime: the time
+   * the state transition occurred - clusterType: PEER\ - lastSyncStateTimeInMs: the time we were in
+   * sync state.
+   * </p>
    * <p>
    * Implementations should be fast and non-blocking to avoid impacting the HA group state
    * management system. If heavy processing is required, consider delegating to a separate thread.
@@ -49,7 +61,7 @@ public interface HAGroupStateListener {
    * @param toState               the new state after the transition
    * @param modifiedTime          the time the state transition occurred
    * @param clusterType           whether this transition occurred on the local or peer cluster
-   * @param lastSyncStateTimeInMs the time we were in sync state, can be null.
+   * @param lastSyncStateTimeInMs the time we were in sync state.
    * @throws Exception implementations may throw exceptions, but they will be logged and will not
    *                   prevent other listeners from being notified
    */
