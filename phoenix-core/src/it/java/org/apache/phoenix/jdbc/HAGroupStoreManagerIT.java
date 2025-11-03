@@ -50,6 +50,7 @@ import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -817,6 +818,9 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
         assertEquals("Cluster2 should be in STANDBY state",
                 HAGroupStoreRecord.HAGroupState.STANDBY, cluster2Record.get().getHAGroupState());
+        assertEquals(0L, (long) cluster1Record.get().getLastSyncStateTimeInMs());
+        assertEquals(0L, (long) cluster2Record.get().getLastSyncStateTimeInMs());
+
 
         // === STEP 1: Transition to store-and-forward mode ===
         // Move cluster1 from ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC (store-and-forward mode)
@@ -827,7 +831,8 @@ public class HAGroupStoreManagerIT extends BaseTest {
         cluster1Record = cluster1HAManager.getHAGroupStoreRecord(haGroupName);
         assertTrue("Cluster1 record should be present", cluster1Record.isPresent());
         assertEquals("Cluster1 should be in ACTIVE_NOT_IN_SYNC state",
-                HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, cluster1Record.get().getHAGroupState());
+                HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC,
+                cluster1Record.get().getHAGroupState());
 
         // === STEP 2: Verify automatic peer reaction to store-and-forward ===
         // Cluster2 (standby) should automatically move from STANDBY to DEGRADED_STANDBY
@@ -838,6 +843,9 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
         assertEquals("Cluster2 should automatically transition to DEGRADED_STANDBY",
                 HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, cluster2Record.get().getHAGroupState());
+        assertNotEquals(0L, (long) cluster1Record.get().getLastSyncStateTimeInMs());
+        assertEquals(cluster2Record.get().getLastSyncStateTimeInMs(),
+                cluster1Record.get().getLastSyncStateTimeInMs());
 
         // === STEP 3: Return to sync mode ===
         // Move cluster1 back from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC
@@ -850,7 +858,8 @@ public class HAGroupStoreManagerIT extends BaseTest {
         cluster1Record = cluster1HAManager.getHAGroupStoreRecord(haGroupName);
         assertTrue("Cluster1 record should be present", cluster1Record.isPresent());
         assertEquals("Cluster1 should be back in ACTIVE_IN_SYNC state",
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, cluster1Record.get().getHAGroupState());
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+                cluster1Record.get().getHAGroupState());
 
         // === STEP 4: Verify automatic peer recovery ===
         // Cluster2 should automatically move from DEGRADED_STANDBY back to STANDBY
@@ -861,5 +870,8 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
         assertEquals("Cluster2 should automatically transition back to STANDBY",
                 HAGroupStoreRecord.HAGroupState.STANDBY, cluster2Record.get().getHAGroupState());
+        assertNotEquals(0L, (long) cluster1Record.get().getLastSyncStateTimeInMs());
+        assertEquals(cluster2Record.get().getLastSyncStateTimeInMs(),
+                cluster1Record.get().getLastSyncStateTimeInMs());
     }
 }
