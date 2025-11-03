@@ -188,6 +188,7 @@ import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.ipc.controller.InvalidateMetadataCacheControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerSideRPCControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
@@ -4136,7 +4137,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
             try {
               GLOBAL_QUERY_SERVICES_COUNTER.increment();
               LOGGER.info("An instance of ConnectionQueryServices was created.");
-              connection = openConnection(config);
+              boolean isServerSideConnection =
+                config.getBoolean(QueryUtil.IS_SERVER_CONNECTION, false);
+              if (isServerSideConnection) {
+                Configuration clonedConfiguration = PropertiesUtil.cloneConfig(config);
+                clonedConfiguration.setClass(CUSTOM_CONTROLLER_CONF_KEY,
+                  ServerRpcControllerFactory.class, RpcControllerFactory.class);
+                connection = openConnection(clonedConfiguration);
+              } else {
+                connection = openConnection(config);
+              }
               hConnectionEstablished = true;
               boolean lastDDLTimestampValidationEnabled =
                 getProps().getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
