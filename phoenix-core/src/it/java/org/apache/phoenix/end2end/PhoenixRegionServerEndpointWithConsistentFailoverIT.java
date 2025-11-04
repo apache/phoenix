@@ -93,7 +93,6 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
                     CLUSTERS.getZkUrl1(), CLUSTERS.getMasterAddress2(), CLUSTERS.getMasterAddress1(), 0L);
             peerHAAdmin.createHAGroupStoreRecordInZooKeeper(peerHAGroupStoreRecord);
         }
-        
         // Restart once to have a fresh RS with row inserted
         CLUSTERS.getHBaseCluster1().getHBaseCluster().stopRegionServer(0);
         CLUSTERS.getHBaseCluster1().getHBaseCluster().startRegionServer();
