@@ -1217,7 +1217,7 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
 
             // Create files in different shard directories
             ReplicationShardDirectoryManager shardManager = fileTracker.getReplicationShardDirectoryManager();
-            
+
             // Create file with minimum timestamp
             Path shardPath1 = shardManager.getShardDirectory(minFileTimestamp);
             localFs.mkdirs(shardPath1);
@@ -1282,11 +1282,11 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
             try {
                 TestableReplicationLogDiscoveryReplay discovery =
                         new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
-                
+
                 // Set lastRoundInSync with start time 0 (the new case being tested)
                 ReplicationRound lastRoundInSyncWithZeroStart = new ReplicationRound(0L, roundTimeMills);
                 discovery.setLastRoundInSync(lastRoundInSyncWithZeroStart);
-                
+
                 // Set lastRoundProcessed to some initial value
                 ReplicationRound initialLastRoundProcessed = new ReplicationRound(0L, roundTimeMills);
                 discovery.setLastRoundProcessed(initialLastRoundProcessed);
@@ -1308,7 +1308,7 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
                 List<ReplicationRound> processedRounds = discovery.getProcessedRounds();
                 assertEquals("Should have processed exactly " + expectedRoundCount + " rounds",
                         expectedRoundCount, processedRounds.size());
-                
+
                 // Verify each round's exact parameters
                 for (int i = 0; i < expectedRoundCount; i++) {
                     ReplicationRound actualRound = processedRounds.get(i);
@@ -1325,7 +1325,7 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
                         expectedRoundStarts[expectedRoundCount - 1], lastRoundAfterReplay.getStartTime());
                 assertEquals("Last round processed should match the last processed round end time",
                         expectedRoundEnds[expectedRoundCount - 1], lastRoundAfterReplay.getEndTime());
-                
+
                 // Verify lastRoundInSync was updated (in SYNC state, both should advance together)
                 ReplicationRound lastRoundInSyncAfter = discovery.getLastRoundInSync();
                 assertNotNull("Last round in sync should not be null", lastRoundInSyncAfter);
@@ -1352,14 +1352,14 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
     /**
      * Tests replay method when state changes from DEGRADED to SYNC between round processing
      * and lastRoundInSync has start time 0.
-     * 
+     *
      * Expected behavior:
      * - 1st round is processed in DEGRADED state
      * - 2nd round is processed in DEGRADED state, but then state transitions to SYNCED_RECOVERY
      * - When state becomes SYNCED_RECOVERY, lastRoundProcessed is rewound to the previous round of getFirstRoundToProcess()
      *   (which uses minimum file timestamp when lastRoundInSync.startTime == 0)
      * - Then 5 rounds are processed starting from the first round (based on minimum file timestamp) in SYNC state
-     * 
+     *
      * Total: 7 rounds processed (2 in DEGRADED, then rewind, then 5 in SYNC)
      */
     @Test
@@ -1377,7 +1377,7 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
 
             // Create files in different shard directories
             ReplicationShardDirectoryManager shardManager = fileTracker.getReplicationShardDirectoryManager();
-            
+
             // Create file with minimum timestamp
             Path shardPath1 = shardManager.getShardDirectory(minFileTimestamp);
             localFs.mkdirs(shardPath1);
@@ -1397,7 +1397,7 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
             // Calculate expected first round start time (minimum timestamp rounded down to nearest round start)
             long expectedFirstRoundStart = shardManager.getNearestRoundStartTimestamp(minFileTimestamp);
             long expectedFirstRoundEnd = expectedFirstRoundStart + roundTimeMills;
-            
+
             // After rewind, lastRoundProcessed will be set to previous round of firstRoundToProcess
             // firstRoundToProcess = expectedFirstRoundStart to expectedFirstRoundEnd
             // previous round = expectedFirstRoundStart - roundTimeMills to expectedFirstRoundStart
@@ -1433,13 +1433,13 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
             int syncRoundCount = 5; // Last 5 rounds are in SYNC state (after rewind)
             long[] expectedRoundStarts = new long[expectedRoundCount];
             long[] expectedRoundEnds = new long[expectedRoundCount];
-            
+
             // Rounds 1-2: DEGRADED
             expectedRoundStarts[0] = expectedFirstRoundStart;
             expectedRoundEnds[0] = expectedFirstRoundEnd;
             expectedRoundStarts[1] = expectedFirstRoundEnd;
             expectedRoundEnds[1] = expectedFirstRoundEnd + roundTimeMills;
-            
+
             // Rounds 3-7: SYNC (after rewind, starting from expectedFirstRoundStart - the first round based on minimum file timestamp)
             expectedRoundStarts[2] = expectedFirstRoundStart; // Round 3: first round after rewind
             expectedRoundEnds[2] = expectedFirstRoundEnd;
@@ -1467,11 +1467,11 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
                         }
                     }
                 };
-                
+
                 // Set lastRoundInSync with start time 0
                 ReplicationRound lastRoundInSyncWithZeroStart = new ReplicationRound(0L, roundTimeMills);
                 discovery.setLastRoundInSync(lastRoundInSyncWithZeroStart);
-                
+
                 // Set lastRoundProcessed to some initial value
                 ReplicationRound initialLastRoundProcessed = new ReplicationRound(0L, roundTimeMills);
                 discovery.setLastRoundProcessed(initialLastRoundProcessed);
@@ -1496,7 +1496,7 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
                 List<ReplicationRound> processedRounds = discovery.getProcessedRounds();
                 assertEquals("Should have processed exactly " + expectedRoundCount + " rounds",
                         expectedRoundCount, processedRounds.size());
-                
+
                 // Verify each round's exact parameters
                 for (int i = 0; i < expectedRoundCount; i++) {
                     ReplicationRound actualRound = processedRounds.get(i);
@@ -1513,14 +1513,14 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
                         expectedRoundStarts[expectedRoundCount - 1], lastRoundAfterReplay.getStartTime());
                 assertEquals("Last round processed should match the last processed round end time",
                         expectedRoundEnds[expectedRoundCount - 1], lastRoundAfterReplay.getEndTime());
-                
+
                 // Verify lastRoundInSync behavior:
                 // - During first 2 rounds (DEGRADED), lastRoundInSync should NOT be updated (remains with start time 0)
                 // - After transition to SYNCED_RECOVERY and then SYNC (rounds 3-7), lastRoundInSync should be updated
                 // - Final lastRoundInSync should match lastRoundProcessed (because we're in SYNC state at the end)
                 ReplicationRound lastRoundInSyncAfter = discovery.getLastRoundInSync();
                 assertNotNull("Last round in sync should not be null", lastRoundInSyncAfter);
-                
+
                 // After processing, we're in SYNC state, so lastRoundInSync should be updated
                 // It should match the last processed round because state is SYNC
                 assertEquals("Last round in sync should match last round processed in SYNC state",
@@ -1798,14 +1798,14 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
         TestableReplicationLogTracker fileTracker = null;
         try {
             fileTracker = createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
-            
+
             // Create a spy of ReplicationLogDiscoveryReplay to test actual implementation
             ReplicationLogDiscoveryReplay discovery = Mockito.spy(
                     new ReplicationLogDiscoveryReplay(fileTracker));
-            
+
             // Initialize the discovery
             discovery.init();
-            
+
             // Set failoverPending to true
             discovery.setFailoverPending(true);
             assertTrue("failoverPending should be true before triggerFailover", discovery.getFailoverPending());
@@ -1853,7 +1853,7 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
      * Tests triggerFailover when HAGroupStoreManager.getInstance(conf).setHAGroupStatusToSync(haGroupName)
      * throws InvalidClusterRoleTransitionException.
      * Verifies that failoverPending is set to false even when the exception occurs.
-     * 
+     *
      * This test sets up the HA group in STANDBY state instead of STANDBY_TO_ACTIVE.
      * Calling setHAGroupStatusToSync from STANDBY state will throw InvalidClusterRoleTransitionException
      * because the transition from STANDBY directly to ACTIVE_IN_SYNC is not allowed.
@@ -1861,7 +1861,7 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
     @Test
     public void testTriggerFailover_InvalidClusterRoleTransitionExceptionFromHAGroupStoreManager() throws IOException, SQLException {
         final String haGroupName = "testTriggerFailoverInvalidTransitionHAGroup";
-        
+
         // Set up HA group store record in STANDBY state (not STANDBY_TO_ACTIVE)
         // This will cause setHAGroupStatusToSync to throw InvalidClusterRoleTransitionException
         // because transitioning from STANDBY directly to ACTIVE_IN_SYNC is invalid
@@ -1873,14 +1873,14 @@ public class ReplicationLogDiscoveryReplayTest extends BaseTest {
         TestableReplicationLogTracker fileTracker = null;
         try {
             fileTracker = createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
-            
+
             // Create a spy of ReplicationLogDiscoveryReplay to test actual implementation
             ReplicationLogDiscoveryReplay discovery = Mockito.spy(
                     new ReplicationLogDiscoveryReplay(fileTracker));
-            
+
             // Initialize the discovery
             discovery.init();
-            
+
             // Set failoverPending to true
             discovery.setFailoverPending(true);
             assertTrue("failoverPending should be true before triggerFailover", discovery.getFailoverPending());

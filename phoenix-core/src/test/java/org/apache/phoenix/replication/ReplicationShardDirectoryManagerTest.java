@@ -5,7 +5,7 @@
  * regarding copyright ownership.  The ASF licenses this file
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+ * with the License.  You may obtain a copy of the License a
  *
  *     http://www.apache.org/licenses/LICENSE-2.0
  *
@@ -234,7 +234,7 @@ public class ReplicationShardDirectoryManagerTest {
 
         // Test 7: Multiple rounds later
         long multipleRoundsLater = dayStart + (300 * 1000L); // 00:05:00 (5 minutes)
-        long expectedRoundStart = dayStart + (300 * 1000L); // Should be exact
+        long expectedRoundStart = dayStart + (300 * 1000L); // Should be exac
         long result7 = manager.getNearestRoundStartTimestamp(multipleRoundsLater);
         assertEquals("Multiple rounds later should return exact round start", expectedRoundStart, result7);
 
@@ -389,7 +389,7 @@ public class ReplicationShardDirectoryManagerTest {
 
     @Test
     public void testGetReplicationRoundFromStartTimeConsistency() {
-        // Test that the same input always produces the same output
+        // Test that the same input always produces the same outpu
         long timestamp = 1704110400000L; // 2024-01-01 12:00:00 UTC
 
         ReplicationRound result1 = manager.getReplicationRoundFromStartTime(timestamp);
@@ -401,7 +401,7 @@ public class ReplicationShardDirectoryManagerTest {
         assertEquals("Same input should produce same start time", result1.getStartTime(), result3.getStartTime());
         assertEquals("Same input should produce same end time", result1.getEndTime(), result3.getEndTime());
 
-        // Test that round duration is consistent
+        // Test that round duration is consisten
         long roundDuration1 = result1.getEndTime() - result1.getStartTime();
         assertEquals("Round duration should be 60 seconds", 60 * 1000L, roundDuration1);
     }
@@ -543,7 +543,7 @@ public class ReplicationShardDirectoryManagerTest {
 
     @Test
     public void testGetReplicationRoundFromEndTimeConsistency() {
-        // Test that the same input always produces the same output
+        // Test that the same input always produces the same outpu
         long timestamp = 1704110400000L; // 2024-01-01 12:00:00 UTC
 
         ReplicationRound result1 = manager.getReplicationRoundFromEndTime(timestamp);
@@ -555,7 +555,7 @@ public class ReplicationShardDirectoryManagerTest {
         assertEquals("Same input should produce same end time", result1.getEndTime(), result3.getEndTime());
         assertEquals("Same input should produce same start time", result1.getStartTime(), result3.getStartTime());
 
-        // Test that round duration is consistent
+        // Test that round duration is consisten
         long roundDuration1 = result1.getEndTime() - result1.getStartTime();
         assertEquals("Round duration should be 60 seconds", 60 * 1000L, roundDuration1);
     }
@@ -610,7 +610,7 @@ public class ReplicationShardDirectoryManagerTest {
         long firstRoundEnd = firstRoundStart + roundDurationMs; // 00:01:00
         ReplicationRound firstRound = new ReplicationRound(firstRoundStart, firstRoundEnd);
         ReplicationRound previousRound = manager.getPreviousRound(firstRound);
-        
+
         // Previous round should end at firstRoundStart (00:00:00), which rounds down to 00:00:00
         // Start time should be end time - round duration = 00:00:00 - 60s = -60s (edge case)
         long expectedEnd = dayStart; // 00:00:00
@@ -625,7 +625,7 @@ public class ReplicationShardDirectoryManagerTest {
         long secondRoundEnd = secondRoundStart + roundDurationMs; // 00:02:00
         ReplicationRound secondRound = new ReplicationRound(secondRoundStart, secondRoundEnd);
         ReplicationRound previousRound2 = manager.getPreviousRound(secondRound);
-        
+
         // Previous round should end at secondRoundStart (00:01:00), which rounds down to 00:01:00
         // Start time should be 00:01:00 - 60s = 00:00:00
         long expectedEnd2 = secondRoundStart; // 00:01:00
@@ -640,7 +640,7 @@ public class ReplicationShardDirectoryManagerTest {
         long midRoundEnd = midRoundStart + roundDurationMs; // 00:02:30
         ReplicationRound midRound = new ReplicationRound(midRoundStart, midRoundEnd);
         ReplicationRound previousRound3 = manager.getPreviousRound(midRound);
-        
+
         // Previous round should end at midRoundStart rounded down = 00:01:00
         // Start time should be 00:01:00 - 60s = 00:00:00
         long expectedEnd3 = dayStart + roundDurationMs; // 00:01:00 (rounded down from 00:01:30)
@@ -655,7 +655,7 @@ public class ReplicationShardDirectoryManagerTest {
         long multipleRoundsEnd = multipleRoundsStart + roundDurationMs; // 00:06:00
         ReplicationRound multipleRounds = new ReplicationRound(multipleRoundsStart, multipleRoundsEnd);
         ReplicationRound previousRound4 = manager.getPreviousRound(multipleRounds);
-        
+
         // Previous round should end at multipleRoundsStart = 00:05:00
         // Start time should be 00:05:00 - 60s = 00:04:00
         long expectedEnd4 = multipleRoundsStart; // 00:05:00
@@ -665,7 +665,7 @@ public class ReplicationShardDirectoryManagerTest {
         assertEquals("Previous round start time should be end time - round duration",
                    expectedStart4, previousRound4.getStartTime());
 
-        // Test 5: Verify round duration is consistent
+        // Test 5: Verify round duration is consisten
         long previousRoundDuration = previousRound4.getEndTime() - previousRound4.getStartTime();
         assertEquals("Previous round duration should be 60 seconds", roundDurationMs, previousRoundDuration);
     }
@@ -684,7 +684,7 @@ public class ReplicationShardDirectoryManagerTest {
         long firstRoundEnd = firstRoundStart + roundDurationMs; // 00:01:00
         ReplicationRound firstRound = new ReplicationRound(firstRoundStart, firstRoundEnd);
         ReplicationRound nextRound = manager.getNextRound(firstRound);
-        
+
         // Next round should start at firstRoundEnd (00:01:00), which rounds down to 00:01:00
         // End time should be 00:01:00 + 60s = 00:02:00
         long expectedStart = firstRoundEnd; // 00:01:00
@@ -699,7 +699,7 @@ public class ReplicationShardDirectoryManagerTest {
         long secondRoundEnd = secondRoundStart + roundDurationMs; // 00:02:00
         ReplicationRound secondRound = new ReplicationRound(secondRoundStart, secondRoundEnd);
         ReplicationRound nextRound2 = manager.getNextRound(secondRound);
-        
+
         // Next round should start at secondRoundEnd (00:02:00), which rounds down to 00:02:00
         // End time should be 00:02:00 + 60s = 00:03:00
         long expectedStart2 = secondRoundEnd; // 00:02:00
@@ -714,7 +714,7 @@ public class ReplicationShardDirectoryManagerTest {
         long midRoundEnd = dayStart + (150 * 1000L); // 00:02:30 (not aligned to round boundary)
         ReplicationRound midRound = new ReplicationRound(midRoundStart, midRoundEnd);
         ReplicationRound nextRound3 = manager.getNextRound(midRound);
-        
+
         // Next round should start at midRoundEnd rounded down = 00:02:00
         // End time should be 00:02:00 + 60s = 00:03:00
         long expectedStart3 = dayStart + (120 * 1000L); // 00:02:00 (rounded down from 00:02:30)
@@ -729,7 +729,7 @@ public class ReplicationShardDirectoryManagerTest {
         long multipleRoundsEnd = multipleRoundsStart + roundDurationMs; // 00:06:00
         ReplicationRound multipleRounds = new ReplicationRound(multipleRoundsStart, multipleRoundsEnd);
         ReplicationRound nextRound4 = manager.getNextRound(multipleRounds);
-        
+
         // Next round should start at multipleRoundsEnd = 00:06:00
         // End time should be 00:06:00 + 60s = 00:07:00
         long expectedStart4 = multipleRoundsEnd; // 00:06:00
@@ -739,7 +739,7 @@ public class ReplicationShardDirectoryManagerTest {
         assertEquals("Next round end time should be start time + round duration",
                    expectedEnd4, nextRound4.getEndTime());
 
-        // Test 5: Verify round duration is consistent
+        // Test 5: Verify round duration is consisten
         long nextRoundDuration = nextRound4.getEndTime() - nextRound4.getStartTime();
         assertEquals("Next round duration should be 60 seconds", roundDurationMs, nextRoundDuration);
 
