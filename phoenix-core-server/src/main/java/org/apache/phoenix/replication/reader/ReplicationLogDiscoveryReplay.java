@@ -317,7 +317,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
                 Optional<ReplicationRound> firstRoundToProcess = getFirstRoundToProcess();
                 LOG.info("Calculated first round to process after SYNCED_RECOVERY as"
                         + "{}", firstRoundToProcess);
-                firstRoundToProcess.ifPresent(round-> setLastRoundProcessed(
+                firstRoundToProcess.ifPresent(round -> setLastRoundProcessed(
                         replicationLogTracker.getReplicationShardDirectoryManager()
                                 .getPreviousRound(round)));
                 // Only reset to NORMAL if state hasn't been flipped to DEGRADED

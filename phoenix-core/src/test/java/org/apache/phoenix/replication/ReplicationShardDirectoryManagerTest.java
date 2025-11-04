@@ -401,7 +401,7 @@ public class ReplicationShardDirectoryManagerTest {
         assertEquals("Same input should produce same start time", result1.getStartTime(), result3.getStartTime());
         assertEquals("Same input should produce same end time", result1.getEndTime(), result3.getEndTime());
 
-        // Test that round duration is consisten
+        // Test that round duration is consistent
         long roundDuration1 = result1.getEndTime() - result1.getStartTime();
         assertEquals("Round duration should be 60 seconds", 60 * 1000L, roundDuration1);
     }
@@ -555,7 +555,7 @@ public class ReplicationShardDirectoryManagerTest {
         assertEquals("Same input should produce same end time", result1.getEndTime(), result3.getEndTime());
         assertEquals("Same input should produce same start time", result1.getStartTime(), result3.getStartTime());
 
-        // Test that round duration is consisten
+        // Test that round duration is consistent
         long roundDuration1 = result1.getEndTime() - result1.getStartTime();
         assertEquals("Round duration should be 60 seconds", 60 * 1000L, roundDuration1);
     }
@@ -665,7 +665,7 @@ public class ReplicationShardDirectoryManagerTest {
         assertEquals("Previous round start time should be end time - round duration",
                    expectedStart4, previousRound4.getStartTime());
 
-        // Test 5: Verify round duration is consisten
+        // Test 5: Verify round duration is consistent
         long previousRoundDuration = previousRound4.getEndTime() - previousRound4.getStartTime();
         assertEquals("Previous round duration should be 60 seconds", roundDurationMs, previousRoundDuration);
     }
@@ -739,7 +739,7 @@ public class ReplicationShardDirectoryManagerTest {
         assertEquals("Next round end time should be start time + round duration",
                    expectedEnd4, nextRound4.getEndTime());
 
-        // Test 5: Verify round duration is consisten
+        // Test 5: Verify round duration is consistent
         long nextRoundDuration = nextRound4.getEndTime() - nextRound4.getStartTime();
         assertEquals("Next round duration should be 60 seconds", roundDurationMs, nextRoundDuration);
 
