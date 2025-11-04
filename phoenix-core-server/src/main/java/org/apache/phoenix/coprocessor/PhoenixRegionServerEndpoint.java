@@ -23,7 +23,12 @@ import com.google.protobuf.RpcController;
 import com.google.protobuf.Service;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
@@ -44,8 +49,6 @@ import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
-
 /**
  * This is first implementation of RegionServer coprocessor introduced by Phoenix.
  */
@@ -55,14 +58,15 @@ public class PhoenixRegionServerEndpoint
     private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRegionServerEndpoint.class);
     private MetricsMetadataCachingSource metricsSource;
     protected Configuration conf;
-    private String zkUrl;
+    private ExecutorService prewarmExecutor;
 
     @Override
     public void start(CoprocessorEnvironment env) throws IOException {
         this.conf = env.getConfiguration();
         this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
                                 .getInstance().getMetadataCachingSource();
-        this.zkUrl = getLocalZkUrl(conf);
+        // Start async prewarming of HAGroupStoreClients
+        startHAGroupStoreClientPrewarming();
         // Start replication log replay
         ReplicationLogReplayService.getInstance(conf).start();
     }
@@ -73,6 +77,10 @@ public class PhoenixRegionServerEndpoint
         ReplicationLogReplayService.getInstance(conf).stop();
         RegionServerCoprocessor.super.stop(env);
         ServerUtil.ConnectionFactory.shutdown();
+        // Stop prewarming executor
+        if (prewarmExecutor != null) {
+            prewarmExecutor.shutdownNow();
+        }
     }
 
     @Override
@@ -193,6 +201,58 @@ public class PhoenixRegionServerEndpoint
 
     public ServerMetadataCache getServerMetadataCache() {
         return ServerMetadataCacheImpl.getInstance(conf);
+    }
+
+    /**
+     * Prewarms HAGroupStoreClients in background thread with retry.
+     * Initializes all HA group clients asynchronously at startup.
+     */
+    private void startHAGroupStoreClientPrewarming() {
+        prewarmExecutor = Executors.newSingleThreadExecutor(r -> {
+            Thread t = new Thread(r, "HAGroupStoreClient-Prewarm");
+            t.setDaemon(true);
+            return t;
+        });
+
+        prewarmExecutor.submit(() -> {
+            try {
+                HAGroupStoreManager manager = HAGroupStoreManager.getInstance(conf);
+                if (manager == null) {
+                    LOGGER.warn("HAGroupStoreManager is null, skipping prewarming");
+                    return;
+                }
+
+                List<String> pending = new ArrayList<>(manager.getHAGroupNames());
+
+                LOGGER.info("Starting prewarming for {} HAGroupStoreClients", pending.size());
+
+                while (!pending.isEmpty()) {
+                    Iterator<String> iterator = pending.iterator();
+                    while (iterator.hasNext()) {
+                        String haGroup = iterator.next();
+                        try {
+                            manager.getClusterRoleRecord(haGroup);
+                            iterator.remove();
+                            LOGGER.info("Prewarmed HAGroupStoreClient: {} ({} remaining)",
+                                    haGroup, pending.size());
+                        } catch (Exception e) {
+                            LOGGER.debug("Failed to prewarm {}, will retry", haGroup, e);
+                        }
+                    }
+
+                    if (!pending.isEmpty()) {
+                        Thread.sleep(2000); // Retry after 2s
+                    }
+                }
+
+                LOGGER.info("Completed prewarming all HAGroupStoreClients");
+            } catch (InterruptedException e) {
+                LOGGER.info("HAGroupStoreClient prewarming interrupted during shutdown");
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                LOGGER.error("Error during HAGroupStoreClient prewarming", e);
+            }
+        });
     }
 
 }

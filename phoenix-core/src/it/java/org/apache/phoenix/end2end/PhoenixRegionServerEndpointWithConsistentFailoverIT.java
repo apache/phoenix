@@ -40,11 +40,12 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TestName;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
 import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
-import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -52,9 +53,11 @@ import static org.junit.Assert.assertNotNull;
 @Category({NeedsOwnMiniClusterTest.class })
 public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTest {
 
+    private static final Logger LOGGER
+            = LoggerFactory.getLogger(PhoenixRegionServerEndpointWithConsistentFailoverIT.class);
     private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 5000L;
-    private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
-    private String zkUrl;
+    private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS
+            = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
     private String peerZkUrl;
 
     @Rule
@@ -69,18 +72,78 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
 
     @Before
     public void setUp() throws Exception {
-        zkUrl = getLocalZkUrl(config);
         peerZkUrl = CLUSTERS.getZkUrl2();
-        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl, peerZkUrl,
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), CLUSTERS.getZkUrl1(), peerZkUrl,
                 CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY,
                 null);
     }
 
     @Test
+    public void testHAGroupStoreClientPrewarming() throws Exception {
+        String haGroupName = testName.getMethodName();
+
+        // Setup: Create HA group in system table and peer ZK
+        try (PhoenixHAAdmin peerHAAdmin
+                     = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(),
+                ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
+            HAGroupStoreRecord peerHAGroupStoreRecord = new HAGroupStoreRecord(
+                    HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+                    HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
+                    CLUSTERS.getZkUrl1(), CLUSTERS.getMasterAddress2(), CLUSTERS.getMasterAddress1(), 0L);
+            peerHAAdmin.createHAGroupStoreRecordInZooKeeper(peerHAGroupStoreRecord);
+        }
+        
+        // Restart once to have a fresh RS with row inserted
+        CLUSTERS.getHBaseCluster1().getHBaseCluster().stopRegionServer(0);
+        CLUSTERS.getHBaseCluster1().getHBaseCluster().startRegionServer();
+        HRegionServer regionServer = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
+        PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
+        ClusterRoleRecord expectedRecord = buildExpectedClusterRoleRecord(haGroupName,
+                ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+
+        // Test WITHOUT prewarming: Access immediately after restart (before prewarming completes)
+        ServerRpcController controller1 = new ServerRpcController();
+        long startWithoutPrewarm = System.currentTimeMillis();
+        executeGetClusterRoleRecordAndVerify(coprocessor, controller1,
+                haGroupName, expectedRecord, false);
+        long timeWithoutPrewarm = System.currentTimeMillis() - startWithoutPrewarm;
+        LOGGER.info("Time WITHOUT prewarming (first access, cold start): {} ms",
+                timeWithoutPrewarm);
+
+        // Restart RegionServer to test prewarming on fresh startup
+        LOGGER.info("Restarting RegionServer to test prewarming...");
+        CLUSTERS.getHBaseCluster1().getHBaseCluster().stopRegionServer(0);
+        CLUSTERS.getHBaseCluster1().getHBaseCluster().startRegionServer();
+
+        // Wait for prewarming to complete after restart
+        Thread.sleep(5000);
+
+        // Get the new RegionServer instance after restart
+        HRegionServer restartedRS = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
+        PhoenixRegionServerEndpoint restartedCoprocessor
+                = getPhoenixRegionServerEndpoint(restartedRS);
+
+        // Test WITH prewarming: Access after restart (should be prewarmed at startup)
+        ServerRpcController controller2 = new ServerRpcController();
+        long startWithPrewarm = System.currentTimeMillis();
+        executeGetClusterRoleRecordAndVerify(restartedCoprocessor, controller2,
+                haGroupName, expectedRecord, false);
+        long timeWithPrewarm = System.currentTimeMillis() - startWithPrewarm;
+
+        LOGGER.info("Time WITH prewarming (after restart, prewarmed at startup): {} ms",
+                timeWithPrewarm);
+        LOGGER.info("Performance improvement: {} ms faster ({} -> {})",
+                (timeWithoutPrewarm - timeWithPrewarm), timeWithoutPrewarm, timeWithPrewarm);
+
+        // Prewarmed access should be significantly faster since client was initialized at startup
+        assert(timeWithPrewarm < timeWithoutPrewarm);
+    }
+
+    @Test
     public void testGetClusterRoleRecordAndInvalidate() throws Exception {
         String haGroupName = testName.getMethodName();
-        HRegionServer regionServer = utility.getMiniHBaseCluster().getRegionServer(0);
+        HRegionServer regionServer = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
         PhoenixRegionServerEndpoint coprocessor = getPhoenixRegionServerEndpoint(regionServer);
         assertNotNull(coprocessor);
         ServerRpcController controller = new ServerRpcController();
@@ -98,19 +161,19 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
         executeGetClusterRoleRecordAndVerify(coprocessor, controller, haGroupName, expectedRecord, false);
 
         // Delete the HAGroupStoreRecord from ZK
-        try (PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(config, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
+        try (PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(), ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
             haAdmin.deleteHAGroupStoreRecordInZooKeeper(haGroupName);
         }
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         // Delete the row from System Table
-        HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupName, zkUrl);
+        HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupName, CLUSTERS.getZkUrl1());
 
         // Expect exception when getting ClusterRoleRecord because the HAGroupStoreRecord is not found in ZK
         controller = new ServerRpcController();
         executeGetClusterRoleRecordAndVerify(coprocessor, controller, haGroupName, expectedRecord, true);
 
         // Update the row
-        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl, peerZkUrl,
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), CLUSTERS.getZkUrl1(), peerZkUrl,
                 CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
                 ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY, ClusterRoleRecord.ClusterRole.STANDBY, null);
 
