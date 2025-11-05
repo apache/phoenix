@@ -32,6 +32,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.EnvironmentEdge;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
 import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
@@ -70,7 +71,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.when;
 
-@Category(NeedsOwnMiniClusterTest.class)
+@Category(ParallelStatsDisabledTest.class)
 public class ReplicationLogDiscoveryReplayTest extends BaseTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogDiscoveryReplayTest.class);
