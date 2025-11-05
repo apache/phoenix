@@ -226,6 +226,11 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-testing-util</artifactId>
+      <scope>test</scope>
+    </dependency>
 
     <!-- Omid test dependencies -->
     <dependency>
@@ -446,6 +451,7 @@
           <ignoredUnusedDeclaredDependencies>
             <ignoredUnusedDeclaredDependency>org.apache.omid:omid-commit-table</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.omid:omid-transaction-client</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>org.apache.hbase:hbase-testing-util</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.omid:omid-hbase-client</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.zookeeper:zookeeper-jute</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-api</ignoredUnusedDeclaredDependency>
@@ -458,7 +464,7 @@
           <ignoredNonTestScopedDependencies>
             <ignoredNonTestScopedDependency>org.apache.phoenix:phoenix-core-client</ignoredNonTestScopedDependency>
             <ignoredNonTestScopedDependency>org.apache.phoenix:phoenix-core-server</ignoredNonTestScopedDependency>
-            <ignoredUnusedDeclaredDependency>org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}</ignoredUnusedDeclaredDependency>
+            <ignoredNonTestScopedDependency>org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}</ignoredNonTestScopedDependency>
             <ignoredNonTestScopedDependency>org.apache.hbase.thirdparty:hbase-shaded-miscellaneous</ignoredNonTestScopedDependency>
           </ignoredNonTestScopedDependencies>
           <ignoredUsedUndeclaredDependencies/>
