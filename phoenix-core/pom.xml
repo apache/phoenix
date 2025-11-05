@@ -447,6 +447,7 @@
             <ignoredUnusedDeclaredDependency>org.apache.omid:omid-commit-table</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.omid:omid-transaction-client</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.omid:omid-hbase-client</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>org.apache.zookeeper:zookeeper-jute</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-api</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-core</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-slf4j-impl</ignoredUnusedDeclaredDependency>
