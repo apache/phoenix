@@ -23,6 +23,7 @@ import java.util.Map;
 import java.util.SortedSet;
 import javax.annotation.Nullable;
 
+import org.apache.phoenix.thirdparty.com.google.common.base.Supplier;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ForwardingListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
@@ -82,6 +83,37 @@ public class TopNTreeMultiMap<K, V> extends ForwardingListMultimap<K, V> {
     return (SortedSet<K>) delegate.keySet();
   }
 
+  public boolean put(@Nullable K key, Supplier<V> valueSupplier) {
+    // Fast path: if the map is not full, just add it
+    // delegate.size() is O(1), delegate.put() is O(log k) for TreeMap
+    if (delegate.size() < maxSize) {
+      return delegate.put(key, valueSupplier.get());
+    }
+
+    // The map is full. Find the highest key to potentially evict
+    SortedSet<K> keySet = sortedKeySet(); // O(1) - returns a view
+    K lastKey = keySet.last(); // O(log k) where k = number of unique keys
+
+    // Compare new key to the highest key
+    int comp = keyComparator.compare(key, lastKey);
+    if (comp >= 0) {
+      // New key is higher or equal to the highest key. Reject.
+      return false;
+    }
+
+    // New key is smaller. Evict the last value from the highest key.
+    List<V> lastValues = delegate.get(lastKey);
+
+    // Evict the last value of the highest key.
+    // Note: The list returned by get() is a live view. This removal:
+    // 1. Decrements delegate.size() automatically
+    // 2. Removes the key if this was its only value
+    lastValues.remove(lastValues.size() - 1);
+
+    // Add the new value (increments size back to maxSize)
+    return delegate.put(key, valueSupplier.get());
+  }
+
   /**
    * Adds the key-value pair, evicting the highest entry if the map is full and the new entry's key
    * is smaller than the highest key. Time Complexity: - When not full: O(log k) for TreeMap
@@ -92,42 +124,7 @@ public class TopNTreeMultiMap<K, V> extends ForwardingListMultimap<K, V> {
    */
   @Override
   public boolean put(@Nullable K key, @Nullable V value) {
-    // Fast path: if the map is not full, just add it
-    // delegate.size() is O(1), delegate.put() is O(log k) for TreeMap
-    if (delegate.size() < maxSize) {
-      return delegate.put(key, value);
-    }
-
-    // The map is full. Find the highest key to potentially evict
-    SortedSet<K> keySet = sortedKeySet(); // O(1) - returns a view
-    if (keySet.isEmpty()) {
-      // Map is full but has no keys? Should not happen
-      return false;
-    }
-
-    K lastKey = keySet.last(); // O(log k) where k = number of unique keys
-
-    // Compare new key to the highest key
-    int comp = keyComparator.compare(key, lastKey);
-
-    if (comp >= 0) {
-      // New key is higher or equal to the highest key. Reject.
-      return false;
-    }
-
-    // New key is smaller. Evict the last value from the highest key.
-    List<V> lastValues = delegate.get(lastKey);
-
-    if (lastValues == null || lastValues.isEmpty()) {
-      // Should not happen if Guava's contract is maintained
-      return false;
-    }
-
-    // Evict the last value of the highest key
-    lastValues.remove(lastValues.size() - 1);
-
-    // Add the new value
-    return delegate.put(key, value);
+    return put(key, () -> value);
   }
 
   /**

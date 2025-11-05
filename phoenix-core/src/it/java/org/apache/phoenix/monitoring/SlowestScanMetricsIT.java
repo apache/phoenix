@@ -22,16 +22,18 @@ import static org.junit.Assert.assertEquals;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -72,7 +74,7 @@ public class SlowestScanMetricsIT extends BaseTest {
     String tableName = generateUniqueName();
     String sql = "SELECT * FROM " + tableName + " WHERE (k1, k2) IN ((1, 'a'), (2, 'b'), (3, 'c'))";
     Properties props = new Properties();
-    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, "3");
+    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, "2");
     props.setProperty(QueryServices.SCAN_METRICS_BY_REGION_ENABLED, "true");
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       createTableAndUpsertData(conn, tableName, "SALT_BUCKETS=3");
@@ -83,16 +85,27 @@ public class SlowestScanMetricsIT extends BaseTest {
         rowCount++;
       }
       assertEquals(3, rowCount);
+      long loggingStartTime = System.currentTimeMillis();
       List<List<ScanMetricsGroup>> slowestScanReadMetrics =
         PhoenixRuntime.getTopNSlowestScanReadMetrics(rs);
+      System.out.println("Time taken to get slowest scan read metrics: "
+        + (System.currentTimeMillis() - loggingStartTime));
       Map<String, Map<MetricType, Long>> readMetrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+      Map<String, Map<String, Long>> processReadMetrics = new HashMap<>();
+      for (Map.Entry<String, Map<MetricType, Long>> entry : readMetrics.entrySet()) {
+        Map<String, Long> metricMap = new HashMap<>();
+        for (Map.Entry<MetricType, Long> metricEntry : entry.getValue().entrySet()) {
+          metricMap.put(metricEntry.getKey().shortName(), metricEntry.getValue());
+        }
+        processReadMetrics.put(entry.getKey(), metricMap);
+      }
       System.out.println("Slowest scan read metrics: " + slowestScanReadMetrics);
-      System.out.println("Read metrics: " + readMetrics);
+      System.out.println("Sum of read metrics: " + processReadMetrics);
     }
   }
 
   private void createTableAndUpsertData(Connection conn, String tableName, String ddlOptions)
-    throws SQLException {
+    throws Exception {
     String createTableSql = "CREATE TABLE " + tableName
       + " (k1 INTEGER NOT NULL, k2 varchar NOT NULL, v1 VARCHAR, v2 VARCHAR, CONSTRAINT PK PRIMARY KEY (k1, k2)) "
       + ddlOptions;
@@ -106,5 +119,6 @@ public class SlowestScanMetricsIT extends BaseTest {
         "UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'c', 'c1000000', 'c2000000')");
       conn.commit();
     }
+    TestUtil.flush(getUtility(), TableName.valueOf(tableName));
   }
 }

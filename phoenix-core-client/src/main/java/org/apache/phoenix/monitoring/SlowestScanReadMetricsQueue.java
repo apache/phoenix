@@ -47,6 +47,6 @@ public class SlowestScanReadMetricsQueue {
   }
 
   public Iterator<ScanMetricsGroup> getIterator() {
-    return this.slowestScanReadMetricsQueue.iterator();
+    return this.slowestScanReadMetricsQueue.descendingIterator();
   }
 }

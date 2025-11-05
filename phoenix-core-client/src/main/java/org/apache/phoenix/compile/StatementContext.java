@@ -514,31 +514,38 @@ public class StatementContext {
     TopNTreeMultiMap<Long, List<ScanMetricsGroup>> topNSlowestScanMetricsGroups) {
     Iterator<ScanMetricsGroup> currentScanMetricsGroupIterator =
       node.getSlowestScanReadMetricsQueue().getIterator();
-    while (currentScanMetricsGroupIterator.hasNext()) {
-      ScanMetricsGroup currentScanMetricsGroup = currentScanMetricsGroupIterator.next();
-      long currentMillisBetweenNexts = currentScanMetricsGroup.getSumOfMillisSecBetweenNexts();
-      long newSumOfMillisBetweenNexts = sumOfMillisBetweenNexts + currentMillisBetweenNexts;
+    if (currentScanMetricsGroupIterator.hasNext()) {
+      do {
+        ScanMetricsGroup currentScanMetricsGroup = currentScanMetricsGroupIterator.next();
+        long currentMillisBetweenNexts = currentScanMetricsGroup.getSumOfMillisSecBetweenNexts();
+        long newSumOfMillisBetweenNexts = sumOfMillisBetweenNexts + currentMillisBetweenNexts;
 
-      // Add at tail of the dequeue
-      currentScanMetricsGroups.addLast(currentScanMetricsGroup);
+        // Add at tail of the dequeue
+        currentScanMetricsGroups.addLast(currentScanMetricsGroup);
 
-      Set<StatementContext> subContexts = node.getSubStatementContexts();
-      if (subContexts == null || subContexts.isEmpty()) {
-        List<ScanMetricsGroup> newScanMetricsGroups =
-          new ArrayList<>(currentScanMetricsGroups.size());
-        // Default iteration order is from head to tail
-        for (ScanMetricsGroup scanMetricsGroup : currentScanMetricsGroups) {
-          newScanMetricsGroups.add(scanMetricsGroup);
-        }
-        topNSlowestScanMetricsGroups.put(newSumOfMillisBetweenNexts, newScanMetricsGroups);
-      } else {
-        // Process sub-contexts
-        for (StatementContext sub : subContexts) {
-          getSlowestScanReadMetricsUtil(sub, currentScanMetricsGroups, newSumOfMillisBetweenNexts,
-            topNSlowestScanMetricsGroups);
-        }
+        traverseSlowestScanReadMetricsTree(node, currentScanMetricsGroups,
+          newSumOfMillisBetweenNexts, topNSlowestScanMetricsGroups);
+        currentScanMetricsGroups.removeLast();
+      } while (currentScanMetricsGroupIterator.hasNext());
+    } else {
+      traverseSlowestScanReadMetricsTree(node, currentScanMetricsGroups, sumOfMillisBetweenNexts,
+        topNSlowestScanMetricsGroups);
+    }
+  }
+
+  private static void traverseSlowestScanReadMetricsTree(StatementContext node,
+    Deque<ScanMetricsGroup> currentScanMetricsGroups, long sumOfMillisBetweenNexts,
+    TopNTreeMultiMap<Long, List<ScanMetricsGroup>> topNSlowestScanMetricsGroups) {
+    Set<StatementContext> subContexts = node.getSubStatementContexts();
+    if (subContexts == null || subContexts.isEmpty()) {
+      topNSlowestScanMetricsGroups.put(sumOfMillisBetweenNexts,
+        () -> new ArrayList<>(currentScanMetricsGroups));
+    } else {
+      // Process sub-contexts
+      for (StatementContext sub : subContexts) {
+        getSlowestScanReadMetricsUtil(sub, currentScanMetricsGroups, sumOfMillisBetweenNexts,
+          topNSlowestScanMetricsGroups);
       }
-      currentScanMetricsGroups.removeLast();
     }
   }
 }
