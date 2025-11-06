@@ -130,10 +130,10 @@ public class ParallelPhoenixResultSet extends DelegateResultSet
   }
 
   @Override
-  public List<List<ScanMetricsGroup>> getTopNSlowestScanReadMetrics() {
+  public List<List<ScanMetricsGroup>> getTopNSlowestScanMetrics() {
     List<List<ScanMetricsGroup>> metrics;
     if (rs != null) {
-      metrics = ((PhoenixMonitoredResultSet) rs).getTopNSlowestScanReadMetrics();
+      metrics = ((PhoenixMonitoredResultSet) rs).getTopNSlowestScanMetrics();
     } else {
       metrics = Collections.emptyList();
     }

@@ -223,7 +223,7 @@ public class ScanningResultIterator implements ResultIterator {
         } else {
           scanMetricsGroup = new ScanMetricsGroup(tableName.getNameAsString(), scanMetricsMap);
         }
-        context.getSlowestScanReadMetricsQueue().add(scanMetricsGroup);
+        context.getSlowestScanMetricsQueue().add(scanMetricsGroup);
       }
 
       scanMetricsUpdated = true;

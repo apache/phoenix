@@ -1548,10 +1548,10 @@ public class PhoenixRuntime {
     return resultSet.getReadMetrics();
   }
 
-  public static List<List<ScanMetricsGroup>> getTopNSlowestScanReadMetrics(ResultSet rs)
+  public static List<List<ScanMetricsGroup>> getTopNSlowestScanMetrics(ResultSet rs)
     throws SQLException {
     PhoenixMonitoredResultSet resultSet = rs.unwrap(PhoenixMonitoredResultSet.class);
-    return resultSet.getTopNSlowestScanReadMetrics();
+    return resultSet.getTopNSlowestScanMetrics();
   }
 
   @Deprecated

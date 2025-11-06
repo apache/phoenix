@@ -27,7 +27,7 @@ public interface PhoenixMonitoredResultSet extends ResultSet {
 
   Map<String, Map<MetricType, Long>> getReadMetrics();
 
-  List<List<ScanMetricsGroup>> getTopNSlowestScanReadMetrics();
+  List<List<ScanMetricsGroup>> getTopNSlowestScanMetrics();
 
   Map<MetricType, Long> getOverAllRequestReadMetrics();
 

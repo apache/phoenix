@@ -18,17 +18,20 @@
 package org.apache.phoenix.monitoring;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -39,6 +42,9 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+
+import org.apache.hbase.thirdparty.com.google.gson.JsonArray;
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class SlowestScanMetricsIT extends BaseTest {
@@ -60,21 +66,38 @@ public class SlowestScanMetricsIT extends BaseTest {
       createTableAndUpsertData(conn, tableName, "");
       Statement stmt = conn.createStatement();
       ResultSet rs = stmt.executeQuery(sql);
+      int rowCount = 0;
       while (rs.next()) {
-
+        rowCount++;
       }
-      List<List<ScanMetricsGroup>> slowestScanReadMetrics =
-        PhoenixRuntime.getTopNSlowestScanReadMetrics(rs);
-      System.out.println("Slowest scan read metrics: " + slowestScanReadMetrics);
+      assertEquals(1, rowCount);
+      List<List<ScanMetricsGroup>> slowestScanMetrics =
+        PhoenixRuntime.getTopNSlowestScanMetrics(rs);
+      JsonArray jsonArray = getJsonArray(slowestScanMetrics);
+      System.out.println("Slowest scan read metrics: " + slowestScanMetrics);
+
+      assertEquals(1, jsonArray.size());
+      JsonArray groupArray = jsonArray.get(0).getAsJsonArray();
+      assertEquals(1, groupArray.size());
+      JsonObject groupJson = groupArray.get(0).getAsJsonObject();
+      assertEquals(2, groupJson.size());
+      assertEquals(tableName, groupJson.get("table").getAsString());
+      JsonArray regionsArray = groupJson.get("regions").getAsJsonArray();
+      assertEquals(1, regionsArray.size());
+      JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
+      assertNotNull(regionJson.get("region"));
+      assertNotNull(regionJson.get("server"));
+      assertEquals(2, regionJson.get("broc").getAsLong());
     }
   }
 
   @Test
   public void testMultiplePointsLookupQuery() throws Exception {
+    int topN = 2;
     String tableName = generateUniqueName();
     String sql = "SELECT * FROM " + tableName + " WHERE (k1, k2) IN ((1, 'a'), (2, 'b'), (3, 'c'))";
     Properties props = new Properties();
-    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, "2");
+    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, String.valueOf(topN));
     props.setProperty(QueryServices.SCAN_METRICS_BY_REGION_ENABLED, "true");
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       createTableAndUpsertData(conn, tableName, "SALT_BUCKETS=3");
@@ -85,22 +108,92 @@ public class SlowestScanMetricsIT extends BaseTest {
         rowCount++;
       }
       assertEquals(3, rowCount);
-      long loggingStartTime = System.currentTimeMillis();
-      List<List<ScanMetricsGroup>> slowestScanReadMetrics =
-        PhoenixRuntime.getTopNSlowestScanReadMetrics(rs);
-      System.out.println("Time taken to get slowest scan read metrics: "
-        + (System.currentTimeMillis() - loggingStartTime));
-      Map<String, Map<MetricType, Long>> readMetrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
-      Map<String, Map<String, Long>> processReadMetrics = new HashMap<>();
-      for (Map.Entry<String, Map<MetricType, Long>> entry : readMetrics.entrySet()) {
-        Map<String, Long> metricMap = new HashMap<>();
-        for (Map.Entry<MetricType, Long> metricEntry : entry.getValue().entrySet()) {
-          metricMap.put(metricEntry.getKey().shortName(), metricEntry.getValue());
-        }
-        processReadMetrics.put(entry.getKey(), metricMap);
+      List<List<ScanMetricsGroup>> slowestScanMetrics =
+        PhoenixRuntime.getTopNSlowestScanMetrics(rs);
+      JsonArray jsonArray = getJsonArray(slowestScanMetrics);
+      System.out.println("Slowest scan metrics: " + jsonArray);
+
+      assertEquals(topN, jsonArray.size());
+      for (int i = 0; i < topN; i++) {
+        JsonArray groupArray = jsonArray.get(i).getAsJsonArray();
+        assertEquals(1, groupArray.size());
+        JsonObject groupJson = groupArray.get(0).getAsJsonObject();
+        assertEquals(2, groupJson.size());
+        assertEquals(tableName, groupJson.get("table").getAsString());
+        JsonArray regionsArray = groupJson.get("regions").getAsJsonArray();
+        assertEquals(1, regionsArray.size());
+        JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
+        assertNotNull(regionJson.get("region"));
+        assertNotNull(regionJson.get("server"));
+        assertEquals(1, regionJson.get("broc").getAsLong());
       }
-      System.out.println("Slowest scan read metrics: " + slowestScanReadMetrics);
-      System.out.println("Sum of read metrics: " + processReadMetrics);
+    }
+  }
+
+  @Test
+  public void testUnionAllQuery() throws Exception {
+    int topN = 2;
+    String tableName1 = generateUniqueName();
+    String tableName2 = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName1, "");
+      createTableAndUpsertData(conn, tableName2, "");
+    }
+    Properties props = new Properties();
+    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, String.valueOf(topN));
+    props.setProperty(QueryServices.SCAN_METRICS_BY_REGION_ENABLED, "true");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String sql = "SELECT * FROM " + tableName1 + " WHERE k1 = 1 AND k2 = 'a'"
+        + " UNION ALL SELECT * FROM " + tableName2 + " WHERE k1 = 1 AND k2 = 'a'";
+      Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery(sql);
+      int rowCount = 0;
+      while (rs.next()) {
+        rowCount++;
+      }
+      assertEquals(2, rowCount);
+      List<List<ScanMetricsGroup>> slowestScanMetrics =
+        PhoenixRuntime.getTopNSlowestScanMetrics(rs);
+      JsonArray jsonArray = getJsonArray(slowestScanMetrics);
+      System.out.println("Slowest scan metrics: " + jsonArray);
+
+      assertEquals(topN, jsonArray.size());
+      for (int i = 0; i < topN; i++) {
+        JsonArray groupArray = jsonArray.get(i).getAsJsonArray();
+        assertEquals(1, groupArray.size());
+        JsonObject groupJson = groupArray.get(0).getAsJsonObject();
+        assertEquals(2, groupJson.size());
+        String tableName = groupJson.get("table").getAsString();
+        assertTrue(tableName1.equals(tableName) || tableName2.equals(tableName));
+        JsonArray regionsArray = groupJson.get("regions").getAsJsonArray();
+        assertEquals(1, regionsArray.size());
+        JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
+        assertNotNull(regionJson.get("region"));
+        assertNotNull(regionJson.get("server"));
+        assertEquals(2, regionJson.get("broc").getAsLong());
+      }
+
+      StatementContext stmtCtx = rs.unwrap(PhoenixResultSet.class).getContext();
+      ReadMetricQueue readMetricsQueue = stmtCtx.getReadMetricsQueue();
+      Map<String, Map<MetricType, Long>> expectedMetrics = readMetricsQueue.aggregate();
+      Map<String, Map<MetricType, Long>> actualMetrics =
+        PhoenixRuntime.getRequestReadMetricInfo(rs);
+      assertEquals(expectedMetrics, actualMetrics);
+      Map<MetricType, Long> expectedOverallQueryMetrics =
+        stmtCtx.getOverallQueryMetrics().publish();
+      Map<MetricType, Long> actualOverallQueryMetrics =
+        PhoenixRuntime.getOverAllReadRequestMetricInfo(rs);
+      assertEquals(expectedOverallQueryMetrics, actualOverallQueryMetrics);
+    }
+  }
+
+  @Test
+  public void testQueryContainingSubquery() throws Exception {
+    String tableName = generateUniqueName();
+    String subqueryTableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName, "");
+      createTableAndUpsertData(conn, subqueryTableName, "");
     }
   }
 
@@ -120,5 +213,17 @@ public class SlowestScanMetricsIT extends BaseTest {
       conn.commit();
     }
     TestUtil.flush(getUtility(), TableName.valueOf(tableName));
+  }
+
+  private JsonArray getJsonArray(List<List<ScanMetricsGroup>> slowestScanMetrics) {
+    JsonArray jsonArray = new JsonArray();
+    for (List<ScanMetricsGroup> group : slowestScanMetrics) {
+      JsonArray groupArray = new JsonArray();
+      for (ScanMetricsGroup scanMetricsGroup : group) {
+        groupArray.add(scanMetricsGroup.toJson());
+      }
+      jsonArray.add(groupArray);
+    }
+    return jsonArray;
   }
 }

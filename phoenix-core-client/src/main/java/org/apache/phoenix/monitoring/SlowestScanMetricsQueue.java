@@ -22,10 +22,10 @@ import java.util.Deque;
 import java.util.Iterator;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
-public class SlowestScanReadMetricsQueue {
+public class SlowestScanMetricsQueue {
 
-  public static final SlowestScanReadMetricsQueue NOOP_SLOWEST_SCAN_READ_METRICS_QUEUE =
-    new SlowestScanReadMetricsQueue() {
+  public static final SlowestScanMetricsQueue NOOP_SLOWEST_SCAN_METRICS_QUEUE =
+    new SlowestScanMetricsQueue() {
       @Override
       public void add(ScanMetricsGroup scanMetricsGroup) {
       }
@@ -36,17 +36,17 @@ public class SlowestScanReadMetricsQueue {
       }
     };
 
-  private final Deque<ScanMetricsGroup> slowestScanReadMetricsQueue;
+  private final Deque<ScanMetricsGroup> slowestScanMetricsQueue;
 
-  public SlowestScanReadMetricsQueue() {
-    this.slowestScanReadMetricsQueue = new ConcurrentLinkedDeque<>();
+  public SlowestScanMetricsQueue() {
+    this.slowestScanMetricsQueue = new ConcurrentLinkedDeque<>();
   }
 
   public void add(ScanMetricsGroup scanMetricsGroup) {
-    this.slowestScanReadMetricsQueue.add(scanMetricsGroup);
+    this.slowestScanMetricsQueue.add(scanMetricsGroup);
   }
 
   public Iterator<ScanMetricsGroup> getIterator() {
-    return this.slowestScanReadMetricsQueue.descendingIterator();
+    return this.slowestScanMetricsQueue.descendingIterator();
   }
 }

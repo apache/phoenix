@@ -37,7 +37,7 @@ import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsGroup;
-import org.apache.phoenix.monitoring.SlowestScanReadMetricsQueue;
+import org.apache.phoenix.monitoring.SlowestScanMetricsQueue;
 import org.apache.phoenix.monitoring.TopNTreeMultiMap;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
@@ -97,7 +97,7 @@ public class StatementContext {
   private Integer totalSegmentsValue;
   private boolean hasRowSizeFunction = false;
   private boolean hasRawRowSizeFunction = false;
-  private final SlowestScanReadMetricsQueue slowestScanReadMetricsQueue;
+  private final SlowestScanMetricsQueue slowestScanMetricsQueue;
   private final int slowestScanMetricsCount;
 
   public StatementContext(PhoenixStatement statement) {
@@ -124,7 +124,7 @@ public class StatementContext {
     this.subqueryResults = context.subqueryResults;
     this.readMetricsQueue = context.readMetricsQueue;
     this.overAllQueryMetrics = context.overAllQueryMetrics;
-    this.slowestScanReadMetricsQueue = context.slowestScanReadMetricsQueue;
+    this.slowestScanMetricsQueue = context.slowestScanMetricsQueue;
     this.slowestScanMetricsCount = context.slowestScanMetricsCount;
     this.queryLogger = context.queryLogger;
     this.isClientSideUpsertSelect = context.isClientSideUpsertSelect;
@@ -191,9 +191,9 @@ public class StatementContext {
     this.overAllQueryMetrics =
       new OverAllQueryMetrics(isRequestMetricsEnabled, connection.getLogLevel());
     this.slowestScanMetricsCount = connection.getSlowestScanMetricsCount();
-    this.slowestScanReadMetricsQueue = slowestScanMetricsCount > 0
-      ? new SlowestScanReadMetricsQueue()
-      : SlowestScanReadMetricsQueue.NOOP_SLOWEST_SCAN_READ_METRICS_QUEUE;
+    this.slowestScanMetricsQueue = slowestScanMetricsCount > 0
+      ? new SlowestScanMetricsQueue()
+      : SlowestScanMetricsQueue.NOOP_SLOWEST_SCAN_METRICS_QUEUE;
     this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();
     this.hasFirstValidResult = new AtomicBoolean(false);
     this.subStatementContexts = Sets.newHashSet();
@@ -490,17 +490,17 @@ public class StatementContext {
     this.totalSegmentsValue = totalSegmentsValue;
   }
 
-  public SlowestScanReadMetricsQueue getSlowestScanReadMetricsQueue() {
-    return slowestScanReadMetricsQueue;
+  public SlowestScanMetricsQueue getSlowestScanMetricsQueue() {
+    return slowestScanMetricsQueue;
   }
 
-  public List<List<ScanMetricsGroup>> getTopNSlowestScanReadMetrics() {
+  public List<List<ScanMetricsGroup>> getTopNSlowestScanMetrics() {
     if (slowestScanMetricsCount <= 0) {
       return Collections.emptyList();
     }
     TopNTreeMultiMap<Long, List<ScanMetricsGroup>> slowestScanMetricsGroups =
       new TopNTreeMultiMap<>(slowestScanMetricsCount, (s1, s2) -> Long.compare(s2, s1));
-    getSlowestScanReadMetricsUtil(this, new ArrayDeque<>(), 0, slowestScanMetricsGroups);
+    getSlowestScanMetricsUtil(this, new ArrayDeque<>(), 0, slowestScanMetricsGroups);
     List<List<ScanMetricsGroup>> topNSlowestScanMetricsGroups =
       new ArrayList<>(slowestScanMetricsGroups.size());
     for (Map.Entry<Long, List<ScanMetricsGroup>> entry : slowestScanMetricsGroups.entries()) {
@@ -509,11 +509,11 @@ public class StatementContext {
     return topNSlowestScanMetricsGroups;
   }
 
-  private static void getSlowestScanReadMetricsUtil(StatementContext node,
+  private static void getSlowestScanMetricsUtil(StatementContext node,
     Deque<ScanMetricsGroup> currentScanMetricsGroups, long sumOfMillisBetweenNexts,
     TopNTreeMultiMap<Long, List<ScanMetricsGroup>> topNSlowestScanMetricsGroups) {
     Iterator<ScanMetricsGroup> currentScanMetricsGroupIterator =
-      node.getSlowestScanReadMetricsQueue().getIterator();
+      node.getSlowestScanMetricsQueue().getIterator();
     if (currentScanMetricsGroupIterator.hasNext()) {
       do {
         ScanMetricsGroup currentScanMetricsGroup = currentScanMetricsGroupIterator.next();
@@ -523,17 +523,17 @@ public class StatementContext {
         // Add at tail of the dequeue
         currentScanMetricsGroups.addLast(currentScanMetricsGroup);
 
-        traverseSlowestScanReadMetricsTree(node, currentScanMetricsGroups,
-          newSumOfMillisBetweenNexts, topNSlowestScanMetricsGroups);
+        traverseSlowestScanMetricsTree(node, currentScanMetricsGroups, newSumOfMillisBetweenNexts,
+          topNSlowestScanMetricsGroups);
         currentScanMetricsGroups.removeLast();
       } while (currentScanMetricsGroupIterator.hasNext());
     } else {
-      traverseSlowestScanReadMetricsTree(node, currentScanMetricsGroups, sumOfMillisBetweenNexts,
+      traverseSlowestScanMetricsTree(node, currentScanMetricsGroups, sumOfMillisBetweenNexts,
         topNSlowestScanMetricsGroups);
     }
   }
 
-  private static void traverseSlowestScanReadMetricsTree(StatementContext node,
+  private static void traverseSlowestScanMetricsTree(StatementContext node,
     Deque<ScanMetricsGroup> currentScanMetricsGroups, long sumOfMillisBetweenNexts,
     TopNTreeMultiMap<Long, List<ScanMetricsGroup>> topNSlowestScanMetricsGroups) {
     Set<StatementContext> subContexts = node.getSubStatementContexts();
@@ -543,7 +543,7 @@ public class StatementContext {
     } else {
       // Process sub-contexts
       for (StatementContext sub : subContexts) {
-        getSlowestScanReadMetricsUtil(sub, currentScanMetricsGroups, sumOfMillisBetweenNexts,
+        getSlowestScanMetricsUtil(sub, currentScanMetricsGroups, sumOfMillisBetweenNexts,
           topNSlowestScanMetricsGroups);
       }
     }

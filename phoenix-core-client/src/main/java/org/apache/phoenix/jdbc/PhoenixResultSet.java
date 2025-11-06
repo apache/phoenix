@@ -1498,8 +1498,8 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
   }
 
   @Override
-  public List<List<ScanMetricsGroup>> getTopNSlowestScanReadMetrics() {
-    return context.getTopNSlowestScanReadMetrics();
+  public List<List<ScanMetricsGroup>> getTopNSlowestScanMetrics() {
+    return context.getTopNSlowestScanMetrics();
   }
 
   @Override
