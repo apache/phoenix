@@ -637,9 +637,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           // We don't want to check for mutation blocking for the system ha group table
           if (!tableName.equals(SYSTEM_HA_GROUP_NAME)) {
               // Extract HAGroupName from the mutations
-              final Set<String> haGroupNames = extractHAGroupNameAttribute(miniBatchOp);
+              final String haGroupName = extractHAGroupNameAttribute(miniBatchOp);
               // Check if mutation is blocked for any of the HAGroupNames
-              for (String haGroupName : haGroupNames) {
+              if (StringUtils.isNotBlank(haGroupName)) {
                   //TODO: Below approach might be slow need to figure out faster way,
                   // slower part is getting haGroupStoreClient We can also cache
                   // roleRecord (I tried it and still it's slow due to haGroupStoreClient
@@ -672,19 +672,18 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
-  private Set<String> extractHAGroupNameAttribute(
+  private String extractHAGroupNameAttribute(
           MiniBatchOperationInProgress<Mutation> miniBatchOp) {
-      Set<String> haGroupNames = new HashSet<>();
       for (int i = 0; i < miniBatchOp.size(); i++) {
           Mutation m = miniBatchOp.getOperation(i);
           byte[] haGroupName = m.getAttribute(
                   BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
           if (haGroupName != null) {
-              haGroupNames.add(new String(haGroupName, StandardCharsets.UTF_8));
+              return new String(haGroupName, StandardCharsets.UTF_8);
           }
       }
-      return haGroupNames;
-    }
+      return null;
+  }
 
     @Override
     public void preWALRestore(

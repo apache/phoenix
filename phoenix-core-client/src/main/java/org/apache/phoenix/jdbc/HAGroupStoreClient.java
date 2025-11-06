@@ -298,7 +298,7 @@ public class HAGroupStoreClient implements Closeable {
 
     /**
      * Set the HA group status for the specified HA group name.
-     * Checks if the status is needed to be updated based on logic in 
+     * Checks if the status is needed to be updated based on logic in
      * validateTransitionAndGetWaitTime function.
      *
      * @param haGroupState the HA group state to set
@@ -316,7 +316,7 @@ public class HAGroupStoreClient implements Closeable {
 
     /**
      * Set the HA group status for the specified HA group name.
-     * Checks if the status is needed to be updated based on logic in 
+     * Checks if the status is needed to be updated based on logic in
      * validateTransitionAndGetWaitTime function.
      *
      * @param haGroupState the HA group state to set
@@ -324,7 +324,7 @@ public class HAGroupStoreClient implements Closeable {
      * @throws IOException if the client is not healthy or the operation fails
      * @throws StaleHAGroupStoreRecordVersionException if the version is stale
      * @throws InvalidClusterRoleTransitionException when transition is not valid
-     * @return the wait time in milliseconds for state transition, 
+     * @return the wait time in milliseconds for state transition,
      *         if 0 then the state transition is successful.
      * @throws SQLException
      */
@@ -369,7 +369,8 @@ public class HAGroupStoreClient implements Closeable {
                 && haGroupState == HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC) {
             // We record the last round timestamp by subtracting the rotationTime and then
             // taking the beginning of last round (floor) by first integer division and then multiplying again.
-            lastSyncTimeInMs = ((System.currentTimeMillis() - rotationTimeMs)/rotationTimeMs) * (rotationTimeMs);
+            lastSyncTimeInMs 
+                    = ((System.currentTimeMillis() - rotationTimeMs) / rotationTimeMs) * rotationTimeMs;
         }
         HAGroupStoreRecord newHAGroupStoreRecord = new HAGroupStoreRecord(
                 currentHAGroupStoreRecord.getProtocolVersion(),
@@ -1057,12 +1058,14 @@ public class HAGroupStoreClient implements Closeable {
      * @param currentHAGroupStoreRecordMtime the last modified time of the current
      *                                      HAGroupStoreRecord
      * @param newHAGroupState the cluster state to check
-     * @return the wait time in milliseconds for state transition, if 0 then the state transition is valid.
+     * @return the wait time in milliseconds for state transition,
+     *         if 0 then the state transition is valid.
      * @throws InvalidClusterRoleTransitionException if the cluster role transition is invalid
      */
-    private long validateTransitionAndGetWaitTime(HAGroupStoreRecord.HAGroupState currentHAGroupState,
-                                   long currentHAGroupStoreRecordMtime,
-                                   HAGroupStoreRecord.HAGroupState newHAGroupState)
+    private long validateTransitionAndGetWaitTime(
+            HAGroupStoreRecord.HAGroupState currentHAGroupState,
+            long currentHAGroupStoreRecordMtime,
+            HAGroupStoreRecord.HAGroupState newHAGroupState)
             throws InvalidClusterRoleTransitionException {
         long waitTime = 0L;
         if (currentHAGroupState.isTransitionAllowed(newHAGroupState)) {
@@ -1076,7 +1079,8 @@ public class HAGroupStoreClient implements Closeable {
             throw new InvalidClusterRoleTransitionException("Cannot transition from "
                     + currentHAGroupState + " to " + newHAGroupState);
         }
-        long remainingTime =  currentHAGroupStoreRecordMtime + waitTime - System.currentTimeMillis();
+        long remainingTime 
+                = currentHAGroupStoreRecordMtime + waitTime - System.currentTimeMillis();
         return Math.max(0, remainingTime);
     }
 
