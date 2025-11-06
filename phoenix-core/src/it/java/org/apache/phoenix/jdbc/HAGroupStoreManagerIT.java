@@ -498,7 +498,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Call setReaderToDegraded
-        haGroupStoreManager.setReaderToDegraded(haGroupName);
+        assertEquals(0L, haGroupStoreManager.setReaderToDegraded(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the status was updated to DEGRADED_STANDBY
@@ -527,7 +527,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Call setReaderToHealthy
-        haGroupStoreManager.setReaderToHealthy(haGroupName);
+        assertEquals(0L, haGroupStoreManager.setReaderToHealthy(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the status was updated to STANDBY
@@ -557,7 +557,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Test setReaderToDegraded with invalid state
         try {
-            haGroupStoreManager.setReaderToDegraded(haGroupName);
+            assertEquals(0L, haGroupStoreManager.setReaderToDegraded(haGroupName));
             fail("Expected InvalidClusterRoleTransitionException for setReaderToDegraded with ACTIVE_IN_SYNC state");
         } catch (InvalidClusterRoleTransitionException e) {
             // Expected behavior
@@ -567,7 +567,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Test setReaderToHealthy with invalid state
         try {
-            haGroupStoreManager.setReaderToHealthy(haGroupName);
+            assertEquals(0L, haGroupStoreManager.setReaderToHealthy(haGroupName));
             fail("Expected InvalidClusterRoleTransitionException for setReaderToHealthy with ACTIVE_IN_SYNC state");
         } catch (InvalidClusterRoleTransitionException e) {
             // Expected behavior
@@ -608,7 +608,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertEquals(0L, cluster1HAManager.setHAGroupStatusToSync(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        cluster2HAManager.setReaderToHealthy(haGroupName);
+        assertEquals(0L, cluster2HAManager.setReaderToHealthy(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Simulates action taken by reader to complete the replay and become new ACTIVE
@@ -700,7 +700,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertEquals(0L, cluster1HAManager.setHAGroupStatusToSync(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        cluster2HAManager.setReaderToHealthy(haGroupName);
+        assertEquals(0L, cluster2HAManager.setReaderToHealthy(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // === INITIAL STATE VERIFICATION ===
