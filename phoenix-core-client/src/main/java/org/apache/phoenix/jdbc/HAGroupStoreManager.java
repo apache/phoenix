@@ -326,6 +326,8 @@ public class HAGroupStoreManager {
      * Sets the HAGroupStoreRecord to StoreAndForward mode in local cluster.
      *
      * @param haGroupName name of the HA group
+     * @return the wait time in milliseconds for state transition,
+     *         if 0 then the state transition is successful.
      * @throws StaleHAGroupStoreRecordVersionException if the cached version is invalid,
      *      the state might have been updated by some other RS,
      *      check the state again and retry if the use case still needs it.
@@ -333,12 +335,12 @@ public class HAGroupStoreManager {
      *      the state might have been updated by some other RS,
      *      check the state again and retry if the use case still needs it.
      */
-    public void setHAGroupStatusToStoreAndForward(final String haGroupName)
+    public long setHAGroupStatusToStoreAndForward(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
             InvalidClusterRoleTransitionException, SQLException {
         HAGroupStoreClient haGroupStoreClient
                 = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
-        haGroupStoreClient.setHAGroupStatusIfNeeded(
+        return haGroupStoreClient.setHAGroupStatusIfNeeded(
                 HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC);
     }
 
@@ -346,6 +348,8 @@ public class HAGroupStoreManager {
      * Sets the HAGroupStoreRecord to Sync mode in local cluster.
      *
      * @param haGroupName name of the HA group
+     * @return the wait time in milliseconds for state transition,
+     *         if 0 then the state transition is successful.
      * @throws IOException when HAGroupStoreClient is not healthy.
      * @throws StaleHAGroupStoreRecordVersionException if the cached version is invalid,
      *      the state might have been updated by some other RS,
@@ -354,7 +358,7 @@ public class HAGroupStoreManager {
      *      the state might have been updated by some other RS,
      *      check the state again and retry if the use case still needs it.
      */
-    public void setHAGroupStatusToSync(final String haGroupName)
+    public long setHAGroupStatusToSync(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
             InvalidClusterRoleTransitionException, SQLException {
         HAGroupStoreClient haGroupStoreClient
@@ -365,7 +369,7 @@ public class HAGroupStoreManager {
                     == HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY
                     ? ACTIVE_IN_SYNC_TO_STANDBY
                     : ACTIVE_IN_SYNC;
-            haGroupStoreClient.setHAGroupStatusIfNeeded(targetHAGroupState);
+            return haGroupStoreClient.setHAGroupStatusIfNeeded(targetHAGroupState);
         } else {
             throw new IOException("Current HAGroupStoreRecord is null for HA group: "
                     + haGroupName);
@@ -379,6 +383,8 @@ public class HAGroupStoreManager {
      * - ACTIVE_NOT_IN_SYNC_TO_STANDBY if currently ACTIVE_NOT_IN_SYNC
      *
      * @param haGroupName name of the HA group
+     * @return the wait time in milliseconds for state transition,
+     *         if 0 then the state transition is successful.
      * @throws IOException when HAGroupStoreClient is not healthy.
      * @throws StaleHAGroupStoreRecordVersionException when the version is stale,
      *      the state might have been updated by some other RS,
@@ -388,7 +394,7 @@ public class HAGroupStoreManager {
      *      check the state again and retry if the use case still needs it.
      * @throws SQLException when there is an error with the database operation
      */
-    public void initiateFailoverOnActiveCluster(final String haGroupName)
+    public long initiateFailoverOnActiveCluster(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
             InvalidClusterRoleTransitionException, SQLException {
         HAGroupStoreClient haGroupStoreClient
@@ -414,7 +420,7 @@ public class HAGroupStoreManager {
                 ". Cluster must be in ACTIVE_IN_SYNC or ACTIVE_NOT_IN_SYNC state.");
         }
 
-        haGroupStoreClient.setHAGroupStatusIfNeeded(targetState);
+        return haGroupStoreClient.setHAGroupStatusIfNeeded(targetState);
     }
 
     /**
@@ -422,6 +428,8 @@ public class HAGroupStoreManager {
      * This aborts an ongoing failover process by moving the standby cluster to abort state.
      *
      * @param haGroupName name of the HA group
+     * @return the wait time in milliseconds for state transition,
+     *         if 0 then the state transition is successful.
      * @throws IOException when HAGroupStoreClient is not healthy.
      * @throws StaleHAGroupStoreRecordVersionException when the version is stale,
      *      the state might have been updated by some other RS,
@@ -431,12 +439,12 @@ public class HAGroupStoreManager {
      *      check the state again and retry if the use case still needs it.
      * @throws SQLException when there is an error with the database operation
      */
-    public void setHAGroupStatusToAbortToStandby(final String haGroupName)
+    public long setHAGroupStatusToAbortToStandby(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
             InvalidClusterRoleTransitionException, SQLException {
         HAGroupStoreClient haGroupStoreClient
                 = getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
-        haGroupStoreClient.setHAGroupStatusIfNeeded(
+        return haGroupStoreClient.setHAGroupStatusIfNeeded(
                 HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY);
     }
 
@@ -446,6 +454,8 @@ public class HAGroupStoreManager {
      * DEGRADED_STANDBY_FOR_WRITER to DEGRADED_STANDBY.
      *
      * @param haGroupName name of the HA group
+     * @return the wait time in milliseconds for state transition,
+     *         if 0 then the state transition is successful.
      * @throws IOException when HAGroupStoreClient is not healthy.
      * @throws StaleHAGroupStoreRecordVersionException when the version is stale,
      *      the state might have been updated by some other RS,
@@ -454,7 +464,7 @@ public class HAGroupStoreManager {
      *      the state might have been updated by some other RS,
      *      check the state again and retry if the use case still needs it.
      */
-    public void setReaderToDegraded(final String haGroupName)
+    public long setReaderToDegraded(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
             InvalidClusterRoleTransitionException, SQLException {
         HAGroupStoreClient haGroupStoreClient
@@ -466,7 +476,7 @@ public class HAGroupStoreManager {
             throw new IOException("Current HAGroupStoreRecord is null for HA group: "
                     + haGroupName);
         }
-        haGroupStoreClient.setHAGroupStatusIfNeeded(
+        return haGroupStoreClient.setHAGroupStatusIfNeeded(
                 HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
     }
 
@@ -476,6 +486,8 @@ public class HAGroupStoreManager {
      * DEGRADED_STANDBY to DEGRADED_STANDBY_FOR_WRITER.
      *
      * @param haGroupName name of the HA group
+     * @return the wait time in milliseconds for state transition,
+     *         if 0 then the state transition is successful.
      * @throws IOException when HAGroupStoreClient is not healthy.
      * @throws StaleHAGroupStoreRecordVersionException when the version is stale,
      *      the state might have been updated by some other RS,
@@ -484,7 +496,7 @@ public class HAGroupStoreManager {
      *      the state might have been updated by some other RS,
      *      check the state again and retry if the use case still needs it.
      */
-    public void setReaderToHealthy(final String haGroupName)
+    public long setReaderToHealthy(final String haGroupName)
             throws IOException, StaleHAGroupStoreRecordVersionException,
             InvalidClusterRoleTransitionException, SQLException {
         HAGroupStoreClient haGroupStoreClient
@@ -497,10 +509,10 @@ public class HAGroupStoreManager {
                     + "for HA group: " + haGroupName);
         } else if (currentRecord.getHAGroupState() == STANDBY) {
             LOGGER.info("Current HAGroupStoreRecord is already STANDBY for HA group: " + haGroupName);
-            return;
+            return 0L;
         }
 
-        haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.STANDBY);
+        return haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.STANDBY);
     }
 
     /**
