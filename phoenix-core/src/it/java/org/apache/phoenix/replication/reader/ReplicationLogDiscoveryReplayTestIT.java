@@ -32,9 +32,6 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.EnvironmentEdge;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
-import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
-import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
@@ -64,17 +61,16 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
-import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertNotNull;
 import static org.mockito.Mockito.when;
 
-@Category(ParallelStatsDisabledTest.class)
-public class ReplicationLogDiscoveryReplayTest extends BaseTest {
+@Category(NeedsOwnMiniClusterTest.class)
+public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
 
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogDiscoveryReplayTest.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogDiscoveryReplayTestIT.class);
 
     private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
     private String zkUrl;
