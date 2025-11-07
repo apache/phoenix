@@ -662,7 +662,7 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
      * @return the currently wrapped connection.
      */
     @VisibleForTesting
-    PhoenixConnection getWrappedConnection() {
+    public PhoenixConnection getWrappedConnection() {
         return connection;
     }
 
