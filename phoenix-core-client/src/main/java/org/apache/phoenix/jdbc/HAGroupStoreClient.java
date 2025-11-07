@@ -369,7 +369,7 @@ public class HAGroupStoreClient implements Closeable {
                 && haGroupState == HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC) {
             // We record the last round timestamp by subtracting the rotationTime and then
             // taking the beginning of last round (floor) by first integer division and then multiplying again.
-            lastSyncTimeInMs 
+            lastSyncTimeInMs
                     = ((System.currentTimeMillis() - rotationTimeMs) / rotationTimeMs) * rotationTimeMs;
         }
         HAGroupStoreRecord newHAGroupStoreRecord = new HAGroupStoreRecord(
@@ -1079,7 +1079,7 @@ public class HAGroupStoreClient implements Closeable {
             throw new InvalidClusterRoleTransitionException("Cannot transition from "
                     + currentHAGroupState + " to " + newHAGroupState);
         }
-        long remainingTime 
+        long remainingTime
                 = currentHAGroupStoreRecordMtime + waitTime - System.currentTimeMillis();
         return Math.max(0, remainingTime);
     }
