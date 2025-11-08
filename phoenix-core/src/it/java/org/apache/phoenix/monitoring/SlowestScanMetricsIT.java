@@ -447,7 +447,8 @@ public class SlowestScanMetricsIT extends BaseTest {
       assertEquals(3, rowCount);
       JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
 
-      // Outer array has size 2 as its a multi-point lookup query and topN is 2.
+      // Outer array has size 2 as its a multi-point lookup query and topN is 2 even though 3
+      // parallel scans are generated.
       assertEquals(topN, slowestScanMetricsJsonArray.size());
       for (int i = 0; i < topN; i++) {
         JsonArray groupArray = slowestScanMetricsJsonArray.get(i).getAsJsonArray();
@@ -465,6 +466,11 @@ public class SlowestScanMetricsIT extends BaseTest {
         assertEquals(1, groupJson.get("broc").getAsLong());
       }
     }
+  }
+
+  @Test
+  public void testAggregateQueryWithoutGroupBy() throws Exception {
+    
   }
 
   private void createTableAndUpsertData(Connection conn, String tableName, String ddlOptions)
