@@ -345,7 +345,7 @@ public class HAGroupStoreClientIT extends BaseTest {
 
     long sessionTimeout = config.getLong(PHOENIX_HA_ZK_SESSION_TIMEOUT_MS_KEY,
             PHOENIX_HA_ZK_SESSION_TIMEOUT_MS_DEFAULT);
-    Thread.sleep(sessionTimeout);
+    Thread.sleep(sessionTimeout + ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
     // Check that HAGroupStoreClient instance is not healthy and throws IOException
     assertThrows(IOException.class,
       () -> haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE));
