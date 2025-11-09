@@ -470,7 +470,144 @@ public class SlowestScanMetricsIT extends BaseTest {
 
   @Test
   public void testAggregateQueryWithoutGroupBy() throws Exception {
-    
+    int topN = 2;
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName, "SALT_BUCKETS=3");
+    }
+    Properties props = new Properties();
+    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, String.valueOf(topN));
+    props.setProperty(QueryServices.SCAN_METRICS_BY_REGION_ENABLED, "true");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String sql = "SELECT MAX(v1) FROM " + tableName;
+      Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery(sql);
+      int rowCount = 0;
+      while (rs.next()) {
+        rowCount++;
+      }
+      assertEquals(1, rowCount);
+      JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
+
+      // Outer array has size 2 as aggregate query did a full table scan and topN is 2.
+      assertEquals(topN, slowestScanMetricsJsonArray.size());
+      for (int i = 0; i < topN; i++) {
+        JsonArray groupArray = slowestScanMetricsJsonArray.get(i).getAsJsonArray();
+        // Inner array has size 1 as it's a simple aggregate query and not a query with subquery or
+        // JOIN operation.
+        assertEquals(1, groupArray.size());
+        JsonObject groupJson = groupArray.get(0).getAsJsonObject();
+        assertEquals(tableName, groupJson.get("table").getAsString());
+        JsonArray regionsArray = groupJson.get("regions").getAsJsonArray();
+        assertEquals(1, regionsArray.size());
+        JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
+        assertNotNull(regionJson.get("region"));
+        assertNotNull(regionJson.get("server"));
+        // BROC is 1 as it's a full table scan so, only data block is read.
+        assertEquals(1, regionJson.get("broc").getAsLong());
+      }
+    }
+  }
+
+  @Test
+  public void testAggregateQueryWithGroupBy() throws Exception {
+    int topN = 2;
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName, "BLOOMFILTER='NONE'");
+      Statement stmt = conn.createStatement();
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'a', 'a1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'b', 'b1', 'b2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'c', 'c1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'd', 'd1', 'd2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'e', 'e1', 'v2')");
+      conn.commit();
+      TestUtil.flush(getUtility(), TableName.valueOf(tableName));
+    }
+    Properties props = new Properties();
+    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, String.valueOf(topN));
+    props.setProperty(QueryServices.SCAN_METRICS_BY_REGION_ENABLED, "true");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String sql = "SELECT MAX(v1) FROM " + tableName + " WHERE v2 = 'v2' GROUP BY k1";
+      Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery(sql);
+      int rowCount = 0;
+      while (rs.next()) {
+        rowCount++;
+      }
+      assertEquals(2, rowCount);
+      JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
+
+      // Outer array has size 1 as its scan of single region only.
+      assertEquals(1, slowestScanMetricsJsonArray.size());
+      JsonArray groupArray = slowestScanMetricsJsonArray.get(0).getAsJsonArray();
+      // Inner array has size 1 as it's a simple aggregate query with group by and not a query with
+      // subquery or JOIN operation.
+      assertEquals(1, groupArray.size());
+      for (int i = 0; i < groupArray.size(); i++) {
+        JsonObject groupJson = groupArray.get(i).getAsJsonObject();
+        assertEquals(tableName, groupJson.get("table").getAsString());
+        JsonArray regionsArray = groupJson.get("regions").getAsJsonArray();
+        assertEquals(1, regionsArray.size());
+        JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
+        assertNotNull(regionJson.get("region"));
+        assertNotNull(regionJson.get("server"));
+        // Though it's a full table scan but still broc is 2 as there are 2 HFiles per commit call
+        // and one data block is read from each HFile.
+        assertEquals(2, regionJson.get("broc").getAsLong());
+      }
+    }
+  }
+
+  @Test
+  public void testAggregateQueryWithGroupByAndOrderBy() throws Exception {
+    int topN = 2;
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName, "BLOOMFILTER='NONE'");
+      Statement stmt = conn.createStatement();
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'a', 'a1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'b', 'b1', 'b2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (1, 'c', 'c1', 'v2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'd', 'd1', 'd2')");
+      stmt.execute("UPSERT INTO " + tableName + " (k1, k2, v1, v2) VALUES (3, 'e', 'e1', 'v2')");
+      conn.commit();
+      TestUtil.flush(getUtility(), TableName.valueOf(tableName));
+    }
+    Properties props = new Properties();
+    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, String.valueOf(topN));
+    props.setProperty(QueryServices.SCAN_METRICS_BY_REGION_ENABLED, "true");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String sql = "SELECT v2, MAX(v1) FROM " + tableName + " GROUP BY v2 ORDER BY v2";
+      Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery(sql);
+      int rowCount = 0;
+      while (rs.next()) {
+        rowCount++;
+      }
+      // Read total 5 rows from 2 HFiles.
+      assertEquals(5, rowCount);
+      JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
+
+      // Outer array has size 1 as its scan of single region only.
+      assertEquals(1, slowestScanMetricsJsonArray.size());
+      JsonArray groupArray = slowestScanMetricsJsonArray.get(0).getAsJsonArray();
+      // Inner array has size 1 as it's a simple aggregate query with group by and not a query with
+      // subquery or JOIN operation.
+      assertEquals(1, groupArray.size());
+      for (int i = 0; i < groupArray.size(); i++) {
+        JsonObject groupJson = groupArray.get(i).getAsJsonObject();
+        assertEquals(tableName, groupJson.get("table").getAsString());
+        JsonArray regionsArray = groupJson.get("regions").getAsJsonArray();
+        assertEquals(1, regionsArray.size());
+        JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
+        assertNotNull(regionJson.get("region"));
+        assertNotNull(regionJson.get("server"));
+        // Though it's a full table scan but still broc is 2 as there are 2 HFiles per commit call
+        // and one data block is read from each HFile.
+        assertEquals(2, regionJson.get("broc").getAsLong());
+      }
+    }
   }
 
   private void createTableAndUpsertData(Connection conn, String tableName, String ddlOptions)
