@@ -134,6 +134,9 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
 
     @Override
     public void init() throws IOException {
+
+        LOG.info("Initializing ReplicationLogDiscoveryReplay for haGroup: {}", haGroupName);
+
         HAGroupStateListener degradedListener = (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
             if (clusterType == ClusterType.LOCAL && HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.equals(toState)) {
                 replicationReplayState.set(ReplicationReplayState.DEGRADED);
@@ -221,7 +224,9 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
      */
     @Override
     protected void initializeLastRoundProcessed() throws IOException {
+        LOG.info("Initializing last round processed for haGroup: {}", haGroupName);
         HAGroupStoreRecord haGroupStoreRecord = getHAGroupRecord();
+        LOG.info("Found HA Group state during initialization as {} for haGroup: {}", haGroupStoreRecord.getHAGroupState(), haGroupName);
         if (HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.equals(haGroupStoreRecord.getHAGroupState())) {
             replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED,
                     ReplicationReplayState.DEGRADED);
@@ -296,6 +301,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
         LOG.info("Starting replay with lastRoundProcessed={}, lastRoundInSync={}",
                 lastRoundProcessed, lastRoundInSync);
         Optional<ReplicationRound> optionalNextRound = getFirstRoundToProcess();
+        LOG.info("Found first round to process as {} for haGroup: {}", optionalNextRound, haGroupName);
         while (optionalNextRound.isPresent()) {
             ReplicationRound replicationRound = optionalNextRound.get();
             try {
@@ -351,7 +357,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
         if (!optionalNextRound.isPresent() && shouldTriggerFailover()) {
             LOG.info("No more rounds to process, lastRoundInSync={}, lastRoundProcessed={}. "
                             + "Failover is triggered & in progress directory is empty. "
-                            + "Marking cluster state as {}",
+                            + "Attempting to mark cluster state as {}",
                     lastRoundInSync, lastRoundProcessed,
                     HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
             triggerFailover();
