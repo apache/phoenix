@@ -195,7 +195,8 @@ public class ReplicationLogReplayService {
      */
     protected void startReplicationReplay() throws IOException, SQLException {
         List<String> replicationGroups = getReplicationGroups();
-        LOG.info("{} number of HA Groups found to start Replication Replay", replicationGroups.size());
+        LOG.info("{} number of HA Groups found to start Replication Replay",
+                replicationGroups.size());
         for (String replicationGroup : replicationGroups) {
             ReplicationLogReplay.get(conf, replicationGroup).startReplay();
         }
@@ -206,7 +207,8 @@ public class ReplicationLogReplayService {
      */
     protected void stopReplicationReplay() throws IOException, SQLException {
         List<String> replicationGroups = getReplicationGroups();
-        LOG.info("{} number of HA Groups found to stop Replication Replay", replicationGroups.size());
+        LOG.info("{} number of HA Groups found to stop Replication Replay",
+                replicationGroups.size());
         for (String replicationGroup : replicationGroups) {
             ReplicationLogReplay replicationLogReplay =
                     ReplicationLogReplay.get(conf, replicationGroup);

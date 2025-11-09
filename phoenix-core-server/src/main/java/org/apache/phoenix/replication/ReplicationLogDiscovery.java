@@ -210,8 +210,8 @@ public abstract class ReplicationLogDiscovery {
             try {
                 processRound(replicationRound);
             } catch (IOException e) {
-                LOG.error("Failed processing replication round {} for haGroup {}. Will retry in next "
-                        + "scheduled run.", replicationRound, haGroupName, e);
+                LOG.error("Failed processing replication round {} for haGroup {}. Will retry"
+                        + "in next scheduled run.", replicationRound, haGroupName, e);
                 break; // stop this run, retry later
             }
             setLastRoundProcessed(replicationRound);
@@ -276,7 +276,8 @@ public abstract class ReplicationLogDiscovery {
      * @throws IOException if there's an error during file processing
      */
     protected void processNewFilesForRound(ReplicationRound replicationRound) throws IOException {
-        LOG.info("Starting new files processing for round: {} for haGroup: {}", replicationRound, haGroupName);
+        LOG.info("Starting new files processing for round: {} for haGroup: {}",
+                replicationRound, haGroupName);
         long startTime = EnvironmentEdgeManager.currentTime();
         List<Path> files = replicationLogTracker.getNewFilesForRound(replicationRound);
         LOG.info("Number of new files for round {} is {}", replicationRound, files.size());
@@ -285,7 +286,8 @@ public abstract class ReplicationLogDiscovery {
             files = replicationLogTracker.getNewFilesForRound(replicationRound);
         }
         long duration = EnvironmentEdgeManager.currentTime() - startTime;
-        LOG.info("Finished new files processing for round: {} in {}ms for haGroup: {}", replicationRound, duration, haGroupName);
+        LOG.info("Finished new files processing for round: {} in {}ms for haGroup: {}",
+                replicationRound, duration, haGroupName);
         getMetrics().updateTimeToProcessNewFiles(duration);
     }
 
@@ -295,7 +297,8 @@ public abstract class ReplicationLogDiscovery {
      * @throws IOException if there's an error during file processing
      */
     protected void processInProgressDirectory() throws IOException {
-        LOG.info("Starting {} directory processing for haGroup: {}", replicationLogTracker.getInProgressLogSubDirectoryName(), haGroupName);
+        LOG.info("Starting {} directory processing for haGroup: {}",
+                replicationLogTracker.getInProgressLogSubDirectoryName(), haGroupName);
         // Increase the count for number of times in progress directory is processed
         getMetrics().incrementNumInProgressDirectoryProcessed();
         long startTime = EnvironmentEdgeManager.currentTime();
@@ -311,7 +314,8 @@ public abstract class ReplicationLogDiscovery {
             files = replicationLogTracker.getOlderInProgressFiles(oldestTimestampToProcess);
         }
         long duration = EnvironmentEdgeManager.currentTime() - startTime;
-        LOG.info("Finished in-progress files processing in {}ms for haGroup: {}", duration, haGroupName);
+        LOG.info("Finished in-progress files processing in {}ms for haGroup: {}",
+                duration, haGroupName);
         getMetrics().updateTimeToProcessInProgressFiles(duration);
     }
 
@@ -366,20 +370,25 @@ public abstract class ReplicationLogDiscovery {
                 getMinTimestampFromInProgressFiles();
         if (minTimestampFromInProgressFiles.isPresent()) {
             LOG.info("Initializing lastRoundProcessed for haGroup: {} from {} files with minimum "
-                    + "timestamp as {}", haGroupName, replicationLogTracker.getInProgressLogSubDirectoryName(), minTimestampFromInProgressFiles.get());
+                    + "timestamp as {}", haGroupName,
+                    replicationLogTracker.getInProgressLogSubDirectoryName(),
+                    minTimestampFromInProgressFiles.get());
             this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
                     .getReplicationRoundFromEndTime(minTimestampFromInProgressFiles.get());
         } else {
             Optional<Long> minTimestampFromNewFiles = getMinTimestampFromNewFiles();
             if (minTimestampFromNewFiles.isPresent()) {
-                LOG.info("Initializing lastRoundProcessed for haGroup: {} from {} files with minimum timestamp "
-                        + "as {}", haGroupName, replicationLogTracker.getInSubDirectoryName(), minTimestampFromNewFiles.get());
+                LOG.info("Initializing lastRoundProcessed for haGroup: {} from {}"
+                        + "files with minimum timestamp as {}", haGroupName,
+                        replicationLogTracker.getInSubDirectoryName(),
+                        minTimestampFromNewFiles.get());
                 this.lastRoundProcessed = replicationLogTracker
                         .getReplicationShardDirectoryManager()
                         .getReplicationRoundFromEndTime(minTimestampFromNewFiles.get());
             } else {
                 long currentTime = EnvironmentEdgeManager.currentTime();
-                LOG.info("Initializing lastRoundProcessed for haGroup: {} from current time {}", haGroupName, currentTime);
+                LOG.info("Initializing lastRoundProcessed for haGroup: {} from current time {}",
+                        haGroupName, currentTime);
                 this.lastRoundProcessed = replicationLogTracker
                         .getReplicationShardDirectoryManager()
                         .getReplicationRoundFromEndTime(EnvironmentEdgeManager.currentTime());
