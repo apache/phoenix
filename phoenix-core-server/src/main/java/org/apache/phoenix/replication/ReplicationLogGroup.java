@@ -104,6 +104,8 @@ import com.lmax.disruptor.dsl.ProducerType;
  *  │  │  │                                                      │   │     │
  *  │  │  │  ┌────────────────────────────────────────────────┐  │   │     │
  *  │  │  │  │  ReplicationLog                                │  │   │     │
+ *  │  │  │  │  - Log File creation,close,rotation            │  │   │     │
+ *  │  │  │  │  - Retries                                     │  │   │     │
  *  │  │  │  │  ┌──────────────────────────────────────────┐  │  │   │     │
  *  │  │  │  │  │  LogFileWriter                           │  │  │   │     │
  *  │  │  │  │  │  - File Management                       │  │  │   │     │
