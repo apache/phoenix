@@ -18,6 +18,7 @@
 package org.apache.phoenix.monitoring;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -35,6 +36,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
@@ -607,6 +609,205 @@ public class SlowestScanMetricsIT extends BaseTest {
         // and one data block is read from each HFile.
         assertEquals(2, regionJson.get("broc").getAsLong());
       }
+    }
+  }
+
+  @Test
+  public void testQueryOnCoveredIndex() throws Exception {
+    int topN = 2;
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName, "SALT_BUCKETS=3");
+      Statement stmt = conn.createStatement();
+      stmt.execute("CREATE INDEX " + indexName + " ON " + tableName + " (v1) INCLUDE (v2)");
+      conn.commit();
+      TestUtil.flush(getUtility(), TableName.valueOf(indexName));
+    }
+    Properties props = new Properties();
+    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, String.valueOf(topN));
+    props.setProperty(QueryServices.SCAN_METRICS_BY_REGION_ENABLED, "true");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String sql = "SELECT v1, v2 FROM " + tableName + " WHERE v1 = 'a1'";
+      Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery(sql);
+      int rowCount = 0;
+      while (rs.next()) {
+        rowCount++;
+      }
+      assertEquals(1, rowCount);
+      JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
+
+      int totalBroc = 0;
+      // Outer array has size 2 as the base table is salted so, salt bucket no. of parallel scans
+      // are generated and topN is 2.
+      assertEquals(topN, slowestScanMetricsJsonArray.size());
+      for (int i = 0; i < topN; i++) {
+        JsonArray groupArray = slowestScanMetricsJsonArray.get(i).getAsJsonArray();
+        // Inner array has size 1 as it's a simple query and not a query with subquery or
+        // JOIN operation.
+        assertEquals(1, groupArray.size());
+        JsonObject groupJson = groupArray.get(0).getAsJsonObject();
+        assertEquals(indexName, groupJson.get("table").getAsString());
+        JsonArray regionsArray = groupJson.get("regions").getAsJsonArray();
+        assertEquals(1, regionsArray.size());
+        JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
+        assertNotNull(regionJson.get("region"));
+        assertNotNull(regionJson.get("server"));
+        // BROC is 1 as it's a simple query so, only data block is read.
+        totalBroc += regionJson.get("broc").getAsLong();
+      }
+      // Total BROC is 1 as data is read from only one region.
+      assertEquals(1, totalBroc);
+    }
+  }
+
+  @Test
+  public void testQueryOnUncoveredIndex() throws Exception {
+    int topN = 2;
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName, "SALT_BUCKETS=3");
+      Statement stmt = conn.createStatement();
+      stmt.execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (v1)");
+      conn.commit();
+      TestUtil.flush(getUtility(), TableName.valueOf(indexName));
+    }
+    Properties props = new Properties();
+    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, String.valueOf(topN));
+    props.setProperty(QueryServices.SCAN_METRICS_BY_REGION_ENABLED, "true");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String sql = "SELECT v1, v2 FROM " + tableName + " WHERE v1 = 'a1'";
+      Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery(sql);
+      int rowCount = 0;
+      while (rs.next()) {
+        rowCount++;
+      }
+      assertEquals(1, rowCount);
+      JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
+
+      int totalBroc = 0;
+      // Outer array has size 2 as the base table is salted so, salt bucket no. of parallel scans
+      // are generated and topN is 2.
+      assertEquals(topN, slowestScanMetricsJsonArray.size());
+      for (int i = 0; i < topN; i++) {
+        JsonArray groupArray = slowestScanMetricsJsonArray.get(i).getAsJsonArray();
+        // Inner array has size 1 as it's a simple query and not a query with subquery or
+        // JOIN operation.
+        assertEquals(1, groupArray.size());
+        JsonObject groupJson = groupArray.get(0).getAsJsonObject();
+        assertEquals(indexName, groupJson.get("table").getAsString());
+        JsonArray regionsArray = groupJson.get("regions").getAsJsonArray();
+        assertEquals(1, regionsArray.size());
+        JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
+        assertNotNull(regionJson.get("region"));
+        assertNotNull(regionJson.get("server"));
+        // BROC is 1 as it's a simple query so, only data block is read.
+        totalBroc += regionJson.get("broc").getAsLong();
+      }
+      // Total BROC is 2 as data is read from one region of index table and one region of data table
+      // as index is uncovered.
+      assertEquals(2, totalBroc);
+    }
+  }
+
+  @Test
+  public void testQueryOnView() throws Exception {
+    int topN = 2;
+    String tableName = generateUniqueName();
+    String viewName = generateUniqueName();
+    assertNotEquals(viewName, tableName);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName, "");
+      Statement stmt = conn.createStatement();
+      stmt.execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName + " WHERE k1 = 1");
+      conn.commit();
+    }
+    Properties props = new Properties();
+    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, String.valueOf(topN));
+    props.setProperty(QueryServices.SCAN_METRICS_BY_REGION_ENABLED, "true");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String sql = "SELECT * FROM " + viewName;
+      Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery(sql);
+      int rowCount = 0;
+      while (rs.next()) {
+        rowCount++;
+      }
+      assertEquals(1, rowCount);
+      JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
+
+      // Outer array has size 1 as its scan of single region only.
+      assertEquals(1, slowestScanMetricsJsonArray.size());
+      JsonArray groupArray = slowestScanMetricsJsonArray.get(0).getAsJsonArray();
+      // Inner array has size 1 as it's a simple query and not a query with subquery or
+      // JOIN operation.
+      assertEquals(1, groupArray.size());
+      JsonObject groupJson = groupArray.get(0).getAsJsonObject();
+      assertEquals(tableName, groupJson.get("table").getAsString());
+      JsonArray regionsArray = groupJson.get("regions").getAsJsonArray();
+      assertEquals(1, regionsArray.size());
+      JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
+      assertNotNull(regionJson.get("region"));
+      assertNotNull(regionJson.get("server"));
+      // BROC is 1 as it's not a single point lookup so, only data block is read.
+      assertEquals(1, regionJson.get("broc").getAsLong());
+    }
+  }
+
+  @Test
+  public void testQueryOnViewIndex() throws Exception {
+    int topN = 2;
+    String tableName = generateUniqueName();
+    String viewName = generateUniqueName();
+    String viewIndexName = generateUniqueName();
+    String viewIndexPhysicalName = MetaDataUtil.getViewIndexPhysicalName(tableName);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName, "SALT_BUCKETS=3");
+      Statement stmt = conn.createStatement();
+      stmt.execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName + " WHERE k1 = 1");
+      conn.commit();
+      stmt.execute("CREATE INDEX " + viewIndexName + " ON " + viewName + " (v1) INCLUDE (v2)");
+      conn.commit();
+      TestUtil.flush(getUtility(), TableName.valueOf(viewIndexPhysicalName));
+    }
+    Properties props = new Properties();
+    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, String.valueOf(topN));
+    props.setProperty(QueryServices.SCAN_METRICS_BY_REGION_ENABLED, "true");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String sql = "SELECT v2 FROM " + viewName + " WHERE v1 = 'a1'";
+      Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery(sql);
+      int rowCount = 0;
+      while (rs.next()) {
+        rowCount++;
+      }
+      assertEquals(1, rowCount);
+      JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
+
+      int totalBroc = 0;
+      // Outer array has size 2 as the base table is salted so, salt bucket no. of parallel scans
+      // are generated and topN is 2.
+      assertEquals(topN, slowestScanMetricsJsonArray.size());
+      for (int i = 0; i < topN; i++) {
+        JsonArray groupArray = slowestScanMetricsJsonArray.get(i).getAsJsonArray();
+        // Inner array has size 1 as it's a simple query and not a query with subquery or
+        // JOIN operation.
+        assertEquals(1, groupArray.size());
+        JsonObject groupJson = groupArray.get(0).getAsJsonObject();
+        assertEquals(viewIndexPhysicalName, groupJson.get("table").getAsString());
+        JsonArray regionsArray = groupJson.get("regions").getAsJsonArray();
+        assertEquals(1, regionsArray.size());
+        JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
+        assertNotNull(regionJson.get("region"));
+        assertNotNull(regionJson.get("server"));
+        // BROC is 1 as it's a simple query so, only data block is read.
+        totalBroc += regionJson.get("broc").getAsLong();
+      }
+      // Total BROC is 1 as data is read from single region of view index table.
+      assertEquals(1, totalBroc);
     }
   }
 
