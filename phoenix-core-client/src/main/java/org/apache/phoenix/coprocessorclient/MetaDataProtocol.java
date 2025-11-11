@@ -56,7 +56,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  */
 public abstract class MetaDataProtocol extends MetaDataService {
   public static final int PHOENIX_MAJOR_VERSION = 5;
-  public static final int PHOENIX_MINOR_VERSION = 3;
+  public static final int PHOENIX_MINOR_VERSION = 4;
 
   public static final int PHOENIX_PATCH_NUMBER = 0;
   public static final int PHOENIX_VERSION =
@@ -92,9 +92,10 @@ public abstract class MetaDataProtocol extends MetaDataService {
   public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0;
   public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 = MIN_TABLE_TIMESTAMP + 38;
   public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 = MIN_TABLE_TIMESTAMP + 42;
+  public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 = MIN_TABLE_TIMESTAMP + 43;
   // MIN_SYSTEM_TABLE_TIMESTAMP needs to be set to the max of all the MIN_SYSTEM_TABLE_TIMESTAMP_*
   // constants
-  public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0;
+  public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0;
 
   // Version below which we should disallow usage of mutable secondary indexing.
   public static final int MUTABLE_SI_VERSION_THRESHOLD = VersionUtil.encodeVersion("0", "94", "10");
@@ -151,6 +152,7 @@ public abstract class MetaDataProtocol extends MetaDataService {
     TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0, "5.1.x");
     TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0, "5.2.x");
     TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0, "5.3.x");
+    TIMESTAMP_VERSION_MAP.put(MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0, "5.4.x");
   }
 
   public static final String CURRENT_CLIENT_VERSION =
