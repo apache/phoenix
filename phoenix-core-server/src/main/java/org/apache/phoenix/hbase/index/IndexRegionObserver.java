@@ -650,18 +650,18 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                             .isHAGroupOnClientStale(haGroupName);
                     if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
                         throw new StaleClusterRoleRecordException(
-                                String.format("HAGroupStoreRecord is stale for haGroup %s on client"
-                                        , haGroupName));
+                                String.format("HAGroupStoreRecord is stale for haGroup %s on client",
+                                        haGroupName));
                     }
 
                     //Check if mutation's haGroup is stale
                     if (StringUtils.isNotBlank(haGroupName)
                             && haGroupStoreManager.isMutationBlocked(haGroupName)) {
-                        throw new MutationBlockedIOException("Blocking Mutation as Some CRRs are in "
-                                + "ACTIVE_TO_STANDBY state and "
+                        throw new MutationBlockedIOException("Blocking Mutation as Some CRRs "
+                                + "are in ACTIVE_TO_STANDBY state and "
                                 + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
                     }
-              }
+                }
           }
           preBatchMutateWithExceptions(c, miniBatchOp);
           return;
@@ -679,7 +679,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             byte[] haGroupName = m.getAttribute(
                     BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
             if (haGroupName != null) {
-                return new String(haGroupName, StandardCharsets.UTF_8);
+                return String.valueOf(haGroupName);
             }
         }
         return null;
