@@ -126,7 +126,7 @@ public class HAGroupStoreClient implements Closeable {
               break;
             case CONNECTION_SUSPENDED:
               LOGGER.warn("Received CONNECTION_SUSPENDED event, will wait until either "
-                      + "ZK connection is restored or session timeout occurs");
+                + "ZK connection is restored or session timeout occurs");
               break;
             case CONNECTION_LOST:
               LOGGER.error("Received CONNECTION_LOST event, marking cache as unhealthy");
