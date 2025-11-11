@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZK_SESSION_TIMEOUT_MS_DEFAULT;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZK_SESSION_TIMEOUT_MS_KEY;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.junit.Assert.assertThrows;
 
@@ -336,7 +338,14 @@ public class HAGroupStoreClientIT extends BaseTest {
     // Shutdown the ZK Cluster to simulate CONNECTION_SUSPENDED event
     utility.shutdownMiniZKCluster();
 
-    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+    // Check that immediately after ZK is down, the connection state
+    // should be SUSPENDED (and not LOST), so no exception should be thrown
+    assert haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE).size()
+        == 2;
+
+    long sessionTimeout = config.getLong(PHOENIX_HA_ZK_SESSION_TIMEOUT_MS_KEY,
+      PHOENIX_HA_ZK_SESSION_TIMEOUT_MS_DEFAULT);
+    Thread.sleep(sessionTimeout + ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
     // Check that HAGroupStoreClient instance is not healthy and throws IOException
     assertThrows(IOException.class,
       () -> haGroupStoreClient.getCRRsByClusterRole(ClusterRoleRecord.ClusterRole.ACTIVE));
