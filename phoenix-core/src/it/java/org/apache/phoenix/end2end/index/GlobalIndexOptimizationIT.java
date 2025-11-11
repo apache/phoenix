@@ -426,8 +426,10 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
       assertEquals(2, rs.getInt("k1"));
       assertEquals(4, rs.getInt("k2"));
       assertEquals(2, rs.getInt("k3"));
-      assertEquals("a", rs.getString(5)); // TODO use name v1 instead of position 5, see
-                                          // PHOENIX-6644
+      assertEquals("a", rs.getString(5));
+      // Fixed in PHOENIX-6644 - rs.getString("v1") now works
+      // See ViewIndexColumnNameGetterIT for comprehensive tests
+      assertEquals("a", rs.getString("v1"));
       assertFalse(rs.next());
     } finally {
       conn1.close();
