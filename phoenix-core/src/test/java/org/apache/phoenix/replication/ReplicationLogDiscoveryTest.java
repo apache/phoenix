@@ -436,7 +436,7 @@ public class ReplicationLogDiscoveryTest {
     @Test
     public void testShouldProcessInProgressDirectory() {
         // Test multiple times to verify probability-based behavior
-        int totalTests = 1000;
+        int totalTests = 100000;
         int trueCount = 0;
 
         for (int i = 0; i < totalTests; i++) {

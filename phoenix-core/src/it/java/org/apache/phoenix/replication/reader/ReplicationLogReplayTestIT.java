@@ -34,6 +34,7 @@ import java.util.Map;
 
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreClient;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
@@ -43,10 +44,12 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.*;
+import org.junit.experimental.categories.Category;
 import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 
-public class ReplicationLogReplayTest extends BaseTest {
+@Category(NeedsOwnMiniClusterTest.class)
+public class ReplicationLogReplayTestIT extends BaseTest {
 
     @ClassRule
     public static TemporaryFolder testFolder = new TemporaryFolder();

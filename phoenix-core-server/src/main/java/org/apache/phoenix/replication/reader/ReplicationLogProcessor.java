@@ -217,6 +217,8 @@ public class ReplicationLogProcessor implements Closeable {
 
     public void processLogFile(FileSystem fs, Path filePath) throws IOException {
 
+        LOG.info("Starting to process file {}", filePath);
+
         // Map from Table Name to List of Mutations
         Map<TableName, List<Mutation>> tableToMutationsMap = new HashMap<>();
 
