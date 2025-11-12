@@ -35,6 +35,7 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -486,24 +487,9 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
               "Region has moved.. Actual scan start rowkey {} is not same "
                 + "as current scan start rowkey {}",
               Bytes.toStringBinary(actualScanStartRowKey), Bytes.toStringBinary(scanStartRowKey));
-            // If region has moved in the middle of the scan operation, after resetting
-            // the scanner, hbase client uses (latest received rowkey + \x00) as new
-            // start rowkey for resuming the scan operation on the new scanner.
-            if (
-              Bytes.compareTo(ByteUtil.concat(actualScanStartRowKey, ByteUtil.ZERO_BYTE),
-                scanStartRowKey) == 0
-            ) {
-              scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
-                actualScanStartRowKey);
-              scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE,
-                Bytes.toBytes(actualScanIncludeStartRowKey));
-            } else {
-              // This happens when the server side scanner has already sent some
-              // rows back to the client and region has moved, so now we need to
-              // use skipValidRowsSent flag and also reset the scanner
-              // at paging region scanner level to re-read the previously sent
-              // values in order to re-compute the aggregation and then return
-              // only the next rowkey that was not yet sent back to the client.
+            // The region has moved during scan, so the HBase client creates a new scan.
+            // We need to restart the scan, and optionally skip any rows already received by the
+            // client
               skipValidRowsSent = true;
               scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
                 actualScanStartRowKey);
@@ -512,7 +498,6 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
             }
           }
         }
-      }
       if (firstScan) {
         firstScan = false;
       }
@@ -521,79 +506,156 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
         return true;
       }
       if (skipValidRowsSent) {
-        while (true) {
-          if (!moreRows) {
-            skipValidRowsSent = false;
-            if (resultsToReturn.size() > 0) {
-              lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
-            }
-            return moreRows;
-          }
-          Cell firstCell = (Cell) resultsToReturn.get(0);
-          byte[] resultRowKey = new byte[firstCell.getRowLength()];
-          System.arraycopy(firstCell.getRowArray(), firstCell.getRowOffset(), resultRowKey, 0,
-            resultRowKey.length);
-          // In case of regular scans, if the region moves and scanner is reset,
-          // hbase client checks the last returned row by the server, gets the
-          // rowkey and appends "\x00" byte, before resuming the scan. With this,
-          // scan includeStartRowKey is set to true.
-          // However, same is not the case with reverse scans. For the reverse scan,
-          // hbase client checks the last returned row by the server, gets the
-          // rowkey and treats it as startRowKey for resuming the scan. With this,
-          // scan includeStartRowKey is set to false.
-          // Hence, we need to cover both cases here.
-          if (Bytes.compareTo(resultRowKey, scanStartRowKey) == 0) {
-            // This can be true for reverse scan case.
-            skipValidRowsSent = false;
-            if (includeStartRowKey) {
-              if (resultsToReturn.size() > 0) {
-                lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
+          Iterator resultIt = resultsToReturn.iterator();
+        while (resultIt.hasNext()) {
+            Cell resultElem = (Cell) resultIt.next();
+            byte[] resultRowKey = CellUtil.cloneRow(resultElem);
+            boolean skipRow = false;
+            int compare = Bytes.compareTo(resultRowKey, scanStartRowKey);
+            if (scan.isReversed()) {
+                if (compare > 0 || (compare == 0 && !includeStartRowKey )) {
+                    skipRow = true;
               }
-              return moreRows;
-            }
-            // If includeStartRowKey is false and the current rowkey is matching
-            // with scanStartRowKey, return the next row result.
-            resultsToReturn.clear();
-            moreRows = nextInternal(resultsToReturn, scannerContext);
-            if (ScanUtil.isDummy(resultsToReturn)) {
-              return true;
-            }
-            if (resultsToReturn.size() > 0) {
-              lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
-            }
-            return moreRows;
-          } else if (
-            Bytes.compareTo(ByteUtil.concat(resultRowKey, ByteUtil.ZERO_BYTE), scanStartRowKey) == 0
-          ) {
-            // This can be true for regular scan case.
-            skipValidRowsSent = false;
-            if (includeStartRowKey) {
-              // If includeStartRowKey is true and the (current rowkey + "\0xx") is
-              // matching with scanStartRowKey, return the next row result.
-              resultsToReturn.clear();
-              moreRows = nextInternal(resultsToReturn, scannerContext);
-              if (ScanUtil.isDummy(resultsToReturn)) {
-                return true;
-              }
-              if (resultsToReturn.size() > 0) {
-                lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
-              }
-              return moreRows;
+            } else {
+                if (compare < 0 || (compare == 0 && !includeStartRowKey )) {
+                    skipRow = true;
             }
           }
-          // In the loop, keep iterating through rows.
-          resultsToReturn.clear();
-          moreRows = nextInternal(resultsToReturn, scannerContext);
-          if (ScanUtil.isDummy(resultsToReturn)) {
-            return true;
+            if (skipRow) {
+                resultIt.remove();
+            } else {
+                //results are ordered, subsequent rows are valid
+                break;
           }
         }
       }
-      if (resultsToReturn.size() > 0) {
-        lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
+      if (resultsToReturn.isEmpty()) {
+          // TODO should we iterate further here ?
+          return getDummyResult(resultsToReturn);
       }
+      //We have some/all result rows remaining, return them
+      lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(resultsToReturn.size()-1));
       return moreRows;
     }
+
+    
+//    @Override
+//    public boolean next(List resultsToReturn, ScannerContext scannerContext) throws IOException {
+//      if (firstScan && actualScanStartRowKey != null) {
+//        if (scanStartRowKey.length > 0 && !ScanUtil.isLocalIndex(scan)) {
+//          if (hasRegionMoved()) {
+//            LOGGER.info(
+//              "Region has moved.. Actual scan start rowkey {} is not same "
+//                + "as current scan start rowkey {}",
+//              Bytes.toStringBinary(actualScanStartRowKey), Bytes.toStringBinary(scanStartRowKey));
+//            // If region has moved in the middle of the scan operation, after resetting
+//            // the scanner, hbase client uses (latest received rowkey + \x00) as new
+//            // start rowkey for resuming the scan operation on the new scanner.
+//            if (
+//              Bytes.compareTo(ByteUtil.concat(actualScanStartRowKey, ByteUtil.ZERO_BYTE),
+//                scanStartRowKey) == 0
+//            ) {
+//              scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
+//                actualScanStartRowKey);
+//              scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE,
+//                Bytes.toBytes(actualScanIncludeStartRowKey));
+//            } else {
+//              // This happens when the server side scanner has already sent some
+//              // rows back to the client and region has moved, so now we need to
+//              // use skipValidRowsSent flag and also reset the scanner
+//              // at paging region scanner level to re-read the previously sent
+//              // values in order to re-compute the aggregation and then return
+//              // only the next rowkey that was not yet sent back to the client.
+//              skipValidRowsSent = true;
+//              scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
+//                actualScanStartRowKey);
+//              scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE,
+//                Bytes.toBytes(actualScanIncludeStartRowKey));
+//            }
+//          }
+//        }
+//      }
+//      if (firstScan) {
+//        firstScan = false;
+//      }
+//      boolean moreRows = nextInternal(resultsToReturn, scannerContext);
+//      if (ScanUtil.isDummy(resultsToReturn)) {
+//        return true;
+//      }
+//      if (skipValidRowsSent) {
+//        while (true) {
+//          if (!moreRows) {
+//            skipValidRowsSent = false;
+//            if (resultsToReturn.size() > 0) {
+//              lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
+//            }
+//            return moreRows;
+//          }
+//          Cell firstCell = (Cell) resultsToReturn.get(0);
+//          byte[] resultRowKey = new byte[firstCell.getRowLength()];
+//          System.arraycopy(firstCell.getRowArray(), firstCell.getRowOffset(), resultRowKey, 0,
+//            resultRowKey.length);
+//          // In case of regular scans, if the region moves and scanner is reset,
+//          // hbase client checks the last returned row by the server, gets the
+//          // rowkey and appends "\x00" byte, before resuming the scan. With this,
+//          // scan includeStartRowKey is set to true.
+//          // However, same is not the case with reverse scans. For the reverse scan,
+//          // hbase client checks the last returned row by the server, gets the
+//          // rowkey and treats it as startRowKey for resuming the scan. With this,
+//          // scan includeStartRowKey is set to false.
+//          // Hence, we need to cover both cases here.
+//          if (Bytes.compareTo(resultRowKey, scanStartRowKey) == 0) {
+//            // This can be true for reverse scan case.
+//            skipValidRowsSent = false;
+//            if (includeStartRowKey) {
+//              if (resultsToReturn.size() > 0) {
+//                lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
+//              }
+//              return moreRows;
+//            }
+//            // If includeStartRowKey is false and the current rowkey is matching
+//            // with scanStartRowKey, return the next row result.
+//            resultsToReturn.clear();
+//            moreRows = nextInternal(resultsToReturn, scannerContext);
+//            if (ScanUtil.isDummy(resultsToReturn)) {
+//              return true;
+//            }
+//            if (resultsToReturn.size() > 0) {
+//              lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
+//            }
+//            return moreRows;
+//          } else if (
+//            Bytes.compareTo(ByteUtil.concat(resultRowKey, ByteUtil.ZERO_BYTE), scanStartRowKey) == 0
+//          ) {
+//            // This can be true for regular scan case.
+//            skipValidRowsSent = false;
+//            if (includeStartRowKey) {
+//              // If includeStartRowKey is true and the (current rowkey + "\0xx") is
+//              // matching with scanStartRowKey, return the next row result.
+//              resultsToReturn.clear();
+//              moreRows = nextInternal(resultsToReturn, scannerContext);
+//              if (ScanUtil.isDummy(resultsToReturn)) {
+//                return true;
+//              }
+//              if (resultsToReturn.size() > 0) {
+//                lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
+//              }
+//              return moreRows;
+//            }
+//          }
+//          // In the loop, keep iterating through rows.
+//          resultsToReturn.clear();
+//          moreRows = nextInternal(resultsToReturn, scannerContext);
+//          if (ScanUtil.isDummy(resultsToReturn)) {
+//            return true;
+//          }
+//        }
+//      }
+//      if (resultsToReturn.size() > 0) {
+//        lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(0));
+//      }
+//      return moreRows;
+//    }
 
     /**
      * Perform the next operation to grab the next row's worth of values.
