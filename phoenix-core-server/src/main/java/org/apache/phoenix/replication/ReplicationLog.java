@@ -77,7 +77,8 @@ public class ReplicationLog {
     // when the writer changes because of rotation while we are in the middle of a write operation.
     private long generation;
 
-    public ReplicationLog(ReplicationLogGroup logGroup, ReplicationShardDirectoryManager shardManager) {
+    public ReplicationLog(ReplicationLogGroup logGroup,
+                          ReplicationShardDirectoryManager shardManager) {
         this.logGroup = logGroup;
         Configuration conf = logGroup.getConfiguration();
         this.maxAttempts = conf.getInt(ReplicationLogGroup.REPLICATION_LOG_SYNC_RETRIES_KEY,

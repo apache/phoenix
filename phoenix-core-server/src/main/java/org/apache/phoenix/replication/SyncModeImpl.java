@@ -17,14 +17,14 @@
  */
 package org.apache.phoenix.replication;
 
-import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
-import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
-
 import java.io.IOException;
 
 import org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
 
 /**
  * Synchronous mode implementation
