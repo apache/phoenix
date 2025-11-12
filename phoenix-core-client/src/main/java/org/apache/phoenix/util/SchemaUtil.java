@@ -1459,6 +1459,7 @@ public class SchemaUtil {
      * SYSTEM.TRANSFORM
      * SYSTEM.CDC_STREAM_STATUS
      * SYSTEM.CDC_STREAM
+     * SYSTEM.HA_GROUP
      * For SYSTEM.CATALOG and SYSTEM.CHILD_LINK we only replicate rows with tenant information.
      * Non tenant (Global) rows are assumed to be executed by an admin or an admin process in each
      * cluster separately and thus not replicated.
