@@ -17,15 +17,6 @@
  */
 package org.apache.phoenix.replication;
 
-import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
-import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
-import static org.apache.phoenix.replication.ReplicationLogGroup.LogEvent.EVENT_TYPE_DATA;
-import static org.apache.phoenix.replication.ReplicationLogGroup.LogEvent.EVENT_TYPE_SYNC;
-import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.INIT;
-import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
-import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
-import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC_AND_FORWARD;
-
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.net.URI;
@@ -37,6 +28,8 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -69,6 +62,15 @@ import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
+
+import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
+import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
+import static org.apache.phoenix.replication.ReplicationLogGroup.LogEvent.EVENT_TYPE_DATA;
+import static org.apache.phoenix.replication.ReplicationLogGroup.LogEvent.EVENT_TYPE_SYNC;
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.INIT;
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC_AND_FORWARD;
 
 /**
  * ReplicationLogGroup manages replication logs for a given HA Group.
@@ -166,7 +168,7 @@ public class ReplicationLogGroup {
     public static final String REPLICATION_LOG_RETRY_DELAY_MS_KEY =
         "phoenix.replication.log.retry.delay.ms";
     public static final long DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS = 100L;
-    private static final long DEFAULT_HDFS_WRITE_RPC_TIMEOUT_MS = 30*1000;
+    private static final long DEFAULT_HDFS_WRITE_RPC_TIMEOUT_MS = 30 * 1000;
 
     public static final String STANDBY_DIR = "in";
     public static final String FALLBACK_DIR = "out";
@@ -277,7 +279,7 @@ public class ReplicationLogGroup {
         }
     }
 
-    private static final ImmutableMap<ReplicationMode, EnumSet<ReplicationMode>> allowedTransition =
+    private static final ImmutableMap<ReplicationMode, EnumSet<ReplicationMode>> VALID_TRANSITIONS =
             Maps.immutableEnumMap(ImmutableMap.of(
                     INIT, EnumSet.of(SYNC, STORE_AND_FORWARD),
                     SYNC, EnumSet.of(STORE_AND_FORWARD, SYNC_AND_FORWARD),
@@ -317,6 +319,8 @@ public class ReplicationLogGroup {
             this.mutation = mutation;
         }
     }
+    // executor service used to do asynchronous close
+    protected ExecutorService disruptorExecutor;
     protected Disruptor<LogEvent> disruptor;
     protected RingBuffer<LogEvent> ringBuffer;
     protected LogEventHandler eventHandler;
@@ -448,8 +452,8 @@ public class ReplicationLogGroup {
                 DEFAULT_HDFS_WRITE_RPC_TIMEOUT_MS);
         // account for HAGroupStore update when we switch replication mode
         long zkTimeoutMs = conf.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT);
-        long totalRpcTimeout =  maxAttempts*wrtiteRpcTimeout + (maxAttempts - 1)*retryDelayMs;
-        return 2*totalRpcTimeout + zkTimeoutMs;
+        long totalRpcTimeout =  maxAttempts * wrtiteRpcTimeout + (maxAttempts - 1) * retryDelayMs;
+        return 2 * totalRpcTimeout + zkTimeoutMs;
     }
 
     /**
@@ -468,14 +472,14 @@ public class ReplicationLogGroup {
             } else if (haGroupState.equals(HAGroupState.ACTIVE_NOT_IN_SYNC)) {
                 setMode(STORE_AND_FORWARD);
             } else {
-                String message = String.format("HAGroup %s got an unexpected state %s while " +
-                        "initializing mode", this, haGroupState);
+                String message = String.format("HAGroup %s got an unexpected state %s while "
+                        + "initializing mode", this, haGroupState);
                 LOG.error(message);
                 throw new IOException(message);
             }
         } else {
-            String message = String.format("HAGroup %s got an empty group store record while " +
-                    "initializing mode", this);
+            String message = String.format("HAGroup %s got an empty group store record while "
+                    + "initializing mode", this);
             LOG.error(message);
             throw new IOException(message);
         }
@@ -486,10 +490,11 @@ public class ReplicationLogGroup {
     protected void initializeDisruptor() throws IOException {
         int ringBufferSize = conf.getInt(REPLICATION_LOG_RINGBUFFER_SIZE_KEY,
                 DEFAULT_REPLICATION_LOG_RINGBUFFER_SIZE);
-        disruptor = new Disruptor<>(LogEvent.EVENT_FACTORY, ringBufferSize,
+        this.disruptorExecutor = Executors.newCachedThreadPool(
                 new ThreadFactoryBuilder()
                         .setNameFormat("ReplicationLogGroup-" + getHAGroupName() + "-%d")
-                        .setDaemon(true).build(),
+                        .setDaemon(true).build());
+        disruptor = new Disruptor<>(LogEvent.EVENT_FACTORY, ringBufferSize, disruptorExecutor,
                 ProducerType.MULTI, new YieldingWaitStrategy());
         eventHandler = new LogEventHandler();
         eventHandler.init();
@@ -629,6 +634,7 @@ public class ReplicationLogGroup {
             if (closed) {
                 return;
             }
+            // setting closed to true prevents future producers to add events to the ring buffer
             closed = true;
         }
         // Directly halt the disruptor. shutdown() would wait for events to drain. We are expecting
@@ -651,6 +657,7 @@ public class ReplicationLogGroup {
             if (closed) {
                 return;
             }
+            // setting closed to true prevents future producers to add events to the ring buffer
             closed = true;
             // Remove from instances cache
             INSTANCES.remove(haGroupName);
@@ -658,19 +665,33 @@ public class ReplicationLogGroup {
             try {
                 syncInternal();
                 gracefulShutdownEventHandlerFlag.set(true);
-                disruptor.shutdown(); // Wait for a clean shutdown.
+                // waits until all the events in the disruptor have been processed
+                disruptor.shutdown();
             } catch (IOException e) {
                 LOG.warn("Error during final sync on close", e);
                 gracefulShutdownEventHandlerFlag.set(false);
                 disruptor.halt(); // Go directly to halt.
             }
-            // TODO revisit close logic and the below comment
-            // We must wait for the disruptor before closing the writers.
+            // wait for the disruptor threads to finish
+            shutdownDisruptorExecutor();
             metrics.close();
             LOG.info("HAGroup {} closed", this);
         }
     }
 
+    private void shutdownDisruptorExecutor() {
+        disruptorExecutor.shutdown();
+        try {
+            if (!disruptorExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+                LOG.warn("HAGroup {} shutdown of disruptor executor service timed out ", this);
+                disruptorExecutor.shutdownNow();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            disruptorExecutor.shutdownNow();
+        }
+        LOG.info("HAGroup {} shutdown disruptor executor service", this);
+    }
     /**
      * Switch the replication mode to the new mode
      *
@@ -678,7 +699,7 @@ public class ReplicationLogGroup {
      * @return previous replication mode
      */
     protected ReplicationMode setMode(ReplicationMode newReplicationMode) {
-        ReplicationMode previous = mode.getAndUpdate( current -> newReplicationMode);
+        ReplicationMode previous = mode.getAndUpdate(current -> newReplicationMode);
         if (previous != newReplicationMode) {
             LOG.info("HAGroup {} switched from {} to {}", this, previous, newReplicationMode);
         }
@@ -699,8 +720,8 @@ public class ReplicationLogGroup {
             LOG.info("HAGroup {} conditionally switched from {} to {}", this,
                     expectedReplicationMode, newReplicationMode);
         } else {
-            LOG.info("HAGroup {} ignoring attempt to switch replication mode to {} " +
-                    "because expected={} != actual={}", this, newReplicationMode,
+            LOG.info("HAGroup {} ignoring attempt to switch replication mode to {} "
+                    + "because expected={} != actual={}", this, newReplicationMode,
                     expectedReplicationMode, getMode());
         }
         return updated;
@@ -831,8 +852,7 @@ public class ReplicationLogGroup {
     protected void setHAGroupStatusToStoreAndForward() throws Exception {
         try {
             haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName);
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
             LOG.info("HAGroup {} failed to set status to STORE_AND_FORWARD", this, ex);
             throw ex;
         }
@@ -844,8 +864,7 @@ public class ReplicationLogGroup {
         } catch (IOException ex) {
             // TODO logging
             throw ex;
-        }
-        catch (Exception ex) {
+        } catch (Exception ex) {
             // TODO logging
             throw new IOException(ex);
         }
@@ -906,7 +925,9 @@ public class ReplicationLogGroup {
             // send the failed event to the current mode
             ReplicationMode newMode = currentModeImpl.onFailure(e);
             setMode(newMode);
-            currentModeImpl.onExit(true);
+            // on failure call the exit asynchronously
+            disruptorExecutor.execute(() ->
+                    currentModeImpl.onExit(true));
             initializeMode(newMode);
         }
 
@@ -918,7 +939,7 @@ public class ReplicationLogGroup {
          *   <li>Syncs the current writer to ensure all data is durably written.</li>
          *   <li>Completes all pending sync futures successfully.</li>
          *   <li>Clears the list of pending sync futures.</li>
-         *   <li>Clears the current batch of records since they have been successfully synced.</li>
+         *   <li>Checks if we need to switch mode</li>
          * </ol>
          * @param sequence The sequence number of the last processed event
          * @throws IOException if the sync operation fails
@@ -935,6 +956,22 @@ public class ReplicationLogGroup {
             }
             pendingSyncFutures.clear();
             LOG.info("Sync operation completed successfully up to sequence {}", sequence);
+            // after a successful sync check the mode set on the replication group
+            // Doing the mode check on sync points makes the implementation more robust
+            // since we can guarantee that all unsynced appends have been flushed to the
+            // replication log before we switch the replication mode
+            ReplicationMode newMode = getMode();
+            if (newMode != currentModeImpl.getMode()) {
+                // some other thread switched the mode on the replication group
+                LOG.info("Mode switched at sequence {} from {} to {}",
+                        sequence, currentModeImpl, newMode);
+                // call exit on the last mode here since we can guarantee that the lastMode
+                // is not processing any event like append/sync because this is the only thread
+                // that is consuming the events from the ring buffer and handing them off to the
+                // mode
+                currentModeImpl.onExit(true);
+                initializeMode(newMode);
+            }
         }
 
         /**
@@ -1049,22 +1086,6 @@ public class ReplicationLogGroup {
                         // Process any pending syncs at the end of batch.
                         if (endOfBatch) {
                             processPendingSyncs(sequence);
-                        }
-                        // after a successful sync check the mode set on the replication group
-                        // Doing the mode check on sync points makes the implementation more robust
-                        // since we can guarantee that all unsynced appends have been flushed to the
-                        // replication log before we switch the replication mode
-                        ReplicationMode newMode = getMode();
-                        if (newMode != currentModeImpl.getMode()) {
-                            // some other thread switched the mode on the replication group
-                            LOG.info("Mode switched at sequence {} from {} to {}",
-                                    sequence, currentModeImpl, newMode);
-                            // call exit on the last mode here since we can guarantee that the lastMode
-                            // is not processing any event like append/sync because this is the only thread
-                            // that is consuming the events from the ring buffer and handing them off to the
-                            // mode
-                            currentModeImpl.onExit(true);
-                            initializeMode(newMode);
                         }
                         return;
                     default:
