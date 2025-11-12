@@ -17,10 +17,6 @@
  */
 package org.apache.phoenix.replication;
 
-import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
-import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
-import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC_AND_FORWARD;
-
 import java.io.IOException;
 
 import org.apache.hadoop.fs.FileStatus;
@@ -38,14 +34,25 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC_AND_FORWARD;
+
 /**
  * ReplicationLogDiscoveryForwarder manages the forwarding of the replication log
  * from the fallback cluster to the remote cluster.
  */
 public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
-    private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogDiscoveryForwarder.class);
+    private static final Logger LOG =
+            LoggerFactory.getLogger(ReplicationLogDiscoveryForwarder.class);
+
+    public static final String REPLICATION_LOG_COPY_THROUGHPUT_BYTES_PER_MS_KEY =
+            "phoenix.replication.log.copy.throughput.bytes.per.ms";
+    // TODO: come up with a better default after testing
+    public static final double DEFAULT_LOG_COPY_THROUGHPUT_BYTES_PER_MS = 1;
 
     private final ReplicationLogGroup logGroup;
+    private double copyThroughputThresholdBytesPerMs;
 
     /**
      * Create a tracker for the replication logs in the fallback cluster.
@@ -66,6 +73,9 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
     public ReplicationLogDiscoveryForwarder(ReplicationLogGroup logGroup) {
         super(createLogTracker(logGroup));
         this.logGroup = logGroup;
+        this.copyThroughputThresholdBytesPerMs =
+                conf.getDouble(REPLICATION_LOG_COPY_THROUGHPUT_BYTES_PER_MS_KEY,
+                DEFAULT_LOG_COPY_THROUGHPUT_BYTES_PER_MS);
     }
 
     @Override
@@ -88,7 +98,8 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
                                                 modifiedTime,
                                                 clusterType,
                                                 lastSyncStateTimeInMs) -> {
-            if (clusterType == ClusterType.LOCAL && HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC.equals(toState)) {
+            if (clusterType == ClusterType.LOCAL
+                    && HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC.equals(toState)) {
                 LOG.info("Received ACTIVE_NOT_IN_SYNC event for {}", logGroup);
                 // If the current mode is SYNC only then switch to SYNC_AND_FORWARD mode
                 if (logGroup.checkAndSetMode(SYNC, SYNC_AND_FORWARD)) {
@@ -111,7 +122,8 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
                                                 modifiedTime,
                                                 clusterType,
                                                 lastSyncStateTimeInMs) -> {
-            if (clusterType == ClusterType.LOCAL && HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC.equals(toState)) {
+            if (clusterType == ClusterType.LOCAL
+                    && HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC.equals(toState)) {
                 LOG.info("Received ACTIVE_IN_SYNC event for {}", logGroup);
                 // Set the current mode to SYNC
                 if (logGroup.checkAndSetMode(SYNC_AND_FORWARD, SYNC)) {
@@ -145,8 +157,8 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
         long endTime = EnvironmentEdgeManager.currentTimeMillis();
         long copyTime = endTime - startTime;
         LOG.info("Copying file src={} dst={} size={} took {}ms", src, dst, srcStat.getLen(), copyTime);
-        if (logGroup.getMode() == STORE_AND_FORWARD &&
-                isLogCopyThroughputAboveThreshold(srcStat.getLen(), copyTime)) {
+        if (logGroup.getMode() == STORE_AND_FORWARD
+                && isLogCopyThroughputAboveThreshold(srcStat.getLen(), copyTime)) {
             // start recovery by switching to SYNC_AND_FORWARD
             if (logGroup.checkAndSetMode(STORE_AND_FORWARD, SYNC_AND_FORWARD)) {
                 // replication mode switched, notify the event handler
@@ -178,13 +190,13 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
      * Determine if the throughput is above the configured threshold. If it is, then we can switch
      * to the SYNC_AND_FORWARD mode
      *
-     * @param fileSize
-     * @param copyTime
+     * @param fileSize in bytes
+     * @param copyTime in ms
      * @return True if the throughput is good else false
      */
     private boolean isLogCopyThroughputAboveThreshold(long fileSize, long copyTime) {
-        // TODO: calculate throughput and check if is above configured threshold
-        return true;
+        double actualThroughputBytesPerMs = copyTime != 0 ? fileSize/copyTime : 0;
+        return actualThroughputBytesPerMs >= copyThroughputThresholdBytesPerMs;
     }
 
     @Override

@@ -17,10 +17,6 @@
  */
 package org.apache.phoenix.replication;
 
-import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
-import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
-import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
-
 import java.io.IOException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -30,6 +26,10 @@ import org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
+import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
 
 /**
  * Store and Forward mode implementation
@@ -64,8 +64,8 @@ public class StoreAndForwardModeImpl extends ReplicationModeImpl {
     }
 
     private long getHAGroupStoreUpdateInterval() {
-        return (long)Math.ceil(logGroup.conf.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT)
-                * HA_GROUP_STORE_UPDATE_MULTIPLIER);
+        return (long) Math.ceil(logGroup.conf.getLong(ZK_SESSION_TIMEOUT,
+                DEFAULT_ZK_SESSION_TIMEOUT) * HA_GROUP_STORE_UPDATE_MULTIPLIER);
     }
 
     private void startHAGroupStoreUpdateTask() {
