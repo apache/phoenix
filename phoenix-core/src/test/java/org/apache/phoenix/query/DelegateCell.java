@@ -43,9 +43,9 @@ public class DelegateCell implements Cell {
     return delegate.getValueArray();
   }
 
-  @Override
+  // Removed from Cell in Hbase 3
   public byte getTypeByte() {
-    return delegate.getTypeByte();
+    throw new UnsupportedOperationException();
   }
 
   @Override
@@ -53,14 +53,14 @@ public class DelegateCell implements Cell {
     return delegate.getTimestamp();
   }
 
-  @Override
+  // Removed from Cell in Hbase 3
   public int getTagsOffset() {
-    return delegate.getTagsOffset();
+    throw new UnsupportedOperationException();
   }
 
-  @Override
+  // Removed from Cell in Hbase 3
   public byte[] getTagsArray() {
-    return delegate.getTagsArray();
+    throw new UnsupportedOperationException();
   }
 
   @Override
@@ -113,14 +113,14 @@ public class DelegateCell implements Cell {
     return name;
   }
 
-  @Override
+  // Removed from Cell in Hbase 3
   public long getSequenceId() {
-    return delegate.getSequenceId();
+    throw new UnsupportedOperationException();
   }
 
-  @Override
+  // Removed from Cell in Hbase 3
   public int getTagsLength() {
-    return delegate.getTagsLength();
+    throw new UnsupportedOperationException();
   }
 
   @Override

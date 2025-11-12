@@ -109,7 +109,7 @@ public class TestPerRegionIndexWriteCache {
       new WALFactory(TEST_UTIL.getConfiguration(), getClass().getSimpleName());
     wal = walFactory.getWAL(RegionInfoBuilder.newBuilder(TableName.valueOf("logs")).build());
     TableDescriptor htd = TableDescriptorBuilder.newBuilder(tableName)
-      .addColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(Bytes.toBytes("a")).build())
+      .setColumnFamily(ColumnFamilyDescriptorBuilder.newBuilder(Bytes.toBytes("a")).build())
       .build();
 
     r1 = new HRegion(basedir, wal, newFS, TEST_UTIL.getConfiguration(), hri, htd, null) {

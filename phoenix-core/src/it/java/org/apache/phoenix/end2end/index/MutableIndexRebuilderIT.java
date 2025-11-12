@@ -36,7 +36,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -169,11 +168,12 @@ public class MutableIndexRebuilderIT extends BaseTest {
     public static volatile AtomicInteger attempts = new AtomicInteger(0);
 
     @Override
-    public void postBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public void postBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws IOException {
+      RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) c.getEnvironment();
       attempts.incrementAndGet();
-      throw new DoNotRetryIOException("Simulating write failure on "
-        + c.getEnvironment().getRegionInfo().getTable().getNameAsString());
+      throw new DoNotRetryIOException(
+        "Simulating write failure on " + env.getRegionInfo().getTable().getNameAsString());
     }
   }
 }

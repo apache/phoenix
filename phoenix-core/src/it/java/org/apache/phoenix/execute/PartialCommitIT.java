@@ -381,8 +381,8 @@ public class PartialCommitIT extends BaseTest {
 
   public static class FailingRegionObserver extends SimpleRegionObserver {
     @Override
-    public void prePut(ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit,
-      final Durability durability) throws HBaseIOException {
+    public void prePut(ObserverContext c, Put put, WALEdit edit, final Durability durability)
+      throws HBaseIOException {
       if (shouldFail(c, put)) {
         // throwing anything other than instances of IOException result
         // in this coprocessor being unloaded
@@ -393,8 +393,8 @@ public class PartialCommitIT extends BaseTest {
     }
 
     @Override
-    public void preDelete(ObserverContext<RegionCoprocessorEnvironment> c, Delete delete,
-      WALEdit edit, Durability durability) throws IOException {
+    public void preDelete(ObserverContext c, Delete delete, WALEdit edit, Durability durability)
+      throws IOException {
       if (shouldFail(c, delete)) {
         // throwing anything other than instances of IOException result
         // in this coprocessor being unloaded
@@ -404,9 +404,9 @@ public class PartialCommitIT extends BaseTest {
       }
     }
 
-    private boolean shouldFail(ObserverContext<RegionCoprocessorEnvironment> c, Mutation m) {
-      String tableName =
-        c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+    private boolean shouldFail(ObserverContext c, Mutation m) {
+      RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) c.getEnvironment();
+      String tableName = env.getRegion().getRegionInfo().getTable().getNameAsString();
       // deletes on transactional tables are converted to put, so use a single helper method
       return tableName.contains(TABLE_NAME_TO_FAIL)
         && (Bytes.equals(ROW_TO_FAIL_UPSERT_BYTES, m.getRow())

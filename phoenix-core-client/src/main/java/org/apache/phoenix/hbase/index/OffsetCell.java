@@ -17,14 +17,15 @@
  */
 package org.apache.phoenix.hbase.index;
 
-import org.apache.hadoop.hbase.Cell;
+import java.io.IOException;
+import org.apache.hadoop.hbase.ExtendedCell;
 
-public class OffsetCell implements Cell {
+public class OffsetCell implements ExtendedCell {
 
-  private Cell cell;
+  private ExtendedCell cell;
   private int offset;
 
-  public OffsetCell(Cell cell, int offset) {
+  public OffsetCell(ExtendedCell cell, int offset) {
     this.cell = cell;
     this.offset = offset;
   }
@@ -132,6 +133,21 @@ public class OffsetCell implements Cell {
   @Override
   public int getSerializedSize() {
     return cell.getSerializedSize() - offset;
+  }
+
+  @Override
+  public void setSequenceId(long seqId) throws IOException {
+    cell.setSequenceId(seqId);
+  }
+
+  @Override
+  public void setTimestamp(long ts) throws IOException {
+    cell.setTimestamp(ts);
+  }
+
+  @Override
+  public void setTimestamp(byte[] ts) throws IOException {
+    cell.setTimestamp(ts);
   }
 
 }

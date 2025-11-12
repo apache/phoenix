@@ -21,8 +21,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 
 /**
- * {@link RpcControllerFactory} that should only be used when making server-server remote RPCs to
- * the region servers hosting Phoenix SYSTEM tables.
+ * Factory that should only be used when making server-server remote RPCs to the region servers
+ * hosting Phoenix SYSTEM tables. Despite the name, this does NOT implement
+ * {@link RpcControllerFactory}
  */
 public class ServerSideRPCControllerFactory {
 

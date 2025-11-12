@@ -85,7 +85,6 @@ import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -1648,8 +1647,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   public static class FastFailRegionObserver implements RegionObserver, RegionCoprocessor {
     @Override
-    public RegionScanner postScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
-      final Scan scan, final RegionScanner s) throws IOException {
+    public RegionScanner postScannerOpen(final ObserverContext c, final Scan scan,
+      final RegionScanner s) throws IOException {
       throw new DoNotRetryIOException("I'm just a coproc that's designed to fail fast");
     }
 

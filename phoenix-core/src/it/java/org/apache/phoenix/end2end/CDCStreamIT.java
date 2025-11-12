@@ -923,7 +923,7 @@ public class CDCStreamIT extends CDCBaseIT {
     List<HRegionLocation> tableRegions = conn.unwrap(PhoenixConnection.class).getQueryServices()
       .getAllTableRegions(tableName.getBytes());
     for (HRegionLocation tableRegion : tableRegions) {
-      RegionInfo ri = tableRegion.getRegionInfo();
+      RegionInfo ri = tableRegion.getRegion();
       PreparedStatement ps = conn.prepareStatement("SELECT * FROM " + SYSTEM_CDC_STREAM_NAME
         + " WHERE TABLE_NAME = ? AND STREAM_NAME = ? AND PARTITION_ID= ?");
       ps.setString(1, tableName);

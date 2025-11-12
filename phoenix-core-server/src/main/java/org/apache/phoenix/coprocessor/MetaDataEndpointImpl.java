@@ -135,6 +135,7 @@ import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.ExtendedCellBuilder;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.KeyValue;
@@ -602,6 +603,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   private static final int MIN_VALUE_INDEX = FUNCTION_ARG_KV_COLUMNS.indexOf(MIN_VALUE_KV);
   private static final int MAX_VALUE_INDEX = FUNCTION_ARG_KV_COLUMNS.indexOf(MAX_VALUE_KV);
 
+  // No longer public in HBase 3+
+  private static final long OLDEST_TIMESTAMP = Long.MIN_VALUE;
+
   public static PName newPName(byte[] buffer) {
     return buffer == null ? null : newPName(buffer, 0, buffer.length);
   }
@@ -869,10 +873,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       keyRanges.add(PVarbinary.INSTANCE.getKeyRange(key, true, stopKey, false, SortOrder.ASC));
     }
     Scan scan = new Scan();
-    if (
-      clientTimeStamp != HConstants.LATEST_TIMESTAMP
-        && clientTimeStamp != HConstants.OLDEST_TIMESTAMP
-    ) {
+    if (clientTimeStamp != HConstants.LATEST_TIMESTAMP && clientTimeStamp != OLDEST_TIMESTAMP) {
       scan.setTimeRange(MIN_TABLE_TIMESTAMP, clientTimeStamp + 1);
     } else {
       scan.setTimeRange(MIN_TABLE_TIMESTAMP, clientTimeStamp);
@@ -1405,7 +1406,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       ? rowKeyOrderOptimizable
       : oldTable != null && oldTable.rowKeyOrderOptimizable());
 
-    Cell updateCacheFrequencyKv = tableKeyValues[UPDATE_CACHE_FREQUENCY_INDEX];
+    // FIXME blind cast, may fail with synthetic cells
+    ExtendedCell updateCacheFrequencyKv =
+      (ExtendedCell) tableKeyValues[UPDATE_CACHE_FREQUENCY_INDEX];
     long updateCacheFrequency = updateCacheFrequencyKv == null
       ? 0
       : PLong.INSTANCE.getCodec().decodeLong(updateCacheFrequencyKv.getValueArray(),
@@ -1480,7 +1483,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       : oldTable != null ? oldTable.getEncodingScheme()
       : QualifierEncodingScheme.NON_ENCODED_QUALIFIERS);
 
-    Cell useStatsForParallelizationKv = tableKeyValues[USE_STATS_FOR_PARALLELIZATION_INDEX];
+    // FIXME blind cast, may fail with synthetic cells
+    ExtendedCell useStatsForParallelizationKv =
+      (ExtendedCell) tableKeyValues[USE_STATS_FOR_PARALLELIZATION_INDEX];
     Boolean useStatsForParallelization = useStatsForParallelizationKv == null
       ? null
       : Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(useStatsForParallelizationKv.getValueArray(),
@@ -2134,7 +2139,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       scanner.next(results);
     }
     for (Cell kv : results) {
-      KeyValue.Type type = Type.codeToType(kv.getTypeByte());
+      KeyValue.Type type = Type.codeToType(kv.getType().getCode());
       if (type == Type.DeleteFamily) { // Row was deleted
         Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
           GlobalCache.getInstance(this.env).getMetaDataCache();
@@ -2164,7 +2169,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     // HBase ignores the time range on a raw scan (HBASE-7362)
     if (!results.isEmpty() && results.get(0).getTimestamp() > clientTimeStamp) {
       Cell kv = results.get(0);
-      if (kv.getTypeByte() == Type.Delete.getCode()) {
+      if (kv.getType().getCode() == Type.Delete.getCode()) {
         Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
           GlobalCache.getInstance(this.env).getMetaDataCache();
         PFunction function = newDeletedFunctionMarker(kv.getTimestamp());
@@ -2193,7 +2198,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     // HBase ignores the time range on a raw scan (HBASE-7362)
     if (!results.isEmpty() && results.get(0).getTimestamp() > clientTimeStamp) {
       Cell kv = results.get(0);
-      if (kv.getTypeByte() == Type.Delete.getCode()) {
+      if (kv.getType().getCode() == Type.Delete.getCode()) {
         Cache<ImmutableBytesPtr, PMetaDataEntity> metaDataCache =
           GlobalCache.getInstance(this.env).getMetaDataCache();
         PSchema schema = newDeletedSchemaMarker(kv.getTimestamp());
@@ -2632,7 +2637,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         ) {
           Table hTable =
             ServerUtil.getHTableForCoprocessorScan(env, TableName.valueOf(cPhysicalName));
-          ColumnFamilyDescriptor cfd = hTable.getTableDescriptor().getColumnFamilies()[0];
+          ColumnFamilyDescriptor cfd = hTable.getDescriptor().getColumnFamilies()[0];
+
           UpgradeUtil.addTTLForClientOlderThan530(tableMetadata, tableKey, clientTimeStamp,
             clientVersion, cfd);
         }
@@ -2936,9 +2942,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     List<List<Cell>> allColumnsCellList =
       MetaDataUtil.getColumnAndLinkCellsFromMutations(tableMetadata);
     // getTableFromCells assumes the Cells are sorted as they would be when reading from HBase
-    Collections.sort(tableCellList, KeyValue.COMPARATOR);
+    Collections.sort(tableCellList, CellComparator.getInstance());
     for (List<Cell> columnCellList : allColumnsCellList) {
-      Collections.sort(columnCellList, KeyValue.COMPARATOR);
+      Collections.sort(columnCellList, CellComparator.getInstance());
     }
 
     PTable newTable = getTableFromCells(tableCellList, allColumnsCellList, clientTimestamp,

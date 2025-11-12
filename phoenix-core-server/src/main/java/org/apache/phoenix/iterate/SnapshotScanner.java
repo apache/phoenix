@@ -49,6 +49,7 @@ import org.apache.hadoop.hbase.regionserver.OnlineRegions;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.CommonFSUtils;
+import org.apache.phoenix.compat.hbase.CompatRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
@@ -196,7 +197,7 @@ public class SnapshotScanner extends AbstractClientScanner {
   }
 
   private RegionCoprocessorEnvironment getSnapshotContextEnvironment(final Configuration conf) {
-    return new RegionCoprocessorEnvironment() {
+    return new CompatRegionCoprocessorEnvironment() {
       @Override
       public Region getRegion() {
         return region;
@@ -276,6 +277,7 @@ public class SnapshotScanner extends AbstractClientScanner {
       public ExtendedCellBuilder getCellBuilder() {
         throw new UnsupportedOperationException();
       }
+
     };
   }
 }

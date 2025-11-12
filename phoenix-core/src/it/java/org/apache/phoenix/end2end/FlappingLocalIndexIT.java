@@ -39,7 +39,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExplainPlan;
@@ -408,8 +407,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
     private CountDownLatch latch = new CountDownLatch(1);
 
     @Override
-    public void preClose(
-      org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+    public void preClose(org.apache.hadoop.hbase.coprocessor.ObserverContext c,
       boolean abortRequested) throws IOException {
       if (DELAY_OPEN) {
         try {
@@ -421,9 +419,8 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
     }
 
     @Override
-    public void preScannerOpen(
-      org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
-      Scan scan) throws IOException {
+    public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext c, Scan scan)
+      throws IOException {
       if (DELAY_OPEN && retryCount == 1) {
         latch.countDown();
       }

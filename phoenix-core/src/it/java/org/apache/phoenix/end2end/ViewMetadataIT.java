@@ -55,7 +55,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -173,8 +172,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
       TableDescriptorBuilder.newBuilder(TableName.valueOf(tableNameStr));
     builder.setColumnFamily(ColumnFamilyDescriptorBuilder.of(familyNameStr));
 
-    HBaseTestingUtility testUtil = getUtility();
-    Admin admin = testUtil.getAdmin();
+    Admin admin = getUtility().getAdmin();
     admin.createTable(builder.build());
     Connection conn = DriverManager.getConnection(getUrl());
 

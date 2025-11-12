@@ -26,7 +26,6 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
@@ -92,8 +91,7 @@ public class CoprocessorHConnectionTableFactoryIT extends BaseTest {
     final Connection conn = DriverManager.getConnection(getUrl());
 
     final Admin admin = getUtility().getAdmin();
-    final MiniHBaseCluster cluster = getUtility().getHBaseCluster();
-    final HRegionServer regionServer = cluster.getRegionServer(0);
+    final HRegionServer regionServer = getUtility().getHBaseCluster().getRegionServer(0);
     Configuration conf = admin.getConfiguration();
     final int noOfOrgs = 20;
     final AtomicBoolean flag = new AtomicBoolean();

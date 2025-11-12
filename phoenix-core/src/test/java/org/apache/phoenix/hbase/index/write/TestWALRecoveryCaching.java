@@ -23,6 +23,7 @@ import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
@@ -36,6 +37,7 @@ import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Connection;
 import org.apache.hadoop.hbase.client.ConnectionFactory;
@@ -48,7 +50,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
@@ -112,10 +113,9 @@ public class TestWALRecoveryCaching {
       return Optional.of(this);
     }
 
-    @Override
-    public void preWALRestore(
-      org.apache.hadoop.hbase.coprocessor.ObserverContext<
-        ? extends RegionCoprocessorEnvironment> ctx,
+    // FIXME this hook does not exist in HBase 3.
+    // Skip test ?
+    public void preWALRestore(org.apache.hadoop.hbase.coprocessor.ObserverContext ctx,
       org.apache.hadoop.hbase.client.RegionInfo info, WALKey logKey,
       org.apache.hadoop.hbase.wal.WALEdit logEdit) throws IOException {
       try {
@@ -170,7 +170,7 @@ public class TestWALRecoveryCaching {
     // start the cluster with 2 rs
     util.startMiniCluster(2);
 
-    Admin admin = util.getHBaseAdmin();
+    Admin admin = util.getAdmin();
     // setup the index
     byte[] family = Bytes.toBytes("family");
     byte[] qual = Bytes.toBytes("qualifier");
@@ -184,8 +184,10 @@ public class TestWALRecoveryCaching {
     // create the primary table w/ indexing enabled
     TableDescriptor primaryTable =
       TableDescriptorBuilder.newBuilder(TableName.valueOf(testTable.getTableName()))
-        .addColumnFamily(ColumnFamilyDescriptorBuilder.of(family))
-        .addColumnFamily(ColumnFamilyDescriptorBuilder.of(nonIndexedFamily)).build();
+        .setColumnFamilies(
+          Arrays.asList(new ColumnFamilyDescriptor[] { ColumnFamilyDescriptorBuilder.of(family),
+            ColumnFamilyDescriptorBuilder.of(nonIndexedFamily) }))
+        .build();
     builder.addArbitraryConfigForTesting(Indexer.RecoveryFailurePolicyKeyForTesting,
       ReleaseLatchOnFailurePolicy.class.getName());
     builder.build(primaryTable);
@@ -194,7 +196,7 @@ public class TestWALRecoveryCaching {
     // create the index table
     TableDescriptorBuilder indexTableBuilder =
       TableDescriptorBuilder.newBuilder(TableName.valueOf(Bytes.toBytes(getIndexTableName())))
-        .addCoprocessor(IndexTableBlockingReplayObserver.class.getName());
+        .setCoprocessor(IndexTableBlockingReplayObserver.class.getName());
     TestIndexManagementUtil.createIndexTable(admin, indexTableBuilder);
 
     // figure out where our tables live

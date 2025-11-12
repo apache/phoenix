@@ -45,6 +45,7 @@
   </licenses>
 
   <modules>
+    <module>phoenix-hbase-compat-3.0.0</module>
     <module>phoenix-hbase-compat-2.6.0</module>
     <module>phoenix-hbase-compat-2.5.4</module>
     <module>phoenix-hbase-compat-2.5.0</module>
@@ -79,6 +80,11 @@
     <hbase-2.5.runtime.version>2.5.12-hadoop3</hbase-2.5.runtime.version>
     <hbase-2.6.0.runtime.version>2.6.1-hadoop3</hbase-2.6.0.runtime.version>
     <hbase-2.6.runtime.version>2.6.3-hadoop3</hbase-2.6.runtime.version>
+    <hbase-3.0.runtime.version>3.0.0-beta-2-SNAPSHOT</hbase-3.0.runtime.version>
+
+    <!-- This is a hack to work around Eclipse m2 integration brokennes. It is set to hbase.version
+    when building with Hbase 2.x, and a random existing version for Hbase 3.x -->
+    <hbase2.version>${hbase.version}</hbase2.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -144,6 +150,7 @@
     <!-- Plugin versions -->
     <maven-eclipse-plugin.version>2.10</maven-eclipse-plugin.version>
     <maven-build-helper-plugin.version>3.5.0</maven-build-helper-plugin.version>
+    <maven-replacer-plugin.version>1.5.2</maven-replacer-plugin.version>
     <restrict-imports.enforcer.version>2.4.0</restrict-imports.enforcer.version>
     <maven-antlr-eclipse-plugin.version>${antlr.version}</maven-antlr-eclipse-plugin.version>
     <spotbugs-maven-plugin.version>4.8.1.0</spotbugs-maven-plugin.version>
@@ -260,12 +267,17 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-embedded-hbase-2.6.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-embedded-hbase-2.6</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
-        <artifactId>phoenix-client-embedded-hbase-2.6.0</artifactId>
+        <artifactId>phoenix-client-embedded-hbase-3.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -295,6 +307,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-lite-hbase-3.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.5.0</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -320,6 +337,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-3.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.5.0</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -341,6 +363,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.6</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-3.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -371,6 +398,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-hbase-compat-2.6.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-hbase-compat-3.0.0</artifactId>
         <version>${project.version}</version>
       </dependency>
       <!-- Intra-project test dependencies -->
@@ -760,6 +792,11 @@
       <dependency>
         <groupId>org.apache.hbase</groupId>
         <artifactId>hbase-annotations</artifactId>
+        <version>${hbase.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-balancer</artifactId>
         <version>${hbase.version}</version>
       </dependency>
       <dependency>
@@ -1523,34 +1560,11 @@
           <groupId>org.codehaus.mojo</groupId>
           <artifactId>build-helper-maven-plugin</artifactId>
           <version>${maven-build-helper-plugin.version}</version>
-          <executions>
-            <execution>
-              <id>add-test-source</id>
-              <goals>
-                <goal>add-test-source</goal>
-              </goals>
-              <phase>validate</phase>
-              <configuration>
-                <sources>
-                  <source>${basedir}/src/it/java</source>
-                </sources>
-              </configuration>
-            </execution>
-            <execution>
-              <id>add-test-resource</id>
-              <goals>
-                <goal>add-test-resource</goal>
-              </goals>
-              <phase>validate</phase>
-              <configuration>
-                <resources>
-                  <resource>
-                    <directory>${basedir}/src/it/resources</directory>
-                  </resource>
-                </resources>
-              </configuration>
-            </execution>
-          </executions>
+        </plugin>
+        <plugin>
+            <groupId>com.google.code.maven-replacer-plugin</groupId>
+            <artifactId>replacer</artifactId>
+            <version>${maven-replacer-plugin.version}</version>
         </plugin>
         <plugin>
           <groupId>org.apache.maven.plugins</groupId>
@@ -1563,7 +1577,7 @@
             <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
             <forkedProcessExitTimeoutInSeconds>180</forkedProcessExitTimeoutInSeconds>
             <shutdown>exit</shutdown>
-            <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>
+            <!--            <testSourceDirectory>${basedir}/src/it/java</testSourceDirectory>-->
             <trimStackTrace>false</trimStackTrace>
             <!-- https://www.orpiske.net/2021/04/test-woes-with-maven-failsafe-3-0-0-m5 -->
             <useModulePath>false</useModulePath>
@@ -2210,6 +2224,22 @@
       </properties>
     </profile>
     <profile>
+      <!-- This WILL work with the public -hadoop3 artifacts -->
+      <id>phoenix-hbase-compat-3.0.0</id>
+      <activation>
+        <property>
+          <name>hbase.profile</name>
+          <value>3.0</value>
+        </property>
+      </activation>
+      <properties>
+        <hbase.profile>3.0</hbase.profile>
+        <hbase.compat.version>3.0.0</hbase.compat.version>
+        <hadoop.version>3.4.2</hadoop.version>
+        <hbase.version>${hbase-3.0.runtime.version}</hbase.version>
+      </properties>
+    </profile>
+    <profile>
       <id>owasp-dependency-check</id>
       <activation>
         <property>
@@ -2378,6 +2408,10 @@
           <family>linux</family>
           <arch>aarch64</arch>
         </os>
+        <property>
+          <name>hbase.profile</name>
+          <value>!3.0</value>
+        </property>
       </activation>
       <properties>
         <!-- PHOENIX-6475 Use custom protoc for Linux ARM64 -->
@@ -2393,6 +2427,10 @@
           <family>mac</family>
           <arch>aarch64</arch>
         </os>
+        <property>
+          <name>hbase.profile</name>
+          <value>!3.0</value>
+        </property>
       </activation>
       <properties>
         <protoc.arch>osx-x86_64</protoc.arch>
