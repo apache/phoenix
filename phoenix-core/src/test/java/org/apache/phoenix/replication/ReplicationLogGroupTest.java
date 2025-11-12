@@ -451,9 +451,6 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
         // Close the log writer
         logGroup.close();
 
-        // wait for the event handler thread to exit since that calls the close
-        // on the underlying writer
-        Thread.sleep(5);
         // Verify the inner writer was closed
         verify(innerWriter, times(1)).close();
 
