@@ -368,9 +368,11 @@ public class HAGroupStoreClient implements Closeable {
                 == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
                 && haGroupState == HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC) {
             // We record the last round timestamp by subtracting the rotationTime and then
-            // taking the beginning of last round (floor) by first integer division and then multiplying again.
+            // taking the beginning of last round (floor) by first integer
+            // division and then multiplying again.
             lastSyncTimeInMs
-                    = ((System.currentTimeMillis() - rotationTimeMs) / rotationTimeMs) * rotationTimeMs;
+                    = ((System.currentTimeMillis() - rotationTimeMs) / rotationTimeMs)
+                    * rotationTimeMs;
         }
         HAGroupStoreRecord newHAGroupStoreRecord = new HAGroupStoreRecord(
                 currentHAGroupStoreRecord.getProtocolVersion(),
