@@ -485,19 +485,19 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
           if (hasRegionMoved()) {
             LOGGER.info(
               "Region has moved.. Actual scan start rowkey {} is not same "
-                + "as current scan start rowkey {}",
+                  + "as current scan start rowkey {}",
               Bytes.toStringBinary(actualScanStartRowKey), Bytes.toStringBinary(scanStartRowKey));
             // The region has moved during scan, so the HBase client creates a new scan.
             // We need to restart the scan, and optionally skip any rows already received by the
             // client
-              skipValidRowsSent = true;
-              scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
-                actualScanStartRowKey);
-              scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE,
-                Bytes.toBytes(actualScanIncludeStartRowKey));
-            }
+            skipValidRowsSent = true;
+            scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY,
+              actualScanStartRowKey);
+            scan.setAttribute(QueryServices.PHOENIX_PAGING_NEW_SCAN_START_ROWKEY_INCLUDE,
+              Bytes.toBytes(actualScanIncludeStartRowKey));
           }
         }
+      }
       if (firstScan) {
         firstScan = false;
       }
@@ -506,35 +506,27 @@ public class GroupedAggregateRegionObserver extends BaseScannerRegionObserver
         return true;
       }
       if (skipValidRowsSent) {
-          Iterator resultIt = resultsToReturn.iterator();
+        Iterator resultIt = resultsToReturn.iterator();
         while (resultIt.hasNext()) {
-            Cell resultElem = (Cell) resultIt.next();
-            byte[] resultRowKey = CellUtil.cloneRow(resultElem);
-            boolean skipRow = false;
-            int compare = Bytes.compareTo(resultRowKey, scanStartRowKey);
-            if (scan.isReversed()) {
-                if (compare > 0 || (compare == 0 && !includeStartRowKey )) {
-                    skipRow = true;
-              }
+          Cell resultElem = (Cell) resultIt.next();
+          byte[] resultRowKey = CellUtil.cloneRow(resultElem);
+          int compare = Bytes.compareTo(resultRowKey, scanStartRowKey);
+            if ( (scan.isReversed() && compare > 0) || (!scan.isReversed() && compare < 0) || (compare == 0 && !includeStartRowKey)) {
+              resultIt.remove();
             } else {
-                if (compare < 0 || (compare == 0 && !includeStartRowKey )) {
-                    skipRow = true;
+              skipValidRowsSent = false;
+              break;
             }
-          }
-            if (skipRow) {
-                resultIt.remove();
-            } else {
-                //results are ordered, subsequent rows are valid
-                break;
-          }
         }
       }
-      if (resultsToReturn.isEmpty()) {
-          // TODO should we iterate further here ?
-          return getDummyResult(resultsToReturn);
+      if (resultsToReturn.isEmpty() && moreRows) {
+        // TODO should we iterate further here ?
+        return getDummyResult(resultsToReturn);
       }
-      //We have some/all result rows remaining, return them
-      lastReturnedRowKey = CellUtil.cloneRow((Cell) resultsToReturn.get(resultsToReturn.size()-1));
+      if (!resultsToReturn.isEmpty()) {
+        lastReturnedRowKey =
+          CellUtil.cloneRow((Cell) resultsToReturn.get(resultsToReturn.size() - 1));
+      }
       return moreRows;
     }
 
