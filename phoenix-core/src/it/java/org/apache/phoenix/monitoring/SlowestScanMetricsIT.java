@@ -837,7 +837,7 @@ public class SlowestScanMetricsIT extends BaseTest {
    * @param rs ResultSet from which to get the slowest scan metrics
    * @return JSON array of arrays of JSON maps
    */
-  private JsonArray getSlowestScanMetricsJsonArray(ResultSet rs) throws Exception {
+  public static JsonArray getSlowestScanMetricsJsonArray(ResultSet rs) throws Exception {
     List<List<ScanMetricsGroup>> slowestScanMetrics = PhoenixRuntime.getTopNSlowestScanMetrics(rs);
     JsonArray jsonArray = new JsonArray();
     for (List<ScanMetricsGroup> group : slowestScanMetrics) {
