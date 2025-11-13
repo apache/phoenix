@@ -68,7 +68,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
   private static final String MVCC_LOCK_TEST_TABLE_PREFIX = "MVCCLOCKTEST_";
   private static final String LOCK_TEST_TABLE_PREFIX = "LOCKTEST_";
   private static final int ROW_LOCK_WAIT_TIME = 10000;
-  private static final int MAX_LOOKBACK_AGE = 1000000;
+  protected static final int MAX_LOOKBACK_AGE = 1000000;
   private final Object lock = new Object();
 
   public ConcurrentMutationsExtendedIT(boolean uncovered) {

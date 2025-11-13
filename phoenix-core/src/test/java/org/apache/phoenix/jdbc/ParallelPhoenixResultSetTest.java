@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 
@@ -75,6 +76,13 @@ public class ParallelPhoenixResultSetTest {
     Executor rsExecutor2 = Mockito.mock(Executor.class);
 
     CountDownLatch latch = new CountDownLatch(1);
+    CountDownLatch closeLatch = new CountDownLatch(1);
+
+    // Set up rs2 to notify when close() is called for async verification
+    doAnswer(invocation -> {
+      closeLatch.countDown();
+      return null;
+    }).when(rs2).close();
 
     // inject a sleep
     doAnswer((InvocationOnMock invocation) -> {
@@ -103,6 +111,25 @@ public class ParallelPhoenixResultSetTest {
     resultSet.next();
 
     assertEquals(rs1, resultSet.getResultSet());
+
+    // rs2 is not done yet, so it should NOT be closed immediately
+    Mockito.verify(rs2, Mockito.never()).close();
+
+    // Now complete rs2 and verify it gets closed asynchronously
+    latch.countDown();
+
+    // Wait for async close to happen (with timeout)
+    boolean closeHappened = closeLatch.await(2, TimeUnit.SECONDS);
+    assertTrue(closeHappened);
+
+    // Explicitly verify rs2 (idle) was closed
+    Mockito.verify(rs2).close();
+
+    // Verify rs1 (winner) was not closed
+    Mockito.verify(rs1, Mockito.never()).close();
+
+    rs1.close();
+    Mockito.verify(rs1).close();
   }
 
   @Test
@@ -112,6 +139,14 @@ public class ParallelPhoenixResultSetTest {
 
     Executor rsExecutor1 = Mockito.mock(Executor.class);
     CountDownLatch latch = new CountDownLatch(1);
+    CountDownLatch closeLatch = new CountDownLatch(1);
+
+    // Set up rs1 to notify when close() is called for async verification
+    doAnswer(invocation -> {
+      closeLatch.countDown();
+      return null;
+    }).when(rs1).close();
+
     // inject a sleep
     doAnswer((InvocationOnMock invocation) -> {
       Thread thread = new Thread(() -> {
@@ -137,6 +172,25 @@ public class ParallelPhoenixResultSetTest {
     resultSet.next();
 
     assertEquals(rs2, resultSet.getResultSet());
+
+    // rs1 is not done yet, so it should NOT be closed immediately
+    Mockito.verify(rs1, Mockito.never()).close();
+
+    // Complete rs1 and verify it gets closed asynchronously
+    latch.countDown();
+
+    // Wait for async close to happen (with timeout)
+    boolean closeHappened = closeLatch.await(2, TimeUnit.SECONDS);
+    assertTrue(closeHappened);
+
+    // Explicitly verify rs1 (idle) was closed
+    Mockito.verify(rs1).close();
+
+    // Verify rs2 (winner) was not closed
+    Mockito.verify(rs2, Mockito.never()).close();
+
+    rs2.close();
+    Mockito.verify(rs2).close();
   }
 
   @Test
@@ -171,6 +225,13 @@ public class ParallelPhoenixResultSetTest {
     resultSet.next();
 
     assertEquals(rs2, resultSet.getResultSet());
+
+    // rs1 failed exceptionally, so it should NOT be closed
+    // rs2 won and is the active result set, so it should NOT be closed
+    Mockito.verify(rs2, Mockito.never()).close();
+
+    // Cleanup
+    latch.countDown();
   }
 
   @Test
@@ -184,6 +245,14 @@ public class ParallelPhoenixResultSetTest {
     CountDownLatch latch1 = new CountDownLatch(1);
     CountDownLatch latch2 = new CountDownLatch(1);
     CountDownLatch latch3 = new CountDownLatch(1);
+    CountDownLatch closeLatch = new CountDownLatch(1);
+
+    // Set up rs2 to notify when close() is called for async verification
+    doAnswer(invocation -> {
+      closeLatch.countDown();
+      return null;
+    }).when(rs2).close();
+
     // inject a sleep
     doAnswer((InvocationOnMock invocation) -> {
       Thread thread = new Thread(() -> {
@@ -245,7 +314,20 @@ public class ParallelPhoenixResultSetTest {
 
     assertEquals(rs1, resultSet.getResultSet());
 
-    // Cleanup
+    // rs2 is not done yet, so it should NOT be closed immediately
+    Mockito.verify(rs2, Mockito.never()).close();
+
+    // Now complete rs2 and verify it gets closed asynchronously
     latch2.countDown();
+
+    // Wait for async close to happen (with timeout)
+    boolean closeHappened = closeLatch.await(2, TimeUnit.SECONDS);
+    assertTrue(closeHappened);
+
+    // Explicitly verify rs2 (idle) was closed
+    Mockito.verify(rs2).close();
+
+    // Verify rs1 (winner) was not closed
+    Mockito.verify(rs1, Mockito.never()).close();
   }
 }

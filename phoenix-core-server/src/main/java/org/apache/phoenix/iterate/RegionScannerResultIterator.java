@@ -43,7 +43,7 @@ public class RegionScannerResultIterator extends BaseResultIterator {
   private final Pair<Integer, Integer> minMaxQualifiers;
   private final boolean useQualifierAsIndex;
   private final QualifierEncodingScheme encodingScheme;
-  private final ScannerContext regionScannerContext;
+  private ScannerContext scannerContext;
 
   public RegionScannerResultIterator(Scan scan, RegionScanner scanner,
     Pair<Integer, Integer> minMaxQualifiers, QualifierEncodingScheme encodingScheme) {
@@ -51,12 +51,6 @@ public class RegionScannerResultIterator extends BaseResultIterator {
     this.useQualifierAsIndex = EncodedColumnsUtil.useQualifierAsIndex(minMaxQualifiers);
     this.minMaxQualifiers = minMaxQualifiers;
     this.encodingScheme = encodingScheme;
-    if (scan.isScanMetricsEnabled()) {
-      regionScannerContext =
-        ScannerContext.newBuilder().setTrackMetrics(scan.isScanMetricsEnabled()).build();
-    } else {
-      regionScannerContext = null;
-    }
   }
 
   @Override
@@ -74,10 +68,10 @@ public class RegionScannerResultIterator extends BaseResultIterator {
         // since this is an indication of whether or not there are more values after the
         // ones returned
         boolean hasMore;
-        if (regionScannerContext == null) {
+        if (scannerContext == null) {
           hasMore = scanner.nextRaw(results);
         } else {
-          hasMore = scanner.nextRaw(results, regionScannerContext);
+          hasMore = scanner.nextRaw(results, scannerContext);
         }
 
         if (!hasMore && results.isEmpty()) {
@@ -98,8 +92,8 @@ public class RegionScannerResultIterator extends BaseResultIterator {
     }
   }
 
-  public ScannerContext getRegionScannerContext() {
-    return regionScannerContext;
+  public void setRegionScannerContext(ScannerContext scannerContext) {
+    this.scannerContext = scannerContext;
   }
 
   @Override
