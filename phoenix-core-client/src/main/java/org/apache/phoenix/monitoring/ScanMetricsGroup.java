@@ -26,6 +26,24 @@ import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.hbase.thirdparty.com.google.gson.JsonArray;
 import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
+/**
+ * Captures scan metrics at both aggregate and region levels for HBase scans created by Phoenix
+ * clients.
+ * <p>
+ * Instances of this class are used to track and identify the slowest-performing scans. The slowness
+ * of a scan is measured by the total time spent between consecutive calls to
+ * {@link org.apache.hadoop.hbase.client.ResultScanner#next()} in the HBase client, which represents
+ * the actual data retrieval latency experienced by the client.
+ * <p>
+ * This class supports two modes of metric collection:
+ * <ul>
+ * <li>Aggregate metrics: Overall scan metrics across all regions</li>
+ * <li>Region-level metrics: Detailed metrics broken down by individual HBase regions</li>
+ * </ul>
+ * <p>
+ * Use {@link #toJson()} to obtain a JSON object representation of the scan metrics for
+ * serialization or reporting purposes.
+ */
 public class ScanMetricsGroup {
 
   public static final ScanMetricsGroup EMPTY_SCAN_METRICS_GROUP =

@@ -269,6 +269,82 @@ public class SlowestScanMetricsTest {
   }
 
   /**
+   * Test with multiple ScanMetricsGroups having the same millisBetweenNexts, verifying that
+   * eviction works correctly when the underlying TopNTreeMultiMap is full. The TopNTreeMultiMap
+   * uses a reverse comparator (larger values sorted first), so it keeps the top N highest values
+   * and evicts from the smallest values when full.
+   */
+  @Test
+  public void testEvictionWithDuplicateMillisBetweenNexts() {
+    // Create context with capacity for 5 scan metrics
+    int topN = 5;
+    StatementContext context = createStatementContext(topN);
+
+    // Add scan metrics where two of them have the same millisBetweenNexts (200L)
+    // With reverse comparator, these are sorted as: 500L, 400L, 300L, 200L, 200L, 100L
+    // When capacity is 5, the smallest values (100L) will be at the "end" of the sorted map
+    context.getSlowestScanMetricsQueue().add(createScanMetricsGroup("TABLE1", 500L));
+    context.getSlowestScanMetricsQueue().add(createScanMetricsGroup("TABLE2", 400L));
+    context.getSlowestScanMetricsQueue().add(createScanMetricsGroup("TABLE3", 300L));
+    context.getSlowestScanMetricsQueue().add(createScanMetricsGroup("TABLE4", 200L)); // First with
+                                                                                      // 200L
+    context.getSlowestScanMetricsQueue().add(createScanMetricsGroup("TABLE5", 200L)); // Second with
+                                                                                      // 200L
+    context.getSlowestScanMetricsQueue().add(createScanMetricsGroup("TABLE6", 100L));
+
+    // Verify we have 5 scan metrics (100L should already be rejected)
+    List<List<ScanMetricsGroup>> result = context.getTopNSlowestScanMetrics();
+    assertEquals(5, result.size());
+
+    // Count how many ScanMetricsGroups with 200L are present
+    long count200L = result.stream().flatMap(List::stream)
+      .filter(smg -> Long.valueOf(200L).equals(smg.getSumOfMillisSecBetweenNexts())).count();
+
+    // Both 200L entries should still be there since 100L is the smallest
+    assertEquals(2, count200L);
+
+    // Now add a new ScanMetricsGroup with 250L which should cause eviction
+    // Since 250L > 200L (smallest in map), and map is full, one of the 200L entries should be
+    // evicted
+    context.getSlowestScanMetricsQueue().add(createScanMetricsGroup("TABLE7", 250L));
+
+    // Get the updated results
+    result = context.getTopNSlowestScanMetrics();
+
+    // Should still have 5 entries total
+    assertEquals(5, result.size());
+
+    // Verify the new ScanMetricsGroup with 250L is present
+    boolean has250L = result.stream().flatMap(List::stream)
+      .anyMatch(smg -> Long.valueOf(250L).equals(smg.getSumOfMillisSecBetweenNexts()));
+    assertTrue(has250L);
+
+    // Verify that only ONE of the two ScanMetricsGroups with 200L remains
+    // (one should have been evicted as it was the last value of the smallest key)
+    count200L = result.stream().flatMap(List::stream)
+      .filter(smg -> Long.valueOf(200L).equals(smg.getSumOfMillisSecBetweenNexts())).count();
+    assertEquals(1, count200L);
+
+    // Verify the larger values are still present
+    boolean has500L = result.stream().flatMap(List::stream)
+      .anyMatch(smg -> Long.valueOf(500L).equals(smg.getSumOfMillisSecBetweenNexts()));
+    assertTrue(has500L);
+
+    boolean has400L = result.stream().flatMap(List::stream)
+      .anyMatch(smg -> Long.valueOf(400L).equals(smg.getSumOfMillisSecBetweenNexts()));
+    assertTrue(has400L);
+
+    boolean has300L = result.stream().flatMap(List::stream)
+      .anyMatch(smg -> Long.valueOf(300L).equals(smg.getSumOfMillisSecBetweenNexts()));
+    assertTrue(has300L);
+
+    // Verify all remaining entries have millisBetweenNexts >= 200L (the minimum)
+    long minMillis = result.stream().flatMap(List::stream)
+      .mapToLong(ScanMetricsGroup::getSumOfMillisSecBetweenNexts).min().orElse(Long.MAX_VALUE);
+    assertEquals(200L, minMillis);
+  }
+
+  /**
    * Test with empty slowest scan metrics queue.
    */
   @Test

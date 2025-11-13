@@ -636,7 +636,10 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.uncovered.index.threads.keepalive.sec";
 
   String USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP = "phoenix.bloomfilter.multikey.pointlookup";
+  // Value of N for the top N slowest scan metrics to be collected. Accepts integer values.
   String SLOWEST_SCAN_METRICS_COUNT = "phoenix.slowest.scan.metrics.count";
+  // Whether to collect region name and server name in the slowest scan metrics. Accepts boolean
+  // values.
   String SCAN_METRICS_BY_REGION_ENABLED = "phoenix.scan.metrics.by.region.enabled";
 
   /**

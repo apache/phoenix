@@ -1548,6 +1548,24 @@ public class PhoenixRuntime {
     return resultSet.getReadMetrics();
   }
 
+  /**
+   * Method to expose the top N slowest scan metrics for a given result set. A typical pattern is:
+   *
+   * <pre>
+   * {@code
+   * List<List<ScanMetricsGroup>> slowestScanMetrics = null;
+   * try (ResultSet rs = stmt.executeQuery()) {
+   *    while(rs.next()) {
+   *      .....
+   *    }
+   *    slowestScanMetrics = PhoenixRuntime.getTopNSlowestScanMetrics(rs);
+   * }
+   * }
+   * </pre>
+   *
+   * @param rs the result set to get the slowest scan metrics
+   * @return a list of lists of {@link ScanMetricsGroup}
+   */
   public static List<List<ScanMetricsGroup>> getTopNSlowestScanMetrics(ResultSet rs)
     throws SQLException {
     PhoenixMonitoredResultSet resultSet = rs.unwrap(PhoenixMonitoredResultSet.class);
