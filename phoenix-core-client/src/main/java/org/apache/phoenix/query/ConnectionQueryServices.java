@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.query;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
@@ -314,4 +315,6 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
   void invalidateServerMetadataCache(List<InvalidateServerMetadataCacheRequest> requests)
     throws Throwable;
+
+  void deleteAllStreamMetadataForTable(Connection conn, String tableName) throws SQLException;
 }

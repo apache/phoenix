@@ -63,7 +63,6 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
   protected QuickFailingTaskRunner pool;
   protected KeyValueBuilder kvBuilder;
   protected RegionCoprocessorEnvironment env;
-  protected TaskBatch<Void> tasks;
   protected boolean disableIndexOnFailure = false;
 
   // This relies on Hadoop Configuration to handle warning about deprecated configs and
@@ -116,6 +115,39 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
   public void write(Multimap<HTableInterfaceReference, Mutation> toWrite,
     final boolean allowLocalUpdates, final int clientVersion)
     throws SingleIndexWriteFailureException {
+    TaskBatch<Void> tasks = new TaskBatch<>(toWrite.asMap().size());
+    addTasks(toWrite, allowLocalUpdates, clientVersion, tasks);
+    submitTasks(tasks);
+  }
+
+  /**
+   * Submits the provided task batch for execution. This method defines the task submission strategy
+   * and must be implemented by concrete subclasses to specify whether tasks should be executed
+   * synchronously (blocking until completion) or asynchronously (fire-and-forget).
+   * @param tasks the batch of index write tasks to submit for execution
+   * @throws SingleIndexWriteFailureException if there is an error during task submission or
+   *                                          execution (implementation-dependent)
+   */
+  protected abstract void submitTasks(TaskBatch<Void> tasks)
+    throws SingleIndexWriteFailureException;
+
+  /**
+   * Adds parallel index write tasks to the provided task batch for execution across multiple index
+   * tables. Each index table gets its own task that will be executed in parallel to optimize write
+   * performance.
+   * @param toWrite           a multimap containing index table references as keys and their
+   *                          corresponding mutations as values. Each table will get its own
+   *                          parallel task.
+   * @param allowLocalUpdates if false, skips creating tasks for writes to the same table as the
+   *                          current region to prevent potential deadlocks
+   * @param clientVersion     the Phoenix client version, used for compatibility checks and
+   *                          version-specific behavior in the index write operations
+   * @param tasks             the task batch to which the newly created index write tasks will be
+   *                          added. This batch needs to be submitted for parallel execution by the
+   *                          caller.
+   */
+  private void addTasks(Multimap<HTableInterfaceReference, Mutation> toWrite,
+    boolean allowLocalUpdates, int clientVersion, TaskBatch<Void> tasks) {
     /*
      * This bit here is a little odd, so let's explain what's going on. Basically, we want to do the
      * writes in parallel to each index table, so each table gets its own task and is submitted to
@@ -128,7 +160,6 @@ public abstract class AbstractParallelWriterIndexCommitter implements IndexCommi
      */
 
     Set<Entry<HTableInterfaceReference, Collection<Mutation>>> entries = toWrite.asMap().entrySet();
-    tasks = new TaskBatch<Void>(entries.size());
     for (Entry<HTableInterfaceReference, Collection<Mutation>> entry : entries) {
       // get the mutations for each table. We leak the implementation here a little bit to save
       // doing a complete copy over of all the index update for each table.

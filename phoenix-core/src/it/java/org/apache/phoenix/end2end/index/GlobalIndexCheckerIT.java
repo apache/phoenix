@@ -1661,7 +1661,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
     }
   }
 
-  static private void commitWithException(Connection conn) {
+  public static void commitWithException(Connection conn) {
     try {
       conn.commit();
       IndexRegionObserver.setFailPreIndexUpdatesForTesting(false);

@@ -25,12 +25,12 @@ import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 
 /**
- * {@link RpcControllerFactory} that should only be used when creating Table for making remote RPCs
- * to the region servers hosting Phoenix SYSTEM tables.
+ * {@link RpcControllerFactory} that sets the appropriate priority of server-server RPC calls
+ * destined for Phoenix SYSTEM tables.
  */
-public class InterRegionServerMetadataRpcControllerFactory extends RpcControllerFactory {
+public class ServerRpcControllerFactory extends RpcControllerFactory {
 
-  public InterRegionServerMetadataRpcControllerFactory(Configuration conf) {
+  public ServerRpcControllerFactory(Configuration conf) {
     super(conf);
   }
 
@@ -53,8 +53,7 @@ public class InterRegionServerMetadataRpcControllerFactory extends RpcController
   }
 
   private HBaseRpcController getController(HBaseRpcController delegate) {
-    // construct a chain of controllers: metadata and delegate controller
-    return new MetadataRpcController(delegate, conf);
+    return new ServerRpcController(delegate, conf);
   }
 
 }

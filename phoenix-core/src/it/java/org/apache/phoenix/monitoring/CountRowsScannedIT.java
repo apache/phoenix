@@ -19,6 +19,7 @@ package org.apache.phoenix.monitoring;
 
 import static org.apache.phoenix.query.QueryServices.USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -321,6 +322,37 @@ public class CountRowsScannedIT extends BaseTest {
       + " WHERE B >= 20) GROUP BY K";
     long count4 = countRowsScannedFromSql(stmt, sqlUnionAllGroupBy);
     assertEquals(142, count4);
+  }
+
+  @Test
+  public void testLimitOffsetWithoutSplit() throws Exception {
+    final String tablename = generateUniqueName();
+    final String[] STRINGS = { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l", "m", "n",
+      "o", "p", "q", "r", "s", "t", "u", "v", "w", "x", "y", "z" };
+    String ddl = "CREATE TABLE " + tablename + " (t_id VARCHAR NOT NULL,\n"
+      + "k1 INTEGER NOT NULL,\n" + "k2 INTEGER NOT NULL,\n" + "C3.k3 INTEGER,\n"
+      + "C2.v1 VARCHAR,\n" + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTestTable(getUrl(), ddl);
+      for (int i = 0; i < 26; i++) {
+        conn.createStatement().execute("UPSERT INTO " + tablename + " values('" + STRINGS[i] + "',"
+          + i + "," + (i + 1) + "," + (i + 2) + ",'" + STRINGS[25 - i] + "')");
+      }
+      conn.commit();
+      int limit = 12;
+      int offset = 5;
+      ResultSet rs;
+      rs = conn.createStatement().executeQuery(
+        "SELECT t_id from " + tablename + " order by t_id limit " + limit + " offset " + offset);
+      int i = 0;
+      while (i < limit) {
+        assertTrue(rs.next());
+        assertEquals("Expected string didn't match for i = " + i, STRINGS[offset + i],
+          rs.getString(1));
+        i++;
+      }
+      assertEquals(limit + offset, getRowsScanned(rs));
+    }
   }
 
   private long countRowsScannedFromSql(Statement stmt, String sql) throws SQLException {

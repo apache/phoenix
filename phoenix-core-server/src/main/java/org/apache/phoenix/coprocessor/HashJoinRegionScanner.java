@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -59,7 +60,6 @@ import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.SingleKeyValueTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.util.ClientUtil;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.TupleUtil;
 
 public class HashJoinRegionScanner implements RegionScanner {
@@ -306,7 +306,6 @@ public class HashJoinRegionScanner implements RegionScanner {
   private boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext)
     throws IOException {
     try {
-      long startTime = EnvironmentEdgeManager.currentTimeMillis();
       while (shouldAdvance()) {
         if (scannerContext != null) {
           hasMore =
@@ -322,7 +321,10 @@ public class HashJoinRegionScanner implements RegionScanner {
         }
         Cell cell = result.get(0);
         processResults(result, false);
-        if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+        if (
+          PhoenixScannerContext.isReturnImmediately(scannerContext)
+            || PhoenixScannerContext.isTimedOut(scannerContext, pageSizeMs)
+        ) {
           byte[] rowKey = CellUtil.cloneRow(cell);
           result.clear();
           getDummyResult(rowKey, result);

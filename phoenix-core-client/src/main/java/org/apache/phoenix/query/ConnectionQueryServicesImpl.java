@@ -56,6 +56,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_HBASE_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_COLUMN_NAME_BYTES;
@@ -186,6 +188,7 @@ import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.ipc.controller.InvalidateMetadataCacheControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerSideRPCControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
@@ -4134,7 +4137,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
             try {
               GLOBAL_QUERY_SERVICES_COUNTER.increment();
               LOGGER.info("An instance of ConnectionQueryServices was created.");
-              connection = openConnection(config);
+              boolean isServerSideConnection =
+                config.getBoolean(QueryUtil.IS_SERVER_CONNECTION, false);
+              if (isServerSideConnection) {
+                Configuration clonedConfiguration = PropertiesUtil.cloneConfig(config);
+                clonedConfiguration.setClass(CUSTOM_CONTROLLER_CONF_KEY,
+                  ServerRpcControllerFactory.class, RpcControllerFactory.class);
+                connection = openConnection(clonedConfiguration);
+              } else {
+                connection = openConnection(config);
+              }
               hConnectionEstablished = true;
               boolean lastDDLTimestampValidationEnabled =
                 getProps().getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
@@ -6906,6 +6918,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     } finally {
       metricsMetadataCachingSource
         .addMetadataCacheInvalidationTotalTime(stopWatch.stop().elapsedMillis());
+    }
+  }
+
+  /*
+   * Delete any metadata related to this table in the System tables for Streams.
+   */
+  @Override
+  public void deleteAllStreamMetadataForTable(java.sql.Connection conn, String tableName)
+    throws SQLException {
+    String deleteStreamStatusQuery =
+      "DELETE FROM " + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME = ?";
+    String deleteStreamPartitionsQuery =
+      "DELETE FROM " + SYSTEM_CDC_STREAM_NAME + " WHERE TABLE_NAME = ?";
+    LOGGER.info("Deleting Stream Metadata for table {}", tableName);
+    try (PreparedStatement ps = conn.prepareStatement(deleteStreamStatusQuery)) {
+      ps.setString(1, tableName);
+      ps.executeUpdate();
+      conn.commit();
+    }
+    try (PreparedStatement ps = conn.prepareStatement(deleteStreamPartitionsQuery)) {
+      ps.setString(1, tableName);
+      ps.executeUpdate();
+      conn.commit();
     }
   }
 

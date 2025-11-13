@@ -44,6 +44,9 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
+import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSourceImpl;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.types.PDouble;
@@ -68,7 +71,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 /**
  * Tests for BSON.
  */
-@Category(ParallelStatsDisabledTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class Bson4IT extends ParallelStatsDisabledIT {
 
@@ -291,7 +294,8 @@ public class Bson4IT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
 
       String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
-        + " CONSTRAINT pk PRIMARY KEY(PK1))";
+        + " CONSTRAINT pk PRIMARY KEY(PK1))"
+        + " \"org.apache.hadoop.hbase.index.lazy.post_batch.write\"=true";
 
       final String indexDdl1;
       if (!this.coveredIndex) {
@@ -367,6 +371,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       stmt.executeUpdate();
 
       conn.commit();
+      Thread.sleep(500);
 
       ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) FROM " + tableName);
       assertTrue(rs.next());
@@ -450,7 +455,23 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       validateExplainPlan(ps, tableName, "FULL SCAN ");
+      verifyNoReadRepair();
     }
+  }
+
+  private void verifyNoReadRepair() {
+    GlobalIndexCheckerSourceImpl indexCheckerSource =
+      (GlobalIndexCheckerSourceImpl) MetricsIndexerSourceFactory.getInstance()
+        .getGlobalIndexCheckerSource();
+
+    long indexRepairs = indexCheckerSource.getMetricsRegistry()
+      .getCounter(GlobalIndexCheckerSource.INDEX_REPAIR, 0).value();
+    assertEquals("No index repairs should occur during test execution", 0, indexRepairs);
+
+    long indexRepairFailures = indexCheckerSource.getMetricsRegistry()
+      .getCounter(GlobalIndexCheckerSource.INDEX_REPAIR_FAILURE, 0).value();
+    assertEquals("No index repair failures should occur during test execution", 0,
+      indexRepairFailures);
   }
 
   @Test
