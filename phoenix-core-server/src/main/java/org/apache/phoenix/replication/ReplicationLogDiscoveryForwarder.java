@@ -181,6 +181,16 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
                 .getReplicationShardDirectoryManager()
                 .getNextRound(getLastRoundProcessed())).isEmpty()) {
             LOG.info("Processed all the replication log files for {}", logGroup);
+            // if this RS is still in STORE_AND_FORWARD mode like when it didn't process any file
+            // move this RS to SYNC_AND_FORWARD
+            if (logGroup.checkAndSetMode(STORE_AND_FORWARD, SYNC_AND_FORWARD)) {
+                // replication mode switched, notify the event handler
+                try {
+                    logGroup.sync();
+                } catch (IOException e) {
+                    LOG.info("Failed to send sync event to {}", logGroup);
+                }
+            }
             // TODO ensure the mTime on the group store record is older than the wait sync timeout
             logGroup.setHAGroupStatusToSync();
         }
