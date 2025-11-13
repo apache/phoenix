@@ -42,6 +42,8 @@ import org.apache.phoenix.coprocessorclient.metrics.MetricsPhoenixCoprocessorSou
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.protobuf.ProtobufUtil;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.replication.reader.ReplicationLogReplayService;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -65,8 +67,15 @@ public class PhoenixRegionServerEndpoint
         this.conf = env.getConfiguration();
         this.metricsSource = MetricsPhoenixCoprocessorSourceFactory
                                 .getInstance().getMetadataCachingSource();
-        // Start async prewarming of HAGroupStoreClients
-        startHAGroupStoreClientPrewarming();
+        // Start async prewarming of HAGroupStoreClients if enabled
+        if (conf.getBoolean(
+                QueryServices.HA_GROUP_STORE_CLIENT_PREWARM_ENABLED,
+                QueryServicesOptions
+                        .DEFAULT_HA_GROUP_STORE_CLIENT_PREWARM_ENABLED)) {
+            startHAGroupStoreClientPrewarming();
+        } else {
+            LOGGER.info("HAGroupStoreClient prewarming is disabled");
+        }
         // Start replication log replay
         ReplicationLogReplayService.getInstance(conf).start();
     }
