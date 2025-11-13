@@ -25,11 +25,15 @@ import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -51,6 +55,8 @@ import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class SlowestScanMetricsIT extends BaseTest {
+  private static final Random RAND = new Random(11);
+
   @BeforeClass
   public static void setup() throws Exception {
     Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
@@ -808,6 +814,82 @@ public class SlowestScanMetricsIT extends BaseTest {
       }
       // Total BROC is 1 as data is read from single region of view index table.
       assertEquals(1, totalBroc);
+    }
+  }
+
+  @Test
+  public void testMultiKeyPointLookupWithPaging() throws Exception {
+    int topN = 2;
+    String tableName = generateUniqueName();
+    int totalRows = 10000;
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      createTableAndUpsertData(conn, tableName, "");
+      String dml = "UPSERT INTO " + tableName + " VALUES(?, ?, ?, ?)";
+      PreparedStatement ps = conn.prepareStatement(dml);
+      for (int i = 0; i < totalRows; ++i) {
+        ps.setInt(1, i % 3);
+        ps.setString(2, "k2_" + i);
+        ps.setString(3, "v1_" + i);
+        ps.setString(4, "v2_" + i % 10);
+        ps.executeUpdate();
+        if (i != 0 && i % 100 == 0) {
+          conn.commit();
+        }
+      }
+      conn.commit();
+      TestUtil.flush(getUtility(), TableName.valueOf(tableName));
+    }
+    Properties props = new Properties();
+    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, String.valueOf(topN));
+    props.setProperty(QueryServices.SCAN_METRICS_BY_REGION_ENABLED, "true");
+    props.setProperty(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, String.valueOf(5));
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      int rowKeyCount = 1000;
+      List<String> inList =
+        Stream.generate(() -> "(?, ?)").limit(rowKeyCount).collect(Collectors.toList());
+      String dql = String.format("select k1, k2 from %s where (k1, k2) IN (%s)", tableName,
+        String.join(",", inList));
+      PreparedStatement ps = conn.prepareStatement(dql);
+      for (int i = 0; i < rowKeyCount; i++) {
+        ps.setInt(2 * i + 1, RAND.nextInt(3));
+        if (RAND.nextBoolean()) {
+          ps.setString(2 * i + 2, "k2_" + RAND.nextInt(totalRows));
+        } else {
+          // generate a non-existing row key
+          ps.setString(2 * i + 2, "k2_" + 78123);
+        }
+      }
+      ResultSet rs = ps.executeQuery();
+      int rowCount = 0;
+      while (rs.next()) {
+        rowCount++;
+      }
+      assertTrue(rowKeyCount >= rowCount);
+      JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
+
+      long brocFromSlowestScanMetrics;
+      // Outer array has size 1 as its scan of single region only.
+      assertEquals(1, slowestScanMetricsJsonArray.size());
+      JsonArray groupArray = slowestScanMetricsJsonArray.get(0).getAsJsonArray();
+      // Inner array has size 1 as it's a simple query and not a query with subquery or
+      // JOIN operation.
+      assertEquals(1, groupArray.size());
+      JsonObject groupJson = groupArray.get(0).getAsJsonObject();
+      assertEquals(tableName, groupJson.get("table").getAsString());
+      JsonArray regionsArray = groupJson.get("regions").getAsJsonArray();
+      assertEquals(1, regionsArray.size());
+      JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
+      assertNotNull(regionJson.get("region"));
+      assertNotNull(regionJson.get("server"));
+      // BROC is 1 as it's a simple query so, only data block is read.
+      brocFromSlowestScanMetrics = regionJson.get("broc").getAsLong();
+      assertTrue(regionJson.get("rp").getAsLong() > 1);
+
+      Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+      long brocFromReadMetrics = metrics.get(tableName).get(MetricType.BLOCK_READ_OPS_COUNT);
+      assertEquals(brocFromReadMetrics, brocFromSlowestScanMetrics);
+      long pagedRowsCounter = metrics.get(tableName).get(MetricType.PAGED_ROWS_COUNTER);
+      assertTrue(pagedRowsCounter > 0);
     }
   }
 
