@@ -351,7 +351,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Set the HA group status to store and forward (ACTIVE_NOT_IN_SYNC)
-        haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName);
+        assertEquals(0L, haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the status was updated to ACTIVE_NOT_IN_SYNC
@@ -364,7 +364,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         // Set the HA group status to store and forward again and verify
         // that getLastSyncStateTimeInMs is same (ACTIVE_NOT_IN_SYNC)
         // The time should only update when we move to AIS to ANIS
-        haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName);
+        assertEquals(0L, haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         Optional<HAGroupStoreRecord> updatedRecordOpt2 = haGroupStoreManager.getHAGroupStoreRecord(haGroupName);
         assertTrue(updatedRecordOpt2.isPresent());
@@ -384,10 +384,13 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, initialRecord.getHAGroupState());
         assertNotNull(initialRecord.getLastSyncStateTimeInMs());
 
+        // Setting it too soon should return wait time.
+        long transitionWaitTime = haGroupStoreManager.setHAGroupStatusToSync(haGroupName);
+        assert(transitionWaitTime > 0);
+
         // Set the HA group status to sync (ACTIVE), we need to wait for ZK_SESSION_TIMEOUT * Multiplier
-        Thread.sleep((long) Math.ceil(config.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT)
-                * ZK_SESSION_TIMEOUT_MULTIPLIER));
-        haGroupStoreManager.setHAGroupStatusToSync(haGroupName);
+        Thread.sleep(transitionWaitTime);
+        assertEquals(0L, haGroupStoreManager.setHAGroupStatusToSync(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the state was updated to ACTIVE_IN_SYNC
@@ -495,7 +498,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Call setReaderToDegraded
-        haGroupStoreManager.setReaderToDegraded(haGroupName);
+        assertEquals(0L, haGroupStoreManager.setReaderToDegraded(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the status was updated to DEGRADED_STANDBY
@@ -524,7 +527,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Call setReaderToHealthy
-        haGroupStoreManager.setReaderToHealthy(haGroupName);
+        assertEquals(0L, haGroupStoreManager.setReaderToHealthy(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the status was updated to STANDBY
@@ -554,7 +557,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Test setReaderToDegraded with invalid state
         try {
-            haGroupStoreManager.setReaderToDegraded(haGroupName);
+            assertEquals(0L, haGroupStoreManager.setReaderToDegraded(haGroupName));
             fail("Expected InvalidClusterRoleTransitionException for setReaderToDegraded with ACTIVE_IN_SYNC state");
         } catch (InvalidClusterRoleTransitionException e) {
             // Expected behavior
@@ -564,7 +567,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Test setReaderToHealthy with invalid state
         try {
-            haGroupStoreManager.setReaderToHealthy(haGroupName);
+            assertEquals(0L, haGroupStoreManager.setReaderToHealthy(haGroupName));
             fail("Expected InvalidClusterRoleTransitionException for setReaderToHealthy with ACTIVE_IN_SYNC state");
         } catch (InvalidClusterRoleTransitionException e) {
             // Expected behavior
@@ -602,10 +605,10 @@ public class HAGroupStoreManagerIT extends BaseTest {
         // Move cluster1 from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC,
         //    we can move after DEFAULT_ZK_SESSION_TIMEOUT * ZK_SESSION_TIMEOUT_MULTIPLIER
         Thread.sleep(20 * 1000);
-        cluster1HAManager.setHAGroupStatusToSync(haGroupName);
+        assertEquals(0L, cluster1HAManager.setHAGroupStatusToSync(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        cluster2HAManager.setReaderToHealthy(haGroupName);
+        assertEquals(0L, cluster2HAManager.setReaderToHealthy(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Simulates action taken by reader to complete the replay and become new ACTIVE
@@ -617,7 +620,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
                                          lastSyncStateTimeInMs) -> {
             try {
                 if (toState == HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE) {
-                    cluster2HAManager.setHAGroupStatusToSync(haGroupName1);
+                    assertEquals(0L, cluster2HAManager.setHAGroupStatusToSync(haGroupName1));
                 }
             } catch (Exception e) {
                 fail("Peer Cluster should be able to move to ACTIVE_IN_SYNC" + e.getMessage());
@@ -694,10 +697,10 @@ public class HAGroupStoreManagerIT extends BaseTest {
         // Move cluster1 from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC,
         //    we can move after DEFAULT_ZK_SESSION_TIMEOUT * ZK_SESSION_TIMEOUT_MULTIPLIER
         Thread.sleep(20 * 1000);
-        cluster1HAManager.setHAGroupStatusToSync(haGroupName);
+        assertEquals(0L, cluster1HAManager.setHAGroupStatusToSync(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        cluster2HAManager.setReaderToHealthy(haGroupName);
+        assertEquals(0L, cluster2HAManager.setReaderToHealthy(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // === INITIAL STATE VERIFICATION ===
@@ -733,7 +736,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // === STEP 3: Operator decides to abort failover ===
         // Set cluster2 (which is in STANDBY_TO_ACTIVE) to ABORT_TO_STANDBY
-        cluster2HAManager.setHAGroupStatusToAbortToStandby(haGroupName);
+        assertEquals(0L, cluster2HAManager.setHAGroupStatusToAbortToStandby(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // === STEP 4: Verify automatic cluster1 abort reaction ===
@@ -805,7 +808,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         // Move cluster1 from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC,
         //    we can move after DEFAULT_ZK_SESSION_TIMEOUT * ZK_SESSION_TIMEOUT_MULTIPLIER
         Thread.sleep(20 * 1000);
-        cluster1HAManager.setHAGroupStatusToSync(haGroupName);
+        assertEquals(0L, cluster1HAManager.setHAGroupStatusToSync(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // === INITIAL STATE VERIFICATION ===
@@ -824,7 +827,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // === STEP 1: Transition to store-and-forward mode ===
         // Move cluster1 from ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC (store-and-forward mode)
-        cluster1HAManager.setHAGroupStatusToStoreAndForward(haGroupName);
+        assertEquals(0L, cluster1HAManager.setHAGroupStatusToStoreAndForward(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify cluster1 is now in store-and-forward state
@@ -851,7 +854,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         // Move cluster1 back from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC
         // Wait for the required time before transitioning back to sync
         Thread.sleep(20 * 1000);
-        cluster1HAManager.setHAGroupStatusToSync(haGroupName);
+        assertEquals(0L, cluster1HAManager.setHAGroupStatusToSync(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify cluster1 is back in sync state
