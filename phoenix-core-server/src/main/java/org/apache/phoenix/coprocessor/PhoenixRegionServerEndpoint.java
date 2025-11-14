@@ -215,6 +215,18 @@ public class PhoenixRegionServerEndpoint
     /**
      * Prewarms HAGroupStoreClients in background thread with retry.
      * Initializes all HA group clients asynchronously at startup.
+     * <p>
+     * Phase 1 : Retry indefinitely until HAGroupStoreManager is initialized
+     * and HAGroupNames are retrieved. If the SYSTEM.HA_GROUP table region
+     * is not ready, manager.getHAGroupNames() would return an exception.
+     * So we need to retry until the SYSTEM.HA_GROUP table region is ready
+     * and then retrieve the HAGroupNames for prewarming.
+     *
+     * <p>
+     * Phase 2 : Prewarm individual HAGroupStoreClients with retry.
+     * If the HAGroupStoreClient is not ready/initialized,
+     * manager.getClusterRoleRecord(haGroup) would throw an exception.
+     * So we need to retry until the HAGroupStoreClient is ready/initialized.
      */
     private void startHAGroupStoreClientPrewarming() {
         prewarmExecutor = Executors.newSingleThreadExecutor(r -> {
@@ -224,17 +236,44 @@ public class PhoenixRegionServerEndpoint
         });
 
         prewarmExecutor.submit(() -> {
-            try {
-                HAGroupStoreManager manager = HAGroupStoreManager.getInstance(conf);
-                if (manager == null) {
-                    LOGGER.warn("HAGroupStoreManager is null, skipping prewarming");
+            HAGroupStoreManager manager = null;
+            List<String> pending = null;
+            // Phase 1: Retry indefinitely until HAGroupStoreManager is initialized
+            // and HAGroupNames are retrieved.
+            while (pending == null) {
+                try {
+                    manager = HAGroupStoreManager.getInstance(conf);
+                    if (manager != null) {
+                        pending = new ArrayList<>(manager.getHAGroupNames());
+                        LOGGER.info("Starting prewarming for {} HAGroupStoreClients",
+                                pending.size());
+                    } else {
+                        LOGGER.debug("HAGroupStoreManager is null, retrying in 2s...");
+                    }
+
+                    if (pending == null) {
+                        Thread.sleep(2000);
+                    }
+                } catch (InterruptedException e) {
+                    LOGGER.info("HAGroupStoreClient prewarming interrupted during "
+                            + "initialization");
+                    Thread.currentThread().interrupt();
                     return;
+                } catch (Exception e) {
+                    LOGGER.debug("Failed to initialize HAGroupStoreManager, retrying in "
+                            + "2s...", e);
+                    try {
+                        Thread.sleep(2000);
+                    } catch (InterruptedException ie) {
+                        LOGGER.info("HAGroupStoreClient prewarming interrupted");
+                        Thread.currentThread().interrupt();
+                        return;
+                    }
                 }
+            }
 
-                List<String> pending = new ArrayList<>(manager.getHAGroupNames());
-
-                LOGGER.info("Starting prewarming for {} HAGroupStoreClients", pending.size());
-
+            // Phase 2: Prewarm individual HAGroupStoreClients with retry
+            try {
                 while (!pending.isEmpty()) {
                     Iterator<String> iterator = pending.iterator();
                     while (iterator.hasNext()) {
@@ -250,16 +289,14 @@ public class PhoenixRegionServerEndpoint
                     }
 
                     if (!pending.isEmpty()) {
-                        Thread.sleep(2000); // Retry after 2s
+                        Thread.sleep(2000);
                     }
                 }
 
                 LOGGER.info("Completed prewarming all HAGroupStoreClients");
             } catch (InterruptedException e) {
-                LOGGER.info("HAGroupStoreClient prewarming interrupted during shutdown");
+                LOGGER.info("HAGroupStoreClient prewarming interrupted during warmup");
                 Thread.currentThread().interrupt();
-            } catch (Exception e) {
-                LOGGER.error("Error during HAGroupStoreClient prewarming", e);
             }
         });
     }
