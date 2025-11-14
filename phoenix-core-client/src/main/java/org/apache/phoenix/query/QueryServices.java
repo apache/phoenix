@@ -389,6 +389,10 @@ public interface QueryServices extends SQLCloseable {
     // Check HAGroup is Stale for mutations
     public static final String HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED = "phoenix.ha.group.stale.for.mutation.check.enabled";
 
+    // Enable prewarming of HAGroupStoreClients at RegionServer startup
+    String HA_GROUP_STORE_CLIENT_PREWARM_ENABLED
+            = "phoenix.ha.group.store.client.prewarm.enabled";
+
     //Enable Thread Pool Creation in CQSI to be used for HBase Client.
     String CQSI_THREAD_POOL_ENABLED = "phoenix.cqsi.thread.pool.enabled";
     //CQSI Thread Pool Related Configuration.
