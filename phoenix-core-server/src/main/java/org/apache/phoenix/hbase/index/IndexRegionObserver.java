@@ -34,7 +34,6 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -649,9 +648,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // We don't want to check for mutation blocking for the system ha group table
       if (!tableName.equals(SYSTEM_HA_GROUP_NAME)) {
         // Extract HAGroupName from the mutations
-        final Set<String> haGroupNames = extractHAGroupNameAttribute(miniBatchOp);
+        final String haGroupName = extractHAGroupNameAttribute(miniBatchOp);
         // Check if mutation is blocked for any of the HAGroupNames
-        for (String haGroupName : haGroupNames) {
+        if (StringUtils.isNotBlank(haGroupName)) {
           // TODO: Below approach might be slow need to figure out faster way,
           // slower part is getting haGroupStoreClient We can also cache
           // roleRecord (I tried it and still it's slow due to haGroupStoreClient
@@ -660,8 +659,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
           boolean isHAGroupOnClientStale = haGroupStoreManager.isHAGroupOnClientStale(haGroupName);
           if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
-            throw new StaleClusterRoleRecordException(
-              String.format("HAGroupStoreRecord is stale for haGroup %s on client", haGroupName));
+            throw new StaleClusterRoleRecordException(String
+              .format("HAGroupStoreRecord is stale for haGroup %s on " + "client", haGroupName));
           }
 
           // Check if mutation's haGroup is stale
@@ -670,7 +669,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               && haGroupStoreManager.isMutationBlocked(haGroupName)
           ) {
             throw new MutationBlockedIOException(
-              "Blocking Mutation as Some CRRs are in " + "ACTIVE_TO_STANDBY state and "
+              "Blocking Mutation as Some CRRs " + "are in ACTIVE_TO_STANDBY state and "
                 + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
           }
         }
@@ -684,17 +683,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
-  private Set<String>
-    extractHAGroupNameAttribute(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
-    Set<String> haGroupNames = new HashSet<>();
+  private String extractHAGroupNameAttribute(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
     for (int i = 0; i < miniBatchOp.size(); i++) {
       Mutation m = miniBatchOp.getOperation(i);
       byte[] haGroupName = m.getAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
       if (haGroupName != null) {
-        haGroupNames.add(new String(haGroupName, StandardCharsets.UTF_8));
+        return Bytes.toString(haGroupName);
       }
     }
-    return haGroupNames;
+    return null;
   }
 
   @Override
