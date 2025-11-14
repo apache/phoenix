@@ -249,9 +249,6 @@ public class PhoenixRegionServerEndpoint
                                 pending.size());
                     } else {
                         LOGGER.debug("HAGroupStoreManager is null, retrying in 2s...");
-                    }
-
-                    if (pending == null) {
                         Thread.sleep(2000);
                     }
                 } catch (InterruptedException e) {
