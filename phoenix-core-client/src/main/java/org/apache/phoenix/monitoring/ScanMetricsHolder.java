@@ -17,10 +17,6 @@
  */
 package org.apache.phoenix.monitoring;
 
-import static org.apache.phoenix.monitoring.MetricType.BLOCK_READ_OPS_COUNT;
-import static org.apache.phoenix.monitoring.MetricType.BYTES_READ_FROM_BLOCKCACHE;
-import static org.apache.phoenix.monitoring.MetricType.BYTES_READ_FROM_FS;
-import static org.apache.phoenix.monitoring.MetricType.BYTES_READ_FROM_MEMSTORE;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_BYTES_IN_REMOTE_RESULTS;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_BYTES_REGION_SERVER_RESULTS;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_MILLS_BETWEEN_NEXTS;
@@ -32,10 +28,7 @@ import static org.apache.phoenix.monitoring.MetricType.COUNT_ROWS_SCANNED;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_CALLS;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_RETRIES;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_SCANNED_REGIONS;
-import static org.apache.phoenix.monitoring.MetricType.FS_READ_TIME;
 import static org.apache.phoenix.monitoring.MetricType.PAGED_ROWS_COUNTER;
-import static org.apache.phoenix.monitoring.MetricType.RPC_SCAN_PROCESSING_TIME;
-import static org.apache.phoenix.monitoring.MetricType.RPC_SCAN_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
 
 import java.io.IOException;
@@ -59,13 +52,6 @@ public class ScanMetricsHolder {
   private final CombinableMetric countOfRowsFiltered;
   private final CombinableMetric countOfBytesScanned;
   private final CombinableMetric countOfRowsPaged;
-  private final CombinableMetric fsReadTime;
-  private final CombinableMetric countOfBytesReadFromFS;
-  private final CombinableMetric countOfBytesReadFromMemstore;
-  private final CombinableMetric countOfBytesReadFromBlockcache;
-  private final CombinableMetric countOfBlockReadOps;
-  private final CombinableMetric rpcScanProcessingTime;
-  private final CombinableMetric rpcScanQueueWaitTime;
   private Map<String, Long> scanMetricMap;
   private Object scan;
 
@@ -97,13 +83,6 @@ public class ScanMetricsHolder {
     countOfRowsFiltered = readMetrics.allotMetric(COUNT_ROWS_FILTERED, tableName);
     countOfBytesScanned = readMetrics.allotMetric(SCAN_BYTES, tableName);
     countOfRowsPaged = readMetrics.allotMetric(PAGED_ROWS_COUNTER, tableName);
-    fsReadTime = readMetrics.allotMetric(FS_READ_TIME, tableName);
-    countOfBytesReadFromFS = readMetrics.allotMetric(BYTES_READ_FROM_FS, tableName);
-    countOfBytesReadFromMemstore = readMetrics.allotMetric(BYTES_READ_FROM_MEMSTORE, tableName);
-    countOfBytesReadFromBlockcache = readMetrics.allotMetric(BYTES_READ_FROM_BLOCKCACHE, tableName);
-    countOfBlockReadOps = readMetrics.allotMetric(BLOCK_READ_OPS_COUNT, tableName);
-    rpcScanProcessingTime = readMetrics.allotMetric(RPC_SCAN_PROCESSING_TIME, tableName);
-    rpcScanQueueWaitTime = readMetrics.allotMetric(RPC_SCAN_QUEUE_WAIT_TIME, tableName);
   }
 
   public CombinableMetric getCountOfRemoteRPCcalls() {
@@ -162,34 +141,6 @@ public class ScanMetricsHolder {
     return countOfRowsPaged;
   }
 
-  public CombinableMetric getFsReadTime() {
-    return fsReadTime;
-  }
-
-  public CombinableMetric getCountOfBytesReadFromFS() {
-    return countOfBytesReadFromFS;
-  }
-
-  public CombinableMetric getCountOfBytesReadFromMemstore() {
-    return countOfBytesReadFromMemstore;
-  }
-
-  public CombinableMetric getCountOfBytesReadFromBlockcache() {
-    return countOfBytesReadFromBlockcache;
-  }
-
-  public CombinableMetric getCountOfBlockReadOps() {
-    return countOfBlockReadOps;
-  }
-
-  public CombinableMetric getRpcScanProcessingTime() {
-    return rpcScanProcessingTime;
-  }
-
-  public CombinableMetric getRpcScanQueueWaitTime() {
-    return rpcScanQueueWaitTime;
-  }
-
   public void setScanMetricMap(Map<String, Long> scanMetricMap) {
     this.scanMetricMap = scanMetricMap;
   }
@@ -203,4 +154,5 @@ public class ScanMetricsHolder {
       return "{\"Exception while converting scan metrics to Json\":\"" + e.getMessage() + "\"}";
     }
   }
+
 }

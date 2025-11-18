@@ -28,7 +28,7 @@
   <description>Compatibility module for HBase 2.6.4+</description>
 
   <properties>
-    <hbase26.compat.version>2.6.4-SNAPSHOT</hbase26.compat.version>
+    <hbase26.compat.version>2.6.4-hadoop3</hbase26.compat.version>
   </properties>
 
   <dependencies>

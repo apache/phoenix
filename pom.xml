@@ -54,6 +54,7 @@
     <module>phoenix-core</module>
     <module>phoenix-pherf</module>
     <module>phoenix-tracing-webapp</module>
+    <!-- shaded artifact and assembly modules are added in shade-and-assembly profile -->
   </modules>
 
   <scm>
@@ -79,7 +80,7 @@
     <hbase-2.5.runtime.version>2.5.12-hadoop3</hbase-2.5.runtime.version>
     <hbase-2.6.0.runtime.version>2.6.1-hadoop3</hbase-2.6.0.runtime.version>
     <hbase-2.6.3.runtime.version>2.6.3-hadoop3</hbase-2.6.3.runtime.version>
-    <hbase-2.6.runtime.version>2.6.4-SNAPSHOT</hbase-2.6.runtime.version>
+    <hbase-2.6.runtime.version>2.6.4-hadoop3</hbase-2.6.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -2194,7 +2195,6 @@
       </activation>
       <properties>
         <hbase.profile>2.6</hbase.profile>
-        <!-- Same compat version as 2.6.0, but different Hadoop version -->
         <hbase.compat.version>2.6.4</hbase.compat.version>
         <hbase.version>${hbase-2.6.runtime.version}</hbase.version>
       </properties>
@@ -2210,7 +2210,6 @@
       </activation>
       <properties>
         <hbase.profile>2.6.3</hbase.profile>
-        <!-- Same compat version as 2.6.0, but different Hadoop version -->
         <hadoop.version>3.4.1</hadoop.version>
         <hbase.compat.version>2.6.0</hbase.compat.version>
         <hbase.version>${hbase-2.6.3.runtime.version}</hbase.version>
