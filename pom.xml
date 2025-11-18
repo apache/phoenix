@@ -2211,7 +2211,6 @@
       </activation>
       <properties>
         <hbase.profile>2.6.3</hbase.profile>
-        <hadoop.version>3.4.1</hadoop.version>
         <hbase.compat.version>2.6.0</hbase.compat.version>
         <hbase.version>${hbase-2.6.3.runtime.version}</hbase.version>
       </properties>
