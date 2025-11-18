@@ -4060,26 +4060,35 @@ public class MetaDataClient {
     String schemaName = statement.getTableName().getSchemaName();
     String cdcTableName = statement.getCdcObjName().getName();
     String parentTableName = statement.getTableName().getTableName();
-    String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
-    // Mark CDC Stream as Disabled
-    long cdcIndexTimestamp =
-      connection.getTable(SchemaUtil.getTableName(schemaName, indexName)).getTimeStamp();
-    String fullParentTableName = SchemaUtil.getTableName(schemaName, parentTableName);
-    String streamName = String.format(CDC_STREAM_NAME_FORMAT, fullParentTableName, cdcTableName,
-      cdcIndexTimestamp, CDCUtil.getCDCCreationUTCDateTime(cdcIndexTimestamp));
-    markCDCStreamStatus(fullParentTableName, streamName, CDCUtil.CdcStreamStatus.DISABLED);
-    // Dropping the virtual CDC Table
-    dropTable(schemaName, cdcTableName, parentTableName, PTableType.CDC, statement.ifExists(),
-      false, false);
-    // Dropping the uncovered index associated with the CDC Table
+    boolean ifExists = statement.ifExists();
+    MutationState mutationState = new MutationState(0, 0, connection);
     try {
-      return dropTable(schemaName, indexName, parentTableName, PTableType.INDEX,
-        statement.ifExists(), false, false);
-    } catch (SQLException e) {
-      throw new SQLExceptionInfo.Builder(SQLExceptionCode.fromErrorCode(e.getErrorCode()))
-        .setTableName(statement.getCdcObjName().getName()).setRootCause(e.getCause()).build()
-        .buildException();
+        String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
+        // Mark CDC Stream as Disabled
+        long cdcIndexTimestamp =
+                connection.getTable(SchemaUtil.getTableName(schemaName, indexName)).getTimeStamp();
+        String fullParentTableName = SchemaUtil.getTableName(schemaName, parentTableName);
+        String streamName = String.format(CDC_STREAM_NAME_FORMAT, fullParentTableName, cdcTableName,
+                cdcIndexTimestamp, CDCUtil.getCDCCreationUTCDateTime(cdcIndexTimestamp));
+        markCDCStreamStatus(fullParentTableName, streamName, CDCUtil.CdcStreamStatus.DISABLED);
+        // Dropping the virtual CDC Table
+        dropTable(schemaName, cdcTableName, parentTableName, PTableType.CDC, statement.ifExists(),
+                false, false);
+        // Dropping the uncovered index associated with the CDC Table
+        try {
+            mutationState = dropTable(schemaName, indexName, parentTableName, PTableType.INDEX,
+                    statement.ifExists(), false, false);
+        } catch (SQLException e) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.fromErrorCode(e.getErrorCode()))
+                    .setTableName(statement.getCdcObjName().getName()).setRootCause(e.getCause()).build()
+                    .buildException();
+        }
+    } catch (MetaDataEntityNotFoundException e) {
+        if (!ifExists) {
+            throw e;
+        }
     }
+    return mutationState;
   }
 
   private void markCDCStreamStatus(String tableName, String streamName,
