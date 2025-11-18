@@ -257,7 +257,6 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
           init();
           initialized = true;
         }
-        long startTime = EnvironmentEdgeManager.currentTimeMillis();
         do {
           if (raw) {
             hasMore = (scannerContext == null)
