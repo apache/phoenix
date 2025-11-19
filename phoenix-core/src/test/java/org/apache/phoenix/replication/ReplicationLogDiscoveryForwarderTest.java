@@ -82,7 +82,7 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
                 } catch (IOException e) {
                     throw new RuntimeException(e);
                 }
-                return null;
+                return 0L;
             }
         }).when(haGroupStoreManager).setHAGroupStatusToSync(haGroupName);
 
@@ -140,5 +140,36 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
         } finally {
             executor.shutdownNow();
         }
+    }
+
+    @Test
+    public void testSyncModeUpdateWaitTime() throws Exception {
+        final long[] waitTime = {8L};
+        int roundDurationSeconds =
+                logGroup.getFallbackShardManager().getReplicationRoundDurationSeconds();
+
+        doAnswer(new Answer<Object>() {
+            @Override
+            public Object answer(InvocationOnMock invocation) {
+                long ret = 0L;
+                if (waitTime[0] > 0) {
+                    ret = waitTime[0];
+                    // reset to 0
+                    waitTime[0] = 0;
+                } else {
+                    // explicitly set the replication mode to SYNC
+                    logGroup.setMode(SYNC);
+                    try {
+                        logGroup.sync();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+                return ret;
+            }
+        }).when(haGroupStoreManager).setHAGroupStatusToSync(haGroupName);
+        Thread.sleep(roundDurationSeconds * 4 * 1000);
+        // we should have switched back to the SYNC mode
+        assertEquals(SYNC, logGroup.getMode());
     }
 }

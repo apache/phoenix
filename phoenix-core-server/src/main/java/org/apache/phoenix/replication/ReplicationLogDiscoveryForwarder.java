@@ -27,6 +27,7 @@ import org.apache.phoenix.jdbc.ClusterType;
 import org.apache.phoenix.jdbc.HAGroupStateListener;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
+import org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogForwarderSourceFactory;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
@@ -49,10 +50,12 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
     public static final String REPLICATION_LOG_COPY_THROUGHPUT_BYTES_PER_MS_KEY =
             "phoenix.replication.log.copy.throughput.bytes.per.ms";
     // TODO: come up with a better default after testing
-    public static final double DEFAULT_LOG_COPY_THROUGHPUT_BYTES_PER_MS = 1;
+    public static final double DEFAULT_LOG_COPY_THROUGHPUT_BYTES_PER_MS = 1.0;
 
     private final ReplicationLogGroup logGroup;
-    private double copyThroughputThresholdBytesPerMs;
+    private final double copyThroughputThresholdBytesPerMs;
+    // the timestamp (in future) at which we will attempt to set the HAGroup state to SYNC
+    private long syncUpdateTS;
 
     /**
      * Create a tracker for the replication logs in the fallback cluster.
@@ -76,6 +79,8 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
         this.copyThroughputThresholdBytesPerMs =
                 conf.getDouble(REPLICATION_LOG_COPY_THROUGHPUT_BYTES_PER_MS_KEY,
                 DEFAULT_LOG_COPY_THROUGHPUT_BYTES_PER_MS);
+        // initialize to 0
+        this.syncUpdateTS = 0;
     }
 
     @Override
@@ -102,14 +107,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
                     && HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC.equals(toState)) {
                 LOG.info("Received ACTIVE_NOT_IN_SYNC event for {}", logGroup);
                 // If the current mode is SYNC only then switch to SYNC_AND_FORWARD mode
-                if (logGroup.checkAndSetMode(SYNC, SYNC_AND_FORWARD)) {
-                    // replication mode switched, notify the event handler
-                    try {
-                        logGroup.sync();
-                    } catch (IOException e) {
-                        LOG.info("Failed to send sync event to {}", logGroup);
-                    }
-                }
+                checkAndSetModeAndNotify(SYNC, SYNC_AND_FORWARD);
             }
         };
 
@@ -126,14 +124,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
                     && HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC.equals(toState)) {
                 LOG.info("Received ACTIVE_IN_SYNC event for {}", logGroup);
                 // Set the current mode to SYNC
-                if (logGroup.checkAndSetMode(SYNC_AND_FORWARD, SYNC)) {
-                    // replication mode switched, notify the event handler
-                    try {
-                        logGroup.sync();
-                    } catch (IOException e) {
-                        LOG.info("Failed to send sync event to {}", logGroup);
-                    }
-                }
+                checkAndSetModeAndNotify(SYNC_AND_FORWARD, SYNC);
             }
         };
 
@@ -148,7 +139,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
     protected void processFile(Path src) throws IOException {
         FileSystem srcFS = replicationLogTracker.getFileSystem();
         FileStatus srcStat = srcFS.getFileStatus(src);
-        long ts = EnvironmentEdgeManager.currentTimeMillis();
+        long ts = replicationLogTracker.getFileTimestamp(srcStat.getPath());
         ReplicationShardDirectoryManager remoteShardManager = logGroup.getStandbyShardManager();
         Path dst = remoteShardManager.getWriterPath(ts, logGroup.getServerName().getServerName());
         long startTime = EnvironmentEdgeManager.currentTimeMillis();
@@ -160,14 +151,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
         if (logGroup.getMode() == STORE_AND_FORWARD
                 && isLogCopyThroughputAboveThreshold(srcStat.getLen(), copyTime)) {
             // start recovery by switching to SYNC_AND_FORWARD
-            if (logGroup.checkAndSetMode(STORE_AND_FORWARD, SYNC_AND_FORWARD)) {
-                // replication mode switched, notify the event handler
-                try {
-                    logGroup.sync();
-                } catch (IOException e) {
-                    LOG.info("Failed to send sync event to {}", logGroup);
-                }
-            }
+            checkAndSetModeAndNotify(STORE_AND_FORWARD, SYNC_AND_FORWARD);
         }
     }
 
@@ -183,16 +167,22 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
             LOG.info("Processed all the replication log files for {}", logGroup);
             // if this RS is still in STORE_AND_FORWARD mode like when it didn't process any file
             // move this RS to SYNC_AND_FORWARD
-            if (logGroup.checkAndSetMode(STORE_AND_FORWARD, SYNC_AND_FORWARD)) {
-                // replication mode switched, notify the event handler
+            checkAndSetModeAndNotify(STORE_AND_FORWARD, SYNC_AND_FORWARD);
+
+            if (syncUpdateTS <= EnvironmentEdgeManager.currentTimeMillis()) {
                 try {
-                    logGroup.sync();
-                } catch (IOException e) {
-                    LOG.info("Failed to send sync event to {}", logGroup);
+                    long waitTime = logGroup.setHAGroupStatusToSync();
+                    if (waitTime != 0) {
+                        syncUpdateTS = EnvironmentEdgeManager.currentTimeMillis() + waitTime;
+                        LOG.info("HAGroup {} will try to update HA state to sync at {}",
+                                logGroup, syncUpdateTS);
+                    } else {
+                        LOG.info("HAGroup {} updated HA state to SYNC", logGroup);
+                    }
+                } catch (Exception e) {
+                    LOG.info("Could not update status to sync for {}", logGroup, e);
                 }
             }
-            // TODO ensure the mTime on the group store record is older than the wait sync timeout
-            logGroup.setHAGroupStatusToSync();
         }
     }
 
@@ -205,7 +195,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
      * @return True if the throughput is good else false
      */
     private boolean isLogCopyThroughputAboveThreshold(long fileSize, long copyTime) {
-        double actualThroughputBytesPerMs = copyTime != 0 ? fileSize/copyTime : 0;
+        double actualThroughputBytesPerMs = copyTime != 0 ? ((double) fileSize)/copyTime : 0;
         return actualThroughputBytesPerMs >= copyThroughputThresholdBytesPerMs;
     }
 
@@ -218,5 +208,21 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
     @VisibleForTesting
     protected ReplicationLogTracker getReplicationLogTracker() {
         return replicationLogTracker;
+    }
+
+    /**
+     * Helper API to check and set the replication mode and then notify the disruptor
+     */
+    private boolean checkAndSetModeAndNotify(ReplicationMode expectedMode, ReplicationMode newMode) {
+        boolean ret = logGroup.checkAndSetMode(expectedMode, newMode);
+        if (ret) {
+            // replication mode switched, notify the event handler
+            try {
+                logGroup.sync();
+            } catch (IOException e) {
+                LOG.info("Failed to notify event handler for {}", logGroup, e);
+            }
+        }
+        return ret;
     }
 }

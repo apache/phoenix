@@ -858,15 +858,12 @@ public class ReplicationLogGroup {
         }
     }
 
-    protected void setHAGroupStatusToSync() throws IOException {
+    protected long setHAGroupStatusToSync() throws Exception {
         try {
-            haGroupStoreManager.setHAGroupStatusToSync(haGroupName);
-        } catch (IOException ex) {
-            // TODO logging
-            throw ex;
+            return haGroupStoreManager.setHAGroupStatusToSync(haGroupName);
         } catch (Exception ex) {
-            // TODO logging
-            throw new IOException(ex);
+            LOG.info("HAGroup {} failed to set status to SYNC", this, ex);
+            throw ex;
         }
     }
 
