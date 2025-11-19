@@ -922,9 +922,10 @@ public class ReplicationLogGroup {
             // send the failed event to the current mode
             ReplicationMode newMode = currentModeImpl.onFailure(e);
             setMode(newMode);
-            // on failure call the exit asynchronously
+            ReplicationModeImpl oldModeImpl = currentModeImpl;
+            // on failure call the exit asynchronously on the old mode
             disruptorExecutor.execute(() ->
-                    currentModeImpl.onExit(true));
+                    oldModeImpl.onExit(true));
             initializeMode(newMode);
         }
 
