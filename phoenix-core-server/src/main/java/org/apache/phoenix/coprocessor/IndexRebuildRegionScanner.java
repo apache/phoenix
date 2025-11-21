@@ -295,7 +295,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
   }
 
   @Override
-  public boolean next(List<Cell> results) throws IOException {
+  public boolean next(List results) throws IOException {
     if (
       indexRowKeyforReadRepair != null
         && singleRowRebuildReturnCode == GlobalIndexChecker.RebuildReturnCode.NO_DATA_ROW.getValue()
@@ -450,7 +450,7 @@ public class IndexRebuildRegionScanner extends GlobalIndexRegionScanner {
     return hasMore || hasMoreIncr;
   }
 
-  public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+  public boolean next(List result, ScannerContext scannerContext) throws IOException {
     return next(result);
   }
 }

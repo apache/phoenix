@@ -74,7 +74,7 @@ public class PhoenixRpcSchedulerFactory implements RpcSchedulerFactory {
     return scheduler;
   }
 
-  @Override
+  // Only exists in HBase 2.x API, removed from Hbase 3
   public RpcScheduler create(Configuration configuration, PriorityFunction priorityFunction) {
     return create(configuration, priorityFunction, null);
   }

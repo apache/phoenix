@@ -39,6 +39,7 @@ import org.apache.hadoop.hbase.security.AccessDeniedException;
 import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -73,8 +74,8 @@ public class PermissionNSEnabledIT extends BasePermissionsIT {
 
   @Test
   public void testCreateMappedView() throws Throwable {
-    final String schema = generateUniqueName();
-    final String tableName = generateUniqueName();
+    final String schema = BaseTest.generateUniqueName();
+    final String tableName = BaseTest.generateUniqueName();
     verifyAllowed(createSchema(schema), superUser1);
     grantPermissions(regularUser1.getShortName(), schema, Permission.Action.WRITE,
       Permission.Action.READ, Permission.Action.EXEC, Permission.Action.ADMIN);
@@ -100,7 +101,7 @@ public class PermissionNSEnabledIT extends BasePermissionsIT {
   @Test
   public void testSchemaPermissions() throws Throwable {
     grantSystemTableAccess();
-    final String schemaName = "S_" + generateUniqueName();
+    final String schemaName = "S_" + BaseTest.generateUniqueName();
     superUser1.runAs(new PrivilegedExceptionAction<Void>() {
       @Override
       public Void run() throws Exception {
@@ -165,10 +166,10 @@ public class PermissionNSEnabledIT extends BasePermissionsIT {
     grantSystemTableAccess();
     TableName systemChildLink = TableName.valueOf(SchemaUtil
       .getPhysicalHBaseTableName(SYSTEM_SCHEMA_NAME, SYSTEM_CHILD_LINK_TABLE, true).getString());
-    final String schemaName = "S_" + generateUniqueName();
-    final String tableName = "T_" + generateUniqueName();
+    final String schemaName = "S_" + BaseTest.generateUniqueName();
+    final String tableName = "T_" + BaseTest.generateUniqueName();
     final String fullTableName = schemaName + "." + tableName;
-    final String viewName = "V_" + generateUniqueName();
+    final String viewName = "V_" + BaseTest.generateUniqueName();
     verifyAllowed(createSchema(schemaName), superUser1);
     verifyAllowed(createTable(fullTableName), superUser1);
 

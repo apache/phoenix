@@ -73,13 +73,13 @@ public class IndexHalfStoreFileReader extends CompatIndexHalfStoreFileReader {
     final Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers,
     final byte[][] viewConstants, final RegionInfo regionInfo, byte[] regionStartKeyInHFile,
     byte[] splitKey, boolean primaryReplicaStoreFile, AtomicInteger refCount,
-    RegionInfo currentRegion) throws IOException {
+    RegionInfo currentRegion, StoreFileReader originalReader) throws IOException {
     super(fs, cacheConf, conf,
       new ReaderContext(p, in, size, new HFileSystem(fs), primaryReplicaStoreFile,
         ReaderType.STREAM),
       new HFileInfo(new ReaderContext(p, in, size, new HFileSystem(fs), primaryReplicaStoreFile,
         ReaderType.STREAM), conf),
-      p);
+      p, r);
     getHFileReader().getHFileInfo().initMetaAndIndex(getHFileReader());
     this.splitkey = splitKey == null ? r.getSplitKey() : splitKey;
     // Is it top or bottom half?

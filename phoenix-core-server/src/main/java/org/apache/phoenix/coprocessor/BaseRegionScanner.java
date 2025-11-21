@@ -19,7 +19,6 @@ package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
 import java.util.List;
-import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
@@ -36,10 +35,10 @@ public abstract class BaseRegionScanner extends DelegateRegionScanner {
   }
 
   @Override
-  public abstract boolean next(List<Cell> results) throws IOException;
+  public abstract boolean next(List results) throws IOException;
 
   @Override
-  public abstract boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException;
+  public abstract boolean next(List result, ScannerContext scannerContext) throws IOException;
 
   @Override
   public boolean reseek(byte[] row) throws IOException {
@@ -47,12 +46,12 @@ public abstract class BaseRegionScanner extends DelegateRegionScanner {
   }
 
   @Override
-  public boolean nextRaw(List<Cell> result) throws IOException {
+  public boolean nextRaw(List result) throws IOException {
     return next(result);
   }
 
   @Override
-  public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
+  public boolean nextRaw(List result, ScannerContext scannerContext) throws IOException {
     return next(result, scannerContext);
   }
 }

@@ -17,42 +17,22 @@
  */
 package org.apache.hadoop.hbase.ipc.controller;
 
-import java.util.List;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.CellScannable;
-import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import org.apache.phoenix.compat.hbase.CompatRPCControllerFactory;
 
 /**
  * {@link RpcControllerFactory} that sets the appropriate priority of server-server RPC calls
  * destined for Phoenix SYSTEM tables.
  */
-public class ServerRpcControllerFactory extends RpcControllerFactory {
+public class ServerRpcControllerFactory extends CompatRPCControllerFactory {
 
   public ServerRpcControllerFactory(Configuration conf) {
     super(conf);
   }
 
-  @Override
-  public HBaseRpcController newController() {
-    HBaseRpcController delegate = super.newController();
-    return getController(delegate);
-  }
-
-  @Override
-  public HBaseRpcController newController(CellScanner cellScanner) {
-    HBaseRpcController delegate = super.newController(cellScanner);
-    return getController(delegate);
-  }
-
-  @Override
-  public HBaseRpcController newController(List<CellScannable> cellIterables) {
-    HBaseRpcController delegate = super.newController(cellIterables);
-    return getController(delegate);
-  }
-
-  private HBaseRpcController getController(HBaseRpcController delegate) {
+  protected HBaseRpcController getController(HBaseRpcController delegate) {
     return new ServerRpcController(delegate, conf);
   }
 

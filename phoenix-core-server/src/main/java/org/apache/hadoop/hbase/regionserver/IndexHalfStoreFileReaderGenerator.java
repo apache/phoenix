@@ -80,11 +80,12 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
   }
 
   @Override
-  public StoreFileReader preStoreFileReaderOpen(ObserverContext<RegionCoprocessorEnvironment> ctx,
-    FileSystem fs, Path p, FSDataInputStreamWrapper in, long size, CacheConfig cacheConf,
-    Reference r, StoreFileReader reader) throws IOException {
-    TableName tableName = ctx.getEnvironment().getRegion().getTableDescriptor().getTableName();
-    Region region = ctx.getEnvironment().getRegion();
+  public StoreFileReader preStoreFileReaderOpen(ObserverContext ctx, FileSystem fs, Path p,
+    FSDataInputStreamWrapper in, long size, CacheConfig cacheConf, Reference r,
+    StoreFileReader reader) throws IOException {
+    RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) ctx.getEnvironment();
+    TableName tableName = env.getRegion().getTableDescriptor().getTableName();
+    Region region = env.getRegion();
     RegionInfo childRegion = region.getRegionInfo();
     byte[] splitKey = null;
     if (reader == null && r != null) {
@@ -119,8 +120,8 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
           result = scanner.next();
         }
         if (result == null || result.isEmpty()) {
-          List<RegionInfo> mergeRegions = CompatUtil
-            .getMergeRegions(ctx.getEnvironment().getConnection(), region.getRegionInfo());
+          List<RegionInfo> mergeRegions =
+            CompatUtil.getMergeRegions(env.getConnection(), region.getRegionInfo());
           if (mergeRegions == null || mergeRegions.isEmpty()) {
             return reader;
           }
@@ -154,14 +155,13 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
             ? new byte[region.getRegionInfo().getEndKey().length]
             : region.getRegionInfo().getStartKey()).getKey();
         } else {
-          RegionInfo parentRegion = MetaTableAccessor.getRegionInfo(result);
+          RegionInfo parentRegion = CompatUtil.getRegionInfo(result);
           regionStartKeyInHFile = parentRegion.getStartKey().length == 0
             ? new byte[parentRegion.getEndKey().length]
             : parentRegion.getStartKey();
         }
 
-        PTable dataTable =
-          IndexUtil.getPDataTable(conn, ctx.getEnvironment().getRegion().getTableDescriptor());
+        PTable dataTable = IndexUtil.getPDataTable(conn, env.getRegion().getTableDescriptor());
         List<PTable> indexes = dataTable.getIndexes();
         Map<ImmutableBytesWritable, IndexMaintainer> indexMaintainers =
           new HashMap<ImmutableBytesWritable, IndexMaintainer>();
@@ -180,7 +180,7 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
           ctx.getEnvironment().getConfiguration(), indexMaintainers, viewConstants, childRegion,
           regionStartKeyInHFile, splitKey,
           childRegion.getReplicaId() == RegionInfo.DEFAULT_REPLICA_ID, new AtomicInteger(0),
-          region.getRegionInfo());
+          region.getRegionInfo(), reader);
       } catch (SQLException e) {
         throw new IOException(e);
       } finally {
@@ -191,25 +191,23 @@ public class IndexHalfStoreFileReaderGenerator implements RegionObserver, Region
   }
 
   @Override
-  public InternalScanner preCompact(ObserverContext<RegionCoprocessorEnvironment> c, Store store,
-    InternalScanner s, ScanType scanType, CompactionLifeCycleTracker tracker,
-    CompactionRequest request) throws IOException {
+  public InternalScanner preCompact(ObserverContext c, Store store, InternalScanner s,
+    ScanType scanType, CompactionLifeCycleTracker tracker, CompactionRequest request)
+    throws IOException {
 
     if (!isLocalIndexStore(store)) {
       return s;
     }
     if (!store.hasReferences()) {
+      RegionCoprocessorEnvironment e = (RegionCoprocessorEnvironment) c.getEnvironment();
       InternalScanner repairScanner = null;
-      if (
-        request.isMajor()
-          && (!RepairUtil.isLocalIndexStoreFilesConsistent(c.getEnvironment(), store))
-      ) {
+      if (request.isMajor() && (!RepairUtil.isLocalIndexStoreFilesConsistent(e, store))) {
         LOGGER.info("we have found inconsistent data for local index for region:"
-          + c.getEnvironment().getRegion().getRegionInfo());
+          + e.getRegion().getRegionInfo());
         if (c.getEnvironment().getConfiguration().getBoolean(LOCAL_INDEX_AUTOMATIC_REPAIR, true)) {
-          LOGGER.info("Starting automatic repair of local Index for region:"
-            + c.getEnvironment().getRegion().getRegionInfo());
-          repairScanner = getRepairScanner(c.getEnvironment(), store);
+          LOGGER.info(
+            "Starting automatic repair of local Index for region:" + e.getRegion().getRegionInfo());
+          repairScanner = getRepairScanner(e, store);
         }
       }
       if (repairScanner != null) {

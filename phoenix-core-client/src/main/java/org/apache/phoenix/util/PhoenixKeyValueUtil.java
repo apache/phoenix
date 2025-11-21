@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.Cell.Type;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -215,7 +216,13 @@ public class PhoenixKeyValueUtil {
     if (c instanceof KeyValue) {
       return (KeyValue) c;
     } else {
-      return KeyValueUtil.copyToNewKeyValue(c);
+      // TODO how to handle this ? The main issue is that Cell in HBase 3 no longer has sequenceId.
+      // Normally, these off-heap to on-heap copy methods are only to be called on the server side,
+      // where we're not even supposed to see non-ExtendedCells.
+      // This currently errors out if it encounters non-ExtendedCells, but we could also just create
+      // a
+      // KeyValue with a 0 sequenceId.
+      return KeyValueUtil.copyToNewKeyValue((ExtendedCell) c);
     }
   }
 
@@ -247,7 +254,13 @@ public class PhoenixKeyValueUtil {
     if (c instanceof KeyValue) {
       return (KeyValue) c;
     }
-    return KeyValueUtil.copyToNewKeyValue(c);
+
+    // TODO how to handle this ? The main issue is that Cell in HBase 3 no longer has sequenceId.
+    // Normally, these off-heap to on-heap copy methods are only to be called on the server side,
+    // where we're not even supposed to see non-ExtendedCells.
+    // This currently errors out if it encounters non-ExtendedCells, but we could also just create a
+    // KeyValue with a 0 sequenceId.
+    return KeyValueUtil.copyToNewKeyValue((ExtendedCell) c);
   }
 
   /**
@@ -261,7 +274,7 @@ public class PhoenixKeyValueUtil {
       Cell c = cellsIt.next();
       // FIXME this does not catch all off-heap cells
       if (c instanceof ByteBufferExtendedCell) {
-        cellsIt.set(KeyValueUtil.copyToNewKeyValue(c));
+        cellsIt.set(KeyValueUtil.copyToNewKeyValue((ByteBufferExtendedCell) c));
       }
     }
     return cells;

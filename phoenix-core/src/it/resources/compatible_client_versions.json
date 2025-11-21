@@ -46,5 +46,6 @@
       "version": "2.18.0",
       "groupId": "org.apache.logging.log4j"
     }
-  ]
+  ],
+  "3.0": []
 }

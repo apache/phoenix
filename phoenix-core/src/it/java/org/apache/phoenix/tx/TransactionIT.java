@@ -47,10 +47,8 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -135,8 +133,8 @@ public class TransactionIT extends ParallelStatsDisabledIT {
 
   public static class WriteFailingRegionObserver extends SimpleRegionObserver {
     @Override
-    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
+    public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws HBaseIOException {
       throw new DoNotRetryIOException();
     }
   }
