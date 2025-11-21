@@ -19,6 +19,7 @@
 package org.apache.phoenix.query;
 
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Table;
@@ -1117,8 +1118,14 @@ public class PhoenixTestBuilder {
                     PTableKey
                             tableKey =
                             new PTableKey(null, SchemaUtil.normalizeFullTableName(entityTableName));
-                    setBaseTable(
-                            globalConnection.unwrap(PhoenixConnection.class).getTable(tableKey));
+                    PhoenixConnection pcon;
+                    if (globalConnection instanceof FailoverPhoenixConnection) {
+                        pcon = globalConnection.
+                                unwrap(FailoverPhoenixConnection.class).getWrappedConnection();
+                    } else {
+                        pcon = globalConnection.unwrap(PhoenixConnection.class);
+                    }
+                    setBaseTable(pcon.getTable(tableKey));
                 }
                 // Index on Table
                 if (tableIndexEnabled && !tableIndexCreated) {

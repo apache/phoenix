@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.replication;
 
+import static java.lang.Thread.sleep;
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -29,14 +31,13 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -46,19 +47,9 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.ServerName;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.replication.log.LogFileWriter;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.ClassRule;
 import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
 import org.mockito.invocation.InvocationOnMock;
@@ -66,57 +57,15 @@ import org.mockito.stubbing.Answer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.phoenix.replication.ReplicationLogGroupWriter.RotationReason;
+import org.apache.phoenix.replication.ReplicationLog.RotationReason;
 import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
 import org.apache.phoenix.replication.log.LogFileTestUtil;
 
-public class ReplicationLogGroupTest {
+public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogGroupTest.class);
-
-    @ClassRule
-    public static TemporaryFolder testFolder = new TemporaryFolder();
-
-    private Configuration conf;
-    private ServerName serverName;
-    private FileSystem localFs;
-    private URI standbyUri;
-    private ReplicationLogGroup logGroup;
-
-    static final int TEST_RINGBUFFER_SIZE = 32;
-    static final int TEST_SYNC_TIMEOUT = 1000;
-    static final int TEST_ROTATION_TIME = 5000;
-    static final int TEST_ROTATION_SIZE_BYTES = 10 * 1024;
-
-    @Before
-    public void setUp() throws IOException {
-        conf = HBaseConfiguration.create();
-        localFs = FileSystem.getLocal(conf);
-        standbyUri = new Path(testFolder.getRoot().toString()).toUri();
-        serverName = ServerName.valueOf("test", 60010, EnvironmentEdgeManager.currentTimeMillis());
-        conf.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
-        // Small ring buffer size for testing
-        conf.setInt(ReplicationLogGroup.REPLICATION_LOG_RINGBUFFER_SIZE_KEY, TEST_RINGBUFFER_SIZE);
-        // Set a short sync timeout for testing
-        conf.setLong(ReplicationLogGroup.REPLICATION_LOG_SYNC_TIMEOUT_KEY, TEST_SYNC_TIMEOUT);
-        // Set rotation time to 10 seconds
-        conf.setLong(QueryServices.REPLICATION_LOG_ROTATION_TIME_MS_KEY, TEST_ROTATION_TIME);
-        // Small size threshold for testing
-        conf.setLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY,
-            TEST_ROTATION_SIZE_BYTES);
-
-        logGroup = new TestableLogGroup(conf, serverName, "testHAGroup");
-        logGroup.init();
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        if (logGroup != null) {
-            logGroup.close();
-        }
-    }
 
     /**
      * Tests basic append and sync functionality of the replication log. Verifies that mutations
@@ -138,7 +87,7 @@ public class ReplicationLogGroupTest {
         final Mutation put5 = LogFileTestUtil.newPut("row5", 5, 1);
 
         // Get the inner writer
-        LogFileWriter writer = logGroup.getActiveWriter().getWriter();
+        LogFileWriter writer = logGroup.getActiveLog().getWriter();
         assertNotNull("Writer should not be null", writer);
         InOrder inOrder = Mockito.inOrder(writer);
 
@@ -171,7 +120,7 @@ public class ReplicationLogGroupTest {
       final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
 
       // Get the inner writer
-      LogFileWriter writerBeforeRoll = logGroup.getActiveWriter().getWriter();
+      LogFileWriter writerBeforeRoll = logGroup.getActiveLog().getWriter();
       assertNotNull("Initial writer should not be null", writerBeforeRoll);
 
       // Configure writerBeforeRoll to fail on the first sync call
@@ -182,7 +131,7 @@ public class ReplicationLogGroupTest {
       logGroup.sync();
 
       // Get the inner writer we rolled to.
-      LogFileWriter writerAfterRoll = logGroup.getActiveWriter().getWriter();
+      LogFileWriter writerAfterRoll = logGroup.getActiveLog().getWriter();
       assertNotNull("Initial writer should not be null", writerBeforeRoll);
 
       // Verify the sequence: append, sync (fail), rotate, append (retry), sync (succeed)
@@ -205,14 +154,14 @@ public class ReplicationLogGroupTest {
         long commitId = 0;
 
         // Get the inner writer
-        LogFileWriter innerWriter = logGroup.getActiveWriter().getWriter();
+        LogFileWriter innerWriter = logGroup.getActiveLog().getWriter();
         assertNotNull("Inner writer should not be null", innerWriter);
 
         // Create a slow consumer to fill up the ring buffer.
         doAnswer(new Answer<Object>() {
             @Override
             public Object answer(InvocationOnMock invocation) throws Throwable {
-                Thread.sleep(50); // Simulate slow processing
+                sleep(50); // Simulate slow processing
                 return invocation.callRealMethod();
             }
         }).when(innerWriter).append(anyString(), anyLong(), any(Mutation.class));
@@ -245,7 +194,7 @@ public class ReplicationLogGroupTest {
         assertFalse("Append should be blocked when ring is full", appendFuture.isDone());
 
         // Let some events process to free up space.
-        Thread.sleep(100);
+        sleep(100);
 
         // Now the append should complete. Any issues and we will time out here.
         appendFuture.get();
@@ -266,7 +215,7 @@ public class ReplicationLogGroupTest {
         final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
 
         // Get the inner writer
-        LogFileWriter writerBeforeRoll = logGroup.getActiveWriter().getWriter();
+        LogFileWriter writerBeforeRoll = logGroup.getActiveLog().getWriter();
         assertNotNull("Initial writer should not be null", writerBeforeRoll);
 
         // Configure writerBeforeRoll to fail on the first append call
@@ -278,7 +227,7 @@ public class ReplicationLogGroupTest {
         logGroup.sync();
 
         // Get the inner writer we rolled to.
-        LogFileWriter writerAfterRoll = logGroup.getActiveWriter().getWriter();
+        LogFileWriter writerAfterRoll = logGroup.getActiveLog().getWriter();
         assertNotNull("Rolled writer should not be null", writerAfterRoll);
 
         // Verify the sequence: append (fail), rotate, append (succeed), sync
@@ -301,14 +250,15 @@ public class ReplicationLogGroupTest {
         final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
 
         // Get the inner writer
-        LogFileWriter innerWriter = logGroup.getActiveWriter().getWriter();
+        LogFileWriter innerWriter = logGroup.getActiveLog().getWriter();
         assertNotNull("Inner writer should not be null", innerWriter);
 
         doAnswer(new Answer<Object>() {
             @Override
             public Object answer(InvocationOnMock invocation) throws Throwable {
                 // Pause long enough to cause a timeout.
-                Thread.sleep((long)(TEST_SYNC_TIMEOUT * 1.25));
+                sleep((long)(TEST_SYNC_TIMEOUT * 1.25));
+                LOG.info("Waking up from sleep");
                 return invocation.callRealMethod();
             }
         }).when(innerWriter).sync();
@@ -316,13 +266,15 @@ public class ReplicationLogGroupTest {
         // Append some data
         logGroup.append(tableName, commitId, put);
 
-        // Try to sync and expect it to timeout
+        // sync on the writer will timeout
         try {
             logGroup.sync();
-            fail("Expected sync to timeout");
-        } catch (IOException e) {
+            fail("Should have thrown RuntimeException because sync timed out");
+        } catch (RuntimeException e) {
             assertTrue("Expected timeout exception", e.getCause() instanceof TimeoutException);
         }
+        // reset
+        doNothing().when(innerWriter).sync();
     }
 
     /**
@@ -339,7 +291,7 @@ public class ReplicationLogGroupTest {
         final CountDownLatch completionLatch = new CountDownLatch(2);
 
         // Get the inner writer
-        LogFileWriter innerWriter = logGroup.getActiveWriter().getWriter();
+        LogFileWriter innerWriter = logGroup.getActiveLog().getWriter();
         assertNotNull("Inner writer should not be null", innerWriter);
 
         // Thread 1: Append mutations with even commit IDs
@@ -406,7 +358,7 @@ public class ReplicationLogGroupTest {
         final long commitId = 1L;
 
         // Get the initial writer
-        LogFileWriter writerBeforeRotation = logGroup.getActiveWriter().getWriter();
+        LogFileWriter writerBeforeRotation = logGroup.getActiveLog().getWriter();
         assertNotNull("Initial writer should not be null", writerBeforeRotation);
 
         // Append some data
@@ -414,14 +366,14 @@ public class ReplicationLogGroupTest {
         logGroup.sync();
 
         // Wait for rotation time to elapse
-        Thread.sleep((long)(TEST_ROTATION_TIME * 1.25));
+        sleep((long)(TEST_ROTATION_TIME * 1.25));
 
         // Append more data to trigger rotation check
         logGroup.append(tableName, commitId + 1, put);
         logGroup.sync();
 
         // Get the new writer after rotation
-        LogFileWriter writerAfterRotation = logGroup.getActiveWriter().getWriter();
+        LogFileWriter writerAfterRotation = logGroup.getActiveLog().getWriter();
         assertNotNull("New writer should not be null", writerAfterRotation);
         assertTrue("Writer should have been rotated", writerAfterRotation != writerBeforeRotation);
 
@@ -447,7 +399,7 @@ public class ReplicationLogGroupTest {
         final Mutation put = LogFileTestUtil.newPut("row", 1, 10);
         long commitId = 1L;
 
-        LogFileWriter writerBeforeRotation = logGroup.getActiveWriter().getWriter();
+        LogFileWriter writerBeforeRotation = logGroup.getActiveLog().getWriter();
         assertNotNull("Initial writer should not be null", writerBeforeRotation);
 
         // Append enough data so that we exceed the size threshold.
@@ -457,7 +409,7 @@ public class ReplicationLogGroupTest {
         logGroup.sync(); // Should trigger a sized based rotation
 
         // Get the new writer after the expected rotation.
-        LogFileWriter writerAfterRotation = logGroup.getActiveWriter().getWriter();
+        LogFileWriter writerAfterRotation = logGroup.getActiveLog().getWriter();
         assertNotNull("New writer should not be null", writerAfterRotation);
         assertTrue("Writer should have been rotated", writerAfterRotation != writerBeforeRotation);
 
@@ -490,7 +442,7 @@ public class ReplicationLogGroupTest {
         final long commitId = 1L;
 
         // Get the inner writer
-        LogFileWriter innerWriter = logGroup.getActiveWriter().getWriter();
+        LogFileWriter innerWriter = logGroup.getActiveLog().getWriter();
         assertNotNull("Inner writer should not be null", innerWriter);
 
         // Append some data
@@ -532,16 +484,16 @@ public class ReplicationLogGroupTest {
         final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
         long commitId = 1L;
 
-        LogFileWriter writerBeforeRotation = logGroup.getActiveWriter().getWriter();
+        LogFileWriter writerBeforeRotation = logGroup.getActiveLog().getWriter();
         assertNotNull("Initial writer should not be null", writerBeforeRotation);
 
         // Append some data and wait for the rotation time to elapse plus a small buffer.
         logGroup.append(tableName, commitId, put);
         logGroup.sync();
-        Thread.sleep((long)(TEST_ROTATION_TIME * 1.25));
+        sleep((long)(TEST_ROTATION_TIME * 1.25));
 
         // Get the new writer after the rotation.
-        LogFileWriter writerAfterRotation = logGroup.getActiveWriter().getWriter();
+        LogFileWriter writerAfterRotation = logGroup.getActiveLog().getWriter();
         assertNotNull("New writer should not be null", writerAfterRotation);
         assertTrue("Writer should have been rotated", writerAfterRotation != writerBeforeRotation);
 
@@ -573,10 +525,10 @@ public class ReplicationLogGroupTest {
         final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
         long commitId = 1L;
 
-        ReplicationLogGroupWriter logGroupWriter = logGroup.getActiveWriter();
+        ReplicationLog activeLog = logGroup.getActiveLog();
 
         // Get the initial writer
-        LogFileWriter initialWriter = logGroupWriter.getWriter();
+        LogFileWriter initialWriter = activeLog.getWriter();
         assertNotNull("Initial writer should not be null", initialWriter);
 
         // Configure the log writer to fail only the first time when creating new writers.
@@ -586,14 +538,14 @@ public class ReplicationLogGroupTest {
                 throw new IOException("Simulated failure to create new writer");
             }
             return invocation.callRealMethod();
-        }).when(logGroupWriter).createNewWriter();
+        }).when(activeLog).createNewWriter();
 
         // Append some data
         logGroup.append(tableName, commitId, put);
         logGroup.sync();
 
         // Rotate the log.
-        LogFileWriter writerAfterFailedRotate = logGroupWriter.rotateLog(RotationReason.TIME);
+        LogFileWriter writerAfterFailedRotate = activeLog.rotateLog(RotationReason.TIME);
         assertEquals("Should still be using the initial writer", initialWriter,
             writerAfterFailedRotate);
 
@@ -601,7 +553,7 @@ public class ReplicationLogGroupTest {
         logGroup.append(tableName, commitId + 1, put);
         logGroup.sync();
 
-        LogFileWriter writerAfterRotate = logGroupWriter.rotateLog(RotationReason.TIME);
+        LogFileWriter writerAfterRotate = activeLog.rotateLog(RotationReason.TIME);
         assertNotEquals("Should be using a new writer", initialWriter, writerAfterRotate);
 
         // Try to append more data. This should work with the new writer after successful rotation.
@@ -631,15 +583,15 @@ public class ReplicationLogGroupTest {
         final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
         long commitId = 1L;
 
-        ReplicationLogGroupWriter logGroupWriter = logGroup.getActiveWriter();
+        ReplicationLog activeLog = logGroup.getActiveLog();
 
         // Get the initial writer
-        LogFileWriter initialWriter = logGroupWriter.getWriter();
+        LogFileWriter initialWriter = activeLog.getWriter();
         assertNotNull("Initial writer should not be null", initialWriter);
 
         // Configure the log writer to always fail when creating new writers
         doThrow(new IOException("Simulated failure to create new writer"))
-            .when(logGroupWriter).createNewWriter();
+            .when(activeLog).createNewWriter();
 
         // Append some data
         logGroup.append(tableName, commitId, put);
@@ -648,7 +600,7 @@ public class ReplicationLogGroupTest {
         // Try to rotate the log multiple times until we exceed the retry limit
         for (int i = 0; i <= ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES; i++) {
             try {
-                logGroupWriter.rotateLog(RotationReason.TIME);
+                activeLog.rotateLog(RotationReason.TIME);
             } catch (IOException e) {
                 if (i < ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES) {
                     // Not the last attempt yet, continue
@@ -662,15 +614,11 @@ public class ReplicationLogGroupTest {
             }
         }
 
-        // Verify subsequent operations fail because the log is closed
-        try {
-            logGroup.append(tableName, commitId + 1, put);
-            logGroup.sync();
-            fail("Expected append to fail because log is closed");
-        } catch (IOException e) {
-            assertTrue("Expected an IOException because log is closed",
-                e.getMessage().contains("Closed"));
-        }
+        // Verify subsequent operations will fail because the log is closed and then trigger
+        // a mode switch to STORE_AND_FORWARD
+        logGroup.append(tableName, commitId + 1, put);
+        logGroup.sync();
+        assertEquals(STORE_AND_FORWARD, logGroup.getMode());
     }
 
     /**
@@ -684,7 +632,7 @@ public class ReplicationLogGroupTest {
         final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
 
         // Get the inner writer
-        LogFileWriter innerWriter = logGroup.getActiveWriter().getWriter();
+        LogFileWriter innerWriter = logGroup.getActiveLog().getWriter();
         assertNotNull("Writer should not be null", innerWriter);
 
         // Configure writer to throw a RuntimeException on append
@@ -695,8 +643,8 @@ public class ReplicationLogGroupTest {
         logGroup.append(tableName, commitId, put);
         try {
             logGroup.sync();
-            fail("Should have thrown IOException because sync timed out");
-        } catch (IOException e) {
+            fail("Should have thrown Runtime because sync timed out");
+        } catch (RuntimeException e) {
             assertTrue("Expected timeout exception", e.getCause() instanceof TimeoutException);
         }
 
@@ -714,19 +662,20 @@ public class ReplicationLogGroupTest {
     }
 
     /**
-     * Tests behavior when all sync retry attempts are exhausted. Verifies that the system properly
-     * handles the case where sync operations fail repeatedly and eventually timeout.
+     * Tests the behavior when a sync operation fails multiple times until all the
+     * attempts are exhausted on the remote cluster and then we switch to the STORE_AND_FORWARD
+     * mode and successfully complete the sync
      */
     @Test
-    public void testSyncFailureAllRetriesExhausted() throws Exception {
+    public void testSwitchToStoreAndForwardOnSyncFailure() throws Exception {
         final String tableName = "TBLSAFR";
         final long commitId = 1L;
         final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
 
-        ReplicationLogGroupWriter logGroupWriter = logGroup.getActiveWriter();
+        ReplicationLog activeLog = logGroup.getActiveLog();
 
         // Get the initial writer
-        LogFileWriter initialWriter = logGroupWriter.getWriter();
+        LogFileWriter initialWriter = activeLog.getWriter();
         assertNotNull("Initial writer should not be null", initialWriter);
 
         // Configure initial writer to fail on sync
@@ -734,21 +683,55 @@ public class ReplicationLogGroupTest {
             .when(initialWriter).sync();
 
         // createNewWriter should keep returning the bad writer
-        doAnswer(invocation -> initialWriter).when(logGroupWriter).createNewWriter();
+        doAnswer(invocation -> initialWriter).when(activeLog).createNewWriter();
 
         // Append data
         logGroup.append(tableName, commitId, put);
+        // Try to sync. Should fail after exhausting retries and then switch to STORE_AND_FORWARD
+        logGroup.sync();
 
-        // Try to sync. Should fail after exhausting retries.
+        // Each retry creates a new writer, so that is at least 1 create + 4 retries.
+        verify(activeLog, atLeast(5)).createNewWriter();
+        assertEquals(STORE_AND_FORWARD, logGroup.getMode());
+    }
+
+    /**
+     * Tests the behavior when we fail to update the HAGroup store status when we switch to
+     * the STORE_AND_FORWARD mode and abort
+     */
+    @Test
+    public void testFailToUpdateHAGroupStatusOnSwitchToStoreAndForward() throws Exception {
+        final String tableName = "TBLSAFR";
+        final long commitId = 1L;
+        final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+
+        ReplicationLog activeLog = logGroup.getActiveLog();
+
+        // Get the initial writer
+        LogFileWriter initialWriter = activeLog.getWriter();
+        assertNotNull("Initial writer should not be null", initialWriter);
+
+        // Configure initial writer to fail on sync
+        doThrow(new IOException("Simulated sync failure"))
+                .when(initialWriter).sync();
+
+        // createNewWriter should keep returning the bad writer
+        doAnswer(invocation -> initialWriter).when(activeLog).createNewWriter();
+
+        doThrow(new IOException("Simulated failure to update HAGroupStore state"))
+                .when(haGroupStoreManager).setHAGroupStatusToStoreAndForward(haGroupName);
+
+        // Append data
+        logGroup.append(tableName, commitId, put);
+        // Try to sync. Should fail after exhausting retries and then switch to STORE_AND_FORWARD
         try {
             logGroup.sync();
-            fail("Expected sync to fail after exhausting retries");
-        } catch (IOException e) {
-            assertTrue("Expected timeout exception", e.getCause() instanceof TimeoutException);
+            fail("Should have thrown exception because of failure to update mode");
+        } catch (RuntimeException ex) {
+            assertTrue(ex.getMessage().contains("Simulated sync failure"));
         }
-
-        // Each retry creates a new writer, so that is at least 1 create + 5 retries.
-        verify(logGroupWriter, atLeast(6)).createNewWriter();
+        // wait for the even processor thread to clean up
+        Thread.sleep(3);
     }
 
     /**
@@ -762,7 +745,7 @@ public class ReplicationLogGroupTest {
         long commitId = 1L;
 
         // Get the initial writer
-        LogFileWriter writerBeforeRotation = logGroup.getActiveWriter().getWriter();
+        LogFileWriter writerBeforeRotation = logGroup.getActiveLog().getWriter();
         assertNotNull("Initial writer should not be null", writerBeforeRotation);
 
         // Append several items to fill currentBatch but don't sync yet
@@ -771,10 +754,10 @@ public class ReplicationLogGroupTest {
         }
 
         // Force a rotation by waiting for rotation time to elapse
-        Thread.sleep((long)(TEST_ROTATION_TIME * 1.25));
+        sleep((long)(TEST_ROTATION_TIME * 1.25));
 
         // Get the new writer after rotation
-        LogFileWriter writerAfterRotation = logGroup.getActiveWriter().getWriter();
+        LogFileWriter writerAfterRotation = logGroup.getActiveLog().getWriter();
         assertNotNull("New writer should not be null", writerAfterRotation);
         assertTrue("Writer should have been rotated", writerAfterRotation != writerBeforeRotation);
 
@@ -813,10 +796,10 @@ public class ReplicationLogGroupTest {
         final int NUM_RECORDS = 100;
         List<LogFile.Record> originalRecords = new ArrayList<>();
 
-        ReplicationLogGroupWriter logGroupWriter = logGroup.getActiveWriter();
+        ReplicationLog activeLog = logGroup.getActiveLog();
 
         // Get the path of the log file.
-        Path logPath = logGroupWriter.getWriter().getContext().getFilePath();
+        Path logPath = activeLog.getWriter().getContext().getFilePath();
 
         for (int i = 0; i < NUM_RECORDS; i++) {
             LogFile.Record record = LogFileTestUtil.newPutRecord(tableName, i, "row" + i, i, 1);
@@ -827,7 +810,7 @@ public class ReplicationLogGroupTest {
         logGroup.sync(); // Sync to commit the appends to the current writer.
 
         // Force a rotation to close the current writer.
-        logGroupWriter.rotateLog(RotationReason.SIZE);
+        activeLog.rotateLog(RotationReason.SIZE);
 
         assertTrue("Log file should exist", localFs.exists(logPath));
 
@@ -869,12 +852,12 @@ public class ReplicationLogGroupTest {
         List<LogFile.Record> originalRecords = new ArrayList<>();
         List<Path> logPaths = new ArrayList<>();
 
-        ReplicationLogGroupWriter logGroupWriter = logGroup.getActiveWriter();
+        ReplicationLog activeLog = logGroup.getActiveLog();
 
         // Write records across multiple rotations.
         for (int rotation = 0; rotation < NUM_ROTATIONS; rotation++) {
             // Get the path of the current log file.
-            Path logPath = logGroupWriter.getWriter().getContext().getFilePath();
+            Path logPath = activeLog.getWriter().getContext().getFilePath();
             logPaths.add(logPath);
 
             for (int i = 0; i < NUM_RECORDS_PER_ROTATION; i++) {
@@ -887,7 +870,7 @@ public class ReplicationLogGroupTest {
             }
             logGroup.sync(); // Sync to commit the appends to the current writer.
             // Force a rotation to close the current writer.
-            logGroupWriter.rotateLog(RotationReason.SIZE);
+            activeLog.rotateLog(RotationReason.SIZE);
         }
 
         // Verify all log files exist
@@ -938,12 +921,12 @@ public class ReplicationLogGroupTest {
         List<LogFile.Record> originalRecords = new ArrayList<>();
         List<Path> logPaths = new ArrayList<>();
 
-        ReplicationLogGroupWriter logGroupWriter = logGroup.getActiveWriter();
+        ReplicationLog activeLog = logGroup.getActiveLog();
 
         // Write records across multiple rotations, only syncing 50% of the time.
         for (int rotation = 0; rotation < NUM_ROTATIONS; rotation++) {
             // Get the path of the current log file.
-            Path logPath = logGroupWriter.getWriter().getContext().getFilePath();
+            Path logPath = activeLog.getWriter().getContext().getFilePath();
             logPaths.add(logPath);
 
             for (int i = 0; i < NUM_RECORDS_PER_ROTATION; i++) {
@@ -961,7 +944,7 @@ public class ReplicationLogGroupTest {
                 logGroup.sync(); // Sync to commit the appends to the current writer.
             }
             // Force a rotation to close the current writer.
-            logGroupWriter.rotateLog(RotationReason.SIZE);
+            activeLog.rotateLog(RotationReason.SIZE);
         }
 
         // Verify all log files exist
@@ -1008,7 +991,7 @@ public class ReplicationLogGroupTest {
         final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
 
         // Get the initial writer
-        LogFileWriter innerWriter = logGroup.getActiveWriter().getWriter();
+        LogFileWriter innerWriter = logGroup.getActiveLog().getWriter();
         assertNotNull("Inner writer should not be null", innerWriter);
 
         // Configure writer to throw RuntimeException on getLength()
@@ -1019,8 +1002,8 @@ public class ReplicationLogGroupTest {
         logGroup.append(tableName, commitId, put);
         try {
             logGroup.sync();
-            fail("Should have thrown IOException because sync timed out");
-        } catch (IOException e) {
+            fail("Should have thrown RuntimeException because sync timed out");
+        } catch (RuntimeException e) {
             assertTrue("Expected timeout exception", e.getCause() instanceof TimeoutException);
         }
 
@@ -1048,7 +1031,7 @@ public class ReplicationLogGroupTest {
         final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
 
         // Get the inner writer
-        LogFileWriter innerWriter = logGroup.getActiveWriter().getWriter();
+        LogFileWriter innerWriter = logGroup.getActiveLog().getWriter();
         assertNotNull("Writer should not be null", innerWriter);
 
         // Configure writer to throw RuntimeException on append
@@ -1059,8 +1042,8 @@ public class ReplicationLogGroupTest {
         logGroup.append(tableName, commitId, put);
         try {
             logGroup.sync();
-            fail("Should have thrown IOException because sync timed out");
-        } catch (IOException e) {
+            fail("Should have thrown RuntimeException because sync timed out");
+        } catch (RuntimeException e) {
             assertTrue("Expected timeout exception", e.getCause() instanceof TimeoutException);
         }
 
@@ -1088,7 +1071,7 @@ public class ReplicationLogGroupTest {
         final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
 
         // Get the inner writer
-        LogFileWriter innerWriter = logGroup.getActiveWriter().getWriter();
+        LogFileWriter innerWriter = logGroup.getActiveLog().getWriter();
         assertNotNull("Writer should not be null", innerWriter);
 
         // Configure writer to throw RuntimeException on append
@@ -1099,8 +1082,8 @@ public class ReplicationLogGroupTest {
         logGroup.append(tableName, commitId, put);
         try {
             logGroup.sync();
-            fail("Should have thrown IOException because sync timed out");
-        } catch (IOException e) {
+            fail("Should have thrown RuntimeException because sync timed out");
+        } catch (RuntimeException e) {
             assertTrue("Expected timeout exception", e.getCause() instanceof TimeoutException);
         }
 
@@ -1133,14 +1116,14 @@ public class ReplicationLogGroupTest {
         final Mutation put3 = LogFileTestUtil.newPut("row3", 3, 1);
         final long commitId3 = 3L;
 
-        LogFileWriter innerWriter = logGroup.getActiveWriter().getWriter();
+        LogFileWriter innerWriter = logGroup.getActiveLog().getWriter();
         assertNotNull("Inner writer should not be null", innerWriter);
 
         // Configure writer to briefly hold up the LogEventHandler upon first append.
         doAnswer(new Answer<Object>() {
             @Override
             public Object answer(InvocationOnMock invocation) throws Throwable {
-                Thread.sleep(50); // Delay to allow multiple events to be posted
+                sleep(50); // Delay to allow multiple events to be posted
                 return invocation.callRealMethod();
             }
         }).when(innerWriter).append(eq(tableName), eq(commitId1), eq(put1));
@@ -1174,24 +1157,24 @@ public class ReplicationLogGroupTest {
         final String haGroupId2 = "testHAGroup2";
 
         // Get instances for the first HA group
-        ReplicationLogGroup g1_1 = ReplicationLogGroup.get(conf, serverName, haGroupId1);
-        ReplicationLogGroup g1_2 = ReplicationLogGroup.get(conf, serverName, haGroupId1);
+        ReplicationLogGroup g1_1 = ReplicationLogGroup.get(conf, serverName, haGroupId1, haGroupStoreManager);
+        ReplicationLogGroup g1_2 = ReplicationLogGroup.get(conf, serverName, haGroupId1, haGroupStoreManager);
 
         // Verify same instance is returned for same haGroupId
         assertNotNull("ReplicationLogGroup should not be null", g1_1);
         assertNotNull("ReplicationLogGroup should not be null", g1_2);
         assertTrue("Same instance should be returned for same haGroupId", g1_2 == g1_1);
-        assertEquals("HA Group name should match", haGroupId1, g1_1.getHaGroupName());
+        assertEquals("HA Group name should match", haGroupId1, g1_1.getHAGroupName());
 
         // Get instance for a different HA group
-        ReplicationLogGroup g2_1 = ReplicationLogGroup.get(conf, serverName, haGroupId2);
+        ReplicationLogGroup g2_1 = ReplicationLogGroup.get(conf, serverName, haGroupId2, haGroupStoreManager);
         assertNotNull("ReplicationLogGroup should not be null", g2_1);
         assertTrue("Different instance should be returned for different haGroupId", g2_1 != g1_1);
-        assertEquals("HA Group name should match", haGroupId2, g2_1.getHaGroupName());
+        assertEquals("HA Group name should match", haGroupId2, g2_1.getHAGroupName());
 
         // Verify multiple calls still return cached instances
-        ReplicationLogGroup g1_3 = ReplicationLogGroup.get(conf, serverName, haGroupId1);
-        ReplicationLogGroup g2_2 = ReplicationLogGroup.get(conf, serverName, haGroupId2);
+        ReplicationLogGroup g1_3 = ReplicationLogGroup.get(conf, serverName, haGroupId1, haGroupStoreManager);
+        ReplicationLogGroup g2_2 = ReplicationLogGroup.get(conf, serverName, haGroupId2, haGroupStoreManager);
         assertTrue("Cached instance should be returned", g1_3 == g1_1);
         assertTrue("Cached instance should be returned", g2_2 == g2_1);
 
@@ -1209,12 +1192,14 @@ public class ReplicationLogGroupTest {
         final String haGroupId = "testHAGroupCacheRemoval";
 
         // Get initial instance
-        ReplicationLogGroup g1_1 = ReplicationLogGroup.get(conf, serverName, haGroupId);
+        ReplicationLogGroup g1_1 = ReplicationLogGroup.get(conf,
+                serverName, haGroupId, haGroupStoreManager);
         assertNotNull("ReplicationLogGroup should not be null", g1_1);
         assertFalse("Group should not be closed initially", g1_1.isClosed());
 
         // Verify cached instance is returned
-        ReplicationLogGroup g1_2 = ReplicationLogGroup.get(conf, serverName, haGroupId);
+        ReplicationLogGroup g1_2 = ReplicationLogGroup.get(conf, serverName, haGroupId,
+                haGroupStoreManager);
         assertTrue("Same instance should be returned before close", g1_2 == g1_1);
 
         // Close the group
@@ -1222,44 +1207,102 @@ public class ReplicationLogGroupTest {
         assertTrue("Group should be closed", g1_1.isClosed());
 
         // Get instance after close - should be a new instance
-        ReplicationLogGroup g1_3 = ReplicationLogGroup.get(conf, serverName, haGroupId);
+        ReplicationLogGroup g1_3 = ReplicationLogGroup.get(conf, serverName, haGroupId,
+                haGroupStoreManager);
         assertNotNull("ReplicationLogGroup should not be null after close", g1_3);
         assertFalse("New group should not be closed", g1_3.isClosed());
         assertTrue("New instance should be created after close", g1_1 != g1_3);
-        assertEquals("HA Group name should match", haGroupId, g1_3.getHaGroupName());
+        assertEquals("HA Group name should match", haGroupId, g1_3.getHAGroupName());
 
         // Clean up
         g1_3.close();
     }
 
-    static class TestableLogGroup extends ReplicationLogGroup {
+    @Test
+    public void testInFlightAppendsReplayAfterModeSwitch() throws Exception {
+        final String tableName = "TESTTBL";
+        final long commitId1 = 1L;
+        final long commitId2 = 2L;
+        final long commitId3 = 3L;
+        final long commitId4 = 4L;
+        final long commitId5 = 5L;
+        final Mutation put1 = LogFileTestUtil.newPut("row1", 1, 1);
+        final Mutation put2 = LogFileTestUtil.newPut("row2", 2, 1);
+        final Mutation put3 = LogFileTestUtil.newPut("row3", 3, 1);
+        final Mutation put4 = LogFileTestUtil.newPut("row4", 4, 1);
+        final Mutation put5 = LogFileTestUtil.newPut("row5", 5, 1);
 
-        public TestableLogGroup(Configuration conf, ServerName serverName, String haGroupName) {
-            super(conf, serverName, haGroupName);
-        }
+        // Get the inner writer
+        ReplicationLog activeLog = logGroup.getActiveLog();
+        LogFileWriter writer = activeLog.getWriter();
+        assertNotNull("Writer should not be null", writer);
+        // keep returning the same writer
+        doAnswer(invocation -> writer).when(activeLog).createNewWriter();
 
-        @Override
-        protected ReplicationLogGroupWriter createRemoteWriter() throws IOException {
-            ReplicationLogGroupWriter writer = spy(new TestableStandbyLogGroupWriter(this));
-            writer.init();
-            return writer;
-        }
+        logGroup.append(tableName, commitId1, put1);
+        logGroup.append(tableName, commitId2, put2);
+        logGroup.append(tableName, commitId3, put3);
+        logGroup.append(tableName, commitId4, put4);
 
+        // configure writer to throw IOException on the 5th append
+        doThrow(new IOException("Simulate append failure"))
+                .when(writer).append(tableName, commitId5, put5);
+
+        logGroup.append(tableName, commitId5, put5);
+        logGroup.sync();
+
+        LogFileWriter storeAndForwardWriter = logGroup.getActiveLog().getWriter();
+        assertTrue("After switching mode we should have a new writer",
+                writer != storeAndForwardWriter);
+        InOrder inOrder = Mockito.inOrder(storeAndForwardWriter);
+
+        // verify that all the in-flight appends and syncs are replayed on the new store and forward writer
+        inOrder.verify(storeAndForwardWriter, times(1))
+                .append(eq(tableName), eq(commitId1), eq(put1));
+        inOrder.verify(storeAndForwardWriter, times(1))
+                .append(eq(tableName), eq(commitId2), eq(put2));
+        inOrder.verify(storeAndForwardWriter, times(1))
+                .append(eq(tableName), eq(commitId3), eq(put3));
+        inOrder.verify(storeAndForwardWriter, times(1))
+                .append(eq(tableName), eq(commitId4), eq(put4));
+        inOrder.verify(storeAndForwardWriter, times(1))
+                .append(eq(tableName), eq(commitId5), eq(put5));
+        inOrder.verify(storeAndForwardWriter, times(1)).sync();
     }
 
-    /**
-     * Testable version of StandbyLogGroupWriter that allows spying on writers.
-     */
-    static class TestableStandbyLogGroupWriter extends StandbyLogGroupWriter {
+    //@Test
+    public void testAppendTimeoutWhileSyncPending() throws Exception {
+        final String tableName = "TESTTBL";
+        final long commitId1 = 1L;
+        final Mutation put1 = LogFileTestUtil.newPut("row1", 1, 1);
 
-        protected TestableStandbyLogGroupWriter(ReplicationLogGroup logGroup) {
-            super(logGroup);
-        }
+        // Get the inner writer
+        ReplicationLog activeLog = logGroup.getActiveLog();
+        LogFileWriter writer = activeLog.getWriter();
+        assertNotNull("Writer should not be null", writer);
+        // keep returning the same writer
+        //doAnswer(invocation -> writer).when(activeLog).createNewWriter();
+        doAnswer(new Answer<Object>() {
+            @Override
+            public Object answer(InvocationOnMock invocation) throws Throwable {
+                //Thread.sleep((long)(TEST_SYNC_TIMEOUT * 1.25)); // Simulate slow append processing
+                //throw new CallTimeoutException("Simulate append timeout");
+                Object result = invocation.callRealMethod();
+                sleep((long)(TEST_SYNC_TIMEOUT * 1.25)); // Simulate slow but successful append
+                return result;
+            }
+        }).when(writer).append(anyString(), anyLong(), any(Mutation.class));
 
-        @Override
-        protected LogFileWriter createNewWriter() throws IOException {
-            LogFileWriter writer = super.createNewWriter();
-            return spy(writer);
-        }
+        logGroup.append(tableName, commitId1, put1);
+        logGroup.sync();
+
+        LogFileWriter storeAndForwardWriter = logGroup.getActiveLog().getWriter();
+        assertTrue("After switching mode we should have a new writer",
+                writer != storeAndForwardWriter);
+        InOrder inOrder = Mockito.inOrder(storeAndForwardWriter);
+        // verify that all the in-flight appends and syncs are replayed on the new store and forward writer
+        inOrder.verify(storeAndForwardWriter, times(1))
+                .append(eq(tableName), eq(commitId1), eq(put1));
+        inOrder.verify(storeAndForwardWriter, times(1)).sync();
     }
 }
