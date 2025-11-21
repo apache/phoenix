@@ -52,6 +52,12 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
     // TODO: come up with a better default after testing
     public static final double DEFAULT_LOG_COPY_THROUGHPUT_BYTES_PER_MS = 1.0;
 
+    /**
+     * Configuration key for waiting buffer percentage
+     */
+    public static final String REPLICATION_FORWARDER_WAITING_BUFFER_PERCENTAGE_KEY =
+            "phoenix.replication.forwarder.waiting.buffer.percentage";
+
     private final ReplicationLogGroup logGroup;
     private final double copyThroughputThresholdBytesPerMs;
     // the timestamp (in future) at which we will attempt to set the HAGroup state to SYNC
@@ -130,7 +136,8 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
 
         HAGroupStoreManager haGroupStoreManager = logGroup.getHAGroupStoreManager();
         haGroupStoreManager.subscribeToTargetState(logGroup.getHAGroupName(),
-                HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, ClusterType.LOCAL, activeNotInSync);
+                HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, ClusterType.LOCAL,
+                activeNotInSync);
         haGroupStoreManager.subscribeToTargetState(logGroup.getHAGroupName(),
                 HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, ClusterType.LOCAL, activeInSync);
     }
@@ -147,7 +154,8 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
         // successfully copied the file
         long endTime = EnvironmentEdgeManager.currentTimeMillis();
         long copyTime = endTime - startTime;
-        LOG.info("Copying file src={} dst={} size={} took {}ms", src, dst, srcStat.getLen(), copyTime);
+        LOG.info("Copying file src={} dst={} size={} took {}ms", src, dst, srcStat.getLen(),
+                copyTime);
         if (logGroup.getMode() == STORE_AND_FORWARD
                 && isLogCopyThroughputAboveThreshold(srcStat.getLen(), copyTime)) {
             // start recovery by switching to SYNC_AND_FORWARD
@@ -195,7 +203,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
      * @return True if the throughput is good else false
      */
     private boolean isLogCopyThroughputAboveThreshold(long fileSize, long copyTime) {
-        double actualThroughputBytesPerMs = copyTime != 0 ? ((double) fileSize)/copyTime : 0;
+        double actualThroughputBytesPerMs = copyTime != 0 ? ((double) fileSize) / copyTime : 0;
         return actualThroughputBytesPerMs >= copyThroughputThresholdBytesPerMs;
     }
 
@@ -213,7 +221,8 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
     /**
      * Helper API to check and set the replication mode and then notify the disruptor
      */
-    private boolean checkAndSetModeAndNotify(ReplicationMode expectedMode, ReplicationMode newMode) {
+    private boolean checkAndSetModeAndNotify(ReplicationMode expectedMode,
+                                             ReplicationMode newMode) {
         boolean ret = logGroup.checkAndSetMode(expectedMode, newMode);
         if (ret) {
             // replication mode switched, notify the event handler
@@ -224,5 +233,11 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
             }
         }
         return ret;
+    }
+
+    @Override
+    public double getWaitingBufferPercentage() {
+        return getConf().getDouble(REPLICATION_FORWARDER_WAITING_BUFFER_PERCENTAGE_KEY,
+                DEFAULT_WAITING_BUFFER_PERCENTAGE);
     }
 }

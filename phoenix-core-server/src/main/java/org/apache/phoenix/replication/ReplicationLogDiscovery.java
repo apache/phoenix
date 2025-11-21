@@ -93,7 +93,7 @@ public abstract class ReplicationLogDiscovery {
     /**
      * Default buffer percentage for waiting time between processing rounds
      */
-    private static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
+    protected static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
 
     protected final Configuration conf;
     protected final String haGroupName;

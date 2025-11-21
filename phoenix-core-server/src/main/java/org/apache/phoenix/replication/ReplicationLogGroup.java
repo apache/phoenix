@@ -1092,7 +1092,8 @@ public class ReplicationLogGroup {
                 }
             } catch (IOException e) {
                 try {
-                    LOG.info("Failed to process event at sequence {} on mode {}", sequence, currentModeImpl, e);
+                    LOG.info("Failed to process event at sequence {} on mode {}", sequence,
+                            currentModeImpl, e);
                     onFailure(event, sequence, e);
                 } catch (Exception fatalEx) {
                     // Either we failed to switch the mode or we are in STORE_AND_FORWARD mode

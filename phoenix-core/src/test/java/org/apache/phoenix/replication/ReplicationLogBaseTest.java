@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.replication;
 
+import static org.apache.phoenix.replication.ReplicationLogDiscoveryForwarder.REPLICATION_FORWARDER_WAITING_BUFFER_PERCENTAGE_KEY;
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
@@ -108,6 +109,7 @@ public class ReplicationLogBaseTest {
         // small value of replication round duration
         conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY,
             TEST_REPLICATION_ROUND_DURATION_SECONDS);
+        conf.setDouble(REPLICATION_FORWARDER_WAITING_BUFFER_PERCENTAGE_KEY, 0.0);
 
         // initialize the group store record
         storeRecord = initHAGroupStoreRecord();
