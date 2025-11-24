@@ -18,6 +18,7 @@
 package org.apache.phoenix.index;
 
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.INDEX_USE_SERVER_METADATA_ATTRIB;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.sql.SQLException;
@@ -34,12 +35,17 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.MaxServerCacheSizeExceededException;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class IndexMetaDataCacheClient {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(IndexMetaDataCacheClient.class);
 
   private final ServerCacheClient serverCache;
   private PTable cacheUsingTable;
@@ -120,8 +126,15 @@ public class IndexMetaDataCacheClient {
       txState = connection.getMutationState().encodeTransaction();
     }
     boolean hasIndexMetaData = indexMetaDataPtr.getLength() > 0;
+    ReadOnlyProps props = connection.getQueryServices().getProps();
+    boolean useServerMetadata = props.getBoolean(INDEX_USE_SERVER_METADATA_ATTRIB,
+      QueryServicesOptions.DEFAULT_INDEX_USE_SERVER_METADATA);
     if (hasIndexMetaData) {
-      if (
+      if (useServerMetadata && table.getType() != PTableType.SYSTEM) {
+        LOGGER.trace("Using server-side metadata for table {}, not sending IndexMaintainer or UUID",
+          table.getTableName());
+        uuidValue = ByteUtil.EMPTY_BYTE_ARRAY;
+      } else if (
         useIndexMetadataCache(connection, mutations, indexMetaDataPtr.getLength() + txState.length)
       ) {
         IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, table);

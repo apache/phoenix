@@ -18,7 +18,9 @@
 package org.apache.phoenix.index;
 
 import java.io.IOException;
+import java.sql.Connection;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -32,14 +34,26 @@ import org.apache.phoenix.cache.TenantCache;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class PhoenixIndexMetaDataBuilder {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixIndexMetaDataBuilder.class);
+
   private final RegionCoprocessorEnvironment env;
 
   PhoenixIndexMetaDataBuilder(RegionCoprocessorEnvironment env) {
@@ -59,6 +73,17 @@ public class PhoenixIndexMetaDataBuilder {
     if (attributes == null) {
       return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
     }
+    if (
+      !env.getRegion().getTableDescriptor().getTableName().getNameAsString()
+        .startsWith(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + QueryConstants.NAME_SEPARATOR)
+        && !env.getRegion().getTableDescriptor().getTableName().getNameAsString().startsWith(
+          PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + QueryConstants.NAMESPACE_SEPARATOR)
+    ) {
+      IndexMetaDataCache cacheFromPTable = getIndexMetaDataCacheFromPTable(env, attributes);
+      if (cacheFromPTable != null) {
+        return cacheFromPTable;
+      }
+    }
     byte[] uuid = attributes.get(PhoenixIndexCodec.INDEX_UUID);
     if (uuid == null) {
       return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
@@ -77,28 +102,7 @@ public class PhoenixIndexMetaDataBuilder {
         : Bytes.toInt(clientVersionBytes);
       final PhoenixTransactionContext txnContext =
         TransactionFactory.getTransactionContext(txState, clientVersion);
-      return new IndexMetaDataCache() {
-
-        @Override
-        public void close() throws IOException {
-        }
-
-        @Override
-        public List<IndexMaintainer> getIndexMaintainers() {
-          return indexMaintainers;
-        }
-
-        @Override
-        public PhoenixTransactionContext getTransactionContext() {
-          return txnContext;
-        }
-
-        @Override
-        public int getClientVersion() {
-          return clientVersion;
-        }
-
-      };
+      return getIndexMetaDataCache(clientVersion, txnContext, indexMaintainers);
     } else {
       byte[] tenantIdBytes = attributes.get(PhoenixRuntime.TENANT_ID_ATTRIB);
       ImmutableBytesPtr tenantId =
@@ -116,5 +120,99 @@ public class PhoenixIndexMetaDataBuilder {
       return indexCache;
     }
 
+  }
+
+  /**
+   * Get IndexMetaDataCache by looking up PTable using table metadata attributes attached to the
+   * mutation.
+   * @param env        RegionCoprocessorEnvironment.
+   * @param attributes Mutation attributes.
+   * @return IndexMetaDataCache or null if table metadata not found in attributes.
+   */
+  private static IndexMetaDataCache getIndexMetaDataCacheFromPTable(
+    RegionCoprocessorEnvironment env, Map<String, byte[]> attributes) {
+    try {
+      byte[] schemaBytes =
+        attributes.get(MutationState.MutationMetadataType.SCHEMA_NAME.toString());
+      byte[] tableBytes =
+        attributes.get(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString());
+      if (schemaBytes == null || tableBytes == null) {
+        LOGGER.error("Table metadata for table name and schema name not found in mutation "
+          + "attributes, falling back to GlobalCache lookup");
+        return null;
+      }
+      byte[] tenantIdBytes =
+        attributes.get(MutationState.MutationMetadataType.TENANT_ID.toString());
+      byte[] txState = attributes.get(BaseScannerRegionObserverConstants.TX_STATE);
+      byte[] clientVersionBytes = attributes.get(BaseScannerRegionObserverConstants.CLIENT_VERSION);
+
+      final int clientVersion = clientVersionBytes == null
+        ? ScanUtil.UNKNOWN_CLIENT_VERSION
+        : Bytes.toInt(clientVersionBytes);
+      final PhoenixTransactionContext txnContext =
+        TransactionFactory.getTransactionContext(txState, clientVersion);
+
+      String fullTableName = SchemaUtil.getTableName(schemaBytes, tableBytes);
+      Connection conn = QueryUtil.getConnectionOnServer(env.getConfiguration());
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+
+      String tenantId =
+        tenantIdBytes == null || tenantIdBytes.length == 0 ? null : Bytes.toString(tenantIdBytes);
+      PTable dataTable = pconn.getTable(tenantId, fullTableName);
+
+      final List<IndexMaintainer> indexMaintainers =
+        buildIndexMaintainersFromPTable(dataTable, pconn);
+      if (indexMaintainers.isEmpty()) {
+        LOGGER.debug("No active indexes found for table {}", fullTableName);
+        return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
+      }
+      return getIndexMetaDataCache(clientVersion, txnContext, indexMaintainers);
+    } catch (Exception e) {
+      LOGGER.warn("Failed to get PTable from CQSI cache, falling back to GlobalCache lookup", e);
+      return null;
+    }
+  }
+
+  private static IndexMetaDataCache getIndexMetaDataCache(int clientVersion,
+    PhoenixTransactionContext txnContext, List<IndexMaintainer> indexMaintainers) {
+    return new IndexMetaDataCache() {
+      @Override
+      public void close() throws IOException {
+      }
+
+      @Override
+      public List<IndexMaintainer> getIndexMaintainers() {
+        return indexMaintainers;
+      }
+
+      @Override
+      public PhoenixTransactionContext getTransactionContext() {
+        return txnContext;
+      }
+
+      @Override
+      public int getClientVersion() {
+        return clientVersion;
+      }
+    };
+  }
+
+  /**
+   * Build List of IndexMaintainer for each active index.
+   * @param dataTable  PTable of the data table.
+   * @param connection PhoenixConnection.
+   * @return List of IndexMaintainer objects for active indexes.
+   */
+  private static List<IndexMaintainer> buildIndexMaintainersFromPTable(PTable dataTable,
+    PhoenixConnection connection) throws SQLException {
+    List<IndexMaintainer> indexMaintainers = new ArrayList<>();
+    List<PTable> indexes = dataTable.getIndexes();
+    for (PTable index : indexes) {
+      if (IndexMaintainer.sendIndexMaintainer(index)) {
+        IndexMaintainer maintainer = IndexMaintainer.create(dataTable, index, connection);
+        indexMaintainers.add(maintainer);
+      }
+    }
+    return indexMaintainers;
   }
 }
