@@ -55,6 +55,12 @@
     <module>phoenix-pherf</module>
     <module>phoenix-tracing-webapp</module>
     <!-- shaded artifact and assembly modules are added in shade-and-assembly profile -->
+    <module>phoenix-client-parent</module>
+    <module>phoenix-client-parent/phoenix-client-embedded</module>
+    <module>phoenix-client-parent/phoenix-client-lite</module>
+    <module>phoenix-server</module>
+    <module>phoenix-mapreduce-byo-shaded-hbase</module>
+    <module>phoenix-assembly</module>
   </modules>
 
   <scm>
