@@ -2148,8 +2148,7 @@
       <id>phoenix-hbase-compat-2.5.12-default</id>
       <activation>
         <property>
-          <name>hbase.profile</name>
-          <value>2.5</value>
+          <name>!hbase.profile</name>
         </property>
       </activation>
       <properties>
@@ -2210,8 +2209,8 @@
       <id>phoenix-hbase-compat-2.6.4</id>
       <activation>
         <property>
-          <name>!hbase.profile</name>
-          <!-- <value>2.6</value> -->
+          <name>hbase.profile</name>
+          <value>2.6</value>
         </property>
       </activation>
       <properties>
