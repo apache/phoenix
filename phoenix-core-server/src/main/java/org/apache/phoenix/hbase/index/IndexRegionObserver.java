@@ -628,38 +628,35 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               throw new IOException("HAGroupStoreManager is null "
                       + "for current cluster, check configuration");
           }
-          Optional<ReplicationLogGroup> logGroup = Optional.empty();
-          if (shouldReplicate) {
-              // Extract HAGroupName from the mutations
-              logGroup = getHAGroupFromBatch(c.getEnvironment(), miniBatchOp);
-          }
+          // Extract HAGroupName from the mutations
+          Optional<ReplicationLogGroup> logGroup =
+                  getHAGroupFromBatch(c.getEnvironment(), miniBatchOp);
+
           // We don't want to check for mutation blocking for the system ha group table
-          if (!dataTableName.equals(SYSTEM_HA_GROUP_NAME)) {
+          if (!dataTableName.equals(SYSTEM_HA_GROUP_NAME) && logGroup.isPresent()) {
               // Check if mutation is blocked for the HA Group
-              if (logGroup.isPresent()) {
-                  String haGroupName = logGroup.get().getHAGroupName();
-                  //TODO: Below approach might be slow need to figure out faster way,
-                  // slower part is getting haGroupStoreClient We can also cache
-                  // roleRecord (I tried it and still it's slow due to haGroupStoreClient
-                  // initialization) and caching will give us old result in case one cluster
-                  // is unreachable instead of UNKNOWN.
+              String haGroupName = logGroup.get().getHAGroupName();
+              //TODO: Below approach might be slow need to figure out faster way,
+              // slower part is getting haGroupStoreClient We can also cache
+              // roleRecord (I tried it and still it's slow due to haGroupStoreClient
+              // initialization) and caching will give us old result in case one cluster
+              // is unreachable instead of UNKNOWN.
 
-                    boolean isHAGroupOnClientStale = haGroupStoreManager
-                            .isHAGroupOnClientStale(haGroupName);
-                    if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
-                        throw new StaleClusterRoleRecordException(
-                                String.format("HAGroupStoreRecord is stale for haGroup %s on "
-                                                + "client", haGroupName));
-                    }
+              boolean isHAGroupOnClientStale = haGroupStoreManager
+                      .isHAGroupOnClientStale(haGroupName);
+              if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
+                  throw new StaleClusterRoleRecordException(
+                          String.format("HAGroupStoreRecord is stale for haGroup %s on "
+                                  + "client", haGroupName));
+              }
 
-                    //Check if mutation's haGroup is stale
-                    if (StringUtils.isNotBlank(haGroupName)
-                            && haGroupStoreManager.isMutationBlocked(haGroupName)) {
-                        throw new MutationBlockedIOException("Blocking Mutation as Some CRRs "
-                                + "are in ACTIVE_TO_STANDBY state and "
-                                + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
-                    }
-                }
+              //Check if mutation's haGroup is stale
+              if (StringUtils.isNotBlank(haGroupName)
+                      && haGroupStoreManager.isMutationBlocked(haGroupName)) {
+                  throw new MutationBlockedIOException("Blocking Mutation as Some CRRs "
+                          + "are in ACTIVE_TO_STANDBY state and "
+                          + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+              }
           }
           preBatchMutateWithExceptions(c, miniBatchOp, logGroup);
           return;
