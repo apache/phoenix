@@ -475,32 +475,37 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
      * Failover is safe to trigger when all of the following conditions are met:
      * 1. A failover has been requested (failoverPending is true)
      * 2. No files are currently in the in-progress directory
-     * 3. No new files exist for ongoing round
+     * 3. No new files exist from the next round to process up to the current timestamp round
      *
-     * These conditions ensure all replication logs have been processed before transitioning
-     * the cluster from STANDBY to ACTIVE state.
+     * The third condition checks for new files in the range from nextRoundToProcess (derived from
+     * getLastRoundProcessed()) to currentTimestampRound (derived from current time). This ensures
+     * all replication logs up to the current time have been processed before transitioning the cluster
+     * from STANDBY to ACTIVE state.
      *
      * @return true if all conditions are met and failover should be triggered, false otherwise
      * @throws IOException if there's an error checking file status
      */
     protected boolean shouldTriggerFailover() throws IOException {
         LOG.debug("Checking if failover should be triggered. failoverPending={}", failoverPending);
+        // Check if failover has been requested
         if(!failoverPending.get()) {
             LOG.debug("Failover not triggered. failoverPending is false.");
             return false;
         }
+        // Check if in-progress directory is empty
         boolean isInProgressDirectoryEmpty = replicationLogTracker.getInProgressFiles().isEmpty();
         if(!isInProgressDirectoryEmpty) {
             LOG.debug("Failover not triggered. In progress directory is not empty.");
             return false;
         }
+        // Check if there are any new files from next round to current timestamp round
         ReplicationShardDirectoryManager replicationShardDirectoryManager = replicationLogTracker.getReplicationShardDirectoryManager();
         ReplicationRound nextRoundToProcess = replicationShardDirectoryManager.getNextRound(getLastRoundProcessed());
         ReplicationRound currentTimestampRound = replicationShardDirectoryManager.getReplicationRoundFromStartTime(EnvironmentEdgeManager.currentTime());
         boolean isInDirectoryEmpty = replicationLogTracker.getNewFiles(nextRoundToProcess, currentTimestampRound).isEmpty();
 
         if (!isInDirectoryEmpty) {
-            LOG.debug("Failover not triggered. New files exist for upcoming round.");
+            LOG.debug("Failover not triggered. New files exist from next round to current timestamp round.");
             return false;
         }
 
