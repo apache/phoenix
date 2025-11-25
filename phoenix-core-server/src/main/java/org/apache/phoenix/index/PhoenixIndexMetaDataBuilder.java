@@ -17,12 +17,15 @@
  */
 package org.apache.phoenix.index;
 
+import static org.apache.phoenix.query.QueryServices.INDEX_USE_SERVER_METADATA_ATTRIB;
+
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
@@ -39,6 +42,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -73,9 +77,12 @@ public class PhoenixIndexMetaDataBuilder {
     if (attributes == null) {
       return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
     }
+    boolean useServerMetadata = env.getConfiguration().getBoolean(INDEX_USE_SERVER_METADATA_ATTRIB,
+      QueryServicesOptions.DEFAULT_INDEX_USE_SERVER_METADATA);
     if (
-      !env.getRegion().getTableDescriptor().getTableName().getNameAsString()
-        .startsWith(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + QueryConstants.NAME_SEPARATOR)
+      useServerMetadata
+        && !env.getRegion().getTableDescriptor().getTableName().getNameAsString()
+          .startsWith(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + QueryConstants.NAME_SEPARATOR)
         && !env.getRegion().getTableDescriptor().getTableName().getNameAsString().startsWith(
           PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + QueryConstants.NAMESPACE_SEPARATOR)
     ) {
@@ -153,16 +160,20 @@ public class PhoenixIndexMetaDataBuilder {
         TransactionFactory.getTransactionContext(txState, clientVersion);
 
       String fullTableName = SchemaUtil.getTableName(schemaBytes, tableBytes);
-      try (Connection conn = QueryUtil.getConnectionOnServer(env.getConfiguration())) {
+      String tenantId =
+        tenantIdBytes == null || tenantIdBytes.length == 0 ? null : Bytes.toString(tenantIdBytes);
+      Properties props = new Properties();
+      if (tenantId != null) {
+        props.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
+      }
+      try (Connection conn = QueryUtil.getConnectionOnServer(props, env.getConfiguration())) {
         PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-        String tenantId =
-          tenantIdBytes == null || tenantIdBytes.length == 0 ? null : Bytes.toString(tenantIdBytes);
         PTable dataTable = pconn.getTable(tenantId, fullTableName);
         final List<IndexMaintainer> indexMaintainers =
           buildIndexMaintainersFromPTable(dataTable, pconn);
         if (indexMaintainers.isEmpty()) {
           LOGGER.debug("No active indexes found for table {}", fullTableName);
-          return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
+          return null;
         }
         return getIndexMetaDataCache(clientVersion, txnContext, indexMaintainers);
       }

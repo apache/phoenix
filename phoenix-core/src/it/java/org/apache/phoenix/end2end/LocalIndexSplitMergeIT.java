@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.QueryServices.INDEX_USE_SERVER_METADATA_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -76,8 +77,8 @@ public class LocalIndexSplitMergeIT extends BaseTest {
     Connection conn = getConnectionForLocalIndexTest();
     String ddl = "CREATE TABLE " + tableName + " (t_id VARCHAR NOT NULL,\n"
       + "k1 INTEGER NOT NULL,\n" + "k2 INTEGER NOT NULL,\n" + "k3 INTEGER,\n" + "v1 VARCHAR,\n"
-      + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2))\n"
-      + (splits != null ? (" split on " + splits) : "");
+      + "CONSTRAINT pk PRIMARY KEY (t_id, k1, k2)) \"" + INDEX_USE_SERVER_METADATA_ATTRIB
+      + "\"=false" + " \n" + (splits != null ? (" split on " + splits) : "");
     conn.createStatement().execute(ddl);
     conn.close();
   }
