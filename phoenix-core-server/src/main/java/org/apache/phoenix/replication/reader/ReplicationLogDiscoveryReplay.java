@@ -32,6 +32,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.replication.ReplicationLogDiscovery;
 import org.apache.phoenix.replication.ReplicationLogTracker;
 import org.apache.phoenix.replication.ReplicationRound;
+import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscoveryReplayImpl;
 import org.slf4j.Logger;
@@ -483,10 +484,28 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
      * @throws IOException if there's an error checking file status
      */
     protected boolean shouldTriggerFailover() throws IOException {
-        return failoverPending.get() && replicationLogTracker.getInProgressFiles().isEmpty()
-                && replicationLogTracker.getNewFilesForRound(replicationLogTracker
-                .getReplicationShardDirectoryManager()
-                .getNextRound(getLastRoundProcessed())).isEmpty();
+        LOG.debug("Checking if failover should be triggered. failoverPending={}", failoverPending);
+        if(!failoverPending.get()) {
+            LOG.debug("Failover not triggered. failoverPending is false.");
+            return false;
+        }
+        boolean isInProgressDirectoryEmpty = replicationLogTracker.getInProgressFiles().isEmpty();
+        if(!isInProgressDirectoryEmpty) {
+            LOG.debug("Failover not triggered. In progress directory is not empty.");
+            return false;
+        }
+        ReplicationShardDirectoryManager replicationShardDirectoryManager = replicationLogTracker.getReplicationShardDirectoryManager();
+        ReplicationRound nextRoundToProcess = replicationShardDirectoryManager.getNextRound(getLastRoundProcessed());
+        ReplicationRound currentTimestampRound = replicationShardDirectoryManager.getReplicationRoundFromStartTime(EnvironmentEdgeManager.currentTime());
+        boolean isInDirectoryEmpty = replicationLogTracker.getNewFiles(nextRoundToProcess, currentTimestampRound).isEmpty();
+
+        if (!isInDirectoryEmpty) {
+            LOG.debug("Failover not triggered. New files exist for upcoming round.");
+            return false;
+        }
+
+        LOG.info("Failover can be triggered.");
+        return true;
     }
 
     protected void triggerFailover() {

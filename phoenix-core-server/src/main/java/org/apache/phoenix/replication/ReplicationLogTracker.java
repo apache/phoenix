@@ -151,6 +151,21 @@ public class ReplicationLogTracker {
         return filesInRound;
     }
 
+    public List<Path> getNewFiles(ReplicationRound startRound, ReplicationRound endRound) throws IOException {
+        List<Path> files = new ArrayList<>();
+        if (startRound.getStartTime() > endRound.getStartTime()) {
+            return files;
+        }
+        ReplicationRound firstRound = startRound;
+        while (!firstRound.equals(endRound)) {
+            files.addAll(getNewFilesForRound(firstRound));
+            firstRound = replicationShardDirectoryManager.getNextRound(firstRound);
+        }
+        // Add the files for last round
+        files.addAll(getNewFilesForRound(endRound));
+        return files;
+    }
+
     /**
      * Retrieves all valid log files currently in the in-progress directory.
      * @return List of valid log file paths in the in-progress directory, empty list if directory
