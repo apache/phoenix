@@ -33,6 +33,7 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.MaxServerCacheSizeExceededException;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
@@ -128,7 +129,9 @@ public class IndexMetaDataCacheClient {
     boolean hasIndexMetaData = indexMetaDataPtr.getLength() > 0;
     ReadOnlyProps props = connection.getQueryServices().getProps();
     boolean useServerMetadata = props.getBoolean(INDEX_USE_SERVER_METADATA_ATTRIB,
-      QueryServicesOptions.DEFAULT_INDEX_USE_SERVER_METADATA);
+      QueryServicesOptions.DEFAULT_INDEX_USE_SERVER_METADATA)
+      && props.getBoolean(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
+        QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
     if (hasIndexMetaData) {
       if (useServerMetadata && table.getType() != PTableType.SYSTEM) {
         LOGGER.trace("Using server-side metadata for table {}, not sending IndexMaintainer or UUID",

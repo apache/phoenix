@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.index;
 
-import static org.apache.phoenix.query.QueryServices.INDEX_USE_SERVER_METADATA_ATTRIB;
-
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
@@ -40,9 +38,6 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
-import org.apache.phoenix.query.QueryConstants;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.TransactionFactory;
@@ -77,21 +72,14 @@ public class PhoenixIndexMetaDataBuilder {
     if (attributes == null) {
       return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
     }
-    boolean useServerMetadata = env.getConfiguration().getBoolean(INDEX_USE_SERVER_METADATA_ATTRIB,
-      QueryServicesOptions.DEFAULT_INDEX_USE_SERVER_METADATA);
-    if (
-      useServerMetadata
-        && !env.getRegion().getTableDescriptor().getTableName().getNameAsString()
-          .startsWith(PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + QueryConstants.NAME_SEPARATOR)
-        && !env.getRegion().getTableDescriptor().getTableName().getNameAsString().startsWith(
-          PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA + QueryConstants.NAMESPACE_SEPARATOR)
-    ) {
+    byte[] uuid = attributes.get(PhoenixIndexCodec.INDEX_UUID);
+    boolean useServerMetadata = uuid != null && uuid.length == 0;
+    if (useServerMetadata) {
       IndexMetaDataCache cacheFromPTable = getIndexMetaDataCacheFromPTable(env, attributes);
       if (cacheFromPTable != null) {
         return cacheFromPTable;
       }
     }
-    byte[] uuid = attributes.get(PhoenixIndexCodec.INDEX_UUID);
     if (uuid == null) {
       return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
     }
