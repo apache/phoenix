@@ -39,6 +39,10 @@ import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -48,10 +52,13 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.hbase.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
@@ -63,6 +70,7 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
 
   private static final ExecutorService EXECUTOR_SERVICE = Executors.newSingleThreadExecutor(
     new ThreadFactoryBuilder().setDaemon(true).setNameFormat("query-timeout-tests-%d").build());
+  private static final Logger LOG = LoggerFactory.getLogger(PhoenixQueryTimeoutIT.class);
 
   private String tableName;
 
@@ -177,14 +185,19 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
     // Arrange
     PreparedStatement ps = loadDataAndPreparePagedQuery(1, 1);
 
+    LOG.info("Starting test {}", tableName);
     // Act + Assert
-    try {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      DelayedRegionObserver.setDelay(5);
+      // Add delay on the server so that the query times out
+      TestUtil.addCoprocessor(conn, tableName, DelayedRegionObserver.class);
       // Do not let BaseResultIterators throw Timeout Exception Let ScanningResultIterator handle
       // it.
       BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(true);
       ResultSet rs = ps.executeQuery();
       while (rs.next()) {
       }
+      LOG.info("Test failed {}", tableName);
       fail("Expected query to timeout with a 1 ms timeout");
     } catch (SQLException e) {
       // OPERATION_TIMED_OUT Exception expected
@@ -299,6 +312,24 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
       fail("Expected query to succeed");
     } finally {
       BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(false);
+    }
+  }
+
+  public static class DelayedRegionObserver extends SimpleRegionObserver {
+    public static long delay = 0;
+
+    public static void setDelay(long duration) {
+      delay = duration;
+    }
+
+    @Override
+    public void preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
+      final Scan scan) {
+      try {
+        Thread.sleep(delay);
+      } catch (InterruptedException e) {
+        throw new RuntimeException(e);
+      }
     }
   }
 
