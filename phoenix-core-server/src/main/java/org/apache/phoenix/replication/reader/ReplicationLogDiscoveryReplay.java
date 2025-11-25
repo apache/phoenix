@@ -502,6 +502,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
         ReplicationShardDirectoryManager replicationShardDirectoryManager = replicationLogTracker.getReplicationShardDirectoryManager();
         ReplicationRound nextRoundToProcess = replicationShardDirectoryManager.getNextRound(getLastRoundProcessed());
         ReplicationRound currentTimestampRound = replicationShardDirectoryManager.getReplicationRoundFromStartTime(EnvironmentEdgeManager.currentTime());
+        LOG.debug("Checking the new files from next round {} to current timestamp round {}.", nextRoundToProcess, currentTimestampRound);
         boolean isInDirectoryEmpty = replicationLogTracker.getNewFiles(nextRoundToProcess, currentTimestampRound).isEmpty();
 
         if (!isInDirectoryEmpty) {
