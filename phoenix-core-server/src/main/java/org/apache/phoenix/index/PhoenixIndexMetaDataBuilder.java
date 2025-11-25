@@ -153,20 +153,19 @@ public class PhoenixIndexMetaDataBuilder {
         TransactionFactory.getTransactionContext(txState, clientVersion);
 
       String fullTableName = SchemaUtil.getTableName(schemaBytes, tableBytes);
-      Connection conn = QueryUtil.getConnectionOnServer(env.getConfiguration());
-      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-
-      String tenantId =
-        tenantIdBytes == null || tenantIdBytes.length == 0 ? null : Bytes.toString(tenantIdBytes);
-      PTable dataTable = pconn.getTable(tenantId, fullTableName);
-
-      final List<IndexMaintainer> indexMaintainers =
-        buildIndexMaintainersFromPTable(dataTable, pconn);
-      if (indexMaintainers.isEmpty()) {
-        LOGGER.debug("No active indexes found for table {}", fullTableName);
-        return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
+      try (Connection conn = QueryUtil.getConnectionOnServer(env.getConfiguration())) {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        String tenantId =
+          tenantIdBytes == null || tenantIdBytes.length == 0 ? null : Bytes.toString(tenantIdBytes);
+        PTable dataTable = pconn.getTable(tenantId, fullTableName);
+        final List<IndexMaintainer> indexMaintainers =
+          buildIndexMaintainersFromPTable(dataTable, pconn);
+        if (indexMaintainers.isEmpty()) {
+          LOGGER.debug("No active indexes found for table {}", fullTableName);
+          return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
+        }
+        return getIndexMetaDataCache(clientVersion, txnContext, indexMaintainers);
       }
-      return getIndexMetaDataCache(clientVersion, txnContext, indexMaintainers);
     } catch (Exception e) {
       LOGGER.warn("Failed to get PTable from CQSI cache, falling back to GlobalCache lookup", e);
       return null;
