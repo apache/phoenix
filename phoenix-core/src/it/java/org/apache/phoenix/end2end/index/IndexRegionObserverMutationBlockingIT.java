@@ -21,38 +21,31 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NA
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
-import static org.apache.phoenix.query.QueryServices.SYNCHRONOUS_REPLICATION_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
-import java.net.URI;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
+import org.apache.phoenix.jdbc.HABaseIT;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixHAAdmin;
-import org.apache.phoenix.replication.ReplicationLogBaseTest;
-import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 
 /**
@@ -61,11 +54,10 @@ import org.junit.rules.TestName;
  * blocking is enabled and CRRs are in ACTIVE_TO_STANDBY state.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class IndexRegionObserverMutationBlockingIT {
+public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
 
     private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;
     private PhoenixHAAdmin haAdmin;
-    private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
 
     private String zkUrl;
     private String peerZkUrl;
@@ -75,26 +67,8 @@ public class IndexRegionObserverMutationBlockingIT {
     private Properties clientProps = new Properties();
     private String haGroupName;
 
-    @ClassRule
-    public static TemporaryFolder standbyFolder = new TemporaryFolder();
-    @ClassRule
-    public static TemporaryFolder localFolder = new TemporaryFolder();
-
-    private static Configuration conf1;
-    private static Configuration conf2;
-    private static URI standbyUri;
-    private static URI fallbackUri;
-
     @BeforeClass
     public static synchronized void doSetup() throws Exception {
-        conf1 = CLUSTERS.getHBaseCluster1().getConfiguration();
-        conf2 = CLUSTERS.getHBaseCluster2().getConfiguration();
-        standbyUri = new Path(standbyFolder.getRoot().toString()).toUri();
-        fallbackUri = new Path(localFolder.getRoot().toString()).toUri();
-        conf1.setBoolean(SYNCHRONOUS_REPLICATION_ENABLED, true);
-        conf2.setBoolean(SYNCHRONOUS_REPLICATION_ENABLED, true);
-        conf1.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
-        conf1.set(ReplicationLogGroup.REPLICATION_FALLBACK_HDFS_URL_KEY, fallbackUri.toString());
         conf1.setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
         conf2.setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
         CLUSTERS.start();
