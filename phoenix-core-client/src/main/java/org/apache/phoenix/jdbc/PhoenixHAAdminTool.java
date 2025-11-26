@@ -151,17 +151,33 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
 
         switch (command) {
         case CMD_UPDATE:
+            // Updates HA group config in ZooKeeper
+            // Required: --ha-group, (--auto-increment-version | --admin-version)
+            // Optional: --policy, --state, --cluster-url, --peer-cluster-url,
+            //           --peer-zk-url, --protocol-version, --last-sync-time,
+            //           --force, --dry-run
             return executeUpdate(commandArgs);
         case CMD_GET:
+            // Retrieves and displays HA group configuration
+            // Required: --ha-group
             return executeGet(commandArgs);
         case CMD_LIST:
+            // Lists all HA groups for current cluster
+            // Required: none
             return executeList(commandArgs);
         case CMD_INITIATE_FAILOVER:
-            // TODO: If timeout exceeds, we can also abort the failover automatically.
+            // Initiates failover on active cluster (transitions active → standby)
+            // Required: --ha-group
+            // Optional: --timeout (default: 120s)
             return executeInitiateFailover(commandArgs);
         case CMD_ABORT_FAILOVER:
+            // Aborts ongoing failover
+            // Required: --ha-group
+            // Optional: --timeout (default: 120s)
             return executeAbortFailover(commandArgs);
         case CMD_GET_CLUSTER_ROLE_RECORD:
+            // Retrieves and displays cluster role record for HA group
+            // Required: --ha-group
             return executeGetClusterRoleRecord(commandArgs);
         default:
             System.err.println("Unknown command: " + command);
