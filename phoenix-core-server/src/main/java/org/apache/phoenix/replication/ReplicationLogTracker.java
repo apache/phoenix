@@ -98,8 +98,9 @@ public class ReplicationLogTracker {
      * exist.
      */
     public void init() throws IOException {
-        this.inProgressDirPath = new Path(getReplicationShardDirectoryManager().getRootDirectoryPath().getParent(),
-            getInProgressLogSubDirectoryName());
+        this.inProgressDirPath = new Path(
+                getReplicationShardDirectoryManager().getRootDirectoryPath().getParent(),
+                getInProgressLogSubDirectoryName());
         createDirectoryIfNotExists(inProgressDirPath);
     }
 
@@ -152,15 +153,18 @@ public class ReplicationLogTracker {
     }
 
     /**
-     * Retrieves new replication log files that belong to replication rounds from startRound to endRound (inclusive).
-     * Iterates through all rounds in the range and collects valid log files from each round's shard directory.
+     * Retrieves new replication log files that belong to replication rounds from startRound to
+     * endRound (inclusive). Iterates through all rounds in the range and collects valid log files
+     * from each round's shard directory.
      *
      * @param startRound - The starting replication round (inclusive)
      * @param endRound - The ending replication round (inclusive)
-     * @return List of valid log file paths from startRound to endRound, empty list if startRound > endRound
+     * @return List of valid log file paths from startRound to endRound, empty list if
+     *         startRound > endRound
      * @throws IOException if there's an error accessing the file system
      */
-    public List<Path> getNewFiles(ReplicationRound startRound, ReplicationRound endRound) throws IOException {
+    public List<Path> getNewFiles(ReplicationRound startRound, ReplicationRound endRound)
+            throws IOException {
         List<Path> files = new ArrayList<>();
         // Early return if startRound is after endRound (invalid range)
         if (startRound.getStartTime() > endRound.getStartTime()) {
