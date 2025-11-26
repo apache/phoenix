@@ -467,16 +467,20 @@ public class ReplicationLogGroup {
         if (haGroupStoreRecord.isPresent()) {
             HAGroupStoreRecord record = haGroupStoreRecord.get();
             HAGroupState haGroupState = record.getHAGroupState();
+            LOG.info("HAGroup {} initializing mode from state {}", this, haGroupState);
             if (haGroupState.equals(HAGroupState.ACTIVE_IN_SYNC)) {
                 setMode(SYNC);
-            } else if (haGroupState.equals(HAGroupState.ACTIVE_NOT_IN_SYNC)) {
+            } else {
+                setMode(STORE_AND_FORWARD);
+            }
+            /*else if (haGroupState.equals(HAGroupState.ACTIVE_NOT_IN_SYNC)) {
                 setMode(STORE_AND_FORWARD);
             } else {
                 String message = String.format("HAGroup %s got an unexpected state %s while "
                         + "initializing mode", this, haGroupState);
                 LOG.error(message);
                 throw new IOException(message);
-            }
+            }*/
         } else {
             String message = String.format("HAGroup %s got an empty group store record while "
                     + "initializing mode", this);
