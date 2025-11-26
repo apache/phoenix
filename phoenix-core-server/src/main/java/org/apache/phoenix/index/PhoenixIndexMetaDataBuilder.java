@@ -73,15 +73,15 @@ public class PhoenixIndexMetaDataBuilder {
       return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
     }
     byte[] uuid = attributes.get(PhoenixIndexCodec.INDEX_UUID);
-    boolean useServerMetadata = uuid != null && uuid.length == 0;
+    if (uuid == null) {
+      return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
+    }
+    boolean useServerMetadata = uuid.length == 0;
     if (useServerMetadata) {
       IndexMetaDataCache cacheFromPTable = getIndexMetaDataCacheFromPTable(env, attributes);
       if (cacheFromPTable != null) {
         return cacheFromPTable;
       }
-    }
-    if (uuid == null) {
-      return IndexMetaDataCache.EMPTY_INDEX_META_DATA_CACHE;
     }
     byte[] md = attributes.get(PhoenixIndexCodec.INDEX_PROTO_MD);
     if (md == null) {

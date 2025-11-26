@@ -19,6 +19,8 @@ package org.apache.phoenix.index;
 
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_USE_SERVER_METADATA_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.sql.SQLException;
@@ -128,12 +130,20 @@ public class IndexMetaDataCacheClient {
     }
     boolean hasIndexMetaData = indexMetaDataPtr.getLength() > 0;
     ReadOnlyProps props = connection.getQueryServices().getProps();
-    boolean useServerMetadata = props.getBoolean(INDEX_USE_SERVER_METADATA_ATTRIB,
-      QueryServicesOptions.DEFAULT_INDEX_USE_SERVER_METADATA)
-      && props.getBoolean(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
-        QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
     if (hasIndexMetaData) {
-      if (useServerMetadata && table.getType() != PTableType.SYSTEM) {
+      boolean useServerMetadata = props.getBoolean(INDEX_USE_SERVER_METADATA_ATTRIB,
+        QueryServicesOptions.DEFAULT_INDEX_USE_SERVER_METADATA)
+        && props.getBoolean(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
+          QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED)
+        && !props.getBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
+          QueryServicesOptions.DEFAULT_IS_NAMESPACE_MAPPING_ENABLED);
+      boolean serverSideImmutableIndexes =
+        props.getBoolean(SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+          DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
+      if (
+        useServerMetadata && table.getType() != PTableType.SYSTEM
+          && (!table.isImmutableRows() || serverSideImmutableIndexes)
+      ) {
         LOGGER.trace("Using server-side metadata for table {}, not sending IndexMaintainer or UUID",
           table.getTableName());
         uuidValue = ByteUtil.EMPTY_BYTE_ARRAY;
