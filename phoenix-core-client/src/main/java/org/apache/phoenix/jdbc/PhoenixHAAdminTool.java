@@ -65,7 +65,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
 
 /**
  * Command-line tool to manage HAGroupStoreRecord configurations.
- * Updates both ZooKeeper and System.HA_GROUP table atomically.
+ * Updates both ZooKeeper and System.HA_GROUP table.
  * Requires admin version increment for all updates.
  */
 public class PhoenixHAAdminTool extends Configured implements Tool {
@@ -171,7 +171,60 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     }
 
     /**
-     * Execute UPDATE command
+     * Updates HA group configuration in ZooKeeper with optimistic locking and validation.
+     *
+     * <p><b>Architecture:</b> HA groups represent active/standby cluster pairs. Configuration
+     * is stored in ZooKeeper (source of truth) as HAGroupStoreRecord JSON and synchronized to
+     * SYSTEM.HA_GROUP table. Each record contains: haGroupName, state, policy, clusterUrl,
+     * peerClusterUrl, peerZKUrl, protocolVersion, lastSyncTime, and adminCRRVersion for
+     * concurrency control.
+     *
+     * <p><b>Versioning:</b> Two-tier system prevents concurrent update conflicts:
+     * <ul>
+     *   <li><b>Admin Version (adminCRRVersion):</b> Application-level version, must always
+     *       increment. Can be auto-incremented (reads current + 1, non-atomic) or explicitly
+     *       specified (safer).</li>
+     *   <li><b>ZK Stat Version:</b> ZooKeeper's internal version used for optimistic locking
+     *       via Curator's setData().withVersion() - ensures atomic compare-and-set.</li>
+     * </ul>
+     *
+     * <p><b>Core Logic Flow:</b>
+     * <ol>
+     *   <li>Parse CLI args and extract: haGroupName, version strategy (auto-increment XOR
+     *       explicit), config fields (policy, state, URLs, etc.), and flags (--force,
+     *       --dry-run)</li>
+     *   <li>Validate: exactly one version option, at least one config field, --force required
+     *       for auto-managed fields (state, lastSyncTime)</li>
+     *   <li>Determine admin version: auto-increment reads current from ZK via
+     *       readCurrentVersionAndIncrement(), or parse explicit value</li>
+     *   <li>Build HAGroupStoreConfigUpdate DTO with delta changes</li>
+     *   <li>Execute via performUpdate():
+     *       <ul>
+     *         <li>Read current HAGroupStoreRecord and ZK Stat from ZooKeeper</li>
+     *         <li>Merge via mergeConfiguration(): apply delta changes, preserve existing for
+     *             unspecified fields, honor --force for auto-managed fields</li>
+     *         <li>Validate via validateUpdate(): version must increment, immutable fields
+     *             unchanged, required fields non-blank, state transitions valid</li>
+     *         <li>If --dry-run, stop here and return success</li>
+     *         <li>Update ZooKeeper using Curator's setData().withVersion(currentStatVersion)
+     *             - atomic CAS operation. Throws StaleHAGroupStoreRecordVersionException if
+     *             concurrent modification detected.</li>
+     *         <li>Update SYSTEM.HA_GROUP table (best-effort, failures logged but don't fail
+     *             operation)</li>
+     *       </ul>
+     *   </li>
+     *   <li>Handle exceptions: StaleHAGroupStoreRecordVersionException → RET_VERSION_CONFLICT,
+     *       IllegalArgumentException → RET_ARGUMENT_ERROR, ValidationException →
+     *       RET_VALIDATION_ERROR, others → RET_UPDATE_ERROR</li>
+     * </ol>
+     *
+     * @param args CLI arguments: --ha-group (required), --auto-increment-version |
+     *             --admin-version (required), config fields (optional), --force (for
+     *             auto-managed fields), --dry-run (validation only)
+     * @return RET_SUCCESS | RET_VERSION_CONFLICT | RET_ARGUMENT_ERROR | RET_VALIDATION_ERROR
+     *         | RET_UPDATE_ERROR
+     * @throws Exception for critical unexpected errors (rare, most exceptions converted to
+     *                   error codes)
      */
     private int executeUpdate(String[] args) throws Exception {
         try {
@@ -265,7 +318,31 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     }
 
     /**
-     * Execute GET command
+     * Retrieves and displays configuration for a specific HA group.
+     *
+     * <p><b>Core Logic:</b>
+     * <ol>
+     *   <li>Parse CLI args to extract haGroupName (required parameter)</li>
+     *   <li>Retrieve HAGroupStoreRecord via HAGroupStoreManager.getHAGroupStoreRecord():
+     *       <ul>
+     *         <li>Gets HAGroupStoreClient (creates if needed, manages ZK
+     *             connection/cache)</li>
+     *         <li>Fetches cached record from PathChildrenCache (Curator cache of ZK
+     *             znode)</li>
+     *         <li>If cache miss, reads directly from ZK and populates cache</li>
+     *       </ul>
+     *   </li>
+     *   <li>Validate existence: return RET_ARGUMENT_ERROR if HA group not found</li>
+     * </ol>
+     *
+     * <p><b>Data Source:</b> HAGroupStoreManager uses cached data from ZooKeeper via
+     * Curator's PathChildrenCache, which watches ZK znodes for automatic updates. This
+     * provides near-real-time view without direct ZK reads on every GET.
+     *
+     * @param args CLI arguments: --ha-group (required)
+     * @return RET_SUCCESS if found and displayed, RET_ARGUMENT_ERROR if not found, or error
+     *         code from handleCommandError()
+     * @throws Exception for unexpected errors (handled by handleCommandError)
      */
     private int executeGet(String[] args) throws Exception {
         try {
@@ -297,7 +374,33 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     }
 
     /**
-     * Execute LIST command
+     * Retrieves and displays all HA groups configured in the system.
+     *
+     * <p><b>Core Logic:</b>
+     * <ol>
+     *   <li>Parse CLI args (no required parameters, only optional --help)</li>
+     *   <li>Retrieve all HA group names via HAGroupStoreManager.getHAGroupNames():
+     *       <ul>
+     *         <li>Queries SYSTEM.HA_GROUP table: SELECT HA_GROUP_NAME, ZK_URL_1,
+     *             ZK_URL_2</li>
+     *         <li>Filters results to only include HA groups for current cluster (matches
+     *             zkUrl)</li>
+     *         <li>Returns list of haGroupName strings</li>
+     *       </ul>
+     *   </li>
+     *   <li>If empty, displays "No HA groups found" message and returns success</li>
+     *   <li>Otherwise, fetches HAGroupStoreRecord for each HA group and displays all as
+     *       formatted table</li>
+     * </ol>
+     *
+     * <p><b>Data Source:</b> Reads from SYSTEM.HA_GROUP Phoenix system table, which is
+     * periodically synced from ZooKeeper. This provides a cluster-local view of HA groups
+     * without cross-cluster queries.
+     *
+     * @param args CLI arguments (none required, optional --help)
+     * @return RET_SUCCESS on successful listing (including empty list), or error code from
+     *         handleCommandError()
+     * @throws Exception for unexpected errors (handled by handleCommandError)
      */
     private int executeList(String[] args) throws Exception {
         try {
@@ -358,7 +461,53 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     }
 
     /**
-     * Execute INITIATE-FAILOVER command
+     * Initiates failover on active cluster, transitioning it to standby while peer becomes
+     * active.
+     *
+     * <p><b>Architecture:</b> Failover is a coordinated state transition where the currently
+     * ACTIVE cluster transitions to STANDBY, triggering the peer cluster to promote itself to
+     * ACTIVE. This operation triggers automatic failover management listeners on both clusters
+     * that orchestrate the complete transition.
+     *
+     * <p><b>Core Logic:</b>
+     * <ol>
+     *   <li>Parse CLI args: haGroupName (required), timeout (optional, default 120s)</li>
+     *   <li>Read current HAGroupStoreRecord from ZooKeeper to validate state</li>
+     *   <li>Validate current state allows failover (must be ACTIVE_IN_SYNC or
+     *       ACTIVE_NOT_IN_SYNC):
+     *       <ul>
+     *         <li>ACTIVE_IN_SYNC → ACTIVE_IN_SYNC_TO_STANDBY → STANDBY</li>
+     *         <li>ACTIVE_NOT_IN_SYNC → ACTIVE_NOT_IN_SYNC_TO_STANDBY →
+     *             ACTIVE_IN_SYNC_TO_STANDBY → STANDBY</li>
+     *         <li>Other states: return RET_VALIDATION_ERROR</li>
+     *       </ul>
+     *   </li>
+     *   <li>Execute failover via manager.initiateFailoverOnActiveCluster():
+     *       <ul>
+     *         <li>Gets HAGroupStoreClient (manages ZK connection, cache, watches)</li>
+     *         <li>Calls setHAGroupStatusIfNeeded(targetState) to update ZK with
+     *             ACTIVE_IN_SYNC_TO_STANDBY state</li>
+     *         <li>Failover management listeners automatically handle subsequent transitions
+     *             to STANDBY</li>
+     *       </ul>
+     *   </li>
+     *   <li>Poll for completion via pollForStateTransition():
+     *       <ul>
+     *         <li>Polls every 2 seconds, reading HAGroupStoreRecord from cache</li>
+     *         <li>Waits for local cluster to reach STANDBY and peer to reach ACTIVE
+     *             state</li>
+     *         <li>Returns true if final state reached within timeout, false otherwise</li>
+     *       </ul>
+     *   </li>
+     *   <li>Return RET_SUCCESS if completed, RET_UPDATE_ERROR if timeout (failover may still
+     *       complete)</li>
+     * </ol>
+     *
+     * @param args CLI arguments: --ha-group (required), --timeout (optional, default 120s)
+     * @return RET_SUCCESS if failover completed within timeout, RET_VALIDATION_ERROR if
+     *         invalid state, RET_ARGUMENT_ERROR if HA group not found, RET_UPDATE_ERROR if
+     *         timeout or other error
+     * @throws Exception for unexpected errors (caught and converted to error codes)
      */
     private int executeInitiateFailover(String[] args) throws Exception {
         try {
@@ -462,7 +611,50 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     }
 
     /**
-     * Execute ABORT-FAILOVER command
+     * Aborts an ongoing failover, returning standby cluster back to STANDBY state.
+     *
+     * <p><b>Use Case:</b> When failover has been initiated (standby is in STANDBY_TO_ACTIVE
+     * state) but needs to be cancelled before completion, this command transitions the standby
+     * cluster back to STANDBY state, allowing the original active cluster to remain/return to
+     * active. Abort should be executed on STANDBY cluster otherwise there is a risk of 2
+     * ACTIVE clusters.
+     *
+     * <p><b>Core Logic:</b>
+     * <ol>
+     *   <li>Parse CLI args: haGroupName (required), timeout (optional, default 120s)</li>
+     *   <li>Read current HAGroupStoreRecord from ZooKeeper to validate state</li>
+     *   <li>Validate current state must be STANDBY_TO_ACTIVE:
+     *       <ul>
+     *         <li>Only valid during ongoing failover when standby is promoting to
+     *             active</li>
+     *         <li>Other states: return RET_VALIDATION_ERROR</li>
+     *       </ul>
+     *   </li>
+     *   <li>Execute abort via manager.setHAGroupStatusToAbortToStandby():
+     *       <ul>
+     *         <li>Gets HAGroupStoreClient (manages ZK connection, cache, watches)</li>
+     *         <li>Calls setHAGroupStatusIfNeeded(ABORT_TO_STANDBY) to update ZK</li>
+     *         <li>State transition: STANDBY_TO_ACTIVE → ABORT_TO_STANDBY → STANDBY</li>
+     *         <li>ACTIVE_IN_SYNC_TO_STANDBY → ABORT_TO_ACTIVE_IN_SYNC →
+     *             ACTIVE_IN_SYNC</li>
+     *         <li>Failover management listeners handle automatic progression to
+     *             STANDBY</li>
+     *       </ul>
+     *   </li>
+     *   <li>Poll for completion via pollForStateTransition():
+     *       <ul>
+     *         <li>Polls every 2 seconds, waiting for STANDBY state</li>
+     *         <li>Returns true if reached within timeout, false otherwise</li>
+     *       </ul>
+     *   </li>
+     *   <li>Return RET_SUCCESS if completed, RET_UPDATE_ERROR if timeout</li>
+     * </ol>
+     *
+     * @param args CLI arguments: --ha-group (required), --timeout (optional, default 120s)
+     * @return RET_SUCCESS if abort completed within timeout, RET_VALIDATION_ERROR if not in
+     *         STANDBY_TO_ACTIVE state, RET_ARGUMENT_ERROR if HA group not found,
+     *         RET_UPDATE_ERROR if timeout or other error
+     * @throws Exception for unexpected errors (caught and converted to error codes)
      */
     private int executeAbortFailover(String[] args) throws Exception {
         try {
@@ -561,7 +753,26 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     }
 
     /**
-     * Execute GET-CLUSTER-ROLE-RECORD command
+     * Retrieves and displays the cluster role record for a specific HA group.
+     *
+     * <p><b>Core Logic:</b>
+     * <ol>
+     *   <li>Parse CLI args to extract haGroupName (required parameter)</li>
+     *   <li>Retrieve ClusterRoleRecord via HAGroupStoreManager.getClusterRoleRecord():
+     *       <ul>
+     *         <li>Gets HAGroupStoreClient (creates if needed, manages ZK
+     *             connection/cache)</li>
+     *         <li>Fetches cached record from PathChildrenCache (Curator cache of ZK
+     *             znode)</li>
+     *         <li>If cache miss, reads directly from ZK and populates cache</li>
+     *       </ul>
+     *   </li>
+     *   <li>Validate existence: return RET_ARGUMENT_ERROR if HA group not found</li>
+     * </ol>
+     *
+     * <p><b>Data Source:</b> HAGroupStoreManager uses cached data from ZooKeeper via
+     * Curator's PathChildrenCache, which watches ZK znodes for automatic updates. This
+     * provides near-real-time view without direct ZK reads on every GET.
      */
     private int executeGetClusterRoleRecord(String[] args) throws Exception {
         try {
@@ -764,7 +975,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
                 return RET_SUCCESS;
             }
 
-            // Step 5: Perform atomic update
+            // Step 5: Perform update
             System.out.println("\n[Step 4] Applying update...");
 
             performUpdate(admin, haGroupName, newRecord, currentStat.getVersion(), zkUrl);
@@ -862,7 +1073,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     }
 
     /**
-     * Atomically update ZK and System Table
+     * Update ZK and System Table
      */
     private void performUpdate(
             PhoenixHAAdmin admin,
