@@ -32,8 +32,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.hadoop.hbase.MiniHBaseCluster;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -209,9 +208,8 @@ public class PhoenixServerRpcIT extends BaseTest {
     byte[] table1 = Bytes.toBytes(tableName1);
     byte[] table2 = Bytes.toBytes(tableName2);
     Admin admin = driver.getConnectionQueryServices(getUrl(), TEST_PROPERTIES).getAdmin();
-    HBaseTestingUtility util = getUtility();
-    MiniHBaseCluster cluster = util.getHBaseCluster();
-    HMaster master = cluster.getMaster();
+    IntegrationTestingUtility util = getUtility();
+    HMaster master = util.getHBaseCluster().getMaster();
     AssignmentManager am = master.getAssignmentManager();
 
     // verify there is only a single region for data table

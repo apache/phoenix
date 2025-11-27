@@ -35,6 +35,7 @@ import org.apache.curator.utils.ZKPaths;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.PairOfSameType;
+import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
@@ -91,7 +92,7 @@ public class PhoenixHAAdmin implements Closeable {
     Preconditions.checkNotNull(zkUrl);
     Preconditions.checkNotNull(conf);
     Preconditions.checkNotNull(highAvailibilityCuratorProvider);
-    this.zkUrl = JDBCUtil.formatUrl(zkUrl);
+    this.zkUrl = JDBCUtil.formatUrl(zkUrl, RegistryType.ZK);
     this.conf = conf;
     conf.iterator().forEachRemaining(k -> properties.setProperty(k.getKey(), k.getValue()));
     this.highAvailibilityCuratorProvider = highAvailibilityCuratorProvider;
@@ -109,7 +110,7 @@ public class PhoenixHAAdmin implements Closeable {
     }
 
     String portStr = conf.get(HConstants.ZOOKEEPER_CLIENT_PORT);
-    int port = HConstants.DEFAULT_ZOOKEPER_CLIENT_PORT;
+    int port = HConstants.DEFAULT_ZOOKEEPER_CLIENT_PORT;
     if (portStr != null) {
       try {
         port = Integer.parseInt(portStr);

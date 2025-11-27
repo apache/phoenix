@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.hadoop.hbase.GenericTestUtils.waitFor;
+import static org.apache.hadoop.hbase.Waiter.waitFor;
 import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_REPAIR_FOUND_INCONSISTENCIES;
 import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_SUCCESS;
 import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_SYNC_ERROR;
@@ -282,7 +282,7 @@ public class PhoenixHAAdminToolIT {
    */
   private static void doVerifyClusterRole(CuratorFramework curator,
     ClusterRoleRecord clusterRoleRecord) throws Exception {
-    waitFor(() -> {
+    waitFor(CLUSTERS.getHBaseCluster1().getConfiguration(), 15_000, 1_000, () -> {
       try {
         String path = ZKPaths.PATH_SEPARATOR + clusterRoleRecord.getHaGroupName();
         byte[] data = curator.getData().forPath(path);
@@ -292,7 +292,7 @@ public class PhoenixHAAdminToolIT {
         LOG.info("Got exception while waiting for znode is up to date: {}", e.getMessage());
         return false;
       }
-    }, 1_000, 15_000);
+    });
   }
 
   private static CuratorFramework getCurator1() throws IOException {

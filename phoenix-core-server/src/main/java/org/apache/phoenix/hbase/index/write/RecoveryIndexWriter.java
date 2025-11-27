@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.hbase.index.exception.MultiIndexWriteFailureException;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
@@ -132,11 +133,7 @@ public class RecoveryIndexWriter extends IndexWriter {
           LOGGER.error("Closing the connection failed: ", e);
         }
       }
-      try {
-        admin.close();
-      } catch (IOException e) {
-        LOGGER.error("Closing the admin failed: ", e);
-      }
+      CompatUtil.closeAdminAndLog(admin, LOGGER);
     }
   }
 

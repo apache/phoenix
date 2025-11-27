@@ -174,7 +174,7 @@ public class MetaDataUtilTest {
     MetaDataUtil.conditionallyAddTagsToPutCells(put, TABLE_FAMILY_BYTES, EMPTY_BYTE_ARRAY,
       mockBuilder, EMPTY_BYTE_ARRAY, DUMMY_TAGS);
     verify(mockBuilder, never()).setTags(Mockito.any(byte[].class));
-    Cell newCell = put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
+    ExtendedCell newCell = (ExtendedCell) put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
     assertEquals(initialCell, newCell);
     assertNull(TagUtil.carryForwardTags(newCell));
   }
@@ -187,7 +187,7 @@ public class MetaDataUtilTest {
     MetaDataUtil.conditionallyAddTagsToPutCells(put, TABLE_FAMILY_BYTES, QUALIFIER, mockBuilder,
       null, DUMMY_TAGS);
     verify(mockBuilder, times(1)).setTags(Mockito.any(byte[].class));
-    Cell newCell = put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
+    ExtendedCell newCell = (ExtendedCell) put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
     assertEquals(mockCellWithTags, newCell);
   }
 
@@ -200,7 +200,7 @@ public class MetaDataUtilTest {
     MetaDataUtil.conditionallyAddTagsToPutCells(put, TABLE_FAMILY_BYTES, QUALIFIER, mockBuilder,
       ORIGINAL_VALUE, DUMMY_TAGS);
     verify(mockBuilder, never()).setTags(Mockito.any(byte[].class));
-    Cell newCell = put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
+    ExtendedCell newCell = (ExtendedCell) put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
     assertEquals(initialCell, newCell);
     assertNull(TagUtil.carryForwardTags(newCell));
   }
@@ -322,7 +322,7 @@ public class MetaDataUtilTest {
       UPDATE_CACHE_FREQUENCY_BYTES, cellBuilder, PInteger.INSTANCE.toBytes(1),
       VIEW_MODIFIED_PROPERTY_BYTES);
 
-    Cell cell = put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
+    ExtendedCell cell = (ExtendedCell) put.getFamilyCellMap().get(TABLE_FAMILY_BYTES).get(0);
 
     // To check the cell tag whether view has modified this property
     assertTrue(

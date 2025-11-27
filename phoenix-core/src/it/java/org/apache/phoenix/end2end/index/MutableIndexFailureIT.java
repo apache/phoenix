@@ -618,15 +618,16 @@ public class MutableIndexFailureIT extends BaseTest {
     public static final String FAIL_TABLE_NAME = "FAIL_TABLE";
 
     @Override
-    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws IOException {
+      RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) c.getEnvironment();
       boolean throwException = false;
       if (FAIL_NEXT_WRITE) {
         throwException = true;
         FAIL_NEXT_WRITE = false;
       } else if (
-        c.getEnvironment().getRegionInfo().getTable().getNameAsString()
-          .endsWith("A_" + FAIL_INDEX_NAME) && FAIL_WRITE
+        env.getRegionInfo().getTable().getNameAsString().endsWith("A_" + FAIL_INDEX_NAME)
+          && FAIL_WRITE
       ) {
         throwException = true;
         if (TOGGLE_FAIL_WRITE_FOR_RETRY) {
@@ -635,7 +636,7 @@ public class MutableIndexFailureIT extends BaseTest {
       } else {
         // When local index updates are atomic with data updates, testing a write failure to a local
         // index won't make sense.
-        Mutation operation = miniBatchOp.getOperation(0);
+        Mutation operation = (Mutation) miniBatchOp.getOperation(0);
         if (FAIL_WRITE) {
           Map<byte[], List<Cell>> cellMap = operation.getFamilyCellMap();
           for (Map.Entry<byte[], List<Cell>> entry : cellMap.entrySet()) {
@@ -643,7 +644,7 @@ public class MutableIndexFailureIT extends BaseTest {
             if (
               Bytes.toString(family).startsWith(QueryConstants.LOCAL_INDEX_COLUMN_FAMILY_PREFIX)
             ) {
-              int regionStartKeyLen = c.getEnvironment().getRegionInfo().getStartKey().length;
+              int regionStartKeyLen = env.getRegionInfo().getStartKey().length;
               Cell firstCell = entry.getValue().get(0);
               long indexId =
                 MetaDataUtil.getViewIndexIdDataType().getCodec().decodeLong(firstCell.getRowArray(),
@@ -665,7 +666,7 @@ public class MutableIndexFailureIT extends BaseTest {
       }
     }
 
-    private void dropIndex(ObserverContext<RegionCoprocessorEnvironment> c) {
+    private void dropIndex(ObserverContext c) {
       try {
         Connection connection = QueryUtil.getConnection(c.getEnvironment().getConfiguration());
         connection.createStatement()

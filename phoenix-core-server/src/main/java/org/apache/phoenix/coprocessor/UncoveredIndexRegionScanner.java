@@ -384,7 +384,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     }
   }
 
-  public boolean next(List<Cell> result) throws IOException {
+  public boolean next(List result) throws IOException {
     return next(result, null);
   }
 
@@ -398,7 +398,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
    * @return boolean to indicate if there are more rows to scan
    */
   @Override
-  public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+  public boolean next(List result, ScannerContext scannerContext) throws IOException {
     long startTime = (scannerContext != null)
       ? ((PhoenixScannerContext) scannerContext).getStartTime()
       : EnvironmentEdgeManager.currentTimeMillis();
@@ -431,7 +431,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         if (state == State.READY) {
           boolean moreRows = getNextCoveredIndexRow(result);
           if (!result.isEmpty()) {
-            previousResultRowKey = CellUtil.cloneRow(result.get(0));
+            previousResultRowKey = CellUtil.cloneRow((Cell) (result.get(0)));
           }
           return moreRows;
         } else {
@@ -456,7 +456,7 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
    * @param includeInitStartRowKey scan start rowkey included.
    * @param scan                   scan object.
    */
-  private void updateDummyWithPrevRowKey(List<Cell> result, byte[] initStartRowKey,
+  private void updateDummyWithPrevRowKey(List result, byte[] initStartRowKey,
     boolean includeInitStartRowKey, Scan scan) {
     result.clear();
     if (previousResultRowKey != null) {

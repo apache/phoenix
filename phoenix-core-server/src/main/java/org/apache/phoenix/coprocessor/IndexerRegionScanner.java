@@ -358,7 +358,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
   }
 
   @Override
-  public boolean next(List<Cell> results) throws IOException {
+  public boolean next(List results) throws IOException {
     Cell lastCell = null;
     int rowCount = 0;
     byte[] encodedRegionName = region.getRegionInfo().getEncodedNameAsBytes();
@@ -472,7 +472,7 @@ public class IndexerRegionScanner extends GlobalIndexRegionScanner {
     return scan.getMaxResultSize();
   }
 
-  public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+  public boolean next(List result, ScannerContext scannerContext) throws IOException {
     return next(result);
   }
 }

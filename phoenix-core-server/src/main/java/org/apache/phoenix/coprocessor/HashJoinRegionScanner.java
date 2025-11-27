@@ -294,12 +294,12 @@ public class HashJoinRegionScanner implements RegionScanner {
   }
 
   @Override
-  public boolean nextRaw(List<Cell> result) throws IOException {
+  public boolean nextRaw(List result) throws IOException {
     return next(result, true, null);
   }
 
   @Override
-  public boolean nextRaw(List<Cell> result, ScannerContext scannerContext) throws IOException {
+  public boolean nextRaw(List result, ScannerContext scannerContext) throws IOException {
     return next(result, true, scannerContext);
   }
 
@@ -351,12 +351,12 @@ public class HashJoinRegionScanner implements RegionScanner {
   }
 
   @Override
-  public boolean next(List<Cell> result) throws IOException {
+  public boolean next(List result) throws IOException {
     return next(result, false, null);
   }
 
   @Override
-  public boolean next(List<Cell> result, ScannerContext scannerContext) throws IOException {
+  public boolean next(List result, ScannerContext scannerContext) throws IOException {
     return next(result, false, scannerContext);
   }
 

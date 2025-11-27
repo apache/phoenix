@@ -29,11 +29,9 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Increment;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
@@ -42,9 +40,7 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.Store;
 import org.apache.hadoop.hbase.regionserver.StoreFile;
 import org.apache.hadoop.hbase.regionserver.querymatcher.DeleteTracker;
-import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.wal.WALEdit;
-import org.apache.hadoop.hbase.wal.WALKey;
 
 public class DelegateRegionObserver implements RegionObserver {
 
@@ -55,262 +51,231 @@ public class DelegateRegionObserver implements RegionObserver {
   }
 
   @Override
-  public void preOpen(ObserverContext<RegionCoprocessorEnvironment> c) throws IOException {
+  public void preOpen(ObserverContext c) throws IOException {
     delegate.preOpen(c);
   }
 
   @Override
-  public void postOpen(ObserverContext<RegionCoprocessorEnvironment> c) {
+  public void postOpen(ObserverContext c) {
     delegate.postOpen(c);
   }
 
   @Override
-  public void preFlush(
-    org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+  public void preFlush(org.apache.hadoop.hbase.coprocessor.ObserverContext c,
     org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker tracker) throws IOException {
     delegate.preFlush(c, tracker);
     ;
   }
 
   @Override
-  public InternalScanner preFlush(
-    org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+  public InternalScanner preFlush(org.apache.hadoop.hbase.coprocessor.ObserverContext c,
     Store store, InternalScanner scanner,
     org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker tracker) throws IOException {
     return delegate.preFlush(c, store, scanner, tracker);
   }
 
   @Override
-  public void postFlush(
-    org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
+  public void postFlush(org.apache.hadoop.hbase.coprocessor.ObserverContext c,
     org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker tracker) throws IOException {
     delegate.postFlush(c, tracker);
   }
 
   @Override
-  public void postFlush(
-    org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c,
-    Store store, StoreFile resultFile,
-    org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker tracker) throws IOException {
+  public void postFlush(org.apache.hadoop.hbase.coprocessor.ObserverContext c, Store store,
+    StoreFile resultFile, org.apache.hadoop.hbase.regionserver.FlushLifeCycleTracker tracker)
+    throws IOException {
     delegate.postFlush(c, store, resultFile, tracker);
   }
 
   @Override
-  public void preClose(ObserverContext<RegionCoprocessorEnvironment> c, boolean abortRequested)
-    throws IOException {
+  public void preClose(ObserverContext c, boolean abortRequested) throws IOException {
     delegate.preClose(c, abortRequested);
   }
 
   @Override
-  public void postClose(ObserverContext<RegionCoprocessorEnvironment> c, boolean abortRequested) {
+  public void postClose(ObserverContext c, boolean abortRequested) {
     delegate.postClose(c, abortRequested);
   }
 
   @Override
-  public void preGetOp(ObserverContext<RegionCoprocessorEnvironment> c, Get get, List<Cell> result)
-    throws IOException {
+  public void preGetOp(ObserverContext c, Get get, List result) throws IOException {
     delegate.preGetOp(c, get, result);
   }
 
   @Override
-  public void postGetOp(ObserverContext<RegionCoprocessorEnvironment> c, Get get, List<Cell> result)
-    throws IOException {
+  public void postGetOp(ObserverContext c, Get get, List result) throws IOException {
     delegate.postGetOp(c, get, result);
   }
 
   @Override
-  public boolean preExists(ObserverContext<RegionCoprocessorEnvironment> c, Get get, boolean exists)
-    throws IOException {
+  public boolean preExists(ObserverContext c, Get get, boolean exists) throws IOException {
     return delegate.preExists(c, get, exists);
   }
 
   @Override
-  public boolean postExists(ObserverContext<RegionCoprocessorEnvironment> c, Get get,
-    boolean exists) throws IOException {
+  public boolean postExists(ObserverContext c, Get get, boolean exists) throws IOException {
     return delegate.postExists(c, get, exists);
   }
 
   @Override
-  public void prePut(ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit,
-    Durability durability) throws IOException {
+  public void prePut(ObserverContext c, Put put, WALEdit edit, Durability durability)
+    throws IOException {
     delegate.prePut(c, put, edit, durability);
   }
 
   @Override
-  public void postPut(ObserverContext<RegionCoprocessorEnvironment> c, Put put, WALEdit edit,
-    Durability durability) throws IOException {
+  public void postPut(ObserverContext c, Put put, WALEdit edit, Durability durability)
+    throws IOException {
     delegate.postPut(c, put, edit, durability);
   }
 
   @Override
-  public void preDelete(ObserverContext<RegionCoprocessorEnvironment> c, Delete delete,
-    WALEdit edit, Durability durability) throws IOException {
+  public void preDelete(ObserverContext c, Delete delete, WALEdit edit, Durability durability)
+    throws IOException {
     delegate.preDelete(c, delete, edit, durability);
   }
 
   @Override
-  public void prePrepareTimeStampForDeleteVersion(ObserverContext<RegionCoprocessorEnvironment> c,
-    Mutation mutation, Cell cell, byte[] byteNow, Get get) throws IOException {
+  public void prePrepareTimeStampForDeleteVersion(ObserverContext c, Mutation mutation, Cell cell,
+    byte[] byteNow, Get get) throws IOException {
     delegate.prePrepareTimeStampForDeleteVersion(c, mutation, cell, byteNow, get);
   }
 
   @Override
-  public void postDelete(ObserverContext<RegionCoprocessorEnvironment> c, Delete delete,
-    WALEdit edit, Durability durability) throws IOException {
+  public void postDelete(ObserverContext c, Delete delete, WALEdit edit, Durability durability)
+    throws IOException {
     delegate.postDelete(c, delete, edit, durability);
   }
 
   @Override
-  public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+  public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+    throws IOException {
     delegate.preBatchMutate(c, miniBatchOp);
   }
 
   @Override
-  public void postBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+  public void postBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+    throws IOException {
     delegate.postBatchMutate(c, miniBatchOp);
   }
 
   @Override
-  public void postStartRegionOperation(ObserverContext<RegionCoprocessorEnvironment> ctx,
-    Operation operation) throws IOException {
+  public void postStartRegionOperation(ObserverContext ctx, Operation operation)
+    throws IOException {
     delegate.postStartRegionOperation(ctx, operation);
   }
 
   @Override
-  public void postCloseRegionOperation(ObserverContext<RegionCoprocessorEnvironment> ctx,
-    Operation operation) throws IOException {
+  public void postCloseRegionOperation(ObserverContext ctx, Operation operation)
+    throws IOException {
     delegate.postCloseRegionOperation(ctx, operation);
   }
 
   @Override
-  public void postBatchMutateIndispensably(ObserverContext<RegionCoprocessorEnvironment> ctx,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp, boolean success) throws IOException {
+  public void postBatchMutateIndispensably(ObserverContext ctx,
+    MiniBatchOperationInProgress miniBatchOp, boolean success) throws IOException {
     delegate.postBatchMutateIndispensably(ctx, miniBatchOp, success);
   }
 
   @Override
-  public Result preAppend(ObserverContext<RegionCoprocessorEnvironment> c, Append append)
-    throws IOException {
+  public Result preAppend(ObserverContext c, Append append) throws IOException {
     return delegate.preAppend(c, append);
   }
 
   @Override
-  public Result preAppendAfterRowLock(ObserverContext<RegionCoprocessorEnvironment> c,
-    Append append) throws IOException {
+  public Result preAppendAfterRowLock(ObserverContext c, Append append) throws IOException {
     return delegate.preAppendAfterRowLock(c, append);
   }
 
   @Override
-  public Result postAppend(ObserverContext<RegionCoprocessorEnvironment> c, Append append,
-    Result result) throws IOException {
+  public Result postAppend(ObserverContext c, Append append, Result result) throws IOException {
     return delegate.postAppend(c, append, result);
   }
 
   @Override
-  public Result preIncrement(ObserverContext<RegionCoprocessorEnvironment> c, Increment increment)
-    throws IOException {
+  public Result preIncrement(ObserverContext c, Increment increment) throws IOException {
     return delegate.preIncrement(c, increment);
   }
 
   @Override
-  public Result preIncrementAfterRowLock(ObserverContext<RegionCoprocessorEnvironment> c,
-    Increment increment) throws IOException {
+  public Result preIncrementAfterRowLock(ObserverContext c, Increment increment)
+    throws IOException {
     return delegate.preIncrementAfterRowLock(c, increment);
   }
 
   @Override
-  public Result postIncrement(ObserverContext<RegionCoprocessorEnvironment> c, Increment increment,
-    Result result) throws IOException {
+  public Result postIncrement(ObserverContext c, Increment increment, Result result)
+    throws IOException {
     return delegate.postIncrement(c, increment, result);
   }
 
   @Override
-  public void preScannerOpen(
-    org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c, Scan scan)
+  public void preScannerOpen(org.apache.hadoop.hbase.coprocessor.ObserverContext c, Scan scan)
     throws IOException {
     delegate.preScannerOpen(c, scan);
   }
 
   @Override
-  public RegionScanner postScannerOpen(ObserverContext<RegionCoprocessorEnvironment> c, Scan scan,
-    RegionScanner s) throws IOException {
+  public RegionScanner postScannerOpen(ObserverContext c, Scan scan, RegionScanner s)
+    throws IOException {
     return delegate.postScannerOpen(c, scan, s);
   }
 
   @Override
-  public boolean preScannerNext(ObserverContext<RegionCoprocessorEnvironment> c, InternalScanner s,
-    List<Result> result, int limit, boolean hasNext) throws IOException {
+  public boolean preScannerNext(ObserverContext c, InternalScanner s, List result, int limit,
+    boolean hasNext) throws IOException {
     return delegate.preScannerNext(c, s, result, limit, hasNext);
   }
 
   @Override
-  public boolean postScannerNext(ObserverContext<RegionCoprocessorEnvironment> c, InternalScanner s,
-    List<Result> result, int limit, boolean hasNext) throws IOException {
+  public boolean postScannerNext(ObserverContext c, InternalScanner s, List result, int limit,
+    boolean hasNext) throws IOException {
     return delegate.postScannerNext(c, s, result, limit, hasNext);
   }
 
   @Override
-  public void preScannerClose(ObserverContext<RegionCoprocessorEnvironment> c, InternalScanner s)
-    throws IOException {
+  public void preScannerClose(ObserverContext c, InternalScanner s) throws IOException {
     delegate.preScannerClose(c, s);
   }
 
   @Override
-  public void postScannerClose(ObserverContext<RegionCoprocessorEnvironment> c, InternalScanner s)
-    throws IOException {
+  public void postScannerClose(ObserverContext c, InternalScanner s) throws IOException {
     delegate.postScannerClose(c, s);
   }
 
   @Override
-  public void preWALRestore(ObserverContext<? extends RegionCoprocessorEnvironment> ctx,
-    RegionInfo info, WALKey logKey, WALEdit logEdit) throws IOException {
-    delegate.preWALRestore(ctx, info, logKey, logEdit);
-  }
-
-  @Override
-  public void postWALRestore(ObserverContext<? extends RegionCoprocessorEnvironment> ctx,
-    RegionInfo info, WALKey logKey, WALEdit logEdit) throws IOException {
-    delegate.postWALRestore(ctx, info, logKey, logEdit);
-  }
-
-  @Override
-  public void preBulkLoadHFile(ObserverContext<RegionCoprocessorEnvironment> ctx,
-    List<Pair<byte[], String>> familyPaths) throws IOException {
+  public void preBulkLoadHFile(ObserverContext ctx, List familyPaths) throws IOException {
     delegate.preBulkLoadHFile(ctx, familyPaths);
   }
 
   @Override
-  public Cell postMutationBeforeWAL(ObserverContext<RegionCoprocessorEnvironment> ctx,
-    MutationType opType, Mutation mutation, Cell oldCell, Cell newCell) throws IOException {
+  public Cell postMutationBeforeWAL(ObserverContext ctx, MutationType opType, Mutation mutation,
+    Cell oldCell, Cell newCell) throws IOException {
     return delegate.postMutationBeforeWAL(ctx, opType, mutation, oldCell, newCell);
   }
 
   @Override
-  public DeleteTracker postInstantiateDeleteTracker(
-    ObserverContext<RegionCoprocessorEnvironment> ctx, DeleteTracker delTracker)
+  public DeleteTracker postInstantiateDeleteTracker(ObserverContext ctx, DeleteTracker delTracker)
     throws IOException {
     return delegate.postInstantiateDeleteTracker(ctx, delTracker);
   }
 
   @Override
-  public void preCommitStoreFile(ObserverContext<RegionCoprocessorEnvironment> ctx, byte[] family,
-    List<Pair<Path, Path>> pairs) throws IOException {
+  public void preCommitStoreFile(ObserverContext ctx, byte[] family, List pairs)
+    throws IOException {
     delegate.preCommitStoreFile(ctx, family, pairs);
 
   }
 
   @Override
-  public void postCommitStoreFile(ObserverContext<RegionCoprocessorEnvironment> ctx, byte[] family,
-    Path srcPath, Path dstPath) throws IOException {
+  public void postCommitStoreFile(ObserverContext ctx, byte[] family, Path srcPath, Path dstPath)
+    throws IOException {
     delegate.postCommitStoreFile(ctx, family, srcPath, dstPath);
 
   }
 
   @Override
-  public void postBulkLoadHFile(ObserverContext<RegionCoprocessorEnvironment> ctx,
-    List<Pair<byte[], String>> stagingFamilyPaths, Map<byte[], List<Path>> finalPaths)
+  public void postBulkLoadHFile(ObserverContext ctx, List stagingFamilyPaths, Map finalPaths)
     throws IOException {
     delegate.postBulkLoadHFile(ctx, stagingFamilyPaths, finalPaths);
   }

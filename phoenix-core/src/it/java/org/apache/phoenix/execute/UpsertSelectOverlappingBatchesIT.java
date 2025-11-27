@@ -36,14 +36,13 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.apache.hadoop.hbase.HBaseIOException;
-import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.IntegrationTestingUtility;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.Waiter;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.DoNotRetryRegionException;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -211,7 +210,7 @@ public class UpsertSelectOverlappingBatchesIT extends BaseTest {
       }
 
       // keep trying to split the region
-      final HBaseTestingUtility utility = getUtility();
+      final IntegrationTestingUtility utility = getUtility();
       final Admin admin = utility.getAdmin();
       final TableName dataTN = TableName.valueOf(dataTable);
       assertEquals(1, utility.getHBaseCluster().getRegions(dataTN).size());
@@ -263,7 +262,7 @@ public class UpsertSelectOverlappingBatchesIT extends BaseTest {
         Thread.sleep(300);
       }
 
-      final HBaseTestingUtility utility = getUtility();
+      final IntegrationTestingUtility utility = getUtility();
       // try to close the region while UPSERT SELECTs are happening,
       final HRegionServer dataRs = utility.getHBaseCluster().getRegionServer(0);
       final Admin admin = utility.getAdmin();
@@ -296,12 +295,13 @@ public class UpsertSelectOverlappingBatchesIT extends BaseTest {
     public static volatile boolean SLOW_MUTATE = false;
 
     @Override
-    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws HBaseIOException {
+    public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws HBaseIOException {
       // model a slow batch that takes a long time
+      RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) c.getEnvironment();
       if (
         (miniBatchOp.size() == 100 || SLOW_MUTATE)
-          && c.getEnvironment().getRegionInfo().getTable().getNameAsString().equals(dataTable)
+          && env.getRegionInfo().getTable().getNameAsString().equals(dataTable)
       ) {
         try {
           Thread.sleep(6000);

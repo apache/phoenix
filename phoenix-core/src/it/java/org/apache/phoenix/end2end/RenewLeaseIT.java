@@ -29,7 +29,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.hbase.HConstants;
-import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
@@ -81,13 +80,13 @@ public class RenewLeaseIT extends BaseTest {
     }
 
     @Override
-    public boolean preScannerNext(final ObserverContext<RegionCoprocessorEnvironment> c,
-      final InternalScanner s, final List<Result> results, final int limit, final boolean hasMore)
-      throws IOException {
+    public boolean preScannerNext(final ObserverContext c, final InternalScanner s,
+      final List results, final int limit, final boolean hasMore) throws IOException {
+      RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) c.getEnvironment();
       try {
         if (
-          SLEEP_NOW && c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString()
-            .equals(TABLE_NAME)
+          SLEEP_NOW
+            && env.getRegion().getRegionInfo().getTable().getNameAsString().equals(TABLE_NAME)
         ) {
           Thread.sleep(2 * SCANNER_LEASE_TIMEOUT);
         }

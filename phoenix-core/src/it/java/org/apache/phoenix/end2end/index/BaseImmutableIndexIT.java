@@ -50,7 +50,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Durability;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -476,16 +475,16 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
 
   public static class DeleteFailingRegionObserver extends SimpleRegionObserver {
     @Override
-    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws IOException {
       throw new DoNotRetryIOException();
     }
   }
 
   public static class UpsertFailingRegionObserver extends SimpleRegionObserver {
     @Override
-    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
-      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    public void preBatchMutate(ObserverContext c, MiniBatchOperationInProgress miniBatchOp)
+      throws IOException {
       throw new DoNotRetryIOException();
     }
   }
@@ -537,11 +536,10 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
   // used to create an index while a batch of rows are being written
   public static class CreateIndexRegionObserver extends SimpleRegionObserver {
     @Override
-    public void postPut(
-      org.apache.hadoop.hbase.coprocessor.ObserverContext<RegionCoprocessorEnvironment> c, Put put,
+    public void postPut(org.apache.hadoop.hbase.coprocessor.ObserverContext c, Put put,
       org.apache.hadoop.hbase.wal.WALEdit edit, Durability durability) throws java.io.IOException {
-      String tableName =
-        c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+      RegionCoprocessorEnvironment env = (RegionCoprocessorEnvironment) c.getEnvironment();
+      String tableName = env.getRegion().getRegionInfo().getTable().getNameAsString();
       if (
         tableName.equalsIgnoreCase(TABLE_NAME)
           // create the index after the second batch

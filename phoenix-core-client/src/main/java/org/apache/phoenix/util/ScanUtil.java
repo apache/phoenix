@@ -1236,8 +1236,7 @@ public class ScanUtil {
   }
 
   public static boolean isEmptyColumn(Cell cell, byte[] emptyCF, byte[] emptyCQ) {
-    return CellUtil.matchingFamily(cell, emptyCF, 0, emptyCF.length)
-      && CellUtil.matchingQualifier(cell, emptyCQ, 0, emptyCQ.length);
+    return CellUtil.matchingFamily(cell, emptyCF) && CellUtil.matchingQualifier(cell, emptyCQ);
   }
 
   public static long getMaxTimestamp(List<Cell> cellList) {
@@ -1614,11 +1613,11 @@ public class ScanUtil {
     return isDummy(cell);
   }
 
-  public static boolean isDummy(List<Cell> result) {
+  public static boolean isDummy(List result) {
     if (result.size() != 1) {
       return false;
     }
-    Cell cell = result.get(0);
+    Cell cell = (Cell) result.get(0);
     return isDummy(cell);
   }
 

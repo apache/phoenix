@@ -32,7 +32,6 @@ import java.sql.SQLTimeoutException;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.InternalScanner;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -141,8 +140,7 @@ public class QueryTimeoutIT extends BaseTest {
 
   public static class SleepingRegionObserver extends SimpleRegionObserver {
     @Override
-    public void preScannerClose(ObserverContext<RegionCoprocessorEnvironment> c, InternalScanner s)
-      throws IOException {
+    public void preScannerClose(ObserverContext c, InternalScanner s) throws IOException {
       try {
         Thread.sleep(1200); // Wait long enough
       } catch (InterruptedException e) {

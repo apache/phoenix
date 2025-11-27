@@ -21,8 +21,6 @@ import static org.apache.phoenix.query.QueryServices.USE_BLOOMFILTER_FOR_MULTIKE
 
 import java.io.IOException;
 import java.util.List;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.client.PackagePrivateFieldAccessor;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.regionserver.BloomType;
@@ -31,6 +29,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.query.KeyRange;
@@ -129,7 +128,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
       return lookupPosition < pointLookupRanges.size();
     }
 
-    private boolean next(List<Cell> results, boolean raw, RegionScanner scanner,
+    private boolean next(List results, boolean raw, RegionScanner scanner,
       ScannerContext scannerContext) throws IOException {
       try {
         while (true) {
@@ -218,7 +217,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
     initialized = true;
   }
 
-  private boolean next(List<Cell> results, boolean raw, ScannerContext scannerContext)
+  private boolean next(List results, boolean raw, ScannerContext scannerContext)
     throws IOException {
     init();
     if (pagingFilter != null) {
@@ -240,7 +239,7 @@ public class PagingRegionScanner extends BaseRegionScanner {
       long mvccReadPoint = delegate.getMvccReadPoint();
       delegate.close();
       scan.withStartRow(adjustedStartRowKey, Bytes.toBoolean(adjustedStartRowKeyIncludeBytes));
-      PackagePrivateFieldAccessor.setMvccReadPoint(scan, mvccReadPoint);
+      CompatUtil.setMvccReadPoint(scan, mvccReadPoint);
       if (
         multiKeyPointLookup != null && !multiKeyPointLookup.verifyStartRowKey(adjustedStartRowKey)
       ) {
@@ -303,22 +302,22 @@ public class PagingRegionScanner extends BaseRegionScanner {
   }
 
   @Override
-  public boolean next(List<Cell> results) throws IOException {
+  public boolean next(List results) throws IOException {
     return next(results, false, null);
   }
 
   @Override
-  public boolean nextRaw(List<Cell> results) throws IOException {
+  public boolean nextRaw(List results) throws IOException {
     return next(results, true, null);
   }
 
   @Override
-  public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
+  public boolean next(List results, ScannerContext scannerContext) throws IOException {
     return next(results, false, scannerContext);
   }
 
   @Override
-  public boolean nextRaw(List<Cell> results, ScannerContext scannerContext) throws IOException {
+  public boolean nextRaw(List results, ScannerContext scannerContext) throws IOException {
     return next(results, true, scannerContext);
   }
 

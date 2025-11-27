@@ -41,6 +41,7 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparatorImpl;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.TableName;
@@ -145,7 +146,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
 
       @Override
       public void write(TableRowkeyPair row, V cell) throws IOException {
-        Cell kv = cell;
+        ExtendedCell kv = (ExtendedCell) cell;
         // null input == user explicitly wants to flush
         if (row == null && kv == null) {
           rollWriters();

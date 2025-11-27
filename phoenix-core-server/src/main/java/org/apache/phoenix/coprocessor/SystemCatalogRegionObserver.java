@@ -24,7 +24,6 @@ import java.util.Optional;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.phoenix.filter.SystemCatalogViewIndexIdFilter;
 import org.apache.phoenix.util.ScanUtil;
@@ -34,8 +33,7 @@ import org.apache.phoenix.util.ScanUtil;
  */
 public class SystemCatalogRegionObserver implements RegionObserver, RegionCoprocessor {
   @Override
-  public void preScannerOpen(ObserverContext<RegionCoprocessorEnvironment> e, Scan scan)
-    throws IOException {
+  public void preScannerOpen(ObserverContext c, Scan scan) throws IOException {
     int clientVersion = ScanUtil.getClientVersion(scan);
     /*
      * ScanUtil.getClientVersion returns UNKNOWN_CLIENT_VERSION if the phoenix client version isn't

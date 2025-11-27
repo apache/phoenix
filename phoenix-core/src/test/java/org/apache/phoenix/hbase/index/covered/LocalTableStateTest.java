@@ -25,6 +25,7 @@ import java.util.HashMap;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.KeyValue.Type;
 import org.apache.hadoop.hbase.KeyValueUtil;
@@ -181,7 +182,7 @@ public class LocalTableStateTest {
     LocalTableState table = new LocalTableState(cachedLocalTable, m);
 
     // add the kvs from the mutation
-    KeyValue kv = KeyValueUtil.ensureKeyValue(m.get(fam, qual).get(0));
+    KeyValue kv = KeyValueUtil.ensureKeyValue((ExtendedCell) m.get(fam, qual).get(0));
     kv.setSequenceId(0);
     table.addPendingUpdates(kv);
 

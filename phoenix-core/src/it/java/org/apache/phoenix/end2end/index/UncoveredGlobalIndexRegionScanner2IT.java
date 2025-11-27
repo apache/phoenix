@@ -53,7 +53,6 @@ import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.RegionStatesCount;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
-import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -1063,8 +1062,7 @@ public class UncoveredGlobalIndexRegionScanner2IT extends BaseTest {
     }
 
     @Override
-    public void preScannerOpen(final ObserverContext<RegionCoprocessorEnvironment> c,
-      final Scan scan) {
+    public void preScannerOpen(final ObserverContext c, final Scan scan) {
       if (scan.getFilter() instanceof SkipScanFilter) {
         List<List<KeyRange>> slots = ((SkipScanFilter) scan.getFilter()).getSlots();
         for (List<KeyRange> ranges : slots) {

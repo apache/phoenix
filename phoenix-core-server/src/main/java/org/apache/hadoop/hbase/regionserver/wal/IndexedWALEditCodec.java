@@ -27,6 +27,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.codec.BaseDecoder;
 import org.apache.hadoop.hbase.codec.BaseEncoder;
@@ -165,7 +166,7 @@ public class IndexedWALEditCodec extends WALCellCodec {
     }
 
     @Override
-    protected Cell parseCell() throws IOException {
+    protected ExtendedCell parseCell() throws IOException {
       // reader the marker
       int marker = this.in.read();
       if (marker < 0) {
@@ -178,7 +179,7 @@ public class IndexedWALEditCodec extends WALCellCodec {
         if (!this.decoder.advance()) {
           throw new IOException("Could not read next key-value from generic KeyValue Decoder!");
         }
-        return this.decoder.current();
+        return (ExtendedCell) this.decoder.current();
       }
 
       // its an indexedKeyValue, so parse it out specially
@@ -209,13 +210,18 @@ public class IndexedWALEditCodec extends WALCellCodec {
       super.flush();
     }
 
-    @Override
-    public void write(Cell cell) throws IOException {
+    // This is the Hbase 3.0 signature
+    public void write(ExtendedCell cell) throws IOException {
       // make sure we are open
       checkFlushed();
 
       // use the standard encoding mechanism
       KeyValueCodec.write(this.dataOutput, PhoenixKeyValueUtil.maybeCopyCell(cell));
+    }
+
+    // This is the Hbase 2.x signature
+    public void write(Cell cell) throws IOException {
+      write((ExtendedCell) cell);
     }
   }
 
@@ -238,8 +244,7 @@ public class IndexedWALEditCodec extends WALCellCodec {
       super.flush();
     }
 
-    @Override
-    public void write(Cell cell) throws IOException {
+    public void write(ExtendedCell cell) throws IOException {
       // make sure we are open
       checkFlushed();
 
@@ -256,6 +261,10 @@ public class IndexedWALEditCodec extends WALCellCodec {
       } else {
         KeyValueCodec.write(this.dataOutput, PhoenixKeyValueUtil.maybeCopyCell(cell));
       }
+    }
+
+    public void write(Cell cell) throws IOException {
+      write((ExtendedCell) cell);
     }
   }
 
@@ -315,7 +324,7 @@ public class IndexedWALEditCodec extends WALCellCodec {
     }
 
     @Override
-    protected Cell parseCell() throws IOException {
+    protected ExtendedCell parseCell() throws IOException {
       // reader the marker
       int marker = this.in.read();
       if (marker < 0) {
@@ -328,7 +337,7 @@ public class IndexedWALEditCodec extends WALCellCodec {
         if (!this.decoder.advance()) {
           throw new IOException("Could not read next key-value from generic KeyValue Decoder!");
         }
-        return this.decoder.current();
+        return (ExtendedCell) this.decoder.current();
       }
 
       // its an indexedKeyValue, so parse it out specially

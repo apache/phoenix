@@ -32,6 +32,7 @@ import java.sql.Types;
 import java.util.Collections;
 import java.util.List;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.ExtendedCell;
 import org.apache.hadoop.hbase.exceptions.DeserializationException;
 import org.apache.hadoop.hbase.filter.FilterBase;
 import org.apache.hadoop.hbase.util.Writables;
@@ -89,39 +90,47 @@ public class SystemCatalogViewIndexIdFilter extends FilterBase implements Writab
           viewIndexIdDataTypeCell.getValueOffset(), viewIndexIdDataTypeCell.getValueLength(),
           PInteger.INSTANCE, SortOrder.ASC);
       }
-      if (this.clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG) {
-        /*
-         * For pre-4.15 client select query cannot include VIEW_INDEX_ID_DATA_TYPE as part of the
-         * projected columns; for this reason, the TYPE will always be NULL. Since the pre-4.15
-         * client always assume the VIEW_INDEX_ID column is type of SMALLINT, we need to retrieve
-         * the BIGINT cell to SMALLINT cell. VIEW_INDEX_ID_DATA_TYPE, VIEW_INDEX_ID(Cell
-         * representation of the data) NULL, SMALLINT -> DO NOT CONVERT SMALLINT, SMALLINT -> DO NOT
-         * CONVERT BIGINT, BIGINT -> RETRIEVE AND SEND SMALLINT BACK
-         */
-        if (
-          type == NULL_DATA_TYPE_VALUE
-            && viewIndexIdCell.getValueLength() > VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN
-        ) {
-          Cell keyValue =
-            ViewIndexIdRetrieveUtil.getRetrievedViewIndexIdCell(viewIndexIdCell, false);
-          Collections.replaceAll(kvs, viewIndexIdCell, keyValue);
+      try {
+        if (this.clientVersion < MIN_SPLITTABLE_SYSTEM_CATALOG) {
+          /*
+           * For pre-4.15 client select query cannot include VIEW_INDEX_ID_DATA_TYPE as part of the
+           * projected columns; for this reason, the TYPE will always be NULL. Since the pre-4.15
+           * client always assume the VIEW_INDEX_ID column is type of SMALLINT, we need to retrieve
+           * the BIGINT cell to SMALLINT cell. VIEW_INDEX_ID_DATA_TYPE, VIEW_INDEX_ID(Cell
+           * representation of the data) NULL, SMALLINT -> DO NOT CONVERT SMALLINT, SMALLINT -> DO
+           * NOT CONVERT BIGINT, BIGINT -> RETRIEVE AND SEND SMALLINT BACK
+           */
+          if (
+            type == NULL_DATA_TYPE_VALUE
+              && viewIndexIdCell.getValueLength() > VIEW_INDEX_ID_SMALLINT_TYPE_VALUE_LEN
+          ) {
+
+            Cell keyValue = ViewIndexIdRetrieveUtil
+              .getRetrievedViewIndexIdCell((ExtendedCell) viewIndexIdCell, false);
+            Collections.replaceAll(kvs, viewIndexIdCell, keyValue);
+          }
+        } else {
+          /*
+           * For post-4.15 client select query needs to include VIEW_INDEX_ID_DATA_TYPE as part of
+           * the projected columns, and VIEW_INDEX_ID depends on it. VIEW_INDEX_ID_DATA_TYPE,
+           * VIEW_INDEX_ID(Cell representation of the data) NULL, SMALLINT -> RETRIEVE AND SEND
+           * BIGINT BACK SMALLINT, SMALLINT -> RETRIEVE AND SEND BIGINT BACK BIGINT, BIGINT -> DO
+           * NOT RETRIEVE
+           */
+          if (
+            type != Types.BIGINT
+              && viewIndexIdCell.getValueLength() < VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN
+          ) {
+            Cell keyValue = ViewIndexIdRetrieveUtil
+              .getRetrievedViewIndexIdCell((ExtendedCell) viewIndexIdCell, true);
+            Collections.replaceAll(kvs, viewIndexIdCell, keyValue);
+          }
         }
-      } else {
-        /*
-         * For post-4.15 client select query needs to include VIEW_INDEX_ID_DATA_TYPE as part of the
-         * projected columns, and VIEW_INDEX_ID depends on it. VIEW_INDEX_ID_DATA_TYPE,
-         * VIEW_INDEX_ID(Cell representation of the data) NULL, SMALLINT -> RETRIEVE AND SEND BIGINT
-         * BACK SMALLINT, SMALLINT -> RETRIEVE AND SEND BIGINT BACK BIGINT, BIGINT -> DO NOT
-         * RETRIEVE
-         */
-        if (
-          type != Types.BIGINT
-            && viewIndexIdCell.getValueLength() < VIEW_INDEX_ID_BIGINT_TYPE_PTR_LEN
-        ) {
-          Cell keyValue =
-            ViewIndexIdRetrieveUtil.getRetrievedViewIndexIdCell(viewIndexIdCell, true);
-          Collections.replaceAll(kvs, viewIndexIdCell, keyValue);
-        }
+      } catch (ClassCastException e) {
+        // As indicated in the Filter interface comments, Filters always work on ExtendedCells.
+        // Throw an IOException is something goes wrong.
+        throw new IOException(
+          "Filter got Cell that is not an ExtendedCell. This should not happen.", e);
       }
     }
   }

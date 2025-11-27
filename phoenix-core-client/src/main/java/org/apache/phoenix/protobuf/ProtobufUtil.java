@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto.MutationType;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.compat.hbase.ByteStringer;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.coprocessor.generated.ChildLinkMetaDataProtos.CreateViewAddChildLinkRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
@@ -125,7 +126,7 @@ public class ProtobufUtil {
     List<Mutation> result = new ArrayList<Mutation>();
     for (ByteString mutation : mutations) {
       MutationProto mProto = MutationProto.parseFrom(mutation);
-      result.add(org.apache.hadoop.hbase.protobuf.ProtobufUtil.toMutation(mProto));
+      result.add(CompatUtil.toMutation(mProto));
     }
     return result;
   }
@@ -139,7 +140,7 @@ public class ProtobufUtil {
     } else {
       throw new IllegalArgumentException("Only Put and Delete are supported");
     }
-    return org.apache.hadoop.hbase.protobuf.ProtobufUtil.toMutation(type, mutation);
+    return CompatUtil.toMutation(type, mutation);
   }
 
   public static ServerCachingProtos.ImmutableBytesWritable toProto(ImmutableBytesWritable w) {
