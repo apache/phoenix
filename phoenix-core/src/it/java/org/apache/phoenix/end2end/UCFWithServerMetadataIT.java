@@ -171,7 +171,7 @@ public class UCFWithServerMetadataIT extends BaseTest {
           expectedCalls = 0;
           break;
         case "ALWAYS_true_true":
-          expectedCalls = totalRows * 2;
+          expectedCalls = totalRows;
           break;
         case "ALWAYS_true_false":
           expectedCalls = (int) Math.ceil((double) totalRows / batchSize) * 2;

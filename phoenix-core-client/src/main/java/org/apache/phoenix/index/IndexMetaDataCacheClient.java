@@ -140,16 +140,34 @@ public class IndexMetaDataCacheClient {
       boolean serverSideImmutableIndexes =
         props.getBoolean(SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
           DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
+      boolean useServerCacheRpc =
+        useIndexMetadataCache(connection, mutations, indexMetaDataPtr.getLength() + txState.length);
+      long updateCacheFreq = table.getUpdateCacheFrequency();
+      // PHOENIX-7727 Eliminate IndexMetadataCache RPCs by leveraging server PTable cache and
+      // retrieve IndexMaintainer objects for each active index from the PTable object.
+      // To optimize rpc calls, use it only when all of these conditions are met:
+      // 1. User server metadata feature is enabled (enabled by default).
+      // 2. New index design is used (IndexRegionObserver coproc).
+      // 3. Schema namespace mapping is disabled.
+      // 4. Table is not of type System.
+      // 5. Either table has mutable indexes or server side handling of immutable indexes is
+      // enabled.
+      // 6. Table's UPDATE_CACHE_FREQUENCY is not ALWAYS. This ensures IndexRegionObserver
+      // does not have to make additional getTable() rpc call with each batchMutate() rpc call.
+      // 7. Table's UPDATE_CACHE_FREQUENCY is ALWAYS but addServerCache() rpc call is needed
+      // due to the size of mutations. Unless expensive addServerCache() rpc call is required,
+      // client can attach index maintainer mutation attribute so that IndexRegionObserver
+      // does not have to make additional getTable() rpc call with each batchMutate() rpc call
+      // with small mutation size (size < phoenix.index.mutableBatchSizeThreshold value).
       if (
         useServerMetadata && table.getType() != PTableType.SYSTEM
           && (!table.isImmutableRows() || serverSideImmutableIndexes)
+          && (updateCacheFreq > 0 || useServerCacheRpc)
       ) {
         LOGGER.trace("Using server-side metadata for table {}, not sending IndexMaintainer or UUID",
           table.getTableName());
         uuidValue = ByteUtil.EMPTY_BYTE_ARRAY;
-      } else if (
-        useIndexMetadataCache(connection, mutations, indexMetaDataPtr.getLength() + txState.length)
-      ) {
+      } else if (useServerCacheRpc) {
         IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, table);
         cache = client.addIndexMetadataCache(mutations, indexMetaDataPtr, txState);
         uuidValue = cache.getId();
