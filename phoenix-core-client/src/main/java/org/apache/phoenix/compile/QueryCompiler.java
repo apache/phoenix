@@ -768,6 +768,15 @@ public class QueryCompiler {
         .getBoolean(WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB, DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB);
     RowProjector projector = ProjectionCompiler.compile(context, select, groupBy,
       asSubquery ? Collections.emptyList() : targetColumns, where, wildcardIncludesDynamicCols);
+
+    // PHOENIX-6644: Merge column name mappings from the original data plan if this is an
+    // index query. This preserves original column names for ResultSet.getString(columnName)
+    // when view constants or other optimizations rewrite column references.
+    QueryPlan dataPlanForMerge = dataPlans.get(tableRef);
+    if (dataPlanForMerge != null && dataPlanForMerge.getProjector() != null) {
+      projector = projector.mergeColumnNameMappings(dataPlanForMerge.getProjector());
+    }
+
     OrderBy orderBy = OrderByCompiler.compile(context, select, groupBy, limit, compiledOffset,
       projector, innerPlan, where);
     context.getAggregationManager().compile(context, groupBy);
