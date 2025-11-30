@@ -132,7 +132,7 @@ public class IndexMetaDataCacheClient {
     ReadOnlyProps props = connection.getQueryServices().getProps();
     if (hasIndexMetaData) {
       List<PTable> indexes = table.getIndexes();
-      boolean hasActiveIndexes =
+      boolean sendIndexMaintainers =
         indexes != null && indexes.stream().anyMatch(IndexMaintainer::sendIndexMaintainer);
       boolean useServerMetadata = props.getBoolean(INDEX_USE_SERVER_METADATA_ATTRIB,
         QueryServicesOptions.DEFAULT_INDEX_USE_SERVER_METADATA)
@@ -143,7 +143,7 @@ public class IndexMetaDataCacheClient {
           DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
       boolean useServerCacheRpc =
         useIndexMetadataCache(connection, mutations, indexMetaDataPtr.getLength() + txState.length)
-          && hasActiveIndexes;
+          && sendIndexMaintainers;
       long updateCacheFreq = table.getUpdateCacheFrequency();
       // PHOENIX-7727 Eliminate IndexMetadataCache RPCs by leveraging server PTable cache and
       // retrieve IndexMaintainer objects for each active index from the PTable object.
