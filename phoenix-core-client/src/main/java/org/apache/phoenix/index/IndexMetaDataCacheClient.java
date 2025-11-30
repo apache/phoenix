@@ -131,34 +131,40 @@ public class IndexMetaDataCacheClient {
     boolean hasIndexMetaData = indexMetaDataPtr.getLength() > 0;
     ReadOnlyProps props = connection.getQueryServices().getProps();
     if (hasIndexMetaData) {
+      List<PTable> indexes = table.getIndexes();
+      boolean hasActiveIndexes =
+        indexes != null && indexes.stream().anyMatch(IndexMaintainer::sendIndexMaintainer);
       boolean useServerMetadata = props.getBoolean(INDEX_USE_SERVER_METADATA_ATTRIB,
         QueryServicesOptions.DEFAULT_INDEX_USE_SERVER_METADATA)
         && props.getBoolean(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
-          QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED)
-        && !props.getBoolean(QueryServices.IS_NAMESPACE_MAPPING_ENABLED,
-          QueryServicesOptions.DEFAULT_IS_NAMESPACE_MAPPING_ENABLED);
+          QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
       boolean serverSideImmutableIndexes =
         props.getBoolean(SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
           DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
       boolean useServerCacheRpc =
-        useIndexMetadataCache(connection, mutations, indexMetaDataPtr.getLength() + txState.length);
+        useIndexMetadataCache(connection, mutations, indexMetaDataPtr.getLength() + txState.length)
+          && hasActiveIndexes;
       long updateCacheFreq = table.getUpdateCacheFrequency();
       // PHOENIX-7727 Eliminate IndexMetadataCache RPCs by leveraging server PTable cache and
       // retrieve IndexMaintainer objects for each active index from the PTable object.
       // To optimize rpc calls, use it only when all of these conditions are met:
-      // 1. User server metadata feature is enabled (enabled by default).
+      // 1. Use server metadata feature is enabled (enabled by default).
       // 2. New index design is used (IndexRegionObserver coproc).
-      // 3. Schema namespace mapping is disabled.
-      // 4. Table is not of type System.
-      // 5. Either table has mutable indexes or server side handling of immutable indexes is
+      // 3. Table is not of type System.
+      // 4. Either table has mutable indexes or server side handling of immutable indexes is
       // enabled.
-      // 6. Table's UPDATE_CACHE_FREQUENCY is not ALWAYS. This ensures IndexRegionObserver
+      // 5. Table's UPDATE_CACHE_FREQUENCY is not ALWAYS. This ensures IndexRegionObserver
       // does not have to make additional getTable() rpc call with each batchMutate() rpc call.
-      // 7. Table's UPDATE_CACHE_FREQUENCY is ALWAYS but addServerCache() rpc call is needed
+      // 6. Table's UPDATE_CACHE_FREQUENCY is ALWAYS but addServerCache() rpc call is needed
       // due to the size of mutations. Unless expensive addServerCache() rpc call is required,
       // client can attach index maintainer mutation attribute so that IndexRegionObserver
       // does not have to make additional getTable() rpc call with each batchMutate() rpc call
       // with small mutation size (size < phoenix.index.mutableBatchSizeThreshold value).
+      // If above conditions do not match and if the mutation size is greater than
+      // "phoenix.index.mutableBatchSizeThreshold" value, however if none of the data table
+      // indexes need to be sent to server (only index in state other than DISABLE,
+      // CREATE_DISABLE, PENDING_ACTIVE need to be sent to server), do not use expensive
+      // addServerCache() rpc call.
       if (
         useServerMetadata && table.getType() != PTableType.SYSTEM
           && (!table.isImmutableRows() || serverSideImmutableIndexes)
