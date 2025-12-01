@@ -105,9 +105,8 @@ import org.slf4j.LoggerFactory;
  * Test failover basics for {@link ParallelPhoenixConnection}.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class ParallelPhoenixConnectionIT {
+public class ParallelPhoenixConnectionIT extends HABaseIT {
     private static final Logger LOG = LoggerFactory.getLogger(ParallelPhoenixConnectionIT.class);
-    private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
     private static final Properties GLOBAL_PROPERTIES = new Properties();
 
     @Rule

@@ -65,9 +65,8 @@ import org.slf4j.LoggerFactory;
  */
 @SuppressWarnings("UnstableApiUsage")
 @Category(NeedsOwnMiniClusterTest.class)
-public class HighAvailabilityGroupIT {
+public class HighAvailabilityGroupIT extends HABaseIT {
     private static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroupIT.class);
-    private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
 
     /** Client properties to create a connection per test. */
     private Properties clientProperties;
