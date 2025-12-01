@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>5.3.0-SNAPSHOT</version>
+    <version>5.4.0-SNAPSHOT</version>
   </parent>
 
   <artifactId>phoenix-hbase-compat-2.6.4</artifactId>
@@ -28,7 +28,7 @@
   <description>Compatibility module for HBase 2.6.4+</description>
 
   <properties>
-    <hbase26.compat.version>2.6.4-SNAPSHOT</hbase26.compat.version>
+    <hbase26.compat.version>2.6.4-hadoop3</hbase26.compat.version>
   </properties>
 
   <dependencies>

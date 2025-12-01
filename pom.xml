@@ -79,7 +79,7 @@
     <hbase-2.5.runtime.version>2.5.12-hadoop3</hbase-2.5.runtime.version>
     <hbase-2.6.0.runtime.version>2.6.1-hadoop3</hbase-2.6.0.runtime.version>
     <hbase-2.6.3.runtime.version>2.6.3-hadoop3</hbase-2.6.3.runtime.version>
-    <hbase-2.6.runtime.version>2.6.4-SNAPSHOT</hbase-2.6.runtime.version>
+    <hbase-2.6.runtime.version>2.6.4-hadoop3</hbase-2.6.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -271,6 +271,11 @@
       </dependency>
       <dependency>
         <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-embedded-hbase-2.6.3</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-lite-hbase-2.5.4</artifactId>
         <version>${project.version}</version>
       </dependency>
@@ -287,6 +292,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-client-lite-hbase-2.6.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-client-lite-hbase-2.6.3</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -312,6 +322,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-server-hbase-2.6.0</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-server-hbase-2.6.3</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -342,6 +357,11 @@
       <dependency>
         <groupId>org.apache.phoenix</groupId>
         <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.6</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.phoenix</groupId>
+        <artifactId>phoenix-mapreduce-byo-shaded-hbase-hbase-2.6.3</artifactId>
         <version>${project.version}</version>
       </dependency>
       <dependency>
@@ -2194,7 +2214,6 @@
       </activation>
       <properties>
         <hbase.profile>2.6</hbase.profile>
-        <!-- Same compat version as 2.6.0, but different Hadoop version -->
         <hbase.compat.version>2.6.4</hbase.compat.version>
         <hbase.version>${hbase-2.6.runtime.version}</hbase.version>
       </properties>
@@ -2210,8 +2229,6 @@
       </activation>
       <properties>
         <hbase.profile>2.6.3</hbase.profile>
-        <!-- Same compat version as 2.6.0, but different Hadoop version -->
-        <hadoop.version>3.4.1</hadoop.version>
         <hbase.compat.version>2.6.0</hbase.compat.version>
         <hbase.version>${hbase-2.6.3.runtime.version}</hbase.version>
       </properties>
