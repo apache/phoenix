@@ -1650,7 +1650,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
 
     /**
      * Tests the shouldTriggerFailover method with various combinations of failoverPending,
-     * in-progress files, and new files for next round.
+     * in-progress files, and new files from next round to current timestamp round.
      */
     @Test
     public void testShouldTriggerFailover() throws IOException {
@@ -1668,12 +1668,14 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
         try {
             // Create test rounds
             ReplicationRound testRound = new ReplicationRound(1704153600000L, 1704153660000L);
-            ReplicationRound nextRound = tracker.getReplicationShardDirectoryManager().getNextRound(testRound);
+            ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
+            ReplicationRound nextRoundToProcess = shardManager.getNextRound(testRound);
+            ReplicationRound currentTimestampRound = shardManager.getReplicationRoundFromStartTime(currentTime);
 
             // Test Case 1: All conditions true - should return true
             {
                 when(tracker.getInProgressFiles()).thenReturn(Collections.emptyList());
-                when(tracker.getNewFilesForRound(nextRound)).thenReturn(Collections.emptyList());
+                when(tracker.getNewFiles(nextRoundToProcess, currentTimestampRound)).thenReturn(Collections.emptyList());
                 TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
                 discovery.setLastRoundInSync(testRound);
                 discovery.setLastRoundProcessed(testRound);
@@ -1686,7 +1688,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
             // Test Case 2: failoverPending is false - should return false
             {
                 when(tracker.getInProgressFiles()).thenReturn(Collections.emptyList());
-                when(tracker.getNewFilesForRound(nextRound)).thenReturn(Collections.emptyList());
+                when(tracker.getNewFiles(nextRoundToProcess, currentTimestampRound)).thenReturn(Collections.emptyList());
                 TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
                 discovery.setLastRoundInSync(testRound);
                 discovery.setLastRoundProcessed(testRound);
@@ -1699,7 +1701,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
             // Test Case 3: in-progress files not empty - should return false
             {
                 when(tracker.getInProgressFiles()).thenReturn(Collections.singletonList(new Path("test.plog")));
-                when(tracker.getNewFilesForRound(nextRound)).thenReturn(Collections.emptyList());
+                when(tracker.getNewFiles(nextRoundToProcess, currentTimestampRound)).thenReturn(Collections.emptyList());
                 TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
                 discovery.setLastRoundInSync(testRound);
                 discovery.setLastRoundProcessed(testRound);
@@ -1709,23 +1711,23 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
                         discovery.shouldTriggerFailover());
             }
 
-            // Test Case 4: new files exist for next round - should return false
+            // Test Case 4: new files exist from next round to current timestamp round - should return false
             {
                 when(tracker.getInProgressFiles()).thenReturn(Collections.emptyList());
-                when(tracker.getNewFilesForRound(nextRound)).thenReturn(Collections.singletonList(new Path("test.plog")));
+                when(tracker.getNewFiles(nextRoundToProcess, currentTimestampRound)).thenReturn(Collections.singletonList(new Path("test.plog")));
                 TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
                 discovery.setLastRoundInSync(testRound);
                 discovery.setLastRoundProcessed(testRound);
                 discovery.setFailoverPending(true);
 
-                assertFalse("Should not trigger failover when new files exist for next round",
+                assertFalse("Should not trigger failover when new files exist from next round to current timestamp round",
                         discovery.shouldTriggerFailover());
             }
 
             // Test Case 5: failoverPending false AND in-progress files not empty - should return false
             {
                 when(tracker.getInProgressFiles()).thenReturn(Collections.singletonList(new Path("test.plog")));
-                when(tracker.getNewFilesForRound(nextRound)).thenReturn(Collections.emptyList());
+                when(tracker.getNewFiles(nextRoundToProcess, currentTimestampRound)).thenReturn(Collections.emptyList());
                 TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
                 discovery.setLastRoundInSync(testRound);
                 discovery.setLastRoundProcessed(testRound);
@@ -1738,7 +1740,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
             // Test Case 6: failoverPending false AND new files exist - should return false
             {
                 when(tracker.getInProgressFiles()).thenReturn(Collections.emptyList());
-                when(tracker.getNewFilesForRound(nextRound)).thenReturn(Collections.singletonList(new Path("test.plog")));
+                when(tracker.getNewFiles(nextRoundToProcess, currentTimestampRound)).thenReturn(Collections.singletonList(new Path("test.plog")));
                 TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
                 discovery.setLastRoundInSync(testRound);
                 discovery.setLastRoundProcessed(testRound);
@@ -1751,7 +1753,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
             // Test Case 7: in-progress files not empty AND new files exist - should return false
             {
                 when(tracker.getInProgressFiles()).thenReturn(Collections.singletonList(new Path("test1.plog")));
-                when(tracker.getNewFilesForRound(nextRound)).thenReturn(Collections.singletonList(new Path("test2.plog")));
+                when(tracker.getNewFiles(nextRoundToProcess, currentTimestampRound)).thenReturn(Collections.singletonList(new Path("test2.plog")));
                 TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
                 discovery.setLastRoundInSync(testRound);
                 discovery.setLastRoundProcessed(testRound);
@@ -1764,7 +1766,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
             // Test Case 8: All conditions false - should return false
             {
                 when(tracker.getInProgressFiles()).thenReturn(Collections.singletonList(new Path("test.plog")));
-                when(tracker.getNewFilesForRound(nextRound)).thenReturn(Collections.singletonList(new Path("test2.plog")));
+                when(tracker.getNewFiles(nextRoundToProcess, currentTimestampRound)).thenReturn(Collections.singletonList(new Path("test2.plog")));
                 TestableReplicationLogDiscoveryReplay discovery = new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
                 discovery.setLastRoundInSync(testRound);
                 discovery.setLastRoundProcessed(testRound);
