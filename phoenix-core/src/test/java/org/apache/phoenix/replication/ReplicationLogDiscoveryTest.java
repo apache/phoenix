@@ -82,7 +82,7 @@ public class ReplicationLogDiscoveryTest {
         testFolderPath = new Path(testFolder.getRoot().getAbsolutePath());
         Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName), ReplicationLogReplay.IN_DIRECTORY_NAME);
         ReplicationShardDirectoryManager replicationShardDirectoryManager =
-                new ReplicationShardDirectoryManager(conf, newFilesDirectory);
+                new ReplicationShardDirectoryManager(conf, localFs, newFilesDirectory);
         fileTracker = Mockito.spy(new TestableReplicationLogTracker(conf, haGroupName, localFs, replicationShardDirectoryManager));
         fileTracker.init();
 
@@ -1922,7 +1922,7 @@ public class ReplicationLogDiscoveryTest {
      */
     private static class TestableReplicationLogTracker extends ReplicationLogTracker {
         public TestableReplicationLogTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final ReplicationShardDirectoryManager replicationShardDirectoryManager) {
-            super(conf, haGroupName, fileSystem, replicationShardDirectoryManager, metricsLogTracker);
+            super(conf, haGroupName, replicationShardDirectoryManager, metricsLogTracker);
         }
     }
 
