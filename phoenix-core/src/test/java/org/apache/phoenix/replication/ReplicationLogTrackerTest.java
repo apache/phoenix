@@ -1306,8 +1306,8 @@ public class ReplicationLogTrackerTest {
     private ReplicationLogTracker createReplicationLogFileTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem, final URI rootURI) {
         Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName), ReplicationLogReplay.IN_DIRECTORY_NAME);
         ReplicationShardDirectoryManager replicationShardDirectoryManager =
-                new ReplicationShardDirectoryManager(conf, newFilesDirectory);
-        return new ReplicationLogTracker(conf, haGroupName, fileSystem, replicationShardDirectoryManager, metrics);
+                new ReplicationShardDirectoryManager(conf, fileSystem, newFilesDirectory);
+        return new ReplicationLogTracker(conf, haGroupName, replicationShardDirectoryManager, metrics);
     }
 
 

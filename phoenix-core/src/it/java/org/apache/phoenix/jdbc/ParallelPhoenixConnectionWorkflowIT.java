@@ -62,9 +62,8 @@ import static org.junit.Assume.assumeTrue;
  */
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-public class ParallelPhoenixConnectionWorkflowIT {
+public class ParallelPhoenixConnectionWorkflowIT extends HABaseIT {
     private static final Logger LOG = LoggerFactory.getLogger(ParallelPhoenixConnectionIT.class);
-    private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
     private static final Properties GLOBAL_PROPERTIES = new Properties();
     private static final String tableName = generateUniqueName();
     private static final String USER_CONDITION = "USER_ID=? and USER_TYPE=? and WORK_ID=?";
