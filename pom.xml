@@ -77,7 +77,7 @@
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.4.runtime.version>2.5.10-hadoop3</hbase-2.5.4.runtime.version>
-    <hbase-2.5.runtime.version>2.5.12-hadoop3</hbase-2.5.runtime.version>
+    <hbase-2.5.runtime.version>2.5.13-hadoop3</hbase-2.5.runtime.version>
     <hbase-2.6.0.runtime.version>2.6.1-hadoop3</hbase-2.6.0.runtime.version>
     <hbase-2.6.3.runtime.version>2.6.3-hadoop3</hbase-2.6.3.runtime.version>
     <hbase-2.6.runtime.version>2.6.4-hadoop3</hbase-2.6.runtime.version>
@@ -2145,7 +2145,7 @@
     <profile>
       <!-- must be identical to phoenix-hbase-compat-2.5.4 profile -->
       <!-- This WILL work with the public HBase artifacts -->
-      <id>phoenix-hbase-compat-2.5.12-default</id>
+      <id>phoenix-hbase-compat-2.5.13-default</id>
       <activation>
         <property>
           <name>!hbase.profile</name>
@@ -2159,7 +2159,7 @@
     </profile>
     <profile>
       <!-- This WILL work with the public -hadoop3 artifacts -->
-      <id>phoenix-hbase-compat-2.5.12</id>
+      <id>phoenix-hbase-compat-2.5.13</id>
       <activation>
         <property>
           <name>hbase.profile</name>
