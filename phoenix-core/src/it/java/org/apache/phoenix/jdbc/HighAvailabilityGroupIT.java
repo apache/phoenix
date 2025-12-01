@@ -44,7 +44,6 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
-import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -63,9 +62,8 @@ import org.slf4j.LoggerFactory;
  */
 @SuppressWarnings("UnstableApiUsage")
 @Category(NeedsOwnMiniClusterTest.class)
-public class HighAvailabilityGroupIT {
+public class HighAvailabilityGroupIT extends HABaseIT {
   private static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroupIT.class);
-  private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
 
   /** Client properties to create a connection per test. */
   private Properties clientProperties;

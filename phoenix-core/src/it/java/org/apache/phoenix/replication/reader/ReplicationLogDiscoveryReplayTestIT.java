@@ -1790,7 +1790,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     Path newFilesDirectory =
       new Path(new Path(rootURI.getPath(), haGroupName), ReplicationLogReplay.IN_DIRECTORY_NAME);
     ReplicationShardDirectoryManager replicationShardDirectoryManager =
-      new ReplicationShardDirectoryManager(config, newFilesDirectory);
+      new ReplicationShardDirectoryManager(config, fileSystem, newFilesDirectory);
     TestableReplicationLogTracker testableReplicationLogTracker =
       new TestableReplicationLogTracker(config, haGroupName, fileSystem,
         replicationShardDirectoryManager, METRICS_REPLICATION_LOG_TRACKER);
@@ -1806,7 +1806,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     public TestableReplicationLogTracker(Configuration config, String haGroupName,
       FileSystem fileSystem, ReplicationShardDirectoryManager replicationShardDirectoryManager,
       MetricsReplicationLogTracker metrics) {
-      super(config, haGroupName, fileSystem, replicationShardDirectoryManager, metrics);
+      super(config, haGroupName, replicationShardDirectoryManager, metrics);
     }
 
     public Path getInProgressDirPath() {

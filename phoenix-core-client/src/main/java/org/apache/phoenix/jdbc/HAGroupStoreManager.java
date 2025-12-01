@@ -177,7 +177,7 @@ public class HAGroupStoreManager {
   }
 
   @VisibleForTesting
-  HAGroupStoreManager(final Configuration conf) {
+  protected HAGroupStoreManager(final Configuration conf) {
     this(conf, getLocalZkUrl(conf));
   }
 

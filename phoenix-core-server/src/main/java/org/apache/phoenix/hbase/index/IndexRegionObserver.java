@@ -137,7 +137,6 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
-import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.TracingUtils;
@@ -147,7 +146,6 @@ import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
-import org.apache.phoenix.util.MutationUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerIndexUtil;
@@ -180,8 +178,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   // Mutation attribute to ignore the mutation for replication
   public static final String IGNORE_REPLICATION_ATTRIB = "_IGNORE_REPLICATION";
   private static final byte[] IGNORE_REPLICATION_ATTRIB_VAL = new byte[] { 0 };
-  // TODO hardcoded for now, will fix later
-  public static final String DEFAULT_HA_GROUP = "DEFAULT_HA_GROUP";
 
   /**
    * Class to represent pending data table rows
@@ -329,7 +325,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private boolean returnResult;
     private boolean returnOldRow;
     private boolean hasConditionalTTL; // table has Conditional TTL
-    private boolean immutableRows;
+    // HAGroup associated with the batch
+    private Optional<ReplicationLogGroup> logGroup = Optional.empty();
 
     public BatchMutateContext() {
       this.clientVersion = 0;
@@ -399,11 +396,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * you only want to ignore this for testing or for custom versions of HBase.
    */
   public static final String CHECK_VERSION_CONF_KEY = "com.saleforce.hbase.index.checkversion";
-
   public static final String INDEX_LAZY_POST_BATCH_WRITE =
     "org.apache.hadoop.hbase.index.lazy.post_batch.write";
   private static final boolean INDEX_LAZY_POST_BATCH_WRITE_DEFAULT = false;
-
   private static final String INDEXER_INDEX_WRITE_SLOW_THRESHOLD_KEY =
     "phoenix.indexer.slow.post.batch.mutate.threshold";
   private static final long INDEXER_INDEX_WRITE_SLOW_THRESHOLD_DEFAULT = 3_000;
@@ -439,7 +434,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
   private byte[] encodedRegionName;
   private boolean shouldReplicate;
-  private ReplicationLogGroup replicationLog;
 
   // Don't replicate the mutation if this attribute is set
   private static final Predicate<Mutation> IGNORE_REPLICATION =
@@ -540,8 +534,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         this.shouldReplicate = SchemaUtil.shouldReplicateTable(tableName);
       }
       if (this.shouldReplicate) {
-        this.replicationLog =
-          ReplicationLogGroup.get(env.getConfiguration(), env.getServerName(), DEFAULT_HA_GROUP);
         this.ignoreReplicationFilter = getSynchronousReplicationFilter(tableName);
       }
     } catch (NoSuchMethodError ex) {
@@ -643,38 +635,35 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         throw new IOException(
           "HAGroupStoreManager is null " + "for current cluster, check configuration");
       }
-      String tableName =
-        c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+      // Extract HAGroupName from the mutations
+      Optional<ReplicationLogGroup> logGroup = getHAGroupFromBatch(c.getEnvironment(), miniBatchOp);
+
       // We don't want to check for mutation blocking for the system ha group table
-      if (!tableName.equals(SYSTEM_HA_GROUP_NAME)) {
-        // Extract HAGroupName from the mutations
-        final String haGroupName = extractHAGroupNameAttribute(miniBatchOp);
-        // Check if mutation is blocked for any of the HAGroupNames
-        if (StringUtils.isNotBlank(haGroupName)) {
-          // TODO: Below approach might be slow need to figure out faster way,
-          // slower part is getting haGroupStoreClient We can also cache
-          // roleRecord (I tried it and still it's slow due to haGroupStoreClient
-          // initialization) and caching will give us old result in case one cluster
-          // is unreachable instead of UNKNOWN.
+      if (!dataTableName.equals(SYSTEM_HA_GROUP_NAME) && logGroup.isPresent()) {
+        // Check if mutation is blocked for the HA Group
+        String haGroupName = logGroup.get().getHAGroupName();
+        // TODO: Below approach might be slow need to figure out faster way,
+        // slower part is getting haGroupStoreClient We can also cache
+        // roleRecord (I tried it and still it's slow due to haGroupStoreClient
+        // initialization) and caching will give us old result in case one cluster
+        // is unreachable instead of UNKNOWN.
 
-          boolean isHAGroupOnClientStale = haGroupStoreManager.isHAGroupOnClientStale(haGroupName);
-          if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
-            throw new StaleClusterRoleRecordException(String
-              .format("HAGroupStoreRecord is stale for haGroup %s on " + "client", haGroupName));
-          }
+        boolean isHAGroupOnClientStale = haGroupStoreManager.isHAGroupOnClientStale(haGroupName);
+        if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
+          throw new StaleClusterRoleRecordException(String
+            .format("HAGroupStoreRecord is stale for haGroup %s on " + "client", haGroupName));
+        }
 
-          // Check if mutation's haGroup is stale
-          if (
-            StringUtils.isNotBlank(haGroupName)
-              && haGroupStoreManager.isMutationBlocked(haGroupName)
-          ) {
-            throw new MutationBlockedIOException(
-              "Blocking Mutation as Some CRRs " + "are in ACTIVE_TO_STANDBY state and "
-                + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
-          }
+        // Check if mutation's haGroup is stale
+        if (
+          StringUtils.isNotBlank(haGroupName) && haGroupStoreManager.isMutationBlocked(haGroupName)
+        ) {
+          throw new MutationBlockedIOException(
+            "Blocking Mutation as Some CRRs " + "are in ACTIVE_TO_STANDBY state and "
+              + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
         }
       }
-      preBatchMutateWithExceptions(c, miniBatchOp);
+      preBatchMutateWithExceptions(c, miniBatchOp, logGroup);
       return;
     } catch (Throwable t) {
       rethrowIndexingException(t);
@@ -683,15 +672,40 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       "Somehow didn't return an index update but also didn't propagate the failure to the client!");
   }
 
-  private String extractHAGroupNameAttribute(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
-    for (int i = 0; i < miniBatchOp.size(); i++) {
-      Mutation m = miniBatchOp.getOperation(i);
+  /**
+   * Get the HA group associated with the batch. We assume that all the mutations in the batch will
+   * have the same HA group.
+   * @return HA group if present or empty if missing
+   */
+  private Optional<ReplicationLogGroup> getHAGroupFromBatch(RegionCoprocessorEnvironment env,
+    MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+    if (miniBatchOp.size() > 0) {
+      Mutation m = miniBatchOp.getOperation(0);
       byte[] haGroupName = m.getAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
       if (haGroupName != null) {
-        return Bytes.toString(haGroupName);
+        ReplicationLogGroup logGroup = ReplicationLogGroup.get(env.getConfiguration(),
+          env.getServerName(), Bytes.toString(haGroupName));
+        return Optional.of(logGroup);
       }
     }
-    return null;
+    return Optional.empty();
+  }
+
+  /**
+   * Get the HA group associated with the WAL key. A batch of mutations is recorded in a single WAL
+   * edit.
+   * @return HA group if present or empty if missing
+   */
+  private Optional<ReplicationLogGroup> getHAGroupFromWALKey(RegionCoprocessorEnvironment env,
+    org.apache.hadoop.hbase.wal.WALKey logKey) {
+    byte[] haGroupName =
+      logKey.getExtendedAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
+    if (haGroupName != null) {
+      ReplicationLogGroup logGroup = ReplicationLogGroup.get(env.getConfiguration(),
+        env.getServerName(), Bytes.toString(haGroupName));
+      return Optional.of(logGroup);
+    }
+    return Optional.empty();
   }
 
   @Override
@@ -705,9 +719,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (!shouldReplicate) {
       return;
     }
+    Optional<ReplicationLogGroup> logGroup = getHAGroupFromWALKey(ctx.getEnvironment(), logKey);
+    if (!logGroup.isPresent()) {
+      return;
+    }
     long start = EnvironmentEdgeManager.currentTimeMillis();
     try {
-      replicateEditOnWALRestore(logKey, logEdit);
+      replicateEditOnWALRestore(logGroup.get(), logKey, logEdit);
     } finally {
       long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
       metricSource.updatePreWALRestoreTime(dataTableName, duration);
@@ -718,16 +736,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * A batch of mutations is recorded in a single WAL edit so a WAL edit can have cells belonging to
    * multiple rows. Further, for one mutation the WAL edit contains the individual cells that are
    * part of the mutation.
+   * @param logGroup HA Group
+   * @param logKey   WAL log key
+   * @param logEdit  WAL edit record
    */
-  private void replicateEditOnWALRestore(org.apache.hadoop.hbase.wal.WALKey logKey, WALEdit logEdit)
-    throws IOException {
+  private void replicateEditOnWALRestore(ReplicationLogGroup logGroup, WALKey logKey,
+    WALEdit logEdit) throws IOException {
     ImmutableBytesPtr prevKey = null, currentKey = null;
     Put put = null;
     Delete del = null;
     for (Cell kv : logEdit.getCells()) {
       if (kv instanceof IndexedKeyValue) {
         IndexedKeyValue ikv = (IndexedKeyValue) kv;
-        replicationLog.append(Bytes.toString(ikv.getIndexTable()), -1, ikv.getMutation());
+        logGroup.append(Bytes.toString(ikv.getIndexTable()), -1, ikv.getMutation());
       } else {
         // While we can generate a separate mutation for every cell that is part of the
         // WAL edit and replicate each such mutation. Doing that will not be very efficient
@@ -737,10 +758,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         currentKey = new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
         if (!currentKey.equals(prevKey)) {
           if (put != null && !this.ignoreReplicationFilter.test(put)) {
-            replicationLog.append(logKey.getTableName().getNameAsString(), -1, put);
+            logGroup.append(logKey.getTableName().getNameAsString(), -1, put);
           }
           if (del != null && !this.ignoreReplicationFilter.test(del)) {
-            replicationLog.append(logKey.getTableName().getNameAsString(), -1, del);
+            logGroup.append(logKey.getTableName().getNameAsString(), -1, del);
           }
           // reset
           put = null;
@@ -762,12 +783,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
     // append the last one
     if (put != null && !this.ignoreReplicationFilter.test(put)) {
-      replicationLog.append(logKey.getTableName().getNameAsString(), -1, put);
+      logGroup.append(logKey.getTableName().getNameAsString(), -1, put);
     }
     if (del != null && !this.ignoreReplicationFilter.test(del)) {
-      replicationLog.append(logKey.getTableName().getNameAsString(), -1, del);
+      logGroup.append(logKey.getTableName().getNameAsString(), -1, del);
     }
-    replicationLog.sync();
+    logGroup.sync();
   }
 
   private void populateRowsToLock(MiniBatchOperationInProgress<Mutation> miniBatchOp,
@@ -776,7 +797,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       Mutation m = miniBatchOp.getOperation(i);
       if (
         this.builder.isAtomicOp(m) || context.returnResult || this.builder.isEnabled(m)
-          || (this.builder.hasConditionalTTL(m) && isStrictTTLEnabled(miniBatchOp))
+          || this.builder.hasConditionalTTL(m)
       ) {
         ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
         context.rowsToLock.add(row);
@@ -877,10 +898,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    */
   private void updateMutationsForConditionalTTL(MiniBatchOperationInProgress<Mutation> miniBatchOp,
     BatchMutateContext context) throws IOException {
-    // If TTL is not strict, skip conditional TTL processing
-    if (!isStrictTTLEnabled(miniBatchOp)) {
-      return;
-    }
     // mapping from row key to indices in mini batch
     Map<ImmutableBytesPtr, List<Integer>> expiredVersions = Maps.newHashMap();
     Set<ImmutableBytesPtr> notExpiredVersions = Sets.newHashSet();
@@ -934,17 +951,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       for (List<Cell> cells : currentVersion.getFamilyCellMap().values()) {
         for (Cell cell : cells) {
           boolean masked = true;
-          byte[] family = CellUtil.cloneFamily(cell);
-          byte[] qualifier = CellUtil.cloneQualifier(cell);
           for (Integer pos : positions) {
             Mutation m = miniBatchOp.getOperation(pos);
-            if (m.has(family, qualifier)) {
+            if (m.has(cell.getFamilyArray(), cell.getQualifierArray())) {
               masked = false;
               break;
             }
           }
           if (masked) {
-            ColumnReference colRef = new ColumnReference(family, qualifier);
+            ColumnReference colRef =
+              new ColumnReference(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell));
             colsToBeMasked.add(colRef);
           }
         }
@@ -1015,7 +1031,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   public static void setTimestamps(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-    IndexBuildManager builder, long ts, boolean isTTLStrict) throws IOException {
+    IndexBuildManager builder, long ts) throws IOException {
     for (Integer i = 0; i < miniBatchOp.size(); i++) {
       if (isAtomicOperationComplete(miniBatchOp.getOperationStatus(i))) {
         continue;
@@ -1024,9 +1040,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // skip this mutation if we aren't enabling indexing or Conditional TTL
       // or not an atomic op or if it is an atomic op
       // and its timestamp is already set(not LATEST)
-      // Also, skip conditional TTL if TTL is not strict
       if (
-        !builder.isEnabled(m) && (!builder.hasConditionalTTL(m) || !isTTLStrict)
+        !builder.isEnabled(m) && !builder.hasConditionalTTL(m)
           && !((builder.isAtomicOp(m) || builder.returnResult(m))
             && IndexUtil.getMaxTimestamp(m) == HConstants.LATEST_TIMESTAMP)
       ) {
@@ -1073,25 +1088,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         miniBatchOp.setOperationStatus(i, NOWRITE);
       }
     }
-  }
-
-  /**
-   * Checks if strict TTL mode is enabled in mutation attributes. Falls back to default value if no
-   * attribute is found.
-   */
-  private boolean isStrictTTLEnabled(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
-    for (int i = 0; i < miniBatchOp.size(); i++) {
-      Mutation m = miniBatchOp.getOperation(i);
-      byte[] isStrictTTLBytes = m.getAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL);
-      if (isStrictTTLBytes != null) {
-        try {
-          return (Boolean) PBoolean.INSTANCE.toObject(isStrictTTLBytes);
-        } catch (Exception e) {
-          break;
-        }
-      }
-    }
-    return PTable.DEFAULT_IS_STRICT_TTL;
   }
 
   /**
@@ -1292,10 +1288,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             }
             Put put = lastContext.getNextDataRowState(rowKeyPtr);
             if (put != null) {
-              // We have detected a concurrent update so do a deep copy of the
-              // previous update but we can skip the attributes
-              Put copy = MutationUtil.copyPut(put, true);
-              context.dataRowStates.put(rowKeyPtr, new Pair<>(copy, new Put(copy)));
+              context.dataRowStates.put(rowKeyPtr, new Pair<>(put, new Put(put)));
             }
           } else {
             // The last batch for this row key failed. We cannot use the memory state.
@@ -1557,21 +1550,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static void identifyIndexMaintainerTypes(PhoenixIndexMetaData indexMetaData,
     BatchMutateContext context) {
     for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
-      if (indexMaintainer.isImmutableRows()) {
-        // Here we care if index is immutable in order to skip reading data table rows. However, if
-        // the data table storage scheme does not agree with the index table storage scheme, we
-        // cannot skip reading data table rows, and thus we cannot treat the index as immutable.
-        // Consider the case where data table uses the single cell per column format and index
-        // uses the single cell format. If the data table row is updated partially, we need to
-        // read the data table row on disk to retrieve missing columns in the partial update to
-        // build the full index row. Please note with the single cell format, the row has single
-        // cell (and the empty cell)
-        if (
-          indexMaintainer.getDataImmutableStorageScheme() == indexMaintainer.getIndexStorageScheme()
-        ) {
-          context.immutableRows = true;
-        }
-      }
       if (indexMaintainer instanceof TransformMaintainer) {
         context.hasTransform = true;
       } else if (indexMaintainer.isLocalIndex()) {
@@ -1598,7 +1576,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           context.returnOldRow = true;
         }
       }
-      if (this.builder.hasConditionalTTL(m) && isStrictTTLEnabled(miniBatchOp)) {
+      if (this.builder.hasConditionalTTL(m)) {
         context.hasConditionalTTL = true;
       }
       if (this.builder.isAtomicOp(m) || this.builder.returnResult(m)) {
@@ -1732,9 +1710,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   public void preBatchMutateWithExceptions(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws Throwable {
+    MiniBatchOperationInProgress<Mutation> miniBatchOp, Optional<ReplicationLogGroup> logGroup)
+    throws Throwable {
     PhoenixIndexMetaData indexMetaData = getPhoenixIndexMetaData(c, miniBatchOp);
     BatchMutateContext context = new BatchMutateContext(indexMetaData.getClientVersion());
+    context.logGroup = logGroup;
     setBatchMutateContext(c, context);
     identifyIndexMaintainerTypes(indexMetaData, context);
     identifyMutationTypes(miniBatchOp, context);
@@ -1768,11 +1748,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       context.dataRowStates =
         new HashMap<ImmutableBytesPtr, Pair<Put, Put>>(context.rowsToLock.size());
       if (
-        !context.immutableRows && context.hasGlobalIndex || context.hasTransform
-          || context.hasAtomic || context.returnResult || context.hasRowDelete
-          || context.hasConditionalTTL
-          || !context.immutableRows && context.hasUncoveredIndex
-            && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp)
+        context.hasGlobalIndex || context.hasTransform || context.hasAtomic || context.returnResult
+          || context.hasRowDelete || context.hasConditionalTTL
+          || (context.hasUncoveredIndex
+            && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp))
       ) {
         getCurrentRowStates(c, context);
       }
@@ -1809,7 +1788,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     long batchTimestamp = getBatchTimestamp(context, table);
     // Update the timestamps of the data table mutations to prevent overlapping timestamps
     // (which prevents index inconsistencies as this case is not handled).
-    setTimestamps(miniBatchOp, builder, batchTimestamp, isStrictTTLEnabled(miniBatchOp));
+    setTimestamps(miniBatchOp, builder, batchTimestamp);
     if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
       // Prepare next data rows states for pending mutations (for global indexes)
       prepareDataRowStates(c, miniBatchOp, context, batchTimestamp);
@@ -1938,9 +1917,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       BatchMutateContext context = getBatchMutateContext(c);
       appendMutationAttributesToWALKey(key, context);
     }
+
+    if (shouldReplicate) {
+      BatchMutateContext context = getBatchMutateContext(c);
+      appendHAGroupAttributeToWALKey(key, context);
+    }
   }
 
-  public void appendMutationAttributesToWALKey(WALKey key,
+  private void appendMutationAttributesToWALKey(WALKey key,
     IndexRegionObserver.BatchMutateContext context) {
     if (context != null && context.getOriginalMutations().size() > 0) {
       Mutation firstMutation = context.getOriginalMutations().get(0);
@@ -1952,6 +1936,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           IndexRegionObserver.appendToWALKey(key, metadataTypeKey, attrMap.get(metadataTypeKey));
         }
       }
+    }
+  }
+
+  /**
+   * Save the HA group name if present in the WAL key so that we can use it when restoring from the
+   * WAL
+   */
+  private void appendHAGroupAttributeToWALKey(WALKey key,
+    IndexRegionObserver.BatchMutateContext context) {
+    if (context != null && context.logGroup.isPresent()) {
+      String haGroupName = context.logGroup.get().getHAGroupName();
+      IndexRegionObserver.appendToWALKey(key,
+        BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB, Bytes.toBytes(haGroupName));
     }
   }
 
@@ -2014,12 +2011,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       this.builder.batchCompleted(miniBatchOp);
 
       if (success) { // The pre-index and data table updates are successful, and now, do post index
-        // updates
+                     // updates
         CompletableFuture<Void> postIndexFuture =
           CompletableFuture.runAsync(() -> doPost(c, context));
         long start = EnvironmentEdgeManager.currentTimeMillis();
         try {
-          replicateMutations(miniBatchOp, context);
+          replicateMutations(c.getEnvironment(), miniBatchOp, context);
         } finally {
           long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
           metricSource.updateReplicationSyncTime(dataTableName, duration);
@@ -2272,16 +2269,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         context.currColumnCellExprMap = currColumnCellExprMap;
       }
       return mutations;
-    }
-
-    boolean isUpdateOnly =
-      atomicPut.getAttribute(PhoenixIndexBuilderHelper.ATOMIC_OP_UPDATE_ONLY_ATTRIB) != null;
-    if (isUpdateOnly && currentDataRowState == null) {
-      // UPDATE_ONLY: If row doesn't exist, do nothing
-      if (context.returnResult) {
-        context.currColumnCellExprMap = currColumnCellExprMap;
-      }
-      return Collections.emptyList();
     }
 
     ByteArrayInputStream stream = new ByteArrayInputStream(opBytes);
@@ -2577,8 +2564,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     return status.getOperationStatusCode() == SUCCESS && status.getResult() != null;
   }
 
-  private void replicateMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-    BatchMutateContext context) throws IOException {
+  private void replicateMutations(RegionCoprocessorEnvironment env,
+    MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context)
+    throws IOException {
 
     if (!this.shouldReplicate) {
       return;
@@ -2586,18 +2574,22 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (ignoreSyncReplicationForTesting) {
       return;
     }
-    assert this.replicationLog != null;
+
+    Optional<ReplicationLogGroup> logGroup = getHAGroupFromBatch(env, miniBatchOp);
+    if (!logGroup.isPresent()) {
+      return;
+    }
 
     for (Integer i = 0; i < miniBatchOp.size(); i++) {
       Mutation m = miniBatchOp.getOperation(i);
       if (this.ignoreReplicationFilter.test(m)) {
         continue;
       }
-      this.replicationLog.append(this.dataTableName, -1, m);
+      logGroup.get().append(this.dataTableName, -1, m);
       Mutation[] mutationsAddedByCP = miniBatchOp.getOperationsFromCoprocessors(i);
       if (mutationsAddedByCP != null) {
         for (Mutation addedMutation : mutationsAddedByCP) {
-          this.replicationLog.append(this.dataTableName, -1, addedMutation);
+          logGroup.get().append(this.dataTableName, -1, addedMutation);
         }
       }
     }
@@ -2607,7 +2599,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         if (this.ignoreReplicationFilter.test(entry.getValue())) {
           continue;
         }
-        this.replicationLog.append(entry.getKey().getTableName(), -1, entry.getValue());
+        logGroup.get().append(entry.getKey().getTableName(), -1, entry.getValue());
       }
     }
     if (context.postIndexUpdates != null) {
@@ -2616,9 +2608,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         if (this.ignoreReplicationFilter.test(entry.getValue())) {
           continue;
         }
-        this.replicationLog.append(entry.getKey().getTableName(), -1, entry.getValue());
+        logGroup.get().append(entry.getKey().getTableName(), -1, entry.getValue());
       }
     }
-    this.replicationLog.sync();
+    logGroup.get().sync();
   }
 }

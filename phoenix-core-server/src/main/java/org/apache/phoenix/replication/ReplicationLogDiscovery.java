@@ -81,7 +81,7 @@ public abstract class ReplicationLogDiscovery {
   /**
    * Default buffer percentage for waiting time between processing rounds
    */
-  private static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
+  protected static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
 
   protected final Configuration conf;
   protected final String haGroupName;
@@ -147,7 +147,7 @@ public abstract class ReplicationLogDiscovery {
    * for the configured shutdown timeout before forcing shutdown if necessary.
    * @throws IOException if there's an error during shutdown
    */
-  public void stop() throws IOException {
+  public void stop() {
     ScheduledExecutorService schedulerToShutdown;
 
     synchronized (this) {
@@ -186,6 +186,7 @@ public abstract class ReplicationLogDiscovery {
    */
   public void replay() throws IOException {
     Optional<ReplicationRound> optionalNextRound = getNextRoundToProcess();
+    LOG.info("replay round={}", optionalNextRound.isPresent());
     while (optionalNextRound.isPresent()) {
       ReplicationRound replicationRound = optionalNextRound.get();
       try {
@@ -198,6 +199,17 @@ public abstract class ReplicationLogDiscovery {
       setLastRoundProcessed(replicationRound);
       optionalNextRound = getNextRoundToProcess();
     }
+    if (!optionalNextRound.isPresent()) {
+      // no more rounds to process
+      processNoMoreRoundsLeft();
+    }
+  }
+
+  /**
+   * Individual implementations can take specific actions when there are no more rounds ready to
+   * process.
+   */
+  protected void processNoMoreRoundsLeft() throws IOException {
   }
 
   /**
@@ -208,6 +220,7 @@ public abstract class ReplicationLogDiscovery {
   protected Optional<ReplicationRound> getNextRoundToProcess() {
     long lastRoundEndTimestamp = getLastRoundProcessed().getEndTime();
     long currentTime = EnvironmentEdgeManager.currentTime();
+    LOG.info("last={} current={}", lastRoundEndTimestamp, currentTime);
     if (currentTime - lastRoundEndTimestamp < roundTimeMills + bufferMillis) {
       // nothing more to process
       return Optional.empty();
@@ -365,7 +378,7 @@ public abstract class ReplicationLogDiscovery {
         LOG.info("Initializing lastRoundProcessed for haGroup: {} from current time {}",
           haGroupName, currentTime);
         this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
-          .getReplicationRoundFromEndTime(EnvironmentEdgeManager.currentTime());
+          .getReplicationRoundFromEndTime(currentTime);
       }
     }
   }

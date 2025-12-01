@@ -68,7 +68,7 @@ import org.slf4j.LoggerFactory;
  * Test failover basics for {@link FailoverPhoenixConnection}.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class FailoverPhoenixConnection2IT {
+public class FailoverPhoenixConnection2IT extends HABaseIT {
   private static final Logger LOG = LoggerFactory.getLogger(FailoverPhoenixConnectionIT.class);
   private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS =
     new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();

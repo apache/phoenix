@@ -20,7 +20,6 @@ package org.apache.phoenix.jdbc;
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityPolicy.PARALLEL;
-import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.junit.Assert.assertTrue;
 
@@ -42,11 +41,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class ParallelPhoenixConnectionFallbackIT {
+public class ParallelPhoenixConnectionFallbackIT extends HABaseIT {
 
   private static final Logger LOG =
     LoggerFactory.getLogger(ParallelPhoenixConnectionFallbackIT.class);
-  private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
   private static final Properties PROPERTIES = new Properties();
 
   private static String jdbcUrl;

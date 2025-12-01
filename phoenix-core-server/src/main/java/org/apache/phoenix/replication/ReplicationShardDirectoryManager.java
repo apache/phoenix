@@ -17,10 +17,13 @@
  */
 package org.apache.phoenix.replication;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 
 /**
@@ -62,6 +65,12 @@ public class ReplicationShardDirectoryManager {
   public static final String SHARD_DIR_FORMAT = "%03d";
 
   /**
+   * Format string for log file names. <timestamp>_<servername>.plog Example
+   * 1762470665995_localhost,54575,1762470584502.plog
+   */
+  public static final String FILE_NAME_FORMAT = "%d_%s.plog";
+
+  /**
    * Configuration key for the duration of each replication round in seconds.
    */
   public static final String PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY =
@@ -84,7 +93,12 @@ public class ReplicationShardDirectoryManager {
 
   private final Path rootDirectoryPath;
 
-  public ReplicationShardDirectoryManager(final Configuration conf, final Path rootPath) {
+  private final FileSystem shardFS;
+
+  private final ConcurrentHashMap<Path, Object> shardMap = new ConcurrentHashMap<>();
+
+  public ReplicationShardDirectoryManager(Configuration conf, FileSystem fs, Path rootPath) {
+    this.shardFS = fs;
     this.rootDirectoryPath = rootPath;
     this.shardDirectoryPath =
       new Path(rootPath.toUri().getPath(), REPLICATION_SHARD_SUB_DIRECTORY_NAME);
@@ -128,6 +142,38 @@ public class ReplicationShardDirectoryManager {
    */
   public Path getShardDirectory(ReplicationRound replicationRound) {
     return getShardDirectory(replicationRound.getStartTime());
+  }
+
+  /**
+   * Creates a new log file path in a sharded directory structure File path:
+   * [root_path]/[ha_group_name]/[in|out]/shard/[shard_directory]/[file_name]
+   * @param timestamp  current time
+   * @param serverName name of the server creating the log file
+   * @return Path to the replication log file
+   */
+  public Path getWriterPath(long timestamp, String serverName) throws IOException {
+    Path shardPath = getShardDirectory(timestamp);
+    // Ensure the shard directory exists. We track which shard directories we have probed or
+    // created to avoid a round trip to the namenode for repeats.
+    IOException[] exception = new IOException[1];
+    shardMap.computeIfAbsent(shardPath, p -> {
+      try {
+        if (!shardFS.exists(p)) {
+          if (!shardFS.mkdirs(shardPath)) {
+            throw new IOException("Could not create path: " + p);
+          }
+        }
+      } catch (IOException e) {
+        exception[0] = e;
+        return null; // Don't cache the path if we can't create it.
+      }
+      return p;
+    });
+    // If we faced an exception in computeIfAbsent, throw it
+    if (exception[0] != null) {
+      throw exception[0];
+    }
+    return new Path(shardPath, String.format(FILE_NAME_FORMAT, timestamp, serverName));
   }
 
   /**
@@ -204,5 +250,9 @@ public class ReplicationShardDirectoryManager {
 
   public int getNumShards() {
     return this.numShards;
+  }
+
+  public FileSystem getFileSystem() {
+    return this.shardFS;
   }
 }

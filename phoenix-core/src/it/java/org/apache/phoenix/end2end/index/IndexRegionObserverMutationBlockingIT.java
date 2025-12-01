@@ -34,6 +34,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.execute.CommitException;
 import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
+import org.apache.phoenix.jdbc.HABaseIT;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
@@ -52,12 +53,10 @@ import org.junit.rules.TestName;
  * blocking is enabled and CRRs are in ACTIVE_TO_STANDBY state.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class IndexRegionObserverMutationBlockingIT {
+public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
 
   private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;
   private PhoenixHAAdmin haAdmin;
-  private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS =
-    new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
 
   private String zkUrl;
   private String peerZkUrl;

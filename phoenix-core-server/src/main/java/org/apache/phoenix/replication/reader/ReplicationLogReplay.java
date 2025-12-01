@@ -110,9 +110,9 @@ public class ReplicationLogReplay {
     Path newFilesDirectory =
       new Path(new Path(rootURI.getPath(), haGroupName), ReplicationLogReplay.IN_DIRECTORY_NAME);
     ReplicationShardDirectoryManager replicationShardDirectoryManager =
-      new ReplicationShardDirectoryManager(conf, newFilesDirectory);
+      new ReplicationShardDirectoryManager(conf, fileSystem, newFilesDirectory);
     ReplicationLogTracker replicationLogReplayFileTracker =
-      new ReplicationLogTracker(conf, haGroupName, fileSystem, replicationShardDirectoryManager,
+      new ReplicationLogTracker(conf, haGroupName, replicationShardDirectoryManager,
         new MetricsReplicationLogTrackerReplayImpl(haGroupName));
     replicationLogReplayFileTracker.init();
     this.replicationLogDiscoveryReplay =
