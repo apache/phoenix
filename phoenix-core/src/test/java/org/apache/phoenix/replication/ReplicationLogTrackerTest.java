@@ -1283,6 +1283,283 @@ public class ReplicationLogTrackerTest {
         assertFalse("Should not contain invalidFile3", resultFilenames.contains(invalidFile3.getName()));
     }
 
+    @Test
+    public void testGetNewFilesWithStartAndEndRound() throws IOException {
+        // Initialize tracker
+        tracker.init();
+
+        ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
+        long roundDurationMs = shardManager.getReplicationRoundDurationSeconds() * 1000L;
+
+        // Create start round (60 seconds duration)
+        long startRoundStartTime = 1704153600000L; // 2024-01-02 00:00:00
+        long startRoundEndTime = startRoundStartTime + roundDurationMs;
+        ReplicationRound startRound = new ReplicationRound(startRoundStartTime, startRoundEndTime);
+
+        // Create middle round
+        long middleRoundStartTime = startRoundEndTime;
+        long middleRoundEndTime = middleRoundStartTime + roundDurationMs;
+        ReplicationRound middleRound = new ReplicationRound(middleRoundStartTime, middleRoundEndTime);
+
+        // Create end round
+        long endRoundStartTime = middleRoundEndTime;
+        long endRoundEndTime = endRoundStartTime + roundDurationMs;
+        ReplicationRound endRound = new ReplicationRound(endRoundStartTime, endRoundEndTime);
+
+        // Get shard directories for each round
+        Path startRoundShardDir = shardManager.getShardDirectory(startRound);
+        Path middleRoundShardDir = shardManager.getShardDirectory(middleRound);
+        Path endRoundShardDir = shardManager.getShardDirectory(endRound);
+
+        // Create shard directories
+        localFs.mkdirs(startRoundShardDir);
+        localFs.mkdirs(middleRoundShardDir);
+        localFs.mkdirs(endRoundShardDir);
+
+        // Create files in start round
+        Path startRoundFile1 = new Path(startRoundShardDir, startRoundStartTime + "_rs1.plog");
+        Path startRoundFile2 = new Path(startRoundShardDir, startRoundStartTime + 30000 + "_rs2.plog");
+
+        // Create files in middle round
+        Path middleRoundFile1 = new Path(middleRoundShardDir, middleRoundStartTime + "_rs3.plog");
+        Path middleRoundFile2 = new Path(middleRoundShardDir, middleRoundStartTime + 30000 + "_rs4.plog");
+
+        // Create files in end round
+        Path endRoundFile1 = new Path(endRoundShardDir, endRoundStartTime + "_rs5.plog");
+        Path endRoundFile2 = new Path(endRoundShardDir, endRoundStartTime + 30000 + "_rs6.plog");
+
+        // Create files outside the range (before start round)
+        ReplicationRound beforeStartRound = shardManager.getPreviousRound(startRound);
+        Path beforeStartRoundShardDir = shardManager.getShardDirectory(beforeStartRound);
+        localFs.mkdirs(beforeStartRoundShardDir);
+        Path beforeStartRoundFile = new Path(beforeStartRoundShardDir, beforeStartRound.getStartTime() + "_rs0.plog");
+
+        // Create files outside the range (after end round)
+        ReplicationRound afterEndRound = shardManager.getNextRound(endRound);
+        Path afterEndRoundShardDir = shardManager.getShardDirectory(afterEndRound);
+        localFs.mkdirs(afterEndRoundShardDir);
+        Path afterEndRoundFile = new Path(afterEndRoundShardDir, afterEndRound.getStartTime() + "_rs7.plog");
+
+        // Create all files
+        localFs.create(startRoundFile1, true).close();
+        localFs.create(startRoundFile2, true).close();
+        localFs.create(middleRoundFile1, true).close();
+        localFs.create(middleRoundFile2, true).close();
+        localFs.create(endRoundFile1, true).close();
+        localFs.create(endRoundFile2, true).close();
+        localFs.create(beforeStartRoundFile, true).close();
+        localFs.create(afterEndRoundFile, true).close();
+
+        // Call getNewFiles with startRound and endRound
+        List<Path> result = tracker.getNewFiles(startRound, endRound);
+
+        // Verify file system operations
+        // Should call getNewFilesForRound for each round (start, middle, end)
+        // Each call to getNewFilesForRound calls exists() and listStatus() on shard directories
+        // Note: init() already called exists() on in-progress directory
+        Mockito.verify(mockFs, times(1)).exists(Mockito.eq(startRoundShardDir));
+        Mockito.verify(mockFs, times(1)).exists(Mockito.eq(middleRoundShardDir));
+        Mockito.verify(mockFs, times(1)).exists(Mockito.eq(endRoundShardDir));
+        Mockito.verify(mockFs, times(3)).listStatus(Mockito.any(Path.class));
+
+        // Prepare expected set of file paths (should include files from start, middle, and end rounds)
+        Set<String> expectedPaths = new HashSet<>();
+        expectedPaths.add(startRoundFile1.toString());
+        expectedPaths.add(startRoundFile2.toString());
+        expectedPaths.add(middleRoundFile1.toString());
+        expectedPaths.add(middleRoundFile2.toString());
+        expectedPaths.add(endRoundFile1.toString());
+        expectedPaths.add(endRoundFile2.toString());
+
+        // Create actual set of paths
+        Set<String> actualPaths = result.stream().map(path -> path.toUri().getPath()).collect(Collectors.toSet());
+
+        // Verify all files from start to end rounds are returned
+        assertEquals("Should return exactly 6 files from start to end rounds", expectedPaths.size(), actualPaths.size());
+        assertEquals("File paths do not match", expectedPaths, actualPaths);
+
+        // Verify files outside the range are not included
+        assertFalse("Should not contain file from before start round", actualPaths.contains(beforeStartRoundFile.toString()));
+        assertFalse("Should not contain file from after end round", actualPaths.contains(afterEndRoundFile.toString()));
+    }
+
+    @Test
+    public void testGetNewFilesWithSameStartAndEndRound() throws IOException {
+        // Initialize tracker
+        tracker.init();
+
+        ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
+        long roundDurationMs = shardManager.getReplicationRoundDurationSeconds() * 1000L;
+
+        // Create a single round
+        long roundStartTime = 1704153600000L; // 2024-01-02 00:00:00
+        long roundEndTime = roundStartTime + roundDurationMs;
+        ReplicationRound round = new ReplicationRound(roundStartTime, roundEndTime);
+
+        // Get shard directory for this round
+        Path roundShardDir = shardManager.getShardDirectory(round);
+        localFs.mkdirs(roundShardDir);
+
+        // Create files in the round
+        Path file1 = new Path(roundShardDir, roundStartTime + "_rs1.plog");
+        Path file2 = new Path(roundShardDir, roundStartTime + 30000 + "_rs2.plog");
+        Path file3 = new Path(roundShardDir, roundStartTime + 50000 + "_rs3.plog");
+
+        // Create files
+        localFs.create(file1, true).close();
+        localFs.create(file2, true).close();
+        localFs.create(file3, true).close();
+
+        // Call getNewFiles with same start and end round
+        List<Path> result = tracker.getNewFiles(round, round);
+
+        // Verify file system operations
+        // Should call getNewFilesForRound once for the round
+        // Note: init() already called exists() on in-progress directory
+        Mockito.verify(mockFs, times(1)).exists(Mockito.eq(roundShardDir));
+        Mockito.verify(mockFs, times(1)).listStatus(Mockito.any(Path.class));
+
+        // Prepare expected set of file paths
+        Set<String> expectedPaths = new HashSet<>();
+        expectedPaths.add(file1.toString());
+        expectedPaths.add(file2.toString());
+        expectedPaths.add(file3.toString());
+
+        // Create actual set of paths
+        Set<String> actualPaths = result.stream().map(path -> path.toUri().getPath()).collect(Collectors.toSet());
+
+        // Verify all files from the round are returned
+        assertEquals("Should return exactly 3 files from the round", expectedPaths.size(), actualPaths.size());
+        assertEquals("File paths do not match", expectedPaths, actualPaths);
+    }
+
+    @Test
+    public void testGetNewFilesWithInvalidRange() throws IOException {
+        // Initialize tracker
+        tracker.init();
+
+        ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
+        long roundDurationMs = shardManager.getReplicationRoundDurationSeconds() * 1000L;
+
+        // Create end round (earlier time)
+        long endRoundStartTime = 1704153600000L; // 2024-01-02 00:00:00
+        long endRoundEndTime = endRoundStartTime + roundDurationMs;
+        ReplicationRound endRound = new ReplicationRound(endRoundStartTime, endRoundEndTime);
+
+        // Create start round (later time) - invalid: start > end
+        long startRoundStartTime = endRoundEndTime;
+        long startRoundEndTime = startRoundStartTime + roundDurationMs;
+        ReplicationRound startRound = new ReplicationRound(startRoundStartTime, startRoundEndTime);
+
+        // Get shard directories
+        Path startRoundShardDir = shardManager.getShardDirectory(startRound);
+        Path endRoundShardDir = shardManager.getShardDirectory(endRound);
+
+        // Create shard directories
+        localFs.mkdirs(startRoundShardDir);
+        localFs.mkdirs(endRoundShardDir);
+
+        // Create files in both rounds
+        Path startRoundFile = new Path(startRoundShardDir, startRoundStartTime + "_rs1.plog");
+        Path endRoundFile = new Path(endRoundShardDir, endRoundStartTime + "_rs2.plog");
+
+        localFs.create(startRoundFile, true).close();
+        localFs.create(endRoundFile, true).close();
+
+        // Call getNewFiles with invalid range (startRound.getStartTime() > endRound.getStartTime())
+        List<Path> result = tracker.getNewFiles(startRound, endRound);
+
+        // Verify empty list is returned when startRound.getStartTime() > endRound.getStartTime()
+        assertTrue("Should return empty list for invalid range", result.isEmpty());
+
+        // Verify no file system operations were performed on shard directories (early return)
+        // Note: init() already called exists() and mkdirs() on in-progress directory
+        Mockito.verify(mockFs, times(0)).exists(Mockito.eq(startRoundShardDir));
+        Mockito.verify(mockFs, times(0)).exists(Mockito.eq(endRoundShardDir));
+        Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
+    }
+
+    @Test
+    public void testGetNewFilesWithEmptyRounds() throws IOException {
+        // Initialize tracker
+        tracker.init();
+
+        ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
+        long roundDurationMs = shardManager.getReplicationRoundDurationSeconds() * 1000L;
+
+        // Create start round
+        long startRoundStartTime = 1704153600000L; // 2024-01-02 00:00:00
+        long startRoundEndTime = startRoundStartTime + roundDurationMs;
+        ReplicationRound startRound = new ReplicationRound(startRoundStartTime, startRoundEndTime);
+
+        // Create end round
+        long endRoundStartTime = startRoundEndTime;
+        long endRoundEndTime = endRoundStartTime + roundDurationMs;
+        ReplicationRound endRound = new ReplicationRound(endRoundStartTime, endRoundEndTime);
+
+        // Get shard directories
+        Path startRoundShardDir = shardManager.getShardDirectory(startRound);
+        Path endRoundShardDir = shardManager.getShardDirectory(endRound);
+
+        // Create shard directories but leave them empty
+        localFs.mkdirs(startRoundShardDir);
+        localFs.mkdirs(endRoundShardDir);
+
+        // Call getNewFiles with empty rounds
+        List<Path> result = tracker.getNewFiles(startRound, endRound);
+
+        // Verify file system operations
+        // Should call getNewFilesForRound for each round (start and end)
+        // Note: init() already called exists() on in-progress directory
+        Mockito.verify(mockFs, times(1)).exists(Mockito.eq(startRoundShardDir));
+        Mockito.verify(mockFs, times(1)).exists(Mockito.eq(endRoundShardDir));
+        Mockito.verify(mockFs, times(2)).listStatus(Mockito.any(Path.class));
+
+        // Verify empty list is returned
+        assertTrue("Should return empty list for empty rounds", result.isEmpty());
+    }
+
+    @Test
+    public void testGetNewFilesWithNonExistentRounds() throws IOException {
+        // Initialize tracker
+        tracker.init();
+
+        ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
+        long roundDurationMs = shardManager.getReplicationRoundDurationSeconds() * 1000L;
+
+        // Create start round
+        long startRoundStartTime = 1704153600000L; // 2024-01-02 00:00:00
+        long startRoundEndTime = startRoundStartTime + roundDurationMs;
+        ReplicationRound startRound = new ReplicationRound(startRoundStartTime, startRoundEndTime);
+
+        // Create end round
+        long endRoundStartTime = startRoundEndTime;
+        long endRoundEndTime = endRoundStartTime + roundDurationMs;
+        ReplicationRound endRound = new ReplicationRound(endRoundStartTime, endRoundEndTime);
+
+        // Get shard directories
+        Path startRoundShardDir = shardManager.getShardDirectory(startRound);
+        Path endRoundShardDir = shardManager.getShardDirectory(endRound);
+
+        // Assert that shard directories do not exist
+        assertFalse("Start round shard directory should not exist", localFs.exists(startRoundShardDir));
+        assertFalse("End round shard directory should not exist", localFs.exists(endRoundShardDir));
+
+        // Call getNewFiles with non-existent rounds
+        List<Path> result = tracker.getNewFiles(startRound, endRound);
+
+        // Verify file system operations
+        // Should call exists() for each round (start and end)
+        // Note: init() already called exists() on in-progress directory
+        Mockito.verify(mockFs, times(1)).exists(Mockito.eq(startRoundShardDir));
+        Mockito.verify(mockFs, times(1)).exists(Mockito.eq(endRoundShardDir));
+        // listStatus() should not be called when directories don't exist
+        Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
+
+        // Verify empty list is returned
+        assertTrue("Should return empty list for non-existent rounds", result.isEmpty());
+    }
+
     private int countDirectories(FileSystem fs, Path path) throws IOException {
         if (!fs.exists(path)) {
             return 0;
