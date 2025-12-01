@@ -17,23 +17,16 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.io.Reference;
-import org.apache.hadoop.hbase.io.hfile.CacheConfig;
-import org.apache.hadoop.hbase.io.hfile.HFileInfo;
-import org.apache.hadoop.hbase.io.hfile.ReaderContext;
-import org.apache.hadoop.hbase.regionserver.StoreFileReader;
+import com.google.protobuf.ByteString;
 
-public class CompatIndexHalfStoreFileReader extends StoreFileReader {
+// This has different signature in the HBase 2 and 3 modules
+// This only comes together after the maven-replacer plugin relocates all protobuf code.
+public class ByteStringer {
 
-  public CompatIndexHalfStoreFileReader(final FileSystem fs, final CacheConfig cacheConf,
-    final Configuration conf, final ReaderContext readerContext, final HFileInfo hFileInfo, Path p,
-    Reference r) throws IOException {
-    super(readerContext, hFileInfo, cacheConf, new AtomicInteger(0), conf);
+  private ByteStringer() {
   }
 
+  public static ByteString wrap(final byte[] array) {
+    return org.apache.hadoop.hbase.util.ByteStringer.wrap(array);
+  }
 }

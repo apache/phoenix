@@ -33,7 +33,8 @@ public class CompatIndexHalfStoreFileReader extends StoreFileReader {
   public CompatIndexHalfStoreFileReader(final FileSystem fs, final CacheConfig cacheConf,
     final Configuration conf, final ReaderContext readerContext, final HFileInfo hFileInfo, Path p,
     Reference r) throws IOException {
-    super(readerContext, hFileInfo, cacheConf, new StoreFileInfo(conf, fs, p, true), conf);
+    super(readerContext, hFileInfo, cacheConf, new StoreFileInfo(conf, fs, fs.getFileStatus(p), r),
+      conf);
   }
 
 }

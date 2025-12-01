@@ -17,23 +17,17 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import java.io.IOException;
-import java.util.concurrent.atomic.AtomicInteger;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.io.Reference;
-import org.apache.hadoop.hbase.io.hfile.CacheConfig;
-import org.apache.hadoop.hbase.io.hfile.HFileInfo;
-import org.apache.hadoop.hbase.io.hfile.ReaderContext;
-import org.apache.hadoop.hbase.regionserver.StoreFileReader;
+import org.apache.hadoop.hbase.io.encoding.DataBlockEncoding;
+import org.apache.hadoop.hbase.regionserver.StoreFileScanner;
 
-public class CompatIndexHalfStoreFileReader extends StoreFileReader {
+public class CompatLocalIndexStoreFileScanner extends StoreFileScanner {
 
-  public CompatIndexHalfStoreFileReader(final FileSystem fs, final CacheConfig cacheConf,
-    final Configuration conf, final ReaderContext readerContext, final HFileInfo hFileInfo, Path p,
-    Reference r) throws IOException {
-    super(readerContext, hFileInfo, cacheConf, new AtomicInteger(0), conf);
+  public CompatLocalIndexStoreFileScanner(CompatIndexHalfStoreFileReader reader,
+    boolean cacheBlocks, boolean pread, boolean isCompaction, long readPt, long scannerOrder,
+    boolean canOptimizeForNonNullColumn) {
+    super(reader, reader.getScanner(cacheBlocks, pread, isCompaction), !isCompaction,
+      reader.getHFileReader().hasMVCCInfo(), readPt, scannerOrder, canOptimizeForNonNullColumn,
+      reader.getHFileReader().getDataBlockEncoding() == DataBlockEncoding.ROW_INDEX_V1);
   }
 
 }
