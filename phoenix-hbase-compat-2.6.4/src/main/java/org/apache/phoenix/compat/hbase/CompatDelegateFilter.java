@@ -18,22 +18,20 @@
 package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.io.Reference;
-import org.apache.hadoop.hbase.io.hfile.CacheConfig;
-import org.apache.hadoop.hbase.io.hfile.HFileInfo;
-import org.apache.hadoop.hbase.io.hfile.ReaderContext;
-import org.apache.hadoop.hbase.regionserver.StoreFileInfo;
-import org.apache.hadoop.hbase.regionserver.StoreFileReader;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterBase;
 
-public class CompatIndexHalfStoreFileReader extends StoreFileReader {
+public class CompatDelegateFilter extends FilterBase {
+  protected Filter delegate = null;
 
-  public CompatIndexHalfStoreFileReader(final FileSystem fs, final CacheConfig cacheConf,
-    final Configuration conf, final ReaderContext readerContext, final HFileInfo hFileInfo, Path p,
-    Reference r) throws IOException {
-    super(readerContext, hFileInfo, cacheConf, new StoreFileInfo(conf, fs, p, true), conf);
+  public CompatDelegateFilter(Filter delegate) {
+    this.delegate = delegate;
+  }
+
+  @Override
+  public ReturnCode filterKeyValue(Cell v) throws IOException {
+    return delegate.filterKeyValue(v);
   }
 
 }
