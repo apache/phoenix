@@ -1246,14 +1246,17 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
   }
 
-  private static class ExecutableTruncateTableStatement extends TruncateTableStatement implements CompilableStatement {
-    ExecutableTruncateTableStatement(TableName tableName, PTableType tableType) {
-      super(tableName, tableType);
+  private static class ExecutableTruncateTableStatement extends TruncateTableStatement
+    implements CompilableStatement {
+    ExecutableTruncateTableStatement(TableName tableName, PTableType tableType,
+      boolean preserveSplits) {
+      super(tableName, tableType, preserveSplits);
     }
 
     @SuppressWarnings("unchecked")
     @Override
-    public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+    public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
+      throws SQLException {
       final StatementContext context = new StatementContext(stmt);
       return new BaseMutationPlan(context, this.getOperation()) {
         @Override
@@ -2227,8 +2230,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
     @Override
-    public TruncateTableStatement truncateTable(TableName tableName, PTableType tableType) {
-      return new ExecutableTruncateTableStatement(tableName, tableType);
+    public TruncateTableStatement truncateTable(TableName tableName, PTableType tableType,
+      boolean preserveSplits) {
+      return new ExecutableTruncateTableStatement(tableName, tableType, preserveSplits);
     }
 
     @Override

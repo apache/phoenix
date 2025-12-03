@@ -162,6 +162,8 @@ tokens
     NOVERIFY = 'noverify';
     RETURNING = 'returning';
     TRUNCATE = 'truncate';
+    PRESERVE='preserve';
+    SPLITS='splits';
 }
 
 
@@ -492,10 +494,12 @@ create_table_node returns [CreateTableStatement ret]
 
 // Parse a truncate table statement.
 truncate_table_node returns [TruncateTableStatement ret]
-    :   TRUNCATE TABLE t=from_table_name
-        {ret = factory.truncateTable(t, PTableType.TABLE);}
+    :   TRUNCATE TABLE t=from_table_name (PRESERVE SPLITS)?
+        {ret = factory.truncateTable(t, PTableType.TABLE, true);}
+    |   TRUNCATE TABLE t=from_table_name DROP SPLITS
+        {ret = factory.truncateTable(t, PTableType.TABLE, false);}
     ;
-   
+
 // Parse a create schema statement.
 create_schema_node returns [CreateSchemaStatement ret]
     :   CREATE SCHEMA (IF NOT ex=EXISTS)? s=identifier
