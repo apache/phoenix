@@ -17,12 +17,13 @@
  */
 package org.apache.phoenix.pherf.configuration;
 
+import java.util.ArrayList;
 import java.util.List;
 import javax.xml.bind.annotation.XmlType;
 
 @XmlType
 public class DataOverride {
-  private List<Column> column;
+  private List<Column> column = new ArrayList<>();
 
   public List<Column> getColumn() {
     return column;

@@ -36,7 +36,8 @@
     <jcabi-jdbc.version>0.15</jcabi-jdbc.version>
     <system-rules.version>1.8.0</system-rules.version>
     <stax.version>1.0.1</stax.version>
-    <jaxb.version>2.2.11</jaxb.version>
+    <jaxb-api.version>2.3.1</jaxb-api.version>
+    <jaxb-impl.version>2.3.9</jaxb-impl.version>
     <!-- JaCoCo thresholds overriden for phoenix-pherf -->
     <jacoco.instruction.coverage.percentage>0.650</jacoco.instruction.coverage.percentage>
     <jacoco.branch.coverage.percentage>0.500</jacoco.branch.coverage.percentage>
@@ -67,12 +68,18 @@
       <dependency>
         <groupId>javax.xml.bind</groupId>
         <artifactId>jaxb-api</artifactId>
-        <version>${jaxb.version}</version>
+        <version>${jaxb-api.version}</version>
       </dependency>
       <dependency>
         <groupId>org.glassfish.jaxb</groupId>
         <artifactId>jaxb-runtime</artifactId>
-        <version>${jaxb.version}</version>
+        <version>${jaxb-impl.version}</version>
+      </dependency>
+      <!-- Same as above, but we get both from transitive dependencies -->
+      <dependency>
+        <groupId>com.sun.xml.bind</groupId>
+        <artifactId>jaxb-impl</artifactId>
+        <version>${jaxb-impl.version}</version>
       </dependency>
       <dependency>
         <groupId>com.jcabi</groupId>
@@ -251,6 +258,11 @@
     <dependency>
       <groupId>javax.xml.bind</groupId>
       <artifactId>jaxb-api</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.jaxb</groupId>
+      <artifactId>jaxb-runtime</artifactId>
+      <scope>runtime</scope>
     </dependency>
   </dependencies>
 
