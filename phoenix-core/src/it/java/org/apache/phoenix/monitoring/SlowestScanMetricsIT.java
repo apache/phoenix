@@ -34,10 +34,13 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
+
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -105,7 +108,7 @@ public class SlowestScanMetricsIT extends BaseTest {
 
   @Test
   public void testMultiplePointsLookupQuery() throws Exception {
-    int topN = 2;
+    int topN = 1;
     String tableName = generateUniqueName();
     String sql = "SELECT * FROM " + tableName + " WHERE (k1, k2) IN ((1, 'a'), (2, 'b'), (3, 'c'))";
     Properties props = new Properties();
@@ -930,6 +933,54 @@ public class SlowestScanMetricsIT extends BaseTest {
       jsonArray.add(groupArray);
     }
     System.out.println("Slowest scan metrics JSON array: " + jsonArray);
+    Map<String, Map<MetricType, Long>> readMetrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
+    Map<MetricType, Long> overAllQueryMetrics = PhoenixRuntime.getOverAllReadRequestMetricInfo(rs);
+    String phqryMetrics = getMetricTypeLogField(readMetrics, overAllQueryMetrics);
+    System.out.println("PHQRY Metrics: " + phqryMetrics);
     return jsonArray;
+  }
+  
+  public static String getMetricTypeLogField(Map<String, Map<MetricType, Long>> tableMetrics, Map<MetricType, Long> rtMetrics) {
+
+    JsonObject overallMetricsJson = new JsonObject();
+
+    // Handle table-level metrics ("R", "W", "RW", "RTS")
+    JsonArray tablesArray = new JsonArray();
+    if (tableMetrics != null && !tableMetrics.isEmpty()) {
+        for (Map.Entry<String, Map<MetricType, Long>> tableEntry : tableMetrics.entrySet()) {
+            String tableName = tableEntry.getKey();
+            Map<MetricType, Long> metrics = tableEntry.getValue();
+
+            JsonObject tableJson = new JsonObject();
+            tableJson.addProperty("table", tableName);
+
+            JsonObject tableMetricsJson = new JsonObject();
+            for (Map.Entry<MetricType, Long> metricEntry : metrics.entrySet()) {
+                tableMetricsJson.addProperty(metricEntry.getKey().shortName(), metricEntry.getValue());
+            }
+
+            tableJson.add("metrics", tableMetricsJson);
+            tablesArray.add(tableJson);
+        }
+    }
+
+    overallMetricsJson.add("tables", tablesArray);
+
+    // // Add serverList
+    // overallMetricsJson.addProperty("ep", StringUtils.isBlank(serverList) ? "" : serverList);
+
+
+    // Handle "RTS" (uber record)
+    if (rtMetrics != null && !rtMetrics.isEmpty()) {
+        JsonObject rtMetricsJson = new JsonObject();
+        for (Map.Entry<MetricType, Long> metricEntry : rtMetrics.entrySet()) {
+            rtMetricsJson.addProperty(metricEntry.getKey().shortName(), metricEntry.getValue());
+        }
+        // Add  RTS metrics at the top level of the JSON
+        overallMetricsJson.add("rt", rtMetricsJson);
+    }
+
+    // Return the JSON string
+    return overallMetricsJson.toString();
   }
 }
