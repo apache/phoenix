@@ -151,6 +151,10 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
 
+import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos.MutationProto;
+
 /**
  * Do all the work of managing index updates from a single coprocessor. All Puts/Delets are passed
  * to an {@link IndexBuilder} to determine the actual updates to make. We don't need to implement
@@ -266,11 +270,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // The collection of index mutations that will be applied before the data table mutations.
     // The empty column (i.e. the verified column) will have the value false ("unverified")
     // on these mutations.
-    private ListMultimap<HTableInterfaceReference, Mutation> preIndexUpdates;
+    private ListMultimap<HTableInterfaceReference, byte[]> preIndexUpdates;
     // The collection of index mutations that will be applied after the data table mutations.
     // The empty column (i.e. the verified column) will have the value true ("verified")
     // on the put mutations.
-    private ListMultimap<HTableInterfaceReference, Mutation> postIndexUpdates;
+    private ListMultimap<HTableInterfaceReference, byte[]> postIndexUpdates;
     // The collection of candidate index mutations that will be applied after the data table
     // mutations.
     private ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates;
@@ -442,7 +446,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       DelegateRegionCoprocessorEnvironment indexWriterEnv =
         new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
       // setup the actual index preWriter
-      this.preWriter = new IndexWriter(indexWriterEnv, serverName + "-index-preWriter", false);
+      this.preWriter = new IndexWriter(indexWriterEnv, new LazyParallelWriterIndexCommitter(),
+              serverName + "-index-preWriter", false);
       if (
         env.getConfiguration().getBoolean(INDEX_LAZY_POST_BATCH_WRITE,
           INDEX_LAZY_POST_BATCH_WRITE_DEFAULT)
@@ -1287,7 +1292,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>> create();
       prepareIndexMutations(context, maintainers, batchTimestamp);
 
-      context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
+      context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, byte[]> create();
       int updateCount = 0;
       for (IndexMaintainer indexMaintainer : maintainers) {
         updateCount++;
@@ -1301,7 +1306,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           if (m instanceof Put) {
             // This will be done before the data table row is updated (i.e., in the first write
             // phase)
-            context.preIndexUpdates.put(hTableInterfaceReference, m);
+            context.preIndexUpdates.put(hTableInterfaceReference, ProtobufUtil
+              .toMutation(ClientProtos.MutationProto.MutationType.PUT, m).toByteArray());
           } else if (IndexUtil.isDeleteFamily(m)) {
             // DeleteColumn is always accompanied by a Put so no need to make the index
             // row unverified again. Only do this for DeleteFamily
@@ -1311,7 +1317,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
               QueryConstants.UNVERIFIED_BYTES);
             // This will be done before the data table row is updated (i.e., in the first write
             // phase)
-            context.preIndexUpdates.put(hTableInterfaceReference, unverifiedPut);
+            context.preIndexUpdates.put(hTableInterfaceReference,
+              ProtobufUtil.toMutation(ClientProtos.MutationProto.MutationType.PUT, unverifiedPut)
+                .toByteArray());
           }
         }
       }
@@ -1333,8 +1341,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   private void preparePostIndexMutations(BatchMutateContext context, long batchTimestamp,
-    PhoenixIndexMetaData indexMetaData) {
-    context.postIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
+    PhoenixIndexMetaData indexMetaData) throws IOException {
+    context.postIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, byte[]> create();
     List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
     for (IndexMaintainer indexMaintainer : maintainers) {
       byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
@@ -1349,10 +1357,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             Put verifiedPut = new Put(m.getRow());
             // Set the status of the index row to "verified"
             verifiedPut.addColumn(emptyCF, emptyCQ, batchTimestamp, QueryConstants.VERIFIED_BYTES);
-            context.postIndexUpdates.put(hTableInterfaceReference, verifiedPut);
+            context.postIndexUpdates.put(hTableInterfaceReference, ProtobufUtil
+              .toMutation(ClientProtos.MutationProto.MutationType.PUT, verifiedPut).toByteArray());
           }
         } else {
-          context.postIndexUpdates.put(hTableInterfaceReference, m);
+          context.postIndexUpdates.put(hTableInterfaceReference,
+            ProtobufUtil.toMutation(MutationProto.MutationType.DELETE, m).toByteArray());
         }
       }
     }
@@ -1864,12 +1874,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   private void doIndexWritesWithExceptions(BatchMutateContext context, boolean post)
     throws IOException {
-    ListMultimap<HTableInterfaceReference, Mutation> indexUpdates =
+    ListMultimap<HTableInterfaceReference, byte[]> idxUpdates =
       post ? context.postIndexUpdates : context.preIndexUpdates;
     // short circuit, if we don't need to do any work
-
-    if (context == null || indexUpdates == null || indexUpdates.isEmpty()) {
+    if (context == null || idxUpdates == null || idxUpdates.isEmpty()) {
       return;
+    }
+
+    ListMultimap<HTableInterfaceReference, Mutation> indexUpdates = ArrayListMultimap.create();
+
+    for (HTableInterfaceReference tableRef : idxUpdates.keySet()) {
+      for (byte[] mutationBytes : idxUpdates.get(tableRef)) {
+        MutationProto mutationProto = MutationProto.parseFrom(mutationBytes);
+        Mutation mutation = ProtobufUtil.toMutation(mutationProto);
+        indexUpdates.put(tableRef, mutation);
+      }
     }
 
     // get the current span, or just use a null-span to avoid a bunch of if statements
