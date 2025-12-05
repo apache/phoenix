@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.pherf.configuration;
 
+import java.util.ArrayList;
 import java.util.List;
 import javax.xml.bind.annotation.XmlType;
 
@@ -44,9 +45,9 @@ public class LoadProfile {
   private int groupIdLength;
   private int tenantIdLength;
   // Holds the desired tenant distribution for this load.
-  private List<TenantGroup> tenantDistribution;
+  private List<TenantGroup> tenantDistribution = new ArrayList<>();
   // Holds the desired operation distribution for this load.
-  private List<OperationGroup> opDistribution;
+  private List<OperationGroup> opDistribution = new ArrayList<>();
 
   public LoadProfile() {
     this.batchSize = MIN_BATCH_SIZE;
