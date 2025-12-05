@@ -306,7 +306,7 @@
             <ignoredUnusedDeclaredDependency>org.apache.hbase.thirdparty:hbase-shaded-miscellaneous</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>javax.activation:activation</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>javax.xml.bind:jaxb-api</ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>org.glassfish.jaxb:jax-runtime</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>org.glassfish.jaxb:jaxb-runtime</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.hbase:hbase-it</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.hbase:hbase-testing-util</ignoredUnusedDeclaredDependency>
