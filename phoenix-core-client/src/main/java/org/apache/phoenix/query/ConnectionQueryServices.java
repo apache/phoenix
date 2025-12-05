@@ -298,6 +298,11 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     String columnName, String familyName) throws SQLException;
 
   /**
+   * Truncate a phoenix table
+   */
+  public void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped) throws SQLException;
+
+  /**
    * Close all phoenix connections created using this CQS.
    * @param reasonBuilder exception builder for building reasons why connection is closed.
    */

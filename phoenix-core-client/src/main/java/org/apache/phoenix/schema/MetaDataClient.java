@@ -253,6 +253,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.TruncateTableStatement;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UseSchemaStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -4034,6 +4035,30 @@ public class MetaDataClient {
     }
   }
 
+  public MutationState truncateTable(TruncateTableStatement statement) throws SQLException {
+    String schemaName = connection.getSchema() != null && statement.getTableName().getSchemaName() == null
+            ? connection.getSchema() : statement.getTableName().getSchemaName();
+    String tableName = statement.getTableName().getTableName();
+    boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(statement.getTableType(),
+            connection.getQueryServices().getProps());
+    boolean wasAutoCommit = connection.getAutoCommit();
+    try {
+      PTable ptable = connection.getTable(
+              new PTableKey(connection.getTenantId(), SchemaUtil.getTableName(schemaName, tableName)));
+    } catch (TableNotFoundException e) {
+      throw e;
+    }
+    try {
+      connection.getQueryServices().truncateTable(schemaName, tableName, isNamespaceMapped);
+      updateCache(schemaName, tableName);
+      return new MutationState(0, 0, connection);
+    } catch (SQLException e) {
+      throw e;
+    }
+    finally {
+      connection.setAutoCommit(wasAutoCommit);
+    }
+  }
   public MutationState dropTable(DropTableStatement statement) throws SQLException {
     String schemaName =
       connection.getSchema() != null && statement.getTableName().getSchemaName() == null

@@ -379,6 +379,10 @@ public class ParseNodeFactory {
       baseTableName, tableTypeIdNode, bindCount, immutableRows, null, false);
   }
 
+  public TruncateTableStatement truncateTable(TableName tableName, PTableType tableType) {
+    return new TruncateTableStatement(tableName, tableType);
+  }
+
   public CreateSchemaStatement createSchema(String schemaName, boolean ifNotExists) {
     return new CreateSchemaStatement(schemaName, ifNotExists);
   }

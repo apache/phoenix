@@ -189,6 +189,7 @@ import org.apache.phoenix.parse.ShowTablesStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TraceStatement;
+import org.apache.phoenix.parse.TruncateTableStatement;
 import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UpsertStatement;
@@ -1245,6 +1246,30 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
   }
 
+  private static class ExecutableTruncateTableStatement extends TruncateTableStatement implements CompilableStatement {
+    ExecutableTruncateTableStatement(TableName tableName, PTableType tableType) {
+      super(tableName, tableType);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction) throws SQLException {
+      final StatementContext context = new StatementContext(stmt);
+      return new BaseMutationPlan(context, this.getOperation()) {
+        @Override
+        public ExplainPlan getExplainPlan() throws SQLException {
+          return new ExplainPlan(Collections.singletonList("Truncate Table"));
+        }
+
+        @Override
+        public MutationState execute() throws SQLException {
+          MetaDataClient client = new MetaDataClient(getContext().getConnection());
+          return client.truncateTable(ExecutableTruncateTableStatement.this);
+        }
+      };
+    }
+  }
+
   private static class ExecutableCreateTableStatement extends CreateTableStatement
     implements CompilableStatement {
     ExecutableCreateTableStatement(TableName tableName,
@@ -2199,6 +2224,11 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       boolean ifNotExists, int bindCount) {
       return new ExecutableCreateCDCStatement(cdcObj, dataTable, includeScopes, props, ifNotExists,
         bindCount);
+    }
+
+    @Override
+    public TruncateTableStatement truncateTable(TableName tableName, PTableType tableType) {
+      return new ExecutableTruncateTableStatement(tableName, tableType);
     }
 
     @Override
