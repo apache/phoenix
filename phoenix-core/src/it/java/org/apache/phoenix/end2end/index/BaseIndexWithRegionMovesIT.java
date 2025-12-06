@@ -929,6 +929,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
       stmt.setString(3, "1");
       stmt.execute();
       conn.commit();
+      Thread.sleep(2000);
 
       // make sure the index is working as expected
       query = "SELECT * FROM " + fullIndexName;

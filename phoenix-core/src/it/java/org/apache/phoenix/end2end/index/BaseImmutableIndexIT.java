@@ -233,6 +233,7 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
       assertEquals(1, conn.createStatement().executeUpdate(dml));
       assertIndexMutations(conn);
       conn.commit();
+      Thread.sleep(2000);
 
       rs =
         conn.createStatement().executeQuery("SELECT /*+ NO_INDEX*/ COUNT(*) FROM " + fullTableName);
@@ -276,6 +277,7 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
       assertEquals(1, conn.createStatement().executeUpdate(dml));
       assertIndexMutations(conn);
       conn.commit();
+      Thread.sleep(2000);
 
       TestUtil.dumpTable(conn.unwrap(PhoenixConnection.class).getQueryServices()
         .getTable(Bytes.toBytes(fullTableName)));
@@ -433,6 +435,7 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
       String dml = "DELETE from " + fullTableName + " WHERE varchar_pk='varchar1'";
       conn.createStatement().execute(dml);
       conn.commit();
+      Thread.sleep(2000);
       ResultSet rs;
       rs =
         conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM " + TABLE_NAME);

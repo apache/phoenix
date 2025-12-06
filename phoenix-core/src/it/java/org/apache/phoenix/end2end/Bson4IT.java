@@ -455,6 +455,7 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       validateExplainPlan(ps, tableName, "FULL SCAN ");
+      Thread.sleep(5000);
       verifyNoReadRepair();
     }
   }
