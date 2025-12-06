@@ -18,22 +18,24 @@
 package org.apache.phoenix.compat.hbase;
 
 import java.io.IOException;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.io.Reference;
-import org.apache.hadoop.hbase.io.hfile.CacheConfig;
-import org.apache.hadoop.hbase.io.hfile.HFileInfo;
-import org.apache.hadoop.hbase.io.hfile.ReaderContext;
-import org.apache.hadoop.hbase.regionserver.StoreFileInfo;
-import org.apache.hadoop.hbase.regionserver.StoreFileReader;
+import java.util.List;
+import org.apache.hadoop.hbase.MetaTableAccessor;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-public class CompatIndexHalfStoreFileReader extends StoreFileReader {
+public class CompatUtil {
 
-  public CompatIndexHalfStoreFileReader(final FileSystem fs, final CacheConfig cacheConf,
-    final Configuration conf, final ReaderContext readerContext, final HFileInfo hFileInfo, Path p,
-    Reference r) throws IOException {
-    super(readerContext, hFileInfo, cacheConf, new StoreFileInfo(conf, fs, p, true), conf);
+  private static final Logger LOGGER = LoggerFactory.getLogger(CompatUtil.class);
+
+  private CompatUtil() {
+    // Not to be instantiated
+  }
+
+  public static List<RegionInfo> getMergeRegions(Connection conn, RegionInfo regionInfo)
+    throws IOException {
+    return MetaTableAccessor.getMergeRegions(conn, regionInfo);
   }
 
 }
