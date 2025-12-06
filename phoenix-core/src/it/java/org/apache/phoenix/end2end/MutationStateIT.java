@@ -214,6 +214,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       } finally {
 
       }
+      Thread.sleep(5000);
       long dataTableRows = TestUtil.getRowCount(conn, fullTableName);
       ResultSet rs = conn.getMetaData().getTables(null, StringUtil.escapeLike(schemaName), null,
         new String[] { PTableType.INDEX.toString() });

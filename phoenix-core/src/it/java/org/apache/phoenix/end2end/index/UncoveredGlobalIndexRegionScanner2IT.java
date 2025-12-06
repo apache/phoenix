@@ -669,6 +669,7 @@ public class UncoveredGlobalIndexRegionScanner2IT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('a', 'ab', 'abc', 'abcd')");
       conn.commit();
+      Thread.sleep(2000);
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       moveRegionsOfTable(dataTableName);
