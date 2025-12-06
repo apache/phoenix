@@ -558,6 +558,7 @@ public class UncoveredGlobalIndexRegionScanner2IT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('c', 'bc', 'ccc', 'cccc')");
       conn.commit();
+      Thread.sleep(1000);
       assertExplainPlan(conn, query, dataTableName, indexTableName);
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -600,6 +601,7 @@ public class UncoveredGlobalIndexRegionScanner2IT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('d', 'de', 'def', 'defg')");
       conn.commit();
+      Thread.sleep(1000);
 
       query =
         "SELECT" + (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
@@ -625,6 +627,7 @@ public class UncoveredGlobalIndexRegionScanner2IT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('e', 'ae', 'efg', 'efgh')");
       conn.commit();
+      Thread.sleep(1000);
       // Write a query to get all the rows in the order of their timestamps
       query =
         "SELECT" + (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
