@@ -259,15 +259,14 @@ public class UncoveredGlobalIndexRegionScanner extends UncoveredIndexRegionScann
   private static class DataTableScanMetricsWithScanTime extends DataTableScanMetrics {
     private final long scanTimeInMs;
 
-    public DataTableScanMetricsWithScanTime(long scanTimeInMs, long fsReadTimeInMs,
-      long bytesReadFromFS, long bytesReadFromMemstore, long bytesReadFromBlockcache,
-      long blockReadOps) {
+    DataTableScanMetricsWithScanTime(long scanTimeInMs, long fsReadTimeInMs, long bytesReadFromFS,
+      long bytesReadFromMemstore, long bytesReadFromBlockcache, long blockReadOps) {
       super(fsReadTimeInMs, bytesReadFromFS, bytesReadFromMemstore, bytesReadFromBlockcache,
         blockReadOps);
       this.scanTimeInMs = scanTimeInMs;
     }
 
-    public long getScanTimeInMs() {
+    long getScanTimeInMs() {
       return scanTimeInMs;
     }
 
