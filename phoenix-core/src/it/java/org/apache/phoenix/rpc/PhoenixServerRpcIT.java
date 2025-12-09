@@ -248,7 +248,8 @@ public class PhoenixServerRpcIT extends BaseTest {
         dstServer.getOnlineRegion(hri2.getRegionName()) == null
           || dstServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
           || srcServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
-          || !ServerName.isSameAddress(master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(hri2),
+          || !ServerName.isSameAddress(
+            master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(hri2),
             dstServer.getServerName())
       ) {
         // wait for the move to be finished
