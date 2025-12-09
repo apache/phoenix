@@ -132,8 +132,15 @@ public class IndexMetaDataCacheClient {
     ReadOnlyProps props = connection.getQueryServices().getProps();
     if (hasIndexMetaData) {
       List<PTable> indexes = table.getIndexes();
-      boolean sendIndexMaintainers =
-        indexes != null && indexes.stream().anyMatch(IndexMaintainer::sendIndexMaintainer);
+      boolean sendIndexMaintainers = false;
+      if (indexes != null) {
+        for (PTable index : indexes) {
+          if (IndexMaintainer.sendIndexMaintainer(index)) {
+            sendIndexMaintainers = true;
+            break;
+          }
+        }
+      }
       boolean useServerMetadata = props.getBoolean(INDEX_USE_SERVER_METADATA_ATTRIB,
         QueryServicesOptions.DEFAULT_INDEX_USE_SERVER_METADATA)
         && props.getBoolean(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,

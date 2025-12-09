@@ -207,7 +207,7 @@ public class PhoenixIndexMetaDataBuilder {
     List<PTable> indexes = dataTable.getIndexes();
     for (PTable index : indexes) {
       if (IndexMaintainer.sendIndexMaintainer(index)) {
-        IndexMaintainer maintainer = IndexMaintainer.create(dataTable, index, connection);
+        IndexMaintainer maintainer = index.getIndexMaintainer(dataTable, connection);
         indexMaintainers.add(maintainer);
       }
     }
