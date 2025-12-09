@@ -167,11 +167,13 @@ public class IndexMetaDataCacheClient {
       // client can attach index maintainer mutation attribute so that IndexRegionObserver
       // does not have to make additional getTable() rpc call with each batchMutate() rpc call
       // with small mutation size (size < phoenix.index.mutableBatchSizeThreshold value).
-      // If above conditions do not match and if the mutation size is greater than
-      // "phoenix.index.mutableBatchSizeThreshold" value, however if none of the data table
-      // indexes need to be sent to server (only index in state other than DISABLE,
-      // CREATE_DISABLE, PENDING_ACTIVE need to be sent to server), do not use expensive
-      // addServerCache() rpc call.
+      // If (a) above conditions do not match, (b) the mutation size is greater than
+      // "phoenix.index.mutableBatchSizeThreshold" value, and (c) data table needs to send index
+      // mutation with the data table mutation, we can use expensive addServerCache() rpc call.
+      // However, (a) above conditions do not match, (b) the mutation size is greater than
+      // "phoenix.index.mutableBatchSizeThreshold" value, and (c) data table mutation does not need
+      // to send index mutation (because all indexes are only in any of DISABLE, CREATE_DISABLE,
+      // PENDING_ACTIVE states), we can avoid expensive addServerCache() rpc call.
       if (
         useServerMetadata && table.getType() != PTableType.SYSTEM
           && (!table.isImmutableRows() || serverSideImmutableIndexes)
