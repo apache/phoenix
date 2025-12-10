@@ -32,11 +32,13 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.POLICY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VERSION;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
+import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
+import java.io.IOException;
 import java.io.PrintStream;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
@@ -71,6 +73,7 @@ public class PhoenixHAAdminToolIT {
     private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
     private static final PrintStream STDOUT = System.out;
     private static final ByteArrayOutputStream STDOUT_CAPTURE = new ByteArrayOutputStream();
+    private static final Long BUFFER_TIME_IN_MS = 100L;
 
     private String haGroupName;
     private PhoenixHAAdminTool adminTool;
@@ -374,6 +377,30 @@ public class PhoenixHAAdminToolIT {
     }
 
     /**
+     * Helper method to wait for a cluster to reach a specific HA group state.
+     * Uses polling with timeout to handle eventual consistency.
+     *
+     * @param manager the HAGroupStoreManager to query
+     * @param haGroupName the HA group name
+     * @param expectedState the expected HAGroupState
+     * @param clusterDescription description for logging (e.g., "Cluster1", "Cluster2")
+     * @throws Exception if timeout occurs or other errors
+     */
+    private void waitForHAGroupState(HAGroupStoreManager manager, String haGroupName,
+            HAGroupStoreRecord.HAGroupState expectedState, String clusterDescription) throws Exception {
+        waitFor(() -> {
+            Optional<HAGroupStoreRecord> record;
+            try {
+                record = manager.getHAGroupStoreRecord(haGroupName);
+            } catch (IOException e) {
+                throw new RuntimeException(e);
+            }
+            return record.isPresent() && record.get().getHAGroupState() == expectedState;
+        }, 100, 30000);
+        LOG.debug("{} reached expected state: {}", clusterDescription, expectedState);
+    }
+
+    /**
      * Helper method to assert output contains all expected HAGroupStoreRecord fields.
      */
     private void assertOutputContainsHAGroupFields(String output) {
@@ -522,9 +549,11 @@ public class PhoenixHAAdminToolIT {
         cluster2HAManager.getHAGroupStoreRecord(failoverHaGroupName);
 
         // Wait for ZK session timeout to allow transition from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC
-        Thread.sleep(20 * 1000);
-        cluster1HAManager.setHAGroupStatusToSync(failoverHaGroupName);
-        Thread.sleep(5000);
+        long waitTime = cluster1HAManager.setHAGroupStatusToSync(failoverHaGroupName);
+        Thread.sleep(waitTime + BUFFER_TIME_IN_MS);
+        assertEquals("Wait time should be 0",
+                0,
+                cluster1HAManager.setHAGroupStatusToSync(failoverHaGroupName));
 
         // Set up listener to simulate reader completing replay and becoming ACTIVE
         HAGroupStateListener listener = (haGroupName1, fromState, toState, modifiedTime,
@@ -542,16 +571,10 @@ public class PhoenixHAAdminToolIT {
                 ClusterType.LOCAL, listener);
 
         // === INITIAL STATE VERIFICATION ===
-        Optional<HAGroupStoreRecord> cluster1Record = cluster1HAManager.getHAGroupStoreRecord(failoverHaGroupName);
-        Optional<HAGroupStoreRecord> cluster2Record = cluster2HAManager.getHAGroupStoreRecord(failoverHaGroupName);
-
-        assertTrue("Cluster1 record should be present", cluster1Record.isPresent());
-        assertEquals("Cluster1 should be in ACTIVE_IN_SYNC state",
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, cluster1Record.get().getHAGroupState());
-        assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
-        assertEquals("Cluster2 should be in STANDBY state",
-                HAGroupStoreRecord.HAGroupState.STANDBY, cluster2Record.get().getHAGroupState());
-
+        waitForHAGroupState(cluster1HAManager, failoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, "Cluster1");
+        waitForHAGroupState(cluster2HAManager, failoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.STANDBY, "Cluster2");
         LOG.info("Initial state verified: Cluster1=ACTIVE_IN_SYNC, Cluster2=STANDBY");
 
         // === EXECUTE INITIATE-FAILOVER COMMAND ===
@@ -575,17 +598,10 @@ public class PhoenixHAAdminToolIT {
                 output.contains("Transition completed"));
 
         // === FINAL STATE VERIFICATION ===
-        cluster1Record = cluster1HAManager.getHAGroupStoreRecord(failoverHaGroupName);
-        cluster2Record = cluster2HAManager.getHAGroupStoreRecord(failoverHaGroupName);
-
-        assertTrue("Cluster1 record should be present", cluster1Record.isPresent());
-        assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
-
-        assertEquals("Cluster1 should now be STANDBY after failover",
-                HAGroupStoreRecord.HAGroupState.STANDBY, cluster1Record.get().getHAGroupState());
-        assertEquals("Cluster2 should now be ACTIVE_IN_SYNC after failover",
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, cluster2Record.get().getHAGroupState());
-
+        waitForHAGroupState(cluster1HAManager, failoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.STANDBY, "Cluster1");
+        waitForHAGroupState(cluster2HAManager, failoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, "Cluster2");
         LOG.info("Final state verified: Cluster1=STANDBY, Cluster2=ACTIVE_IN_SYNC");
 
         // Verify cluster role records show correct role swap
@@ -639,43 +655,31 @@ public class PhoenixHAAdminToolIT {
         cluster2HAManager.getHAGroupStoreRecord(abortFailoverHaGroupName);
 
         // Wait for ZK session timeout to allow transition from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC
-        Thread.sleep(20 * 1000);
-        cluster1HAManager.setHAGroupStatusToSync(abortFailoverHaGroupName);
-        Thread.sleep(5000);
+        long waitTime = cluster1HAManager.setHAGroupStatusToSync(abortFailoverHaGroupName);
+        Thread.sleep(waitTime + BUFFER_TIME_IN_MS);
+        assertEquals("Wait time should be 0",
+                0,
+                cluster1HAManager.setHAGroupStatusToSync(abortFailoverHaGroupName));
 
         // === INITIAL STATE VERIFICATION ===
-        Optional<HAGroupStoreRecord> cluster1Record = cluster1HAManager.getHAGroupStoreRecord(abortFailoverHaGroupName);
-        Optional<HAGroupStoreRecord> cluster2Record = cluster2HAManager.getHAGroupStoreRecord(abortFailoverHaGroupName);
-
-        assertTrue("Cluster1 record should be present", cluster1Record.isPresent());
-        assertEquals("Cluster1 should be in ACTIVE_IN_SYNC state",
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, cluster1Record.get().getHAGroupState());
-        assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
-        assertEquals("Cluster2 should be in STANDBY state",
-                HAGroupStoreRecord.HAGroupState.STANDBY, cluster2Record.get().getHAGroupState());
-
+        waitForHAGroupState(cluster1HAManager, abortFailoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, "Cluster1");
+        waitForHAGroupState(cluster2HAManager, abortFailoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.STANDBY, "Cluster2");
         LOG.info("Initial state verified: Cluster1=ACTIVE_IN_SYNC, Cluster2=STANDBY");
 
         // === STEP 1: INITIATE FAILOVER ON CLUSTER1 (ACTIVE) ===
         cluster1HAManager.initiateFailoverOnActiveCluster(abortFailoverHaGroupName);
-        Thread.sleep(5000);
 
-        // Verify cluster1 is now in transition state
-        cluster1Record = cluster1HAManager.getHAGroupStoreRecord(abortFailoverHaGroupName);
-        assertTrue("Cluster1 record should be present", cluster1Record.isPresent());
-        assertEquals("Cluster1 should be in ACTIVE_IN_SYNC_TO_STANDBY state",
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, cluster1Record.get().getHAGroupState());
-
+        // Wait for cluster1 to transition to ACTIVE_IN_SYNC_TO_STANDBY state
+        waitForHAGroupState(cluster1HAManager, abortFailoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, "Cluster1");
         LOG.info("Failover initiated: Cluster1=ACTIVE_IN_SYNC_TO_STANDBY");
 
         // === STEP 2: VERIFY AUTOMATIC PEER REACTION ===
         // Cluster2 (standby) should automatically move to STANDBY_TO_ACTIVE
-
-        cluster2Record = cluster2HAManager.getHAGroupStoreRecord(abortFailoverHaGroupName);
-        assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
-        assertEquals("Cluster2 should automatically transition to STANDBY_TO_ACTIVE",
-                HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, cluster2Record.get().getHAGroupState());
-
+        waitForHAGroupState(cluster2HAManager, abortFailoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, "Cluster2");
         LOG.info("Peer reaction verified: Cluster2=STANDBY_TO_ACTIVE");
 
         // === STEP 3: EXECUTE ABORT-FAILOVER COMMAND ON CLUSTER2 ===
@@ -699,17 +703,11 @@ public class PhoenixHAAdminToolIT {
                 output.contains("Transition completed"));
 
         // === FINAL VERIFICATION ===
-        // The command has already waited for completion, so verify final state
-        cluster1Record = cluster1HAManager.getHAGroupStoreRecord(abortFailoverHaGroupName);
-        cluster2Record = cluster2HAManager.getHAGroupStoreRecord(abortFailoverHaGroupName);
-
-        assertTrue("Cluster1 record should be present", cluster1Record.isPresent());
-        assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
-
-        assertEquals("Cluster1 should be back to ACTIVE_IN_SYNC state",
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, cluster1Record.get().getHAGroupState());
-        assertEquals("Cluster2 should be back to STANDBY state",
-                HAGroupStoreRecord.HAGroupState.STANDBY, cluster2Record.get().getHAGroupState());
+        // Wait for both clusters to reach final state
+        waitForHAGroupState(cluster1HAManager, abortFailoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, "Cluster1");
+        waitForHAGroupState(cluster2HAManager, abortFailoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.STANDBY, "Cluster2");
 
         // Verify cluster role records are back to original - use getRole(url) to handle any order
         ClusterRoleRecord cluster1Role = cluster1HAManager.getClusterRoleRecord(abortFailoverHaGroupName);
@@ -757,21 +755,17 @@ public class PhoenixHAAdminToolIT {
         cluster2HAManager.getHAGroupStoreRecord(timeoutFailoverHaGroupName);
 
         // Wait for ZK session timeout to allow transition from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC
-        Thread.sleep(20 * 1000);
-        cluster1HAManager.setHAGroupStatusToSync(timeoutFailoverHaGroupName);
-        Thread.sleep(5000);
+        long waitTime = cluster1HAManager.setHAGroupStatusToSync(timeoutFailoverHaGroupName);
+        Thread.sleep(waitTime);
+        assertEquals("Wait time should be 0",
+                0,
+                cluster1HAManager.setHAGroupStatusToSync(timeoutFailoverHaGroupName));
 
         // === INITIAL STATE VERIFICATION ===
-        Optional<HAGroupStoreRecord> cluster1Record = cluster1HAManager.getHAGroupStoreRecord(timeoutFailoverHaGroupName);
-        Optional<HAGroupStoreRecord> cluster2Record = cluster2HAManager.getHAGroupStoreRecord(timeoutFailoverHaGroupName);
-
-        assertTrue("Cluster1 record should be present", cluster1Record.isPresent());
-        assertEquals("Cluster1 should be in ACTIVE_IN_SYNC state",
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, cluster1Record.get().getHAGroupState());
-        assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
-        assertEquals("Cluster2 should be in STANDBY state",
-                HAGroupStoreRecord.HAGroupState.STANDBY, cluster2Record.get().getHAGroupState());
-
+        waitForHAGroupState(cluster1HAManager, timeoutFailoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, "Cluster1");
+        waitForHAGroupState(cluster2HAManager, timeoutFailoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.STANDBY, "Cluster2");
         LOG.info("Initial state verified: Cluster1=ACTIVE_IN_SYNC, Cluster2=STANDBY");
 
         // === KEY DIFFERENCE: DO NOT SET UP LISTENER ===
@@ -804,18 +798,12 @@ public class PhoenixHAAdminToolIT {
 
         // === VERIFY INTERMEDIATE STATE ===
         // Cluster1 should be stuck in ACTIVE_IN_SYNC_TO_STANDBY (not reached STANDBY)
-        cluster1Record = cluster1HAManager.getHAGroupStoreRecord(timeoutFailoverHaGroupName);
-        assertTrue("Cluster1 record should be present", cluster1Record.isPresent());
-        assertEquals("Cluster1 should still be in ACTIVE_IN_SYNC_TO_STANDBY (transition incomplete)",
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
-                cluster1Record.get().getHAGroupState());
+        waitForHAGroupState(cluster1HAManager, timeoutFailoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, "Cluster1");
 
         // Cluster2 should have reacted and moved to STANDBY_TO_ACTIVE but NOT to ACTIVE_IN_SYNC
-        cluster2Record = cluster2HAManager.getHAGroupStoreRecord(timeoutFailoverHaGroupName);
-        assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
-        assertEquals("Cluster2 should be in STANDBY_TO_ACTIVE (reader hasn't completed transition)",
-                HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE,
-                cluster2Record.get().getHAGroupState());
+        waitForHAGroupState(cluster2HAManager, timeoutFailoverHaGroupName,
+                HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, "Cluster2");
 
         LOG.info("Timeout behavior verified: Cluster1=ACTIVE_IN_SYNC_TO_STANDBY (stuck), Cluster2=STANDBY_TO_ACTIVE (stuck)");
 
