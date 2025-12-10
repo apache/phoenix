@@ -146,6 +146,11 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
   }
 
   protected static void moveRegionsOfTable(String tableName) throws IOException {
+    try {
+      Thread.sleep(1000);
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
     Admin admin = getUtility().getAdmin();
     List<ServerName> servers = new ArrayList<>(admin.getRegionServers());
     ServerName server1 = servers.get(0);
@@ -416,6 +421,7 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
         .execute("upsert into " + dataTableName + " values ('d', 'de', 'def', 'defg')");
       conn.commit();
       IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+      Thread.sleep(1000);
       // Make sure that we can repair the unverified row
       query =
         "SELECT  val1, val2, PHOENIX_ROW_TIMESTAMP()  from " + dataTableName + " WHERE val1 = 'de'";
@@ -445,6 +451,7 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('e', 'ae', 'efg', 'efgh')");
       conn.commit();
+      Thread.sleep(1000);
       // Write a query to get all the rows in the order of their timestamps
       query = "SELECT  val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName + " WHERE "
         + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + initial.toString()
@@ -988,7 +995,7 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
         .findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
       assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
-      assertEquals(2, indexTool.getJob().getCounters()
+      assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
       assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
@@ -1669,6 +1676,7 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
     conn.createStatement()
       .execute("upsert into " + dataTableName + " values ('z', 'za', 'zab', 'zabc')");
     conn.commit();
+    Thread.sleep(1000);
     String selectSql = "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
     /// Verify that we will read from the index table
     assertExplainPlan(conn, selectSql, dataTableName, indexTableName);

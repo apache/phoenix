@@ -293,6 +293,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
     LOGGER.info(
       "Total upsert time in ms : " + (EnvironmentEdgeManager.currentTimeMillis() - startTime));
+    Thread.sleep(5000);
     long actualRowCount = verifyIndexTable(tableName, indexName, conn);
     assertEquals(nRows, actualRowCount);
   }
