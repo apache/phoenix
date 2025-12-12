@@ -878,7 +878,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
                 Optional<HAGroupStoreRecord> recordOpt =
                         manager.getHAGroupStoreRecord(haGroupName);
                 Optional<HAGroupStoreRecord> peerRecordOpt =
-                        manager.getHAGroupStoreRecord(haGroupName);
+                        manager.getPeerHAGroupStoreRecord(haGroupName);
                 HAGroupState peerState = HAGroupStoreRecord.HAGroupState.UNKNOWN;
                 if (peerRecordOpt.isPresent()) {
                     peerState = peerRecordOpt.get().getHAGroupState();

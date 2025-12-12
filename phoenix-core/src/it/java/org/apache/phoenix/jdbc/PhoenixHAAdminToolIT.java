@@ -49,15 +49,19 @@ import java.util.Optional;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
+import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.replication.reader.ReplicationLogReplay;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.JDBCUtil;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 import org.junit.rules.TestWatcher;
 import org.junit.runner.Description;
@@ -68,7 +72,7 @@ import org.slf4j.LoggerFactory;
  * Integration tests for {@link PhoenixHAAdminTool}.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class PhoenixHAAdminToolIT {
+public class PhoenixHAAdminToolIT extends BaseTest {
     private static final Logger LOG = LoggerFactory.getLogger(PhoenixHAAdminToolIT.class);
     private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
     private static final PrintStream STDOUT = System.out;
@@ -77,6 +81,9 @@ public class PhoenixHAAdminToolIT {
 
     private String haGroupName;
     private PhoenixHAAdminTool adminTool;
+
+    @ClassRule
+    public static TemporaryFolder testFolder = new TemporaryFolder();
 
     @Rule
     public final TestName testName = new TestName();
@@ -152,6 +159,11 @@ public class PhoenixHAAdminToolIT {
             LOG.warn("Error during cleanup", e);
             // Don't fail the test due to cleanup errors
         }
+        
+        standbyUri = testFolder.getRoot().toURI();
+        // Set the required configuration for ReplicationLogReplay
+        CLUSTERS.getHBaseCluster2().getConfiguration().set(ReplicationLogReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY,
+                standbyUri.toString());
 
         adminTool = new PhoenixHAAdminTool();
         adminTool.setConf(CLUSTERS.getHBaseCluster1().getConfiguration());
@@ -554,21 +566,11 @@ public class PhoenixHAAdminToolIT {
         assertEquals("Wait time should be 0",
                 0,
                 cluster1HAManager.setHAGroupStatusToSync(failoverHaGroupName));
-
-        // Set up listener to simulate reader completing replay and becoming ACTIVE
-        HAGroupStateListener listener = (haGroupName1, fromState, toState, modifiedTime,
-                                         clusterType, lastSyncStateTimeInMs) -> {
-            try {
-                if (toState == HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE) {
-                    cluster2HAManager.setHAGroupStatusToSync(haGroupName1);
-                }
-            } catch (Exception e) {
-                LOG.error("Failed to transition cluster2 to ACTIVE_IN_SYNC", e);
-            }
-        };
-        cluster2HAManager.subscribeToTargetState(failoverHaGroupName,
-                HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE,
-                ClusterType.LOCAL, listener);
+        
+        // Start the ReplicationLogReplay
+        ReplicationLogReplay replicationLogReplay = ReplicationLogReplay.get(CLUSTERS.getHBaseCluster2().getConfiguration(),
+                failoverHaGroupName);
+        replicationLogReplay.startReplay();
 
         // === INITIAL STATE VERIFICATION ===
         waitForHAGroupState(cluster1HAManager, failoverHaGroupName,
@@ -585,7 +587,7 @@ public class PhoenixHAAdminToolIT {
 
         // Use a timeout of 60 seconds for test (shorter than default 120)
         int ret = ToolRunner.run(cluster1AdminTool,
-                new String[]{"initiate-failover", "-g", failoverHaGroupName, "-t", "60"});
+                new String[]{"initiate-failover", "-g", failoverHaGroupName, "-t", "180"});
 
         assertEquals("initiate-failover command should succeed", RET_SUCCESS, ret);
 
@@ -622,8 +624,9 @@ public class PhoenixHAAdminToolIT {
         LOG.info("✓ Failover completed successfully: roles swapped from Cluster1=ACTIVE to Cluster2=ACTIVE");
 
         // Clean up
-        cluster2HAManager.unsubscribeFromTargetState(failoverHaGroupName,
-                HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, ClusterType.LOCAL, listener);
+        replicationLogReplay.stopReplay();
+//        cluster2HAManager.unsubscribeFromTargetState(failoverHaGroupName,
+//                HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, ClusterType.LOCAL, listener);
     }
 
     /**
