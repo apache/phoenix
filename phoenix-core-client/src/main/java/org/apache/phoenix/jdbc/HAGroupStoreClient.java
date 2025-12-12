@@ -95,8 +95,7 @@ public class HAGroupStoreClient implements Closeable {
             = 30000L;
     // Multiplier for ZK session timeout to account for time it will take for HMaster to abort
     // the region server in case ZK connection is lost from the region server.
-    @VisibleForTesting
-    static final double ZK_SESSION_TIMEOUT_MULTIPLIER = 1.1;
+    public static final double ZK_SESSION_TIMEOUT_MULTIPLIER = 1.1;
     // Maximum jitter in seconds for sync job start time (10 seconds)
     private static final long SYNC_JOB_MAX_JITTER_SECONDS = 10;
     private PhoenixHAAdmin phoenixHaAdmin;
