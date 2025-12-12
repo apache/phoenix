@@ -623,7 +623,6 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertEquals(0L, cluster2HAManager.setReaderToHealthy(haGroupName));
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        // Simulates action taken by reader to complete the replay and become new ACTIVE
         // Start the ReplicationLogReplay
         ReplicationLogReplay replicationLogReplay
                 = ReplicationLogReplay.get(CLUSTERS.getHBaseCluster2().getConfiguration(), haGroupName);
