@@ -143,10 +143,6 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
 
   private QueryPlanBuilder queryPlanBuilder;
 
-  /**
-   * Quotes table name for SQL generation if case sensitivity is needed.
-   * Extracts schema and table from normalized name and uses SchemaUtil to add quotes.
-   */
   private String getQuotedTableNameForSQL(String normalizedFullTableName) {
     String schemaName = SchemaUtil.getSchemaNameFromFullName(normalizedFullTableName);
     String tableName = SchemaUtil.getTableNameFromFullName(normalizedFullTableName);
