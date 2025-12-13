@@ -177,7 +177,6 @@ public class IndexMetaDataCacheClient {
       if (
         useServerMetadata && table.getType() != PTableType.SYSTEM
           && (!table.isImmutableRows() || serverSideImmutableIndexes)
-          && (updateCacheFreq > 0 || useServerCacheRpc)
       ) {
         LOGGER.trace("Using server-side metadata for table {}, not sending IndexMaintainer or UUID",
           table.getTableName());
