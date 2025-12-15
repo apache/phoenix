@@ -494,10 +494,16 @@ create_table_node returns [CreateTableStatement ret]
 
 // Parse a truncate table statement.
 truncate_table_node returns [TruncateTableStatement ret]
-    :   TRUNCATE TABLE t=from_table_name (PRESERVE SPLITS)?
-        {ret = factory.truncateTable(t, PTableType.TABLE, true);}
-    |   TRUNCATE TABLE t=from_table_name DROP SPLITS
-        {ret = factory.truncateTable(t, PTableType.TABLE, false);}
+    :   TRUNCATE TABLE t=from_table_name
+        (
+            // Case 1: Explicitly DROP SPLITS
+            DROP SPLITS
+            { $ret = factory.truncateTable(t, PTableType.TABLE, false); }
+        |
+            // Default Case: PRESERVE SPLITS or Nothing (Both mean preserve=true)
+            (PRESERVE SPLITS)?
+            { $ret = factory.truncateTable(t, PTableType.TABLE, true); }
+        )
     ;
 
 // Parse a create schema statement.

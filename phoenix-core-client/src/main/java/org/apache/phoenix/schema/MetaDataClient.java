@@ -21,7 +21,16 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.RUN_UPDATE_STATS_ASYNC_ATTRIB;
 import static org.apache.phoenix.coprocessorclient.tasks.IndexRebuildTaskConstants.INDEX_NAME;
 import static org.apache.phoenix.coprocessorclient.tasks.IndexRebuildTaskConstants.REBUILD_ALL;
-import static org.apache.phoenix.exception.SQLExceptionCode.*;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_CONDITIONAL_TTL_ON_TABLE_WITH_MULTIPLE_COLUMN_FAMILIES;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRUNCATE_MULTITENANT_TABLE;
+import static org.apache.phoenix.exception.SQLExceptionCode.CDC_ALREADY_ENABLED;
+import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
+import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
+import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
+import static org.apache.phoenix.exception.SQLExceptionCode.SALTING_NOT_ALLOWED_FOR_CDC;
+import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
+import static org.apache.phoenix.exception.SQLExceptionCode.TRUNCATE_NOT_ALLOWED_ON_SYSTEM_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
@@ -4857,9 +4866,9 @@ public class MetaDataClient {
           /**
            * To check if TTL is defined at any of the child below we are checking it at
            * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#mutateColumn(List, ColumnMutator, int, PTable, PTable, boolean)}
-           * level where in function {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#
-           * validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[],
-           * byte[], List, int)} we are already traversing through allDescendantViews.
+           * level where in function
+           * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl# validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[], byte[], List, int)}
+           * we are already traversing through allDescendantViews.
            */
         }
 
