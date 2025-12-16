@@ -243,11 +243,14 @@ public class PhoenixServerRpcIT extends BaseTest {
       }
       byte[] encodedRegionNameInBytes = hri2.getEncodedNameAsBytes();
       admin.move(encodedRegionNameInBytes, dstServer.getServerName());
+      // verify that both HMaster and Region server are aware of this movement
       while (
         dstServer.getOnlineRegion(hri2.getRegionName()) == null
           || dstServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
           || srcServer.getRegionsInTransitionInRS().containsKey(encodedRegionNameInBytes)
-          || master.getAssignmentManager().getRegionStates().isRegionInTransition(hri2)
+          || !ServerName.isSameAddress(
+            master.getAssignmentManager().getRegionStates().getRegionServerOfRegion(hri2),
+            dstServer.getServerName())
       ) {
         // wait for the move to be finished
         Thread.sleep(1);
