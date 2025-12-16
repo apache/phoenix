@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import java.util.Map;
+import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.hbase.monitoring.ThreadLocalServerSideScanMetrics;
 import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.compat.hbase.CompatThreadLocalServerSideScanMetrics;
@@ -106,7 +106,7 @@ public class DataTableScanMetrics {
     }
   }
 
-  public static void buildDataTableScanMetrics(Map<String, Long> scanMetrics, Builder builder) {
+  public static void populateDataTableScanMetrics(ScanMetrics scanMetrics, Builder builder) {
     builder.setFsReadTimeInMs(CompatScanMetrics.getFsReadTime(scanMetrics))
       .setBytesReadFromFS(CompatScanMetrics.getBytesReadFromFs(scanMetrics))
       .setBytesReadFromMemstore(CompatScanMetrics.getBytesReadFromMemstore(scanMetrics))

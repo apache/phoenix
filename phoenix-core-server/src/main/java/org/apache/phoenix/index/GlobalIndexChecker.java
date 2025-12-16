@@ -29,7 +29,6 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
 import org.apache.hadoop.hbase.Cell;
@@ -43,6 +42,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -57,6 +57,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.coprocessor.BaseRegionScanner;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.DataTableScanMetrics;
@@ -189,7 +190,8 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         DEFAULT_REPAIR_LOGGING_PERCENT);
       random = new Random(EnvironmentEdgeManager.currentTimeMillis());
       pageSizeMs = getPageSizeMsForRegionScanner(scan);
-      isScanMetricsEnabled = scan.isScanMetricsEnabled();
+      isScanMetricsEnabled =
+        scan.isScanMetricsEnabled() && CompatScanMetrics.supportsFineGrainedReadMetrics();
     }
 
     @Override
@@ -347,9 +349,9 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       return scanner.getMvccReadPoint();
     }
 
-    private DataTableScanMetrics buildDataTableScanMetrics(Map<String, Long> scanMetrics) {
+    private DataTableScanMetrics buildDataTableScanMetrics(ScanMetrics scanMetrics) {
       DataTableScanMetrics.Builder builder = new DataTableScanMetrics.Builder();
-      DataTableScanMetrics.buildDataTableScanMetrics(scanMetrics, builder);
+      DataTableScanMetrics.populateDataTableScanMetrics(scanMetrics, builder);
       return builder.build();
     }
 
@@ -414,7 +416,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       try (ResultScanner resultScanner = dataHTable.getScanner(buildIndexScanForDataTable)) {
         result = resultScanner.next();
         if (isScanMetricsEnabled) {
-          Map<String, Long> scanMetrics = resultScanner.getScanMetrics().getMetricsMap();
+          ScanMetrics scanMetrics = resultScanner.getScanMetrics();
           DataTableScanMetrics dataTableScanMetrics = buildDataTableScanMetrics(scanMetrics);
           dataTableScanMetrics.populateThreadLocalServerSideScanMetrics();
         }
