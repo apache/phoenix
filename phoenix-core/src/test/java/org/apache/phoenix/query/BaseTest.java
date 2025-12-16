@@ -435,9 +435,8 @@ public abstract class BaseTest {
     protected static boolean clusterInitialized = false;
     protected static HBaseTestingUtility utility;
     protected static final Configuration config = HBaseConfiguration.create();
-    protected static final String logDir = "/PHOENIX_REPLICATION";
+    protected static final String logDir = "/PHOENIX_REPLICATION_IN";
     protected static URI standbyUri = new Path(logDir).toUri();
-    protected static URI localUri = new Path(logDir).toUri();
 
     protected static String getUrl() {
         if (!clusterInitialized) {
@@ -677,7 +676,6 @@ public abstract class BaseTest {
         setPhoenixRegionServerEndpoint(conf);
         // setup up synchronous replication
         conf.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
-        conf.set(ReplicationLogGroup.REPLICATION_FALLBACK_HDFS_URL_KEY, localUri.toString());
         return conf;
     }
 

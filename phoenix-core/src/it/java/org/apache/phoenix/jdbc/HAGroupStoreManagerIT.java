@@ -23,18 +23,15 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
-import org.apache.phoenix.replication.reader.ReplicationLogReplay;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.zookeeper.data.Stat;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 
 import java.lang.reflect.Field;
@@ -51,10 +48,8 @@ import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_SESSION_TIMEOUT_MULT
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
-import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.DEFAULT_REPLICATION_ROUND_DURATION_SECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -65,9 +60,6 @@ import static org.junit.Assert.fail;
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class HAGroupStoreManagerIT extends BaseTest {
-
-    @ClassRule
-    public static TemporaryFolder testFolder = new TemporaryFolder();
 
     @Rule
     public TestName testName = new TestName();
@@ -104,11 +96,6 @@ public class HAGroupStoreManagerIT extends BaseTest {
         }
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl, peerZKUrl,
                 ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
-
-        standbyUri = testFolder.getRoot().toURI();
-        // Set the required configuration for ReplicationLogReplay
-        CLUSTERS.getHBaseCluster2().getConfiguration().set(ReplicationLogReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY,
-                standbyUri.toString());
     }
 
     @Test
@@ -363,7 +350,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Set the HA group status to store and forward (ACTIVE_NOT_IN_SYNC)
-        assertEquals(0L, haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName));
+        haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the status was updated to ACTIVE_NOT_IN_SYNC
@@ -376,7 +363,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         // Set the HA group status to store and forward again and verify
         // that getLastSyncStateTimeInMs is same (ACTIVE_NOT_IN_SYNC)
         // The time should only update when we move to AIS to ANIS
-        assertEquals(0L, haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName));
+        haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
         Optional<HAGroupStoreRecord> updatedRecordOpt2 = haGroupStoreManager.getHAGroupStoreRecord(haGroupName);
         assertTrue(updatedRecordOpt2.isPresent());
@@ -396,13 +383,10 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, initialRecord.getHAGroupState());
         assertNotNull(initialRecord.getLastSyncStateTimeInMs());
 
-        // Setting it too soon should return wait time.
-        long transitionWaitTime = haGroupStoreManager.setHAGroupStatusToSync(haGroupName);
-        assert(transitionWaitTime > 0);
-
         // Set the HA group status to sync (ACTIVE), we need to wait for ZK_SESSION_TIMEOUT * Multiplier
-        Thread.sleep(transitionWaitTime);
-        assertEquals(0L, haGroupStoreManager.setHAGroupStatusToSync(haGroupName));
+        Thread.sleep((long) Math.ceil(config.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT)
+                * ZK_SESSION_TIMEOUT_MULTIPLIER));
+        haGroupStoreManager.setHAGroupStatusToSync(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the state was updated to ACTIVE_IN_SYNC
@@ -510,7 +494,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Call setReaderToDegraded
-        assertEquals(0L, haGroupStoreManager.setReaderToDegraded(haGroupName));
+        haGroupStoreManager.setReaderToDegraded(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the status was updated to DEGRADED_STANDBY
@@ -539,7 +523,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Call setReaderToHealthy
-        assertEquals(0L, haGroupStoreManager.setReaderToHealthy(haGroupName));
+        haGroupStoreManager.setReaderToHealthy(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify the status was updated to STANDBY
@@ -569,7 +553,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Test setReaderToDegraded with invalid state
         try {
-            assertEquals(0L, haGroupStoreManager.setReaderToDegraded(haGroupName));
+            haGroupStoreManager.setReaderToDegraded(haGroupName);
             fail("Expected InvalidClusterRoleTransitionException for setReaderToDegraded with ACTIVE_IN_SYNC state");
         } catch (InvalidClusterRoleTransitionException e) {
             // Expected behavior
@@ -579,7 +563,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // Test setReaderToHealthy with invalid state
         try {
-            assertEquals(0L, haGroupStoreManager.setReaderToHealthy(haGroupName));
+            haGroupStoreManager.setReaderToHealthy(haGroupName);
             fail("Expected InvalidClusterRoleTransitionException for setReaderToHealthy with ACTIVE_IN_SYNC state");
         } catch (InvalidClusterRoleTransitionException e) {
             // Expected behavior
@@ -617,16 +601,30 @@ public class HAGroupStoreManagerIT extends BaseTest {
         // Move cluster1 from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC,
         //    we can move after DEFAULT_ZK_SESSION_TIMEOUT * ZK_SESSION_TIMEOUT_MULTIPLIER
         Thread.sleep(20 * 1000);
-        assertEquals(0L, cluster1HAManager.setHAGroupStatusToSync(haGroupName));
+        cluster1HAManager.setHAGroupStatusToSync(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        assertEquals(0L, cluster2HAManager.setReaderToHealthy(haGroupName));
+        cluster2HAManager.setReaderToHealthy(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        // Start the ReplicationLogReplay
-        ReplicationLogReplay replicationLogReplay
-                = ReplicationLogReplay.get(CLUSTERS.getHBaseCluster2().getConfiguration(), haGroupName);
-        replicationLogReplay.startReplay();
+        // Simulates action taken by reader to complete the replay and become new ACTIVE
+        HAGroupStateListener listener = (haGroupName1,
+                                         fromState,
+                                         toState,
+                                         modifiedTime,
+                                         clusterType,
+                                         lastSyncStateTimeInMs) -> {
+            try {
+                if (toState == HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE) {
+                    cluster2HAManager.setHAGroupStatusToSync(haGroupName1);
+                }
+            } catch (Exception e) {
+                fail("Peer Cluster should be able to move to ACTIVE_IN_SYNC" + e.getMessage());
+            }
+        };
+        cluster2HAManager.subscribeToTargetState(haGroupName,
+                HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE,
+                ClusterType.LOCAL, listener);
 
         // === INITIAL STATE VERIFICATION ===
         Optional<HAGroupStoreRecord> cluster1Record = cluster1HAManager.getHAGroupStoreRecord(haGroupName);
@@ -642,8 +640,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // === Operator initiates failover on cluster1 (active) ===
         cluster1HAManager.initiateFailoverOnActiveCluster(haGroupName);
-        // Sleep for 2 Replay rounds to complete so that failover happens.
-        Thread.sleep(2 * DEFAULT_REPLICATION_ROUND_DURATION_SECONDS * 1000L);
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // === FINAL VERIFICATION ===
         // Verify complete role swap has occurred
@@ -696,10 +693,10 @@ public class HAGroupStoreManagerIT extends BaseTest {
         // Move cluster1 from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC,
         //    we can move after DEFAULT_ZK_SESSION_TIMEOUT * ZK_SESSION_TIMEOUT_MULTIPLIER
         Thread.sleep(20 * 1000);
-        assertEquals(0L, cluster1HAManager.setHAGroupStatusToSync(haGroupName));
+        cluster1HAManager.setHAGroupStatusToSync(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-        assertEquals(0L, cluster2HAManager.setReaderToHealthy(haGroupName));
+        cluster2HAManager.setReaderToHealthy(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // === INITIAL STATE VERIFICATION ===
@@ -735,7 +732,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
         // === STEP 3: Operator decides to abort failover ===
         // Set cluster2 (which is in STANDBY_TO_ACTIVE) to ABORT_TO_STANDBY
-        assertEquals(0L, cluster2HAManager.setHAGroupStatusToAbortToStandby(haGroupName));
+        cluster2HAManager.setHAGroupStatusToAbortToStandby(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // === STEP 4: Verify automatic cluster1 abort reaction ===
@@ -807,7 +804,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         // Move cluster1 from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC,
         //    we can move after DEFAULT_ZK_SESSION_TIMEOUT * ZK_SESSION_TIMEOUT_MULTIPLIER
         Thread.sleep(20 * 1000);
-        assertEquals(0L, cluster1HAManager.setHAGroupStatusToSync(haGroupName));
+        cluster1HAManager.setHAGroupStatusToSync(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // === INITIAL STATE VERIFICATION ===
@@ -820,21 +817,17 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
         assertEquals("Cluster2 should be in STANDBY state",
                 HAGroupStoreRecord.HAGroupState.STANDBY, cluster2Record.get().getHAGroupState());
-        assertEquals(0L, (long) cluster1Record.get().getLastSyncStateTimeInMs());
-        assertEquals(0L, (long) cluster2Record.get().getLastSyncStateTimeInMs());
-
 
         // === STEP 1: Transition to store-and-forward mode ===
         // Move cluster1 from ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC (store-and-forward mode)
-        assertEquals(0L, cluster1HAManager.setHAGroupStatusToStoreAndForward(haGroupName));
+        cluster1HAManager.setHAGroupStatusToStoreAndForward(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify cluster1 is now in store-and-forward state
         cluster1Record = cluster1HAManager.getHAGroupStoreRecord(haGroupName);
         assertTrue("Cluster1 record should be present", cluster1Record.isPresent());
         assertEquals("Cluster1 should be in ACTIVE_NOT_IN_SYNC state",
-                HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC,
-                cluster1Record.get().getHAGroupState());
+                HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, cluster1Record.get().getHAGroupState());
 
         // === STEP 2: Verify automatic peer reaction to store-and-forward ===
         // Cluster2 (standby) should automatically move from STANDBY to DEGRADED_STANDBY
@@ -845,23 +838,19 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
         assertEquals("Cluster2 should automatically transition to DEGRADED_STANDBY",
                 HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, cluster2Record.get().getHAGroupState());
-        assertNotEquals(0L, (long) cluster1Record.get().getLastSyncStateTimeInMs());
-        assertEquals(cluster2Record.get().getLastSyncStateTimeInMs(),
-                cluster1Record.get().getLastSyncStateTimeInMs());
 
         // === STEP 3: Return to sync mode ===
         // Move cluster1 back from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC
         // Wait for the required time before transitioning back to sync
         Thread.sleep(20 * 1000);
-        assertEquals(0L, cluster1HAManager.setHAGroupStatusToSync(haGroupName));
+        cluster1HAManager.setHAGroupStatusToSync(haGroupName);
         Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
         // Verify cluster1 is back in sync state
         cluster1Record = cluster1HAManager.getHAGroupStoreRecord(haGroupName);
         assertTrue("Cluster1 record should be present", cluster1Record.isPresent());
         assertEquals("Cluster1 should be back in ACTIVE_IN_SYNC state",
-                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
-                cluster1Record.get().getHAGroupState());
+                HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, cluster1Record.get().getHAGroupState());
 
         // === STEP 4: Verify automatic peer recovery ===
         // Cluster2 should automatically move from DEGRADED_STANDBY back to STANDBY
@@ -872,8 +861,5 @@ public class HAGroupStoreManagerIT extends BaseTest {
         assertTrue("Cluster2 record should be present", cluster2Record.isPresent());
         assertEquals("Cluster2 should automatically transition back to STANDBY",
                 HAGroupStoreRecord.HAGroupState.STANDBY, cluster2Record.get().getHAGroupState());
-        assertNotEquals(0L, (long) cluster1Record.get().getLastSyncStateTimeInMs());
-        assertEquals(cluster2Record.get().getLastSyncStateTimeInMs(),
-                cluster1Record.get().getLastSyncStateTimeInMs());
     }
 }

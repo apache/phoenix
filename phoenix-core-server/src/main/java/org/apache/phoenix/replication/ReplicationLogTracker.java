@@ -70,12 +70,12 @@ public class ReplicationLogTracker {
     protected final String haGroupName;
     protected MetricsReplicationLogTracker metrics;
 
-    public ReplicationLogTracker(final Configuration conf, final String haGroupName,
+    public ReplicationLogTracker(final Configuration conf, final String haGroupName, final FileSystem fileSystem,
         final ReplicationShardDirectoryManager replicationShardDirectoryManager,
         final MetricsReplicationLogTracker metrics) {
         this.conf = conf;
         this.haGroupName = haGroupName;
-        this.fileSystem = replicationShardDirectoryManager.getFileSystem();
+        this.fileSystem = fileSystem;
         this.replicationShardDirectoryManager = replicationShardDirectoryManager;
         this.metrics = metrics;
     }
@@ -98,9 +98,8 @@ public class ReplicationLogTracker {
      * exist.
      */
     public void init() throws IOException {
-        this.inProgressDirPath = new Path(
-                getReplicationShardDirectoryManager().getRootDirectoryPath().getParent(),
-                getInProgressLogSubDirectoryName());
+        this.inProgressDirPath = new Path(getReplicationShardDirectoryManager().getRootDirectoryPath().getParent(),
+            getInProgressLogSubDirectoryName());
         createDirectoryIfNotExists(inProgressDirPath);
     }
 
@@ -117,7 +116,7 @@ public class ReplicationLogTracker {
      * @return List of valid log file paths that belong to the specified replication round
      * @throws IOException if there's an error accessing the file system
      */
-    public List<Path> getNewFilesForRound(ReplicationRound replicationRound) throws IOException {
+    protected List<Path> getNewFilesForRound(ReplicationRound replicationRound) throws IOException {
         Path roundDirectory = replicationShardDirectoryManager.getShardDirectory(replicationRound);
         LOG.info("Getting new files for round {} from shard {}", replicationRound, roundDirectory);
         if (!fileSystem.exists(roundDirectory)) {
@@ -150,35 +149,6 @@ public class ReplicationLogTracker {
             }
         }
         return filesInRound;
-    }
-
-    /**
-     * Retrieves new replication log files that belong to replication rounds from startRound to
-     * endRound (inclusive). Iterates through all rounds in the range and collects valid log files
-     * from each round's shard directory.
-     *
-     * @param startRound - The starting replication round (inclusive)
-     * @param endRound - The ending replication round (inclusive)
-     * @return List of valid log file paths from startRound to endRound, empty list if
-     *         startRound > endRound
-     * @throws IOException if there's an error accessing the file system
-     */
-    public List<Path> getNewFiles(ReplicationRound startRound, ReplicationRound endRound)
-            throws IOException {
-        List<Path> files = new ArrayList<>();
-        // Early return if startRound is after endRound (invalid range)
-        if (startRound.getStartTime() > endRound.getStartTime()) {
-            return files;
-        }
-        // Iterate through all rounds from startRound to endRound (exclusive of endRound)
-        ReplicationRound firstRound = startRound;
-        while (!firstRound.equals(endRound)) {
-            files.addAll(getNewFilesForRound(firstRound));
-            firstRound = replicationShardDirectoryManager.getNextRound(firstRound);
-        }
-        // Add the files for the endRound (inclusive)
-        files.addAll(getNewFilesForRound(endRound));
-        return files;
     }
 
     /**
