@@ -51,8 +51,9 @@ import static org.junit.Assert.*;
 import static org.junit.Assert.assertTrue;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class HighAvailabilityGroup2IT extends HABaseIT {
+public class HighAvailabilityGroup2IT {
     private static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup2IT.class);
+    private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
 
     /** Client properties to create a connection per test. */
     private Properties clientProperties;

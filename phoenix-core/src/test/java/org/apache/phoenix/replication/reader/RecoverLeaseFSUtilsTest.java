@@ -30,21 +30,18 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.CancelableProgressable;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hdfs.DistributedFileSystem;
-import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Test;
-import org.junit.experimental.categories.Category;
 import org.junit.rules.TemporaryFolder;
 import org.mockito.Mockito;
 
 /**
  * Test our recoverLease loop against mocked up filesystem.
  */
-@Category(NeedsOwnMiniClusterTest.class)
-public class RecoverLeaseFSUtilsTestIT extends ParallelStatsDisabledIT {
+public class RecoverLeaseFSUtilsTest extends ParallelStatsDisabledIT {
 
     @ClassRule
     public static TemporaryFolder testFolder = new TemporaryFolder();
