@@ -43,11 +43,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class ParallelPhoenixConnectionFallbackIT {
+public class ParallelPhoenixConnectionFallbackIT extends HABaseIT {
 
     private static final Logger LOG =
             LoggerFactory.getLogger(ParallelPhoenixConnectionFallbackIT.class);
-    private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
     private static final Properties PROPERTIES = new Properties();
 
     private static String jdbcUrl;

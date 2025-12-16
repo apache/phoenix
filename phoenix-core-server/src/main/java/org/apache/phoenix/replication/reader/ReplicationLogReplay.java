@@ -107,12 +107,13 @@ public class ReplicationLogReplay {
      * @throws IOException if there's an error during initialization
      */
     protected void init() throws IOException {
+        LOG.info("Initializing ReplicationLogReplay for haGroup: {}", haGroupName);
         initializeFileSystem();
         Path newFilesDirectory = new Path(new Path(rootURI.getPath(), haGroupName), ReplicationLogReplay.IN_DIRECTORY_NAME);
         ReplicationShardDirectoryManager replicationShardDirectoryManager =
-                new ReplicationShardDirectoryManager(conf, newFilesDirectory);
+                new ReplicationShardDirectoryManager(conf, fileSystem, newFilesDirectory);
         ReplicationLogTracker replicationLogReplayFileTracker = new ReplicationLogTracker(
-            conf, haGroupName, fileSystem, replicationShardDirectoryManager,
+            conf, haGroupName, replicationShardDirectoryManager,
             new MetricsReplicationLogTrackerReplayImpl(haGroupName));
         replicationLogReplayFileTracker.init();
         this.replicationLogDiscoveryReplay =
@@ -121,6 +122,7 @@ public class ReplicationLogReplay {
     }
 
     public void close() {
+        LOG.info("Closing ReplicationLogReplay for haGroup: {}", haGroupName);
         replicationLogDiscoveryReplay.getReplicationLogFileTracker().close();
         replicationLogDiscoveryReplay.close();
         // Remove the instance from cache

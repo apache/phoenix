@@ -18,8 +18,6 @@
 package org.apache.phoenix.replication.reader;
 
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -34,6 +32,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.replication.ReplicationLogDiscovery;
 import org.apache.phoenix.replication.ReplicationLogTracker;
 import org.apache.phoenix.replication.ReplicationRound;
+import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscoveryReplayImpl;
 import org.slf4j.Logger;
@@ -136,23 +135,31 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
 
     @Override
     public void init() throws IOException {
-        HAGroupStateListener degradedListener = (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
-            if (clusterType == ClusterType.LOCAL && HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.equals(toState)) {
+
+        LOG.info("Initializing ReplicationLogDiscoveryReplay for haGroup: {}", haGroupName);
+
+        HAGroupStateListener degradedListener = (groupName, fromState, toState,
+                modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+            if (clusterType == ClusterType.LOCAL
+                    && HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.equals(toState)) {
                 replicationReplayState.set(ReplicationReplayState.DEGRADED);
                 LOG.info("Cluster degraded detected for {}. replicationReplayState={}",
                         haGroupName, ReplicationReplayState.DEGRADED);
             }
         };
 
-        HAGroupStateListener recoveryListener = (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
-            if (clusterType == ClusterType.LOCAL && HAGroupStoreRecord.HAGroupState.STANDBY.equals(toState)) {
+        HAGroupStateListener recoveryListener = (groupName, fromState, toState,
+                modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+            if (clusterType == ClusterType.LOCAL
+                    && HAGroupStoreRecord.HAGroupState.STANDBY.equals(toState)) {
                 replicationReplayState.set(ReplicationReplayState.SYNCED_RECOVERY);
                 LOG.info("Cluster recovered detected for {}. replicationReplayState={}",
                         haGroupName, getReplicationReplayState());
             }
         };
 
-        HAGroupStateListener triggerFailoverListner = (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        HAGroupStateListener triggerFailoverListner = (groupName, fromState, toState,
+                modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
             if (clusterType == ClusterType.LOCAL
                     && HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(toState)) {
                 failoverPending.set(true);
@@ -162,7 +169,8 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
             }
         };
 
-        HAGroupStateListener abortFailoverListner = (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        HAGroupStateListener abortFailoverListner = (groupName, fromState, toState,
+                modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
             if (clusterType == ClusterType.LOCAL
                     && HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY.equals(toState)) {
                 failoverPending.set(false);
@@ -223,8 +231,12 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
      */
     @Override
     protected void initializeLastRoundProcessed() throws IOException {
+        LOG.info("Initializing last round processed for haGroup: {}", haGroupName);
         HAGroupStoreRecord haGroupStoreRecord = getHAGroupRecord();
-        if (HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.equals(haGroupStoreRecord.getHAGroupState())) {
+        LOG.info("Found HA Group state during initialization as {} for haGroup: {}",
+                haGroupStoreRecord.getHAGroupState(), haGroupName);
+        if (HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY
+                .equals(haGroupStoreRecord.getHAGroupState())) {
             replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED,
                     ReplicationReplayState.DEGRADED);
             long minimumTimestampFromFiles = EnvironmentEdgeManager.currentTime();
@@ -298,6 +310,8 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
         LOG.info("Starting replay with lastRoundProcessed={}, lastRoundInSync={}",
                 lastRoundProcessed, lastRoundInSync);
         Optional<ReplicationRound> optionalNextRound = getFirstRoundToProcess();
+        LOG.info("Found first round to process as {} for haGroup: {}",
+                optionalNextRound, haGroupName);
         while (optionalNextRound.isPresent()) {
             ReplicationRound replicationRound = optionalNextRound.get();
             try {
@@ -314,9 +328,14 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
             switch (currentState) {
             case SYNCED_RECOVERY:
                 // Rewind to last in-sync round
-                LOG.info("SYNCED_RECOVERY detected, rewinding to lastRoundInSync={}",
+                LOG.info("SYNCED_RECOVERY detected, rewinding with lastRoundInSync={}",
                         lastRoundInSync);
-                setLastRoundProcessed(lastRoundInSync);
+                Optional<ReplicationRound> firstRoundToProcess = getFirstRoundToProcess();
+                LOG.info("Calculated first round to process after SYNCED_RECOVERY as"
+                        + "{}", firstRoundToProcess);
+                firstRoundToProcess.ifPresent(round -> setLastRoundProcessed(
+                        replicationLogTracker.getReplicationShardDirectoryManager()
+                                .getPreviousRound(round)));
                 // Only reset to NORMAL if state hasn't been flipped to DEGRADED
                 replicationReplayState.compareAndSet(ReplicationReplayState.SYNCED_RECOVERY,
                         ReplicationReplayState.SYNC);
@@ -348,17 +367,10 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
         if (!optionalNextRound.isPresent() && shouldTriggerFailover()) {
             LOG.info("No more rounds to process, lastRoundInSync={}, lastRoundProcessed={}. "
                             + "Failover is triggered & in progress directory is empty. "
-                            + "Marking cluster state as {}",
+                            + "Attempting to mark cluster state as {}",
                     lastRoundInSync, lastRoundProcessed,
                     HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
-            try {
-                triggerFailover();
-                LOG.info("Successfully updated the cluster state");
-                failoverPending.set(false);
-            } catch (InvalidClusterRoleTransitionException exception) {
-                LOG.warn("Failed to update the cluster state.", exception);
-                failoverPending.set(false);
-            }
+            triggerFailover();
         }
     }
 
@@ -372,8 +384,15 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
      * @return Optional containing the first round to process, or empty if not enough time
      *         has passed
      */
-    private Optional<ReplicationRound> getFirstRoundToProcess() {
-        long lastRoundEndTimestamp = getLastRoundInSync().getEndTime();
+    private Optional<ReplicationRound> getFirstRoundToProcess() throws IOException {
+        ReplicationRound lastRoundInSync = getLastRoundInSync();
+        long lastRoundEndTimestamp = lastRoundInSync.getEndTime();
+        if (lastRoundInSync.getStartTime() == 0) {
+            Optional<Long> optionalMinimumNewFilesTimestamp = getMinTimestampFromNewFiles();
+            lastRoundEndTimestamp = replicationLogTracker.getReplicationShardDirectoryManager()
+                    .getNearestRoundStartTimestamp(optionalMinimumNewFilesTimestamp
+                            .orElseGet(EnvironmentEdgeManager::currentTime));
+        }
         long currentTime = EnvironmentEdgeManager.currentTime();
         if (currentTime - lastRoundEndTimestamp < roundTimeMills + bufferMillis) {
             // nothing more to process
@@ -457,17 +476,71 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
         return optionalHAGroupStateRecord.get();
     }
 
+    /**
+     * Determines whether failover should be triggered based on completion criteria.
+     *
+     * Failover is safe to trigger when all of the following conditions are met:
+     * 1. A failover has been requested (failoverPending is true)
+     * 2. No files are currently in the in-progress directory
+     * 3. No new files exist from the next round to process up to the current timestamp round
+     *
+     * The third condition checks for new files in the range from nextRoundToProcess (derived from
+     * getLastRoundProcessed()) to currentTimestampRound (derived from current time). This ensures
+     * all replication logs up to the current time have been processed before transitioning
+     * the cluster
+     * from STANDBY to ACTIVE state.
+     *
+     * @return true if all conditions are met and failover should be triggered, false otherwise
+     * @throws IOException if there's an error checking file status
+     */
     protected boolean shouldTriggerFailover() throws IOException {
-        return failoverPending.get() && lastRoundInSync.equals(lastRoundProcessed)
-                && replicationLogTracker.getInProgressFiles().isEmpty()
-                ;
-        // TODO: Check for in files of lastRoundProcessed, lastRoundProcessed + roundTime as well - because there can be new files for upcoming round
+        LOG.debug("Checking if failover should be triggered. failoverPending={}", failoverPending);
+        // Check if failover has been requested
+        if (!failoverPending.get()) {
+            LOG.debug("Failover not triggered. failoverPending is false.");
+            return false;
+        }
+        // Check if in-progress directory is empty
+        boolean isInProgressDirectoryEmpty = replicationLogTracker.getInProgressFiles().isEmpty();
+        if (!isInProgressDirectoryEmpty) {
+            LOG.debug("Failover not triggered. In progress directory is not empty.");
+            return false;
+        }
+        // Check if there are any new files from next round to current timestamp round
+        ReplicationShardDirectoryManager replicationShardDirectoryManager =
+                replicationLogTracker.getReplicationShardDirectoryManager();
+        ReplicationRound nextRoundToProcess =
+                replicationShardDirectoryManager.getNextRound(getLastRoundProcessed());
+        ReplicationRound currentTimestampRound =
+                replicationShardDirectoryManager.getReplicationRoundFromStartTime(
+                        EnvironmentEdgeManager.currentTime());
+        LOG.debug("Checking the new files from next round {} to current timestamp round {}.",
+                nextRoundToProcess, currentTimestampRound);
+        boolean isInDirectoryEmpty = replicationLogTracker.getNewFiles(nextRoundToProcess,
+                currentTimestampRound).isEmpty();
+
+        if (!isInDirectoryEmpty) {
+            LOG.debug("Failover not triggered. New files exist from next round to current "
+                    + "timestamp round.");
+            return false;
+        }
+
+        LOG.info("Failover can be triggered.");
+        return true;
     }
 
-    protected void triggerFailover() throws IOException, InvalidClusterRoleTransitionException {
-        // TODO: Update cluster state to ACTIVE_IN_SYNC within try block
-        // (once API is supported in HA Store)
-        // Throw any exception back to caller.
+    protected void triggerFailover() {
+        try {
+            HAGroupStoreManager.getInstance(conf).setHAGroupStatusToSync(haGroupName);
+            failoverPending.set(false);
+        } catch (InvalidClusterRoleTransitionException invalidClusterRoleTransitionException) {
+            LOG.warn("Failed to update the cluster state due to"
+                    + "InvalidClusterRoleTransitionException. Setting failoverPending"
+                    + "to false.", invalidClusterRoleTransitionException);
+            failoverPending.set(false);
+        } catch (Exception exception) {
+            LOG.error("Failed to update the cluster state.", exception);
+        }
     }
 
     public enum ReplicationReplayState {

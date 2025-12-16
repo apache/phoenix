@@ -125,6 +125,7 @@ import static org.apache.phoenix.query.QueryServices.PHOENIX_TTL_SERVER_SIDE_MAS
 import static org.apache.phoenix.query.QueryServices.MAX_IN_LIST_SKIP_SCAN_SIZE;
 import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_SYNC_INTERVAL_SECONDS;
+import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_CLIENT_PREWARM_ENABLED;
 
 import java.util.Map.Entry;
 
@@ -465,6 +466,7 @@ public class QueryServicesOptions {
 
     public static final Boolean DEFAULT_CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED = false;
     public static final Boolean DEFAULT_HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED = true;
+    public static final Boolean DEFAULT_HA_GROUP_STORE_CLIENT_PREWARM_ENABLED = true;
     public static final Boolean DEFAULT_CQSI_THREAD_POOL_ENABLED = false;
     public static final int DEFAULT_CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS = 60;
     public static final int DEFAULT_CQSI_THREAD_POOL_CORE_POOL_SIZE = 25;
@@ -597,7 +599,9 @@ public class QueryServicesOptions {
             .setIfUnset(CQSI_THREAD_POOL_METRICS_ENABLED, DEFAULT_CQSI_THREAD_POOL_METRICS_ENABLED)
             .setIfUnset(REPLICATION_LOG_ROTATION_TIME_MS_KEY, DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS)
             .setIfUnset(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS,
-                    DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS);
+                    DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS)
+            .setIfUnset(HA_GROUP_STORE_CLIENT_PREWARM_ENABLED,
+                    DEFAULT_HA_GROUP_STORE_CLIENT_PREWARM_ENABLED);
 
         // HBase sets this to 1, so we reset it to something more appropriate.
         // Hopefully HBase will change this, because we can't know if a user set

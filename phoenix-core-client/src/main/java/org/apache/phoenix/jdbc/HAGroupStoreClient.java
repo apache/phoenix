@@ -57,7 +57,6 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.zookeeper.data.Stat;
-import org.joda.time.DateTime;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,8 +95,7 @@ public class HAGroupStoreClient implements Closeable {
             = 30000L;
     // Multiplier for ZK session timeout to account for time it will take for HMaster to abort
     // the region server in case ZK connection is lost from the region server.
-    @VisibleForTesting
-    static final double ZK_SESSION_TIMEOUT_MULTIPLIER = 1.1;
+    public static final double ZK_SESSION_TIMEOUT_MULTIPLIER = 1.1;
     // Maximum jitter in seconds for sync job start time (10 seconds)
     private static final long SYNC_JOB_MAX_JITTER_SECONDS = 10;
     private PhoenixHAAdmin phoenixHaAdmin;
@@ -298,7 +296,8 @@ public class HAGroupStoreClient implements Closeable {
 
     /**
      * Set the HA group status for the specified HA group name.
-     * Checks if the status is needed to be updated based on logic in isUpdateNeeded function.
+     * Checks if the status is needed to be updated based on logic in
+     * validateTransitionAndGetWaitTime function.
      *
      * @param haGroupState the HA group state to set
      * @throws IOException if the client is not healthy or the operation fails
@@ -306,7 +305,29 @@ public class HAGroupStoreClient implements Closeable {
      * @throws InvalidClusterRoleTransitionException when transition is not valid
      * @throws SQLException
      */
-    public void setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState haGroupState)
+    public long setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState haGroupState)
+            throws IOException,
+            InvalidClusterRoleTransitionException,
+            SQLException, StaleHAGroupStoreRecordVersionException {
+        return setHAGroupStatusIfNeeded(haGroupState, null);
+    }
+
+    /**
+     * Set the HA group status for the specified HA group name.
+     * Checks if the status is needed to be updated based on logic in
+     * validateTransitionAndGetWaitTime function.
+     *
+     * @param haGroupState the HA group state to set
+     * @param lastSyncTimeInMsNullable the last sync time in milliseconds, can be null if not known.
+     * @throws IOException if the client is not healthy or the operation fails
+     * @throws StaleHAGroupStoreRecordVersionException if the version is stale
+     * @throws InvalidClusterRoleTransitionException when transition is not valid
+     * @return the wait time in milliseconds for state transition,
+     *         if 0 then the state transition is successful.
+     * @throws SQLException
+     */
+    public long setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState haGroupState,
+                                         Long lastSyncTimeInMsNullable)
             throws IOException,
             InvalidClusterRoleTransitionException,
             SQLException, StaleHAGroupStoreRecordVersionException {
@@ -323,61 +344,69 @@ public class HAGroupStoreClient implements Closeable {
                     + "cannot update HAGroupStoreRecord, the record should be initialized "
                     + "in System Table first" + haGroupName);
         }
-        if (isUpdateNeeded(currentHAGroupStoreRecord.getHAGroupState(),
-                currentHAGroupStoreRecordStat.getMtime(), haGroupState)) {
-                // We maintain last sync time as the last time cluster was in sync state.
-                // If state changes from ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC, record that time
-                // Once state changes back to ACTIVE_IN_SYNC or the role is
-                // NOT ACTIVE or ACTIVE_TO_STANDBY
-                // set the time to null to mark that we are current(or we don't have any reader).
-                Long lastSyncTimeInMs = currentHAGroupStoreRecord
-                        .getLastSyncStateTimeInMs();
-                ClusterRole clusterRole = haGroupState.getClusterRole();
-                if (currentHAGroupStoreRecord.getHAGroupState()
-                        == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
-                        && haGroupState == HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC) {
-                    // We record the last round timestamp by subtracting the rotationTime and then 
-                    // taking the beginning of last round (floor) by first integer division and then multiplying again.
-                    lastSyncTimeInMs = ((System.currentTimeMillis() - rotationTimeMs)/rotationTimeMs) * (rotationTimeMs);
-                }
-                HAGroupStoreRecord newHAGroupStoreRecord = new HAGroupStoreRecord(
-                        currentHAGroupStoreRecord.getProtocolVersion(),
-                        currentHAGroupStoreRecord.getHaGroupName(),
-                        haGroupState,
-                        lastSyncTimeInMs,
-                        currentHAGroupStoreRecord.getPolicy(),
-                        currentHAGroupStoreRecord.getPeerZKUrl(),
-                        currentHAGroupStoreRecord.getClusterUrl(),
-                        currentHAGroupStoreRecord.getPeerClusterUrl(),
-                        currentHAGroupStoreRecord.getAdminCRRVersion()
-                );
-                phoenixHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName,
-                        newHAGroupStoreRecord, currentHAGroupStoreRecordStat.getVersion());
-                // If cluster role is changing, if so, we update,
-                // the system table on best effort basis.
-                // We also have a periodic job which syncs the ZK
-                // state with System Table periodically.
-                if (currentHAGroupStoreRecord.getClusterRole() != clusterRole) {
-                    HAGroupStoreRecord peerZkRecord = getHAGroupStoreRecordFromPeer();
-                    ClusterRoleRecord.ClusterRole peerClusterRole = peerZkRecord != null
-                            ? peerZkRecord.getClusterRole()
-                            : ClusterRoleRecord.ClusterRole.UNKNOWN;
-                    SystemTableHAGroupRecord systemTableRecord = new SystemTableHAGroupRecord(
-                            HighAvailabilityPolicy.valueOf(newHAGroupStoreRecord.getPolicy()),
-                            clusterRole,
-                            peerClusterRole,
-                            newHAGroupStoreRecord.getClusterUrl(),
-                            newHAGroupStoreRecord.getPeerClusterUrl(),
-                            this.zkUrl,
-                            newHAGroupStoreRecord.getPeerZKUrl(),
-                            newHAGroupStoreRecord.getAdminCRRVersion()
-                    );
-                    updateSystemTableHAGroupRecordSilently(haGroupName, systemTableRecord);
-                }
-        } else {
+        long stateTransitionWaitTime
+                = validateTransitionAndGetWaitTime(currentHAGroupStoreRecord.getHAGroupState(),
+                currentHAGroupStoreRecordStat.getMtime(), haGroupState);
+        if (stateTransitionWaitTime > 0) {
             LOGGER.info("Not updating HAGroupStoreRecord for HA group {} with state {}",
                     haGroupName, haGroupState);
+            return stateTransitionWaitTime;
         }
+        // We maintain last sync time as the last time cluster was in sync state.
+        // If state changes from ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC, record that time
+        // Once state changes back to ACTIVE_IN_SYNC or the role is
+        // NOT ACTIVE or ACTIVE_TO_STANDBY
+        // set the time to null to mark that we are current(or we don't have any reader).
+        long lastSyncTimeInMs
+                = lastSyncTimeInMsNullable != null
+                ? lastSyncTimeInMsNullable
+                : currentHAGroupStoreRecord.getLastSyncStateTimeInMs();
+        ClusterRole clusterRole = haGroupState.getClusterRole();
+        if (currentHAGroupStoreRecord.getHAGroupState()
+                == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
+                && haGroupState == HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC) {
+            // We record the last round timestamp by subtracting the rotationTime and then
+            // taking the beginning of last round (floor) by first integer
+            // division and then multiplying again.
+            lastSyncTimeInMs
+                    = ((System.currentTimeMillis() - rotationTimeMs) / rotationTimeMs)
+                    * rotationTimeMs;
+        }
+        HAGroupStoreRecord newHAGroupStoreRecord = new HAGroupStoreRecord(
+                currentHAGroupStoreRecord.getProtocolVersion(),
+                currentHAGroupStoreRecord.getHaGroupName(),
+                haGroupState,
+                lastSyncTimeInMs,
+                currentHAGroupStoreRecord.getPolicy(),
+                currentHAGroupStoreRecord.getPeerZKUrl(),
+                currentHAGroupStoreRecord.getClusterUrl(),
+                currentHAGroupStoreRecord.getPeerClusterUrl(),
+                currentHAGroupStoreRecord.getAdminCRRVersion()
+        );
+        phoenixHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName,
+                newHAGroupStoreRecord, currentHAGroupStoreRecordStat.getVersion());
+        // If cluster role is changing, if so, we update,
+        // the system table on best effort basis.
+        // We also have a periodic job which syncs the ZK
+        // state with System Table periodically.
+        if (currentHAGroupStoreRecord.getClusterRole() != clusterRole) {
+            HAGroupStoreRecord peerZkRecord = getHAGroupStoreRecordFromPeer();
+            ClusterRoleRecord.ClusterRole peerClusterRole = peerZkRecord != null
+                    ? peerZkRecord.getClusterRole()
+                    : ClusterRoleRecord.ClusterRole.UNKNOWN;
+            SystemTableHAGroupRecord systemTableRecord = new SystemTableHAGroupRecord(
+                    HighAvailabilityPolicy.valueOf(newHAGroupStoreRecord.getPolicy()),
+                    clusterRole,
+                    peerClusterRole,
+                    newHAGroupStoreRecord.getClusterUrl(),
+                    newHAGroupStoreRecord.getPeerClusterUrl(),
+                    this.zkUrl,
+                    newHAGroupStoreRecord.getPeerZKUrl(),
+                    newHAGroupStoreRecord.getAdminCRRVersion()
+            );
+            updateSystemTableHAGroupRecordSilently(haGroupName, systemTableRecord);
+        }
+        return 0L;
     }
 
     /**
@@ -1029,12 +1058,14 @@ public class HAGroupStoreClient implements Closeable {
      * @param currentHAGroupStoreRecordMtime the last modified time of the current
      *                                      HAGroupStoreRecord
      * @param newHAGroupState the cluster state to check
-     * @return true if the HAGroupStoreRecord needs to be updated, false otherwise
+     * @return the wait time in milliseconds for state transition,
+     *         if 0 then the state transition is valid.
      * @throws InvalidClusterRoleTransitionException if the cluster role transition is invalid
      */
-    private boolean isUpdateNeeded(HAGroupStoreRecord.HAGroupState currentHAGroupState,
-                                   long currentHAGroupStoreRecordMtime,
-                                   HAGroupStoreRecord.HAGroupState newHAGroupState)
+    private long validateTransitionAndGetWaitTime(
+            HAGroupStoreRecord.HAGroupState currentHAGroupState,
+            long currentHAGroupStoreRecordMtime,
+            HAGroupStoreRecord.HAGroupState newHAGroupState)
             throws InvalidClusterRoleTransitionException {
         long waitTime = 0L;
         if (currentHAGroupState.isTransitionAllowed(newHAGroupState)) {
@@ -1048,7 +1079,9 @@ public class HAGroupStoreClient implements Closeable {
             throw new InvalidClusterRoleTransitionException("Cannot transition from "
                     + currentHAGroupState + " to " + newHAGroupState);
         }
-        return ((System.currentTimeMillis() - currentHAGroupStoreRecordMtime) > waitTime);
+        long remainingTime
+                = currentHAGroupStoreRecordMtime + waitTime - System.currentTimeMillis();
+        return Math.max(0, remainingTime);
     }
 
     // ========== HA Group State Change Subscription Methods ==========
