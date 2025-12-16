@@ -38,8 +38,6 @@ import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscoveryRepl
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
-
 /**
  * State-aware implementation of ReplicationLogDiscovery for HA replication replay on standby
  * clusters.

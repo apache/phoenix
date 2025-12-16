@@ -159,7 +159,7 @@ public class PhoenixHAAdminToolIT extends BaseTest {
             LOG.warn("Error during cleanup", e);
             // Don't fail the test due to cleanup errors
         }
-        
+
         standbyUri = testFolder.getRoot().toURI();
         // Set the required configuration for ReplicationLogReplay
         CLUSTERS.getHBaseCluster2().getConfiguration().set(ReplicationLogReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY,
@@ -566,7 +566,7 @@ public class PhoenixHAAdminToolIT extends BaseTest {
         assertEquals("Wait time should be 0",
                 0,
                 cluster1HAManager.setHAGroupStatusToSync(failoverHaGroupName));
-        
+
         // Start the ReplicationLogReplay
         ReplicationLogReplay replicationLogReplay = ReplicationLogReplay.get(CLUSTERS.getHBaseCluster2().getConfiguration(),
                 failoverHaGroupName);
