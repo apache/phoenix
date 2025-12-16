@@ -22,6 +22,7 @@ import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
+import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.DEFAULT_REPLICATION_ROUND_DURATION_SECONDS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -41,14 +42,17 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.replication.reader.ReplicationLogReplay;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.zookeeper.data.Stat;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -58,6 +62,9 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class HAGroupStoreManagerIT extends BaseTest {
+
+  @ClassRule
+  public static TemporaryFolder testFolder = new TemporaryFolder();
 
   @Rule
   public TestName testName = new TestName();
@@ -95,6 +102,11 @@ public class HAGroupStoreManagerIT extends BaseTest {
     }
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl,
       peerZKUrl, ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+
+    standbyUri = testFolder.getRoot().toURI();
+    // Set the required configuration for ReplicationLogReplay
+    CLUSTERS.getHBaseCluster2().getConfiguration()
+      .set(ReplicationLogReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY, standbyUri.toString());
   }
 
   @Test
@@ -632,19 +644,10 @@ public class HAGroupStoreManagerIT extends BaseTest {
     assertEquals(0L, cluster2HAManager.setReaderToHealthy(haGroupName));
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-    // Simulates action taken by reader to complete the replay and become new ACTIVE
-    HAGroupStateListener listener =
-      (haGroupName1, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
-        try {
-          if (toState == HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE) {
-            assertEquals(0L, cluster2HAManager.setHAGroupStatusToSync(haGroupName1));
-          }
-        } catch (Exception e) {
-          fail("Peer Cluster should be able to move to ACTIVE_IN_SYNC" + e.getMessage());
-        }
-      };
-    cluster2HAManager.subscribeToTargetState(haGroupName,
-      HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, ClusterType.LOCAL, listener);
+    // Start the ReplicationLogReplay
+    ReplicationLogReplay replicationLogReplay =
+      ReplicationLogReplay.get(CLUSTERS.getHBaseCluster2().getConfiguration(), haGroupName);
+    replicationLogReplay.startReplay();
 
     // === INITIAL STATE VERIFICATION ===
     Optional<HAGroupStoreRecord> cluster1Record =
@@ -661,7 +664,8 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
     // === Operator initiates failover on cluster1 (active) ===
     cluster1HAManager.initiateFailoverOnActiveCluster(haGroupName);
-    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+    // Sleep for 2 Replay rounds to complete so that failover happens.
+    Thread.sleep(2 * DEFAULT_REPLICATION_ROUND_DURATION_SECONDS * 1000L);
 
     // === FINAL VERIFICATION ===
     // Verify complete role swap has occurred
