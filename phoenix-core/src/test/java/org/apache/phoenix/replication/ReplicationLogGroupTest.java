@@ -92,7 +92,7 @@ public class ReplicationLogGroupTest {
   public void setUp() throws IOException {
     conf = HBaseConfiguration.create();
     localFs = FileSystem.getLocal(conf);
-    standbyUri = new Path(testFolder.toString()).toUri();
+    standbyUri = new Path(testFolder.getRoot().toString()).toUri();
     serverName = ServerName.valueOf("test", 60010, EnvironmentEdgeManager.currentTimeMillis());
     conf.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
     // Small ring buffer size for testing

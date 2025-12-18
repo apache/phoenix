@@ -455,6 +455,19 @@ public abstract class ReplicationLogGroupWriter {
   }
 
   /**
+   * Close the currentWriter. Needed by tests so that we can close the log file and then read it
+   */
+  protected void closeCurrentWriter() {
+    lock.lock();
+    try {
+      closeWriter(currentWriter);
+      currentWriter = null;
+    } finally {
+      lock.unlock();
+    }
+  }
+
+  /**
    * Check if this ReplicationLogGroup is closed.
    * @return true if closed, false otherwise
    */
