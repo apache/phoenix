@@ -127,6 +127,11 @@
       <artifactId>hbase-mapreduce</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-compression-aircompressor</artifactId>
+      <scope>test</scope>
+    </dependency>
 
     <!-- HBase Adjacent Dependencies -->
     <dependency>
@@ -452,6 +457,7 @@
             <ignoredUnusedDeclaredDependency>org.apache.omid:omid-commit-table</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.omid:omid-transaction-client</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.hbase:hbase-testing-util</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>org.apache.hbase:hbase-compression-aircompressor</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.omid:omid-hbase-client</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.zookeeper:zookeeper-jute</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-api</ignoredUnusedDeclaredDependency>
