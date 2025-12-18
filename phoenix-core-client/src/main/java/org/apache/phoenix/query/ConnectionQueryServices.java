@@ -298,7 +298,14 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     String columnName, String familyName) throws SQLException;
 
   /**
-   * Close all phoenix connections created using this CQS.
+   * Truncate a phoenix table
+   */
+  void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped,
+    boolean preserveSplits) throws SQLException;
+
+  /**
+   * Close all phoenix cphoenix-core-client/src/main/java/org/apache/phoenix/query
+   * /ConnectionQueryServices.javaonnections created using this CQS.
    * @param reasonBuilder exception builder for building reasons why connection is closed.
    */
   default void closeAllConnections(SQLExceptionInfo.Builder reasonBuilder) {

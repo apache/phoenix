@@ -161,6 +161,9 @@ tokens
     REGIONS = 'regions';
     NOVERIFY = 'noverify';
     RETURNING = 'returning';
+    TRUNCATE = 'truncate';
+    PRESERVE='preserve';
+    SPLITS='splits';
 }
 
 
@@ -432,6 +435,7 @@ oneStatement returns [BindableStatement ret]
     |	s=upsert_node
     |   s=delete_node
     |   s=create_table_node
+    |   s=truncate_table_node
     |   s=create_schema_node
     |   s=create_view_node
     |   s=create_index_node
@@ -487,7 +491,21 @@ create_table_node returns [CreateTableStatement ret]
         (COLUMN_QUALIFIER_COUNTER LPAREN cqc=initializiation_list RPAREN)?
         {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount(), im!=null ? true : null, cqc, noverify!=null); }
     ;
-   
+
+// Parse a truncate table statement.
+truncate_table_node returns [TruncateTableStatement ret]
+    :   TRUNCATE TABLE t=from_table_name
+        (
+            // Case 1: Explicitly DROP SPLITS
+            DROP SPLITS
+            { $ret = factory.truncateTable(t, PTableType.TABLE, false); }
+        |
+            // Default Case: PRESERVE SPLITS or Nothing (Both mean preserve=true)
+            (PRESERVE SPLITS)?
+            { $ret = factory.truncateTable(t, PTableType.TABLE, true); }
+        )
+    ;
+
 // Parse a create schema statement.
 create_schema_node returns [CreateSchemaStatement ret]
     :   CREATE SCHEMA (IF NOT ex=EXISTS)? s=identifier
