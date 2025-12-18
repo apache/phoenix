@@ -36,6 +36,13 @@ public class LogFileWriter implements LogFile.Writer {
   private LogFileWriterContext context;
   private LogFileFormatWriter writer;
   private boolean closed = false;
+  /**
+   * A monotonically increasing sequence number that identifies this writer instance, used to detect
+   * log file rotations and ensure proper handling of in-flight operations. Higher layers will get a
+   * new generation number that is higher than any previous generation and store it in the
+   * LogFileWriter via setGeneration().
+   */
+  private long generation;
 
   public LogFileWriter() {
 
@@ -43,6 +50,14 @@ public class LogFileWriter implements LogFile.Writer {
 
   public LogFileWriterContext getContext() {
     return context;
+  }
+
+  public void setGeneration(long generation) {
+    this.generation = generation;
+  }
+
+  public long getGeneration() {
+    return generation;
   }
 
   @Override
@@ -110,7 +125,7 @@ public class LogFileWriter implements LogFile.Writer {
   @Override
   public String toString() {
     return "LogFileWriter [writerContext=" + context + ", formatWriter=" + writer + ", closed="
-      + closed + "]";
+      + closed + ", generation=" + generation + "]";
   }
 
 }
