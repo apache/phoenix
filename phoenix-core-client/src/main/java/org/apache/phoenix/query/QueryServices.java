@@ -638,6 +638,8 @@ public interface QueryServices extends SQLCloseable {
 
   String USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP = "phoenix.bloomfilter.multikey.pointlookup";
 
+  String SYNCHRONOUS_REPLICATION_ENABLED = "phoenix.synchronous.replication.enabled";
+
   /**
    * Get executor service used for parallel scans
    */

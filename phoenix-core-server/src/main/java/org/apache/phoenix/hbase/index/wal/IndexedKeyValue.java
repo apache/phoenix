@@ -52,6 +52,11 @@ public class IndexedKeyValue extends KeyValue {
 
   public static IndexedKeyValue newIndexedKeyValue(byte[] bs, Mutation m) {
     Cell indexWALCell = adaptFirstCellFromMutation(m);
+    return new IndexedKeyValue(indexWALCell, new ImmutableBytesPtr(bs), m);
+  }
+
+  public static IndexedKeyValue newIndexedKeyValue(ImmutableBytesPtr bs, Mutation m) {
+    Cell indexWALCell = adaptFirstCellFromMutation(m);
     return new IndexedKeyValue(indexWALCell, bs, m);
   }
 
@@ -81,9 +86,9 @@ public class IndexedKeyValue extends KeyValue {
   public IndexedKeyValue() {
   }
 
-  private IndexedKeyValue(Cell c, byte[] bs, Mutation mutation) {
+  private IndexedKeyValue(Cell c, ImmutableBytesPtr bs, Mutation mutation) {
     super(c);
-    this.indexTableName = new ImmutableBytesPtr(bs);
+    this.indexTableName = bs;
     this.mutation = mutation;
     this.hashCode = calcHashCode(indexTableName, mutation);
   }

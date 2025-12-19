@@ -92,6 +92,10 @@ public interface MetricsIndexerSource extends BaseSource {
   String POST_INDEX_UPDATE_FAILURE_DESC =
     "The number of failures of index updates post data updates";
 
+  String REPLICATION_SYNC_TIME = "replicationSyncTime";
+  String REPLICATION_SYNC_TIME_DESC =
+    "Histogram for the time in milliseconds to synchronously replicate a batch of mutations";
+
   /**
    * Updates the index preparation time histogram (preBatchMutate).
    * @param dataTableName Physical data table name
@@ -223,4 +227,11 @@ public interface MetricsIndexerSource extends BaseSource {
    * @param dataTableName Physical data table name
    */
   void incrementPostIndexUpdateFailures(String dataTableName);
+
+  /**
+   * Updates the replication sync time histogram.
+   * @param dataTableName Physical data table name
+   * @param t             time taken in milliseconds
+   */
+  void updateReplicationSyncTime(String dataTableName, long t);
 }
