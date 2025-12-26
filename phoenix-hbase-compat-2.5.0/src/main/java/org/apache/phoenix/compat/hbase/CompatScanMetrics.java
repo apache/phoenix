@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compat.hbase;
 
+import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import java.util.Map;
 
 public class CompatScanMetrics {
@@ -33,7 +34,15 @@ public class CompatScanMetrics {
     // Not to be instantiated
   }
 
+  public static boolean supportsFineGrainedReadMetrics() {
+    return false;
+  }
+
   public static Long getFsReadTime(Map<String, Long> scanMetrics) {
+    return 0L;
+  }
+
+  public static Long getFsReadTime(ScanMetrics scanMetrics) {
     return 0L;
   }
 
@@ -41,7 +50,15 @@ public class CompatScanMetrics {
     return 0L;
   }
 
+  public static Long getBytesReadFromFs(ScanMetrics scanMetrics) {
+    return 0L;
+  }
+
   public static Long getBytesReadFromMemstore(Map<String, Long> scanMetrics) {
+    return 0L;
+  }
+
+  public static Long getBytesReadFromMemstore(ScanMetrics scanMetrics) {
     return 0L;
   }
 
@@ -49,7 +66,15 @@ public class CompatScanMetrics {
     return 0L;
   }
 
+  public static Long getBytesReadFromBlockCache(ScanMetrics scanMetrics) {
+    return 0L;
+  }
+
   public static Long getBlockReadOpsCount(Map<String, Long> scanMetrics) {
+    return 0L;
+  }
+
+  public static Long getBlockReadOpsCount(ScanMetrics scanMetrics) {
     return 0L;
   }
 

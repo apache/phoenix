@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.pherf.configuration;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import javax.xml.bind.annotation.XmlElement;
@@ -31,7 +32,7 @@ public class Column {
   private long minValue, maxValue;
   private int nullChance;
   private boolean userDefined;
-  private List<DataValue> dataValues;
+  private List<DataValue> dataValues = new ArrayList<>();
   private DataTypeMapping type;
   private boolean useCurrentDate;
 

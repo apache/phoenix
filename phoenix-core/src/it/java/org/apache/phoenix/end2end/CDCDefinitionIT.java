@@ -296,6 +296,22 @@ public class CDCDefinitionIT extends CDCBaseIT {
   }
 
   @Test
+  public void testDropCDCIfExists() throws SQLException {
+    Properties props = new Properties();
+    Connection conn = DriverManager.getConnection(getUrl(), props);
+    String tableName = generateUniqueName();
+    String schemaName = null;
+    String viewName = forView ? generateUniqueName() : null;
+    String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
+    if (forView) {
+      fullTableName = SchemaUtil.getTableName(schemaName, viewName);
+    }
+    String cdcName = generateUniqueName();
+    String drop_cdc_sql = "DROP CDC IF EXISTS " + cdcName + " ON " + fullTableName;
+    conn.createStatement().execute(drop_cdc_sql);
+  }
+
+  @Test
   public void testDropCDC() throws SQLException {
     Properties props = new Properties();
     Connection conn = DriverManager.getConnection(getUrl(), props);

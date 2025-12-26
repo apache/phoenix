@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.pherf.configuration;
 
+import java.util.ArrayList;
 import java.util.List;
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlType;
@@ -25,7 +26,7 @@ import javax.xml.bind.annotation.XmlType;
 public class UserDefined {
   String id;
   String clazzName;
-  List<String> args;
+  List<String> args = new ArrayList<>();
 
   @XmlAttribute
   public String getId() {

@@ -18,6 +18,7 @@
 package org.apache.phoenix.pherf.configuration;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import javax.xml.bind.annotation.XmlAttribute;
@@ -33,7 +34,7 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 public class Scenario {
   private String tableName;
   private int rowCount;
-  private Map<String, String> phoenixProperties;
+  private Map<String, String> phoenixProperties = new HashMap<>();
   private WriteParams writeParams = null;
   private DataOverride dataOverride;
   private List<QuerySet> querySet = new ArrayList<>();
@@ -45,8 +46,8 @@ public class Scenario {
   private String name;
   private String generatorName;
   private String tenantId;
-  private List<Ddl> preScenarioDdls;
-  private List<Ddl> postScenarioDdls;
+  private List<Ddl> preScenarioDdls = new ArrayList<>();
+  private List<Ddl> postScenarioDdls = new ArrayList<>();
 
   public Scenario() {
   }

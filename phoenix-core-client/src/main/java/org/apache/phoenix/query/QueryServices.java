@@ -115,6 +115,7 @@ public interface QueryServices extends SQLCloseable {
   public static final String IMMUTABLE_ROWS_ATTRIB = "phoenix.mutate.immutableRows";
   public static final String INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB =
     "phoenix.index.mutableBatchSizeThreshold";
+  public static final String INDEX_USE_SERVER_METADATA_ATTRIB = "phoenix.index.useServerMetadata";
   public static final String DROP_METADATA_ATTRIB = "phoenix.schema.dropMetaData";
   public static final String GROUPBY_SPILLABLE_ATTRIB = "phoenix.groupby.spillable";
   public static final String GROUPBY_SPILL_FILES_ATTRIB = "phoenix.groupby.spillFiles";
