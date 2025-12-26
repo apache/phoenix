@@ -86,8 +86,8 @@ public class PhoenixHAAdminToolTest {
 
   @Before
   public void setup() throws Exception {
-    when(mockHighAvailibilityCuratorProvider.getCurator(Mockito.anyString(), any(Properties.class)))
-      .thenReturn(curator);
+    when(mockHighAvailibilityCuratorProvider.getCurator(anyString(), any(Properties.class),
+      anyString())).thenReturn(curator);
     haGroupName = testName.getMethodName();
     recordV1 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER, ZK1,
       ClusterRole.ACTIVE, ZK2, ClusterRole.STANDBY, 1);
@@ -185,7 +185,7 @@ public class PhoenixHAAdminToolTest {
     saveRecordV1ToZk();
     ClusterRoleRecord recordV2 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
       ZK1, ClusterRole.STANDBY, ZK2, ClusterRole.STANDBY, 2); // higher version than recordV1 so
-                                                              // update should be tried
+    // update should be tried
     try {
       result = admin.createOrUpdateDataOnZookeeper(recordV2);
     } catch (Exception e) {

@@ -185,6 +185,7 @@ public class PhoenixConnection
   private LogLevel auditLogLevel;
   private Double logSamplingRate;
   private String sourceOfOperation;
+  private String haGroupName;
   private volatile SQLException reasonForClose;
   private static final String[] CONNECTION_PROPERTIES;
 
@@ -1164,6 +1165,18 @@ public class PhoenixConnection
 
   public void setConsistency(Consistency val) {
     this.consistency = val;
+  }
+
+  /**
+   * This is temporary method to set HAGroupName for the connection. This will be removed once we
+   * have a proper way to set HAGroupName in the connection.
+   */
+  public void setHAGroupName(String haGroupName) {
+    this.haGroupName = haGroupName;
+  }
+
+  public String getHAGroupName() {
+    return this.haGroupName;
   }
 
   @Override

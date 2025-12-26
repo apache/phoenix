@@ -17,19 +17,26 @@
  */
 package org.apache.phoenix.exception;
 
-import java.io.IOException;
-
 /**
- * Exception thrown when CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is set and the current cluster
- * role is ACTIVE_TO_STANDBY.
+ * Exception thrown when attempting to update HAGroupStoreRecord with a stale ZK stat version,
+ * indicating that the record has been modified by another process.
  */
-public class MutationBlockedIOException extends IOException {
+public class StaleHAGroupStoreRecordVersionException extends Exception {
   private static final long serialVersionUID = 1L;
 
   /**
    * @param msg reason for the exception
    */
-  public MutationBlockedIOException(String msg) {
+  public StaleHAGroupStoreRecordVersionException(String msg) {
     super(msg);
   }
+
+  /**
+   * @param msg   reason for the exception
+   * @param cause the underlying cause
+   */
+  public StaleHAGroupStoreRecordVersionException(String msg, Throwable cause) {
+    super(msg, cause);
+  }
+
 }

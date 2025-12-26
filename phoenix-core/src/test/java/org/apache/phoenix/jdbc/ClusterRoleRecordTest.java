@@ -65,8 +65,8 @@ public class ClusterRoleRecordTest {
   public static Collection<Object> data() {
     return Arrays.asList(new Object[] { ClusterRoleRecord.RegistryType.ZK,
       ClusterRoleRecord.RegistryType.MASTER, ClusterRoleRecord.RegistryType.RPC, null // For
-                                                                                      // Backward
-                                                                                      // Compatibility
+        // Backward
+        // Compatibility
     });
   }
 
@@ -249,6 +249,15 @@ public class ClusterRoleRecordTest {
     LOG.info("toString(): {}", record.toString());
     LOG.info("toPrettyString:\n{}", record.toPrettyString());
     assertNotEquals(record.toString(), record.toPrettyString());
+  }
+
+  @Test
+  public void testClusterRoleFromInvalidBytes() {
+    ClusterRole role = ClusterRole.from(new byte[0]);
+    assertEquals(ClusterRole.UNKNOWN, role);
+
+    role = ClusterRole.from("random".getBytes());
+    assertEquals(ClusterRole.UNKNOWN, role);
   }
 
   // Private Helper Methods

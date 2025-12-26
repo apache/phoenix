@@ -17,19 +17,25 @@
  */
 package org.apache.phoenix.exception;
 
-import java.io.IOException;
-
 /**
- * Exception thrown when CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is set and the current cluster
- * role is ACTIVE_TO_STANDBY.
+ * Exception thrown when attempting an invalid cluster role transition.
  */
-public class MutationBlockedIOException extends IOException {
+public class InvalidClusterRoleTransitionException extends Exception {
   private static final long serialVersionUID = 1L;
 
   /**
    * @param msg reason for the exception
    */
-  public MutationBlockedIOException(String msg) {
+  public InvalidClusterRoleTransitionException(String msg) {
     super(msg);
   }
+
+  /**
+   * @param msg   reason for the exception
+   * @param cause the underlying cause
+   */
+  public InvalidClusterRoleTransitionException(String msg, Throwable cause) {
+    super(msg, cause);
+  }
+
 }

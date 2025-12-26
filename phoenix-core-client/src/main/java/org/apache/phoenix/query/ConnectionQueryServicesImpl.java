@@ -4101,6 +4101,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     return ddl + ",TTL='" + ttlExpression + "'";
   }
 
+  protected String getHAGroupDDL() {
+    return setSystemDDLProperties(QueryConstants.CREATE_HA_GROUP_METADATA);
+  }
+
   private String setSystemDDLProperties(String ddl) {
     return String.format(ddl,
       props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB,
@@ -4797,6 +4801,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     return metaConnection;
   }
 
+  private PhoenixConnection upgradeSystemHAGroup(PhoenixConnection metaConnection)
+    throws SQLException {
+    try (Statement stmt = metaConnection.createStatement()) {
+      stmt.executeUpdate(getHAGroupDDL());
+    } catch (TableAlreadyExistsException ignored) {
+    }
+    return metaConnection;
+  }
+
   /**
    * There is no other locking needed here since only one connection (on the same or different JVM)
    * will be able to acquire the upgrade mutex via {@link #acquireUpgradeMutex(long)} .
@@ -5006,6 +5019,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     metaConnection = upgradeSystemMutex(metaConnection);
     metaConnection = upgradeSystemCDCStreamStatus(metaConnection);
     metaConnection = upgradeSystemCDCStream(metaConnection);
+    metaConnection = upgradeSystemHAGroup(metaConnection);
 
     // As this is where the most time will be spent during an upgrade,
     // especially when there are large number of views.

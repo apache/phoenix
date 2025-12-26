@@ -55,6 +55,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -433,7 +434,7 @@ public class MutationState implements SQLCloseable {
 
   public long getInitialWritePointer() {
     return phoenixTransactionContext.getTransactionId(); // First write pointer - won't change with
-                                                         // checkpointing
+    // checkpointing
   }
 
   // For testing
@@ -905,8 +906,11 @@ public class MutationState implements SQLCloseable {
       table.getExternalSchemaId() != null ? Bytes.toBytes(table.getExternalSchemaId()) : null;
     byte[] lastDDLTimestamp =
       table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
+    byte[] haGroupName = StringUtils.isNotBlank(connection.getHAGroupName())
+      ? Bytes.toBytes(connection.getHAGroupName())
+      : null;
     WALAnnotationUtil.annotateMutation(mutation, tenantId, schemaName, tableName, tableType,
-      lastDDLTimestamp);
+      lastDDLTimestamp, haGroupName);
   }
 
   /**
@@ -1867,7 +1871,7 @@ public class MutationState implements SQLCloseable {
     return new MutationMetric(numMutations, committedUpsertMutationBytes,
       committedDeleteMutationBytes, upsertMutationCommitTime, atomicUpsertMutationCommitTime,
       deleteMutationCommitTime, 0, // num failed mutations have been counted already in
-                                   // updateMutationBatchFailureMetrics()
+      // updateMutationBatchFailureMetrics()
       committedUpsertMutationCounter, committedDeleteMutationCounter, committedTotalMutationBytes,
       numFailedPhase3Mutations, 0, 0, 0, 0, mutationBatchCounter, mutationQueryParsingTimeMS);
   }
