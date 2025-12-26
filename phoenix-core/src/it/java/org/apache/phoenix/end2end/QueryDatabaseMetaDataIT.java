@@ -189,6 +189,10 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
       assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
       assertTrue(rs.next());
       assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
+      assertEquals(PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_TABLE, rs.getString("TABLE_NAME"));
+      assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
+      assertTrue(rs.next());
+      assertEquals(SYSTEM_CATALOG_SCHEMA, rs.getString("TABLE_SCHEM"));
       assertEquals(PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE, rs.getString("TABLE_NAME"));
       assertEquals(PTableType.SYSTEM.toString(), rs.getString("TABLE_TYPE"));
       assertTrue(rs.next());
@@ -425,7 +429,7 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         tables.add(rs.getString("TABLE_NAME"));
         assertEquals("SYSTEM", rs.getString("TABLE_SCHEM"));
       }
-      assertEquals(11, tables.size());
+      assertEquals(12, tables.size());
       assertTrue(tables.contains("CATALOG"));
       assertTrue(tables.contains("FUNCTION"));
 
@@ -725,10 +729,10 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
       assertEquals(SchemaUtil.normalizeIdentifier("organization_id"), rs.getString("COLUMN_NAME"));
       assertEquals(1, rs.getInt("KEY_SEQ"));
       assertEquals(SchemaUtil.normalizeIdentifier("pk"), rs.getString("PK_NAME")); // TODO:
-                                                                                   // this is
-                                                                                   // on the
-                                                                                   // table
-                                                                                   // row
+      // this is
+      // on the
+      // table
+      // row
 
       assertFalse(rs.next());
       rs.close();
@@ -893,14 +897,14 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
       assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_KEEP_DELETED, cdA.getKeepDeletedCells());
       assertNotEquals(ColumnFamilyDescriptorBuilder.DEFAULT_BLOCKSIZE, cdA.getBlocksize());
       assertEquals(DataBlockEncoding.NONE, cdA.getDataBlockEncoding()); // Overriden using
-                                                                        // WITH
+      // WITH
       assertEquals(1, cdA.getMaxVersions());// Overriden using WITH
       ColumnFamilyDescriptor cdB = descriptor.getColumnFamily(cfB);
       // Allow KEEP_DELETED_CELLS to be false for VIEW
       assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_KEEP_DELETED, cdB.getKeepDeletedCells());
       assertEquals(ColumnFamilyDescriptorBuilder.DEFAULT_BLOCKSIZE, cdB.getBlocksize());
       assertEquals(DataBlockEncoding.NONE, cdB.getDataBlockEncoding()); // Should keep the
-                                                                        // original value.
+      // original value.
       // CF c should stay the same since it's not a Phoenix cf.
       ColumnFamilyDescriptor cdC = descriptor.getColumnFamily(cfC);
       assertNotNull("Column family not found", cdC);

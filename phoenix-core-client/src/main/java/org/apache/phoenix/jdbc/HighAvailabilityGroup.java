@@ -136,17 +136,15 @@ public class HighAvailabilityGroup {
    */
   @VisibleForTesting
   static final Map<HAGroupInfo, HighAvailabilityGroup> GROUPS = new ConcurrentHashMap<>();
+  static final Map<HAGroupInfo, Set<HAURLInfo>> URLS = new ConcurrentHashMap<>();
   @VisibleForTesting
-  public static final Map<HAGroupInfo, Set<HAURLInfo>> URLS = new ConcurrentHashMap<>();
-  @VisibleForTesting
-  public static final Cache<HAGroupInfo, Boolean> MISSING_CRR_GROUPS_CACHE =
-    CacheBuilder.newBuilder()
-      .expireAfterWrite(PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT, TimeUnit.MILLISECONDS).build();
+  static final Cache<HAGroupInfo, Boolean> MISSING_CRR_GROUPS_CACHE = CacheBuilder.newBuilder()
+    .expireAfterWrite(PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT, TimeUnit.MILLISECONDS).build();
   /**
-   * The Curator client cache, one client instance per cluster.
+   * The Curator client cache, one client instance per cluster and namespace combination.
    */
   @VisibleForTesting
-  public static final Cache<String,
+  static final Cache<String,
     CuratorFramework> CURATOR_CACHE = CacheBuilder.newBuilder()
       .expireAfterAccess(DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION, TimeUnit.MILLISECONDS)
       .removalListener(
@@ -342,8 +340,10 @@ public class HighAvailabilityGroup {
       GROUPS.remove(info);
       haGroup.close();
       try {
-        CuratorFramework curator1 = CURATOR_CACHE.getIfPresent(info.getUrl1());
-        CuratorFramework curator2 = CURATOR_CACHE.getIfPresent(info.getUrl2());
+        CuratorFramework curator1 =
+          CURATOR_CACHE.getIfPresent(generateCacheKey(info.getUrl1(), null));
+        CuratorFramework curator2 =
+          CURATOR_CACHE.getIfPresent(generateCacheKey(info.getUrl2(), null));
         if (curator1 != null && curator2 != null) {
           Stat node1 = curator1.checkExists().forPath(info.getZkPath());
           Stat node2 = curator2.checkExists().forPath(info.getZkPath());
@@ -412,6 +412,19 @@ public class HighAvailabilityGroup {
   }
 
   /**
+   * Generate cache key for curator cache based on URL and namespace.
+   * @param jdbcUrl   the ZK endpoint host:port or the JDBC connection String host:port:/hbase
+   * @param namespace the ZooKeeper namespace, uses default if null
+   * @return cache key string
+   */
+  @VisibleForTesting
+  static String generateCacheKey(String jdbcUrl, String namespace) {
+    String effectiveNamespace =
+      namespace != null ? namespace : PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE;
+    return jdbcUrl + ":" + effectiveNamespace;
+  }
+
+  /**
    * Get an active curator ZK client for the given properties and ZK endpoint.
    * <p>
    * This can be from cached object since Curator should be shared per cluster.
@@ -422,9 +435,29 @@ public class HighAvailabilityGroup {
   @SuppressWarnings("UnstableApiUsage")
   public static CuratorFramework getCurator(String jdbcUrl, Properties properties)
     throws IOException {
+    return getCurator(jdbcUrl, properties, PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE);
+  }
+
+  /**
+   * Get an active curator ZK client for the given properties, ZK endpoint and namespace.
+   * <p>
+   * This can be from cached object since Curator should be shared per cluster.
+   * @param jdbcUrl    the ZK endpoint host:port or the JDBC connection String host:port:/hbase
+   * @param properties the properties defining time out values and retry count
+   * @param namespace  the ZooKeeper namespace to use, defaults to
+   *                   PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE if null
+   * @return a new Curator framework client
+   */
+  @SuppressWarnings("UnstableApiUsage")
+  public static CuratorFramework getCurator(String jdbcUrl, Properties properties, String namespace)
+    throws IOException {
+    // Use namespace as part of cache key to avoid conflicts between different namespaces
+    String effectiveNamespace =
+      namespace != null ? namespace : PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE;
+    String cacheKey = generateCacheKey(jdbcUrl, namespace);
     try {
-      return CURATOR_CACHE.get(jdbcUrl, () -> {
-        CuratorFramework curator = createCurator(jdbcUrl, properties);
+      return CURATOR_CACHE.get(cacheKey, () -> {
+        CuratorFramework curator = createCurator(jdbcUrl, properties, effectiveNamespace);
         try {
           if (
             !curator.blockUntilConnected(PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_DEFAULT,
@@ -447,17 +480,23 @@ public class HighAvailabilityGroup {
     } catch (Exception e) {
       LOG.error("Fail to get an active curator for url {}", jdbcUrl, e);
       // invalidate the cache when getting/creating throws exception
-      CURATOR_CACHE.invalidate(jdbcUrl);
+      CURATOR_CACHE.invalidate(cacheKey);
       throw new IOException(e);
     }
   }
 
   /**
-   * Create a curator ZK client for the given properties and ZK endpoint.
+   * Create a curator ZK client for the given properties, ZK endpoint and namespace.
    * <p>
    * Unless caller needs a new curator, it should use {@link #getCurator(String, Properties)}.
+   * @param jdbcUrl    the ZK endpoint host:port or the JDBC connection String host:port:/hbase
+   * @param properties the properties defining time out values and retry count
+   * @param namespace  the ZooKeeper namespace to use, defaults to
+   *                   PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE if null
+   * @return a new Curator framework client
    */
-  private static CuratorFramework createCurator(String jdbcUrl, Properties properties) {
+  private static CuratorFramework createCurator(String jdbcUrl, Properties properties,
+    String namespace) {
     // Get the ZK endpoint in host:port format by removing JDBC protocol and HBase root node
     final String zkUrl;
     if (jdbcUrl.startsWith(PhoenixRuntime.JDBC_PROTOCOL)) {
@@ -485,8 +524,9 @@ public class HighAvailabilityGroup {
     final RetryPolicy retryPolicy = createRetryPolicy(properties);
 
     CuratorFramework curator = CuratorFrameworkFactory.builder().connectString(zkUrl)
-      .namespace(PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE).connectionTimeoutMs(connectionTimeoutMs)
-      .sessionTimeoutMs(sessionTimeoutMs).retryPolicy(retryPolicy).canBeReadOnly(true).build();
+      .namespace(namespace != null ? namespace : PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE)
+      .connectionTimeoutMs(connectionTimeoutMs).sessionTimeoutMs(sessionTimeoutMs)
+      .retryPolicy(retryPolicy).canBeReadOnly(true).build();
     curator.start();
     return curator;
   }

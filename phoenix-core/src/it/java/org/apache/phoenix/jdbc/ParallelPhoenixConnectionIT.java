@@ -86,6 +86,7 @@ import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.AfterClass;
@@ -134,8 +135,8 @@ public class ParallelPhoenixConnectionIT {
     GLOBAL_PROPERTIES.setProperty(QueryServices.COLLECT_REQUEST_LEVEL_METRICS,
       String.valueOf(true));
     GLOBAL_PROPERTIES.setProperty(QueryServices.LOG_LEVEL, LogLevel.DEBUG.name()); // Need logging
-                                                                                   // for query
-                                                                                   // metrics
+    // for query
+    // metrics
     GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_ENABLED, String.valueOf(true));
     GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_KEEP_ALIVE_SECONDS, String.valueOf(13));
     GLOBAL_PROPERTIES.setProperty(CQSI_THREAD_POOL_CORE_POOL_SIZE, String.valueOf(17));
@@ -380,9 +381,18 @@ public class ParallelPhoenixConnectionIT {
    */
   @Test
   public void testBothClusterATSRole() throws Exception {
-    CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY,
-      ClusterRole.ACTIVE_TO_STANDBY);
-    try (Connection conn = getParallelConnection()) {
+    String zkUrl1 = CLUSTERS.getZkUrl1();
+    String zkUrl2 = CLUSTERS.getZkUrl2();
+    String haGroupName = testName.getMethodName();
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
+      ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY, null);
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl2, zkUrl1,
+      ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.ACTIVE_TO_STANDBY, null);
+    try (ParallelPhoenixConnection conn = (ParallelPhoenixConnection) getParallelConnection()) {
+      PhoenixConnection conn1 = conn.futureConnection1.get();
+      PhoenixConnection conn2 = conn.futureConnection2.get();
+      conn1.setHAGroupName(haGroupName);
+      conn2.setHAGroupName(haGroupName);
       doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
       fail("Expected MutationBlockedIOException to be thrown");
     } catch (SQLException e) {

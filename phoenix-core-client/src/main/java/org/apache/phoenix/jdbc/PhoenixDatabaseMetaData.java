@@ -449,6 +449,23 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final String INDEX_WHERE = "INDEX_WHERE";
   public static final byte[] INDEX_WHERE_BYTES = Bytes.toBytes(INDEX_WHERE);
 
+  public static final String SYSTEM_HA_GROUP_TABLE = "HA_GROUP";
+  public static final String SYSTEM_HA_GROUP_NAME =
+    SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_HA_GROUP_TABLE);
+  public static final byte[] SYSTEM_HA_GROUP_NAME_BYTES = Bytes.toBytes(SYSTEM_HA_GROUP_NAME);
+  public static final TableName SYSTEM_HA_GROUP_HBASE_TABLE_NAME =
+    TableName.valueOf(SYSTEM_HA_GROUP_NAME);
+
+  public static final String HA_GROUP_NAME = "HA_GROUP_NAME";
+  public static final String POLICY = "POLICY";
+  public static final String VERSION = "VERSION";
+  public static final String ZK_URL_1 = "ZK_URL_1";
+  public static final String ZK_URL_2 = "ZK_URL_2";
+  public static final String CLUSTER_URL_1 = "CLUSTER_URL_1";
+  public static final String CLUSTER_URL_2 = "CLUSTER_URL_2";
+  public static final String CLUSTER_ROLE_1 = "CLUSTER_ROLE_1";
+  public static final String CLUSTER_ROLE_2 = "CLUSTER_ROLE_2";
+
   public static final String SYSTEM_CHILD_LINK_TABLE = "CHILD_LINK";
   public static final String SYSTEM_CHILD_LINK_NAME =
     SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_CHILD_LINK_TABLE);
