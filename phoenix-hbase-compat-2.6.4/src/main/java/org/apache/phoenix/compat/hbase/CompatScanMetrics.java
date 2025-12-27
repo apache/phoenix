@@ -76,7 +76,8 @@ public class CompatScanMetrics {
   }
 
   public static Long getBytesReadFromBlockCache(ScanMetrics scanMetrics) {
-    return getCounterValue(scanMetrics, ServerSideScanMetrics.BYTES_READ_FROM_BLOCK_CACHE_METRIC_NAME);
+    return getCounterValue(scanMetrics,
+      ServerSideScanMetrics.BYTES_READ_FROM_BLOCK_CACHE_METRIC_NAME);
   }
 
   public static Long getBlockReadOpsCount(Map<String, Long> scanMetrics) {

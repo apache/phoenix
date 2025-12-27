@@ -34,13 +34,10 @@ import java.util.Properties;
 import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
-
-import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
-import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -320,7 +317,7 @@ public class SlowestScanMetricsIT extends BaseTest {
 
       // On scanning the left table, the data blocks get loaded into block cache. So, left table
       // reads data from file system and right table reads data from block cache. As both left and
-      // right tables are scanning single regions, only data block will be read.
+      // right tables are scanning single regions, only 1 data block will be read.
       assertEquals(0, brocValues[0]);
       assertEquals(1, brocValues[1]);
       assertTrue(brfcValues[0] > 0);
@@ -352,7 +349,7 @@ public class SlowestScanMetricsIT extends BaseTest {
       assertEquals(1, rowCount);
       JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
 
-      // Outer array has size 2 as its UNION of it's union of 2 queries each scanning single region
+      // Outer array has size 2 as its UNION of 2 queries each scanning single region
       // and topN is 2.
       assertEquals(topN, slowestScanMetricsJsonArray.size());
       for (int i = 0; i < topN; i++) {
@@ -563,8 +560,8 @@ public class SlowestScanMetricsIT extends BaseTest {
         JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
         assertNotNull(regionJson.get("region"));
         assertNotNull(regionJson.get("server"));
-        // Though it's a full table scan but still broc is 2 as there are 2 HFiles per commit call
-        // and one data block is read from each HFile.
+        // Though it's a full table scan but still broc is 2 as there are 2 HFiles, 1 per commit
+        // call, and 1 data block is read from each HFile.
         assertEquals(2, regionJson.get("broc").getAsLong());
       }
     }
@@ -614,8 +611,8 @@ public class SlowestScanMetricsIT extends BaseTest {
         JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
         assertNotNull(regionJson.get("region"));
         assertNotNull(regionJson.get("server"));
-        // Though it's a full table scan but still broc is 2 as there are 2 HFiles per commit call
-        // and one data block is read from each HFile.
+        // Though it's a full table scan but still broc is 2 as there are 2 HFiles, 1 per commit
+        // call, and one data block is read from each HFile.
         assertEquals(2, regionJson.get("broc").getAsLong());
       }
     }
@@ -663,7 +660,6 @@ public class SlowestScanMetricsIT extends BaseTest {
         JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
         assertNotNull(regionJson.get("region"));
         assertNotNull(regionJson.get("server"));
-        // BROC is 1 as it's a simple query so, only data block is read.
         totalBroc += regionJson.get("broc").getAsLong();
       }
       // Total BROC is 1 as data is read from only one region.
@@ -713,7 +709,6 @@ public class SlowestScanMetricsIT extends BaseTest {
         JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
         assertNotNull(regionJson.get("region"));
         assertNotNull(regionJson.get("server"));
-        // BROC is 1 as it's a simple query so, only data block is read.
         totalBroc += regionJson.get("broc").getAsLong();
       }
       // Total BROC is 2 as data is read from one region of index table and one region of data table
@@ -812,7 +807,6 @@ public class SlowestScanMetricsIT extends BaseTest {
         JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
         assertNotNull(regionJson.get("region"));
         assertNotNull(regionJson.get("server"));
-        // BROC is 1 as it's a simple query so, only data block is read.
         totalBroc += regionJson.get("broc").getAsLong();
       }
       // Total BROC is 1 as data is read from single region of view index table.
@@ -884,7 +878,6 @@ public class SlowestScanMetricsIT extends BaseTest {
       JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
       assertNotNull(regionJson.get("region"));
       assertNotNull(regionJson.get("server"));
-      // BROC is 1 as it's a simple query so, only data block is read.
       brocFromSlowestScanMetrics = regionJson.get("broc").getAsLong();
       assertTrue(regionJson.get("rp").getAsLong() > 1);
 
@@ -933,54 +926,6 @@ public class SlowestScanMetricsIT extends BaseTest {
       jsonArray.add(groupArray);
     }
     System.out.println("Slowest scan metrics JSON array: " + jsonArray);
-    Map<String, Map<MetricType, Long>> readMetrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
-    Map<MetricType, Long> overAllQueryMetrics = PhoenixRuntime.getOverAllReadRequestMetricInfo(rs);
-    String phqryMetrics = getMetricTypeLogField(readMetrics, overAllQueryMetrics);
-    System.out.println("PHQRY Metrics: " + phqryMetrics);
     return jsonArray;
-  }
-  
-  public static String getMetricTypeLogField(Map<String, Map<MetricType, Long>> tableMetrics, Map<MetricType, Long> rtMetrics) {
-
-    JsonObject overallMetricsJson = new JsonObject();
-
-    // Handle table-level metrics ("R", "W", "RW", "RTS")
-    JsonArray tablesArray = new JsonArray();
-    if (tableMetrics != null && !tableMetrics.isEmpty()) {
-        for (Map.Entry<String, Map<MetricType, Long>> tableEntry : tableMetrics.entrySet()) {
-            String tableName = tableEntry.getKey();
-            Map<MetricType, Long> metrics = tableEntry.getValue();
-
-            JsonObject tableJson = new JsonObject();
-            tableJson.addProperty("table", tableName);
-
-            JsonObject tableMetricsJson = new JsonObject();
-            for (Map.Entry<MetricType, Long> metricEntry : metrics.entrySet()) {
-                tableMetricsJson.addProperty(metricEntry.getKey().shortName(), metricEntry.getValue());
-            }
-
-            tableJson.add("metrics", tableMetricsJson);
-            tablesArray.add(tableJson);
-        }
-    }
-
-    overallMetricsJson.add("tables", tablesArray);
-
-    // // Add serverList
-    // overallMetricsJson.addProperty("ep", StringUtils.isBlank(serverList) ? "" : serverList);
-
-
-    // Handle "RTS" (uber record)
-    if (rtMetrics != null && !rtMetrics.isEmpty()) {
-        JsonObject rtMetricsJson = new JsonObject();
-        for (Map.Entry<MetricType, Long> metricEntry : rtMetrics.entrySet()) {
-            rtMetricsJson.addProperty(metricEntry.getKey().shortName(), metricEntry.getValue());
-        }
-        // Add  RTS metrics at the top level of the JSON
-        overallMetricsJson.add("rt", rtMetricsJson);
-    }
-
-    // Return the JSON string
-    return overallMetricsJson.toString();
   }
 }

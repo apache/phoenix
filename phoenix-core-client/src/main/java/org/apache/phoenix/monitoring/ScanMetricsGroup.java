@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.monitoring;
 
-import java.util.Collections;
 import java.util.Map;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.hbase.client.metrics.ScanMetricsRegionInfo;
@@ -45,14 +44,6 @@ import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
  * serialization or reporting purposes.
  */
 public class ScanMetricsGroup {
-
-  public static final ScanMetricsGroup EMPTY_SCAN_METRICS_GROUP =
-    new ScanMetricsGroup("", Collections.emptyMap()) {
-      @Override
-      public Long getSumOfMillisSecBetweenNexts() {
-        return Long.MIN_VALUE;
-      }
-    };
 
   private final String tableName;
   private Map<String, Long> scanMetrics = null;

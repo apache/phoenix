@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import java.util.Map;
+import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 
 public class CompatScanMetrics {
   public static final String FS_READ_TIME_METRIC_NAME = "FS_READ_TIME";
