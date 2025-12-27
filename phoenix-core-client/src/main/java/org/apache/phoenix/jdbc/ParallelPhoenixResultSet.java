@@ -21,6 +21,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.CLASS_NOT_UNWRAPPABL
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,6 +30,7 @@ import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.monitoring.ScanMetricsGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -130,6 +132,17 @@ public class ParallelPhoenixResultSet extends DelegateResultSet
       metrics = new HashMap<>();
     }
     context.decorateMetrics(metrics);
+    return metrics;
+  }
+
+  @Override
+  public List<List<ScanMetricsGroup>> getTopNSlowestScanMetrics() {
+    List<List<ScanMetricsGroup>> metrics;
+    if (rs != null) {
+      metrics = ((PhoenixMonitoredResultSet) rs).getTopNSlowestScanMetrics();
+    } else {
+      metrics = Collections.emptyList();
+    }
     return metrics;
   }
 

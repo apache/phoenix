@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import javax.annotation.concurrent.GuardedBy;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.AbstractClientScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
@@ -319,8 +320,9 @@ public class TableResultIterator implements ResultIterator {
           if (ScanUtil.isReversed(scan)) {
             ScanUtil.setupReverseScan(scan);
           }
+          TableName tableName = htable.getName();
           this.scanIterator = new ScanningResultIterator(htable.getScanner(scan), scan,
-            scanMetricsHolder, plan.getContext(), isMapReduceContext, maxQueryEndTime);
+            scanMetricsHolder, plan.getContext(), isMapReduceContext, maxQueryEndTime, tableName);
         } catch (IOException e) {
           Closeables.closeQuietly(htable);
           throw ClientUtil.parseServerException(e);

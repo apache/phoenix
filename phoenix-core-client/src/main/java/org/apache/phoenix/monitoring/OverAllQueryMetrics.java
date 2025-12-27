@@ -127,15 +127,15 @@ public class OverAllQueryMetrics {
   }
 
   public void setQueryCompilerTimeMS(long time) {
-    queryCompilerTimeMS.set(time);
+    queryCompilerTimeMS.change(time);
   }
 
   public void setQueryOptimizerTimeMS(long time) {
-    queryOptimizerTimeMS.set(time);
+    queryOptimizerTimeMS.change(time);
   }
 
   public void setQueryResultItrTimeMS(long time) {
-    queryResultItrSetTimeMS.set(time);
+    queryResultItrSetTimeMS.change(time);
   }
 
   public void startQuery() {
@@ -175,7 +175,7 @@ public class OverAllQueryMetrics {
   }
 
   public void setQueryParsingTimeMS(long time) {
-    queryParsingTimeMS.set(time);
+    queryParsingTimeMS.change(time);
   }
 
   public Map<MetricType, Long> publish() {
@@ -231,9 +231,9 @@ public class OverAllQueryMetrics {
     numParallelScans.combine(metric.numParallelScans);
     wallClockTimeMS.combine(metric.wallClockTimeMS);
     resultSetTimeMS.combine(metric.resultSetTimeMS);
-    queryCompilerTimeMS.combine(queryCompilerTimeMS);
-    queryOptimizerTimeMS.combine(queryOptimizerTimeMS);
-    queryResultItrSetTimeMS.combine(queryResultItrSetTimeMS);
+    queryCompilerTimeMS.combine(metric.queryCompilerTimeMS);
+    queryOptimizerTimeMS.combine(metric.queryOptimizerTimeMS);
+    queryResultItrSetTimeMS.combine(metric.queryResultItrSetTimeMS);
     queryParsingTimeMS.combine(metric.queryParsingTimeMS);
     return this;
   }

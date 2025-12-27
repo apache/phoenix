@@ -74,10 +74,16 @@ public class ScanMetricsHolder {
 
   public static ScanMetricsHolder getInstance(ReadMetricQueue readMetrics, String tableName,
     Scan scan, LogLevel connectionLogLevel) {
+    return ScanMetricsHolder.getInstance(readMetrics, tableName, scan, connectionLogLevel, false);
+  }
+
+  public static ScanMetricsHolder getInstance(ReadMetricQueue readMetrics, String tableName,
+    Scan scan, LogLevel connectionLogLevel, boolean isScanMetricsByRegionEnabled) {
     if (connectionLogLevel == LogLevel.OFF && !readMetrics.isRequestMetricsEnabled()) {
       return NO_OP_INSTANCE;
     }
     scan.setScanMetricsEnabled(true);
+    scan.setEnableScanMetricsByRegion(isScanMetricsByRegionEnabled);
     return new ScanMetricsHolder(readMetrics, tableName, scan);
   }
 

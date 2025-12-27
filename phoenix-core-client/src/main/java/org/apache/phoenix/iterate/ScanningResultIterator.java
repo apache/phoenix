@@ -48,18 +48,22 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
+import org.apache.hadoop.hbase.client.metrics.ScanMetricsRegionInfo;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.ScanMetricsGroup;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -83,6 +87,8 @@ public class ScanningResultIterator implements ResultIterator {
 
   private final boolean isMapReduceContext;
   private final long maxQueryEndTime;
+  private final TableName tableName;
+  private final boolean isScanMetricsByRegionEnabled;
 
   private long dummyRowCounter = 0;
 
@@ -91,8 +97,9 @@ public class ScanningResultIterator implements ResultIterator {
 
   public ScanningResultIterator(ResultScanner scanner, Scan scan,
     ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isMapReduceContext,
-    long maxQueryEndTime) {
+    long maxQueryEndTime, TableName tableName) {
     this.scanner = scanner;
+    this.tableName = tableName;
     this.scanMetricsHolder = scanMetricsHolder;
     this.context = context;
     scanMetricsUpdated = false;
@@ -111,6 +118,7 @@ public class ScanningResultIterator implements ResultIterator {
         ScanningResultPostValidResultCaller.class);
     this.scanningResultPostValidResultCaller = ReflectionUtils.newInstance(validResultCallerClazz,
       context.getConnection().getQueryServices().getConfiguration());
+    this.isScanMetricsByRegionEnabled = scan.isScanMetricsByRegionEnabled();
   }
 
   @Override
@@ -202,6 +210,21 @@ public class ScanningResultIterator implements ResultIterator {
         scanMetricsMap.get(COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
 
       changeMetric(GLOBAL_PAGED_ROWS_COUNTER, dummyRowCounter);
+
+      PhoenixConnection connection = context.getConnection();
+      int slowestScanMetricsCount = connection.getSlowestScanMetricsCount();
+      if (slowestScanMetricsCount > 0) {
+        ScanMetricsGroup scanMetricsGroup;
+        if (isScanMetricsByRegionEnabled) {
+          Map<ScanMetricsRegionInfo, Map<String, Long>> scanMetricsByRegion =
+            scanMetrics.collectMetricsByRegion();
+          scanMetricsGroup =
+            new ScanMetricsGroup(tableName.getNameAsString(), scanMetricsByRegion, scanMetricsMap);
+        } else {
+          scanMetricsGroup = new ScanMetricsGroup(tableName.getNameAsString(), scanMetricsMap);
+        }
+        context.getSlowestScanMetricsQueue().add(scanMetricsGroup);
+      }
 
       scanMetricsUpdated = true;
     }
