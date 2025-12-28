@@ -35,6 +35,7 @@ import java.util.Random;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -44,6 +45,7 @@ import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.Assume;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -59,6 +61,7 @@ public class SlowestScanMetricsIT extends BaseTest {
 
   @BeforeClass
   public static void setup() throws Exception {
+    Assume.assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.6.3") > 0);
     Map<String, String> props = Maps.newHashMapWithExpectedSize(3);
     props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, "true");
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
