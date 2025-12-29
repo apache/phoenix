@@ -4438,6 +4438,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
     } catch (TableAlreadyExistsException ignore) {
     }
+    try (Statement stmt = metaConnection.createStatement()) {
+      stmt.executeUpdate(getHAGroupDDL());
+    } catch (TableAlreadyExistsException ignore) {
+    }
   }
 
   /**
