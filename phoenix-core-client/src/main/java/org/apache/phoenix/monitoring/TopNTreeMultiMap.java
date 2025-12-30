@@ -47,16 +47,21 @@ public class TopNTreeMultiMap<K, V> extends ForwardingListMultimap<K, V> {
   private final int maxSize;
   private final Comparator<? super K> keyComparator;
 
+  public static <K, V> TopNTreeMultiMap<K, V> getInstance(int maxSize,
+    Comparator<? super K> keyComparator) {
+    if (maxSize <= 0) {
+      throw new IllegalArgumentException("maxSize must be positive");
+    }
+    return new TopNTreeMultiMap<>(maxSize, keyComparator);
+  }
+
   /**
    * Creates a new bounded multimap with keys sorted according to the provided comparator.
    * @param maxSize       the maximum total number of key-value pairs this map can hold (must be
    *                      positive)
    * @param keyComparator the comparator used to order keys in this multimap
    */
-  public TopNTreeMultiMap(int maxSize, Comparator<? super K> keyComparator) {
-    if (maxSize <= 0) {
-      throw new IllegalArgumentException("maxSize must be positive");
-    }
+  private TopNTreeMultiMap(int maxSize, Comparator<? super K> keyComparator) {
     this.maxSize = maxSize;
     this.keyComparator = keyComparator;
     // Use a TreeMap for sorted keys, with ArrayList for storing multiple values per key

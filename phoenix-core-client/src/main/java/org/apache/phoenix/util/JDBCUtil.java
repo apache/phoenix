@@ -152,20 +152,20 @@ public class JDBCUtil {
     throws SQLException {
     String slowestScanMetricsCountStr =
       findProperty(url, info, QueryServices.SLOWEST_SCAN_METRICS_COUNT);
-    return (slowestScanMetricsCountStr == null
+    return slowestScanMetricsCountStr == null
       ? props.getInt(QueryServices.SLOWEST_SCAN_METRICS_COUNT,
         QueryServicesOptions.DEFAULT_SLOWEST_SCAN_METRICS_COUNT)
-      : Integer.parseInt(slowestScanMetricsCountStr));
+      : Integer.parseInt(slowestScanMetricsCountStr);
   }
 
   public static boolean isScanMetricsByRegionEnabled(String url, Properties info,
     ReadOnlyProps props) throws SQLException {
     String scanMetricsByRegionEnabledStr =
       findProperty(url, info, QueryServices.SCAN_METRICS_BY_REGION_ENABLED);
-    return (scanMetricsByRegionEnabledStr == null
+    return scanMetricsByRegionEnabledStr == null
       ? props.getBoolean(QueryServices.SCAN_METRICS_BY_REGION_ENABLED,
         QueryServicesOptions.DEFAULT_SCAN_METRICS_BY_REGION_ENABLED)
-      : Boolean.parseBoolean(scanMetricsByRegionEnabledStr));
+      : Boolean.parseBoolean(scanMetricsByRegionEnabledStr);
   }
 
   public static long getMutateBatchSizeBytes(String url, Properties info, ReadOnlyProps props)

@@ -490,6 +490,10 @@ public class StatementContext {
     this.totalSegmentsValue = totalSegmentsValue;
   }
 
+  /**
+   * FOR INTERNAL USE ONLY.
+   * @return the slowest scan metrics queue
+   */
   public SlowestScanMetricsQueue getSlowestScanMetricsQueue() {
     return slowestScanMetricsQueue;
   }
@@ -499,7 +503,7 @@ public class StatementContext {
       return Collections.emptyList();
     }
     TopNTreeMultiMap<Long, List<ScanMetricsGroup>> slowestScanMetricsGroups =
-      new TopNTreeMultiMap<>(slowestScanMetricsCount, (s1, s2) -> Long.compare(s2, s1));
+      TopNTreeMultiMap.getInstance(slowestScanMetricsCount, (s1, s2) -> Long.compare(s2, s1));
     getSlowestScanMetricsUtil(this, new ArrayDeque<>(), 0, slowestScanMetricsGroups);
     List<List<ScanMetricsGroup>> topNSlowestScanMetricsGroups =
       new ArrayList<>(slowestScanMetricsGroups.size());
