@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
+
 import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
@@ -46,9 +48,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-
-import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 
 /**
  * This is first implementation of RegionServer coprocessor introduced by Phoenix.
