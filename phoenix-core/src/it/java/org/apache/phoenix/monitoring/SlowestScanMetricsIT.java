@@ -919,12 +919,12 @@ public class SlowestScanMetricsIT extends BaseTest {
    * @return JSON array of arrays of JSON maps
    */
   public static JsonArray getSlowestScanMetricsJsonArray(ResultSet rs) throws Exception {
-    List<List<ScanMetricsGroup>> slowestScanMetrics = PhoenixRuntime.getTopNSlowestScanMetrics(rs);
+    List<List<JsonObject>> slowestScanMetrics = PhoenixRuntime.getTopNSlowestScanMetrics(rs);
     JsonArray jsonArray = new JsonArray();
-    for (List<ScanMetricsGroup> group : slowestScanMetrics) {
+    for (List<JsonObject> group : slowestScanMetrics) {
       JsonArray groupArray = new JsonArray();
-      for (ScanMetricsGroup scanMetricsGroup : group) {
-        groupArray.add(scanMetricsGroup.toJson());
+      for (JsonObject scanMetrics : group) {
+        groupArray.add(scanMetrics);
       }
       jsonArray.add(groupArray);
     }

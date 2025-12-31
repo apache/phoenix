@@ -29,7 +29,6 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
-import org.apache.hadoop.hbase.client.metrics.ScanMetricsRegionInfo;
 import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.StatementContext;
@@ -38,7 +37,6 @@ import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
-import org.apache.phoenix.monitoring.ScanMetricsGroup;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.tuple.ResultTuple;
@@ -126,16 +124,8 @@ public class ScanningResultIterator implements ResultIterator {
       PhoenixConnection connection = context.getConnection();
       int slowestScanMetricsCount = connection.getSlowestScanMetricsCount();
       if (slowestScanMetricsCount > 0) {
-        ScanMetricsGroup scanMetricsGroup;
-        if (isScanMetricsByRegionEnabled) {
-          Map<ScanMetricsRegionInfo, Map<String, Long>> scanMetricsByRegion =
-            scanMetrics.collectMetricsByRegion();
-          scanMetricsGroup =
-            new ScanMetricsGroup(tableName.getNameAsString(), scanMetricsByRegion, scanMetricsMap);
-        } else {
-          scanMetricsGroup = new ScanMetricsGroup(tableName.getNameAsString(), scanMetricsMap);
-        }
-        context.getSlowestScanMetricsQueue().add(scanMetricsGroup);
+        scanMetricsHolder.setScanMetricsByRegion(scanMetrics.collectMetricsByRegion());
+        context.getSlowestScanMetricsQueue().add(scanMetricsHolder);
       }
 
       scanMetricsUpdated = true;

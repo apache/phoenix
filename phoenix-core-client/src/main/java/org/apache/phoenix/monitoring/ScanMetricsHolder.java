@@ -42,9 +42,13 @@ import java.io.IOException;
 import java.util.Map;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
+import org.apache.hadoop.hbase.client.metrics.ScanMetricsRegionInfo;
 import org.apache.hadoop.hbase.util.JsonMapper;
 import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.log.LogLevel;
+
+import org.apache.hbase.thirdparty.com.google.gson.JsonArray;
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 public class ScanMetricsHolder {
 
@@ -69,7 +73,9 @@ public class ScanMetricsHolder {
   private final CombinableMetric rpcScanProcessingTime;
   private final CombinableMetric rpcScanQueueWaitTime;
   private Map<String, Long> scanMetricMap;
+  private Map<ScanMetricsRegionInfo, Map<String, Long>> scanMetricsByRegion;
   private Object scan;
+  private final String tableName;
 
   private static final ScanMetricsHolder NO_OP_INSTANCE =
     new ScanMetricsHolder(new ReadMetricQueue(false, LogLevel.OFF), "", null, false);
@@ -90,9 +96,12 @@ public class ScanMetricsHolder {
   private ScanMetricsHolder(ReadMetricQueue readMetrics, String tableName, Scan scan,
     boolean isScanMetricsByRegionEnabled) {
     readMetrics.addScanHolder(this);
+    this.tableName = tableName;
     this.scan = scan;
-    scan.setScanMetricsEnabled(true);
-    scan.setEnableScanMetricsByRegion(isScanMetricsByRegionEnabled);
+    if (scan != null) {
+      scan.setScanMetricsEnabled(true);
+      scan.setEnableScanMetricsByRegion(isScanMetricsByRegionEnabled);
+    }
     countOfRPCcalls = readMetrics.allotMetric(COUNT_RPC_CALLS, tableName);
     countOfRemoteRPCcalls = readMetrics.allotMetric(COUNT_REMOTE_RPC_CALLS, tableName);
     sumOfMillisSecBetweenNexts = readMetrics.allotMetric(COUNT_MILLS_BETWEEN_NEXTS, tableName);
@@ -203,6 +212,11 @@ public class ScanMetricsHolder {
     this.scanMetricMap = scanMetricMap;
   }
 
+  public void
+    setScanMetricsByRegion(Map<ScanMetricsRegionInfo, Map<String, Long>> scanMetricsByRegion) {
+    this.scanMetricsByRegion = scanMetricsByRegion;
+  }
+
   public void populateMetrics(Long dummyRowCounter) {
     changeMetric(countOfRPCcalls, scanMetricMap.get(ScanMetrics.RPC_CALLS_METRIC_NAME));
     changeMetric(countOfRemoteRPCcalls,
@@ -240,6 +254,50 @@ public class ScanMetricsHolder {
     if (value != null) {
       metric.change(value);
     }
+  }
+
+  public Long getCostOfScan() {
+    if (scanMetricMap == null || scanMetricMap.isEmpty()) {
+      return Long.MAX_VALUE;
+    }
+    return scanMetricMap.get(ScanMetrics.MILLIS_BETWEEN_NEXTS_METRIC_NAME);
+  }
+
+  public JsonObject toJson() {
+    JsonObject tableJson = new JsonObject();
+    if (scanMetricMap == null || scanMetricMap.isEmpty()) {
+      return tableJson;
+    }
+    if (scanMetricsByRegion != null && !scanMetricsByRegion.isEmpty()) {
+      tableJson.addProperty("table", tableName);
+      JsonArray regionMetrics = new JsonArray();
+      for (Map.Entry<ScanMetricsRegionInfo, Map<String, Long>> entry : scanMetricsByRegion
+        .entrySet()) {
+        JsonObject regionJson = new JsonObject();
+        ScanMetricsRegionInfo regionInfo = entry.getKey();
+        regionJson.addProperty("region", regionInfo.getEncodedRegionName());
+        regionJson.addProperty("server", regionInfo.getServerName().toString());
+        for (Map.Entry<String, Long> scanMetricEntry : entry.getValue().entrySet()) {
+          MetricType metricType = MetricType.getMetricType(scanMetricEntry.getKey());
+          if (metricType == null) {
+            continue;
+          }
+          regionJson.addProperty(metricType.shortName(), scanMetricEntry.getValue());
+        }
+        regionMetrics.add(regionJson);
+      }
+      tableJson.add("regions", regionMetrics);
+    } else {
+      tableJson.addProperty("table", tableName);
+      for (Map.Entry<String, Long> scanMetricEntry : scanMetricMap.entrySet()) {
+        MetricType metricType = MetricType.getMetricType(scanMetricEntry.getKey());
+        if (metricType == null) {
+          continue;
+        }
+        tableJson.addProperty(metricType.shortName(), scanMetricEntry.getValue());
+      }
+    }
+    return tableJson;
   }
 
   @Override

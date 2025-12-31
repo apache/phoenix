@@ -72,7 +72,6 @@ import org.apache.phoenix.log.QueryStatus;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
-import org.apache.phoenix.monitoring.ScanMetricsGroup;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
@@ -106,6 +105,8 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Bytes;
+
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 /**
  * JDBC ResultSet implementation of Phoenix. Currently only the following data types are supported:
@@ -1498,7 +1499,7 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
   }
 
   @Override
-  public List<List<ScanMetricsGroup>> getTopNSlowestScanMetrics() {
+  public List<List<JsonObject>> getTopNSlowestScanMetrics() {
     return context.getTopNSlowestScanMetrics();
   }
 

@@ -36,7 +36,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
-import org.apache.phoenix.monitoring.ScanMetricsGroup;
+import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.SlowestScanMetricsQueue;
 import org.apache.phoenix.monitoring.TopNTreeMultiMap;
 import org.apache.phoenix.parse.SelectStatement;
@@ -57,6 +57,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 /**
  * Class that keeps common state used across processing the various clauses in a top level JDBC
@@ -498,57 +500,61 @@ public class StatementContext {
     return slowestScanMetricsQueue;
   }
 
-  public List<List<ScanMetricsGroup>> getTopNSlowestScanMetrics() {
+  public List<List<JsonObject>> getTopNSlowestScanMetrics() {
     if (slowestScanMetricsCount <= 0) {
       return Collections.emptyList();
     }
-    TopNTreeMultiMap<Long, List<ScanMetricsGroup>> slowestScanMetricsGroups =
+    TopNTreeMultiMap<Long, List<ScanMetricsHolder>> slowestScanMetricsHolders =
       TopNTreeMultiMap.getInstance(slowestScanMetricsCount, (s1, s2) -> Long.compare(s2, s1));
-    getSlowestScanMetricsUtil(this, new ArrayDeque<>(), 0, slowestScanMetricsGroups);
-    List<List<ScanMetricsGroup>> topNSlowestScanMetricsGroups =
-      new ArrayList<>(slowestScanMetricsGroups.size());
-    for (Map.Entry<Long, List<ScanMetricsGroup>> entry : slowestScanMetricsGroups.entries()) {
-      topNSlowestScanMetricsGroups.add(entry.getValue());
+    getSlowestScanMetricsUtil(this, new ArrayDeque<>(), 0, slowestScanMetricsHolders);
+    List<List<JsonObject>> topNSlowestScanMetricsHolders =
+      new ArrayList<>(slowestScanMetricsHolders.size());
+    for (Map.Entry<Long, List<ScanMetricsHolder>> entry : slowestScanMetricsHolders.entries()) {
+      List<JsonObject> scanMetricsHolderJsonObjects = new ArrayList<>(entry.getValue().size());
+      for (ScanMetricsHolder scanMetricsHolder : entry.getValue()) {
+        scanMetricsHolderJsonObjects.add(scanMetricsHolder.toJson());
+      }
+      topNSlowestScanMetricsHolders.add(scanMetricsHolderJsonObjects);
     }
-    return topNSlowestScanMetricsGroups;
+    return topNSlowestScanMetricsHolders;
   }
 
   private static void getSlowestScanMetricsUtil(StatementContext node,
-    Deque<ScanMetricsGroup> currentScanMetricsGroups, long sumOfMillisBetweenNexts,
-    TopNTreeMultiMap<Long, List<ScanMetricsGroup>> topNSlowestScanMetricsGroups) {
-    Iterator<ScanMetricsGroup> currentScanMetricsGroupIterator =
+    Deque<ScanMetricsHolder> currentScanMetricsHolders, long sumOfMillisBetweenNexts,
+    TopNTreeMultiMap<Long, List<ScanMetricsHolder>> topNSlowestScanMetricsHolders) {
+    Iterator<ScanMetricsHolder> currentScanMetricsHolderIterator =
       node.getSlowestScanMetricsQueue().getIterator();
-    if (currentScanMetricsGroupIterator.hasNext()) {
+    if (currentScanMetricsHolderIterator.hasNext()) {
       do {
-        ScanMetricsGroup currentScanMetricsGroup = currentScanMetricsGroupIterator.next();
-        long currentMillisBetweenNexts = currentScanMetricsGroup.getSumOfMillisSecBetweenNexts();
+        ScanMetricsHolder currentScanMetricsHolder = currentScanMetricsHolderIterator.next();
+        long currentMillisBetweenNexts = currentScanMetricsHolder.getCostOfScan();
         long newSumOfMillisBetweenNexts = sumOfMillisBetweenNexts + currentMillisBetweenNexts;
 
         // Add at tail of the dequeue
-        currentScanMetricsGroups.addLast(currentScanMetricsGroup);
+        currentScanMetricsHolders.addLast(currentScanMetricsHolder);
 
-        traverseSlowestScanMetricsTree(node, currentScanMetricsGroups, newSumOfMillisBetweenNexts,
-          topNSlowestScanMetricsGroups);
-        currentScanMetricsGroups.removeLast();
-      } while (currentScanMetricsGroupIterator.hasNext());
+        traverseSlowestScanMetricsTree(node, currentScanMetricsHolders, newSumOfMillisBetweenNexts,
+          topNSlowestScanMetricsHolders);
+        currentScanMetricsHolders.removeLast();
+      } while (currentScanMetricsHolderIterator.hasNext());
     } else {
-      traverseSlowestScanMetricsTree(node, currentScanMetricsGroups, sumOfMillisBetweenNexts,
-        topNSlowestScanMetricsGroups);
+      traverseSlowestScanMetricsTree(node, currentScanMetricsHolders, sumOfMillisBetweenNexts,
+        topNSlowestScanMetricsHolders);
     }
   }
 
   private static void traverseSlowestScanMetricsTree(StatementContext node,
-    Deque<ScanMetricsGroup> currentScanMetricsGroups, long sumOfMillisBetweenNexts,
-    TopNTreeMultiMap<Long, List<ScanMetricsGroup>> topNSlowestScanMetricsGroups) {
+    Deque<ScanMetricsHolder> currentScanMetricsHolders, long sumOfMillisBetweenNexts,
+    TopNTreeMultiMap<Long, List<ScanMetricsHolder>> topNSlowestScanMetricsHolders) {
     Set<StatementContext> subContexts = node.getSubStatementContexts();
     if (subContexts == null || subContexts.isEmpty()) {
-      topNSlowestScanMetricsGroups.put(sumOfMillisBetweenNexts,
-        () -> new ArrayList<>(currentScanMetricsGroups));
+      topNSlowestScanMetricsHolders.put(sumOfMillisBetweenNexts,
+        () -> new ArrayList<>(currentScanMetricsHolders));
     } else {
       // Process sub-contexts
       for (StatementContext sub : subContexts) {
-        getSlowestScanMetricsUtil(sub, currentScanMetricsGroups, sumOfMillisBetweenNexts,
-          topNSlowestScanMetricsGroups);
+        getSlowestScanMetricsUtil(sub, currentScanMetricsHolders, sumOfMillisBetweenNexts,
+          topNSlowestScanMetricsHolders);
       }
     }
   }

@@ -23,13 +23,13 @@ import java.util.Iterator;
 import java.util.concurrent.ConcurrentLinkedDeque;
 
 /**
- * Maintains a queue of {@link ScanMetricsGroup} instances, one instance per HBase scan created by
- * Phoenix client. The class exposes an iterator which returns ScanMetricsGroup instances in reverse
- * order of insertion as the last inserted instance is more likely to correspond to the slowest
- * HBase scan.
+ * Maintains a queue of {@link ScanMetricsHolder} instances, one instance per HBase scan created by
+ * Phoenix client. The class exposes an iterator which returns ScanMetricsHolder instances in
+ * reverse order of insertion as the last inserted instance is more likely to correspond to the
+ * slowest HBase scan.
  * <p>
- * The insertion of ScanMetricsGroup instances to the queue is thread-safe, so multiple parallel
- * scans can concurrently add their ScanMetricsGroup instances to the queue.
+ * The insertion of ScanMetricsHolder instances to the queue is thread-safe, so multiple parallel
+ * scans can concurrently add their ScanMetricsHolder instances to the queue.
  */
 public class SlowestScanMetricsQueue {
 
@@ -39,16 +39,16 @@ public class SlowestScanMetricsQueue {
   public static final SlowestScanMetricsQueue NOOP_SLOWEST_SCAN_METRICS_QUEUE =
     new SlowestScanMetricsQueue() {
       @Override
-      public void add(ScanMetricsGroup scanMetricsGroup) {
+      public void add(ScanMetricsHolder scanMetricsHolder) {
       }
 
       @Override
-      public Iterator<ScanMetricsGroup> getIterator() {
+      public Iterator<ScanMetricsHolder> getIterator() {
         return Collections.emptyIterator();
       }
     };
 
-  private final Deque<ScanMetricsGroup> slowestScanMetricsQueue;
+  private final Deque<ScanMetricsHolder> slowestScanMetricsQueue;
 
   /**
    * Creates a new SlowestScanMetricsQueue with an empty concurrent deque.
@@ -58,20 +58,20 @@ public class SlowestScanMetricsQueue {
   }
 
   /**
-   * Adds a {@link ScanMetricsGroup} instance to the queue. This method is thread-safe and can be
+   * Adds a {@link ScanMetricsHolder} instance to the queue. This method is thread-safe and can be
    * called concurrently by multiple threads.
-   * @param scanMetricsGroup the scan metrics group to add to the queue
+   * @param scanMetricsHolder the scan metrics holder to add to the queue
    */
-  public void add(ScanMetricsGroup scanMetricsGroup) {
-    this.slowestScanMetricsQueue.add(scanMetricsGroup);
+  public void add(ScanMetricsHolder scanMetricsHolder) {
+    this.slowestScanMetricsQueue.add(scanMetricsHolder);
   }
 
   /**
    * Returns an iterator that traverses the queue in reverse order of insertion (LIFO). The most
-   * recently added {@link ScanMetricsGroup} will be returned first.
-   * @return an iterator over the scan metrics groups in reverse insertion order
+   * recently added {@link ScanMetricsHolder} will be returned first.
+   * @return an iterator over the scan metrics holders in reverse insertion order
    */
-  public Iterator<ScanMetricsGroup> getIterator() {
+  public Iterator<ScanMetricsHolder> getIterator() {
     return this.slowestScanMetricsQueue.descendingIterator();
   }
 }

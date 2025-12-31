@@ -67,7 +67,6 @@ import org.apache.phoenix.monitoring.HTableThreadPoolMetricsManager;
 import org.apache.phoenix.monitoring.HistogramDistribution;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.monitoring.PhoenixTableMetric;
-import org.apache.phoenix.monitoring.ScanMetricsGroup;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.monitoring.connectionqueryservice.ConnectionQueryServicesMetricsManager;
 import org.apache.phoenix.query.QueryConstants;
@@ -100,6 +99,7 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
 
 import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 /**
  * Collection of non JDBC compliant utility methods
@@ -1553,7 +1553,7 @@ public class PhoenixRuntime {
    *
    * <pre>
    * {@code
-   * List<List<ScanMetricsGroup>> slowestScanMetrics = null;
+   * List<List<JsonObject>> slowestScanMetrics = null;
    * try (ResultSet rs = stmt.executeQuery()) {
    *    while(rs.next()) {
    *      .....
@@ -1564,10 +1564,10 @@ public class PhoenixRuntime {
    * </pre>
    *
    * @param rs the result set to get the slowest scan metrics
-   * @return a list of lists of {@link ScanMetricsGroup}
+   * @return a list of lists of {@link JsonObject} objects containing the metrics for top N slowest
+   *         scans
    */
-  public static List<List<ScanMetricsGroup>> getTopNSlowestScanMetrics(ResultSet rs)
-    throws SQLException {
+  public static List<List<JsonObject>> getTopNSlowestScanMetrics(ResultSet rs) throws SQLException {
     PhoenixMonitoredResultSet resultSet = rs.unwrap(PhoenixMonitoredResultSet.class);
     return resultSet.getTopNSlowestScanMetrics();
   }

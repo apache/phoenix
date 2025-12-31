@@ -30,12 +30,13 @@ import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.MetricType;
-import org.apache.phoenix.monitoring.ScanMetricsGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 /**
  * ParallelPhoenixResultSet that provides the standard wait until at least one cluster completes. We
@@ -136,8 +137,8 @@ public class ParallelPhoenixResultSet extends DelegateResultSet
   }
 
   @Override
-  public List<List<ScanMetricsGroup>> getTopNSlowestScanMetrics() {
-    List<List<ScanMetricsGroup>> metrics;
+  public List<List<JsonObject>> getTopNSlowestScanMetrics() {
+    List<List<JsonObject>> metrics;
     if (rs != null) {
       metrics = ((PhoenixMonitoredResultSet) rs).getTopNSlowestScanMetrics();
     } else {
