@@ -322,10 +322,6 @@ public class PhoenixConnection
     this.mutateBatchSize = JDBCUtil.getMutateBatchSize(url, this.info, this.services.getProps());
     this.mutateBatchSizeBytes =
       JDBCUtil.getMutateBatchSizeBytes(url, this.info, this.services.getProps());
-    this.slowestScanMetricsCount =
-      JDBCUtil.getSlowestScanMetricsCount(url, this.info, this.services.getProps());
-    this.isScanMetricsByRegionEnabled =
-      JDBCUtil.isScanMetricsByRegionEnabled(url, this.info, this.services.getProps());
     datePattern =
       this.services.getProps().get(QueryServices.DATE_FORMAT_ATTRIB, DateUtil.DEFAULT_DATE_FORMAT);
     timePattern =
@@ -363,6 +359,13 @@ public class PhoenixConnection
       .get(QueryServices.AUDIT_LOG_LEVEL, QueryServicesOptions.DEFAULT_AUDIT_LOGGING_LEVEL));
     this.isRequestLevelMetricsEnabled =
       JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info, this.services.getProps());
+    int slowestScanMetricsCount =
+      JDBCUtil.getSlowestScanMetricsCount(url, this.info, this.services.getProps());
+    this.slowestScanMetricsCount = this.isRequestLevelMetricsEnabled ? slowestScanMetricsCount : 0;
+    boolean isScanMetricsByRegionEnabled =
+      JDBCUtil.isScanMetricsByRegionEnabled(url, this.info, this.services.getProps());
+    this.isScanMetricsByRegionEnabled =
+      this.slowestScanMetricsCount > 0 ? isScanMetricsByRegionEnabled : false;
     this.mutationState = mutationState == null
       ? newMutationState(maxSize, maxSizeBytes)
       : new MutationState(mutationState, this);
@@ -1501,6 +1504,6 @@ public class PhoenixConnection
   }
 
   public boolean isScanMetricsByRegionEnabled() {
-    return slowestScanMetricsCount > 0 && isScanMetricsByRegionEnabled;
+    return isScanMetricsByRegionEnabled;
   }
 }

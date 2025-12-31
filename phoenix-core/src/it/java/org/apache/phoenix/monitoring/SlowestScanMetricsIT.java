@@ -419,6 +419,27 @@ public class SlowestScanMetricsIT extends BaseTest {
   }
 
   @Test
+  public void testRequestLevelMetricsDisabled() throws Exception {
+    String tableName = generateUniqueName();
+    Properties props = new Properties();
+    props.setProperty(PhoenixRuntime.REQUEST_METRIC_ATTRIB, "false");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      createTableAndUpsertData(conn, tableName, "");
+      Statement stmt = conn.createStatement();
+      String sql = "SELECT * FROM " + tableName + " WHERE k1 = 1 AND k2 = 'a'";
+      ResultSet rs = stmt.executeQuery(sql);
+      int rowCount = 0;
+      while (rs.next()) {
+        rowCount++;
+      }
+      assertEquals(1, rowCount);
+      JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
+      // No slowest scan metrics are returned as request level metrics are disabled.
+      assertTrue(slowestScanMetricsJsonArray.isEmpty());
+    }
+  }
+
+  @Test
   public void testSlowestScanMetricsDisabled() throws Exception {
     String tableName = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
