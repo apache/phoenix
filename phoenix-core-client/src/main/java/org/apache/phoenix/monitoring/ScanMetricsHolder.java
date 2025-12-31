@@ -41,7 +41,9 @@ import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
 import java.io.IOException;
 import java.util.Map;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.hbase.util.JsonMapper;
+import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.log.LogLevel;
 
 public class ScanMetricsHolder {
@@ -70,7 +72,7 @@ public class ScanMetricsHolder {
   private Object scan;
 
   private static final ScanMetricsHolder NO_OP_INSTANCE =
-    new ScanMetricsHolder(new ReadMetricQueue(false, LogLevel.OFF), "", null);
+    new ScanMetricsHolder(new ReadMetricQueue(false, LogLevel.OFF), "", null, false);
 
   public static ScanMetricsHolder getInstance(ReadMetricQueue readMetrics, String tableName,
     Scan scan, LogLevel connectionLogLevel) {
@@ -82,14 +84,15 @@ public class ScanMetricsHolder {
     if (connectionLogLevel == LogLevel.OFF && !readMetrics.isRequestMetricsEnabled()) {
       return NO_OP_INSTANCE;
     }
-    scan.setScanMetricsEnabled(true);
-    scan.setEnableScanMetricsByRegion(isScanMetricsByRegionEnabled);
-    return new ScanMetricsHolder(readMetrics, tableName, scan);
+    return new ScanMetricsHolder(readMetrics, tableName, scan, isScanMetricsByRegionEnabled);
   }
 
-  private ScanMetricsHolder(ReadMetricQueue readMetrics, String tableName, Scan scan) {
+  private ScanMetricsHolder(ReadMetricQueue readMetrics, String tableName, Scan scan,
+    boolean isScanMetricsByRegionEnabled) {
     readMetrics.addScanHolder(this);
     this.scan = scan;
+    scan.setScanMetricsEnabled(true);
+    scan.setEnableScanMetricsByRegion(isScanMetricsByRegionEnabled);
     countOfRPCcalls = readMetrics.allotMetric(COUNT_RPC_CALLS, tableName);
     countOfRemoteRPCcalls = readMetrics.allotMetric(COUNT_REMOTE_RPC_CALLS, tableName);
     sumOfMillisSecBetweenNexts = readMetrics.allotMetric(COUNT_MILLS_BETWEEN_NEXTS, tableName);
@@ -198,6 +201,45 @@ public class ScanMetricsHolder {
 
   public void setScanMetricMap(Map<String, Long> scanMetricMap) {
     this.scanMetricMap = scanMetricMap;
+  }
+
+  public void populateMetrics(Long dummyRowCounter) {
+    changeMetric(countOfRPCcalls, scanMetricMap.get(ScanMetrics.RPC_CALLS_METRIC_NAME));
+    changeMetric(countOfRemoteRPCcalls,
+      scanMetricMap.get(ScanMetrics.REMOTE_RPC_CALLS_METRIC_NAME));
+    changeMetric(sumOfMillisSecBetweenNexts,
+      scanMetricMap.get(ScanMetrics.MILLIS_BETWEEN_NEXTS_METRIC_NAME));
+    changeMetric(countOfNSRE,
+      scanMetricMap.get(ScanMetrics.NOT_SERVING_REGION_EXCEPTION_METRIC_NAME));
+    changeMetric(countOfBytesInResults,
+      scanMetricMap.get(ScanMetrics.BYTES_IN_RESULTS_METRIC_NAME));
+    changeMetric(countOfBytesInRemoteResults,
+      scanMetricMap.get(ScanMetrics.BYTES_IN_REMOTE_RESULTS_METRIC_NAME));
+    changeMetric(countOfRegions, scanMetricMap.get(ScanMetrics.REGIONS_SCANNED_METRIC_NAME));
+    changeMetric(countOfRPCRetries, scanMetricMap.get(ScanMetrics.RPC_RETRIES_METRIC_NAME));
+    changeMetric(countOfRemoteRPCRetries,
+      scanMetricMap.get(ScanMetrics.REMOTE_RPC_RETRIES_METRIC_NAME));
+    changeMetric(countOfRowsScanned,
+      scanMetricMap.get(ScanMetrics.COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME));
+    changeMetric(countOfRowsFiltered,
+      scanMetricMap.get(ScanMetrics.COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
+    changeMetric(countOfBytesScanned, scanMetricMap.get(ScanMetrics.BYTES_IN_RESULTS_METRIC_NAME));
+    changeMetric(countOfRowsPaged, dummyRowCounter);
+    changeMetric(fsReadTime, CompatScanMetrics.getFsReadTime(scanMetricMap));
+    changeMetric(countOfBytesReadFromFS, CompatScanMetrics.getBytesReadFromFs(scanMetricMap));
+    changeMetric(countOfBytesReadFromMemstore,
+      CompatScanMetrics.getBytesReadFromMemstore(scanMetricMap));
+    changeMetric(countOfBytesReadFromBlockcache,
+      CompatScanMetrics.getBytesReadFromBlockCache(scanMetricMap));
+    changeMetric(countOfBlockReadOps, CompatScanMetrics.getBlockReadOpsCount(scanMetricMap));
+    changeMetric(rpcScanProcessingTime, CompatScanMetrics.getRpcScanProcessingTime(scanMetricMap));
+    changeMetric(rpcScanQueueWaitTime, CompatScanMetrics.getRpcScanQueueWaitTime(scanMetricMap));
+  }
+
+  private void changeMetric(CombinableMetric metric, Long value) {
+    if (value != null) {
+      metric.change(value);
+    }
   }
 
   @Override
