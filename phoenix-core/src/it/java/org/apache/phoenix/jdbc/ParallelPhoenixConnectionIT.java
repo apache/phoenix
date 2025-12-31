@@ -46,6 +46,7 @@ import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_MAX_THREAD
 import static org.apache.phoenix.query.QueryServices.CQSI_THREAD_POOL_METRICS_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -69,6 +70,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
 import org.apache.hadoop.hbase.util.VersionInfo;
 import org.apache.hadoop.test.GenericTestUtils;
@@ -76,6 +78,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
+import org.apache.phoenix.jdbc.ParallelPhoenixResultSetFactory.ParallelPhoenixResultSetType;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.monitoring.GlobalMetric;
@@ -83,13 +86,16 @@ import org.apache.phoenix.monitoring.HTableThreadPoolHistograms;
 import org.apache.phoenix.monitoring.HTableThreadPoolMetricsManager;
 import org.apache.phoenix.monitoring.HistogramDistribution;
 import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.monitoring.SlowestScanMetricsIT;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.AfterClass;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -99,6 +105,9 @@ import org.junit.rules.TestName;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.hbase.thirdparty.com.google.gson.JsonArray;
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 /**
  * Test failover basics for {@link ParallelPhoenixConnection}.
@@ -709,6 +718,68 @@ public class ParallelPhoenixConnectionIT {
     }
   }
 
+  @Test
+  public void testTopNSlowestScanMetrics() throws Exception {
+    testTopNSlowestScanMetrics(ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET);
+  }
+
+  @Test
+  public void testTopNSlowestScanMetricsWithNullComparingResultSet() throws Exception {
+    testTopNSlowestScanMetrics(
+      ParallelPhoenixResultSetType.PARALLEL_PHOENIX_NULL_COMPARING_RESULT_SET);
+  }
+
+  private void testTopNSlowestScanMetrics(ParallelPhoenixResultSetType rsType) throws Exception {
+    Assume.assumeTrue(VersionInfo.compareVersion(VersionInfo.getVersion(), "2.6.3") > 0);
+    try (Connection conn = getParallelConnection()) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.executeUpdate(String.format("UPSERT INTO %s VALUES(%d, 1984)", tableName, 0));
+        conn.commit();
+        TestUtil.flush(CLUSTERS.getHBaseCluster1(), TableName.valueOf(tableName));
+        TestUtil.flush(CLUSTERS.getHBaseCluster2(), TableName.valueOf(tableName));
+      }
+      waitForCompletion(conn);
+    }
+    Properties props = new Properties();
+    props.setProperty(QueryServices.SLOWEST_SCAN_METRICS_COUNT, String.valueOf(1));
+    props.setProperty(QueryServices.SCAN_METRICS_BY_REGION_ENABLED, "true");
+    props.setProperty(ParallelPhoenixResultSetFactory.PHOENIX_PARALLEL_RESULTSET_TYPE,
+      rsType.getName());
+    try (Connection conn = getParallelConnection(props)) {
+      try (Statement stmt = conn.createStatement()) {
+        ResultSet rs = stmt.executeQuery(String.format("SELECT * FROM %s", tableName));
+        int rowCount = 0;
+        while (rs.next()) {
+          rowCount++;
+        }
+        assertEquals(1, rowCount);
+        if (rsType == ParallelPhoenixResultSetType.PARALLEL_PHOENIX_RESULT_SET) {
+          assertTrue(rs instanceof ParallelPhoenixResultSet);
+        } else {
+          assertTrue(rs instanceof ParallelPhoenixNullComparingResultSet);
+        }
+        JsonArray slowestScanMetricsJsonArray =
+          SlowestScanMetricsIT.getSlowestScanMetricsJsonArray(rs);
+
+        // Outer array has size 1 as its scan of single region only.
+        assertEquals(1, slowestScanMetricsJsonArray.size());
+        JsonArray groupArray = slowestScanMetricsJsonArray.get(0).getAsJsonArray();
+        // Inner array has size 1 as it's a simple query and not a query with subquery or
+        // JOIN operation.
+        assertEquals(1, groupArray.size());
+        JsonObject groupJson = groupArray.get(0).getAsJsonObject();
+        assertEquals(tableName, groupJson.get("table").getAsString());
+        JsonArray regionsArray = groupJson.get("regions").getAsJsonArray();
+        assertEquals(1, regionsArray.size());
+        JsonObject regionJson = regionsArray.get(0).getAsJsonObject();
+        assertNotNull(regionJson.get("region"));
+        assertNotNull(regionJson.get("server"));
+        // BROC is 1 as it's a simple query so, only data block is read.
+        assertEquals(1, regionJson.get("broc").getAsLong());
+      }
+    }
+  }
+
   /**
    * Test Phoenix connection metrics when no metrics have been generated
    */
@@ -905,6 +976,12 @@ public class ParallelPhoenixConnectionIT {
    */
   private Connection getParallelConnection() throws SQLException {
     return DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties);
+  }
+
+  private Connection getParallelConnection(Properties props) throws SQLException {
+    Properties combinedProps = new Properties(clientProperties);
+    combinedProps.putAll(props);
+    return DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), combinedProps);
   }
 
   void waitForCompletion(Connection conn) throws Exception {

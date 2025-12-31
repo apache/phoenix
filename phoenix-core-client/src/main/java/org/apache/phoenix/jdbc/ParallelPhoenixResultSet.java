@@ -21,6 +21,7 @@ import static org.apache.phoenix.exception.SQLExceptionCode.CLASS_NOT_UNWRAPPABL
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -34,6 +35,8 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 /**
  * ParallelPhoenixResultSet that provides the standard wait until at least one cluster completes. We
@@ -130,6 +133,17 @@ public class ParallelPhoenixResultSet extends DelegateResultSet
       metrics = new HashMap<>();
     }
     context.decorateMetrics(metrics);
+    return metrics;
+  }
+
+  @Override
+  public List<List<JsonObject>> getTopNSlowestScanMetrics() {
+    List<List<JsonObject>> metrics;
+    if (rs != null) {
+      metrics = ((PhoenixMonitoredResultSet) rs).getTopNSlowestScanMetrics();
+    } else {
+      metrics = Collections.emptyList();
+    }
     return metrics;
   }
 
