@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Map;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -35,7 +34,6 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.monitoring.CombinableMetric;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.QueryServices;
@@ -60,8 +58,6 @@ public class ScanningResultIterator implements ResultIterator {
 
   private final boolean isMapReduceContext;
   private final long maxQueryEndTime;
-  private final TableName tableName;
-  private final boolean isScanMetricsByRegionEnabled;
 
   private long dummyRowCounter = 0;
 
@@ -70,9 +66,8 @@ public class ScanningResultIterator implements ResultIterator {
 
   public ScanningResultIterator(ResultScanner scanner, Scan scan,
     ScanMetricsHolder scanMetricsHolder, StatementContext context, boolean isMapReduceContext,
-    long maxQueryEndTime, TableName tableName) {
+    long maxQueryEndTime) {
     this.scanner = scanner;
-    this.tableName = tableName;
     this.scanMetricsHolder = scanMetricsHolder;
     this.context = context;
     scanMetricsUpdated = false;
@@ -91,7 +86,6 @@ public class ScanningResultIterator implements ResultIterator {
         ScanningResultPostValidResultCaller.class);
     this.scanningResultPostValidResultCaller = ReflectionUtils.newInstance(validResultCallerClazz,
       context.getConnection().getQueryServices().getConfiguration());
-    this.isScanMetricsByRegionEnabled = scan.isScanMetricsByRegionEnabled();
   }
 
   @Override
@@ -99,18 +93,6 @@ public class ScanningResultIterator implements ResultIterator {
     // close the scanner so that metrics are available
     scanner.close();
     updateMetrics();
-  }
-
-  private void changeMetric(CombinableMetric metric, Long value) {
-    if (value != null) {
-      metric.change(value);
-    }
-  }
-
-  private void changeMetric(GlobalClientMetrics metric, Long value) {
-    if (value != null) {
-      metric.update(value);
-    }
   }
 
   private void updateMetrics() {

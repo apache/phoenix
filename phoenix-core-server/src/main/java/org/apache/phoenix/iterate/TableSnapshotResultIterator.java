@@ -28,7 +28,6 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.PrivateCellUtil;
-import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
@@ -157,10 +156,9 @@ public class TableSnapshotResultIterator implements ResultIterator {
       if (this.currentRegion >= this.regions.size()) return false;
       try {
         RegionInfo hri = regions.get(this.currentRegion);
-        TableName tableName = htd.getTableName();
         this.scanIterator = new ScanningResultIterator(
           new SnapshotScanner(configuration, fs, restoreDir, htd, hri, scan), scan,
-          scanMetricsHolder, context, isMapReduceContext, maxQueryEndTime, tableName);
+          scanMetricsHolder, context, isMapReduceContext, maxQueryEndTime);
       } catch (Throwable e) {
         throw ClientUtil.parseServerException(e);
       }
