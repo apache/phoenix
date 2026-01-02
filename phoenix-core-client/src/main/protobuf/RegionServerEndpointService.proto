@@ -51,9 +51,26 @@ message InvalidateServerMetadataCacheRequest {
 }
 
 message InvalidateHAGroupStoreClientRequest {
+  required bytes haGroupName = 1;
+  required bool broadcastUpdate = 2;
 }
 
 message InvalidateHAGroupStoreClientResponse {
+}
+
+message GetClusterRoleRecordRequest {
+  required bytes haGroupName = 1;
+}
+
+message GetClusterRoleRecordResponse {
+  // In case of single cluster configuration, one of the urls and roles can be empty
+  required bytes haGroupName = 1;
+  required bytes policy = 2;
+  optional bytes url1 = 3;
+  optional bytes role1 = 4;
+  optional bytes url2 = 5;
+  optional bytes role2 = 6;
+  optional int64 version = 7;
 }
 
 service RegionServerEndpointService {
@@ -65,4 +82,7 @@ service RegionServerEndpointService {
 
   rpc invalidateHAGroupStoreClient(InvalidateHAGroupStoreClientRequest)
       returns (InvalidateHAGroupStoreClientResponse);
+
+  rpc getClusterRoleRecord(GetClusterRoleRecordRequest)
+      returns (GetClusterRoleRecordResponse);
 }

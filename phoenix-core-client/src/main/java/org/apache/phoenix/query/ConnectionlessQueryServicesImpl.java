@@ -22,6 +22,7 @@ import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -217,6 +218,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
 
   protected String getCDCStreamDDL() {
     return setSystemDDLProperties(QueryConstants.CREATE_CDC_STREAM_METADATA);
+  }
+
+  protected String getHAGroupDDL() {
+    return setSystemDDLProperties(QueryConstants.CREATE_HA_GROUP_METADATA);
   }
 
   private String setSystemDDLProperties(String ddl) {
@@ -494,6 +499,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
         }
         try {
           metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
+        try (Statement stmt = metaConnection.createStatement()) {
+          stmt.executeUpdate(getHAGroupDDL());
         } catch (TableAlreadyExistsException ignore) {
         }
       } catch (SQLException e) {
