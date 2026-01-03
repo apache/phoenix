@@ -225,7 +225,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
       conn.close();
 
       Timestamp expectedTimestamp;
-      ts = 1040;
+      ts = clock.time + 1;
       clock.time = ts;
       conn = DriverManager.getConnection(getUrl(), props);
       stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES('aa','aa',?, null)");
@@ -239,7 +239,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
       conn.commit();
       conn.close();
 
-      ts = 1050;
+      ts = clock.time + 1;
       clock.time = ts;
       conn = DriverManager.getConnection(getUrl(), props);
 

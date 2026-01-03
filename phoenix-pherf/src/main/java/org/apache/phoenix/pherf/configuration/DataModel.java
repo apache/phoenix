@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.pherf.configuration;
 
+import java.util.ArrayList;
 import java.util.List;
 import javax.xml.bind.annotation.XmlAttribute;
 import javax.xml.bind.annotation.XmlElement;
@@ -26,8 +27,8 @@ import javax.xml.bind.annotation.XmlRootElement;
 @XmlRootElement(name = "datamodel")
 public class DataModel {
   private String name;
-  private List<Scenario> scenarios;
-  private List<Column> dataMappingColumns;
+  private List<Scenario> scenarios = new ArrayList<>();
+  private List<Column> dataMappingColumns = new ArrayList<>();
 
   public DataModel() {
   }

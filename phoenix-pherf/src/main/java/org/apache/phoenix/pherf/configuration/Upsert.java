@@ -17,20 +17,19 @@
  */
 package org.apache.phoenix.pherf.configuration;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.xml.bind.annotation.XmlAttribute;
 import org.apache.phoenix.pherf.rules.RulesApplier;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
-
 public class Upsert {
 
   private String id;
   private String upsertGroup;
   private String statement;
-  private List<Column> column;
+  private List<Column> column = new ArrayList<>();
   private boolean useGlobalConnection;
   private Pattern pattern;
   private long timeoutDuration = Long.MAX_VALUE;
@@ -84,7 +83,6 @@ public class Upsert {
   }
 
   public List<Column> getColumn() {
-    if (column == null) return Lists.newArrayList();
     return column;
   }
 

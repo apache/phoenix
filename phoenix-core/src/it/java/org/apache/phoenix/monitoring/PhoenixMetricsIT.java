@@ -46,8 +46,13 @@ import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SELECT_SQ
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_SPOOL_FILE_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_END_TO_END_TIME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_TASK_EXECUTION_TIME;
+import static org.apache.phoenix.monitoring.MetricType.BLOCK_READ_OPS_COUNT;
+import static org.apache.phoenix.monitoring.MetricType.BYTES_READ_FROM_BLOCKCACHE;
+import static org.apache.phoenix.monitoring.MetricType.BYTES_READ_FROM_FS;
+import static org.apache.phoenix.monitoring.MetricType.BYTES_READ_FROM_MEMSTORE;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_MILLS_BETWEEN_NEXTS;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_COMMIT_TIME;
+import static org.apache.phoenix.monitoring.MetricType.FS_READ_TIME;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_BATCH_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
@@ -55,6 +60,8 @@ import static org.apache.phoenix.monitoring.MetricType.QUERY_COMPILER_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_OPTIMIZER_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_RESULT_ITR_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.QUERY_TIMEOUT_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.RPC_SCAN_PROCESSING_TIME;
+import static org.apache.phoenix.monitoring.MetricType.RPC_SCAN_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.SQL_QUERY_PARSING_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.TASK_END_TO_END_TIME;
 import static org.apache.phoenix.monitoring.MetricType.TASK_EXECUTED_COUNTER;
@@ -137,7 +144,9 @@ public class PhoenixMetricsIT extends BasePhoenixMetricsIT {
     Lists.newArrayList(MUTATION_COMMIT_TIME, UPSERT_COMMIT_TIME, DELETE_COMMIT_TIME,
       MUTATION_BATCH_COUNTER, SQL_QUERY_PARSING_TIME_MS);
   private static final List<MetricType> readMetricsToSkip = Lists.newArrayList(TASK_QUEUE_WAIT_TIME,
-    TASK_EXECUTION_TIME, TASK_END_TO_END_TIME, COUNT_MILLS_BETWEEN_NEXTS);
+    TASK_EXECUTION_TIME, TASK_END_TO_END_TIME, COUNT_MILLS_BETWEEN_NEXTS, RPC_SCAN_PROCESSING_TIME,
+    RPC_SCAN_QUEUE_WAIT_TIME, FS_READ_TIME, BYTES_READ_FROM_FS, BYTES_READ_FROM_MEMSTORE,
+    BYTES_READ_FROM_BLOCKCACHE, BLOCK_READ_OPS_COUNT);
   private static final String CUSTOM_URL_STRING = "SESSION";
   private static final AtomicInteger numConnections = new AtomicInteger(0);
   static final String POINT_LOOKUP_SELECT_QUERY = "SELECT J, G, E, (NOW() - I)*24*60*60*1000 FROM"
