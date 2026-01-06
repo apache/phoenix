@@ -103,7 +103,7 @@
     <antlr.version>3.5.2</antlr.version>
     <reload4j.version>1.2.24</reload4j.version>
     <!-- Only for Hbase 2.5 minicluster -->
-    <log4j2.version>2.17.2</log4j2.version>
+    <log4j2.version>2.25.3</log4j2.version>
     <disruptor.version>3.3.6</disruptor.version>
     <slf4j.version>1.7.36</slf4j.version>
     <!-- com.google repo will be used except on Aarch64 platform. -->
