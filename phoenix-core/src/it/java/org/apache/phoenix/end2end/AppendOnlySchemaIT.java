@@ -138,7 +138,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
       // does not make a rpc)
       // else verify no add column calls
       verify(connectionQueryServices, notExists ? times(1) : never()).addColumn(
-        eq(Collections.<Mutation> emptyList()), any(), any(), any(), anyMap(), anySet(), anyList());
+        eq(Collections.<Mutation> emptyList()), any(), any(), any(), anyMap(), anySet(), anyList(), any());
 
       // upsert one row
       conn2.createStatement()

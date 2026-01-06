@@ -1057,7 +1057,7 @@ public class MetaDataClient {
         }
         // if there are new columns to add
         return addColumn(table, columnDefs, statement.getProps(), statement.ifNotExists(), true,
-          NamedTableNode.create(statement.getTableName()), statement.getTableType(), false, null);
+          NamedTableNode.create(statement.getTableName()), statement.getTableType(), false, null, true);
       }
     }
     table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType,
@@ -4593,13 +4593,13 @@ public class MetaDataClient {
     PTable table = FromCompiler.getResolver(statement, connection).getTables().get(0).getTable();
     return addColumn(table, statement.getColumnDefs(), statement.getProps(),
       statement.ifNotExists(), false, statement.getTable(), statement.getTableType(),
-      statement.isCascade(), statement.getIndexes());
+      statement.isCascade(), statement.getIndexes(), statement.getReopenRegions());
   }
 
   public MutationState addColumn(PTable table, List<ColumnDef> origColumnDefs,
     ListMultimap<String, Pair<String, Object>> stmtProperties, boolean ifNotExists,
     boolean removeTableProps, NamedTableNode namedTableNode, PTableType tableType, boolean cascade,
-    List<NamedNode> indexes) throws SQLException {
+    List<NamedNode> indexes, boolean reopenRegions) throws SQLException {
     connection.rollback();
     List<PTable> indexesPTable = Lists
       .newArrayListWithExpectedSize(indexes != null ? indexes.size() : table.getIndexes().size());
@@ -5100,7 +5100,7 @@ public class MetaDataClient {
         }
         MetaDataMutationResult result =
           connection.getQueryServices().addColumn(tableMetaData, table, getParentTable(table),
-            transformingNewTable, properties, colFamiliesForPColumnsToBeAdded, columns);
+            transformingNewTable, properties, colFamiliesForPColumnsToBeAdded, columns, reopenRegions);
 
         try {
           MutationCode code = processMutationResult(schemaName, tableName, result);
@@ -5593,7 +5593,7 @@ public class MetaDataClient {
                   tableContainingColumnToDrop.getSchemaName().getBytes(),
                   tableContainingColumnToDrop.getTableName().getBytes()))),
                 tableContainingColumnToDrop, null, null, family,
-                Sets.newHashSet(Bytes.toString(emptyCF)), Collections.<PColumn> emptyList());
+                Sets.newHashSet(Bytes.toString(emptyCF)), Collections.<PColumn> emptyList(), true);
 
             }
           }

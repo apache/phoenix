@@ -36,6 +36,7 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
+import org.junit.Assert;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
@@ -1034,4 +1035,19 @@ public class QueryParserTest {
     parseQueryThatShouldFail(
       "SELECT b, x from x WHERE x = " + "b'0 10 ' --comment \n /* comment */ '00 000' \n \n ''");
   }
+
+    @Test
+    public void testAlterTableReopenRegions() throws Exception {
+        AddColumnStatement stmt = parseQuery("ALTER TABLE S.T SET k=v", AddColumnStatement.class);
+        Assert.assertNotNull(stmt);
+        Assert.assertTrue(stmt.getReopenRegions());
+        stmt = parseQuery("ALTER TABLE S.T SET k=v REOPEN_REGIONS=true", AddColumnStatement.class);
+        Assert.assertNotNull(stmt);
+        Assert.assertTrue(stmt.getReopenRegions());
+        stmt = parseQuery("ALTER TABLE S.T SET k=v REOPEN_REGIONS=false", AddColumnStatement.class);
+        Assert.assertNotNull(stmt);
+        Assert.assertFalse(stmt.getReopenRegions());
+        parseQueryThatShouldFail("ALTER TABLE ADD COL VARCHAR REOPEN_REGIONS=false");
+        parseQueryThatShouldFail("ALTER TABLE DROP COLUMN COL REOPEN_REGIONS=false");
+    }
 }

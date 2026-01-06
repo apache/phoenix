@@ -174,7 +174,7 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
   public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, PTable table,
     PTable parentTable, PTable transformingNewTable,
     Map<String, List<Pair<String, Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded,
-    List<PColumn> columns) throws SQLException;
+    List<PColumn> columns, boolean reopenRegions) throws SQLException;
 
   public MetaDataMutationResult dropColumn(List<Mutation> tableMetadata, PTableType tableType,
     PTable parentTable) throws SQLException;

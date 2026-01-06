@@ -440,9 +440,9 @@ public class ParseNodeFactory {
 
   public AddColumnStatement addColumn(NamedTableNode table, PTableType tableType,
     List<ColumnDef> columnDefs, boolean ifNotExists,
-    ListMultimap<String, Pair<String, Object>> props, boolean cascade, List<NamedNode> indexes) {
+    ListMultimap<String, Pair<String, Object>> props, boolean cascade, List<NamedNode> indexes, Boolean reopenRegions) {
     return new AddColumnStatement(table, tableType, columnDefs, ifNotExists, props, cascade,
-      indexes);
+      indexes, reopenRegions);
   }
 
   public DropColumnStatement dropColumn(NamedTableNode table, PTableType tableType,

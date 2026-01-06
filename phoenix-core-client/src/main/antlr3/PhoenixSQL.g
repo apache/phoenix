@@ -161,6 +161,7 @@ tokens
     REGIONS = 'regions';
     NOVERIFY = 'noverify';
     RETURNING = 'returning';
+    REOPEN_REGIONS = 'reopen_regions';
 }
 
 
@@ -749,8 +750,8 @@ alter_session_node returns [AlterSessionStatement ret]
 // Parse an alter table statement.
 alter_table_node returns [AlterTableStatement ret]
     :   ALTER (TABLE | v=VIEW) t=from_table_name
-        ( (DROP COLUMN (IF ex=EXISTS)? c=column_names) | (ADD (IF NOT ex=EXISTS)? (d=column_defs) (p=fam_properties)?) (cas=CASCADE INDEX (list=indexes | all=ALL))? | (SET (p=fam_properties)) )
-        { PTableType tt = v==null ? (QueryConstants.SYSTEM_SCHEMA_NAME.equals(t.getSchemaName()) ? PTableType.SYSTEM : PTableType.TABLE) : PTableType.VIEW; ret = ( c == null ? factory.addColumn(factory.namedTable(null,t), tt, d, ex!=null, p, cas!=null, (all == null ? list : null)) : factory.dropColumn(factory.namedTable(null,t), tt, c, ex!=null) ); }
+        ( (DROP COLUMN (IF ex=EXISTS)? c=column_names) | (ADD (IF NOT ex=EXISTS)? (d=column_defs) (p=fam_properties)?) (cas=CASCADE INDEX (list=indexes | all=ALL))? | (SET (p=fam_properties) (REOPEN_REGIONS EQ reopen=literal)?) )
+        { PTableType tt = v==null ? (QueryConstants.SYSTEM_SCHEMA_NAME.equals(t.getSchemaName()) ? PTableType.SYSTEM : PTableType.TABLE) : PTableType.VIEW; Boolean reopenRegions = reopen != null ? (Boolean)reopen.getValue() : null; ret = ( c == null ? factory.addColumn(factory.namedTable(null,t), tt, d, ex!=null, p, cas!=null, (all == null ? list : null), reopenRegions) : factory.dropColumn(factory.namedTable(null,t), tt, c, ex!=null) ); }
     ;
 
 update_statistics_node returns [UpdateStatisticsStatement ret]

@@ -393,7 +393,7 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
   public MetaDataMutationResult addColumn(List<Mutation> tableMetaData, PTable table,
     PTable parentTable, PTable transformingNewTable,
     Map<String, List<Pair<String, Object>>> properties, Set<String> colFamiliesForPColumnsToBeAdded,
-    List<PColumn> columnsToBeAdded) throws SQLException {
+    List<PColumn> columnsToBeAdded, boolean reopenRegion) throws SQLException {
     List<PColumn> columns = Lists.newArrayList(table.getColumns());
     columns.addAll(columnsToBeAdded);
     return new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0,
