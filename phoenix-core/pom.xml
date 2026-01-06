@@ -31,6 +31,9 @@
   </properties>
 
   <dependencies>
+    <!-- As phoenix-core servers both as a module for tests and as a backwards compatibility module
+    phoenix-core-client and phoenix-core-server must be compile scope so that dependents get
+    all required transitive dependencies -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core-client</artifactId>
@@ -110,6 +113,12 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-zookeeper</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-hadoop2-compat</artifactId>
       <scope>test</scope>
     </dependency>
@@ -152,7 +161,6 @@
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-hbase-compat-${hbase.compat.version}</artifactId>
-      <scope>test</scope>
     </dependency>
 
     <dependency>
@@ -205,11 +213,6 @@
       <type>test-jar</type>
       <scope>test</scope>
     </dependency>
-    <dependency>
-      <groupId>org.apache.hbase</groupId>
-      <artifactId>hbase-testing-util</artifactId>
-      <scope>test</scope>
-    </dependency>
 
     <!-- Omid test dependencies -->
     <dependency>
@@ -239,6 +242,7 @@
     <dependency>
       <groupId>org.apache.commons</groupId>
       <artifactId>commons-compress</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.phoenix.thirdparty</groupId>
@@ -414,16 +418,19 @@
           <ignoredUnusedDeclaredDependencies>
             <ignoredUnusedDeclaredDependency>org.apache.omid:omid-commit-table</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.omid:omid-transaction-client</ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>org.apache.hbase:hbase-testing-util</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.omid:omid-hbase-client</ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>org.apache.zookeeper:zookeeper-jute</ignoredUnusedDeclaredDependency>
-            <ignoredUnusedDeclaredDependency>org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-api</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-core</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-slf4j-impl</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-1.2-api</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.slf4j:jul-to-slf4j</ignoredUnusedDeclaredDependency>
+            <ignoredUnusedDeclaredDependency>org.apache.phoenix:phoenix-hbase-compat-${hbase.compat.version}</ignoredUnusedDeclaredDependency>
           </ignoredUnusedDeclaredDependencies>
+          <ignoredNonTestScopedDependencies>
+            <ignoredNonTestScopedDependency>org.apache.phoenix:phoenix-core-client</ignoredNonTestScopedDependency>
+            <ignoredNonTestScopedDependency>org.apache.phoenix:phoenix-core-server</ignoredNonTestScopedDependency>
+            <ignoredNonTestScopedDependency>org.apache.hbase.thirdparty:hbase-shaded-miscellaneous</ignoredNonTestScopedDependency>
+          </ignoredNonTestScopedDependencies>
           <ignoredUsedUndeclaredDependencies/>
         </configuration>
         <executions>
