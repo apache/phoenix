@@ -7202,8 +7202,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       String openQry = "select * from " + tableName + " where k > 'a' and k<'aaa'";
       Scan openScan =
         getOptimizedQueryPlan(openQry, Collections.emptyList()).getContext().getScan();
-//      assertEquals("\\x9E\\x9E\\x9F\\x00", Bytes.toStringBinary(openScan.getStartRow()));
-//      assertEquals("\\x9E\\xFF", Bytes.toStringBinary(openScan.getStopRow()));
+      assertEquals("\\x9E\\x9E\\x9F\\x00", Bytes.toStringBinary(openScan.getStartRow()));
+      assertEquals("\\x9E\\xFF", Bytes.toStringBinary(openScan.getStopRow()));
       ResultSet rs = stmt.executeQuery("EXPLAIN " + openQry);
       String explainPlan = QueryUtil.getExplainPlan(rs);
       assertEquals(explainExpected, explainPlan);

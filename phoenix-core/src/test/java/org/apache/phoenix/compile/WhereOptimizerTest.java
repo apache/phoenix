@@ -1280,8 +1280,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     byte[] invStopRow = new byte[startRow.length];
     SortOrder.invert(stopRow, 0, invStopRow, 0, stopRow.length);
 
-    assertArrayEquals(startRow, lowerRange);
-    assertArrayEquals(stopRow, upperRange);
+    assertArrayEquals(invStopRow, lowerRange);
+    assertArrayEquals(invStartRow, upperRange);
     assertFalse(lowerInclusive);
     assertTrue(upperInclusive);
 
@@ -3241,15 +3241,15 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
         + "where (OBJ.OBJECT_ID, OBJ.OBJECT_VERSION) in (('obj1', '2222'),('obj2', '1111'),('obj3', '1111'))";
       queryPlan = TestUtil.getOptimizeQueryPlan(conn, sql);
       scan = queryPlan.getContext().getScan();
-//      FilterList filterList = (FilterList) scan.getFilter();
-//      assertTrue(filterList.getOperator() == Operator.MUST_PASS_ALL);
-//      assertEquals(filterList.getFilters().size(), 2);
-//      assertTrue(filterList.getFilters().get(0) instanceof SkipScanFilter);
-//      assertTrue(filterList.getFilters().get(1) instanceof RowKeyComparisonFilter);
-//      RowKeyComparisonFilter rowKeyComparisonFilter =
-//        (RowKeyComparisonFilter) filterList.getFilters().get(1);
-//      assertEquals(rowKeyComparisonFilter.toString(),
-//        "(OBJECT_ID, OBJECT_VERSION) IN (X'6f626a3100cdcdcdcd',X'6f626a3200cececece',X'6f626a3300cececece')");
+      FilterList filterList = (FilterList) scan.getFilter();
+      assertTrue(filterList.getOperator() == Operator.MUST_PASS_ALL);
+      assertEquals(filterList.getFilters().size(), 2);
+      assertTrue(filterList.getFilters().get(0) instanceof SkipScanFilter);
+      assertTrue(filterList.getFilters().get(1) instanceof RowKeyComparisonFilter);
+      RowKeyComparisonFilter rowKeyComparisonFilter =
+        (RowKeyComparisonFilter) filterList.getFilters().get(1);
+      assertEquals(rowKeyComparisonFilter.toString(),
+        "(OBJECT_ID, OBJECT_VERSION) IN (X'6f626a3100cdcdcdcd',X'6f626a3200cececece',X'6f626a3300cececece')");
 
       assertTrue(queryPlan.getContext().getScanRanges().isPointLookup());
       assertArrayEquals(startKey, scan.getStartRow());
