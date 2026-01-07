@@ -152,17 +152,27 @@ public class HAGroupStoreRecord {
   private final String protocolVersion;
   private final String haGroupName;
   private final HAGroupState haGroupState;
+  private final Long lastSyncStateTimeInMs;
 
   @JsonCreator
   public HAGroupStoreRecord(@JsonProperty("protocolVersion") String protocolVersion,
     @JsonProperty("haGroupName") String haGroupName,
-    @JsonProperty("haGroupState") HAGroupState haGroupState) {
+    @JsonProperty("haGroupState") HAGroupState haGroupState,
+    @JsonProperty("lastSyncStateTimeInMs") Long lastSyncStateTimeInMs) {
     Preconditions.checkNotNull(haGroupName, "HA group name cannot be null!");
     Preconditions.checkNotNull(haGroupState, "HA group state cannot be null!");
 
     this.protocolVersion = Objects.toString(protocolVersion, DEFAULT_PROTOCOL_VERSION);
     this.haGroupName = haGroupName;
     this.haGroupState = haGroupState;
+    this.lastSyncStateTimeInMs = lastSyncStateTimeInMs;
+  }
+
+  /**
+   * Convenience constructor for backward compatibility without lastSyncStateTimeInMs.
+   */
+  public HAGroupStoreRecord(String protocolVersion, String haGroupName, HAGroupState haGroupState) {
+    this(protocolVersion, haGroupName, haGroupState, null);
   }
 
   public static Optional<HAGroupStoreRecord> fromJson(byte[] bytes) {
@@ -183,7 +193,8 @@ public class HAGroupStoreRecord {
 
   public boolean hasSameInfo(HAGroupStoreRecord other) {
     return haGroupName.equals(other.haGroupName) && haGroupState.equals(other.haGroupState)
-      && protocolVersion.equals(other.protocolVersion);
+      && protocolVersion.equals(other.protocolVersion)
+      && Objects.equals(lastSyncStateTimeInMs, other.lastSyncStateTimeInMs);
   }
 
   public String getProtocolVersion() {
@@ -199,6 +210,10 @@ public class HAGroupStoreRecord {
     return haGroupState;
   }
 
+  public Long getLastSyncStateTimeInMs() {
+    return lastSyncStateTimeInMs;
+  }
+
   @JsonIgnore
   public ClusterRoleRecord.ClusterRole getClusterRole() {
     return haGroupState.getClusterRole();
@@ -207,7 +222,7 @@ public class HAGroupStoreRecord {
   @Override
   public int hashCode() {
     return new HashCodeBuilder().append(protocolVersion).append(haGroupName).append(haGroupState)
-      .hashCode();
+      .append(lastSyncStateTimeInMs).hashCode();
   }
 
   @Override
@@ -222,14 +237,15 @@ public class HAGroupStoreRecord {
       HAGroupStoreRecord otherRecord = (HAGroupStoreRecord) other;
       return new EqualsBuilder().append(protocolVersion, otherRecord.protocolVersion)
         .append(haGroupName, otherRecord.haGroupName).append(haGroupState, otherRecord.haGroupState)
-        .isEquals();
+        .append(lastSyncStateTimeInMs, otherRecord.lastSyncStateTimeInMs).isEquals();
     }
   }
 
   @Override
   public String toString() {
     return "HAGroupStoreRecord{" + "protocolVersion='" + protocolVersion + '\'' + ", haGroupName='"
-      + haGroupName + '\'' + ", haGroupState=" + haGroupState + '}';
+      + haGroupName + '\'' + ", haGroupState=" + haGroupState + ", lastSyncStateTimeInMs="
+      + lastSyncStateTimeInMs + '}';
   }
 
   public String toPrettyString() {
