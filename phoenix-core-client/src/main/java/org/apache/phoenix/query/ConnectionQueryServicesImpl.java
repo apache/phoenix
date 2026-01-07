@@ -2128,7 +2128,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       && newDesc.hasCoprocessor(coprocessorClassName));
   }
 
-  private void modifyTable(byte[] tableName, TableDescriptor newDesc, boolean shouldPoll, boolean reopenRegions)
+  private void modifyTable(byte[] tableName, TableDescriptor newDesc, boolean shouldPoll,
+    boolean reopenRegions)
     throws IOException, InterruptedException, TimeoutException, SQLException {
     TableName tn = TableName.valueOf(tableName);
     try (Admin admin = getAdmin()) {
@@ -2936,7 +2937,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   public MetaDataMutationResult addColumn(final List<Mutation> tableMetaData, PTable table,
     final PTable parentTable, final PTable transformingNewTable,
     Map<String, List<Pair<String, Object>>> stmtProperties,
-    Set<String> colFamiliesForPColumnsToBeAdded, List<PColumn> columns, boolean reopenRegions) throws SQLException {
+    Set<String> colFamiliesForPColumnsToBeAdded, List<PColumn> columns, boolean reopenRegions)
+    throws SQLException {
     List<Pair<byte[], Map<String, Object>>> families = new ArrayList<>(stmtProperties.size());
     Map<String, Object> tableProps = new HashMap<>();
     Set<TableDescriptor> tableDescriptors = Collections.emptySet();
@@ -3234,8 +3236,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     }
   }
 
-  private void sendHBaseMetaData(Set<TableDescriptor> tableDescriptors, boolean pollingNeeded, boolean reopenRegions)
-    throws SQLException {
+  private void sendHBaseMetaData(Set<TableDescriptor> tableDescriptors, boolean pollingNeeded,
+    boolean reopenRegions) throws SQLException {
     SQLException sqlE = null;
     for (TableDescriptor descriptor : tableDescriptors) {
       try {

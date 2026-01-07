@@ -33,18 +33,18 @@ public class AddColumnStatement extends AlterTableStatement {
   // boolean indicating whether to reopen regions after this alter statement is executed.
   private final boolean reopenRegions;
 
-    protected AddColumnStatement(NamedTableNode table, PTableType tableType,
-                                 List<ColumnDef> columnDefs, boolean ifNotExists,
-                                 ListMultimap<String, Pair<String, Object>> props, boolean cascade,
-                                 List<NamedNode> indexes, Boolean reopenRegions) {
-        super(table, tableType);
-        this.columnDefs = columnDefs;
-        this.props = props == null ? ImmutableListMultimap.<String, Pair<String, Object>> of() : props;
-        this.ifNotExists = ifNotExists;
-        this.cascade = cascade;
-        this.indexes = indexes;
-        this.reopenRegions = reopenRegions != null ? reopenRegions : true;
-    }
+  protected AddColumnStatement(NamedTableNode table, PTableType tableType,
+    List<ColumnDef> columnDefs, boolean ifNotExists,
+    ListMultimap<String, Pair<String, Object>> props, boolean cascade, List<NamedNode> indexes,
+    Boolean reopenRegions) {
+    super(table, tableType);
+    this.columnDefs = columnDefs;
+    this.props = props == null ? ImmutableListMultimap.<String, Pair<String, Object>> of() : props;
+    this.ifNotExists = ifNotExists;
+    this.cascade = cascade;
+    this.indexes = indexes;
+    this.reopenRegions = reopenRegions != null ? reopenRegions : true;
+  }
 
   protected AddColumnStatement(NamedTableNode table, PTableType tableType,
     List<ColumnDef> columnDefs, boolean ifNotExists,
@@ -72,7 +72,7 @@ public class AddColumnStatement extends AlterTableStatement {
     return indexes;
   }
 
-    public boolean getReopenRegions() {
-        return reopenRegions;
-    }
+  public boolean getReopenRegions() {
+    return reopenRegions;
+  }
 }

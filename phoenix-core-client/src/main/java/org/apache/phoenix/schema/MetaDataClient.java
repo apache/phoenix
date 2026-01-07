@@ -1057,7 +1057,8 @@ public class MetaDataClient {
         }
         // if there are new columns to add
         return addColumn(table, columnDefs, statement.getProps(), statement.ifNotExists(), true,
-          NamedTableNode.create(statement.getTableName()), statement.getTableType(), false, null, true);
+          NamedTableNode.create(statement.getTableName()), statement.getTableType(), false, null,
+          true);
       }
     }
     table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType,
@@ -4738,9 +4739,9 @@ public class MetaDataClient {
           /**
            * To check if TTL is defined at any of the child below we are checking it at
            * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#mutateColumn(List, ColumnMutator, int, PTable, PTable, boolean)}
-           * level where in function
-           * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl# validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[], byte[], List, int)}
-           * we are already traversing through allDescendantViews.
+           * level where in function {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#
+           * validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[],
+           * byte[], List, int)} we are already traversing through allDescendantViews.
            */
         }
 
@@ -5098,9 +5099,9 @@ public class MetaDataClient {
           }
           acquiredColumnMutexSet.add(pColumn.toString());
         }
-        MetaDataMutationResult result =
-          connection.getQueryServices().addColumn(tableMetaData, table, getParentTable(table),
-            transformingNewTable, properties, colFamiliesForPColumnsToBeAdded, columns, reopenRegions);
+        MetaDataMutationResult result = connection.getQueryServices().addColumn(tableMetaData,
+          table, getParentTable(table), transformingNewTable, properties,
+          colFamiliesForPColumnsToBeAdded, columns, reopenRegions);
 
         try {
           MutationCode code = processMutationResult(schemaName, tableName, result);

@@ -1865,63 +1865,59 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
   }
 
-    @Test
-    public void testAlterReopenRegions() throws Exception {
-        Assume.assumeTrue("Reopen Regions for tables with coprocs is supported in hbase versions 2.5.14+ or 2.6.5+",
-                isReopenRegionsSupportedForTablesWithCoprocs());
-        String tableName = generateUniqueName();
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String ddl = "CREATE TABLE " + tableName + "(k INTEGER PRIMARY KEY, v VARCHAR)";
-            conn.createStatement().execute(ddl);
-            Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
-            TableName hTableName = TableName.valueOf(tableName);
+  @Test
+  public void testAlterReopenRegions() throws Exception {
+    Assume.assumeTrue(
+      "Reopen Regions for tables with coprocs is supported in hbase versions 2.5.14+ or 2.6.5+",
+      isReopenRegionsSupportedForTablesWithCoprocs());
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String ddl = "CREATE TABLE " + tableName + "(k INTEGER PRIMARY KEY, v VARCHAR)";
+      conn.createStatement().execute(ddl);
+      Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+      TableName hTableName = TableName.valueOf(tableName);
 
-            conn.createStatement().execute(
-                "ALTER TABLE " + tableName
-                    + " SET \"phoenix.max.lookback.age.seconds\"=100 REOPEN_REGIONS = true");
-            HRegion region = getUtility().getHBaseCluster().getRegions(hTableName).get(0);
-            assertEquals("100", region.getTableDescriptor()
-                .getValue("phoenix.max.lookback.age.seconds"));
+      conn.createStatement().execute("ALTER TABLE " + tableName
+        + " SET \"phoenix.max.lookback.age.seconds\"=100 REOPEN_REGIONS = true");
+      HRegion region = getUtility().getHBaseCluster().getRegions(hTableName).get(0);
+      assertEquals("100", region.getTableDescriptor().getValue("phoenix.max.lookback.age.seconds"));
 
-            conn.createStatement().execute(
-                "ALTER TABLE " + tableName
-                    + " SET \"phoenix.max.lookback.age.seconds\"=200 REOPEN_REGIONS = false");
-            region = getUtility().getHBaseCluster().getRegions(hTableName).get(0);
-            assertEquals("100", region.getTableDescriptor()
-                .getValue("phoenix.max.lookback.age.seconds"));
-            assertEquals("200", admin.getDescriptor(hTableName)
-                .getValue("phoenix.max.lookback.age.seconds"));
+      conn.createStatement().execute("ALTER TABLE " + tableName
+        + " SET \"phoenix.max.lookback.age.seconds\"=200 REOPEN_REGIONS = false");
+      region = getUtility().getHBaseCluster().getRegions(hTableName).get(0);
+      assertEquals("100", region.getTableDescriptor().getValue("phoenix.max.lookback.age.seconds"));
+      assertEquals("200",
+        admin.getDescriptor(hTableName).getValue("phoenix.max.lookback.age.seconds"));
 
-            admin.disableTable(hTableName);
-            admin.enableTable(hTableName);
-            region = getUtility().getHBaseCluster().getRegions(hTableName).get(0);
-            assertEquals("200", region.getTableDescriptor()
-                .getValue("phoenix.max.lookback.age.seconds"));
-        }
+      admin.disableTable(hTableName);
+      admin.enableTable(hTableName);
+      region = getUtility().getHBaseCluster().getRegions(hTableName).get(0);
+      assertEquals("200", region.getTableDescriptor().getValue("phoenix.max.lookback.age.seconds"));
     }
+  }
 
-    private boolean isReopenRegionsSupportedForTablesWithCoprocs() {
-        // true for 2.5.14+ or 2.6.5+ versions, false otherwise
-        String hbaseVersion = VersionInfo.getVersion();
-        String[] versionArr = hbaseVersion.split("\\.");
-        int majorVersion = Integer.parseInt(versionArr[0]);
-        int minorVersion = Integer.parseInt(versionArr[1]);
-        int patchVersion = Integer.parseInt(versionArr[2].split("-")[0]);
-        if (majorVersion > 2) {
-            return true;
-        }
-        if (majorVersion < 2) {
-            return false;
-        }
-        if (minorVersion > 6) {
-            return true;
-        }
-        if (minorVersion < 5) {
-            return false;
-        }
-        if (minorVersion == 5) {
-            return patchVersion >= 14;
-        }
-        return patchVersion >= 5;
+  private boolean isReopenRegionsSupportedForTablesWithCoprocs() {
+    // true for 2.5.14+ or 2.6.5+ versions, false otherwise
+    String hbaseVersion = VersionInfo.getVersion();
+    String[] versionArr = hbaseVersion.split("\\.");
+    int majorVersion = Integer.parseInt(versionArr[0]);
+    int minorVersion = Integer.parseInt(versionArr[1]);
+    int patchVersion = Integer.parseInt(versionArr[2].split("-")[0]);
+    if (majorVersion > 2) {
+      return true;
     }
+    if (majorVersion < 2) {
+      return false;
+    }
+    if (minorVersion > 6) {
+      return true;
+    }
+    if (minorVersion < 5) {
+      return false;
+    }
+    if (minorVersion == 5) {
+      return patchVersion >= 14;
+    }
+    return patchVersion >= 5;
+  }
 }

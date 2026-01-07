@@ -2054,7 +2054,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     ExecutableAddColumnStatement(NamedTableNode table, PTableType tableType,
       List<ColumnDef> columnDefs, boolean ifNotExists,
-      ListMultimap<String, Pair<String, Object>> props, boolean cascade, List<NamedNode> indexes, Boolean reopenRegions) {
+      ListMultimap<String, Pair<String, Object>> props, boolean cascade, List<NamedNode> indexes,
+      Boolean reopenRegions) {
       super(table, tableType, columnDefs, ifNotExists, props, cascade, indexes, reopenRegions);
     }
 
@@ -2253,7 +2254,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     @Override
     public AddColumnStatement addColumn(NamedTableNode table, PTableType tableType,
       List<ColumnDef> columnDefs, boolean ifNotExists,
-      ListMultimap<String, Pair<String, Object>> props, boolean cascade, List<NamedNode> indexes, Boolean reopenRegions) {
+      ListMultimap<String, Pair<String, Object>> props, boolean cascade, List<NamedNode> indexes,
+      Boolean reopenRegions) {
       return new ExecutableAddColumnStatement(table, tableType, columnDefs, ifNotExists, props,
         cascade, indexes, reopenRegions);
     }

@@ -23,6 +23,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyMap;
@@ -138,7 +139,8 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
       // does not make a rpc)
       // else verify no add column calls
       verify(connectionQueryServices, notExists ? times(1) : never()).addColumn(
-        eq(Collections.<Mutation> emptyList()), any(), any(), any(), anyMap(), anySet(), anyList(), any());
+        eq(Collections.<Mutation> emptyList()), any(), any(), any(), anyMap(), anySet(), anyList(),
+        anyBoolean());
 
       // upsert one row
       conn2.createStatement()
