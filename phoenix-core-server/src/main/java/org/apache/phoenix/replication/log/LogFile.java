@@ -22,6 +22,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -418,21 +419,29 @@ public interface LogFile {
 
   /**
    * Utility for determining if a file is a valid replication log file.
-   * @param fs   The FileSystem
-   * @param path Path to the potential replication log file
+   * @param conf            The Configuration
+   * @param fs              The FileSystem
+   * @param path            Path to the potential replication log file
+   * @param validateTrailer Whether to validate the trailer
    * @return true if the file is a valid replication log file, false otherwise
    * @throws IOException if an I/O problem was encountered
    */
-  static boolean isValidLogFile(final FileSystem fs, final Path path) throws IOException {
+  static boolean isValidLogFile(final Configuration conf, final FileSystem fs, final Path path,
+    final boolean validateTrailer) throws IOException {
     long length = fs.getFileStatus(path).getLen();
     try (FSDataInputStream in = fs.open(path)) {
-      if (LogFileTrailer.isValidTrailer(in, length)) {
-        return true;
-      } else {
-        // Not a valid trailer, do we need to do something (set a flag)?
-        // Fall back to checking the header.
-        return LogFileHeader.isValidHeader(in);
+      // Check if the file is too short to be a valid log file.
+      if (length < LogFileHeader.HEADERSIZE) {
+        return false;
       }
+      try (LogFileFormatReader reader = new LogFileFormatReader()) {
+        LogFileReaderContext context = new LogFileReaderContext(conf).setFilePath(path)
+          .setFileSize(length).setValidateTrailer(validateTrailer);
+        reader.init(context, (SeekableDataInput) in);
+      } catch (InvalidLogHeaderException | InvalidLogTrailerException e) {
+        return false;
+      }
+      return true;
     }
   }
 
