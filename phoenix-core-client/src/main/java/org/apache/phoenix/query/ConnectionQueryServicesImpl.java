@@ -5922,8 +5922,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
 
   @Override
   public MetaDataMutationResult updateIndexState(final List<Mutation> tableMetaData,
-    String parentTableName, Map<String, List<Pair<String, Object>>> stmtProperties, PTable table)
-    throws SQLException {
+    String parentTableName, Map<String, List<Pair<String, Object>>> stmtProperties, PTable table,
+    boolean reopenRegions) throws SQLException {
     if (stmtProperties == null) {
       return updateIndexState(tableMetaData, parentTableName);
     }
@@ -5938,7 +5938,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       modifiedTableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
       modifiedTableDescriptors.add(newTableDescriptor);
     }
-    sendHBaseMetaData(modifiedTableDescriptors, true, true);
+    sendHBaseMetaData(modifiedTableDescriptors, true, reopenRegions);
     return updateIndexState(tableMetaData, parentTableName);
   }
 

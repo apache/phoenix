@@ -466,9 +466,9 @@ public class ParseNodeFactory {
 
   public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName,
     boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
-    ListMultimap<String, Pair<String, Object>> props) {
+    ListMultimap<String, Pair<String, Object>> props, Boolean reopenRegions) {
     return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, isRebuildAll,
-      async, props);
+      async, props, reopenRegions);
   }
 
   public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName,

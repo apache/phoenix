@@ -193,9 +193,10 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices
 
   @Override
   public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata,
-    String parentTableName, Map<String, List<Pair<String, Object>>> stmtProperties, PTable table)
-    throws SQLException {
-    return getDelegate().updateIndexState(tableMetadata, parentTableName, stmtProperties, table);
+    String parentTableName, Map<String, List<Pair<String, Object>>> stmtProperties, PTable table,
+    boolean reopenRegions) throws SQLException {
+    return getDelegate().updateIndexState(tableMetadata, parentTableName, stmtProperties, table,
+      reopenRegions);
   }
 
   @Override

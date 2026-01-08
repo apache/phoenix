@@ -32,6 +32,8 @@ public class AlterIndexStatement extends SingleTableStatement {
   private boolean isRebuildAll;
   private ListMultimap<String, Pair<String, Object>> props;
   private static final PTableType tableType = PTableType.INDEX;
+  // boolean indicating whether to reopen regions after this alter statement is executed.
+  private final boolean reopenRegions;
 
   public AlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists,
     PIndexState indexState, boolean isRebuildAll, boolean async) {
@@ -41,6 +43,12 @@ public class AlterIndexStatement extends SingleTableStatement {
   public AlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists,
     PIndexState indexState, boolean isRebuildAll, boolean async,
     ListMultimap<String, Pair<String, Object>> props) {
+    this(indexTableNode, dataTableName, ifExists, indexState, isRebuildAll, async, props, true);
+  }
+
+  public AlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists,
+    PIndexState indexState, boolean isRebuildAll, boolean async,
+    ListMultimap<String, Pair<String, Object>> props, Boolean reopenRegions) {
     super(indexTableNode, 0);
     this.dataTableName = dataTableName;
     this.ifExists = ifExists;
@@ -48,6 +56,7 @@ public class AlterIndexStatement extends SingleTableStatement {
     this.async = async;
     this.isRebuildAll = isRebuildAll;
     this.props = props == null ? ImmutableListMultimap.<String, Pair<String, Object>> of() : props;
+    this.reopenRegions = reopenRegions != null ? reopenRegions : true;
   }
 
   public String getTableName() {
@@ -81,5 +90,9 @@ public class AlterIndexStatement extends SingleTableStatement {
 
   public PTableType getTableType() {
     return tableType;
+  }
+
+  public boolean getReopenRegions() {
+    return reopenRegions;
   }
 }

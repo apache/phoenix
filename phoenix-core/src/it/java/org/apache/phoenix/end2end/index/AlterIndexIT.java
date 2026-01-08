@@ -17,13 +17,21 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.junit.Assert.assertEquals;
+
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.regionserver.HRegion;
+import org.apache.phoenix.end2end.AlterTableIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -41,6 +49,39 @@ public class AlterIndexIT extends ParallelStatsDisabledIT {
       Assert.assertEquals(2, TestUtil.getRowCount(conn, indexName));
       rebuildIndex(conn, indexName, tableName, false);
       Assert.assertEquals(2, TestUtil.getRowCount(conn, indexName));
+    }
+  }
+
+  @Test
+  public void testAlterReopenRegions() throws Exception {
+    Assume.assumeTrue(
+      "Reopen Regions for tables with coprocs is supported in hbase versions 2.5.14+ or 2.6.5+",
+      AlterTableIT.isReopenRegionsSupportedForTablesWithCoprocs());
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String ddl = "CREATE TABLE " + tableName + "(k INTEGER PRIMARY KEY, v VARCHAR)";
+      conn.createStatement().execute(ddl);
+      String indexDdl = "CREATE INDEX " + indexName + " ON " + tableName + "(v)";
+      conn.createStatement().execute(indexDdl);
+      Admin admin = conn.unwrap(PhoenixConnection.class).getQueryServices().getAdmin();
+      TableName hTableName = TableName.valueOf(indexName);
+
+      conn.createStatement().execute("ALTER INDEX " + indexName
+        + " ACTIVE SET \"phoenix.some.config\"=100 REOPEN_REGIONS = true");
+      HRegion region = getUtility().getHBaseCluster().getRegions(hTableName).get(0);
+      assertEquals("100", region.getTableDescriptor().getValue("phoenix.some.config"));
+
+      conn.createStatement().execute("ALTER INDEX " + tableName
+        + " ACTIVE SET \"phoenix.some.config\"=200 REOPEN_REGIONS = false");
+      region = getUtility().getHBaseCluster().getRegions(hTableName).get(0);
+      assertEquals("100", region.getTableDescriptor().getValue("phoenix.some.config"));
+      assertEquals("200", admin.getDescriptor(hTableName).getValue("phoenix.some.config"));
+
+      admin.disableTable(hTableName);
+      admin.enableTable(hTableName);
+      region = getUtility().getHBaseCluster().getRegions(hTableName).get(0);
+      assertEquals("200", region.getTableDescriptor().getValue("phoenix.some.config"));
     }
   }
 

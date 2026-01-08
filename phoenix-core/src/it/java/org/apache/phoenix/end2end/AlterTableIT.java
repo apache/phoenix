@@ -1896,7 +1896,7 @@ public class AlterTableIT extends ParallelStatsDisabledIT {
     }
   }
 
-  private boolean isReopenRegionsSupportedForTablesWithCoprocs() {
+  public static boolean isReopenRegionsSupportedForTablesWithCoprocs() {
     // true for 2.5.14+ or 2.6.5+ versions, false otherwise
     String hbaseVersion = VersionInfo.getVersion();
     String[] versionArr = hbaseVersion.split("\\.");

@@ -183,8 +183,8 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     String parentTableName) throws SQLException;
 
   public MetaDataMutationResult updateIndexState(List<Mutation> tableMetadata,
-    String parentTableName, Map<String, List<Pair<String, Object>>> stmtProperties, PTable table)
-    throws SQLException;
+    String parentTableName, Map<String, List<Pair<String, Object>>> stmtProperties, PTable table,
+    boolean reopenRegions) throws SQLException;
 
   public MutationState updateData(MutationPlan plan) throws SQLException;
 

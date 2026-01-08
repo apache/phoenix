@@ -1858,8 +1858,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     public ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName,
       boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
-      ListMultimap<String, Pair<String, Object>> props) {
-      super(indexTableNode, dataTableName, ifExists, state, isRebuildAll, async, props);
+      ListMultimap<String, Pair<String, Object>> props, Boolean reopenRegions) {
+      super(indexTableNode, dataTableName, ifExists, state, isRebuildAll, async, props,
+        reopenRegions);
     }
 
     @SuppressWarnings("unchecked")
@@ -2301,9 +2302,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     @Override
     public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName,
       boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
-      ListMultimap<String, Pair<String, Object>> props) {
+      ListMultimap<String, Pair<String, Object>> props, Boolean reopenRegions) {
       return new ExecutableAlterIndexStatement(indexTableNode, dataTableName, ifExists, state,
-        isRebuildAll, async, props);
+        isRebuildAll, async, props, reopenRegions);
     }
 
     @Override

@@ -1049,5 +1049,14 @@ public class QueryParserTest {
     Assert.assertFalse(stmt.getReopenRegions());
     parseQueryThatShouldFail("ALTER TABLE ADD COL VARCHAR REOPEN_REGIONS=false");
     parseQueryThatShouldFail("ALTER TABLE DROP COLUMN COL REOPEN_REGIONS=false");
+
+    AlterIndexStatement iStmt = parseQuery("ALTER INDEX I ON T ACTIVE SET k=v REOPEN_REGIONS=true",
+      AlterIndexStatement.class);
+    Assert.assertNotNull(iStmt);
+    Assert.assertTrue(iStmt.getReopenRegions());
+    iStmt = parseQuery("ALTER INDEX I ON T ACTIVE SET k=v REOPEN_REGIONS=false",
+      AlterIndexStatement.class);
+    Assert.assertNotNull(iStmt);
+    Assert.assertFalse(iStmt.getReopenRegions());
   }
 }

@@ -5845,7 +5845,7 @@ public class MetaDataClient {
       }
 
       MetaDataMutationResult result = connection.getQueryServices().updateIndexState(tableMetadata,
-        dataTableName, properties, table);
+        dataTableName, properties, table, statement.getReopenRegions());
 
       try {
         MutationCode code = result.getMutationCode();
