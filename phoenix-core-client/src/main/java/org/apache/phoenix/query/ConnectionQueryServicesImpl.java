@@ -439,6 +439,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   private static final AtomicInteger threadPoolNumber = new AtomicInteger(1);
   public static final String INVALIDATE_SERVER_METADATA_CACHE_EX_MESSAGE =
     "Cannot invalidate server metadata cache on a non-server connection";
+  private static final String REOPEN_REGIONS = "REOPEN_REGIONS";
 
   private static interface FeatureSupported {
     boolean isSupported(ConnectionQueryServices services);
@@ -2130,14 +2131,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
 
   private void modifyTable(byte[] tableName, TableDescriptor newDesc, boolean shouldPoll)
     throws IOException, InterruptedException, TimeoutException, SQLException {
+    modifyTable(tableName, newDesc, shouldPoll, null);
+  }
+
+  private void modifyTable(byte[] tableName, TableDescriptor newDesc, boolean shouldPoll,
+    Boolean reopenRegions)
+    throws IOException, InterruptedException, TimeoutException, SQLException {
     TableName tn = TableName.valueOf(tableName);
+    boolean doReopenRegions = reopenRegions == null ? true : reopenRegions;
     try (Admin admin = getAdmin()) {
       if (!allowOnlineTableSchemaUpdate()) {
         disableTable(admin, tn);
         admin.modifyTable(newDesc); // TODO: Update to TableDescriptor
         admin.enableTable(tn);
       } else {
-        admin.modifyTable(newDesc); // TODO: Update to TableDescriptor
+        admin.modifyTable(newDesc, doReopenRegions); // TODO: Update to TableDescriptor
         if (shouldPoll) {
           pollForUpdatedTableDescriptor(admin, newDesc, tableName);
         }
@@ -2944,6 +2952,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
 
     Map<TableDescriptor, TableDescriptor> oldToNewTableDescriptors = separateAndValidateProperties(
       table, stmtProperties, colFamiliesForPColumnsToBeAdded, tableProps);
+    Boolean reopenRegions = (Boolean) tableProps.remove(REOPEN_REGIONS);
     Set<TableDescriptor> origTableDescriptors = new HashSet<>(oldToNewTableDescriptors.keySet());
 
     TableDescriptor baseTableOrigDesc = this.getTableDescriptor(table.getPhysicalName().getBytes());
@@ -2998,7 +3007,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         (tableMetaData.isEmpty()) || (tableMetaData.size() == 1 && tableMetaData.get(0).isEmpty())
       ) {
         if (modifyHTable) {
-          sendHBaseMetaData(tableDescriptors, pollingNeeded);
+          sendHBaseMetaData(tableDescriptors, pollingNeeded, reopenRegions);
         }
         return new MetaDataMutationResult(MutationCode.NO_OP,
           EnvironmentEdgeManager.currentTimeMillis(), table);
@@ -3076,7 +3085,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       }
 
       if (modifyHTable && result.getMutationCode() != MutationCode.UNALLOWED_TABLE_MUTATION) {
-        sendHBaseMetaData(tableDescriptors, pollingNeeded);
+        sendHBaseMetaData(tableDescriptors, pollingNeeded, reopenRegions);
       }
     } finally {
       // If we weren't successful with our metadata update
@@ -3086,7 +3095,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       // no longer function correctly.
       // Note that if this fails, we're in a corrupt state.
       if (!success && metaDataUpdated && nonTxToTx) {
-        sendHBaseMetaData(origTableDescriptors, pollingNeeded);
+        sendHBaseMetaData(origTableDescriptors, pollingNeeded, reopenRegions);
       }
     }
     return result;
@@ -3234,12 +3243,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     }
   }
 
-  private void sendHBaseMetaData(Set<TableDescriptor> tableDescriptors, boolean pollingNeeded)
-    throws SQLException {
+  private void sendHBaseMetaData(Set<TableDescriptor> tableDescriptors, boolean pollingNeeded,
+    Boolean reopenRegions) throws SQLException {
     SQLException sqlE = null;
     for (TableDescriptor descriptor : tableDescriptors) {
       try {
-        modifyTable(descriptor.getTableName().getName(), descriptor, pollingNeeded);
+        modifyTable(descriptor.getTableName().getName(), descriptor, pollingNeeded, reopenRegions);
       } catch (IOException e) {
         sqlE = ClientUtil.parseServerException(e);
       } catch (InterruptedException e) {
@@ -3289,6 +3298,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     KeepDeletedCells newKeepDeletedCells = null;
     TransactionFactory.Provider txProvider = null;
     Integer newMaxLookback = null;
+    Boolean reopenRegions = null;
+    int totalPropertiesCount = 0;
     for (String family : properties.keySet()) {
       List<Pair<String, Object>> propsList = properties.get(family);
       if (propsList != null && propsList.size() > 0) {
@@ -3296,6 +3307,35 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         for (Pair<String, Object> prop : propsList) {
           String propName = prop.getFirst();
           Object propValue = prop.getSecond();
+          totalPropertiesCount++;
+          if (REOPEN_REGIONS.equalsIgnoreCase(propName)) {
+            if (!family.equals(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
+              throw new SQLExceptionInfo.Builder(
+                SQLExceptionCode.COLUMN_FAMILY_NOT_ALLOWED_TABLE_PROPERTY)
+                  .setMessage("Column Family: " + family + ", Property: " + propName)
+                  .setSchemaName(table.getSchemaName().getString())
+                  .setTableName(table.getTableName().getString()).build().buildException();
+            }
+            if (propValue instanceof Boolean) {
+              reopenRegions = (Boolean) propValue;
+            } else if (propValue instanceof String) {
+              String strValue = ((String) propValue).trim().toLowerCase();
+              if ("true".equals(strValue)) {
+                reopenRegions = Boolean.TRUE;
+              } else if ("false".equals(strValue)) {
+                reopenRegions = Boolean.FALSE;
+              } else {
+                throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
+                  .setMessage("REOPEN_REGIONS must be true or false, got: " + propValue).build()
+                  .buildException();
+              }
+            } else {
+              throw new SQLExceptionInfo.Builder(SQLExceptionCode.TYPE_MISMATCH)
+                .setMessage("REOPEN_REGIONS must be a boolean value").build().buildException();
+            }
+            continue;
+          }
+
           if (
             (MetaDataUtil.isHTableProperty(propName)
               || TableProperty.isPhoenixTableProperty(propName)) && addingColumns
@@ -3442,6 +3482,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
 
       }
     }
+    if (reopenRegions != null && totalPropertiesCount == 1) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.NO_PROPERTIES_IN_ALTER_STMT)
+        .setSchemaName(table.getSchemaName().getString())
+        .setTableName(table.getTableName().getString()).build().buildException();
+    }
+    if (reopenRegions != null) {
+      tableProps.put(REOPEN_REGIONS, reopenRegions);
+    }
+
     commonFamilyProps = Collections.unmodifiableMap(commonFamilyProps);
     boolean isAddingPkColOnly =
       colFamiliesForPColumnsToBeAdded.size() == 1 && colFamiliesForPColumnsToBeAdded.contains(null);
@@ -5926,8 +5975,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       return updateIndexState(tableMetaData, parentTableName);
     }
 
+    Map<String, Object> props = new HashMap<>();
     Map<TableDescriptor, TableDescriptor> oldToNewTableDescriptors =
-      separateAndValidateProperties(table, stmtProperties, new HashSet<>(), new HashMap<>());
+      separateAndValidateProperties(table, stmtProperties, new HashSet<>(), props);
+    Boolean reopenRegions = (Boolean) props.remove(REOPEN_REGIONS);
     TableDescriptor origTableDescriptor =
       this.getTableDescriptor(table.getPhysicalName().getBytes());
     TableDescriptor newTableDescriptor = oldToNewTableDescriptors.remove(origTableDescriptor);
@@ -5936,7 +5987,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       modifiedTableDescriptors = Sets.newHashSetWithExpectedSize(3 + table.getIndexes().size());
       modifiedTableDescriptors.add(newTableDescriptor);
     }
-    sendHBaseMetaData(modifiedTableDescriptors, true);
+    sendHBaseMetaData(modifiedTableDescriptors, true, reopenRegions);
     return updateIndexState(tableMetaData, parentTableName);
   }
 
