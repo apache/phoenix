@@ -19,11 +19,9 @@ package org.apache.phoenix.replication.log;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.EOFException;
 import java.io.IOException;
 import java.util.Arrays;
-import org.apache.hadoop.fs.FSDataInputStream;
-import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.Bytes;
 
 public class LogFileHeader implements LogFile.Header {
@@ -35,7 +33,7 @@ public class LogFileHeader implements LogFile.Header {
   /** Current minor version of the replication log format */
   static final int VERSION_MINOR = 0;
 
-  static final int HEADERSIZE = MAGIC.length + 3 * Bytes.SIZEOF_BYTE;
+  static final int HEADERSIZE = MAGIC.length + 2 * Bytes.SIZEOF_BYTE;
 
   private int majorVersion = VERSION_MAJOR;
   private int minorVersion = VERSION_MINOR;
@@ -69,18 +67,27 @@ public class LogFileHeader implements LogFile.Header {
   @Override
   public void readFields(DataInput in) throws IOException {
     byte[] magic = new byte[MAGIC.length];
-    in.readFully(magic);
+    try {
+      in.readFully(magic);
+    } catch (EOFException e) {
+      throw (IOException) new InvalidLogHeaderException("Short magic").initCause(e);
+    }
     if (!Arrays.equals(MAGIC, magic)) {
-      throw new IOException("Invalid LogFile magic. Got " + Bytes.toStringBinary(magic)
+      throw new InvalidLogHeaderException("Bad magic. Got " + Bytes.toStringBinary(magic)
         + ", expected " + Bytes.toStringBinary(MAGIC));
     }
-    majorVersion = in.readByte();
-    minorVersion = in.readByte();
+    try {
+      majorVersion = in.readByte();
+      minorVersion = in.readByte();
+    } catch (EOFException e) {
+      throw (IOException) new InvalidLogHeaderException("Short version").initCause(e);
+    }
     // Basic version check for now. We assume semver conventions where only higher major
     // versions may be incompatible.
     if (majorVersion > VERSION_MAJOR) {
-      throw new IOException("Unsupported LogFile version. Got major=" + majorVersion + " minor="
-        + minorVersion + ", expected major=" + VERSION_MAJOR + " minor=" + VERSION_MINOR);
+      throw new InvalidLogHeaderException(
+        "Unsupported version. Got major=" + majorVersion + " minor=" + minorVersion
+          + ", expected major=" + VERSION_MAJOR + " minor=" + VERSION_MINOR);
     }
   }
 
@@ -94,32 +101,6 @@ public class LogFileHeader implements LogFile.Header {
   @Override
   public int getSerializedLength() {
     return HEADERSIZE;
-  }
-
-  public static boolean isValidHeader(final FileSystem fs, final Path path) throws IOException {
-    if (fs.getFileStatus(path).getLen() < HEADERSIZE) {
-      return false;
-    }
-    try (FSDataInputStream in = fs.open(path)) {
-      return isValidHeader(in);
-    }
-  }
-
-  public static boolean isValidHeader(FSDataInputStream in) throws IOException {
-    in.seek(0);
-    byte[] magic = new byte[MAGIC.length];
-    in.readFully(magic);
-    if (!Arrays.equals(MAGIC, magic)) {
-      return false;
-    }
-    int majorVersion = in.readByte();
-    in.readByte(); // minorVersion, for now we don't use it
-    // Basic version check for now. We assume semver conventions where only higher major
-    // versions may be incompatible.
-    if (majorVersion > VERSION_MAJOR) {
-      return false;
-    }
-    return true;
   }
 
   @Override

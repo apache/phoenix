@@ -47,7 +47,6 @@ public class LogFileFormatReader implements Closeable {
   private ByteBuffer currentBlockBuffer;
   private long currentBlockDataBytes;
   private long currentBlockConsumedBytes;
-  private boolean trailerValidated;
   private CRC64 crc = new CRC64();
 
   public LogFileFormatReader() {
@@ -61,13 +60,13 @@ public class LogFileFormatReader implements Closeable {
     this.currentBlockConsumedBytes = 0;
     try {
       readAndValidateTrailer();
-      trailerValidated = true;
     } catch (IOException e) {
+      // If we are validating the trailer, we cannot proceed without it.
+      if (context.isValidateTrailer()) {
+        throw e;
+      }
       // Log warning, trailer might be missing or corrupt, proceed without it
-      LOG.warn(
-        "Failed to read or validate Log trailer for path: "
-          + (context != null ? context.getFilePath() : "unknown") + ". Proceeding without trailer.",
-        e);
+      LOG.warn("Failed to validate Log trailer for " + context.getFilePath() + ", proceeding", e);
       trailer = null; // Ensure trailer is null if reading/validation failed
     }
     this.decoder = null;
@@ -78,8 +77,7 @@ public class LogFileFormatReader implements Closeable {
 
   private void readAndValidateTrailer() throws IOException {
     if (context.getFileSize() < LogFileTrailer.FIXED_TRAILER_SIZE) {
-      throw new IOException("File size " + context.getFileSize()
-        + " is smaller than the fixed trailer size " + LogFileTrailer.FIXED_TRAILER_SIZE);
+      throw new InvalidLogTrailerException("Short file");
     }
     LogFileTrailer ourTrailer = new LogFileTrailer();
     // Fixed trailer fields will be LogTrailer.FIXED_TRAILER_SIZE bytes back from end of file.
@@ -337,7 +335,7 @@ public class LogFileFormatReader implements Closeable {
 
   // Validates read counts against trailer counts if trailer was successfully read
   private void validateReadCounts() {
-    if (!trailerValidated || trailer == null) {
+    if (trailer == null) {
       return;
     }
     if (trailer.getBlockCount() != context.getBlocksRead()) {
@@ -367,8 +365,7 @@ public class LogFileFormatReader implements Closeable {
     return "LogFileFormatReader [context=" + context + ", decoder=" + decoder + ", input=" + input
       + ", header=" + header + ", trailer=" + trailer + ", currentPosition=" + currentPosition
       + ", currentBlockBuffer=" + currentBlockBuffer + ", currentBlockUncompressedSize="
-      + currentBlockDataBytes + ", currentBlockConsumedBytes=" + currentBlockConsumedBytes
-      + ", trailerValidated=" + trailerValidated + "]";
+      + currentBlockDataBytes + ", currentBlockConsumedBytes=" + currentBlockConsumedBytes + "]";
   }
 
   LogFile.Header getHeader() {

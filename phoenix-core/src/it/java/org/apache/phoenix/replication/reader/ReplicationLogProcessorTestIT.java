@@ -553,8 +553,11 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
     writer.append(tableNameString, 1, put);
     writer.sync();
 
+    // For processing of an unclosed file to work, we need to disable trailer validation
+    Configuration testConf = new Configuration(conf);
+    testConf.setBoolean(LogFileReaderContext.LOGFILE_VALIDATE_TRAILER, false);
     ReplicationLogProcessor spyProcessor =
-      Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
+      Mockito.spy(new ReplicationLogProcessor(testConf, testHAGroupName));
 
     // Create argument captor to capture the actual parameters passed to processReplicationLogBatch
     ArgumentCaptor<Map<TableName, List<Mutation>>> mapCaptor = ArgumentCaptor.forClass(Map.class);
