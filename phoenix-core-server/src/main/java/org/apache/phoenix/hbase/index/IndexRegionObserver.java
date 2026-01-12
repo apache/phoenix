@@ -654,8 +654,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
         boolean isHAGroupOnClientStale = haGroupStoreManager.isHAGroupOnClientStale(haGroupName);
         if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
-          throw new StaleClusterRoleRecordException(String
-            .format("HAGroupStoreRecord is stale for haGroup %s on client", haGroupName));
+          throw new StaleClusterRoleRecordException(
+            String.format("HAGroupStoreRecord is stale for haGroup %s on client", haGroupName));
         }
 
         // Check if mutation's haGroup is stale

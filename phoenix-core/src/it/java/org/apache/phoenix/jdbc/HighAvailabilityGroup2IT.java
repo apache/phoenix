@@ -158,7 +158,11 @@ public class HighAvailabilityGroup2IT {
         haGroup2 = HighAvailabilityGroup.get(jdbcHAUrl, clientProperties);
         assertTrue(haGroup2.isPresent());
         assertNotSame(haGroup2.get(), haGroup);
-        assertTrue(haGroup2.get().getRoleRecord().getRole1().isActive());
+        if (CLUSTERS.getMasterAddress1().equals(haGroup2.get().getRoleRecord().getUrl1()))
+          assertTrue(haGroup2.get().getRoleRecord().getRole1().isActive());
+        else {
+          assertTrue(haGroup2.get().getRoleRecord().getRole2().isActive());
+        }
         // get a new connection in this new HA group; should be pointing to ACTIVE cluster1
         try (Connection connection = haGroup2.get().connect(clientProperties, haURLInfo)) {
           assertNotNull(connection);

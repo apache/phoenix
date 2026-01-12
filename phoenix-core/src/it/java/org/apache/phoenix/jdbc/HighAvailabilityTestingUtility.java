@@ -466,15 +466,8 @@ public class HighAvailabilityTestingUtility {
       refreshSystemTableInBothClusters(haGroupName, role1, role2, newVersion1, newVersion2, null,
         haGroup.getRoleRecord().getPolicy());
       addOrUpdateRoleRecordToClusters(haGroupName, record1, record2);
-      try {
-        HAGroupStoreManager.getInstance(hbaseCluster1.getConfiguration())
-          .invalidateHAGroupStoreClient(haGroupName, true);
-        HAGroupStoreManager.getInstance(hbaseCluster2.getConfiguration())
-          .invalidateHAGroupStoreClient(haGroupName, true);
-      } catch (Exception e) {
-        LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName,
-          e.getMessage());
-      }
+      invalidateHAGroupStoreClientForCluster(haGroupName, hbaseCluster1.getConfiguration());
+      invalidateHAGroupStoreClientForCluster(haGroupName, hbaseCluster2.getConfiguration());
 
       if (doRefreshHAGroup) {
         haGroup.refreshClusterRoleRecord(true);
@@ -486,6 +479,15 @@ public class HighAvailabilityTestingUtility {
         waitFor(() -> newRoleRecord.equals(haGroup.getRoleRecord()), 1000, 10_000);
       }
 
+    }
+
+    public void invalidateHAGroupStoreClientForCluster(String haGroupName, Configuration conf) {
+      try {
+        HAGroupStoreManager.getInstance(conf).invalidateHAGroupStoreClient(haGroupName, true);
+      } catch (Exception e) {
+        LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName,
+          e.getMessage());
+      }
     }
 
     public void transitClusterRoleWithCluster1Down(HighAvailabilityGroup haGroup, ClusterRole role1,
@@ -502,13 +504,7 @@ public class HighAvailabilityTestingUtility {
       refreshSystemTableInOneCluster(haGroupName, role1, role2, 1, newVersion2, null,
         haGroup.getRoleRecord().getPolicy(), 2);
       addOrUpdateRoleRecordToClusters(haGroupName, null, record2);
-      try {
-        HAGroupStoreManager.getInstance(hbaseCluster2.getConfiguration())
-          .invalidateHAGroupStoreClient(haGroupName, true);
-      } catch (Exception e) {
-        LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName,
-          e.getMessage());
-      }
+      invalidateHAGroupStoreClientForCluster(haGroupName, hbaseCluster2.getConfiguration());
       haGroup.refreshClusterRoleRecord(true);
 
       // If cluster 1 is down, server won't be able to reach peer for states and will get version
@@ -538,13 +534,7 @@ public class HighAvailabilityTestingUtility {
       refreshSystemTableInOneCluster(haGroupName, role1, role2, newVersion1, 1, null,
         haGroup.getRoleRecord().getPolicy(), 1);
       addOrUpdateRoleRecordToClusters(haGroupName, record1, null);
-      try {
-        HAGroupStoreManager.getInstance(hbaseCluster1.getConfiguration())
-          .invalidateHAGroupStoreClient(haGroupName, true);
-      } catch (Exception e) {
-        LOG.warn("Fail to invalidate HAGroupStoreClient for {} because {}", haGroupName,
-          e.getMessage());
-      }
+      invalidateHAGroupStoreClientForCluster(haGroupName, hbaseCluster1.getConfiguration());
       haGroup.refreshClusterRoleRecord(true);
 
       // If cluster 2 is down, server won't be able to reach peer for states and will get version
