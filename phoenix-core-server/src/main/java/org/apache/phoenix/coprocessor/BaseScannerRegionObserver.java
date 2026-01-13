@@ -193,7 +193,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
       scan.getAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
     // Check if scan's HAGroup is stale on client. If yes, throw an exception.
     if (haGroupNameBytes != null) {
-      String haGroupName = new String(haGroupNameBytes, StandardCharsets.UTF_8);
+      String haGroupName = Bytes.toString(haGroupNameBytes);
       final Configuration conf = c.getEnvironment().getConfiguration();
       final HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
       if (haGroupStoreManager == null) {
