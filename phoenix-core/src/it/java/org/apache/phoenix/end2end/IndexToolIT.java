@@ -34,6 +34,8 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
+import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -814,6 +816,89 @@ public class IndexToolIT extends BaseTest {
       assertFalse(rs.next());
     } finally {
       conn.close();
+    }
+  }
+
+  @Test
+  public void testIndexToDataVerification() throws Exception {
+    testIndexToDataVerificationHelper(false);
+  }
+
+  @Test
+  public void testIndexToDataVerificationCaseSensitive() throws Exception {
+    testIndexToDataVerificationHelper(true);
+  }
+
+  private void testIndexToDataVerificationHelper(boolean caseSensitive) throws Exception {
+    if (localIndex || transactional || useSnapshot) {
+      return;
+    }
+    String schemaName = caseSensitive ? generateUniqueName().toLowerCase() : generateUniqueName();
+    String dataTableName =
+      caseSensitive ? generateUniqueName().toLowerCase() : generateUniqueName();
+    String indexTableName =
+      caseSensitive ? generateUniqueName().toLowerCase() : generateUniqueName();
+    String sSchemaName =
+      caseSensitive ? SchemaUtil.getCaseSensitiveColumnDisplayName(null, schemaName) : schemaName;
+    String sDataTableName = caseSensitive
+      ? SchemaUtil.getCaseSensitiveColumnDisplayName(null, dataTableName)
+      : dataTableName;
+    String sIndexTableName = caseSensitive
+      ? SchemaUtil.getCaseSensitiveColumnDisplayName(null, indexTableName)
+      : indexTableName;
+    String qDataTableName = caseSensitive
+      ? SchemaUtil.getCaseSensitiveColumnDisplayName(schemaName, dataTableName)
+      : SchemaUtil.getTableName(schemaName, dataTableName);
+    String qIndexTableName = caseSensitive
+      ? SchemaUtil.getCaseSensitiveColumnDisplayName(schemaName, indexTableName)
+      : SchemaUtil.getTableName(schemaName, indexTableName);
+
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      if (namespaceMapped) {
+        conn.createStatement().execute("CREATE SCHEMA " + sSchemaName);
+      }
+      conn.createStatement().execute("CREATE TABLE " + qDataTableName
+        + " (ID INTEGER NOT NULL PRIMARY KEY, VAL1 INTEGER, VAL2 INTEGER) " + tableDDLOptions);
+
+      PreparedStatement dataStmt =
+        conn.prepareStatement("UPSERT INTO " + qDataTableName + " VALUES(?,?,?)");
+      for (int i = 1; i <= 4; i++) {
+        dataStmt.setInt(1, i);
+        dataStmt.setInt(2, i + 1);
+        dataStmt.setInt(3, i * 2);
+        dataStmt.execute();
+      }
+      conn.commit();
+
+      conn.createStatement()
+        .execute(String.format("CREATE INDEX %s ON %s (VAL1) INCLUDE (VAL2) " + indexDDLOptions,
+          sIndexTableName, qDataTableName));
+
+      // Add extra rows directly to the index table
+      PreparedStatement indexStmt =
+        conn.prepareStatement("UPSERT INTO " + qIndexTableName + " VALUES(?,?,?)");
+      for (int i = 10; i <= 12; i++) {
+        indexStmt.setInt(1, i + 1);
+        indexStmt.setInt(2, i);
+        indexStmt.setInt(3, i * 2);
+        indexStmt.execute();
+      }
+      conn.commit();
+
+      // Run index-to-data verification
+      IndexTool indexTool = runIndexTool(false, sSchemaName, sDataTableName, sIndexTableName, null,
+        0, IndexTool.IndexVerifyType.ONLY, "-fi");
+
+      CounterGroup mrJobCounters = getMRJobCounters(indexTool);
+      // Extra index rows should be detected
+      if (mutable) {
+        assertEquals(3, mrJobCounters
+          .findCounter(BEFORE_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT.name()).getValue());
+      } else {
+        assertEquals(3, mrJobCounters
+          .findCounter(BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT.name()).getValue());
+      }
     }
   }
 
