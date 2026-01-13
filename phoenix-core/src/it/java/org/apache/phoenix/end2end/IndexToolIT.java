@@ -838,19 +838,16 @@ public class IndexToolIT extends BaseTest {
       caseSensitive ? generateUniqueName().toLowerCase() : generateUniqueName();
     String indexTableName =
       caseSensitive ? generateUniqueName().toLowerCase() : generateUniqueName();
-    String sSchemaName =
-      caseSensitive ? SchemaUtil.getCaseSensitiveColumnDisplayName(null, schemaName) : schemaName;
-    String sDataTableName = caseSensitive
-      ? SchemaUtil.getCaseSensitiveColumnDisplayName(null, dataTableName)
-      : dataTableName;
-    String sIndexTableName = caseSensitive
-      ? SchemaUtil.getCaseSensitiveColumnDisplayName(null, indexTableName)
-      : indexTableName;
+    String sSchemaName = caseSensitive ? SchemaUtil.getEscapedArgument(schemaName) : schemaName;
+    String sDataTableName =
+      caseSensitive ? SchemaUtil.getEscapedArgument(dataTableName) : dataTableName;
+    String sIndexTableName =
+      caseSensitive ? SchemaUtil.getEscapedArgument(indexTableName) : indexTableName;
     String qDataTableName = caseSensitive
-      ? SchemaUtil.getCaseSensitiveColumnDisplayName(schemaName, dataTableName)
+      ? SchemaUtil.getFullTableNameWithQuotes(schemaName, dataTableName)
       : SchemaUtil.getTableName(schemaName, dataTableName);
     String qIndexTableName = caseSensitive
-      ? SchemaUtil.getCaseSensitiveColumnDisplayName(schemaName, indexTableName)
+      ? SchemaUtil.getFullTableNameWithQuotes(schemaName, indexTableName)
       : SchemaUtil.getTableName(schemaName, indexTableName);
 
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
