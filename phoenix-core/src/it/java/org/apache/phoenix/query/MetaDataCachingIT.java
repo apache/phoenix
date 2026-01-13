@@ -65,6 +65,8 @@ public class MetaDataCachingIT extends BaseTest {
     // zero to allow insertion of system tables even when the cache reaches its maximum weight.
     props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "50000");
     props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
+    props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 
