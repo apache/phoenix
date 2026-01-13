@@ -80,7 +80,7 @@ public class ParallelPhoenixContextTest {
   public void testPool1OutOfCapacity() throws Exception {
     HAGroupInfo haGroupInfo = new HAGroupInfo("test", "test1", "test2");
     ParallelPhoenixContext context = new ParallelPhoenixContext(new Properties(),
-      new HighAvailabilityGroup(haGroupInfo, Mockito.mock(Properties.class),
+      new HighAvailabilityGroup(haGroupInfo, new Properties(),
         Mockito.mock(ClusterRoleRecord.class), HighAvailabilityGroup.State.READY),
       executorList, Lists.newArrayList(Boolean.FALSE, Boolean.TRUE), Mockito.mock(HAURLInfo.class));
     CompletableFuture<Boolean> future1 = context.chainOnConn1(() -> true);
@@ -101,7 +101,7 @@ public class ParallelPhoenixContextTest {
   public void testPool2OutOfCapacity() throws Exception {
     HAGroupInfo haGroupInfo = new HAGroupInfo("test", "test1", "test2");
     ParallelPhoenixContext context = new ParallelPhoenixContext(new Properties(),
-      new HighAvailabilityGroup(haGroupInfo, Mockito.mock(Properties.class),
+      new HighAvailabilityGroup(haGroupInfo, new Properties(),
         Mockito.mock(ClusterRoleRecord.class), HighAvailabilityGroup.State.READY),
       executorList, Lists.newArrayList(Boolean.TRUE, Boolean.FALSE), Mockito.mock(HAURLInfo.class));
     CompletableFuture<Boolean> future1 = context.chainOnConn1(() -> true);

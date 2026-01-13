@@ -24,7 +24,8 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
- * An HAURLInfo contains information of an HA Url with respect of HA Group Name.
+ * An HAURLInfo contains information of an HA Url with respect of HA Group Name. It includes
+ * HAGroupName as name, principal and additional JDBC parameters passed as part of connection url.
  * <p>
  * It is constructed based on client input, including the JDBC connection string and properties.
  * Objects of this class are used to get appropriate principal and additional JDBC parameters.

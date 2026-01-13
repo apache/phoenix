@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -26,8 +27,6 @@ import static org.junit.Assume.assumeTrue;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Optional;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.output.ByteArrayOutputStream;
@@ -39,36 +38,20 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TestName;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Unit test for {@link ClusterRoleRecord}.
  */
-@RunWith(Parameterized.class)
 public class ClusterRoleRecordTest {
   private static final Logger LOG = LoggerFactory.getLogger(ClusterRoleRecordTest.class);
   private static final String URL1 = "zk1-1\\:2181,zk1-2\\:2181";
   private static final String URL2 = "zk2-1\\:2181,zk2-2\\:2181";
-  private final ClusterRoleRecord.RegistryType registryType;
+  private final ClusterRoleRecord.RegistryType registryType = DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE;
 
   @Rule
   public final TestName testName = new TestName();
-
-  public ClusterRoleRecordTest(ClusterRoleRecord.RegistryType registryType) {
-    this.registryType = registryType;
-  }
-
-  @Parameterized.Parameters(name = "ClusterRoleRecord_registryType={0}")
-  public static Collection<Object> data() {
-    return Arrays.asList(new Object[] { ClusterRoleRecord.RegistryType.ZK,
-      ClusterRoleRecord.RegistryType.MASTER, ClusterRoleRecord.RegistryType.RPC, null // For
-        // Backward
-        // Compatibility
-    });
-  }
 
   /**
    * Helper method to create a temp JSON file with the given array of cluster role records.
@@ -96,20 +79,6 @@ public class ClusterRoleRecordTest {
     String fileName = createJsonFileWithRecords(record);
     String fileContent = FileUtils.readFileToString(new File(fileName), "UTF-8");
     assertTrue(fileContent.contains(record.getHaGroupName()));
-  }
-
-  @Test
-  public void testOldFormatCompatibility() throws IOException {
-    String oldFormatPath = "json/test_role_record_old_format.json";
-    String newFormatPath = "json/test_role_record.json";
-    byte[] oldFormat = readFile(oldFormatPath);
-    byte[] newFormat = readFile(newFormatPath);
-    assertFalse(Arrays.equals(oldFormat, newFormat));
-
-    ClusterRoleRecord oldFormatCRR = ClusterRoleRecord.fromJson(oldFormat).get();
-    ClusterRoleRecord newFormatCRR = ClusterRoleRecord.fromJson(newFormat).get();
-    assertEquals(oldFormatCRR, newFormatCRR);
-
   }
 
   @Test
@@ -266,11 +235,7 @@ public class ClusterRoleRecordTest {
     String url1, ClusterRole role1, String url2, ClusterRole role2, int version) {
     url1 = getUrlWithSuffix(url1);
     url2 = getUrlWithSuffix(url2);
-    if (registryType == null) {
-      return new ClusterRoleRecord(name, policy, url1, role1, url2, role2, version);
-    } else {
-      return new ClusterRoleRecord(name, policy, registryType, url1, role1, url2, role2, version);
-    }
+    return new ClusterRoleRecord(name, policy, url1, role1, url2, role2, version);
   }
 
   private String getUrlWithSuffix(String url) {

@@ -59,6 +59,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.ConnectionInfo;
+import org.apache.phoenix.jdbc.HighAvailabilityGroup;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
@@ -317,6 +318,12 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
   @Override
   public PhoenixConnection connect(String url, Properties info) throws SQLException {
     return new PhoenixConnection(this, url, info);
+  }
+
+  @Override
+  public PhoenixConnection connect(String url, Properties info, HighAvailabilityGroup haGroup)
+    throws SQLException {
+    return new PhoenixConnection(this, url, info, haGroup);
   }
 
   @Override

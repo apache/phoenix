@@ -318,6 +318,9 @@ public enum SQLExceptionCode {
   HA_READ_FROM_CLUSTER_FAILED_ON_NULL(1986, "F1Q86", "Unable to read from cluster for null."),
   HA_INVALID_PROPERTIES(1987, "F1Q87", "Invalid properties to get a Phoenix HA connection."),
   HA_CLUSTER_CAN_NOT_CONNECT(1988, "F1Q88", "Cluster can not serve any requests for this HA group"),
+  CLUSTER_ROLE_RECORD_NOT_FOUND(1989, "F1Q89", "Cluster role record not found for this HA group"),
+  FAILOVER_IN_PROGRESS(1990, "F1Q90", "Operation failed because Failover is in progress."),
+  HA_ROLE_TRANSITION_NOT_ALLOWED(1991, "F1Q93", "Role transition not allowed for this HA group"),
 
   // Syntax error
   TYPE_NOT_SUPPORTED_FOR_OPERATOR(1014, "42Y01", "The operator does not support the operand type."),

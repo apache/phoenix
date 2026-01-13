@@ -19,8 +19,6 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
-import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneHBaseDown;
-import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneZKDown;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
 import static org.junit.Assert.assertFalse;
@@ -32,8 +30,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
-import java.util.Arrays;
-import java.util.Collection;
 import java.util.Properties;
 import org.apache.commons.lang3.RandomStringUtils;
 import org.apache.hadoop.hbase.util.VersionInfo;
@@ -46,8 +42,6 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TestName;
-import org.junit.runner.RunWith;
-import org.junit.runners.Parameterized;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -55,7 +49,6 @@ import org.slf4j.LoggerFactory;
  * Test failover basics for {@link HighAvailabilityTestingUtility}.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-@RunWith(Parameterized.class)
 public class HighAvailabilityTestingUtilityIT {
   private static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityTestingUtilityIT.class);
   private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
@@ -70,14 +63,10 @@ public class HighAvailabilityTestingUtilityIT {
   /** Failover HA group for to test. */
   private HighAvailabilityGroup haGroup;
   private String haGroupName;
-  private final ClusterRoleRecord.RegistryType registryType;
+  private final ClusterRoleRecord.RegistryType registryType = ClusterRoleRecord.RegistryType.RPC;
 
   /** Table name per test case. */
   private String tableName;
-
-  public HighAvailabilityTestingUtilityIT(ClusterRoleRecord.RegistryType registryType) {
-    this.registryType = registryType;
-  }
 
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
@@ -101,12 +90,7 @@ public class HighAvailabilityTestingUtilityIT {
     clientProperties = HighAvailabilityTestingUtility.getHATestProperties();
     clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
 
-    // Make first cluster ACTIVE
-    if (registryType == null) {
-      CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
-    } else {
-      CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER, registryType);
-    }
+    CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
 
     tableName = RandomStringUtils.randomAlphabetic(10);
     jdbcHAUrl = CLUSTERS.getJdbcHAUrl();
@@ -114,27 +98,18 @@ public class HighAvailabilityTestingUtilityIT {
     CLUSTERS.createTableOnClusterPair(haGroup, tableName);
   }
 
-  @Parameterized.Parameters(name = "ClusterRoleRecord_registryType={0}")
-  public static Collection<Object> data() {
-    return Arrays.asList(new Object[] { ClusterRoleRecord.RegistryType.ZK,
-      ClusterRoleRecord.RegistryType.MASTER, ClusterRoleRecord.RegistryType.RPC, null // For
-                                                                                      // Backward
-                                                                                      // Compatibility
-    });
-  }
-
   /**
    * Test Phoenix connection creation and basic operations with HBase cluster(s) unavail.
    */
   @Test
   public void testClusterUnavailableNormalConnection() throws Exception {
-    doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster2(), () -> {
+    CLUSTERS.doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster2(), () -> {
       CLUSTERS.logClustersStates();
       try (Connection conn = CLUSTERS.getCluster1Connection(haGroup)) {
         doTestBasicOperationsWithConnection(conn, tableName, null);
       }
     });
-    doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
+    CLUSTERS.doTestWhenOneHBaseDown(CLUSTERS.getHBaseCluster1(), () -> {
       CLUSTERS.logClustersStates();
       try (Connection conn = CLUSTERS.getCluster2Connection(haGroup)) {
         doTestBasicOperationsWithConnection(conn, tableName, null);
@@ -167,7 +142,7 @@ public class HighAvailabilityTestingUtilityIT {
    */
   @Test
   public void testGetNewCQSShouldFail() throws Exception {
-    doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
+    CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster1(), () -> {
       try {
         Properties properties = HighAvailabilityTestingUtility.getHATestProperties();
         properties.setProperty(PHOENIX_HA_GROUP_ATTR, testName.getMethodName());

@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityPolicy.PARALLEL;
+import static org.apache.phoenix.query.QueryServices.HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -76,18 +77,23 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
         put(QueryServices.CONNECTION_ACTIVITY_LOGGING_ENABLED, String.valueOf(true));
         put(QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, String.valueOf(20));
         put(QueryServices.INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS, String.valueOf(20));
-        put(PhoenixHAExecutorServiceProvider.HA_MAX_POOL_SIZE, String.valueOf(5));
-        put(PhoenixHAExecutorServiceProvider.HA_MAX_QUEUE_SIZE, String.valueOf(30));
+        put(PhoenixHAExecutorServiceProvider.HA_MAX_POOL_SIZE, String.valueOf(15));
+        put(PhoenixHAExecutorServiceProvider.HA_MAX_QUEUE_SIZE, String.valueOf(40));
 
       }
     };
 
+    CLUSTERS.getHBaseCluster1().getConfiguration()
+      .setBoolean(HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED, false);
+    CLUSTERS.getHBaseCluster2().getConfiguration()
+      .setBoolean(HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED, false);
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
     GLOBAL_PROPERTIES.put(PHOENIX_HA_GROUP_ATTR, PARALLEL.name());
 
-    CONNECTIONS = Lists.newArrayList(getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl1())),
-      getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl2())));
+    CONNECTIONS =
+      Lists.newArrayList(getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getMasterAddress1())),
+        getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getMasterAddress2())));
     LOG.info(String.format("************* Num connections : %d", CONNECTIONS.size()));
 
     for (Connection conn : CONNECTIONS) {
@@ -98,7 +104,7 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
     }
 
     // preload some data
-    try (Connection connection = getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getZkUrl1()))) {
+    try (Connection connection = getConnection(CLUSTERS.getJdbcUrl(CLUSTERS.getMasterAddress1()))) {
       loadData(connection, ORG_ID, GROUP_ID, 100, 20);
     }
   }
@@ -115,7 +121,8 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
 
   @Before
   public void setup() throws Exception {
-    clientProperties = new Properties();
+    clientProperties = HighAvailabilityTestingUtility.getHATestProperties();
+    ;
     clientProperties.putAll(GLOBAL_PROPERTIES);
 
     String haGroupName = testName.getMethodName();
@@ -124,7 +131,8 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
     // Make first cluster ACTIVE
     CLUSTERS.initClusterRole(haGroupName, PARALLEL);
 
-    jdbcHAUrl = String.format("jdbc:phoenix:[%s|%s]", CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2());
+    jdbcHAUrl = String.format("jdbc:phoenix+rpc:[%s|%s]", CLUSTERS.getMasterAddress1(),
+      CLUSTERS.getMasterAddress2());
     haGroup = HighAvailabilityTestingUtility.getHighAvailibilityGroup(jdbcHAUrl, clientProperties);
     LOG.info("Initialized haGroup {} with URL {}", haGroup.getGroupInfo().getName(), jdbcHAUrl);
 

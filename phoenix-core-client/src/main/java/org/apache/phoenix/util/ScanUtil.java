@@ -41,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.TreeMap;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -1445,6 +1446,24 @@ public class ScanUtil {
     }
   }
 
+  /**
+   * Set haGroupName as a scan Attribute for pointLookups to check staleness on server side for the
+   * respective HAGroup
+   * @param scan    Scan to which we have to set Attribute
+   * @param conn    PhoenixConnection for which scan is part of
+   * @param context StatementContext for the query
+   */
+  public static void setScanAttributeForHAForPointLookups(Scan scan, PhoenixConnection conn,
+    StatementContext context) {
+    if (
+      context.getScanRanges().isPointLookup() && conn.getHAGroup() != null
+        && StringUtils.isNotBlank(conn.getHAGroupName())
+    ) {
+      scan.setAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB,
+        Bytes.toBytes(conn.getHAGroupName()));
+    }
+  }
+
   public static void setScanAttributesForPhoenixTTL(Scan scan, PTable table,
     PhoenixConnection phoenixConnection) throws SQLException {
 
@@ -1538,6 +1557,7 @@ public class ScanUtil {
     PhoenixConnection phoenixConnection = context.getConnection();
     setScanAttributesForIndexReadRepair(scan, table, phoenixConnection, context);
     setScanAttributesForPhoenixTTL(scan, table, phoenixConnection);
+    setScanAttributeForHAForPointLookups(scan, phoenixConnection, context);
     byte[] emptyCF = scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
     byte[] emptyCQ =
       scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);

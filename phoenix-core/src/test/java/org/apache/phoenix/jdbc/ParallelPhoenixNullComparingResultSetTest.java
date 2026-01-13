@@ -50,7 +50,7 @@ public class ParallelPhoenixNullComparingResultSetTest {
   public void init() {
     HAGroupInfo haGroupInfo = new HAGroupInfo("test", "test1", "test2");
     context = new ParallelPhoenixContext(new Properties(),
-      new HighAvailabilityGroup(haGroupInfo, Mockito.mock(Properties.class),
+      new HighAvailabilityGroup(haGroupInfo, new Properties(),
         Mockito.mock(ClusterRoleRecord.class), HighAvailabilityGroup.State.READY),
       HighAvailabilityTestingUtility.getListOfSingleThreadExecutorServices(), null,
       Mockito.mock(HAURLInfo.class));

@@ -906,9 +906,11 @@ public class MutationState implements SQLCloseable {
       table.getExternalSchemaId() != null ? Bytes.toBytes(table.getExternalSchemaId()) : null;
     byte[] lastDDLTimestamp =
       table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
-    byte[] haGroupName = StringUtils.isNotBlank(connection.getHAGroupName())
-      ? Bytes.toBytes(connection.getHAGroupName())
-      : null;
+    byte[] haGroupName = null;
+    // Only set haGroupName if connection is part of HA Connection
+    if (connection.getHAGroup() != null && StringUtils.isNotBlank(connection.getHAGroupName())) {
+      haGroupName = Bytes.toBytes(connection.getHAGroupName());
+    }
     WALAnnotationUtil.annotateMutation(mutation, tenantId, schemaName, tableName, tableType,
       lastDDLTimestamp, haGroupName);
   }
