@@ -185,7 +185,8 @@ public class HighAvailabilityGroup2IT {
     String haGroupName2 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);
     clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
     CLUSTERS.initClusterRole(haGroupName2, HighAvailabilityPolicy.FAILOVER);
-
+    HighAvailabilityTestingUtility.primeHAGroupStoreClientOnCluster(CLUSTERS.getHBaseCluster1(),
+      haGroupName2);
     CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster2(), () -> {
       Optional<HighAvailabilityGroup> haGroup2 = Optional.empty();
       try {

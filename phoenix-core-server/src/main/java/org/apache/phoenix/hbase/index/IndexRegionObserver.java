@@ -25,6 +25,7 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.hbase.index.util.IndexManagementUtil.rethrowIndexingException;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRIB;
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.RETURN_RESULT;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.query.QueryServices.SYNCHRONOUS_REPLICATION_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -643,27 +644,35 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         throw new IOException(
           "HAGroupStoreManager is null " + "for current cluster, check configuration");
       }
-      // Extract HAGroupName from the mutations
-      final Set<String> haGroupNames = extractHAGroupNameAttribute(miniBatchOp);
-      // Check if mutation is blocked for any of the HAGroupNames
-      for (String haGroupName : haGroupNames) {
-        // TODO: Below approach might be slow need to figure out faster way, slower part is
-        // getting haGroupStoreClient We can also cache roleRecord (I tried it and still its
-        // slow due to haGroupStoreClient initialization) and caching will give us old result
-        // in case one cluster is unreachable instead of UNKNOWN.
+      String tableName =
+        c.getEnvironment().getRegion().getRegionInfo().getTable().getNameAsString();
+      // We don't want to check for mutation blocking for the system ha group table
+      if (!tableName.equals(SYSTEM_HA_GROUP_NAME)) {
+        // Extract HAGroupName from the mutations
+        final Set<String> haGroupNames = extractHAGroupNameAttribute(miniBatchOp);
+        // Check if mutation is blocked for any of the HAGroupNames
+        for (String haGroupName : haGroupNames) {
+          // TODO: Below approach might be slow need to figure out faster way,
+          // slower part is getting haGroupStoreClient We can also cache
+          // roleRecord (I tried it and still it's slow due to haGroupStoreClient
+          // initialization) and caching will give us old result in case one cluster
+          // is unreachable instead of UNKNOWN.
 
-        boolean isHAGroupOnClientStale = haGroupStoreManager.isHAGroupOnClientStale(haGroupName);
-        if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
-          throw new StaleClusterRoleRecordException(
-            String.format("HAGroupStoreRecord is stale for haGroup %s on client", haGroupName));
-        }
+          boolean isHAGroupOnClientStale = haGroupStoreManager.isHAGroupOnClientStale(haGroupName);
+          if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
+            throw new StaleClusterRoleRecordException(
+              String.format("HAGroupStoreRecord is stale for haGroup %s on client", haGroupName));
+          }
 
-        // Check if mutation's haGroup is stale
-        if (
-          StringUtils.isNotBlank(haGroupName) && haGroupStoreManager.isMutationBlocked(haGroupName)
-        ) {
-          throw new MutationBlockedIOException("Blocking Mutation as Some CRRs are in "
-            + "ACTIVE_TO_STANDBY state and CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+          // Check if mutation's haGroup is stale
+          if (
+            StringUtils.isNotBlank(haGroupName)
+              && haGroupStoreManager.isMutationBlocked(haGroupName)
+          ) {
+            throw new MutationBlockedIOException(
+              "Blocking Mutation as Some CRRs are in " + "ACTIVE_TO_STANDBY state and "
+                + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
+          }
         }
       }
       preBatchMutateWithExceptions(c, miniBatchOp);

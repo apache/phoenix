@@ -141,8 +141,7 @@ public class PhoenixRegionServerEndpoint extends
     try {
       HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
       if (haGroupStoreManager != null) {
-        haGroupStoreManager.invalidateHAGroupStoreClient(request.getHaGroupName().toStringUtf8(),
-          request.getBroadcastUpdate());
+        haGroupStoreManager.invalidateHAGroupStoreClient(request.getHaGroupName().toStringUtf8());
       } else {
         throw new IOException(
           "HAGroupStoreManager is null for " + "current cluster, check configuration");
