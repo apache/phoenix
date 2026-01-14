@@ -613,9 +613,9 @@ public interface QueryConstants {
       CLUSTER_ROLE_2 + " VARCHAR," + // Role for peer cluster might not be accurate, we will use
                                      // only local role for recovery if needed
       POLICY + " VARCHAR," + // There should be only one policy for an HA group
-      VERSION + " BIGINT," + // Version should be incremented for Admin Updates, only for
-                             // CLUSTER_URLs and REGISTRY_TYPE
-      "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + HA_GROUP_NAME + "))\n"
+      VERSION + " BIGINT," // Version should be incremented for Admin Updates, only for
+                           // CLUSTER_URLs and REGISTRY_TYPE
+      + "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + HA_GROUP_NAME + "))\n"
       + HConstants.VERSIONS + "=%s,\n" + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n"
       + TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" + UPDATE_CACHE_FREQUENCY + "=" + "7200000";
 }

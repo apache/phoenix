@@ -227,8 +227,8 @@ public class HAGroupStoreManager {
       // based on whether the SCN falls within its consistency point, and will require a change
       // in the logic her, with much bigger change.
       HAGroupStoreRecord hagroupStoreRecord = haGroupStoreClient.getHAGroupStoreRecord();
-      return (HighAvailabilityPolicy.valueOf(hagroupStoreRecord.getPolicy())
-          == HighAvailabilityPolicy.FAILOVER)
+      return HighAvailabilityPolicy.valueOf(hagroupStoreRecord.getPolicy())
+          == HighAvailabilityPolicy.FAILOVER
         && !(hagroupStoreRecord.getHAGroupState().getClusterRole().isActive());
     }
     return false;

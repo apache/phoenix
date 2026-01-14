@@ -645,8 +645,7 @@ public interface QueryServices extends SQLCloseable {
   // HA Group Store sync job interval in seconds
   String HA_GROUP_STORE_SYNC_INTERVAL_SECONDS = "phoenix.ha.group.store.sync.interval.seconds";
 
-  public static final String REPLICATION_LOG_ROTATION_TIME_MS_KEY =
-    "phoenix.replication.log.rotation.time.ms";
+  String REPLICATION_LOG_ROTATION_TIME_MS_KEY = "phoenix.replication.log.rotation.time.ms";
 
   /**
    * Get executor service used for parallel scans

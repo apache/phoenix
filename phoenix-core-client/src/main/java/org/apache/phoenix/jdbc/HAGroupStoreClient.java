@@ -334,7 +334,7 @@ public class HAGroupStoreClient implements Closeable {
         // taking the beginning of last round (floor) by first integer division and then
         // multiplying again.
         lastSyncTimeInMs =
-          ((System.currentTimeMillis() - rotationTimeMs) / rotationTimeMs) * (rotationTimeMs);
+          ((System.currentTimeMillis() - rotationTimeMs) / rotationTimeMs) * rotationTimeMs;
       }
       HAGroupStoreRecord newHAGroupStoreRecord =
         new HAGroupStoreRecord(currentHAGroupStoreRecord.getProtocolVersion(),
