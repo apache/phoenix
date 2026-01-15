@@ -626,6 +626,39 @@ public class HAGroupStoreClientIT extends BaseTest {
   }
 
   @Test
+  public void testSetHAGroupStatusIfNeededWithExplicitLastSyncTimeUpdateExistingRecord()
+    throws Exception {
+    String haGroupName = testName.getMethodName();
+
+    // Create initial record
+    HAGroupStoreRecord initialRecord =
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+        0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.masterUrl,
+        this.peerMasterUrl, 0L);
+    createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, initialRecord);
+
+    HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient
+      .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+    // Verify initial state
+    HAGroupStoreRecord currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
+    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, currentRecord.getHAGroupState());
+
+    // Update to STANDBY (this should succeed as it's a valid transition)
+    long timestamp = System.currentTimeMillis();
+    haGroupStoreClient.setHAGroupStatusIfNeeded(
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, timestamp);
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+    // Verify the record was updated
+    currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
+    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
+      currentRecord.getHAGroupState());
+    assertEquals(timestamp, (long) currentRecord.getLastSyncStateTimeInMs());
+  }
+
+  @Test
   public void testSetHAGroupStatusIfNeededNoUpdateWhenNotNeeded() throws Exception {
     String haGroupName = testName.getMethodName();
 
