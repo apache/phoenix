@@ -126,6 +126,7 @@ public abstract class ReplicationLogGroupWriter {
   protected Disruptor<LogEvent> disruptor;
   protected RingBuffer<LogEvent> ringBuffer;
   protected volatile boolean closed = false;
+  protected ReplicationShardDirectoryManager replicationShardDirectoryManager;
 
   /** The reason for requesting a log rotation. */
   protected enum RotationReason {
@@ -175,6 +176,7 @@ public abstract class ReplicationLogGroupWriter {
   /** Initialize the writer. */
   public void init() throws IOException {
     initializeFileSystems();
+    initializeReplicationShardDirectoryManager();
     // Start time based rotation.
     lastRotationTime.set(EnvironmentEdgeManager.currentTimeMillis());
     startRotationExecutor();
@@ -245,6 +247,12 @@ public abstract class ReplicationLogGroupWriter {
 
   /** Initialize file systems needed by this writer implementation. */
   protected abstract void initializeFileSystems() throws IOException;
+
+  /**
+   * Initialize the {@link ReplicationShardDirectoryManager} to manage file to shard directory
+   * mapping
+   */
+  protected abstract void initializeReplicationShardDirectoryManager();
 
   /**
    * Create a new log writer for rotation.
