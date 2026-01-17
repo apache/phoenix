@@ -172,13 +172,21 @@ public class ReplicationShardDirectoryManager {
    * @param timestamp The timestamp in milliseconds since epoch
    * @return The nearest replication round start timestamp
    */
-  protected long getNearestRoundStartTimestamp(long timestamp) {
+  public long getNearestRoundStartTimestamp(long timestamp) {
     // Convert round time from seconds to milliseconds
     long roundTimeMs = replicationRoundDurationSeconds * 1000L;
 
     // Calculate the nearest round start timestamp
     // This rounds down to the nearest multiple of round time
     return (timestamp / roundTimeMs) * roundTimeMs;
+  }
+
+  public ReplicationRound getPreviousRound(final ReplicationRound replicationRound) {
+    return getReplicationRoundFromEndTime(replicationRound.getStartTime());
+  }
+
+  public ReplicationRound getNextRound(final ReplicationRound replicationRound) {
+    return getReplicationRoundFromStartTime(replicationRound.getEndTime());
   }
 
   public int getReplicationRoundDurationSeconds() {
