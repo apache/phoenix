@@ -150,7 +150,7 @@ public class ReplicationShardDirectoryManager {
    */
   public ReplicationRound getReplicationRoundFromEndTime(long roundEndTime) {
     long validRoundEndTime = getNearestRoundStartTimestamp(roundEndTime);
-    long validRoundStartTime = validRoundEndTime - replicationRoundDurationSeconds * 1000L;
+    long validRoundStartTime = Math.max(0L, validRoundEndTime - replicationRoundDurationSeconds * 1000L);
     return new ReplicationRound(validRoundStartTime, validRoundEndTime);
   }
 
