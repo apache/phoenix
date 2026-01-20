@@ -32,7 +32,6 @@ public class ReplicationRound {
   private final long endTime;
 
   public ReplicationRound(long startTime, long endTime) {
-    Preconditions.checkArgument(startTime < endTime);
     this.startTime = startTime;
     this.endTime = endTime;
   }
