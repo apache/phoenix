@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.query.QueryServices.DISABLE_VIEW_SUBTREE_VALIDATION;
+import static org.apache.phoenix.query.QueryServices.INDEX_USE_SERVER_METADATA_ATTRIB;
 
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
@@ -75,6 +76,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
     props.put(QueryServices.PHOENIX_METADATA_INVALIDATE_CACHE_ENABLED, Boolean.toString(false));
     props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     props.put(DISABLE_VIEW_SUBTREE_VALIDATION, "true");
+    props.put(INDEX_USE_SERVER_METADATA_ATTRIB, Boolean.toString(false));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 

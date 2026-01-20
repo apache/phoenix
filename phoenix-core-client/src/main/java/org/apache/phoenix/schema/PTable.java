@@ -882,9 +882,26 @@ public interface PTable extends PMetaDataEntity {
   boolean getIndexMaintainers(ImmutableBytesWritable ptr, PhoenixConnection connection)
     throws SQLException;
 
+  /**
+   * Retrieves the IndexMaintainer for this index table. This method caches the IndexMaintainer
+   * object in the PTable. This is only relevant for PTable objects of type INDEX.
+   * @param dataTable  data table associated with the index.
+   * @param connection PhoenixConnection object.
+   * @return the IndexMaintainer for this index table.
+   * @throws SQLException if an error occurs during IndexMaintainer creation.
+   */
   IndexMaintainer getIndexMaintainer(PTable dataTable, PhoenixConnection connection)
     throws SQLException;
 
+  /**
+   * Retrieves the IndexMaintainer for this index table with CDC context. This method caches the
+   * IndexMaintainer object in the PTable. This is only relevant for PTable objects of type INDEX.
+   * @param dataTable  data table associated with the index.
+   * @param cdcTable   CDC table.
+   * @param connection PhoenixConnection object.
+   * @return the IndexMaintainer for this index table.
+   * @throws SQLException if an error occurs during IndexMaintainer creation.
+   */
   IndexMaintainer getIndexMaintainer(PTable dataTable, PTable cdcTable,
     PhoenixConnection connection) throws SQLException;
 
