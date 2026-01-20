@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
 import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
@@ -615,8 +614,8 @@ public class HAGroupStoreClientIT extends BaseTest {
     assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, currentRecord.getHAGroupState());
 
     // Update to STANDBY (this should succeed as it's a valid transition)
-    haGroupStoreClient
-      .setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    assertEquals(0L, haGroupStoreClient
+      .setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY));
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Verify the record was updated
@@ -647,8 +646,8 @@ public class HAGroupStoreClientIT extends BaseTest {
 
     // Update to STANDBY (this should succeed as it's a valid transition)
     long timestamp = System.currentTimeMillis();
-    haGroupStoreClient.setHAGroupStatusIfNeeded(
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, timestamp);
+    assertEquals(0L, haGroupStoreClient.setHAGroupStatusIfNeeded(
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, timestamp));
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Verify the record was updated
@@ -675,7 +674,8 @@ public class HAGroupStoreClientIT extends BaseTest {
       .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
 
     // Try to set to ACTIVE_IN_SYNC immediately (should not update due to timing)
-    haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+    assert haGroupStoreClient
+      .setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC) > 0;
 
     // Add sleep if due to any bug the update might have gone through and we can assert below this.
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -702,9 +702,13 @@ public class HAGroupStoreClientIT extends BaseTest {
     HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient
       .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
 
-    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS + (long) Math
-      .ceil(DEFAULT_ZK_SESSION_TIMEOUT * HAGroupStoreClient.ZK_SESSION_TIMEOUT_MULTIPLIER));
-    haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+    // Find wait time for ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC
+    long waitTime =
+      haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+    assert waitTime > 0;
+    Thread.sleep(waitTime);
+    assertEquals(0L,
+      haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC));
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Verify the record was updated
@@ -777,8 +781,8 @@ public class HAGroupStoreClientIT extends BaseTest {
       .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
 
     // First transition: ACTIVE -> ACTIVE_TO_STANDBY
-    haGroupStoreClient
-      .setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    assertEquals(0L, haGroupStoreClient
+      .setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY));
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     HAGroupStoreRecord afterFirst = haGroupStoreClient.getHAGroupStoreRecord();
@@ -787,7 +791,8 @@ public class HAGroupStoreClientIT extends BaseTest {
 
     // Wait and make another transition: ACTIVE_TO_STANDBY -> STANDBY
     Thread.sleep(100); // Small delay to ensure timestamp difference
-    haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.STANDBY);
+    assertEquals(0L,
+      haGroupStoreClient.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.STANDBY));
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     HAGroupStoreRecord afterSecond = haGroupStoreClient.getHAGroupStoreRecord();
