@@ -19,8 +19,6 @@ package org.apache.phoenix.replication;
 
 import java.util.Objects;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
-
 /**
  * Represents a replication round with defined start and end timestamp. Used for grouping
  * replication log files into time-based processing windows and managing file distribution across
