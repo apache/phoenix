@@ -31,10 +31,14 @@ import static org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantVi
 import static org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewOptions;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Random;
@@ -46,13 +50,17 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataWriter;
 import org.apache.phoenix.query.PhoenixTestBuilder.DataSupplier;
 import org.apache.phoenix.query.PhoenixTestBuilder.DataWriter;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.ManualEnvironmentEdge;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Ignore;
@@ -699,6 +707,55 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
             }
           }
         }
+      }
+    }
+  }
+
+  /**
+   * Test that the empty column cell is returned by the scan when there is a DistinctPrefixFilter
+   * and an EmptyColumnOnlyFilter. If there is no empty column cell returned in the scan then TTL
+   * masking logic can break.
+   */
+  @Test
+  public void testMaskingWithDistinctPrefixFilter() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      int ttl = 10;
+      String dataTableName = generateUniqueName();
+      // not using column encoding so that we use EmptyColumnOnlyFilter
+      String ddl = "create table " + dataTableName + " (id1 varchar(10) not null , "
+        + "id2 varchar(10) not null , val1 varchar(10), val2 varchar(10) "
+        + "constraint PK primary key (id1, id2)) COLUMN_ENCODED_BYTES=0, TTL=" + ttl;
+      conn.createStatement().execute(ddl);
+
+      String[] expectedValues = { "val1_1", "val1_2", "val1_3", "val1_4" };
+      String dml = "UPSERT INTO " + dataTableName + " VALUES(?, ?, ?, ?)";
+      PreparedStatement ps = conn.prepareStatement(dml);
+      for (int id1 = 0; id1 < 5; ++id1) {
+        ps.setString(1, "id1_" + id1);
+        for (int id2 = 0; id2 < 5; ++id2) {
+          ps.setString(2, "id2_" + id2);
+          ps.setString(3, "val1_" + id1 % 2);
+          ps.setString(4, "val2_" + id2 % 2);
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      try {
+        ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
+        // expire the rows
+        injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis() + ttl * 1000 + 2);
+        EnvironmentEdgeManager.injectEdge(injectEdge);
+        String distinctQuery = "SELECT DISTINCT id1 FROM " + dataTableName;
+        try (ResultSet rs = conn.createStatement().executeQuery(distinctQuery)) {
+          PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+          String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+          assertTrue(explainPlan.contains("SERVER FILTER BY EMPTY COLUMN ONLY"));
+          assertTrue(explainPlan.contains("SERVER DISTINCT PREFIX FILTER OVER"));
+          // all the rows should have been masked
+          assertFalse(rs.next());
+        }
+      } finally {
+        EnvironmentEdgeManager.reset();
       }
     }
   }
