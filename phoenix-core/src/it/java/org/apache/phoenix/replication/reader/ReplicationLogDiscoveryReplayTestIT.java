@@ -22,11 +22,14 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.net.URI;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -639,6 +642,11 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
         // Verify triggerFailover was not called
         assertEquals("triggerFailover should not be called", 0,
           discovery.getTriggerFailoverCallCount());
+
+        // Verify consistency point: in SYNC state, should be lastRoundInSync.getEndTime()
+        long consistencyPoint = discovery.getConsistencyPoint();
+        assertEquals("Consistency point should match lastRoundInSync.getEndTime() in SYNC state",
+          expectedRound3.getEndTime(), consistencyPoint);
       } finally {
         EnvironmentEdgeManager.reset();
       }
@@ -724,6 +732,12 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
         // Verify triggerFailover was not called
         assertEquals("triggerFailover should not be called", 0,
           discovery.getTriggerFailoverCallCount());
+
+        // Verify consistency point: in DEGRADED state, should be lastRoundInSync.getEndTime()
+        long consistencyPoint = discovery.getConsistencyPoint();
+        assertEquals(
+          "Consistency point should match lastRoundInSync.getEndTime() in DEGRADED state",
+          lastRoundInSyncBeforeReplay.getEndTime(), consistencyPoint);
       } finally {
         EnvironmentEdgeManager.reset();
       }
@@ -842,6 +856,13 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
         // Verify triggerFailover was not called
         assertEquals("triggerFailover should not be called", 0,
           discovery.getTriggerFailoverCallCount());
+
+        // Verify consistency point: after transition to SYNC, should be
+        // lastRoundInSync.getEndTime()
+        long consistencyPoint = discovery.getConsistencyPoint();
+        assertEquals(
+          "Consistency point should match lastRoundInSync.getEndTime() after SYNC transition",
+          expectedSixthRound.getEndTime(), consistencyPoint);
       } finally {
         EnvironmentEdgeManager.reset();
       }
@@ -947,6 +968,12 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
         // Verify triggerFailover was not called
         assertEquals("triggerFailover should not be called", 0,
           discovery.getTriggerFailoverCallCount());
+
+        // Verify consistency point: in DEGRADED state, should be lastRoundInSync.getEndTime()
+        long consistencyPoint = discovery.getConsistencyPoint();
+        assertEquals(
+          "Consistency point should match lastRoundInSync.getEndTime() in DEGRADED state",
+          expectedRound1.getEndTime(), consistencyPoint);
       } finally {
         EnvironmentEdgeManager.reset();
       }
@@ -1217,6 +1244,13 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
         // Verify triggerFailover was not called
         assertEquals("triggerFailover should not be called", 0,
           discoveryWithTransitions.getTriggerFailoverCallCount());
+
+        // Verify consistency point: after transition to SYNC, should be
+        // lastRoundInSync.getEndTime()
+        long consistencyPoint = discoveryWithTransitions.getConsistencyPoint();
+        assertEquals(
+          "Consistency point should match lastRoundInSync.getEndTime() after SYNC transition",
+          expectedLastRound.getEndTime(), consistencyPoint);
       } finally {
         EnvironmentEdgeManager.reset();
       }
@@ -1288,6 +1322,11 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
         // Verify triggerFailover was not called
         assertEquals("triggerFailover should not be called", 0,
           discovery.getTriggerFailoverCallCount());
+
+        // Verify consistency point: in SYNC state, should be lastRoundInSync.getEndTime()
+        long consistencyPoint = discovery.getConsistencyPoint();
+        assertEquals("Consistency point should match lastRoundInSync.getEndTime() in SYNC state",
+          lastRoundInSyncBeforeReplay.getEndTime(), consistencyPoint);
       } finally {
         EnvironmentEdgeManager.reset();
       }
@@ -1776,6 +1815,11 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
         assertFalse("failoverPending should be set to false after failover is triggered",
           discovery.getFailoverPending());
 
+        // Verify consistency point: in SYNC state, should be lastRoundInSync.getEndTime()
+        long consistencyPoint = discovery.getConsistencyPoint();
+        assertEquals("Consistency point should match lastRoundInSync.getEndTime() in SYNC state",
+          expectedRound3.getEndTime(), consistencyPoint);
+
         // TODO: Ensure cluster state is updated to ACTIVE_IN_SYNC once failover is triggered.
       } finally {
         EnvironmentEdgeManager.reset();
@@ -2042,6 +2086,115 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   }
 
   /**
+   * Tests getConsistencyPoint method in SYNC state with in-progress files present. Should return
+   * the minimum timestamp from in-progress files.
+   */
+  @Test
+  public void testGetConsistencyPointSyncStateWithInProgressFiles() throws IOException {
+    // Create ReplicationLogTracker
+    ReplicationLogTracker tracker =
+      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+    HAGroupStoreRecord haGroupStoreRecord =
+      new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+        HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
+        peerZkUrl, zkUrl, peerZkUrl, 0L);
+    TestableReplicationLogDiscoveryReplay discovery =
+      new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+
+    // Set state to SYNC
+    discovery.setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+
+    // Create mock in-progress files
+    // Note: getFileTimestamp() parses the filename, so we don't need to mock it
+    Path file1 = new Path("/test/1704153660000_rs2.plog");
+    Path file2 = new Path("/test/1704153600000_rs1.plog");
+    Path file3 = new Path("/test/1704153720000_rs3.plog");
+    List<Path> inProgressFiles = Arrays.asList(file1, file2, file3);
+
+    // Mock fileTracker to return in-progress files
+    doReturn(inProgressFiles).when(tracker).getInProgressFiles();
+
+    // Call getConsistencyPoint
+    long consistencyPoint = discovery.getConsistencyPoint();
+
+    // Should return the minimum timestamp from in-progress files
+    assertEquals("Should return minimum timestamp from in-progress files", 1704153600000L,
+      consistencyPoint);
+  }
+
+  /**
+   * Tests getConsistencyPoint method in SYNC state without in-progress files but with
+   * lastRoundInSync set. Should return lastRoundInSync.getEndTime().
+   */
+  @Test
+  public void testGetConsistencyPointSyncStateWithoutInProgressFilesWithLastRoundInSync()
+    throws IOException {
+    // Create ReplicationLogTracker
+    ReplicationLogTracker tracker =
+      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+    HAGroupStoreRecord haGroupStoreRecord =
+      new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+        HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
+        peerZkUrl, zkUrl, peerZkUrl, 0L);
+    TestableReplicationLogDiscoveryReplay discovery =
+      new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+
+    // Set state to SYNC
+    discovery.setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+
+    // Mock empty in-progress files
+    doReturn(Collections.emptyList()).when(tracker).getInProgressFiles();
+
+    // Set lastRoundInSync
+    long endTime = 1704153600000L;
+    long roundTimeMills = discovery.getRoundTimeMills();
+    ReplicationRound lastRoundInSync = new ReplicationRound(endTime - roundTimeMills, endTime);
+    discovery.setLastRoundInSync(lastRoundInSync);
+
+    // Call getConsistencyPoint
+    long consistencyPoint = discovery.getConsistencyPoint();
+
+    // Should return lastRoundInSync.getEndTime()
+    assertEquals("Should return lastRoundInSync.getEndTime()", endTime, consistencyPoint);
+  }
+
+  /**
+   * Tests getConsistencyPoint method in SYNC state without in-progress files and without
+   * lastRoundInSync. Should throw IOException.
+   */
+  @Test
+  public void testGetConsistencyPointSyncStateWithoutInProgressFilesWithoutLastRoundInSync()
+    throws IOException {
+    // Create ReplicationLogTracker
+    ReplicationLogTracker tracker =
+      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+    HAGroupStoreRecord haGroupStoreRecord =
+      new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+        HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
+        peerZkUrl, zkUrl, peerZkUrl, 0L);
+    TestableReplicationLogDiscoveryReplay discovery =
+      new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+
+    // Set state to SYNC
+    discovery.setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+
+    // Mock empty in-progress files
+    doReturn(Collections.emptyList()).when(tracker).getInProgressFiles();
+
+    // Don't set lastRoundInSync (should be null)
+
+    // Call getConsistencyPoint - should throw IOException
+    try {
+      discovery.getConsistencyPoint();
+      fail("Should throw IOException when in-progress files are empty and lastRoundInSync is null");
+    } catch (IOException e) {
+      assertEquals("Error message should match",
+        "Not able to derive consistency point because In Progress directory is empty and lastRoundInSync is not initialized.",
+        e.getMessage());
+    }
+  }
+
+  /**
    * Tests triggerFailover when
    * HAGroupStoreManager.getInstance(conf).setHAGroupStatusToSync(haGroupName) throws
    * InvalidClusterRoleTransitionException. Verifies that failoverPending is set to false even when
@@ -2108,6 +2261,168 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       } catch (Exception e) {
         LOG.warn("Failed to clean up HA group store record", e);
       }
+    }
+  }
+
+  /**
+   * Tests getConsistencyPoint method in DEGRADED state with lastRoundInSync set. Should return
+   * lastRoundInSync.getEndTime().
+   */
+  @Test
+  public void testGetConsistencyPointDegradedStateWithLastRoundInSync() throws IOException {
+    // Create ReplicationLogTracker
+    ReplicationLogTracker tracker =
+      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+    HAGroupStoreRecord haGroupStoreRecord =
+      new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+        HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
+        peerZkUrl, zkUrl, peerZkUrl, 0L);
+    TestableReplicationLogDiscoveryReplay discovery =
+      new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+
+    // Set state to DEGRADED
+    discovery
+      .setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
+
+    // Set lastRoundInSync
+    long endTime = 1704153600000L;
+    long roundTimeMills = discovery.getRoundTimeMills();
+    ReplicationRound lastRoundInSync = new ReplicationRound(endTime - roundTimeMills, endTime);
+    discovery.setLastRoundInSync(lastRoundInSync);
+
+    // Call getConsistencyPoint
+    long consistencyPoint = discovery.getConsistencyPoint();
+
+    // Should return lastRoundInSync.getEndTime()
+    assertEquals("Should return lastRoundInSync.getEndTime()", endTime, consistencyPoint);
+  }
+
+  /**
+   * Tests getConsistencyPoint method in DEGRADED state without lastRoundInSync. Should throw
+   * IOException.
+   */
+  @Test
+  public void testGetConsistencyPointDegradedStateWithoutLastRoundInSync() throws IOException {
+    // Create ReplicationLogTracker
+    ReplicationLogTracker tracker =
+      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+    HAGroupStoreRecord haGroupStoreRecord =
+      new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+        HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
+        peerZkUrl, zkUrl, peerZkUrl, 0L);
+    TestableReplicationLogDiscoveryReplay discovery =
+      new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+
+    // Set state to DEGRADED
+    discovery
+      .setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
+
+    // Don't set lastRoundInSync (should be null)
+
+    // Call getConsistencyPoint - should throw IOException
+    try {
+      discovery.getConsistencyPoint();
+      fail("Should throw IOException when lastRoundInSync is null in DEGRADED state");
+    } catch (IOException e) {
+      assertEquals("Error message should match",
+        "Not able to derive consistency point because lastRoundInSync is not initialized.",
+        e.getMessage());
+    }
+  }
+
+  /**
+   * Tests getConsistencyPoint method in SYNCED_RECOVERY state with lastRoundInSync set. Should
+   * return lastRoundInSync.getEndTime().
+   */
+  @Test
+  public void testGetConsistencyPointSyncedRecoveryStateWithLastRoundInSync() throws IOException {
+    // Create ReplicationLogTracker
+    ReplicationLogTracker tracker =
+      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+    HAGroupStoreRecord haGroupStoreRecord =
+      new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+        HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
+        peerZkUrl, zkUrl, peerZkUrl, 0L);
+    TestableReplicationLogDiscoveryReplay discovery =
+      new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+
+    // Set state to SYNCED_RECOVERY
+    discovery.setReplicationReplayState(
+      ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY);
+
+    // Set lastRoundInSync
+    long endTime = 1704153600000L;
+    long roundTimeMills = discovery.getRoundTimeMills();
+    ReplicationRound lastRoundInSync = new ReplicationRound(endTime - roundTimeMills, endTime);
+    discovery.setLastRoundInSync(lastRoundInSync);
+
+    // Call getConsistencyPoint
+    long consistencyPoint = discovery.getConsistencyPoint();
+
+    // Should return lastRoundInSync.getEndTime()
+    assertEquals("Should return lastRoundInSync.getEndTime()", endTime, consistencyPoint);
+  }
+
+  /**
+   * Tests getConsistencyPoint method in SYNCED_RECOVERY state without lastRoundInSync. Should throw
+   * IOException.
+   */
+  @Test
+  public void testGetConsistencyPointSyncedRecoveryStateWithoutLastRoundInSync()
+    throws IOException {
+    // Create ReplicationLogTracker
+    ReplicationLogTracker tracker =
+      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+    HAGroupStoreRecord haGroupStoreRecord =
+      new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+        HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
+        peerZkUrl, zkUrl, peerZkUrl, 0L);
+    TestableReplicationLogDiscoveryReplay discovery =
+      new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+
+    // Set state to SYNCED_RECOVERY
+    discovery.setReplicationReplayState(
+      ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY);
+
+    // Don't set lastRoundInSync (should be null)
+
+    // Call getConsistencyPoint - should throw IOException
+    try {
+      discovery.getConsistencyPoint();
+      fail("Should throw IOException when lastRoundInSync is null in SYNCED_RECOVERY state");
+    } catch (IOException e) {
+      assertEquals("Error message should match",
+        "Not able to derive consistency point because lastRoundInSync is not initialized.",
+        e.getMessage());
+    }
+  }
+
+  /**
+   * Tests getConsistencyPoint method in NOT_INITIALIZED state. Should throw IOException.
+   */
+  @Test
+  public void testGetConsistencyPointNotInitializedState() throws IOException {
+    // Create ReplicationLogTracker
+    ReplicationLogTracker tracker =
+      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+    HAGroupStoreRecord haGroupStoreRecord =
+      new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+        HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
+        peerZkUrl, zkUrl, peerZkUrl, 0L);
+    TestableReplicationLogDiscoveryReplay discovery =
+      new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+
+    // Set state to NOT_INITIALIZED
+    discovery.setReplicationReplayState(
+      ReplicationLogDiscoveryReplay.ReplicationReplayState.NOT_INITIALIZED);
+
+    // Call getConsistencyPoint - should throw IOException
+    try {
+      discovery.getConsistencyPoint();
+      fail("Should throw IOException when state is NOT_INITIALIZED");
+    } catch (IOException e) {
+      assertEquals("Error message should match",
+        "Not able to derive consistency point for current state: NOT_INITIALIZED", e.getMessage());
     }
   }
 
@@ -2194,6 +2509,10 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
 
     public List<ReplicationRound> getProcessedRounds() {
       return new java.util.ArrayList<>(processedRounds);
+    }
+
+    public long getRoundTimeMills() {
+      return roundTimeMills;
     }
   }
 }

@@ -291,6 +291,12 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
   public void replay() throws IOException {
     LOG.info("Starting replay with lastRoundProcessed={}, lastRoundInSync={}", lastRoundProcessed,
       lastRoundInSync);
+
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Consistency point for HAGroup: {} before starting the replay is {}.", haGroupName,
+        getConsistencyPoint());
+    }
+
     Optional<ReplicationRound> optionalNextRound = getFirstRoundToProcess();
     LOG.info("Found first round to process as {} for haGroup: {}", optionalNextRound, haGroupName);
     while (optionalNextRound.isPresent()) {
@@ -341,6 +347,12 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
         default:
           throw new IllegalStateException("Unexpected state: " + currentState);
       }
+
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Consistency point for HAGroup: {} after processing round: {} is {}", haGroupName,
+          replicationRound, getConsistencyPoint());
+      }
+
       optionalNextRound = getNextRoundToProcess();
     }
 
@@ -519,5 +531,56 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     SYNC, // fully in sync / standby
     DEGRADED, // degraded for writer
     SYNCED_RECOVERY // came back from degraded → standby, needs rewind
+  }
+
+  /**
+   * Returns the consistency point timestamp based on the current replication replay state. The
+   * consistency point in a standby cluster is defined as the timestamp such that all mutations
+   * whose timestamp less than this consistency point timestamp have been replayed
+   * @return The consistency point timestamp in milliseconds
+   * @throws IOException if the consistency point cannot be determined based on current state
+   */
+  public long getConsistencyPoint() throws IOException {
+
+    ReplicationReplayState currentState = replicationReplayState.get();
+    long consistencyPoint = 0L;
+
+    switch (currentState) {
+      case SYNC:
+        // In SYNC state: prefer minimum timestamp from in-progress files (if any),
+        // otherwise use lastRoundInSync end time
+        Optional<Long> optionalMinTimestampInProgressTimestamp =
+          getMinTimestampFromInProgressFiles();
+        if (optionalMinTimestampInProgressTimestamp.isPresent()) {
+          // Use minimum timestamp from in-progress files as consistency point
+          consistencyPoint = optionalMinTimestampInProgressTimestamp.get();
+        } else if (lastRoundInSync != null) {
+          // Use lastRoundInSync end time if no in-progress files
+          // Since we are in sync mode, both lastRoundProcessed and lastRoundInSync would be same.
+          // However, using lastRoundInSync to be on safe side.
+          consistencyPoint = lastRoundInSync.getEndTime();
+        } else {
+          throw new IOException(
+            "Not able to derive consistency point because In Progress directory is empty and lastRoundInSync is not initialized.");
+        }
+        break;
+      case DEGRADED:
+      case SYNCED_RECOVERY:
+        // In DEGRADED or SYNCED_RECOVERY state: use lastRoundInSync end time
+        // (the last known sync point before degradation/recovery)
+        if (lastRoundInSync != null) {
+          consistencyPoint = lastRoundInSync.getEndTime();
+        } else {
+          throw new IOException(
+            "Not able to derive consistency point because lastRoundInSync is not initialized.");
+        }
+        break;
+      default:
+        // Invalid or uninitialized state
+        throw new IOException(
+          "Not able to derive consistency point for current state: " + currentState);
+    }
+
+    return consistencyPoint;
   }
 }
