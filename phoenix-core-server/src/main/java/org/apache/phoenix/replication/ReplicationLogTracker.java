@@ -116,7 +116,7 @@ public class ReplicationLogTracker {
    * @return List of valid log file paths that belong to the specified replication round
    * @throws IOException if there's an error accessing the file system
    */
-  protected List<Path> getNewFilesForRound(ReplicationRound replicationRound) throws IOException {
+  public List<Path> getNewFilesForRound(ReplicationRound replicationRound) throws IOException {
     Path roundDirectory = replicationShardDirectoryManager.getShardDirectory(replicationRound);
     LOG.info("Getting new files for round {} from shard {}", replicationRound, roundDirectory);
     if (!fileSystem.exists(roundDirectory)) {
