@@ -31,6 +31,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.replication.ReplicationLogDiscovery;
 import org.apache.phoenix.replication.ReplicationLogTracker;
 import org.apache.phoenix.replication.ReplicationRound;
+import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscoveryReplayImpl;
 import org.slf4j.Logger;
@@ -455,15 +456,47 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
    * Determines whether failover should be triggered based on completion criteria. Failover is safe
    * to trigger when all of the following conditions are met: 1. A failover has been requested
    * (failoverPending is true) 2. No files are currently in the in-progress directory 3. No new
-   * files exist for ongoing round These conditions ensure all replication logs have been processed
-   * before transitioning the cluster from STANDBY to ACTIVE state.
+   * files exist from the next round to process up to the current timestamp round. The third
+   * condition checks for new files in the range from nextRoundToProcess (derived from
+   * getLastRoundProcessed()) to currentTimestampRound (derived from current time). This ensures all
+   * replication logs up to the current time have been processed before transitioning the cluster
+   * from STANDBY to ACTIVE state.
    * @return true if all conditions are met and failover should be triggered, false otherwise
    * @throws IOException if there's an error checking file status
    */
   protected boolean shouldTriggerFailover() throws IOException {
-    return failoverPending.get() && replicationLogTracker.getInProgressFiles().isEmpty()
-      && replicationLogTracker.getNewFilesForRound(replicationLogTracker
-        .getReplicationShardDirectoryManager().getNextRound(getLastRoundProcessed())).isEmpty();
+    LOG.debug("Checking if failover should be triggered. failoverPending={}", failoverPending);
+    // Check if failover has been requested
+    if (!failoverPending.get()) {
+      LOG.debug("Failover not triggered. failoverPending is false.");
+      return false;
+    }
+    // Check if in-progress directory is empty
+    boolean isInProgressDirectoryEmpty = replicationLogTracker.getInProgressFiles().isEmpty();
+    if (!isInProgressDirectoryEmpty) {
+      LOG.debug("Failover not triggered. In progress directory is not empty.");
+      return false;
+    }
+    // Check if there are any new files from next round to current timestamp round
+    ReplicationShardDirectoryManager replicationShardDirectoryManager =
+      replicationLogTracker.getReplicationShardDirectoryManager();
+    ReplicationRound nextRoundToProcess =
+      replicationShardDirectoryManager.getNextRound(getLastRoundProcessed());
+    ReplicationRound currentTimestampRound = replicationShardDirectoryManager
+      .getReplicationRoundFromStartTime(EnvironmentEdgeManager.currentTime());
+    LOG.debug("Checking the new files from next round {} to current timestamp round {}.",
+      nextRoundToProcess, currentTimestampRound);
+    boolean isInDirectoryEmpty =
+      replicationLogTracker.getNewFiles(nextRoundToProcess, currentTimestampRound).isEmpty();
+
+    if (!isInDirectoryEmpty) {
+      LOG.debug(
+        "Failover not triggered. New files exist from next round to current " + "timestamp round.");
+      return false;
+    }
+
+    LOG.info("Failover can be triggered.");
+    return true;
   }
 
   protected void triggerFailover() {
