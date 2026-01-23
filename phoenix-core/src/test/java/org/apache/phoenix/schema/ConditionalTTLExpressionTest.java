@@ -561,23 +561,23 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     }
   }
 
-    @Test
-    public void testUncoveredIndexRelaxedTTL() throws Exception {
-        String ddlTemplate = "create table %s (id varchar not null primary key, "
-                + "col1 integer, col2 integer, col3 double, col4 varchar) TTL = '%s', IS_STRICT_TTL=false";
-        String tableName = generateUniqueName();
-        String indexTemplate = "create uncovered index %s on %s (col1) ";
-        String indexName = generateUniqueName();
-        String ttl = "col2 > 100 AND col4='expired'";
-        try (Connection conn = DriverManager.getConnection(getUrl())) {
-            String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
-            conn.createStatement().execute(ddl);
-            assertConditionTTL(conn, tableName, ttl);
-            ddl = String.format(indexTemplate, indexName, tableName);
-            conn.createStatement().execute(ddl);
-            assertTTL(conn, indexName, TTL_EXPRESSION_NOT_DEFINED);
-        }
+  @Test
+  public void testUncoveredIndexRelaxedTTL() throws Exception {
+    String ddlTemplate = "create table %s (id varchar not null primary key, "
+      + "col1 integer, col2 integer, col3 double, col4 varchar) TTL = '%s', IS_STRICT_TTL=false";
+    String tableName = generateUniqueName();
+    String indexTemplate = "create uncovered index %s on %s (col1) ";
+    String indexName = generateUniqueName();
+    String ttl = "col2 > 100 AND col4='expired'";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
+      conn.createStatement().execute(ddl);
+      assertConditionTTL(conn, tableName, ttl);
+      ddl = String.format(indexTemplate, indexName, tableName);
+      conn.createStatement().execute(ddl);
+      assertTTL(conn, indexName, TTL_EXPRESSION_NOT_DEFINED);
     }
+  }
 
   @Test
   public void testCreatingIndexWithMissingExprCols() throws Exception {
@@ -621,7 +621,27 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
         assertTrue(e.getCause() instanceof ColumnNotFoundException);
       }
       // relaxed ttl
-      ddl = String.format("alter table %s set TTL = '%s', IS_STRICT_TTL = false", tableName, retainSingleQuotes(ttl));
+      ddl = String.format("alter table %s set TTL = '%s', IS_STRICT_TTL = false", tableName,
+        retainSingleQuotes(ttl));
+      conn.createStatement().execute(ddl);
+      assertTTL(conn, indexName, TTL_EXPRESSION_NOT_DEFINED);
+    }
+  }
+
+  @Test
+  public void testSettingCondTTLOnTableWithRelaxedTTLAndUncoveredIndex() throws Exception {
+    String ddlTemplate = "create table %s (id varchar not null primary key, "
+      + "col1 integer, col2 integer, col3 double, col4 varchar) IS_STRICT_TTL = false";
+    String tableName = generateUniqueName();
+    String indexTemplate = "create uncovered index %s on %s (col1)";
+    String indexName = generateUniqueName();
+    String ttl = "col2 > 100 AND col4='expired'";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String ddl = String.format(ddlTemplate, tableName);
+      conn.createStatement().execute(ddl);
+      ddl = String.format(indexTemplate, indexName, tableName);
+      conn.createStatement().execute(ddl);
+      ddl = String.format("alter table %s set TTL = '%s'", tableName, retainSingleQuotes(ttl));
       conn.createStatement().execute(ddl);
       assertTTL(conn, indexName, TTL_EXPRESSION_NOT_DEFINED);
     }
