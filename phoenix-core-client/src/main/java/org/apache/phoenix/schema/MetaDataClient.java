@@ -2529,7 +2529,11 @@ public class MetaDataClient {
       } else {
         ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
         if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
-          ttlFromHierarchy.validateTTLOnCreate(connection, statement, parent, tableProps);
+            if (parent.hasConditionalTTL() && !parent.isStrictTTL()) {
+                ttlFromHierarchy = TTL_EXPRESSION_NOT_DEFINED;
+            } else {
+                ttlFromHierarchy.validateTTLOnCreate(connection, statement, parent, tableProps);
+            }
         }
       }
 
@@ -6413,7 +6417,10 @@ public class MetaDataClient {
       }
       if (metaProperties.getTTL() != table.getTTLExpression()) {
         TTLExpression newTTL = metaProperties.getTTL();
-        newTTL.validateTTLOnAlter(connection, table);
+        boolean isStrictTTL = metaProperties.isStrictTTL() != null ? metaProperties.isStrictTTL : true;
+        if (!(newTTL instanceof ConditionalTTLExpression) || isStrictTTL) {
+            newTTL.validateTTLOnAlter(connection, table);
+        }
         metaPropertiesEvaluated.setTTL(getCompatibleTTLExpression(metaProperties.getTTL(),
           table.getType(), table.getViewType(), table.getName().toString()));
         changingPhoenixTableProperty = true;

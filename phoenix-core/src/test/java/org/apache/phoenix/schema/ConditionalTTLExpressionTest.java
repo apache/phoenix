@@ -55,7 +55,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
 
-  private static void assertConditonTTL(Connection conn, String tableName, String ttlExpr)
+  private static void assertConditionTTL(Connection conn, String tableName, String ttlExpr)
     throws SQLException {
     TTLExpression expected = new ConditionalTTLExpression(ttlExpr);
     assertTTL(conn, tableName, expected);
@@ -105,7 +105,7 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, ttl);
+      assertConditionTTL(conn, tableName, ttl);
       String query = String.format("SELECT count(*) from %s where k1 > 3", tableName);
       validateScan(conn, tableName, query, ttl, false, Lists.newArrayList("col1"));
     }
@@ -174,17 +174,17 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, ttl);
+      assertConditionTTL(conn, tableName, ttl);
       // create global index
       String indexName = "I_" + generateUniqueName();
       ddl = String.format("create index %s on %s (col2) include(col1)", indexName, tableName);
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, indexName, ttl);
+      assertConditionTTL(conn, indexName, ttl);
       // create local index
       indexName = "L_" + generateUniqueName();
       ddl = String.format("create local index %s on %s (col2) include(col1)", indexName, tableName);
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, indexName, ttl);
+      assertConditionTTL(conn, indexName, ttl);
     }
   }
 
@@ -198,23 +198,23 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, ttl);
+      assertConditionTTL(conn, tableName, ttl);
       // create view
       String viewName = "GV_" + generateUniqueName();
       ddl = String.format("create view %s (col3 varchar) as select * from %s where k1 = 2",
         viewName, tableName);
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, viewName, ttl);
+      assertConditionTTL(conn, viewName, ttl);
       // create global index
       String indexName = "I_" + generateUniqueName();
       ddl = String.format("create index %s on %s (col2) include(col1)", indexName, tableName);
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, indexName, ttl);
+      assertConditionTTL(conn, indexName, ttl);
       // create local index
       indexName = "L_" + generateUniqueName();
       ddl = String.format("create local index %s on %s (col2) include(col1)", indexName, tableName);
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, indexName, ttl);
+      assertConditionTTL(conn, indexName, ttl);
     }
   }
 
@@ -301,7 +301,7 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, ttl);
+      assertConditionTTL(conn, tableName, ttl);
       // add a new column in a different column family
       String alterDDL = String.format("alter table %s add A.col3 varchar", tableName);
       try {
@@ -369,7 +369,7 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     String ddl = String.format(ddlTemplate, tableName, ttl);
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, ttl);
+      assertConditionTTL(conn, tableName, ttl);
       String query = String.format("SELECT count(*) from %s", tableName);
       validateScan(conn, tableName, query, ttl, false, Lists.newArrayList("col1", "col2"));
     }
@@ -387,14 +387,14 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       String ddl = String.format(ddlTemplate, tableName, ttl);
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, ttl);
+      assertConditionTTL(conn, tableName, ttl);
 
       query = String.format("SELECT k1, k2 from %s where (k1,k2) IN ((1,2), (3,4))", tableName);
       validateScan(conn, tableName, query, ttl, false, Lists.newArrayList("expired"));
 
       ddl = String.format(indexTemplate, indexName, tableName);
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, indexName, ttl);
+      assertConditionTTL(conn, indexName, ttl);
 
       // validate the scan on index
       query = String.format("SELECT count(*) from %s", tableName);
@@ -411,7 +411,7 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     String ddl = String.format(ddlTemplate, tableName, ttl);
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, ttl);
+      assertConditionTTL(conn, tableName, ttl);
     }
   }
 
@@ -425,7 +425,7 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     String query;
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, ttl);
+      assertConditionTTL(conn, tableName, ttl);
       query = String.format("select col1 from %s where k1 = 7 AND k2 > 12", tableName);
       validateScan(conn, tableName, query, ttl, false, Lists.newArrayList("col1"));
     }
@@ -441,7 +441,7 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     String ddl = String.format(ddlTemplate, tableName, ttl);
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, expectedTTLExpr);
+      assertConditionTTL(conn, tableName, expectedTTLExpr);
     }
   }
 
@@ -460,7 +460,7 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
       ddl = String.format(viewTemplate, viewName, tableName, ttl);
       conn.createStatement().execute(ddl);
       assertTTL(conn, tableName, TTL_EXPRESSION_NOT_DEFINED);
-      assertConditonTTL(conn, viewName, ttl);
+      assertConditionTTL(conn, viewName, ttl);
       String query = String.format("select k3 from %s", viewName);
       validateScan(conn, viewName, query, ttl, false, Lists.newArrayList("k2", "k3"));
     }
@@ -487,11 +487,11 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
       conn.createStatement().execute(ddl);
       assertTTL(conn, tableName, TTL_EXPRESSION_NOT_DEFINED);
       assertTTL(conn, parentView, TTL_EXPRESSION_NOT_DEFINED);
-      assertConditonTTL(conn, childView, ttl);
+      assertConditionTTL(conn, childView, ttl);
       // create an index on child view
       ddl = String.format(indexOnChildTemplate, indexName, childView);
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, indexName, ttl);
+      assertConditionTTL(conn, indexName, ttl);
     }
   }
 
@@ -505,7 +505,7 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, ttl);
+      assertConditionTTL(conn, tableName, ttl);
       query = String.format("select col1 from %s where id IN ('abc', 'fff')", tableName);
       validateScan(conn, tableName, query, ttl, false, Lists.newArrayList("col1", "col2"));
     }
@@ -524,10 +524,10 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, ttl);
+      assertConditionTTL(conn, tableName, ttl);
       ddl = String.format(indexTemplate, indexName, tableName);
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, indexName, ttl);
+      assertConditionTTL(conn, indexName, ttl);
       query = String.format("select col3 from %s where col1 > 60", tableName);
       validateScan(conn, tableName, query, ttl, true,
         Lists.newArrayList("0:col2", "0:col3", "0:col4"));
@@ -535,7 +535,7 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
   }
 
   @Test
-  public void testUncoveredIndex() throws Exception {
+  public void testUncoveredIndexStrictTTL() throws Exception {
     String ddlTemplate = "create table %s (id varchar not null primary key, "
       + "col1 integer, col2 integer, col3 double, col4 varchar) TTL = '%s'";
     String tableName = generateUniqueName();
@@ -546,7 +546,7 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, ttl);
+      assertConditionTTL(conn, tableName, ttl);
       ddl = String.format(indexTemplate, indexName, tableName);
       try {
         conn.createStatement().execute(ddl);
@@ -557,9 +557,27 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
       indexTemplate = "create uncovered index %s on %s (col4, col2) ";
       ddl = String.format(indexTemplate, indexName, tableName);
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, indexName, ttl);
+      assertConditionTTL(conn, indexName, ttl);
     }
   }
+
+    @Test
+    public void testUncoveredIndexRelaxedTTL() throws Exception {
+        String ddlTemplate = "create table %s (id varchar not null primary key, "
+                + "col1 integer, col2 integer, col3 double, col4 varchar) TTL = '%s', IS_STRICT_TTL=false";
+        String tableName = generateUniqueName();
+        String indexTemplate = "create uncovered index %s on %s (col1) ";
+        String indexName = generateUniqueName();
+        String ttl = "col2 > 100 AND col4='expired'";
+        try (Connection conn = DriverManager.getConnection(getUrl())) {
+            String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
+            conn.createStatement().execute(ddl);
+            assertConditionTTL(conn, tableName, ttl);
+            ddl = String.format(indexTemplate, indexName, tableName);
+            conn.createStatement().execute(ddl);
+            assertTTL(conn, indexName, TTL_EXPRESSION_NOT_DEFINED);
+        }
+    }
 
   @Test
   public void testCreatingIndexWithMissingExprCols() throws Exception {
@@ -602,6 +620,10 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
       } catch (SQLException e) {
         assertTrue(e.getCause() instanceof ColumnNotFoundException);
       }
+      // relaxed ttl
+      ddl = String.format("alter table %s set TTL = '%s', IS_STRICT_TTL = false", tableName, retainSingleQuotes(ttl));
+      conn.createStatement().execute(ddl);
+      assertTTL(conn, indexName, TTL_EXPRESSION_NOT_DEFINED);
     }
   }
 
@@ -615,7 +637,7 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
     String ddl = String.format(ddlTemplate, tableName, retainSingleQuotes(ttl));
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.createStatement().execute(ddl);
-      assertConditonTTL(conn, tableName, ttl);
+      assertConditionTTL(conn, tableName, ttl);
       String query = String.format("select * from %s where k1 > 3", tableName);
       // select * so all columns should be read
       validateScan(conn, tableName, query, ttl, false, Collections.EMPTY_LIST);
