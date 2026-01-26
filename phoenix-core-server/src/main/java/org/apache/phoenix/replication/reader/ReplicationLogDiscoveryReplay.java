@@ -293,8 +293,12 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
       lastRoundInSync);
 
     if (LOG.isDebugEnabled()) {
-      LOG.debug("Consistency point for HAGroup: {} before starting the replay is {}.", haGroupName,
-        getConsistencyPoint());
+      try {
+        LOG.debug("Consistency point for HAGroup: {} before starting the replay is {}.",
+          haGroupName, getConsistencyPoint());
+      } catch (IOException exception) {
+        LOG.warn("Failed to get the consistency point for HA Group: {}", haGroupName, exception);
+      }
     }
 
     Optional<ReplicationRound> optionalNextRound = getFirstRoundToProcess();
@@ -349,8 +353,14 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
       }
 
       if (LOG.isDebugEnabled()) {
-        LOG.debug("Consistency point for HAGroup: {} after processing round: {} is {}", haGroupName,
-          replicationRound, getConsistencyPoint());
+        try {
+          LOG.debug("Consistency point for HAGroup: {} after processing round: {} is {}",
+            haGroupName, replicationRound, getConsistencyPoint());
+        } catch (IOException exception) {
+          LOG.warn(
+            "Failed to get the consistency point for HA Group: {} after processing round: {}",
+            haGroupName, replicationRound, exception);
+        }
       }
 
       optionalNextRound = getNextRoundToProcess();
