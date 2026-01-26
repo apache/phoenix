@@ -33,6 +33,7 @@ import org.apache.phoenix.replication.ReplicationLogTracker;
 import org.apache.phoenix.replication.ReplicationRound;
 import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscoveryReplay;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscoveryReplayImpl;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -292,13 +293,15 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     LOG.info("Starting replay with lastRoundProcessed={}, lastRoundInSync={}", lastRoundProcessed,
       lastRoundInSync);
 
-    if (LOG.isDebugEnabled()) {
-      try {
-        LOG.debug("Consistency point for HAGroup: {} before starting the replay is {}.",
-          haGroupName, getConsistencyPoint());
-      } catch (IOException exception) {
-        LOG.warn("Failed to get the consistency point for HA Group: {}", haGroupName, exception);
-      }
+    // Update consistency point metric at the start of replay
+    try {
+      long consistencyPoint = getConsistencyPoint();
+      LOG.debug("Consistency point for HAGroup: {} before starting the replay is {}.", haGroupName,
+        consistencyPoint);
+      getReplayMetrics().updateConsistencyPoint(consistencyPoint);
+    } catch (IOException exception) {
+      LOG.warn("Failed to get the consistency point for HA Group: {} at start of replay",
+        haGroupName, exception);
     }
 
     Optional<ReplicationRound> optionalNextRound = getFirstRoundToProcess();
@@ -352,15 +355,15 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
           throw new IllegalStateException("Unexpected state: " + currentState);
       }
 
-      if (LOG.isDebugEnabled()) {
-        try {
-          LOG.debug("Consistency point for HAGroup: {} after processing round: {} is {}",
-            haGroupName, replicationRound, getConsistencyPoint());
-        } catch (IOException exception) {
-          LOG.warn(
-            "Failed to get the consistency point for HA Group: {} after processing round: {}",
-            haGroupName, replicationRound, exception);
-        }
+      // Update consistency point metric after processing each round
+      try {
+        long consistencyPoint = getConsistencyPoint();
+        LOG.debug("Consistency point for HAGroup: {} after processing round: {} is {}", haGroupName,
+          replicationRound, consistencyPoint);
+        getReplayMetrics().updateConsistencyPoint(consistencyPoint);
+      } catch (IOException exception) {
+        LOG.warn("Failed to get the consistency point for HA Group: {} after processing round: {}",
+          haGroupName, replicationRound, exception);
       }
 
       optionalNextRound = getNextRoundToProcess();
@@ -404,6 +407,14 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
   @Override
   protected MetricsReplicationLogDiscovery createMetricsSource() {
     return new MetricsReplicationLogDiscoveryReplayImpl(haGroupName);
+  }
+
+  /**
+   * Returns the replay-specific metrics interface.
+   * @return MetricsReplicationLogDiscoveryReplay instance
+   */
+  protected MetricsReplicationLogDiscoveryReplay getReplayMetrics() {
+    return (MetricsReplicationLogDiscoveryReplay) getMetrics();
   }
 
   @Override
