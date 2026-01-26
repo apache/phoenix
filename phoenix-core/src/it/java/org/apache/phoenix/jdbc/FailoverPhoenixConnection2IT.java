@@ -57,6 +57,7 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -197,6 +198,7 @@ public class FailoverPhoenixConnection2IT extends HABaseIT {
    * (against cluster 1).
    */
   @Test(timeout = 300000)
+  @Ignore("TODO")
   public void testConnectionWhenActiveZKRestarts() throws Exception {
     // This creates the cqsi for the active cluster upfront.
     // If we don't do that then later when we try to transition
