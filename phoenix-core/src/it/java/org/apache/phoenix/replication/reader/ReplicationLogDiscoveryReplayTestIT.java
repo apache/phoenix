@@ -51,8 +51,7 @@ import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.ReplicationLogTracker;
 import org.apache.phoenix.replication.ReplicationRound;
 import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogTracker;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogTrackerReplayImpl;
+import org.apache.phoenix.replication.metrics.*;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
@@ -594,6 +593,10 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       try {
         TestableReplicationLogDiscoveryReplay discovery =
           new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+
+        // Initialize the discovery
+        discovery.init();
+
         ReplicationRound initialRound =
           new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
         discovery.setLastRoundProcessed(initialRound);
@@ -686,6 +689,10 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       try {
         TestableReplicationLogDiscoveryReplay discovery =
           new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+
+        // Initialize the discovery
+        discovery.init();
+
         discovery.setLastRoundProcessed(
           new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime));
         ReplicationRound lastRoundInSyncBeforeReplay =
@@ -777,6 +784,9 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       try {
         TestableReplicationLogDiscoveryReplay discovery =
           new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+
+        // Initialize the discovery
+        discovery.init();
 
         // Set initial state: lastRoundProcessed is ahead, lastRoundInSync is behind
         ReplicationRound lastInSyncRound =
@@ -902,6 +912,10 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       try {
         TestableReplicationLogDiscoveryReplay discovery =
           new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+
+        // Initialize the discovery
+        discovery.init();
+
         ReplicationRound initialRound =
           new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
         discovery.setLastRoundProcessed(initialRound);
@@ -1012,6 +1026,9 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       try {
         TestableReplicationLogDiscoveryReplay discovery =
           new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+
+        // Initialize the discovery
+        discovery.init();
 
         ReplicationRound lastInSyncRound =
           new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
@@ -1167,6 +1184,9 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
             }
           };
 
+        // Initialize the discovery
+        discoveryWithTransitions.init();
+
         discoveryWithTransitions.setLastRoundProcessed(initialRound);
         discoveryWithTransitions.setLastRoundInSync(initialRound);
         discoveryWithTransitions
@@ -1288,6 +1308,10 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       try {
         TestableReplicationLogDiscoveryReplay discovery =
           new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+
+        // Initialize the discovery
+        discovery.init();
+
         ReplicationRound initialRound =
           new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
         discovery.setLastRoundProcessed(initialRound);
@@ -1437,6 +1461,9 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       try {
         TestableReplicationLogDiscoveryReplay discovery =
           new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+
+        // Initialize the discovery
+        discovery.init();
 
         // Set lastRoundInSync with start time 0 (the new case being tested)
         ReplicationRound lastRoundInSyncWithZeroStart = new ReplicationRound(0L, roundTimeMills);
@@ -1643,6 +1670,9 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
             }
           };
 
+        // Initialize the discovery
+        discovery.init();
+
         // Set lastRoundInSync with start time 0
         ReplicationRound lastRoundInSyncWithZeroStart = new ReplicationRound(0L, roundTimeMills);
         discovery.setLastRoundInSync(lastRoundInSyncWithZeroStart);
@@ -1757,6 +1787,10 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       try {
         TestableReplicationLogDiscoveryReplay discovery =
           new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+
+        // Initialize the discovery
+        discovery.init();
+
         ReplicationRound initialRound =
           new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
         discovery.setLastRoundProcessed(initialRound);
