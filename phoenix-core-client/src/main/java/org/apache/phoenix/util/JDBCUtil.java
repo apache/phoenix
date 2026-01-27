@@ -148,6 +148,26 @@ public class JDBCUtil {
       : Integer.parseInt(batchSizeStr));
   }
 
+  public static int getSlowestScanMetricsCount(String url, Properties info, ReadOnlyProps props)
+    throws SQLException {
+    String slowestScanMetricsCountStr =
+      findProperty(url, info, QueryServices.SLOWEST_SCAN_METRICS_COUNT);
+    return slowestScanMetricsCountStr == null
+      ? props.getInt(QueryServices.SLOWEST_SCAN_METRICS_COUNT,
+        QueryServicesOptions.DEFAULT_SLOWEST_SCAN_METRICS_COUNT)
+      : Integer.parseInt(slowestScanMetricsCountStr);
+  }
+
+  public static boolean isScanMetricsByRegionEnabled(String url, Properties info,
+    ReadOnlyProps props) throws SQLException {
+    String scanMetricsByRegionEnabledStr =
+      findProperty(url, info, QueryServices.SCAN_METRICS_BY_REGION_ENABLED);
+    return scanMetricsByRegionEnabledStr == null
+      ? props.getBoolean(QueryServices.SCAN_METRICS_BY_REGION_ENABLED,
+        QueryServicesOptions.DEFAULT_SCAN_METRICS_BY_REGION_ENABLED)
+      : Boolean.parseBoolean(scanMetricsByRegionEnabledStr);
+  }
+
   public static long getMutateBatchSizeBytes(String url, Properties info, ReadOnlyProps props)
     throws SQLException {
     String batchSizeStr = findProperty(url, info, PhoenixRuntime.UPSERT_BATCH_SIZE_BYTES_ATTRIB);
