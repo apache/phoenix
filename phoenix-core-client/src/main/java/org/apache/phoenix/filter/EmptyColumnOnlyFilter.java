@@ -83,7 +83,7 @@ public class EmptyColumnOnlyFilter extends FilterBase implements Writable {
   @Override
   public void filterRowCells(List<Cell> kvs) throws IOException {
     if (kvs.size() > 2) {
-        throw new IOException("EmptyColumnOnlyFilter got unexpected cells: " + kvs.size());
+      throw new IOException("EmptyColumnOnlyFilter got unexpected cells: " + kvs.size());
     } else if (kvs.size() == 2) {
       // remove the first cell and only return the empty column cell
       kvs.remove(0);
