@@ -20,6 +20,7 @@ package org.apache.phoenix.monitoring.connectionqueryservice;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTION_CREATION_DURATION_MS;
 import static org.apache.phoenix.query.QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS;
@@ -240,7 +241,7 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
       stmt.execute(String.format(CREATE_TABLE_DDL, tableName + "_" + connQueryServiceName));
       if (connQueryServiceName.equals(CONN_QUERY_SERVICE_CHECK_CONN_THROTTLE)) {
         try (Connection conn1 = DriverManager.getConnection(princURL)) {
-          assertMetricValues(connQueryServiceName, 2, 0, 0);
+          assertMetricValues(connQueryServiceName, 2, 0, 0, 0);
           assertHistogramMetricsForMutations(connQueryServiceName, 2, 0, 0, 0);
           try (Connection conn2 = DriverManager.getConnection(princURL)) {
             // This should never execute in this test.
@@ -253,7 +254,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
         // Open Connection Count : 1
         // Open Internal Connection Count : 0
         // Connection Throttled Count : 0
-        assertMetricValues(connQueryServiceName, 1, 0, 0);
+        // Connection creation duration > 0
+        assertMetricValues(connQueryServiceName, 1, 0, 0, 0);
         assertHistogramMetricsForMutations(connQueryServiceName, 1, 0, 0, 0);
       }
     } catch (Exception e) {
@@ -265,7 +267,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
         // Open Connection Count : 0
         // Connection Throttled Count : 1
         // Open Internal Connection Count : 0
-        assertMetricValues(queryServiceName, 0, 1, 0);
+        // Connection creation duration > -1 i.e 0
+        assertMetricValues(queryServiceName, 0, 1, 0, -1);
         // In histogram, we will still have max open connection count as 2
         // while rest of the values will be 0.
         assertHistogramMetricsForMutations(queryServiceName, 2, 0, 0, 0);
@@ -274,7 +277,8 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
         // Open Connection Count : 0
         // Connection Throttled Count : 0
         // Open Internal Connection Count : 0
-        assertMetricValues(queryServiceName, 0, 0, 0);
+        // Connection creation duration > 0
+        assertMetricValues(queryServiceName, 0, 0, 0, 0);
         // In histogram, we will still have max open connection count as 1 while rest of the values
         // will be 0.
         assertHistogramMetricsForMutations(queryServiceName, 1, 0, 0, 0);
@@ -320,21 +324,23 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
    * @param o                {@link MetricType#OPEN_PHOENIX_CONNECTIONS_COUNTER}
    * @param ct               {@link MetricType#PHOENIX_CONNECTIONS_THROTTLED_COUNTER}
    * @param io               {@link MetricType#OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER}
+   * @param cct              {@link MetricType#PHOENIX_CONNECTION_CREATION_DURATION_MS}
    */
-  public void assertMetricValues(String queryServiceName, int o, int ct, int io) {
+  public void assertMetricValues(String queryServiceName, int o, int ct, int io, int cct) {
     Map<String, List<ConnectionQueryServicesMetric>> listOfMetrics =
-      PhoenixRuntime.getAllConnectionQueryServicesCounters();
+      PhoenixRuntime.getAllConnectionQueryServicesMetrics();
     /*
-     * There are 3 metrics which are tracked as part of Phoenix Connection Query Service Metrics.
+     * There are 4 metrics which are tracked as part of Phoenix Connection Query Service Metrics.
      * Defined here : {@link ConnectionQueryServicesMetrics.QueryServiceMetrics}
      * OPEN_PHOENIX_CONNECTIONS_COUNTER OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER
-     * PHOENIX_CONNECTIONS_THROTTLED_COUNTER
+     * PHOENIX_CONNECTIONS_THROTTLED_COUNTER, PHOENIX_CONNECTION_CREATION_DURATION_MS
      */
-    assertEquals(3, listOfMetrics.get(queryServiceName).size());
+    assertEquals(4, listOfMetrics.get(queryServiceName).size());
     for (ConnectionQueryServicesMetric metric : listOfMetrics.get(queryServiceName)) {
       assertMetricValue(metric, OPEN_PHOENIX_CONNECTIONS_COUNTER, o, CompareOp.EQ);
       assertMetricValue(metric, PHOENIX_CONNECTIONS_THROTTLED_COUNTER, ct, CompareOp.EQ);
       assertMetricValue(metric, OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER, io, CompareOp.EQ);
+      assertMetricValue(metric, PHOENIX_CONNECTION_CREATION_DURATION_MS, cct, CompareOp.GT);
     }
   }
 
@@ -343,7 +349,7 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
    */
   public void assertMetricListIsEmpty() {
     Map<String, List<ConnectionQueryServicesMetric>> listOfMetrics =
-      PhoenixRuntime.getAllConnectionQueryServicesCounters();
+      PhoenixRuntime.getAllConnectionQueryServicesMetrics();
     assertTrue(listOfMetrics.isEmpty());
   }
 
