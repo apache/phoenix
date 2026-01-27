@@ -34,6 +34,7 @@ import java.util.Properties;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.PTable;
@@ -1097,7 +1098,13 @@ public class PhoenixTestBuilder {
           tableCreated = true;
           PTableKey tableKey =
             new PTableKey(null, SchemaUtil.normalizeFullTableName(entityTableName));
-          setBaseTable(globalConnection.unwrap(PhoenixConnection.class).getTable(tableKey));
+          PhoenixConnection pcon;
+          if (globalConnection instanceof FailoverPhoenixConnection) {
+            pcon = globalConnection.unwrap(FailoverPhoenixConnection.class).getWrappedConnection();
+          } else {
+            pcon = globalConnection.unwrap(PhoenixConnection.class);
+          }
+          setBaseTable(pcon.getTable(tableKey));
         }
         // Index on Table
         if (tableIndexEnabled && !tableIndexCreated) {

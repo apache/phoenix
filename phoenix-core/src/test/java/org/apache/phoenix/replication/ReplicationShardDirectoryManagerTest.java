@@ -56,7 +56,7 @@ public class ReplicationShardDirectoryManagerTest {
 
     // Create manager with default configuration
     Path rootPath = new Path(testFolder.getRoot().getAbsolutePath());
-    manager = new ReplicationShardDirectoryManager(conf, rootPath);
+    manager = new ReplicationShardDirectoryManager(conf, localFs, rootPath);
   }
 
   @After
@@ -270,7 +270,7 @@ public class ReplicationShardDirectoryManagerTest {
 
     Path rootPath = new Path(testFolder.getRoot().getAbsolutePath());
     ReplicationShardDirectoryManager customManager =
-      new ReplicationShardDirectoryManager(customConf, rootPath);
+      new ReplicationShardDirectoryManager(customConf, localFs, rootPath);
 
     long dayStart = 1704067200000L; // 2024-01-01 00:00:00 UTC
 
@@ -385,7 +385,7 @@ public class ReplicationShardDirectoryManagerTest {
 
     Path rootPath = new Path(testFolder.getRoot().getAbsolutePath());
     ReplicationShardDirectoryManager customManager =
-      new ReplicationShardDirectoryManager(customConf, rootPath);
+      new ReplicationShardDirectoryManager(customConf, localFs, rootPath);
 
     long dayStart = 1704067200000L; // 2024-01-01 00:00:00 UTC
     long roundDurationMs = 30 * 1000L; // 30 seconds in milliseconds
@@ -533,7 +533,7 @@ public class ReplicationShardDirectoryManagerTest {
 
     Path rootPath = new Path(testFolder.getRoot().getAbsolutePath());
     ReplicationShardDirectoryManager customManager =
-      new ReplicationShardDirectoryManager(customConf, rootPath);
+      new ReplicationShardDirectoryManager(customConf, localFs, rootPath);
 
     long dayStart = 1704067200000L; // 2024-01-01 00:00:00 UTC
     long roundDurationMs = 30 * 1000L; // 30 seconds in milliseconds
@@ -560,8 +560,9 @@ public class ReplicationShardDirectoryManagerTest {
   @Test
   public void testDefaultAndCustomConfigurationValues() {
     // Test with default configuration (no custom values set)
+    Path testPath = new Path(testFolder.getRoot().getAbsolutePath());
     ReplicationShardDirectoryManager defaultManager =
-      new ReplicationShardDirectoryManager(conf, new Path(testFolder.getRoot().getAbsolutePath()));
+      new ReplicationShardDirectoryManager(conf, localFs, testPath);
 
     // Validate default values
     assertEquals("numShards should use default value when not configured",
@@ -581,8 +582,8 @@ public class ReplicationShardDirectoryManagerTest {
       ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY,
       customReplicationRoundDurationSeconds);
 
-    ReplicationShardDirectoryManager customManager = new ReplicationShardDirectoryManager(
-      customConf, new Path(testFolder.getRoot().getAbsolutePath()));
+    ReplicationShardDirectoryManager customManager =
+      new ReplicationShardDirectoryManager(customConf, localFs, testPath);
 
     // Validate custom values
     assertEquals("numShards should use custom value when configured", customNumShards,
@@ -632,8 +633,9 @@ public class ReplicationShardDirectoryManagerTest {
 
   private void testGetAllShardPathsHelper(final Configuration conf, final int expectedShardCount) {
 
+    Path testPath = new Path(testFolder.getRoot().getAbsolutePath());
     ReplicationShardDirectoryManager replicationShardDirectoryManager =
-      new ReplicationShardDirectoryManager(conf, new Path(testFolder.getRoot().getAbsolutePath()));
+      new ReplicationShardDirectoryManager(conf, localFs, testPath);
     List<Path> shardPaths = replicationShardDirectoryManager.getAllShardPaths();
 
     // Verify the number of shards

@@ -48,10 +48,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class HighAvailabilityGroup2IT {
+public class HighAvailabilityGroup2IT extends HABaseIT {
   private static final Logger LOG = LoggerFactory.getLogger(HighAvailabilityGroup2IT.class);
-  private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS =
-    new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
 
   /** Client properties to create a connection per test. */
   private Properties clientProperties;

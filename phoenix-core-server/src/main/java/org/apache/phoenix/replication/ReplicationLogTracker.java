@@ -70,12 +70,11 @@ public class ReplicationLogTracker {
   protected MetricsReplicationLogTracker metrics;
 
   public ReplicationLogTracker(final Configuration conf, final String haGroupName,
-    final FileSystem fileSystem,
     final ReplicationShardDirectoryManager replicationShardDirectoryManager,
     final MetricsReplicationLogTracker metrics) {
     this.conf = conf;
     this.haGroupName = haGroupName;
-    this.fileSystem = fileSystem;
+    this.fileSystem = replicationShardDirectoryManager.getFileSystem();
     this.replicationShardDirectoryManager = replicationShardDirectoryManager;
     this.metrics = metrics;
   }

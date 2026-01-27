@@ -19,7 +19,6 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityPolicy.PARALLEL;
-import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -59,9 +58,8 @@ import org.slf4j.LoggerFactory;
  */
 @Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
-public class ParallelPhoenixConnectionWorkflowIT {
+public class ParallelPhoenixConnectionWorkflowIT extends HABaseIT {
   private static final Logger LOG = LoggerFactory.getLogger(ParallelPhoenixConnectionIT.class);
-  private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
   private static final Properties GLOBAL_PROPERTIES = new Properties();
   private static final String tableName = generateUniqueName();
   private static final String USER_CONDITION = "USER_ID=? and USER_TYPE=? and WORK_ID=?";
