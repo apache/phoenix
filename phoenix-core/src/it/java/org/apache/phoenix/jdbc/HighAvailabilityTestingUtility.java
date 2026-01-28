@@ -36,6 +36,7 @@ import static org.apache.phoenix.jdbc.HighAvailabilityGroup.*;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.HighAvailibilityCuratorProvider;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.COLLECT_REQUEST_LEVEL_METRICS;
+import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_CLIENT_PREWARM_ENABLED;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_MASTER;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_RPC;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
@@ -1059,6 +1060,9 @@ public class HighAvailabilityTestingUtility {
       conf.set(REGIONSERVER_COPROCESSOR_CONF_KEY,
         PhoenixRegionServerEndpointTestImpl.class.getName());
       conf.set(INDEX_COMMITTER_CONF_KEY, TestTrackingParallelWriterIndexCommitter.class.getName());
+
+      // Enabling Prewarming of HAGroupStoreClient cache
+      conf.setBoolean(HA_GROUP_STORE_CLIENT_PREWARM_ENABLED, true);
 
     }
   }
