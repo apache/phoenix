@@ -954,12 +954,53 @@ public class HighAvailabilityGroup {
       Long.parseLong(properties.getProperty(PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY, config
         .get(PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY, PHOENIX_HA_CRR_POLLER_INTERVAL_MS_DEFAULT)));
 
-    // Get the CRR via RSEndpoint for cluster 1
     try {
-      return GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(), info.getName(), this,
-        pollerInterval, properties);
+      // Get the CRR via RSEndpoint for cluster 1
+      ClusterRoleRecord roleRecord = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
+        info.getName(), this, pollerInterval, properties);
+      // If we have unknown role for any cluster then try getting CRR from cluster 2 endpoint and if
+      // we get unknown role from there as well then CRR with higher adminVersion wins.
+      if (roleRecord.hasUnknownRole()) {
+        ClusterRoleRecord roleRecordFromPR;
+        try {
+          roleRecordFromPR = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl2(),
+            info.getName(), this, pollerInterval, properties);
+        } catch (Exception e) {
+          // As we were able to get CRR from cluster 1 but cluster 2 threw exception then just
+          // return
+          // CRR from cluster 1 and consume this exception
+          LOG.warn("Role Record from cluster {} has Unknown Role but cluster {} threw exception, "
+            + "returning {} as CRR", info.getUrl1(), info.getUrl2(), roleRecord.toPrettyString());
+          return roleRecord;
+        }
+        if (roleRecordFromPR.hasUnknownRole()) {
+          return roleRecord.getVersion() > roleRecordFromPR.getVersion()
+            ? roleRecord
+            : roleRecordFromPR;
+        } else {
+          return roleRecordFromPR;
+        }
+      } else {
+        return roleRecord;
+      }
     } catch (Exception e) {
-      // Got exception from cluster 1 when trying to get CRR, try cluster 2
+      // If we get CRR Not Found on cluster 1, we should still try cluster 2, maybe
+      // haGroupStoreClient
+      // was not initialized somehow, but if we get any exception from cluster 2 too then we should
+      // throw CRR not found so that fallback can happen.
+      if (
+        e instanceof SQLException && ((SQLException) e).getErrorCode()
+            == SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getErrorCode()
+      ) {
+        try {
+          return GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl2(), info.getName(),
+            this, pollerInterval, properties);
+        } catch (Exception ignoredEx) {
+          throw (SQLException) e;
+        }
+      }
+
+      // If caught exception is not CRR not found, then just try cluster 2 endpoint.
       return GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl2(), info.getName(), this,
         pollerInterval, properties);
     }
