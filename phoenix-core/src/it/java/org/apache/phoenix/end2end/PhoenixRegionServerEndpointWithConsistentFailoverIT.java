@@ -18,13 +18,11 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
-import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 
 import com.google.protobuf.RpcCallback;
-
 import java.io.IOException;
 import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
@@ -65,8 +63,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 @Category({ NeedsOwnMiniClusterTest.class })
 public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTest {
 
-  private static final Logger LOGGER
-    = LoggerFactory.getLogger(PhoenixRegionServerEndpointWithConsistentFailoverIT.class);
+  private static final Logger LOGGER =
+    LoggerFactory.getLogger(PhoenixRegionServerEndpointWithConsistentFailoverIT.class);
   private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 5000L;
   private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS =
     new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
@@ -81,10 +79,10 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
     Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     // Set prewarm enabled to true for cluster 1 and false for cluster 2 for comparison.
-    CLUSTERS.getHBaseCluster1().getConfiguration().setBoolean(
-        QueryServices.HA_GROUP_STORE_CLIENT_PREWARM_ENABLED, true);
-    CLUSTERS.getHBaseCluster2().getConfiguration().setBoolean(
-        QueryServices.HA_GROUP_STORE_CLIENT_PREWARM_ENABLED, false);
+    CLUSTERS.getHBaseCluster1().getConfiguration()
+      .setBoolean(QueryServices.HA_GROUP_STORE_CLIENT_PREWARM_ENABLED, true);
+    CLUSTERS.getHBaseCluster2().getConfiguration()
+      .setBoolean(QueryServices.HA_GROUP_STORE_CLIENT_PREWARM_ENABLED, false);
     CLUSTERS.start();
   }
 
@@ -96,14 +94,14 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
   @Before
   public void setUp() throws Exception {
     peerZkUrl = CLUSTERS.getZkUrl2();
-    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(),
-      CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY,
-      null);
-    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), CLUSTERS.getZkUrl2(), CLUSTERS.getZkUrl1(),
-      CLUSTERS.getMasterAddress2(), CLUSTERS.getMasterAddress1(),
-      ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE,
-      null);
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(),
+      CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(),
+      CLUSTERS.getMasterAddress2(), ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY, null);
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(),
+      CLUSTERS.getZkUrl2(), CLUSTERS.getZkUrl1(), CLUSTERS.getMasterAddress2(),
+      CLUSTERS.getMasterAddress1(), ClusterRoleRecord.ClusterRole.STANDBY,
+      ClusterRoleRecord.ClusterRole.ACTIVE, null);
 
   }
 
@@ -114,70 +112,73 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
 
     // There is a race condition between when RegionServerEndpoint Coproc starts and
     // when the HAGroupStoreRecord is inserted into the system table.
-    // To handle this condition and get predictable results, we will insert the HAGroupStoreRecord into the system table first.
-    // Once the HAGroupStoreRecord is inserted into the system table, we will start the RegionServerEndpoint Coproc again.
-    // This will ensure that the RegionServerEndpoint Coproc starts after the HAGroupStoreRecord is inserted into the system table.
-    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(),
-        CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-        ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY,
-        null);
+    // To handle this condition and get predictable results, we will insert the HAGroupStoreRecord
+    // into the system table first.
+    // Once the HAGroupStoreRecord is inserted into the system table, we will start the
+    // RegionServerEndpoint Coproc again.
+    // This will ensure that the RegionServerEndpoint Coproc starts after the HAGroupStoreRecord is
+    // inserted into the system table.
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, CLUSTERS.getZkUrl1(),
+      CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
 
-    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(),
-        CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-        ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY,
-        CLUSTERS.getZkUrl2());
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, CLUSTERS.getZkUrl1(),
+      CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY,
+      CLUSTERS.getZkUrl2());
 
     // Get RegionServer instances from both clusters
     HRegionServer regionServer1 = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
     PhoenixRegionServerEndpoint coprocessor1 = getPhoenixRegionServerEndpoint(regionServer1);
 
     // Start the RegionServerEndpoint Coproc for cluster 1
-    coprocessor1.start(getTestCoprocessorEnvironment(CLUSTERS.getHBaseCluster1().getConfiguration()));
+    coprocessor1
+      .start(getTestCoprocessorEnvironment(CLUSTERS.getHBaseCluster1().getConfiguration()));
 
     HRegionServer regionServer2 = CLUSTERS.getHBaseCluster2().getHBaseCluster().getRegionServer(0);
     PhoenixRegionServerEndpoint coprocessor2 = getPhoenixRegionServerEndpoint(regionServer2);
 
     // Start the RegionServerEndpoint Coproc for cluster 2
-    coprocessor2.start(getTestCoprocessorEnvironment(CLUSTERS.getHBaseCluster2().getConfiguration()));
+    coprocessor2
+      .start(getTestCoprocessorEnvironment(CLUSTERS.getHBaseCluster2().getConfiguration()));
 
     // Wait for prewarming to complete on cluster 1 (cluster 2 won't prewarm)
     Thread.sleep(5000);
 
     // Expected records for each cluster
     ClusterRoleRecord expectedRecord1 = buildExpectedClusterRoleRecord(haGroupName,
-        ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.UNKNOWN);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.UNKNOWN);
     ClusterRoleRecord expectedRecord2 = buildExpectedClusterRoleRecord(haGroupName,
-        ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY);
 
     // Test Cluster 1 WITH prewarming
     ServerRpcController controller1 = new ServerRpcController();
     long startTimeCluster1 = System.currentTimeMillis();
-    executeGetClusterRoleRecordAndVerify(coprocessor1, controller1,
-        haGroupName, expectedRecord1, false);
+    executeGetClusterRoleRecordAndVerify(coprocessor1, controller1, haGroupName, expectedRecord1,
+      false);
     long timeCluster1 = System.currentTimeMillis() - startTimeCluster1;
     LOGGER.info("Cluster 1 WITH prewarming (after restart, prewarmed at startup): {} ms for {}",
-        timeCluster1, CLUSTERS.getZkUrl1());
+      timeCluster1, CLUSTERS.getZkUrl1());
 
     // Test Cluster 2 WITHOUT prewarming
     ServerRpcController controller2 = new ServerRpcController();
     long startTimeCluster2 = System.currentTimeMillis();
-    executeGetClusterRoleRecordAndVerify(coprocessor2, controller2,
-        haGroupName, expectedRecord2, false);
+    executeGetClusterRoleRecordAndVerify(coprocessor2, controller2, haGroupName, expectedRecord2,
+      false);
     long timeCluster2 = System.currentTimeMillis() - startTimeCluster2;
     LOGGER.info("Cluster 2 WITHOUT prewarming (after restart, cold start): {} ms for {}",
-        timeCluster2, CLUSTERS.getZkUrl2());
+      timeCluster2, CLUSTERS.getZkUrl2());
 
     // Compare performance
-    LOGGER.info("Performance comparison: Cluster 1 (prewarmed) took {} ms, " +
-            "Cluster 2 (not prewarmed) took {} ms",
-        timeCluster1, timeCluster2);
+    LOGGER.info("Performance comparison: Cluster 1 (prewarmed) took {} ms, "
+      + "Cluster 2 (not prewarmed) took {} ms", timeCluster1, timeCluster2);
     LOGGER.info("Performance improvement: {} ms faster with prewarming",
-        (timeCluster2 - timeCluster1));
+      (timeCluster2 - timeCluster1));
 
     // Prewarmed cluster should be faster than non-prewarmed cluster
-    assert (timeCluster1 < timeCluster2) :
-        String.format("Prewarmed cluster (cluster 1: %d ms) should be faster than " +
-            "non-prewarmed cluster (cluster 2: %d ms)", timeCluster1, timeCluster2);
+    assert (timeCluster1 < timeCluster2)
+      : String.format("Prewarmed cluster (cluster 1: %d ms) should be faster than "
+        + "non-prewarmed cluster (cluster 2: %d ms)", timeCluster1, timeCluster2);
   }
 
   @Test
@@ -205,8 +206,8 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
       false);
 
     // Delete the HAGroupStoreRecord from ZK
-    try (PhoenixHAAdmin haAdmin =
-      new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(), ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
+    try (PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(),
+      ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
       haAdmin.deleteHAGroupStoreRecordInZooKeeper(haGroupName);
     }
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -220,8 +221,8 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
       true);
 
     // Update the row
-    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), CLUSTERS.getZkUrl1(),
-      peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(),
+      CLUSTERS.getZkUrl1(), peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
       ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY, ClusterRoleRecord.ClusterRole.STANDBY, null);
 
     // Now Invalidate the Cache
