@@ -1061,7 +1061,7 @@ public class HighAvailabilityTestingUtility {
         PhoenixRegionServerEndpointTestImpl.class.getName());
       conf.set(INDEX_COMMITTER_CONF_KEY, TestTrackingParallelWriterIndexCommitter.class.getName());
 
-      //Enabling Prewarming of HAGroupStoreClient cache
+      // Enabling Prewarming of HAGroupStoreClient cache
       conf.setBoolean(HA_GROUP_STORE_CLIENT_PREWARM_ENABLED, true);
 
     }
