@@ -221,6 +221,11 @@ public class ClusterRoleRecord {
     return haGroupName.equals(other.haGroupName) && policy.equals(other.policy);
   }
 
+  /** Returns true if CRR has any url in UNKNOWN role/state. */
+  public boolean hasUnknownRole() {
+    return role1 == ClusterRole.UNKNOWN || role2 == ClusterRole.UNKNOWN;
+  }
+
   /** Returns role by url or UNKNOWN if the Url does not belong to this HA group */
   public ClusterRole getRole(String url) {
     if (url1.equals(url)) {

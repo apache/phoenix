@@ -324,6 +324,33 @@ public class HighAvailabilityGroup2IT extends HABaseIT {
   }
 
   /**
+   * Test Fallback to Single Cluster if non Key cluster is down
+   */
+  @Test
+  public void testFallbackToSingleClusterIfNonKeyClusterIsDown() throws Exception {
+    final String tableName = RandomStringUtils.randomAlphabetic(10);
+    CLUSTERS.createTableOnClusterPair(haGroup, tableName);
+    String haGroupName2 = testName.getMethodName() + RandomStringUtils.randomAlphabetic(3);
+
+    String firstClusterUrl = CLUSTERS.getJdbcUrl1(haGroup);
+    clientProperties.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName2);
+    clientProperties.setProperty(PHOENIX_HA_FALLBACK_CLUSTER_KEY, firstClusterUrl);
+
+    // Here cluster 2 is down and fallback key is cluster 1
+    CLUSTERS.doTestWhenOneZKDown(CLUSTERS.getHBaseCluster2(), () -> {
+      try {
+        // Should get Fallback connection as fallback key is cluster 1 and cluster 2 is down
+        Connection conn = DriverManager.getConnection(jdbcHAUrl, clientProperties);
+        assertTrue(conn instanceof PhoenixConnection);
+        assertEquals(firstClusterUrl, ((PhoenixConnection) conn).getURL());
+        doTestBasicOperationsWithConnection(conn, tableName, haGroupName2);
+      } catch (SQLException e) {
+        fail("Should have failed since one HA group can not initialized. Not falling back");
+      }
+    });
+  }
+
+  /**
    * Test that poller should be running when we detect a non-active role record and should stop when
    * we detect an active role record
    */
