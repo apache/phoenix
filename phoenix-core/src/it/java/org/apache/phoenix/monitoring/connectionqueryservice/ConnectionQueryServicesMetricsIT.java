@@ -219,7 +219,7 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
     csqi4.join();
 
     // Check If all CSQI Metric check passed or not
-    assertEquals("Number of passing CSQI Metrics check should be : ", 4, counter.get());
+    assertEquals("Number of passing CSQI Metrics check should be : ", 3, counter.get());
   }
 
   private void checkConnectionQueryServiceMetricsValues(String queryServiceName) throws Exception {

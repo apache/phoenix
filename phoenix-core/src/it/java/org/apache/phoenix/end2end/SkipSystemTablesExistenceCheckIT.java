@@ -64,10 +64,10 @@ public class SkipSystemTablesExistenceCheckIT {
   private static HBaseTestingUtility hbaseTestUtil;
   private static Configuration conf;
   private Set<String> hbaseTables;
-  private static final Set<String> PHOENIX_SYSTEM_TABLES =
-    new HashSet<>(Arrays.asList("SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS",
-      "SYSTEM.FUNCTION", "SYSTEM.MUTEX", "SYSTEM.LOG", "SYSTEM.CHILD_LINK", "SYSTEM.TASK",
-      "SYSTEM.TRANSFORM", "SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM"));
+  private static final Set<String> PHOENIX_SYSTEM_TABLES = new HashSet<>(
+    Arrays.asList("SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS", "SYSTEM.FUNCTION",
+      "SYSTEM.MUTEX", "SYSTEM.LOG", "SYSTEM.CHILD_LINK", "SYSTEM.TASK", "SYSTEM.TRANSFORM",
+      "SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM", "SYSTEM.IDX_CDC_TRACKER"));
 
   private static class PhoenixSystemTablesCreationTestDriver extends PhoenixTestDriver {
     private static ConnectionQueryServices cqs;

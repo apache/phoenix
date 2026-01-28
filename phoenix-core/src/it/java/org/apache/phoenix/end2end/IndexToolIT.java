@@ -1039,6 +1039,14 @@ public class IndexToolIT extends BaseTest {
     String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
     String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
     String indexName = SchemaUtil.getTableNameFromFullName(fullIndexName);
+    String fullTableNameNormalized = null;
+    String fullIndexNameNormalized = null;
+    if (schemaName != null && !schemaName.isEmpty()) {
+      fullTableNameNormalized = SchemaUtil.normalizeIdentifier(schemaName) + "."
+        + SchemaUtil.normalizeIdentifier(tableName);
+      fullIndexNameNormalized = SchemaUtil.normalizeIdentifier(schemaName) + "."
+        + SchemaUtil.normalizeIdentifier(indexName);
+    }
     try {
       // This checks the state of every raw index row without rebuilding any row
       IndexTool indexTool = IndexToolIT.runIndexTool(false, schemaName, tableName, indexName, null,
@@ -1074,7 +1082,8 @@ public class IndexToolIT extends BaseTest {
       // The index scrutiny run will trigger index repair on all unverified rows, and they will be
       // repaired or
       // deleted (since the age threshold is set to zero ms for these tests
-      PTable pIndexTable = conn.unwrap(PhoenixConnection.class).getTable(fullIndexName);
+      PTable pIndexTable = conn.unwrap(PhoenixConnection.class)
+        .getTable(fullIndexNameNormalized != null ? fullIndexNameNormalized : fullIndexName);
       if (pIndexTable.getIndexType() != PTable.IndexType.UNCOVERED_GLOBAL) {
         assertEquals(0, counters.findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
       }
@@ -1113,14 +1122,17 @@ public class IndexToolIT extends BaseTest {
         counters.findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
       assertEquals(0,
         counters.findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
-      pConn.getQueryServices().clearTableRegionCache(TableName.valueOf(fullIndexName));
+      pConn.getQueryServices().clearTableRegionCache(TableName
+        .valueOf(fullIndexNameNormalized != null ? fullIndexNameNormalized : fullIndexName));
       long actualRowCountAfterCompaction =
         IndexScrutiny.scrutinizeIndex(conn, fullTableName, fullIndexName);
       assertEquals(actualRowCount, actualRowCountAfterCompaction);
       return actualRowCount;
     } catch (AssertionError e) {
-      TestUtil.dumpTable(conn, TableName.valueOf(fullTableName));
-      TestUtil.dumpTable(conn, TableName.valueOf(fullIndexName));
+      TestUtil.dumpTable(conn, TableName
+        .valueOf(fullTableNameNormalized != null ? fullTableNameNormalized : fullTableName));
+      TestUtil.dumpTable(conn, TableName
+        .valueOf(fullIndexNameNormalized != null ? fullIndexNameNormalized : fullIndexName));
       throw e;
     }
   }

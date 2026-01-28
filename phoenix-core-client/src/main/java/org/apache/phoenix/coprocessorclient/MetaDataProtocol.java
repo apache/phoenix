@@ -91,8 +91,8 @@ public abstract class MetaDataProtocol extends MetaDataService {
   public static final long MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0 = MIN_TABLE_TIMESTAMP + 33;
   public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_1_0 = MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0;
   public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_2_0 = MIN_TABLE_TIMESTAMP + 38;
-  public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 = MIN_TABLE_TIMESTAMP + 42;
-  public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 = MIN_TABLE_TIMESTAMP + 43;
+  public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 = MIN_TABLE_TIMESTAMP + 44;
+  public static final long MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 = MIN_TABLE_TIMESTAMP + 45;
   // MIN_SYSTEM_TABLE_TIMESTAMP needs to be set to the max of all the MIN_SYSTEM_TABLE_TIMESTAMP_*
   // constants
   public static final long MIN_SYSTEM_TABLE_TIMESTAMP = MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0;
