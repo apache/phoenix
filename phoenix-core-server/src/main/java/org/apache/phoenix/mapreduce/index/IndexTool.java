@@ -83,10 +83,12 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -1002,10 +1004,20 @@ public class IndexTool extends Configured implements Tool {
         .format(" %s is not an index table for %s for this connection", indexTable, qDataTable));
     }
     qSchemaName = SchemaUtil.normalizeIdentifier(schemaName);
+
     pIndexTable = connection.unwrap(PhoenixConnection.class)
       .getTable(SchemaUtil.getQualifiedTableName(schemaName, indexTable));
+    if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, getConf())) {
+      pIndexTable = connection.unwrap(PhoenixConnection.class).getTable(
+        SchemaUtil.getQualifiedTableName(schemaName, indexTable).replace(
+          QueryConstants.NAME_SEPARATOR,
+          QueryConstants.NAMESPACE_SEPARATOR));
+    }
     indexType = pIndexTable.getIndexType();
     qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
+    if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, getConf())) {
+      qIndexTable = qIndexTable.replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR);
+    }
     if (IndexType.LOCAL.equals(indexType)) {
       isLocalIndexBuild = true;
       if (useSnapshot) {

@@ -224,8 +224,8 @@ public abstract class BasePermissionsIT extends BaseTest {
     view2TableName = tableName + "_V2";
   }
 
-  private static void enablePhoenixHBaseAuthorization(Configuration config,
-    boolean useCustomAccessController) {
+  static void enablePhoenixHBaseAuthorization(Configuration config,
+                                              boolean useCustomAccessController) {
     config.set("hbase.superuser", SUPER_USER + "," + "superUser2");
     config.set("hbase.security.authorization", Boolean.TRUE.toString());
     config.set("hbase.security.exec.permission.checks", Boolean.TRUE.toString());
@@ -247,11 +247,11 @@ public abstract class BasePermissionsIT extends BaseTest {
       "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
   }
 
-  private static void configureNamespacesOnServer(Configuration conf, boolean isNamespaceMapped) {
+  static void configureNamespacesOnServer(Configuration conf, boolean isNamespaceMapped) {
     conf.set(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.toString(isNamespaceMapped));
   }
 
-  private static void configureStatsConfigurations(Configuration conf) {
+  static void configureStatsConfigurations(Configuration conf) {
     conf.set(QueryServices.STATS_GUIDEPOST_WIDTH_BYTES_ATTRIB, Long.toString(20));
     conf.set(QueryServices.STATS_UPDATE_FREQ_MS_ATTRIB, Long.toString(5));
     conf.set(QueryServices.MAX_SERVER_METADATA_CACHE_TIME_TO_LIVE_MS_ATTRIB, Long.toString(5));
