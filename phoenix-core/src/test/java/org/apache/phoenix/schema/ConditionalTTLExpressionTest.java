@@ -623,8 +623,12 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
       // relaxed ttl
       ddl = String.format("alter table %s set TTL = '%s', IS_STRICT_TTL = false", tableName,
         retainSingleQuotes(ttl));
-      conn.createStatement().execute(ddl);
-      assertTTL(conn, indexName, TTL_EXPRESSION_NOT_DEFINED);
+      try {
+        conn.createStatement().execute(ddl);
+        fail("Should have thrown ColumnNotFoundException");
+      } catch (SQLException e) {
+        assertTrue(e.getCause() instanceof ColumnNotFoundException);
+      }
     }
   }
 
