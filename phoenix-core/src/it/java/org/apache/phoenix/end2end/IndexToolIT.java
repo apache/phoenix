@@ -867,11 +867,12 @@ public class IndexToolIT extends BaseTest {
     String indxTable, String tenantId, IndexTool.IndexVerifyType verifyType, Long startTime,
     Long endTime, IndexTool.IndexDisableLoggingType disableLoggingType, Long incrementalVerify,
     boolean useIndexTableAsSource) {
-        return getArgList(useSnapshot, schemaName, dataTable, indxTable, tenantId,verifyType, startTime,
-                endTime, disableLoggingType, incrementalVerify, useIndexTableAsSource, "/tmp/" + UUID.randomUUID().toString());
-    }
+    return getArgList(useSnapshot, schemaName, dataTable, indxTable, tenantId, verifyType,
+      startTime, endTime, disableLoggingType, incrementalVerify, useIndexTableAsSource,
+      "/tmp/" + UUID.randomUUID().toString());
+  }
 
-  private static List<String> getArgList (boolean useSnapshot, String schemaName, String dataTable,
+  private static List<String> getArgList(boolean useSnapshot, String schemaName, String dataTable,
     String indxTable, String tenantId, IndexTool.IndexVerifyType verifyType, Long startTime,
     Long endTime, IndexTool.IndexDisableLoggingType disableLoggingType, Long incrementalVerify,
     boolean useIndexTableAsSource, String outputPath) {
@@ -941,10 +942,10 @@ public class IndexToolIT extends BaseTest {
   public static String[] getArgValues(boolean useSnapshot, String schemaName, String dataTable,
     String indexTable, String tenantId, IndexTool.IndexVerifyType verifyType,
     IndexTool.IndexDisableLoggingType disableLoggingType, String outputPath) {
-    List<String> args = getArgList(useSnapshot, schemaName, dataTable, indexTable,
-      tenantId, verifyType, null, null, disableLoggingType, null, false, outputPath);
+    List<String> args = getArgList(useSnapshot, schemaName, dataTable, indexTable, tenantId,
+      verifyType, null, null, disableLoggingType, null, false, outputPath);
     return args.toArray(new String[0]);
-    }
+  }
 
   public static String[] getArgValues(boolean useSnapshot, String schemaName, String dataTable,
     String indexTable, String tenantId, IndexTool.IndexVerifyType verifyType, Long startTime,
@@ -1037,14 +1038,12 @@ public class IndexToolIT extends BaseTest {
     boolean additionalArgsContainPath = false;
     String path = "";
     List<String> newadditionalArgs = Lists.newArrayList();
-    for (String arg : additionalArgs){
+    for (String arg : additionalArgs) {
       if (additionalArgsContainPath == true) {
         path = arg;
-      }
-      else if ( arg.equals("-op") || arg.equals("-output-path")) {
-         additionalArgsContainPath = true;
-      }
-      else {
+      } else if (arg.equals("-op") || arg.equals("-output-path")) {
+        additionalArgsContainPath = true;
+      } else {
         newadditionalArgs.add(arg);
       }
     }
@@ -1052,16 +1051,16 @@ public class IndexToolIT extends BaseTest {
 
     String[] cmdArgs;
     if (additionalArgsContainPath) {
-      cmdArgs = getArgValues(useSnapshot, schemaName, dataTableName,
-         indexTableName, tenantId, verifyType, disableLoggingType, path);
-    }
-    else {
-      cmdArgs = getArgValues(useSnapshot, schemaName, dataTableName,
-        indexTableName, tenantId, verifyType, disableLoggingType);
+      cmdArgs = getArgValues(useSnapshot, schemaName, dataTableName, indexTableName, tenantId,
+        verifyType, disableLoggingType, path);
+    } else {
+      cmdArgs = getArgValues(useSnapshot, schemaName, dataTableName, indexTableName, tenantId,
+        verifyType, disableLoggingType);
     }
     List<String> cmdArgList = new ArrayList<>(Arrays.asList(cmdArgs));
     cmdArgList.addAll(Arrays.asList(additionalArgs));
-    LOGGER.info("Running IndexTool with {}", Arrays.toString(cmdArgList.toArray()), new Exception("Stack Trace"));
+    LOGGER.info("Running IndexTool with {}", Arrays.toString(cmdArgList.toArray()),
+      new Exception("Stack Trace"));
     int status = indexingTool.run(cmdArgList.toArray(new String[cmdArgList.size()]));
 
     if (expectedStatus == 0) {

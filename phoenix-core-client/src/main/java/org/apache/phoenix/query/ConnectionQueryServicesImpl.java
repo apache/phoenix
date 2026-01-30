@@ -4948,7 +4948,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         // move data to the new tables under System, or simply create the new tables
         IndexToolTableUtil.createNewIndexToolTables(metaConnection);
 
-      } catch (Exception ignore) {}
+      } catch (Exception ignore) {
+      }
 
       clearUpgradeRequired();
       success = true;
