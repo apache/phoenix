@@ -88,8 +88,8 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
@@ -1008,15 +1008,15 @@ public class IndexTool extends Configured implements Tool {
     pIndexTable = connection.unwrap(PhoenixConnection.class)
       .getTable(SchemaUtil.getQualifiedTableName(schemaName, indexTable));
     if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, getConf())) {
-      pIndexTable = connection.unwrap(PhoenixConnection.class).getTable(
-        SchemaUtil.getQualifiedTableName(schemaName, indexTable).replace(
-          QueryConstants.NAME_SEPARATOR,
-          QueryConstants.NAMESPACE_SEPARATOR));
+      pIndexTable = connection.unwrap(PhoenixConnection.class)
+        .getTable(SchemaUtil.getQualifiedTableName(schemaName, indexTable)
+          .replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR));
     }
     indexType = pIndexTable.getIndexType();
     qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
     if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, getConf())) {
-      qIndexTable = qIndexTable.replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR);
+      qIndexTable =
+        qIndexTable.replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR);
     }
     if (IndexType.LOCAL.equals(indexType)) {
       isLocalIndexBuild = true;

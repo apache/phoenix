@@ -74,10 +74,10 @@ import org.junit.FixMethodOrder;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runners.MethodSorters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.junit.runners.MethodSorters;
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Category(NeedsOwnMiniClusterTest.class)
 public class SystemTablesCreationOnConnectionIT {
@@ -107,10 +107,10 @@ public class SystemTablesCreationOnConnectionIT {
   private static final Set<String> PHOENIX_SYSTEM_TABLES =
     new HashSet<>(Arrays.asList("SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS",
       "SYSTEM.FUNCTION", "SYSTEM.MUTEX", "SYSTEM.LOG", "SYSTEM.CHILD_LINK", "SYSTEM.TASK",
-      "SYSTEM.TRANSFORM","SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM",
+      "SYSTEM.TRANSFORM", "SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM",
       "SYSTEM.PHOENIX_INDEX_TOOL_RESULT", "SYSTEM.PHOENIX_INDEX_TOOL"));
 
-    private static final Set<String> PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES =
+  private static final Set<String> PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES =
     new HashSet<>(Arrays.asList("SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS",
       "SYSTEM:FUNCTION", "SYSTEM:MUTEX", "SYSTEM:LOG", "SYSTEM:CHILD_LINK", "SYSTEM:TASK",
       "SYSTEM:TRANSFORM", "SYSTEM:CDC_STREAM_STATUS", "SYSTEM:CDC_STREAM",
