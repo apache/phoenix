@@ -21,6 +21,15 @@ import java.util.Map;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 
 public class CompatScanMetrics {
+  public static final String FS_READ_TIME_METRIC_NAME = "FS_READ_TIME";
+  public static final String BYTES_READ_FROM_FS_METRIC_NAME = "BYTES_READ_FROM_FS";
+  public static final String BYTES_READ_FROM_MEMSTORE_METRIC_NAME = "BYTES_READ_FROM_MEMSTORE";
+  public static final String BYTES_READ_FROM_BLOCK_CACHE_METRIC_NAME =
+    "BYTES_READ_FROM_BLOCK_CACHE";
+  public static final String BLOCK_READ_OPS_COUNT_METRIC_NAME = "BLOCK_READ_OPS_COUNT";
+  public static final String RPC_SCAN_PROCESSING_TIME_METRIC_NAME = "RPC_SCAN_PROCESSING_TIME";
+  public static final String RPC_SCAN_QUEUE_WAIT_TIME_METRIC_NAME = "RPC_SCAN_QUEUE_WAIT_TIME";
+
   private CompatScanMetrics() {
     // Not to be instantiated
   }
