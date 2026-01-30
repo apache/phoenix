@@ -756,7 +756,7 @@ public class IndexTool extends Configured implements Tool {
       configuration.setBooleanIfUnset(
         PhoenixConfigurationUtil.MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER, true);
 
-      PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, dataTableWithSchema);
+      PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
       PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
       PhoenixConfigurationUtil.setIndexToolSourceTable(configuration, sourceTable);
       if (startTime != null) {
