@@ -127,6 +127,7 @@ import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.trace.TracingUtils;
@@ -141,6 +142,9 @@ import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerIndexUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
+import org.bson.BsonArray;
+import org.bson.BsonBinary;
+import org.bson.BsonDocument;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -150,6 +154,9 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+
+import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos;
 
 /**
  * Do all the work of managing index updates from a single coprocessor. All Puts/Delets are passed
@@ -166,6 +173,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static final OperationStatus NOWRITE = new OperationStatus(SUCCESS);
   public static final String PHOENIX_APPEND_METADATA_TO_WAL = "phoenix.append.metadata.to.wal";
   public static final boolean DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL = false;
+  public static final String PHOENIX_INDEX_CDC_CONSUMER_ENABLED =
+    "phoenix.index.cdc.consumer.enabled";
+  public static final boolean DEFAULT_PHOENIX_INDEX_CDC_CONSUMER_ENABLED = true;
 
   /**
    * Class to represent pending data table rows
@@ -274,6 +284,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // The collection of candidate index mutations that will be applied after the data table
     // mutations.
     private ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates;
+    // Map of data table row key to BsonDocument containing pre-phase mutations for eventually
+    // consistent indexes (index mutations with UNVERIFIED Puts only, no Deletes)
+    private Map<ImmutableBytesPtr, BsonDocument> cdcPreMutationsDoc;
+    // Map of data table row key to BsonDocument containing post-phase mutations for eventually
+    // consistent indexes (index mutations with VERIFIED Puts for covered,
+    // UNVERIFIED for uncovered, plus Deletes if needed)
+    private Map<ImmutableBytesPtr, BsonDocument> cdcPostMutationsDoc;
     private List<RowLock> rowLocks =
       Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
     // TreeSet to improve locking efficiency and avoid deadlock (PHOENIX-6871 and HBASE-17924)
@@ -410,10 +427,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private int concurrentMutationWaitDuration;
   private String dataTableName;
   private boolean shouldWALAppend = DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL;
+  private boolean indexCDCConsumerEnabled = DEFAULT_PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
   private boolean isNamespaceEnabled = false;
   private boolean useBloomFilter = false;
   private long lastTimestamp = 0;
   private List<Set<ImmutableBytesPtr>> batchesWithLastTimestamp = new ArrayList<>();
+  private IndexCDCConsumer indexCDCConsumer;
   private static final int DEFAULT_ROWLOCK_WAIT_DURATION = 30000;
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
   private byte[] encodedRegionName;
@@ -465,12 +484,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       this.dataTableName = env.getRegionInfo().getTable().getNameAsString();
       this.shouldWALAppend = env.getConfiguration().getBoolean(PHOENIX_APPEND_METADATA_TO_WAL,
         DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL);
+      this.indexCDCConsumerEnabled = env.getConfiguration()
+        .getBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, DEFAULT_PHOENIX_INDEX_CDC_CONSUMER_ENABLED);
       this.isNamespaceEnabled =
         SchemaUtil.isNamespaceMappingEnabled(PTableType.INDEX, env.getConfiguration());
       TableDescriptor tableDescriptor = env.getRegion().getTableDescriptor();
       BloomType bloomFilterType = tableDescriptor.getColumnFamilies()[0].getBloomFilterType();
       // when the table descriptor changes, the coproc is reloaded
       this.useBloomFilter = bloomFilterType == BloomType.ROW;
+      if (
+        this.indexCDCConsumerEnabled && !this.dataTableName.startsWith("SYSTEM.")
+          && !this.dataTableName.startsWith("SYSTEM:")
+      ) {
+        this.indexCDCConsumer = new IndexCDCConsumer(env, this.dataTableName, serverName);
+        this.indexCDCConsumer.start();
+      }
     } catch (NoSuchMethodError ex) {
       disabled = true;
       LOG.error("Must be too early a version of HBase. Disabled coprocessor ", ex);
@@ -507,6 +535,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     this.builder.stop(msg);
     this.preWriter.stop(msg);
     this.postWriter.stop(msg);
+    if (this.indexCDCConsumer != null) {
+      this.indexCDCConsumer.stop();
+    }
   }
 
   /**
@@ -1287,9 +1318,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>> create();
       prepareIndexMutations(context, maintainers, batchTimestamp);
 
+      prepareEventuallyConsistentIndexMutations(context, batchTimestamp, maintainers);
+
       context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
       int updateCount = 0;
       for (IndexMaintainer indexMaintainer : maintainers) {
+        if (
+          indexMaintainer.getIndexConsistency() != null
+            && indexMaintainer.getIndexConsistency().isAsynchronous()
+        ) {
+          continue;
+        }
         updateCount++;
         byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
         byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
@@ -1299,6 +1338,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         for (Pair<Mutation, byte[]> update : updates) {
           Mutation m = update.getFirst();
           if (m instanceof Put) {
+            if (indexMaintainer.isCDCIndex() && context.cdcPreMutationsDoc != null) {
+              ImmutableBytesPtr dataRowKeyPtr = new ImmutableBytesPtr(update.getSecond());
+              BsonDocument cdcDoc = context.cdcPreMutationsDoc.get(dataRowKeyPtr);
+              if (cdcDoc != null) {
+                byte[] cdcMutationsBytes = PBson.INSTANCE.toBytes(cdcDoc);
+                ((Put) m).addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                  QueryConstants.CDC_INDEX_MUTATIONS_CQ_BYTES, batchTimestamp, cdcMutationsBytes);
+              }
+            }
             // This will be done before the data table row is updated (i.e., in the first write
             // phase)
             context.preIndexUpdates.put(hTableInterfaceReference, m);
@@ -1309,6 +1357,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             Put unverifiedPut = new Put(m.getRow());
             unverifiedPut.addColumn(emptyCF, emptyCQ, batchTimestamp,
               QueryConstants.UNVERIFIED_BYTES);
+            if (indexMaintainer.isCDCIndex() && context.cdcPreMutationsDoc != null) {
+              ImmutableBytesPtr dataRowKeyPtr = new ImmutableBytesPtr(update.getSecond());
+              BsonDocument cdcDoc = context.cdcPreMutationsDoc.get(dataRowKeyPtr);
+              if (cdcDoc != null) {
+                byte[] cdcMutationsBytes = PBson.INSTANCE.toBytes(cdcDoc);
+                unverifiedPut.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                  QueryConstants.CDC_INDEX_MUTATIONS_CQ_BYTES, batchTimestamp, cdcMutationsBytes);
+              }
+            }
             // This will be done before the data table row is updated (i.e., in the first write
             // phase)
             context.preIndexUpdates.put(hTableInterfaceReference, unverifiedPut);
@@ -1316,6 +1373,122 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
       }
       TracingUtils.addAnnotation(current, "index update count", updateCount);
+    }
+  }
+
+  /**
+   * Prepares pre-phase and post-phase cdc mutations for eventually consistent indexes.
+   * @param context        batch mutate context.
+   * @param batchTimestamp the timestamp to use for mutations.
+   * @param maintainers    the list of index maintainers.
+   * @throws IOException if there is an error.
+   */
+  private static void prepareEventuallyConsistentIndexMutations(BatchMutateContext context,
+    long batchTimestamp, List<IndexMaintainer> maintainers) throws IOException {
+    // Store pre-index updates
+    Map<ImmutableBytesPtr, BsonArray> preTablesMap = new HashMap<>();
+    Map<ImmutableBytesPtr, BsonArray> preMutationsMap = new HashMap<>();
+    // Store post-index updates
+    Map<ImmutableBytesPtr, BsonArray> postTablesMap = new HashMap<>();
+    Map<ImmutableBytesPtr, BsonArray> postMutationsMap = new HashMap<>();
+
+    Set<ImmutableBytesPtr> postMutationsNeeded = new HashSet<>();
+    for (IndexMaintainer indexMaintainer : maintainers) {
+      if (
+        indexMaintainer.getIndexConsistency() == null
+          || !indexMaintainer.getIndexConsistency().isAsynchronous()
+      ) {
+        continue;
+      }
+      byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
+      byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
+      HTableInterfaceReference hTableInterfaceReference =
+        new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
+      List<Pair<Mutation, byte[]>> updates = context.indexUpdates.get(hTableInterfaceReference);
+      for (Pair<Mutation, byte[]> update : updates) {
+        Mutation m = update.getFirst();
+        byte[] dataRowKey = update.getSecond();
+        ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(dataRowKey);
+        BsonArray preTables = preTablesMap.computeIfAbsent(rowKeyPtr, k -> new BsonArray());
+        BsonArray preMutations = preMutationsMap.computeIfAbsent(rowKeyPtr, k -> new BsonArray());
+        BsonArray postTables = postTablesMap.computeIfAbsent(rowKeyPtr, k -> new BsonArray());
+        BsonArray postMutations = postMutationsMap.computeIfAbsent(rowKeyPtr, k -> new BsonArray());
+        if (m instanceof Put) {
+          preTables.add(new BsonBinary(indexMaintainer.getIndexTableName()));
+          byte[] preMutation =
+            ProtobufUtil.toMutation(ClientProtos.MutationProto.MutationType.PUT, m).toByteArray();
+          preMutations.add(new BsonBinary(preMutation));
+          if (!indexMaintainer.isUncovered()) {
+            Put verifiedPut = MutationUtil.copyPutReplacingCell((Put) m, emptyCF, emptyCQ,
+              batchTimestamp, QueryConstants.VERIFIED_BYTES);
+            postTables.add(new BsonBinary(indexMaintainer.getIndexTableName()));
+            byte[] postMutation = ProtobufUtil
+              .toMutation(ClientProtos.MutationProto.MutationType.PUT, verifiedPut).toByteArray();
+            postMutations.add(new BsonBinary(postMutation));
+            postMutationsNeeded.add(rowKeyPtr);
+          } else {
+            postTables.add(new BsonBinary(indexMaintainer.getIndexTableName()));
+            postMutations.add(new BsonBinary(preMutation));
+          }
+        } else {
+          if (IndexUtil.isDeleteFamily(m)) {
+            Put unverifiedPut = new Put(m.getRow());
+            unverifiedPut.addColumn(emptyCF, emptyCQ, batchTimestamp,
+              QueryConstants.UNVERIFIED_BYTES);
+            preTables.add(new BsonBinary(indexMaintainer.getIndexTableName()));
+            byte[] preMutation = ProtobufUtil
+              .toMutation(ClientProtos.MutationProto.MutationType.PUT, unverifiedPut).toByteArray();
+            preMutations.add(new BsonBinary(preMutation));
+          }
+          postTables.add(new BsonBinary(indexMaintainer.getIndexTableName()));
+          byte[] deleteMutation = ProtobufUtil
+            .toMutation(ClientProtos.MutationProto.MutationType.DELETE, m).toByteArray();
+          postMutations.add(new BsonBinary(deleteMutation));
+          postMutationsNeeded.add(rowKeyPtr);
+        }
+      }
+    }
+
+    if (!preTablesMap.isEmpty()) {
+      context.cdcPreMutationsDoc = new HashMap<>();
+      for (Map.Entry<ImmutableBytesPtr, BsonArray> entry : preTablesMap.entrySet()) {
+        ImmutableBytesPtr rowKey = entry.getKey();
+        BsonArray tables = entry.getValue();
+        BsonArray mutations = preMutationsMap.get(rowKey);
+        if (tables.size() != mutations.size()) {
+          throw new DoNotRetryIOException(
+            "Pre-phase tables and mutations sizes do not match for row key. Tables size: "
+              + tables.size() + " , mutations size: " + mutations.size());
+        }
+        BsonDocument doc = new BsonDocument();
+        doc.append("tables", tables);
+        doc.append("mutations", mutations);
+        context.cdcPreMutationsDoc.put(rowKey, doc);
+      }
+    }
+
+    if (!postTablesMap.isEmpty()) {
+      context.cdcPostMutationsDoc = new HashMap<>();
+      for (Map.Entry<ImmutableBytesPtr, BsonArray> entry : postTablesMap.entrySet()) {
+        ImmutableBytesPtr rowKey = entry.getKey();
+        // If all index mutations for the given rowkey are uncovered index mutations and none of
+        // them have delete mutations, no need to perform post-index update on the CDC for
+        // the eventually consistent indexes.
+        if (!postMutationsNeeded.contains(rowKey)) {
+          continue;
+        }
+        BsonArray tables = entry.getValue();
+        BsonArray mutations = postMutationsMap.get(rowKey);
+        if (tables.size() != mutations.size()) {
+          throw new DoNotRetryIOException(
+            "Post-phase tables and mutations sizes do not match for row key. Tables size: "
+              + tables.size() + " , mutations size: " + mutations.size());
+        }
+        BsonDocument doc = new BsonDocument();
+        doc.append("tables", tables);
+        doc.append("mutations", mutations);
+        context.cdcPostMutationsDoc.put(rowKey, doc);
+      }
     }
   }
 
@@ -1337,6 +1510,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     context.postIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
     List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
     for (IndexMaintainer indexMaintainer : maintainers) {
+      if (
+        indexMaintainer.getIndexConsistency() != null
+          && indexMaintainer.getIndexConsistency().isAsynchronous()
+      ) {
+        continue;
+      }
       byte[] emptyCF = indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary();
       byte[] emptyCQ = indexMaintainer.getEmptyKeyValueQualifier();
       HTableInterfaceReference hTableInterfaceReference =
@@ -1353,6 +1532,31 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           }
         } else {
           context.postIndexUpdates.put(hTableInterfaceReference, m);
+        }
+      }
+    }
+
+    if (context.cdcPostMutationsDoc != null && !context.cdcPostMutationsDoc.isEmpty()) {
+      for (IndexMaintainer indexMaintainer : maintainers) {
+        if (!indexMaintainer.isCDCIndex()) {
+          continue;
+        }
+        HTableInterfaceReference hTableInterfaceReference =
+          new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
+        List<Pair<Mutation, byte[]>> updates = context.indexUpdates.get(hTableInterfaceReference);
+        for (Pair<Mutation, byte[]> update : updates) {
+          Mutation m = update.getFirst();
+          if (m instanceof Put) {
+            ImmutableBytesPtr dataRowKeyPtr = new ImmutableBytesPtr(update.getSecond());
+            BsonDocument cdcDoc = context.cdcPostMutationsDoc.get(dataRowKeyPtr);
+            if (cdcDoc != null) {
+              Put postPut = new Put(m.getRow());
+              byte[] cdcMutationsBytes = PBson.INSTANCE.toBytes(cdcDoc);
+              postPut.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
+                QueryConstants.CDC_INDEX_MUTATIONS_CQ_BYTES, batchTimestamp, cdcMutationsBytes);
+              context.postIndexUpdates.put(hTableInterfaceReference, postPut);
+            }
+          }
         }
       }
     }

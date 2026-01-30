@@ -63,6 +63,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
@@ -271,7 +272,21 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
         indexToDataRowKeyMap.put(offset == 0 ? lastIndexRowKey : CellUtil.cloneRow(firstCell),
           indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(lastIndexRowKey),
             viewConstants));
-        indexRows.add(row);
+        // When a row has at most one cell, we can safely reuse it as we don't look at cell value,
+        // and we proceed with data table scan.
+        // For rows with multiple cells, we must copy each cell to avoid issues where the
+        // underlying byte buffers for cell values may be reused or invalidated by the scanner
+        // on subsequent nextRaw() calls and hence the cell value could be garbage under
+        // high GC pressure.
+        if (row.size() <= 1) {
+          indexRows.add(row);
+        } else {
+          List<Cell> dupRow = new ArrayList<>(row.size());
+          for (Cell cell : row) {
+            dupRow.add(PhoenixKeyValueUtil.maybeCopyCell(cell));
+          }
+          indexRows.add(dupRow);
+        }
         indexRowCount++;
         if (
           hasMore && (PhoenixScannerContext.isTimedOut(scannerContext, pageSizeMs)

@@ -57,6 +57,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FUNCTION_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_CONSISTENCY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
@@ -275,6 +276,7 @@ import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.transform.TransformClient;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
@@ -343,9 +345,9 @@ public class MetaDataClient {
     + IMMUTABLE_STORAGE_SCHEME + "," + ENCODING_SCHEME + "," + USE_STATS_FOR_PARALLELIZATION + ","
     + VIEW_INDEX_ID_DATA_TYPE + "," + CHANGE_DETECTION_ENABLED + "," + PHYSICAL_TABLE_NAME + ","
     + SCHEMA_VERSION + "," + STREAMING_TOPIC_NAME + "," + INDEX_WHERE + "," + CDC_INCLUDE_TABLE
-    + "," + TTL + "," + ROW_KEY_MATCHER + "," + IS_STRICT_TTL
+    + "," + TTL + "," + ROW_KEY_MATCHER + "," + IS_STRICT_TTL + "," + INDEX_CONSISTENCY
     + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-    + "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    + "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\""
     + SYSTEM_CATALOG_TABLE + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -396,6 +398,10 @@ public class MetaDataClient {
     + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + ","
     + INDEX_STATE + "," + INDEX_DISABLE_TIMESTAMP + "," + ASYNC_REBUILD_TIMESTAMP + " "
     + PLong.INSTANCE.getSqlTypeName() + ") VALUES (?, ?, ?, ?, ?, ?)";
+
+  public static final String UPDATE_INDEX_CONSISTENCY =
+    "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + TENANT_ID + ","
+      + TABLE_SCHEM + "," + TABLE_NAME + "," + INDEX_CONSISTENCY + ") VALUES (?, ?, ?, ?)";
 
   /*
    * Custom sql to add a column to SYSTEM.CATALOG table during upgrade. We can't use the regular
@@ -1061,7 +1067,7 @@ public class MetaDataClient {
       }
     }
     table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType,
-      rowKeyMatcher, viewColumnConstants, isViewColumnReferenced, false, null, null, null,
+      rowKeyMatcher, viewColumnConstants, isViewColumnReferenced, false, null, null, null, null,
       tableProps, commonFamilyProps);
 
     if (table == null || table.getType() == PTableType.VIEW || statement.isNoVerify() /*
@@ -1894,7 +1900,7 @@ public class MetaDataClient {
         statement.ifNotExists(), null, statement.getWhere(), statement.getBindCount(), null);
       table = createTableInternal(tableStatement, splits, dataTable, null, null,
         getViewIndexDataType(), null, null, null, allocateIndexId, statement.getIndexType(),
-        asyncCreatedDate, null, tableProps, commonFamilyProps);
+        statement.getIndexConsistency(), asyncCreatedDate, null, tableProps, commonFamilyProps);
     } finally {
       deleteMutexCells(physicalSchemaName, physicalTableName, acquiredColumnMutexSet);
     }
@@ -1904,6 +1910,13 @@ public class MetaDataClient {
 
     if (LOGGER.isInfoEnabled())
       LOGGER.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
+
+    if (
+      statement.getIndexConsistency() != null && statement.getIndexConsistency().isAsynchronous()
+    ) {
+      createCDCForEventuallyConsistentIndex(dataTable);
+    }
+
     boolean asyncIndexBuildEnabled =
       connection.getQueryServices().getProps().getBoolean(QueryServices.INDEX_ASYNC_BUILD_ENABLED,
         QueryServicesOptions.DEFAULT_INDEX_ASYNC_BUILD_ENABLED);
@@ -2017,7 +2030,7 @@ public class MetaDataClient {
         columnDefs, FACTORY.primaryKey(null, pkColumnDefs), Collections.emptyList(), PTableType.CDC,
         statement.isIfNotExists(), null, null, statement.getBindCount(), null);
     createTableInternal(tableStatement, null, dataTable, null, null, null, null, null, null, false,
-      null, null, statement.getIncludeScopes(), tableProps, commonFamilyProps);
+      null, null, null, statement.getIncludeScopes(), tableProps, commonFamilyProps);
     // for now, only track stream partition metadata for tables, TODO: updatable views
     if (PTableType.TABLE == dataTable.getType()) {
       updateStreamPartitionMetadata(dataTableFullName, cdcObjName);
@@ -2437,12 +2450,37 @@ public class MetaDataClient {
     return parentName.getString().equals(view.getPhysicalName().getString());
   }
 
+  /**
+   * Creates a CDC stream on the data table for eventually consistent indexes if not already
+   * present.
+   * @param dataTable The data table PTable object for which to create the CDC stream.
+   * @throws SQLException If there is an error executing the CREATE CDC statement or accessing the
+   *                      database connection.
+   */
+  private void createCDCForEventuallyConsistentIndex(PTable dataTable) throws SQLException {
+    String dataTableName = dataTable.getTableName().getString();
+    String schemaName = dataTable.getSchemaName().getString();
+    String cdcName = "CDC_" + dataTableName;
+    String fullTableName = SchemaUtil.getCaseSensitiveColumnDisplayName(schemaName, dataTableName);
+    String cdcSql = "CREATE CDC IF NOT EXISTS \"" + cdcName + "\" ON " + fullTableName;
+    try {
+      connection.createStatement().execute(cdcSql);
+    } catch (SQLException e) {
+      if (SQLExceptionCode.CDC_ALREADY_ENABLED.getErrorCode() != e.getErrorCode()) {
+        LOGGER.error("Error while creating CDC for {}", fullTableName, e);
+        throw e;
+      }
+      LOGGER.debug("CDC already exists for {}", fullTableName, e);
+    }
+  }
+
   private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
     final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
     final byte[] rowKeyMatcher, final byte[][] viewColumnConstants,
     final BitSet isViewColumnReferenced, boolean allocateIndexId, IndexType indexType,
-    Date asyncCreatedDate, Set<PTable.CDCChangeScope> cdcIncludeScopes,
-    Map<String, Object> tableProps, Map<String, Object> commonFamilyProps) throws SQLException {
+    IndexConsistency indexConsistency, Date asyncCreatedDate,
+    Set<PTable.CDCChangeScope> cdcIncludeScopes, Map<String, Object> tableProps,
+    Map<String, Object> commonFamilyProps) throws SQLException {
     final PTableType tableType = statement.getTableType();
     boolean wasAutoCommit = connection.getAutoCommit();
     TableName tableNameNode = null;
@@ -3392,9 +3430,10 @@ public class MetaDataClient {
           .setTimeStamp(MetaDataProtocol.MIN_TABLE_TIMESTAMP).setIndexDisableTimestamp(0L)
           .setSequenceNumber(PTable.INITIAL_SEQ_NUM).setImmutableRows(isImmutableRows)
           .setDisableWAL(Boolean.TRUE.equals(disableWAL)).setMultiTenant(false).setStoreNulls(false)
-          .setViewIndexIdType(viewIndexIdType).setIndexType(indexType).setUpdateCacheFrequency(0)
-          .setNamespaceMapped(isNamespaceMapped).setAutoPartitionSeqName(autoPartitionSeq)
-          .setAppendOnlySchema(isAppendOnlySchema).setImmutableStorageScheme(ONE_CELL_PER_COLUMN)
+          .setViewIndexIdType(viewIndexIdType).setIndexType(indexType).setIndexConsistency(null)
+          .setUpdateCacheFrequency(0).setNamespaceMapped(isNamespaceMapped)
+          .setAutoPartitionSeqName(autoPartitionSeq).setAppendOnlySchema(isAppendOnlySchema)
+          .setImmutableStorageScheme(ONE_CELL_PER_COLUMN)
           .setQualifierEncodingScheme(NON_ENCODED_QUALIFIERS)
           .setBaseColumnCount(QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT)
           .setEncodedCQCounter(PTable.EncodedCQCounter.NULL_COUNTER)
@@ -3699,6 +3738,16 @@ public class MetaDataClient {
 
       tableUpsert.setBoolean(38, isStrictTTL);
 
+      if (tableType == PTableType.INDEX) {
+        if (indexConsistency == null) {
+          tableUpsert.setNull(39, Types.CHAR);
+        } else {
+          tableUpsert.setString(39, indexConsistency.getCodeAsString());
+        }
+      } else {
+        tableUpsert.setNull(39, Types.CHAR);
+      }
+
       tableUpsert.execute();
 
       if (asyncCreatedDate != null) {
@@ -3802,6 +3851,7 @@ public class MetaDataClient {
           .setDisableWAL(Boolean.TRUE.equals(disableWAL)).setMultiTenant(multiTenant)
           .setStoreNulls(storeNulls).setViewType(viewType).setViewIndexIdType(viewIndexIdType)
           .setViewIndexId(result.getViewIndexId()).setIndexType(indexType)
+          .setIndexConsistency(tableType == PTableType.INDEX ? indexConsistency : null)
           .setTransactionProvider(transactionProvider).setUpdateCacheFrequency(updateCacheFrequency)
           .setNamespaceMapped(isNamespaceMapped).setAutoPartitionSeqName(autoPartitionSeq)
           .setAppendOnlySchema(isAppendOnlySchema).setImmutableStorageScheme(immutableStorageScheme)
@@ -5796,6 +5846,37 @@ public class MetaDataClient {
         metaPropertiesEvaluated, table, schemaName, tableName, new MutableBoolean(false));
 
       PIndexState newIndexState = statement.getIndexState();
+      IndexConsistency newIndexConsistency = statement.getIndexConsistency();
+
+      if (newIndexConsistency != null) {
+        try (PreparedStatement consistencyUpsert =
+          connection.prepareStatement(UPDATE_INDEX_CONSISTENCY)) {
+          consistencyUpsert.setString(1, tenantId);
+          consistencyUpsert.setString(2, schemaName);
+          consistencyUpsert.setString(3, indexName);
+          consistencyUpsert.setString(4, newIndexConsistency.getCodeAsString());
+          consistencyUpsert.execute();
+          connection.commit();
+
+          if (newIndexConsistency == IndexConsistency.EVENTUAL) {
+            PTable dataTable =
+              connection.getTable(tenantId, SchemaUtil.getTableName(schemaName, dataTableName));
+            createCDCForEventuallyConsistentIndex(dataTable);
+          }
+
+          connection.getQueryServices().clearTableFromCache(
+            connection.getTenantId() == null
+              ? ByteUtil.EMPTY_BYTE_ARRAY
+              : connection.getTenantId().getBytes(),
+            schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName),
+            Bytes.toBytes(indexName), HConstants.LATEST_TIMESTAMP);
+          connection.removeTable(connection.getTenantId(),
+            SchemaUtil.getTableName(schemaName, indexName),
+            SchemaUtil.getTableName(schemaName, dataTableName), HConstants.LATEST_TIMESTAMP);
+
+          return new MutationState(1, 1000, connection);
+        }
+      }
 
       if (isAsync && newIndexState != PIndexState.REBUILD) {
         throw new SQLExceptionInfo.Builder(SQLExceptionCode.ASYNC_NOT_ALLOWED)
@@ -5809,13 +5890,8 @@ public class MetaDataClient {
       connection.setAutoCommit(false);
       // Confirm index table is valid and up-to-date
       TableRef indexRef = FromCompiler.getResolver(statement, connection).getTables().get(0);
-      PreparedStatement tableUpsert = null;
-      try {
-        if (newIndexState == PIndexState.ACTIVE) {
-          tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE_TO_ACTIVE);
-        } else {
-          tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE);
-        }
+      try (PreparedStatement tableUpsert = connection.prepareStatement(
+        newIndexState == PIndexState.ACTIVE ? UPDATE_INDEX_STATE_TO_ACTIVE : UPDATE_INDEX_STATE)) {
         tableUpsert.setString(1,
           connection.getTenantId() == null ? null : connection.getTenantId().getString());
         tableUpsert.setString(2, schemaName);
@@ -5826,10 +5902,6 @@ public class MetaDataClient {
           tableUpsert.setLong(6, 0);
         }
         tableUpsert.execute();
-      } finally {
-        if (tableUpsert != null) {
-          tableUpsert.close();
-        }
       }
       Long timeStamp = indexRef.getTable().isTransactional() ? indexRef.getTimeStamp() : null;
       List<Mutation> tableMetadata =
@@ -5918,8 +5990,8 @@ public class MetaDataClient {
                   }
                 }
               } else {
-                try {
-                  tableUpsert = connection.prepareStatement(UPDATE_INDEX_REBUILD_ASYNC_STATE);
+                try (PreparedStatement tableUpsert =
+                  connection.prepareStatement(UPDATE_INDEX_REBUILD_ASYNC_STATE)) {
                   tableUpsert.setString(1,
                     connection.getTenantId() == null ? null : connection.getTenantId().getString());
                   tableUpsert.setString(2, schemaName);
@@ -5928,10 +6000,6 @@ public class MetaDataClient {
                   tableUpsert.setLong(4, beginTimestamp);
                   tableUpsert.execute();
                   connection.commit();
-                } finally {
-                  if (tableUpsert != null) {
-                    tableUpsert.close();
-                  }
                 }
               }
             }

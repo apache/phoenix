@@ -76,4 +76,35 @@ public class MutationUtil {
     }
     return copy;
   }
+
+  /**
+   * Creates a copy of the Put Mutation, replacing a specific cell with a new value. All other cells
+   * are preserved.
+   * @param original  The original Put Mutation.
+   * @param cf        The column family of the cell to replace.
+   * @param cq        The column qualifier of the cell to replace.
+   * @param timestamp The timestamp to use for the new cell.
+   * @param newValue  The new value for the cell.
+   * @return A new Put Mutation with the specified cell replaced.
+   */
+  public static Put copyPutReplacingCell(Put original, byte[] cf, byte[] cq, long timestamp,
+    byte[] newValue) throws IOException {
+    Put copy = new Put(original.getRow());
+    copy.setTimestamp(original.getTimestamp());
+    copy.setDurability(original.getDurability());
+    copy.setPriority(original.getPriority());
+    for (Map.Entry<String, byte[]> entry : original.getAttributesMap().entrySet()) {
+      copy.setAttribute(entry.getKey(), entry.getValue().clone());
+    }
+    for (List<Cell> cells : original.getFamilyCellMap().values()) {
+      for (Cell cell : cells) {
+        if (CellUtil.matchingFamily(cell, cf) && CellUtil.matchingQualifier(cell, cq)) {
+          continue;
+        }
+        copy.add(CellUtil.cloneIfNecessary(cell));
+      }
+    }
+    copy.addColumn(cf, cq, timestamp, newValue);
+    return copy;
+  }
 }

@@ -34,8 +34,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 @Category(NeedsOwnMiniClusterTest.class)
 public class ConcurrentMutationsLazyPostBatchWriteIT extends ConcurrentMutationsExtendedIT {
 
-  public ConcurrentMutationsLazyPostBatchWriteIT(boolean uncovered) {
-    super(uncovered);
+  public ConcurrentMutationsLazyPostBatchWriteIT(boolean uncovered, boolean eventual) {
+    super(uncovered, eventual);
     Assume.assumeFalse("Only covered index supports lazy post batch write mode", uncovered);
   }
 

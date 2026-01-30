@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.end2end.IndexToolIT.verifyIndexTable;
+import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_BATCH_SIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -41,6 +42,7 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessor.PhoenixMasterObserver;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
@@ -64,6 +66,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
   private static final Logger LOGGER = LoggerFactory.getLogger(ConcurrentMutationsExtendedIT.class);
   private final boolean uncovered;
+  private final boolean eventual;
   private static final Random RAND = new Random(5);
   private static final String MVCC_LOCK_TEST_TABLE_PREFIX = "MVCCLOCKTEST_";
   private static final String LOCK_TEST_TABLE_PREFIX = "LOCKTEST_";
@@ -71,8 +74,9 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
   protected static final int MAX_LOOKBACK_AGE = 1000000;
   private final Object lock = new Object();
 
-  public ConcurrentMutationsExtendedIT(boolean uncovered) {
+  public ConcurrentMutationsExtendedIT(boolean uncovered, boolean eventual) {
     this.uncovered = uncovered;
+    this.eventual = eventual;
   }
 
   @BeforeClass
@@ -88,12 +92,17 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     // The following sets the wait duration for the previous concurrent batch to 10 ms to test
     // the code path handling timeouts
     props.put("phoenix.index.concurrent.wait.duration.ms", "10");
+    props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(2));
+    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(1));
+    props.put(INDEX_CDC_CONSUMER_BATCH_SIZE, Integer.toString(4500));
+    props.put("hbase.coprocessor.master.classes", PhoenixMasterObserver.class.getName());
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 
-  @Parameterized.Parameters(name = "uncovered={0}")
-  public static synchronized Collection<Boolean> data() {
-    return Arrays.asList(true, false);
+  @Parameterized.Parameters(name = "uncovered={0}, eventual={1}")
+  public static synchronized Collection<Object[]> data() {
+    return Arrays.asList(
+      new Object[][] { { false, false }, { false, true }, { true, false }, { true, true } });
   }
 
   @Test
@@ -105,7 +114,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
       + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2)) COLUMN_ENCODED_BYTES = 0");
     TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
     conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + "INDEX "
-      + indexName + " ON " + tableName + "(v1)");
+      + indexName + " ON " + tableName + "(v1)" + (eventual ? " CONSISTENCY = EVENTUAL" : ""));
     final CountDownLatch doneSignal = new CountDownLatch(2);
     Runnable r1 = new Runnable() {
 
@@ -167,6 +176,9 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     t2.start();
 
     doneSignal.await(60, TimeUnit.SECONDS);
+    if (eventual) {
+      Thread.sleep(10000);
+    }
     verifyIndexTable(tableName, indexName, conn);
   }
 
@@ -180,11 +192,11 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
       + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, v1 INTEGER, CONSTRAINT pk PRIMARY KEY (k1,k2))");
     TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
     conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + "INDEX "
-      + indexName + " ON " + tableName + "(v1)");
+      + indexName + " ON " + tableName + "(v1)" + (eventual ? " CONSISTENCY = EVENTUAL" : ""));
     conn.createStatement()
       .execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + "INDEX " + singleCellindexName
-        + " ON " + tableName
-        + "(v1) IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+        + " ON " + tableName + "(v1)" + (eventual ? " CONSISTENCY = EVENTUAL," : "")
+        + " IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS," + " COLUMN_ENCODED_BYTES=2");
     final CountDownLatch doneSignal = new CountDownLatch(2);
     Runnable r1 = new Runnable() {
 
@@ -236,6 +248,9 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     t2.start();
 
     doneSignal.await(60, TimeUnit.SECONDS);
+    if (eventual) {
+      Thread.sleep(10000);
+    }
     verifyIndexTable(tableName, indexName, conn);
     verifyIndexTable(tableName, singleCellindexName, conn);
   }
@@ -252,49 +267,54 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     conn.createStatement().execute("CREATE TABLE " + tableName
       + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, a.v1 INTEGER, b.v2 INTEGER, c.v3 INTEGER, d.v4 INTEGER,"
       + "CONSTRAINT pk PRIMARY KEY (k1,k2))  COLUMN_ENCODED_BYTES = 0, VERSIONS=1");
-    conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + "INDEX "
-      + indexName + " ON " + tableName + "(v1)" + (uncovered ? "" : "INCLUDE(v2, v3)"));
+    conn.createStatement()
+      .execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + "INDEX " + indexName + " ON "
+        + tableName + "(v1)" + (uncovered ? "" : " INCLUDE(v2, v3)")
+        + (eventual ? " CONSISTENCY = EVENTUAL" : ""));
     final CountDownLatch doneSignal = new CountDownLatch(nThreads);
     Runnable[] runnables = new Runnable[nThreads];
     long startTime = EnvironmentEdgeManager.currentTimeMillis();
-    for (int i = 0; i < nThreads; i++) {
-      runnables[i] = new Runnable() {
-
-        @Override
-        public void run() {
-          try {
-            Connection conn = DriverManager.getConnection(getUrl());
-            for (int i = 0; i < 10000; i++) {
-              conn.createStatement()
-                .execute("UPSERT INTO " + tableName + " VALUES (" + (i % nRows) + ", 0, "
-                  + (RAND.nextBoolean() ? null : (RAND.nextInt() % nIndexValues)) + ", "
-                  + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
-                  + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
-                  + (RAND.nextBoolean() ? null : RAND.nextInt()) + ")");
-              if ((i % batchSize) == 0) {
-                conn.commit();
-              }
-            }
-            conn.commit();
-          } catch (SQLException e) {
-            LOGGER.warn("Exception during upsert : " + e);
-          } finally {
-            doneSignal.countDown();
-          }
-        }
-
-      };
-    }
+    buildRunnables(nThreads, runnables, tableName, nRows, nIndexValues, batchSize, doneSignal,
+      10000);
     for (int i = 0; i < nThreads; i++) {
       Thread t = new Thread(runnables[i]);
       t.start();
     }
-
     assertTrue("Ran out of time", doneSignal.await(120, TimeUnit.SECONDS));
     LOGGER.info(
       "Total upsert time in ms : " + (EnvironmentEdgeManager.currentTimeMillis() - startTime));
+    if (eventual) {
+      Thread.sleep(350000);
+    }
     long actualRowCount = verifyIndexTable(tableName, indexName, conn);
     assertEquals(nRows, actualRowCount);
+  }
+
+  static void buildRunnables(int nThreads, Runnable[] runnables, String tableName, int nRows,
+    int nIndexValues, int batchSize, CountDownLatch doneSignal, int totalUpserts) {
+    for (int i = 0; i < nThreads; i++) {
+      runnables[i] = () -> {
+        try {
+          Connection conn = DriverManager.getConnection(getUrl());
+          for (int j = 0; j < totalUpserts; j++) {
+            conn.createStatement()
+              .execute("UPSERT INTO " + tableName + " VALUES (" + (j % nRows) + ", 0, "
+                + (RAND.nextBoolean() ? null : (RAND.nextInt() % nIndexValues)) + ", "
+                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
+                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ", "
+                + (RAND.nextBoolean() ? null : RAND.nextInt()) + ")");
+            if ((j % batchSize) == 0) {
+              conn.commit();
+            }
+          }
+          conn.commit();
+        } catch (SQLException e) {
+          LOGGER.warn("Exception during upsert : " + e);
+        } finally {
+          doneSignal.countDown();
+        }
+      };
+    }
   }
 
   @Test
@@ -307,7 +327,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
       "CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v INTEGER) COLUMN_ENCODED_BYTES = 0");
     TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
     conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + "INDEX "
-      + indexName + " ON " + tableName + "(v)");
+      + indexName + " ON " + tableName + "(v)" + (eventual ? " CONSISTENCY = EVENTUAL" : ""));
     final CountDownLatch doneSignal = new CountDownLatch(2);
     final String[] failedMsg = new String[1];
     Runnable r1 = new Runnable() {
@@ -353,6 +373,9 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
     doneSignal.await(ROW_LOCK_WAIT_TIME + 5000, TimeUnit.SECONDS);
     assertNull(failedMsg[0], failedMsg[0]);
+    if (eventual) {
+      Thread.sleep(10000);
+    }
     long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
     assertEquals(1, actualRowCount);
   }
@@ -365,7 +388,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     conn.createStatement().execute(
       "CREATE TABLE " + tableName + "(k VARCHAR PRIMARY KEY, v INTEGER) COLUMN_ENCODED_BYTES = 0");
     conn.createStatement().execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + "INDEX "
-      + indexName + " ON " + tableName + "(v,k)");
+      + indexName + " ON " + tableName + "(v,k)" + (eventual ? " CONSISTENCY = EVENTUAL" : ""));
     conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES ('foo',0)");
     conn.commit();
     TestUtil.addCoprocessor(conn, tableName, DelayingRegionObserver.class);
@@ -411,6 +434,9 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     t2.start();
 
     doneSignal.await(ROW_LOCK_WAIT_TIME + 5000, TimeUnit.SECONDS);
+    if (eventual) {
+      Thread.sleep(10000);
+    }
     long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
     assertEquals(1, actualRowCount);
   }

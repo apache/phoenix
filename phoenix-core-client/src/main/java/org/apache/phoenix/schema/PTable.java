@@ -39,6 +39,7 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PArrayDataType;
 import org.apache.phoenix.schema.types.PArrayDataTypeDecoder;
 import org.apache.phoenix.schema.types.PArrayDataTypeEncoder;
@@ -931,6 +932,8 @@ public interface PTable extends PMetaDataEntity {
 
   IndexType getIndexType();
 
+  IndexConsistency getIndexConsistency();
+
   int getBaseColumnCount();
 
   /**
@@ -1154,5 +1157,10 @@ public interface PTable extends PMetaDataEntity {
      * Include only the post image (state past the change) of the row.
      */
     POST,
+
+    /**
+     * Include index mutations for eventually consistent indexes.
+     */
+    IDX_MUTATIONS,
   }
 }

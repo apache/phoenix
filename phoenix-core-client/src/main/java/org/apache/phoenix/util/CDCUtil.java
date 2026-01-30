@@ -36,6 +36,7 @@ import org.apache.hadoop.util.StringUtils;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
@@ -146,6 +147,34 @@ public class CDCUtil {
       return false;
     }
     return table.getIndexes().stream().anyMatch(CDCUtil::isCDCIndex);
+  }
+
+  /**
+   * Get the CDC object name for the given data table that can be used in SQL queries.
+   * @param dataTable  The data table PTable object.
+   * @param withSchema If true, returns the CDC object name with schema prefix. If false, returns
+   *                   only the CDC object name.
+   * @return The CDC object name that can be used in SQL queries, optionally prefixed with schema
+   *         name, or null if no active CDC index exists.
+   */
+  public static String getCDCObjectName(PTable dataTable, boolean withSchema) {
+    if (dataTable == null) {
+      return null;
+    }
+    PTable cdcIndex = getActiveCDCIndex(dataTable);
+    if (cdcIndex == null) {
+      return null;
+    }
+    String cdcIndexName = cdcIndex.getTableName().getString();
+    String schemaName = dataTable.getSchemaName().getString();
+    if (isCDCIndex(cdcIndexName)) {
+      String cdcObj = cdcIndexName.substring(CDC_INDEX_PREFIX.length());
+      if (!withSchema || schemaName == null || schemaName.isEmpty()) {
+        return cdcObj;
+      }
+      return schemaName + QueryConstants.NAME_SEPARATOR + cdcObj;
+    }
+    return null;
   }
 
   public static Scan setupScanForCDC(Scan scan) {
