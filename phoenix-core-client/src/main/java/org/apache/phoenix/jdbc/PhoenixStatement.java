@@ -1182,7 +1182,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     implements CompilableStatement {
 
     private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode,
-      List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount,
+      List<ColumnName> columns, List<List<ParseNode>> values, SelectStatement select, int bindCount,
       Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
       OnDuplicateKeyType onDupKeyType, boolean returningRow) {
       super(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs,
@@ -2154,7 +2154,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     @Override
     public ExecutableUpsertStatement upsert(NamedTableNode table, HintNode hintNode,
-      List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount,
+      List<ColumnName> columns, List<List<ParseNode>> values, SelectStatement select, int bindCount,
       Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
       UpsertStatement.OnDuplicateKeyType onDupKeyType, boolean returningRow) {
       return new ExecutableUpsertStatement(table, hintNode, columns, values, select, bindCount,
