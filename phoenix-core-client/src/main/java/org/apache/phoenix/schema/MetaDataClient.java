@@ -131,6 +131,7 @@ import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_
 import static org.apache.phoenix.schema.PTable.EncodedCQCounter.NULL_COUNTER;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
+import static org.apache.phoenix.schema.PTable.IndexType.UNCOVERED_GLOBAL;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
 import static org.apache.phoenix.schema.PTableType.CDC;
@@ -2532,7 +2533,14 @@ public class MetaDataClient {
       } else {
         ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
         if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
-          ttlFromHierarchy.validateTTLOnCreate(connection, statement, parent, tableProps);
+          if (
+            UNCOVERED_GLOBAL.equals(indexType) && parent.hasConditionalTTL()
+              && !parent.isStrictTTL()
+          ) {
+            ttlFromHierarchy = TTL_EXPRESSION_NOT_DEFINED;
+          } else {
+            ttlFromHierarchy.validateTTLOnCreate(connection, statement, parent, tableProps);
+          }
         }
       }
 
@@ -6541,7 +6549,9 @@ public class MetaDataClient {
       }
       if (metaProperties.getTTL() != table.getTTLExpression()) {
         TTLExpression newTTL = metaProperties.getTTL();
-        newTTL.validateTTLOnAlter(connection, table);
+        boolean isStrictTTL =
+          metaProperties.isStrictTTL() != null ? metaProperties.isStrictTTL : table.isStrictTTL();
+        newTTL.validateTTLOnAlter(connection, table, isStrictTTL);
         metaPropertiesEvaluated.setTTL(getCompatibleTTLExpression(metaProperties.getTTL(),
           table.getType(), table.getViewType(), table.getName().toString()));
         changingPhoenixTableProperty = true;
