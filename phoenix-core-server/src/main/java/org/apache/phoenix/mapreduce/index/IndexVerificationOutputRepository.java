@@ -18,13 +18,11 @@
 package org.apache.phoenix.mapreduce.index;
 
 import java.io.IOException;
-import java.sql.SQLException;
 import java.sql.Connection;
-
+import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Iterator;
-
+import java.util.List;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -55,8 +53,10 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
   private boolean shouldLogBeyondMaxLookback = true;
 
   public final static String OUTPUT_TABLE_NAME = IndexToolTableUtil.OUTPUT_TABLE_FULL_NAME;
-  public final static byte[] OUTPUT_TABLE_NAME_BYTES = Bytes.toBytes(IndexToolTableUtil.OUTPUT_TABLE_FULL_NAME);
-  public final static byte[] OUTPUT_TABLE_COLUMN_FAMILY = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+  public final static byte[] OUTPUT_TABLE_NAME_BYTES =
+    Bytes.toBytes(IndexToolTableUtil.OUTPUT_TABLE_FULL_NAME);
+  public final static byte[] OUTPUT_TABLE_COLUMN_FAMILY =
+    QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
 
   public final static String DATA_TABLE_NAME = "DTName";
   public final static byte[] DATA_TABLE_NAME_BYTES = Bytes.toBytes(DATA_TABLE_NAME);

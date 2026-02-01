@@ -73,13 +73,12 @@ public abstract class LoadSystemTableSnapshotBase extends BaseTest {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(LoadSystemTableSnapshotBase.class);
 
-    public static String SNAPSHOT_DIR;
-    public static String rootDir;
+  public static String SNAPSHOT_DIR;
+  public static String rootDir;
 
-    private static HashMap<String, String> SNAPSHOTS_TO_LOAD;
+  private static HashMap<String, String> SNAPSHOTS_TO_LOAD;
 
   public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes(StandardCharsets.UTF_8);
-
 
   private static void decompress(String in, File out) throws IOException {
     try (TarArchiveInputStream fin = new TarArchiveInputStream(new FileInputStream(in))) {
@@ -99,21 +98,25 @@ public abstract class LoadSystemTableSnapshotBase extends BaseTest {
   }
 
   public static synchronized void setupCluster(boolean createBlockUpgradeMutex) throws Exception {
-    //Add any HBase tables, including Phoenix System tables
+    // Add any HBase tables, including Phoenix System tables
     HashMap<String, String> snapshotsToLoad = new HashMap<>();
     snapshotsToLoad.put("SYSTEM.CATALOG_SNAPSHOT", "SYSTEM.CATALOG");
     snapshotsToLoad.put("SYSTEM.FUNCTION_SNAPSHOT", "SYSTEM.FUNCTION");
     snapshotsToLoad.put("SYSTEM.SEQUENCE_SNAPSHOT", "SYSTEM.SEQUENCE");
     snapshotsToLoad.put("SYSTEM.STATS_SNAPSHOT", "SYSTEM.STATS");
 
-    setupCluster(createBlockUpgradeMutex, "snapshots47.tar.gz", "snapshots4_7/", snapshotsToLoad, "true");
+    setupCluster(createBlockUpgradeMutex, "snapshots47.tar.gz", "snapshots4_7/", snapshotsToLoad,
+      "true");
   }
 
-  public static synchronized void setupCluster(boolean createBlockUpgradeMutex, String tarName, String snapshotDir, HashMap<String, String> snapshotsToLoad, String nameSpaceMapping) throws Exception {
+  public static synchronized void setupCluster(boolean createBlockUpgradeMutex, String tarName,
+    String snapshotDir, HashMap<String, String> snapshotsToLoad, String nameSpaceMapping)
+    throws Exception {
     SNAPSHOT_DIR = snapshotDir;
     SNAPSHOTS_TO_LOAD = snapshotsToLoad;
     Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
-    serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB, QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
+    serverProps.put(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
+      QueryServicesOptions.DEFAULT_EXTRA_JDBC_ARGUMENTS);
     serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, nameSpaceMapping);
     Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(2);
     clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, nameSpaceMapping);

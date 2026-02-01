@@ -225,7 +225,7 @@ public abstract class BasePermissionsIT extends BaseTest {
   }
 
   static void enablePhoenixHBaseAuthorization(Configuration config,
-                                              boolean useCustomAccessController) {
+    boolean useCustomAccessController) {
     config.set("hbase.superuser", SUPER_USER + "," + "superUser2");
     config.set("hbase.security.authorization", Boolean.TRUE.toString());
     config.set("hbase.security.exec.permission.checks", Boolean.TRUE.toString());

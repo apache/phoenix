@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import org.apache.hadoop.hbase.Cell;
-
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
@@ -46,7 +45,8 @@ public class IndexVerificationResultRepository implements AutoCloseable {
   public static final String ROW_KEY_SEPARATOR = "|";
   public static final byte[] ROW_KEY_SEPARATOR_BYTE = Bytes.toBytes(ROW_KEY_SEPARATOR);
   public static String RESULT_TABLE_NAME = IndexToolTableUtil.RESULT_TABLE_FULL_NAME;
-  public static byte[] RESULT_TABLE_NAME_BYTES = Bytes.toBytes(IndexToolTableUtil.RESULT_TABLE_FULL_NAME);
+  public static byte[] RESULT_TABLE_NAME_BYTES =
+    Bytes.toBytes(IndexToolTableUtil.RESULT_TABLE_FULL_NAME);
   public final static byte[] RESULT_TABLE_COLUMN_FAMILY =
     QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
   public final static String SCANNED_DATA_ROW_COUNT = "ScannedDataRowCount";
@@ -160,13 +160,16 @@ public class IndexVerificationResultRepository implements AutoCloseable {
 
   }
 
-  public IndexVerificationResultRepository(Connection conn, byte[] indexNameBytes) throws SQLException {
+  public IndexVerificationResultRepository(Connection conn, byte[] indexNameBytes)
+    throws SQLException {
     resultTable = getTable(conn, Bytes.toBytes(IndexToolTableUtil.RESULT_TABLE_FULL_NAME));
     indexTable = getTable(conn, indexNameBytes);
   }
 
-  public IndexVerificationResultRepository(byte[] indexName, HTableFactory hTableFactory) throws IOException {
-    resultTable = hTableFactory.getTable(new ImmutableBytesPtr(Bytes.toBytes(IndexToolTableUtil.RESULT_TABLE_FULL_NAME)));
+  public IndexVerificationResultRepository(byte[] indexName, HTableFactory hTableFactory)
+    throws IOException {
+    resultTable = hTableFactory
+      .getTable(new ImmutableBytesPtr(Bytes.toBytes(IndexToolTableUtil.RESULT_TABLE_FULL_NAME)));
     indexTable = hTableFactory.getTable(new ImmutableBytesPtr(indexName));
   }
 

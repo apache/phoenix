@@ -63,10 +63,10 @@ import org.junit.experimental.categories.Category;
 @Category(NeedsOwnMiniClusterTest.class)
 public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
 
-  private static final Set<String> HBASE_SYSTEM_TABLES = new HashSet<>(Arrays.asList(
-    "SYSTEM.PHOENIX_INDEX_TOOL_RESULT", "SYSTEM.PHOENIX_INDEX_TOOL"));
-  private static final Set<String> HBASE_NAMESPACE_MAPPED_SYSTEM_TABLES = new HashSet<>(
-    Arrays.asList("SYSTEM:PHOENIX_INDEX_TOOL_RESULT", "SYSTEM:PHOENIX_INDEX_TOOL"));
+  private static final Set<String> HBASE_SYSTEM_TABLES =
+    new HashSet<>(Arrays.asList("SYSTEM.PHOENIX_INDEX_TOOL_RESULT", "SYSTEM.PHOENIX_INDEX_TOOL"));
+  private static final Set<String> HBASE_NAMESPACE_MAPPED_SYSTEM_TABLES =
+    new HashSet<>(Arrays.asList("SYSTEM:PHOENIX_INDEX_TOOL_RESULT", "SYSTEM:PHOENIX_INDEX_TOOL"));
 
   private static final Set<String> PHOENIX_SYSTEM_TABLES =
     new HashSet<>(Arrays.asList("SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS",
@@ -196,7 +196,8 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
     });
 
     hbaseTables = getHBaseTables();
-    assertTrue(hbaseTables.size() == PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES.size() + HBASE_NAMESPACE_MAPPED_SYSTEM_TABLES.size());
+    assertTrue(hbaseTables.size() == PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES.size()
+      + HBASE_NAMESPACE_MAPPED_SYSTEM_TABLES.size());
     assertTrue(hbaseTables.containsAll(PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES));
 
     try {
@@ -214,7 +215,8 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
     }
 
     hbaseTables = getHBaseTables();
-    assertTrue(hbaseTables.size() == PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES.size() + HBASE_NAMESPACE_MAPPED_SYSTEM_TABLES.size());
+    assertTrue(hbaseTables.size() == PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES.size()
+      + HBASE_NAMESPACE_MAPPED_SYSTEM_TABLES.size());
     assertTrue(hbaseTables.containsAll(PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES));
   }
 
@@ -290,7 +292,8 @@ public class MigrateSystemTablesToSystemNamespaceIT extends BaseTest {
     });
 
     hbaseTables = getHBaseTables();
-    assertTrue(hbaseTables.size() == PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES.size() + HBASE_NAMESPACE_MAPPED_SYSTEM_TABLES.size());
+    assertTrue(hbaseTables.size() == PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES.size()
+      + HBASE_NAMESPACE_MAPPED_SYSTEM_TABLES.size());
     assertTrue(hbaseTables.containsAll(PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES));
   }
 
