@@ -19,6 +19,7 @@ package org.apache.phoenix.filter;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.EOFException;
 import java.io.IOException;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValueUtil;
@@ -33,6 +34,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.ValueSchema.Field;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.ScanUtil;
 
 public class DistinctPrefixFilter extends FilterBase implements Writable {
   private static byte VERSION = 1;
@@ -44,6 +46,8 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
   private int lastPosition;
   private final ImmutableBytesWritable lastKey =
     new ImmutableBytesWritable(ByteUtil.EMPTY_BYTE_ARRAY, -1, -1);
+  private byte[] emptyCF;
+  private byte[] emptyCQ;
 
   public DistinctPrefixFilter() {
   }
@@ -51,6 +55,15 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
   public DistinctPrefixFilter(RowKeySchema schema, int prefixLength) {
     this.schema = schema;
     this.prefixLength = prefixLength;
+    this.emptyCF = null;
+    this.emptyCQ = null;
+  }
+
+  public DistinctPrefixFilter(RowKeySchema schema, int prefixLength, byte[] emptyCF,
+    byte[] emptyCQ) {
+    this(schema, prefixLength);
+    this.emptyCF = emptyCF;
+    this.emptyCQ = emptyCQ;
   }
 
   public void setOffset(int offset) {
@@ -64,6 +77,10 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
 
   @Override
   public ReturnCode filterCell(Cell v) throws IOException {
+    if (emptyCF != null && emptyCQ != null && !ScanUtil.isEmptyColumn(v, emptyCF, emptyCQ)) {
+      // wait for the empty column
+      return ReturnCode.NEXT_COL;
+    }
     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
     // First determine the prefix based on the schema
@@ -151,6 +168,12 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
     out.writeByte(VERSION);
     schema.write(out);
     out.writeInt(prefixLength);
+    if (emptyCF != null && emptyCQ != null) {
+      out.writeInt(emptyCF.length);
+      out.write(emptyCF);
+      out.writeInt(emptyCQ.length);
+      out.write(emptyCQ);
+    }
   }
 
   @Override
@@ -159,6 +182,18 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
     schema = new RowKeySchema();
     schema.readFields(in);
     prefixLength = in.readInt();
+    try {
+      int length = in.readInt();
+      emptyCF = new byte[length];
+      in.readFully(emptyCF, 0, length);
+      length = in.readInt();
+      emptyCQ = new byte[length];
+      in.readFully(emptyCQ, 0, length);
+    } catch (EOFException e) {
+      // Older client doesn't send empty column information
+      emptyCF = null;
+      emptyCQ = null;
+    }
   }
 
   @Override
