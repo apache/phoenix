@@ -1192,7 +1192,7 @@ public class UpdateExpressionUtilsTest {
   public void testMixedSetExpressions() {
     String initialDocJson = "{\n" + "  \"fieldA\": 10,\n" + "  \"fieldB\": 25,\n"
       + "  \"existingValue\": \"will be overwritten\",\n" + "  \"items\": [100, 200, 300],\n"
-      + "  \"counter\": 50,\n" + "  \"nested\": {\"value\": 5}\n" + "}";
+      + "  \"counter\": 50,\n" + "  \"nested\": {\"value\": 5},\n" + "  \"a.b\": 7\n" + "}";
     BsonDocument bsonDocument = BsonDocument.parse(initialDocJson);
 
     String updateExpression = "{\n" + "  \"$SET\": {\n"
@@ -1222,8 +1222,9 @@ public class UpdateExpressionUtilsTest {
       // 5c. document format with 2 simple operands: fieldA = fieldA + 1 = 10 + 1 = 11
       + "    \"fieldA\": {\n" + "      \"$ADD\": [\"fieldA\", 1]\n" + "    },\n"
       // 5d. document format with nested path: nested.value = nested.value + 1 = 5 + 1 = 6
-      + "    \"nested.value\": {\n" + "      \"$ADD\": [\"nested.value\", 1]\n" + "    }\n"
-      + "  }\n" + "}";
+      + "    \"nested.value\": {\n" + "      \"$ADD\": [\"nested.value\", 1]\n" + "    },\n"
+      // 5e. document format with top-level dotted key: a.b = a.b + 1 = 7 + 1 = 8
+      + "    \"a.b\": {\n" + "      \"$ADD\": [\"a.b\", 1]\n" + "    }\n" + "  }\n" + "}";
 
     RawBsonDocument expressionDoc = RawBsonDocument.parse(updateExpression);
     UpdateExpressionUtils.updateExpression(expressionDoc, bsonDocument);
@@ -1255,6 +1256,9 @@ public class UpdateExpressionUtilsTest {
 
     // 5d. Verify document format: $ADD with nested path (nested.value = nested.value + 1)
     Assert.assertEquals(6, bsonDocument.getDocument("nested").getInt32("value").getValue());
+
+    // 5e. Verify document format: $ADD with top-level dotted key (a.b = a.b + 1)
+    Assert.assertEquals(8, bsonDocument.getInt32("a.b").getValue());
 
     // Verify original fields unchanged where expected
     Assert.assertEquals(25, bsonDocument.getInt32("fieldB").getValue());
