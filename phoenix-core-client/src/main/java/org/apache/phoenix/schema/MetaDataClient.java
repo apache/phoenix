@@ -23,12 +23,14 @@ import static org.apache.phoenix.coprocessorclient.tasks.IndexRebuildTaskConstan
 import static org.apache.phoenix.coprocessorclient.tasks.IndexRebuildTaskConstants.REBUILD_ALL;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_CONDITIONAL_TTL_ON_TABLE_WITH_MULTIPLE_COLUMN_FAMILIES;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRUNCATE_MULTITENANT_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.CDC_ALREADY_ENABLED;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
 import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
 import static org.apache.phoenix.exception.SQLExceptionCode.SALTING_NOT_ALLOWED_FOR_CDC;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
+import static org.apache.phoenix.exception.SQLExceptionCode.TRUNCATE_NOT_ALLOWED_ON_SYSTEM_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
@@ -254,6 +256,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.TruncateTableStatement;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UseSchemaStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -4039,6 +4042,131 @@ public class MetaDataClient {
     if (tenantIdCol.isNullable()) {
       throw new SQLExceptionInfo.Builder(INSUFFICIENT_MULTI_TENANT_COLUMNS)
         .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+    }
+  }
+
+  private void deleteStatistics(List<String> truncatedObjectList) throws SQLException {
+    if (truncatedObjectList == null || truncatedObjectList.isEmpty()) {
+      return;
+    }
+    String deleteStatsSql = "DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " WHERE "
+      + PhoenixDatabaseMetaData.PHYSICAL_NAME + " = ?";
+    try (PreparedStatement stmt = connection.prepareStatement(deleteStatsSql)) {
+      for (String physicalName : truncatedObjectList) {
+        stmt.setString(1, physicalName);
+        stmt.executeUpdate();
+      }
+      connection.commit();
+    }
+  }
+
+  private PTable getPTableRef(String schemaName, String tableName) throws SQLException {
+    return connection.getTable(
+      new PTableKey(connection.getTenantId(), SchemaUtil.getTableName(schemaName, tableName)));
+  }
+
+  private void validateObjectTypeBeingTruncated(PTable pTable, String tableName, String schemaName,
+    boolean preserveSplits) throws SQLException {
+    // Cannot drop splits on a salted table
+    if (!preserveSplits && pTable.getBucketNum() != null) {
+      throw new SQLExceptionInfo.Builder(
+        SQLExceptionCode.TRUNCATE_MUST_PRESERVE_SPLITS_FOR_SALTED_TABLE).setSchemaName(schemaName)
+          .setTableName(tableName).build().buildException();
+    }
+    // disallow truncating a view
+    if (pTable.getType() == PTableType.VIEW) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.TRUNCATE_NOT_ALLOWED_ON_VIEW)
+        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+    }
+    // block if the table type is SYSTEM or if it resides in the SYSTEM schema
+    if (
+      pTable.getType() == PTableType.SYSTEM
+        || PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(schemaName)
+    ) {
+      throw new SQLExceptionInfo.Builder(TRUNCATE_NOT_ALLOWED_ON_SYSTEM_TABLE)
+        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+    }
+    // Block truncate as it would wipe data for ALL tenants
+    if (pTable.isMultiTenant() && connection.getTenantId() != null) {
+      throw new SQLExceptionInfo.Builder(CANNOT_TRUNCATE_MULTITENANT_TABLE)
+        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+    }
+  }
+
+  private void truncateGlobalIndexes(PTable pTable, List<String> truncatedObjectList,
+    boolean preserveSplits) throws SQLException {
+    for (PTable index : pTable.getIndexes()) {
+      if (index.getIndexType() != IndexType.LOCAL) {
+        if (!preserveSplits && index.getBucketNum() != null) {
+          throw new SQLExceptionInfo.Builder(
+            SQLExceptionCode.TRUNCATE_MUST_PRESERVE_SPLITS_FOR_SALTED_TABLE)
+              .setTableName(index.getName().getString()).build().buildException();
+        }
+        String indexSchemaName = index.getSchemaName().getString();
+        String indexTableName = index.getTableName().getString();
+        connection.getQueryServices().truncateTable(indexSchemaName, indexTableName,
+          index.isNamespaceMapped(), preserveSplits);
+        truncatedObjectList.add(index.getPhysicalName().getString());
+      }
+    }
+  }
+
+  private void truncateSharedViewIndexTable(PTable pTable, List<String> truncatedObjectList,
+    boolean preserveSplits) throws SQLException {
+    if (pTable.getType() == PTableType.TABLE) {
+      byte[] viewIndexPhysicalNameBytes =
+        MetaDataUtil.getViewIndexPhysicalName(pTable.getPhysicalName().getBytes());
+      String viewIndexPhysicalName = Bytes.toString(viewIndexPhysicalNameBytes);
+
+      try (Admin admin = connection.getQueryServices().getAdmin()) {
+        org.apache.hadoop.hbase.TableName viewIdxTableName =
+          org.apache.hadoop.hbase.TableName.valueOf(viewIndexPhysicalName);
+        if (admin.tableExists(viewIdxTableName)) {
+          String viewIdxSchema = SchemaUtil.getSchemaNameFromFullName(viewIndexPhysicalName);
+          String viewIdxTableStr = SchemaUtil.getTableNameFromFullName(viewIndexPhysicalName);
+          connection.getQueryServices().truncateTable(viewIdxSchema, viewIdxTableStr, false,
+            preserveSplits);
+          connection.getQueryServices().clearTableRegionCache(viewIdxTableName);
+          truncatedObjectList.add(viewIndexPhysicalName);
+        }
+      } catch (IOException e) {
+        throw ClientUtil.parseServerException(e);
+      }
+    }
+  }
+
+  public MutationState truncateTable(TruncateTableStatement statement) throws SQLException {
+    String schemaName =
+      connection.getSchema() != null && statement.getTableName().getSchemaName() == null
+        ? connection.getSchema()
+        : statement.getTableName().getSchemaName();
+    boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(statement.getTableType(),
+      connection.getQueryServices().getProps());
+    String tableName = statement.getTableName().getTableName();
+    boolean preserveSplits = statement.preserveSplits();
+    PTable pTable = getPTableRef(schemaName, tableName);
+
+    // Allow truncate only for valid object types
+    validateObjectTypeBeingTruncated(pTable, tableName, schemaName, preserveSplits);
+
+    try {
+      List<String> truncatedObjectList = new ArrayList<>();
+      // Truncate the Base Table
+      connection.getQueryServices().truncateTable(schemaName, tableName, isNamespaceMapped,
+        preserveSplits);
+      // Mark for stats deletion
+      truncatedObjectList.add(pTable.getPhysicalName().getString());
+      // Identify and Truncate Global Indexes
+      truncateGlobalIndexes(pTable, truncatedObjectList, preserveSplits);
+      // Identify and Truncate Shared View Index Table
+      truncateSharedViewIndexTable(pTable, truncatedObjectList, preserveSplits);
+      // Delete Statistics of all the tables being truncated
+      deleteStatistics(truncatedObjectList);
+      // Update cache post truncation
+      updateCache(schemaName, tableName);
+      return new MutationState(0, 0, connection);
+    } catch (SQLException e) {
+      throw e;
     }
   }
 

@@ -42,6 +42,7 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.List;
@@ -64,6 +65,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -1658,6 +1660,45 @@ public class GlobalIndexCheckerIT extends BaseTest {
       assertEquals("abcabc", rs.getString(3));
       assertEquals("abcd", rs.getString(4));
       assertFalse(rs.next());
+    }
+  }
+
+  @Test
+  public void testWithDistinctPrefixFilter() throws Exception {
+    Assume.assumeTrue(async == false);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      String indexTableName = generateUniqueName();
+      String ddl = "create table " + dataTableName + " (id varchar(10) not null primary key, "
+        + "val1 varchar(10), val2 varchar(10), val3 varchar(10))" + tableDDLOptions;
+      conn.createStatement().execute(ddl);
+      ddl = "create index " + indexTableName + " on " + dataTableName
+        + " (val1) include (val2, val3)" + this.indexDDLOptions;
+      conn.createStatement().execute(ddl);
+      String[] expectedValues = { "val1_1", "val1_2", "val1_3", "val1_4" };
+      int rowCount = 20;
+      String dml = "UPSERT INTO " + dataTableName + " VALUES(?, ?, ?, ?)";
+      PreparedStatement ps = conn.prepareStatement(dml);
+      for (int id = 0; id < rowCount; ++id) {
+        ps.setString(1, "id_" + id);
+        ps.setString(2, expectedValues[id % expectedValues.length]);
+        ps.setString(3, "val2_" + id % 2);
+        ps.setString(4, "val3");
+        ps.executeUpdate();
+      }
+      conn.commit();
+      String distinctQuery = "SELECT DISTINCT val1 FROM " + dataTableName;
+      try (ResultSet rs = conn.createStatement().executeQuery(distinctQuery)) {
+        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+        assertTrue(explainPlan.contains(indexTableName));
+        assertTrue(explainPlan.contains("SERVER DISTINCT PREFIX FILTER OVER"));
+        List actualValues = Lists.newArrayList();
+        while (rs.next()) {
+          actualValues.add(rs.getString(1));
+        }
+        assertEquals(Arrays.asList(expectedValues), actualValues);
+      }
     }
   }
 
