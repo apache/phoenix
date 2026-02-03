@@ -52,11 +52,16 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     IndexTool.IndexDisableLoggingType.NONE;
   private boolean shouldLogBeyondMaxLookback = true;
 
-  public final static String OUTPUT_TABLE_NAME = IndexToolTableUtil.OUTPUT_TABLE_FULL_NAME;
-  public final static byte[] OUTPUT_TABLE_NAME_BYTES =
-    Bytes.toBytes(IndexToolTableUtil.OUTPUT_TABLE_FULL_NAME);
   public final static byte[] OUTPUT_TABLE_COLUMN_FAMILY =
     QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+
+  public static String getOutputTableName() {
+    return IndexToolTableUtil.OUTPUT_TABLE_FULL_NAME;
+  }
+
+  public static byte[] getOutputTableNameBytes() {
+    return IndexToolTableUtil.OUTPUT_TABLE_FULL_NAME_BYTES;
+  }
 
   public final static String DATA_TABLE_NAME = "DTName";
   public final static byte[] DATA_TABLE_NAME_BYTES = Bytes.toBytes(DATA_TABLE_NAME);
@@ -109,7 +114,7 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
   @VisibleForTesting
   public IndexVerificationOutputRepository(byte[] indexName, Connection conn) throws SQLException {
     ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
-    outputTable = queryServices.getTable(OUTPUT_TABLE_NAME_BYTES);
+    outputTable = queryServices.getTable(getOutputTableNameBytes());
     indexTable = queryServices.getTable(indexName);
   }
 
@@ -124,7 +129,7 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
   public IndexVerificationOutputRepository(byte[] indexName, HTableFactory hTableFactory,
     IndexTool.IndexDisableLoggingType disableLoggingVerifyType) throws IOException {
     this.indexName = indexName;
-    outputTable = hTableFactory.getTable(new ImmutableBytesPtr(OUTPUT_TABLE_NAME_BYTES));
+    outputTable = hTableFactory.getTable(new ImmutableBytesPtr(getOutputTableNameBytes()));
     indexTable = hTableFactory.getTable(new ImmutableBytesPtr(indexName));
     this.disableLoggingVerifyType = disableLoggingVerifyType;
   }

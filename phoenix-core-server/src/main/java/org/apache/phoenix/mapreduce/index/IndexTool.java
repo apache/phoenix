@@ -971,7 +971,7 @@ public class IndexTool extends Configured implements Tool {
   public boolean isValidLastVerifyTime(Long lastVerifyTime) throws Exception {
     try (Connection conn = getConnection(configuration);
       Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
-        .getTable(IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES)) {
+        .getTable(IndexVerificationResultRepository.getResultTableNameBytes())) {
       Scan s = new Scan();
       ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
       boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(null, cqs.getProps());

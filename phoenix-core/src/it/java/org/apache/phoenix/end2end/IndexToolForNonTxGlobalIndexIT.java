@@ -20,8 +20,6 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.INDEX_TOOL_RUN_STATUS_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_COLUMN_FAMILY;
-import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME;
-import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.ROW_KEY_SEPARATOR;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RUN_STATUS_EXECUTED;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RUN_STATUS_SKIPPED;
@@ -201,8 +199,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       deleteAllRows(conn,
-        TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES));
-      deleteAllRows(conn, TableName.valueOf(IndexVerificationResultRepository.RESULT_TABLE_NAME));
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableNameBytes()));
+      deleteAllRows(conn, TableName.valueOf(IndexVerificationResultRepository.getResultTableName()));
     }
     EnvironmentEdgeManager.reset();
   }
@@ -325,7 +323,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       modifyColumnFams.get(41000, TimeUnit.MILLISECONDS);
 
       TableName indexToolOutputTable =
-        TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableNameBytes());
       admin.disableTable(indexToolOutputTable);
       admin.deleteTable(indexToolOutputTable);
       // Run the index tool using the only-verify option, verify it gives no mismatch
@@ -760,7 +758,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       Assert.assertEquals(PIndexState.BUILDING, TestUtil.getIndexState(conn, indexTableFullName));
 
       // Delete the output table for the next test
-      deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+      deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       // Run the index tool to populate the index while verifying rows
       IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
         IndexTool.IndexVerifyType.AFTER);
@@ -801,7 +799,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       try {
         verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 3, expectedStatus);
       } catch (AssertionError ae) {
-        TestUtil.dumpTable(conn, TableName.valueOf(RESULT_TABLE_NAME));
+        TestUtil.dumpTable(conn, TableName.valueOf(IndexVerificationResultRepository.getResultTableName()));
         throw ae;
       }
 
@@ -1093,7 +1091,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-      deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+      deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       String stmString1 = "CREATE TABLE " + dataTableFullName
         + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) " + tableDDLOptions;
       conn.createStatement().execute(stmString1);
@@ -1181,7 +1179,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
 
-      deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+      deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       String stmString1 = "CREATE TABLE " + dataTableFullName
         + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) ";
       conn.createStatement().execute(stmString1);
@@ -1206,13 +1204,13 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       EnvironmentEdgeManager.injectEdge(injectEdge);
       injectEdge.incrementValue(1L);
       injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
-      deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+      deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       getUtility().getConfiguration()
         .set(IndexRebuildRegionScanner.PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS, "true");
       IndexTool it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName,
         indexTableName, null, 0, IndexTool.IndexVerifyType.ONLY);
       TestUtil.dumpTable(conn,
-        TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       Counters counters = it.getJob().getCounters();
       System.out.println(counters.toString());
       assertEquals(2L,
@@ -1574,11 +1572,11 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   private void truncateIndexToolTables() throws IOException {
     getUtility().getAdmin()
-      .disableTable(TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+      .disableTable(TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
     getUtility().getAdmin()
-      .truncateTable(TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME), true);
-    getUtility().getAdmin().disableTable(TableName.valueOf(RESULT_TABLE_NAME));
-    getUtility().getAdmin().truncateTable(TableName.valueOf(RESULT_TABLE_NAME), true);
+      .truncateTable(TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()), true);
+    getUtility().getAdmin().disableTable(TableName.valueOf(IndexVerificationResultRepository.getResultTableName()));
+    getUtility().getAdmin().truncateTable(TableName.valueOf(IndexVerificationResultRepository.getResultTableName()), true);
   }
 
   private void assertDisableLogging(Connection conn, int expectedRows,
@@ -1599,7 +1597,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       assertEquals(expectedRows, rows.size());
     } catch (AssertionError e) {
       TestUtil.dumpTable(conn,
-        TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       throw e;
     }
     if (expectedRows > 0) {
@@ -1610,7 +1608,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
   private void deleteOneRowFromResultTable(Connection conn, Long scn, String indexTable)
     throws SQLException, IOException {
     Table hIndexToolTable =
-      conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(RESULT_TABLE_NAME_BYTES);
+      conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(IndexVerificationResultRepository.getResultTableNameBytes());
     Scan s = new Scan();
     s.setRowPrefixFilter(
       Bytes.toBytes(String.format("%s%s%s", scn, ROW_KEY_SEPARATOR, indexTable)));
@@ -1621,7 +1619,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
   private List<String> verifyRunStatusFromResultTable(Connection conn, Long scn, String indexTable,
     int totalRows, List<String> expectedStatus) throws SQLException, IOException {
     Table hIndexToolTable =
-      conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(RESULT_TABLE_NAME_BYTES);
+      conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(IndexVerificationResultRepository.getResultTableNameBytes());
     Assert.assertEquals(totalRows, TestUtil.getRowCount(hIndexToolTable, false));
     List<String> output = new ArrayList<>();
     Scan s = new Scan();

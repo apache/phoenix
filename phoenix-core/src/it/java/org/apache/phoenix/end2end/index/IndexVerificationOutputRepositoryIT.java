@@ -21,7 +21,6 @@ import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.DEFAULT_LOG_
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_INVALID;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.BEYOND_MAX_LOOKBACK_MISSING;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.IndexVerificationErrorType.INVALID_ROW;
-import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.PHASE_AFTER_VALUE;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository.PHASE_BEFORE_VALUE;
 import static org.junit.Assert.assertEquals;
@@ -121,13 +120,13 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       Table hTable =
-        conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(OUTPUT_TABLE_NAME_BYTES);
+        conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(IndexVerificationOutputRepository.getOutputTableNameBytes());
 
       IndexVerificationOutputRepository outputRepository =
         new IndexVerificationOutputRepository(mockStringBytes, conn);
 
       outputRepository.createOutputTable(conn);
-      TestUtil.assertTTLValue(conn, TableName.valueOf(OUTPUT_TABLE_NAME_BYTES), DEFAULT_LOG_TTL,
+      TestUtil.assertTTLValue(conn, TableName.valueOf(IndexVerificationOutputRepository.getOutputTableNameBytes()), DEFAULT_LOG_TTL,
         false);
       ManualEnvironmentEdge customClock = new ManualEnvironmentEdge();
       customClock.setValue(EnvironmentEdgeManager.currentTimeMillis());
@@ -312,7 +311,7 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
       ConnectionQueryServices queryServices =
         conn.unwrap(PhoenixConnection.class).getQueryServices();
       Admin admin = queryServices.getAdmin();
-      TableName outputTableName = TableName.valueOf(OUTPUT_TABLE_NAME_BYTES);
+      TableName outputTableName = TableName.valueOf(IndexVerificationOutputRepository.getOutputTableNameBytes());
       if (admin.tableExists(outputTableName)) {
         admin.disableTable(outputTableName);
         admin.deleteTable(outputTableName);

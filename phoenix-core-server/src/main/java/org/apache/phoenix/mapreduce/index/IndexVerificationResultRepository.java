@@ -44,11 +44,16 @@ public class IndexVerificationResultRepository implements AutoCloseable {
   private Table indexTable;
   public static final String ROW_KEY_SEPARATOR = "|";
   public static final byte[] ROW_KEY_SEPARATOR_BYTE = Bytes.toBytes(ROW_KEY_SEPARATOR);
-  public static String RESULT_TABLE_NAME = IndexToolTableUtil.RESULT_TABLE_FULL_NAME;
-  public static byte[] RESULT_TABLE_NAME_BYTES =
-    Bytes.toBytes(IndexToolTableUtil.RESULT_TABLE_FULL_NAME);
   public final static byte[] RESULT_TABLE_COLUMN_FAMILY =
     QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+
+  public static String getResultTableName() {
+    return IndexToolTableUtil.RESULT_TABLE_FULL_NAME;
+  }
+
+  public static byte[] getResultTableNameBytes() {
+    return IndexToolTableUtil.RESULT_TABLE_FULL_NAME_BYTES;
+  }
   public final static String SCANNED_DATA_ROW_COUNT = "ScannedDataRowCount";
   public final static byte[] SCANNED_DATA_ROW_COUNT_BYTES = Bytes.toBytes(SCANNED_DATA_ROW_COUNT);
   public final static String REBUILT_INDEX_ROW_COUNT = "RebuiltIndexRowCount";

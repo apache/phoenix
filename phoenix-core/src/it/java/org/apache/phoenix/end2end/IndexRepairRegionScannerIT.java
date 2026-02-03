@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REPAIR_EXTRA_UNVERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.AFTER_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
@@ -159,8 +158,8 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       deleteAllRows(conn,
-        TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES));
-      deleteAllRows(conn, TableName.valueOf(IndexVerificationResultRepository.RESULT_TABLE_NAME));
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableNameBytes()));
+      deleteAllRows(conn, TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes()));
     }
     EnvironmentEdgeManager.reset();
     resetIndexRegionObserverFailPoints();
@@ -227,11 +226,11 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
 
   private void truncateIndexToolTables() throws IOException {
     getUtility().getAdmin()
-      .disableTable(TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+      .disableTable(TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
     getUtility().getAdmin()
-      .truncateTable(TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME), true);
-    getUtility().getAdmin().disableTable(TableName.valueOf(RESULT_TABLE_NAME));
-    getUtility().getAdmin().truncateTable(TableName.valueOf(RESULT_TABLE_NAME), true);
+      .truncateTable(TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()), true);
+    getUtility().getAdmin().disableTable(TableName.valueOf(IndexVerificationResultRepository.getResultTableName()));
+    getUtility().getAdmin().truncateTable(TableName.valueOf(IndexVerificationResultRepository.getResultTableName()), true);
   }
 
   private void assertExtraCounters(IndexTool indexTool, long extraVerified, long extraUnverified,
@@ -281,7 +280,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
       }
     } catch (AssertionError e) {
       TestUtil.dumpTable(conn,
-        TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       throw e;
     }
     if (expectedPITRows > 0) {
@@ -678,7 +677,7 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
         assertEquals(2, rows.size());
       } catch (AssertionError e) {
         TestUtil.dumpTable(conn,
-          TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+          TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
         throw e;
       }
     }
