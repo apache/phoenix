@@ -1192,7 +1192,7 @@ public class UpdateExpressionUtilsTest {
   public void testMixedSetExpressions() {
     String initialDocJson = "{\n" + "  \"fieldA\": 10,\n" + "  \"fieldB\": 25,\n"
       + "  \"existingValue\": \"will be overwritten\",\n" + "  \"items\": [100, 200, 300],\n"
-      + "  \"counter\": 50\n" + "}";
+      + "  \"counter\": 50,\n" + "  \"nested\": {\"value\": 5}\n" + "}";
     BsonDocument bsonDocument = BsonDocument.parse(initialDocJson);
 
     String updateExpression = "{\n" + "  \"$SET\": {\n"
@@ -1218,7 +1218,12 @@ public class UpdateExpressionUtilsTest {
       // = 0 + 10 = 10
       + "    \"newCounter\": {\n" + "      \"$ADD\": [\n"
       + "        {\"$IF_NOT_EXISTS\": {\"newCounter\": 0}},\n" + "        10\n" + "      ]\n"
-      + "    }\n" + "  }\n" + "}";
+      + "    },\n"
+      // 5c. document format with 2 simple operands: fieldA = fieldA + 1 = 10 + 1 = 11
+      + "    \"fieldA\": {\n" + "      \"$ADD\": [\"fieldA\", 1]\n" + "    },\n"
+      // 5d. document format with nested path: nested.value = nested.value + 1 = 5 + 1 = 6
+      + "    \"nested.value\": {\n" + "      \"$ADD\": [\"nested.value\", 1]\n" + "    }\n"
+      + "  }\n" + "}";
 
     RawBsonDocument expressionDoc = RawBsonDocument.parse(updateExpression);
     UpdateExpressionUtils.updateExpression(expressionDoc, bsonDocument);
@@ -1245,8 +1250,13 @@ public class UpdateExpressionUtilsTest {
     Assert.assertEquals(51, bsonDocument.getInt32("counter").getValue());
     Assert.assertEquals(10, bsonDocument.getInt32("newCounter").getValue());
 
+    // 5c. Verify document format: $ADD with 2 simple operands (fieldA = fieldA + 1)
+    Assert.assertEquals(11, bsonDocument.getInt32("fieldA").getValue());
+
+    // 5d. Verify document format: $ADD with nested path (nested.value = nested.value + 1)
+    Assert.assertEquals(6, bsonDocument.getDocument("nested").getInt32("value").getValue());
+
     // Verify original fields unchanged where expected
-    Assert.assertEquals(10, bsonDocument.getInt32("fieldA").getValue());
     Assert.assertEquals(25, bsonDocument.getInt32("fieldB").getValue());
   }
 

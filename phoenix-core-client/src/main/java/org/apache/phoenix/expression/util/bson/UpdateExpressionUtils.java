@@ -686,8 +686,20 @@ public class UpdateExpressionUtils {
     ) {
       BsonValue resolved = resolveIfNotExists((BsonDocument) operand, bsonDocument);
       return getNumberFromBsonNumber((BsonNumber) resolved);
+    } else if (operand instanceof BsonString) {
+      String operandVal = ((BsonString) operand).getValue();
+      BsonValue topLevelValue = bsonDocument.get(operandVal);
+      BsonValue bsonValue = topLevelValue != null
+        ? topLevelValue
+        : CommonComparisonExpressionUtils.getFieldFromDocument(operandVal, bsonDocument);
+      if (bsonValue != null && bsonValue.isNumber()) {
+        return getNumberFromBsonNumber((BsonNumber) bsonValue);
+      } else {
+        throw new BsonUpdateInvalidArgumentException(
+          "Operand for $SET not found in document: " + operand);
+      }
     } else {
-      throw new IllegalArgumentException("Invalid operand type for $SET");
+      throw new BsonUpdateInvalidArgumentException("Invalid operand for $SET: " + operand);
     }
   }
 
