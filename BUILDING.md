@@ -139,5 +139,4 @@ as well as each of the subprojects. (not every project has all reports)
 Generate Apache Web Site
 ------------------------
 
-checkout https://svn.apache.org/repos/asf/phoenix
-`$ build.sh`
+Follow instructions at: https://phoenix.apache.org/building_website.html

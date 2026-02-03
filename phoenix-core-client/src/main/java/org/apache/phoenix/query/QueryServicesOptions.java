@@ -66,6 +66,7 @@ import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_POPULATION_SLEEP_TIME;
 import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_TASK_INITIAL_DELAY;
+import static org.apache.phoenix.query.QueryServices.INDEX_USE_SERVER_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.IS_NAMESPACE_MAPPING_ENABLED;
 import static org.apache.phoenix.query.QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE;
 import static org.apache.phoenix.query.QueryServices.KEEP_ALIVE_MS_ATTRIB;
@@ -202,6 +203,7 @@ public class QueryServicesOptions {
   public static final int DEFAULT_DISTINCT_VALUE_COMPRESS_THRESHOLD = 1024 * 1024 * 1; // 1 Mb
   public static final int DEFAULT_AGGREGATE_CHUNK_SIZE_INCREASE = 1024 * 1024 * 1; // 1 Mb
   public static final int DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD = 3;
+  public static final boolean DEFAULT_INDEX_USE_SERVER_METADATA = true;
   public static final long DEFAULT_MAX_SPOOL_TO_DISK_BYTES = 1024000000;
   // Only the first chunked batches are fetched in parallel, so this default
   // should be on the relatively bigger side of things. Bigger means more
@@ -551,6 +553,7 @@ public class QueryServicesOptions {
       .setIfUnset(IMMUTABLE_ROWS_ATTRIB, DEFAULT_IMMUTABLE_ROWS)
       .setIfUnset(INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB,
         DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD)
+      .setIfUnset(INDEX_USE_SERVER_METADATA_ATTRIB, DEFAULT_INDEX_USE_SERVER_METADATA)
       .setIfUnset(MAX_SPOOL_TO_DISK_BYTES_ATTRIB, DEFAULT_MAX_SPOOL_TO_DISK_BYTES)
       .setIfUnset(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA)
       .setIfUnset(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE)

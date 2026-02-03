@@ -949,6 +949,15 @@ public class IndexToolIT extends BaseTest {
     String indxTable, String tenantId, IndexTool.IndexVerifyType verifyType, Long startTime,
     Long endTime, IndexTool.IndexDisableLoggingType disableLoggingType, Long incrementalVerify,
     boolean useIndexTableAsSource) {
+    return getArgList(useSnapshot, schemaName, dataTable, indxTable, tenantId, verifyType,
+      startTime, endTime, disableLoggingType, incrementalVerify, useIndexTableAsSource,
+      "/tmp/" + UUID.randomUUID().toString());
+  }
+
+  private static List<String> getArgList(boolean useSnapshot, String schemaName, String dataTable,
+    String indxTable, String tenantId, IndexTool.IndexVerifyType verifyType, Long startTime,
+    Long endTime, IndexTool.IndexDisableLoggingType disableLoggingType, Long incrementalVerify,
+    boolean useIndexTableAsSource, String outputPath) {
     List<String> args = Lists.newArrayList();
     if (schemaName != null) {
       args.add("--schema=" + schemaName);
@@ -993,7 +1002,7 @@ public class IndexToolIT extends BaseTest {
     }
 
     args.add("-op");
-    args.add("/tmp/" + UUID.randomUUID().toString());
+    args.add(outputPath);
     return args;
   }
 
@@ -1009,6 +1018,14 @@ public class IndexToolIT extends BaseTest {
     IndexTool.IndexDisableLoggingType disableLoggingType) {
     List<String> args = getArgList(useSnapshot, schemaName, dataTable, indexTable, tenantId,
       verifyType, null, null, disableLoggingType, null, false);
+    return args.toArray(new String[0]);
+  }
+
+  public static String[] getArgValues(boolean useSnapshot, String schemaName, String dataTable,
+    String indexTable, String tenantId, IndexTool.IndexVerifyType verifyType,
+    IndexTool.IndexDisableLoggingType disableLoggingType, String outputPath) {
+    List<String> args = getArgList(useSnapshot, schemaName, dataTable, indexTable, tenantId,
+      verifyType, null, null, disableLoggingType, null, false, outputPath);
     return args.toArray(new String[0]);
   }
 
@@ -1100,8 +1117,28 @@ public class IndexToolIT extends BaseTest {
     IndexTool indexingTool = new IndexTool();
     conf.set(QueryServices.TRANSACTIONS_ENABLED, Boolean.TRUE.toString());
     indexingTool.setConf(conf);
-    final String[] cmdArgs = getArgValues(useSnapshot, schemaName, dataTableName, indexTableName,
-      tenantId, verifyType, disableLoggingType);
+    boolean additionalArgsContainPath = false;
+    String path = "";
+    List<String> newadditionalArgs = Lists.newArrayList();
+    for (String arg : additionalArgs) {
+      if (additionalArgsContainPath == true) {
+        path = arg;
+      } else if (arg.equals("-op") || arg.equals("-output-path")) {
+        additionalArgsContainPath = true;
+      } else {
+        newadditionalArgs.add(arg);
+      }
+    }
+    additionalArgs = newadditionalArgs.toArray(new String[0]);
+
+    String[] cmdArgs;
+    if (additionalArgsContainPath) {
+      cmdArgs = getArgValues(useSnapshot, schemaName, dataTableName, indexTableName, tenantId,
+        verifyType, disableLoggingType, path);
+    } else {
+      cmdArgs = getArgValues(useSnapshot, schemaName, dataTableName, indexTableName, tenantId,
+        verifyType, disableLoggingType);
+    }
     List<String> cmdArgList = new ArrayList<>(Arrays.asList(cmdArgs));
     cmdArgList.addAll(Arrays.asList(additionalArgs));
     LOGGER.info("Running IndexTool with {}", Arrays.toString(cmdArgList.toArray()),
