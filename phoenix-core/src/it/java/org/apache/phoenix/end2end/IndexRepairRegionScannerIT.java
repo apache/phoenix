@@ -159,7 +159,8 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       deleteAllRows(conn,
         TableName.valueOf(IndexVerificationOutputRepository.getOutputTableNameBytes()));
-      deleteAllRows(conn, TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes()));
+      deleteAllRows(conn,
+        TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes()));
     }
     EnvironmentEdgeManager.reset();
     resetIndexRegionObserverFailPoints();
@@ -227,10 +228,12 @@ public class IndexRepairRegionScannerIT extends ParallelStatsDisabledIT {
   private void truncateIndexToolTables() throws IOException {
     getUtility().getAdmin()
       .disableTable(TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
+    getUtility().getAdmin().truncateTable(
+      TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()), true);
     getUtility().getAdmin()
-      .truncateTable(TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()), true);
-    getUtility().getAdmin().disableTable(TableName.valueOf(IndexVerificationResultRepository.getResultTableName()));
-    getUtility().getAdmin().truncateTable(TableName.valueOf(IndexVerificationResultRepository.getResultTableName()), true);
+      .disableTable(TableName.valueOf(IndexVerificationResultRepository.getResultTableName()));
+    getUtility().getAdmin().truncateTable(
+      TableName.valueOf(IndexVerificationResultRepository.getResultTableName()), true);
   }
 
   private void assertExtraCounters(IndexTool indexTool, long extraVerified, long extraUnverified,

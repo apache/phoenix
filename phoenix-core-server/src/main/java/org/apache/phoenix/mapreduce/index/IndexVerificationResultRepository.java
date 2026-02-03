@@ -54,6 +54,7 @@ public class IndexVerificationResultRepository implements AutoCloseable {
   public static byte[] getResultTableNameBytes() {
     return IndexToolTableUtil.RESULT_TABLE_FULL_NAME_BYTES;
   }
+
   public final static String SCANNED_DATA_ROW_COUNT = "ScannedDataRowCount";
   public final static byte[] SCANNED_DATA_ROW_COUNT_BYTES = Bytes.toBytes(SCANNED_DATA_ROW_COUNT);
   public final static String REBUILT_INDEX_ROW_COUNT = "RebuiltIndexRowCount";

@@ -107,8 +107,9 @@ public class IndexVerificationResultRepositoryIT extends ParallelStatsDisabledIT
     IndexVerificationResultRepository resultRepository =
       new IndexVerificationResultRepository(conn, indexNameBytes);
     resultRepository.createResultTable(conn);
-    TestUtil.assertTTLValue(conn, TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes()), DEFAULT_LOG_TTL,
-      false);
+    TestUtil.assertTTLValue(conn,
+      TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes()),
+      DEFAULT_LOG_TTL, false);
     byte[] regionOne = Bytes.toBytes("a.1.00000000000000000000");
     byte[] regionTwo = Bytes.toBytes("a.2.00000000000000000000");
     resultRepository.logToIndexToolResultTable(expectedResult, IndexTool.IndexVerifyType.BOTH,
@@ -197,10 +198,13 @@ public class IndexVerificationResultRepositoryIT extends ParallelStatsDisabledIT
       ConnectionQueryServices queryServices =
         conn.unwrap(PhoenixConnection.class).getQueryServices();
       Admin admin = queryServices.getAdmin();
-      TableName outputTableName = TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes());
+      TableName outputTableName =
+        TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes());
       if (admin.tableExists(outputTableName)) {
-        admin.disableTable(TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes()));
-        admin.deleteTable(TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes()));
+        admin.disableTable(
+          TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes()));
+        admin.deleteTable(
+          TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes()));
       }
     }
     EnvironmentEdgeManager.reset();

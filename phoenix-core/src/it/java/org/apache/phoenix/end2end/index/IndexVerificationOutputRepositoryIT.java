@@ -119,15 +119,16 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
     byte[] mockStringBytes = Bytes.toBytes(mockString);
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
-      Table hTable =
-        conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(IndexVerificationOutputRepository.getOutputTableNameBytes());
+      Table hTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        .getTable(IndexVerificationOutputRepository.getOutputTableNameBytes());
 
       IndexVerificationOutputRepository outputRepository =
         new IndexVerificationOutputRepository(mockStringBytes, conn);
 
       outputRepository.createOutputTable(conn);
-      TestUtil.assertTTLValue(conn, TableName.valueOf(IndexVerificationOutputRepository.getOutputTableNameBytes()), DEFAULT_LOG_TTL,
-        false);
+      TestUtil.assertTTLValue(conn,
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableNameBytes()),
+        DEFAULT_LOG_TTL, false);
       ManualEnvironmentEdge customClock = new ManualEnvironmentEdge();
       customClock.setValue(EnvironmentEdgeManager.currentTimeMillis());
       EnvironmentEdgeManager.injectEdge(customClock);
@@ -311,7 +312,8 @@ public class IndexVerificationOutputRepositoryIT extends ParallelStatsDisabledIT
       ConnectionQueryServices queryServices =
         conn.unwrap(PhoenixConnection.class).getQueryServices();
       Admin admin = queryServices.getAdmin();
-      TableName outputTableName = TableName.valueOf(IndexVerificationOutputRepository.getOutputTableNameBytes());
+      TableName outputTableName =
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableNameBytes());
       if (admin.tableExists(outputTableName)) {
         admin.disableTable(outputTableName);
         admin.deleteTable(outputTableName);
