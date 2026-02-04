@@ -28,6 +28,7 @@ import org.apache.hadoop.hbase.NamespaceDescriptor;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.*;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -49,10 +50,12 @@ public class IndexToolTableUtil extends Configured {
   public final static String OUTPUT_TABLE_NAME = "PHOENIX_INDEX_TOOL";
   public static String OUTPUT_TABLE_FULL_NAME =
     SchemaUtil.getTableName(SYSTEM_SCHEMA_NAME, OUTPUT_TABLE_NAME);
+  public static byte[] OUTPUT_TABLE_FULL_NAME_BYTES = Bytes.toBytes(OUTPUT_TABLE_FULL_NAME);
 
-  public final static String RESULT_TABLE_NAME = "PHOENIX_INDEX_TOOL_RESULT";
+  public static final String RESULT_TABLE_NAME = "PHOENIX_INDEX_TOOL_RESULT";
   public static String RESULT_TABLE_FULL_NAME =
     SchemaUtil.getTableName(SYSTEM_SCHEMA_NAME, RESULT_TABLE_NAME);
+  public static byte[] RESULT_TABLE_FULL_NAME_BYTES = Bytes.toBytes(RESULT_TABLE_FULL_NAME);
 
   public static void setIndexToolTableName(Connection connection) throws Exception {
     ConnectionQueryServices queryServices =
@@ -66,6 +69,8 @@ public class IndexToolTableUtil extends Configured {
       OUTPUT_TABLE_FULL_NAME = SchemaUtil.getTableName(SYSTEM_SCHEMA_NAME, OUTPUT_TABLE_NAME);
       RESULT_TABLE_FULL_NAME = SchemaUtil.getTableName(SYSTEM_SCHEMA_NAME, RESULT_TABLE_NAME);
     }
+    OUTPUT_TABLE_FULL_NAME_BYTES = Bytes.toBytes(OUTPUT_TABLE_FULL_NAME);
+    RESULT_TABLE_FULL_NAME_BYTES = Bytes.toBytes(RESULT_TABLE_FULL_NAME);
   }
 
   public static Table createResultTable(Connection connection) throws IOException, SQLException {
