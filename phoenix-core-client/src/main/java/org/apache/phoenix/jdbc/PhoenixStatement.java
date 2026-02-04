@@ -204,6 +204,7 @@ import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
+import org.apache.phoenix.schema.MutationLimitReachedException;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
@@ -2451,6 +2452,29 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         connection.commit();
       }
       return returnCodes;
+    } catch (MutationLimitReachedException limitEx) {
+      // Special handling: limit reached but existing mutations preserved
+      // Statements 0 through i-1 were successfully added to MutationState
+      // Statement at index i was NOT added (its join was rejected by the pre-check)
+
+      // If original autoCommit was true, commit what we have buffered
+      if (autoCommit) {
+        connection.commit();
+      }
+
+      // Trim the batch list to contain only unprocessed items (from index i to end)
+      if (i > 0) {
+        List<PhoenixPreparedStatement> remaining =
+            new ArrayList<>(batch.subList(i, batch.size()));
+        batch.clear();
+        batch.addAll(remaining);
+      }
+
+      // Mark the failed index
+      returnCodes[i] = Statement.EXECUTE_FAILED;
+
+      // Throw MutationLimitBatchException with checkpoint information
+      throw new MutationLimitBatchException(returnCodes, limitEx, i);
     } catch (SQLException t) {
       if (i == returnCodes.length) {
         // Exception after for loop, perhaps in commit(), discard returnCodes.

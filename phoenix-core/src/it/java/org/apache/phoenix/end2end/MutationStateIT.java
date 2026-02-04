@@ -45,8 +45,10 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.jdbc.MutationLimitBatchException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.MutationLimitReachedException;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.Repeat;
@@ -310,6 +312,312 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
         e.getMessage().contains(SQLExceptionCode.MAX_MUTATION_SIZE_BYTES_EXCEEDED.getMessage()));
       assertTrue(e.getMessage()
         .contains(connectionProperties.getProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB)));
+    }
+  }
+
+  /**
+   * Tests that when preserveOnLimitExceeded=true, executeUpdate() throws
+   * MutationLimitReachedException without clearing buffered mutations,
+   * allowing the client to commit and retry.
+   */
+  @Test
+  public void testExecuteUpdatePreserveOnLimitExceeded() throws Exception {
+    String fullTableName = generateUniqueName();
+    int maxMutationSize = 5;
+
+    // Create table
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    // Test with preserveOnLimitExceeded=true
+    Properties props = new Properties();
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxMutationSize));
+    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
+
+    try (PhoenixConnection conn =
+      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(false);
+
+      PreparedStatement stmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score) VALUES (?,?,?)");
+
+      int totalRows = 12;
+      int processed = 0;
+      int commitCount = 0;
+
+      while (processed < totalRows) {
+        try {
+          for (int i = processed; i < totalRows; i++) {
+            stmt.setString(1, "ORG" + String.format("%011d", i));
+            stmt.setString(2, "ENT" + String.format("%011d", i));
+            stmt.setInt(3, i);
+            stmt.executeUpdate();
+            processed = i + 1;
+          }
+          conn.commit();
+          commitCount++;
+          break; // All done
+        } catch (MutationLimitReachedException e) {
+          // Verify the exception is the expected type
+          assertEquals(SQLExceptionCode.MUTATION_LIMIT_REACHED.getErrorCode(), e.getErrorCode());
+
+          // Verify mutations were preserved - MutationState should have rows
+          MutationState state = conn.getMutationState();
+          assertTrue("Mutations should be preserved", state.getNumRows() > 0);
+
+          // Commit what we have so far
+          conn.commit();
+          commitCount++;
+          // Loop continues from 'processed' index
+        }
+      }
+
+      // Should have required multiple commits due to limit
+      assertTrue("Should have committed multiple times", commitCount > 1);
+
+      // Verify all rows were inserted
+      try (ResultSet rs = conn.createStatement()
+        .executeQuery("SELECT COUNT(*) FROM " + fullTableName)) {
+        assertTrue(rs.next());
+        assertEquals(totalRows, rs.getInt(1));
+      }
+    }
+  }
+
+  /**
+   * Tests that when preserveOnLimitExceeded=true, executeBatch() throws
+   * MutationLimitBatchException with proper checkpoint info, allowing recovery.
+   */
+  @Test
+  public void testExecuteBatchPreserveOnLimitExceeded() throws Exception {
+    String fullTableName = generateUniqueName();
+    int maxMutationSize = 5;
+
+    // Create table
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    // Test with preserveOnLimitExceeded=true and autoCommit=false
+    Properties props = new Properties();
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxMutationSize));
+    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
+
+    try (PhoenixConnection conn =
+      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(false);
+
+      PreparedStatement stmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score) VALUES (?,?,?)");
+
+      int totalRows = 15;
+      int commitCount = 0;
+
+      // Add all rows to batch
+      for (int i = 0; i < totalRows; i++) {
+        stmt.setString(1, "ORG" + String.format("%011d", i));
+        stmt.setString(2, "ENT" + String.format("%011d", i));
+        stmt.setInt(3, i);
+        stmt.addBatch();
+      }
+
+      // Execute batch - should hit limit and throw MutationLimitBatchException
+      while (true) {
+        try {
+          stmt.executeBatch();
+          conn.commit();
+          commitCount++;
+          break; // All done
+        } catch (MutationLimitBatchException e) {
+          // Verify we got processedCount
+          assertTrue("ProcessedCount should be > 0", e.getProcessedCount() > 0);
+
+          // Commit what was successfully buffered
+          conn.commit();
+          commitCount++;
+          // executeBatch() trims the batch, so just retry
+        }
+      }
+
+      // Should have required multiple commits
+      assertTrue("Should have committed multiple times", commitCount > 1);
+
+      // Verify all rows were inserted
+      try (ResultSet rs = conn.createStatement()
+        .executeQuery("SELECT COUNT(*) FROM " + fullTableName)) {
+        assertTrue(rs.next());
+        assertEquals(totalRows, rs.getInt(1));
+      }
+    }
+  }
+
+  /**
+   * Tests executeBatch() with autoCommit=true and preserveOnLimitExceeded=true.
+   * In this case, executeBatch() should auto-commit on limit and trim batch.
+   */
+  @Test
+  public void testExecuteBatchAutoCommitPreserveOnLimitExceeded() throws Exception {
+    String fullTableName = generateUniqueName();
+    int maxMutationSize = 5;
+
+    // Create table
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    // Test with preserveOnLimitExceeded=true and autoCommit=true
+    Properties props = new Properties();
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxMutationSize));
+    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
+
+    try (PhoenixConnection conn =
+      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(true); // autoCommit is true
+
+      PreparedStatement stmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score) VALUES (?,?,?)");
+
+      int totalRows = 15;
+      int exceptionCount = 0;
+
+      // Add all rows to batch
+      for (int i = 0; i < totalRows; i++) {
+        stmt.setString(1, "ORG" + String.format("%011d", i));
+        stmt.setString(2, "ENT" + String.format("%011d", i));
+        stmt.setInt(3, i);
+        stmt.addBatch();
+      }
+
+      // Execute batch - with autoCommit=true, it should auto-commit and trim
+      while (true) {
+        try {
+          stmt.executeBatch();
+          break; // All done
+        } catch (MutationLimitBatchException e) {
+          exceptionCount++;
+          // With autoCommit=true, mutations were already committed
+          // Batch is trimmed, just retry
+        }
+      }
+
+      // Should have hit limit at least once
+      assertTrue("Should have hit limit at least once", exceptionCount > 0);
+
+      // Verify all rows were inserted
+      try (ResultSet rs = conn.createStatement()
+        .executeQuery("SELECT COUNT(*) FROM " + fullTableName)) {
+        assertTrue(rs.next());
+        assertEquals(totalRows, rs.getInt(1));
+      }
+    }
+  }
+
+  /**
+   * Tests that when preserveOnLimitExceeded=false (default), the old behavior
+   * is maintained - mutations are cleared on limit exceeded.
+   */
+  @Test
+  public void testExecuteUpdateDefaultBehaviorClearsMutations() throws Exception {
+    String fullTableName = generateUniqueName();
+    int maxMutationSize = 5;
+
+    // Create table
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    // Test with preserveOnLimitExceeded=false (default)
+    Properties props = new Properties();
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxMutationSize));
+    // Not setting PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, should default to false
+
+    try (PhoenixConnection conn =
+      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(false);
+
+      PreparedStatement stmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score) VALUES (?,?,?)");
+
+      try {
+        for (int i = 0; i < 20; i++) {
+          stmt.setString(1, "ORG" + String.format("%011d", i));
+          stmt.setString(2, "ENT" + String.format("%011d", i));
+          stmt.setInt(3, i);
+          stmt.executeUpdate();
+        }
+        fail("Should have thrown MaxMutationSizeExceededException");
+      } catch (SQLException e) {
+        // Should be the old exception type, not MutationLimitReachedException
+        assertEquals(SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED.getErrorCode(), e.getErrorCode());
+
+        // Verify mutations were cleared (old behavior)
+        MutationState state = conn.getMutationState();
+        assertEquals("Mutations should be cleared", 0, state.getNumRows());
+      }
+    }
+  }
+
+  /**
+   * Tests byte size limit with preserveOnLimitExceeded=true.
+   */
+  @Test
+  public void testExecuteUpdatePreserveOnByteLimitExceeded() throws Exception {
+    String fullTableName = generateUniqueName();
+
+    // Create table with a VARCHAR column for large values
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    // Test with preserveOnLimitExceeded=true and low byte limit
+    // Each row is approximately 900+ bytes, so set limit to allow ~3-4 rows
+    Properties props = new Properties();
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "1000000"); // High row limit
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "3000"); // Low byte limit (~3-4 rows)
+    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
+
+    try (PhoenixConnection conn =
+      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(false);
+
+      PreparedStatement stmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score, tags) VALUES (?,?,?,?)");
+
+      int totalRows = 10;
+      int processed = 0;
+      int commitCount = 0;
+      String largeValue = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"; // ~36 bytes per row in tags
+
+      while (processed < totalRows) {
+        try {
+          for (int i = processed; i < totalRows; i++) {
+            stmt.setString(1, "ORG" + String.format("%011d", i));
+            stmt.setString(2, "ENT" + String.format("%011d", i));
+            stmt.setInt(3, i);
+            stmt.setString(4, largeValue + i);
+            stmt.executeUpdate();
+            processed = i + 1;
+          }
+          conn.commit();
+          commitCount++;
+          break;
+        } catch (MutationLimitReachedException e) {
+          assertEquals(SQLExceptionCode.MUTATION_LIMIT_REACHED.getErrorCode(), e.getErrorCode());
+          conn.commit();
+          commitCount++;
+        }
+      }
+
+      // Should have required multiple commits due to byte limit
+      assertTrue("Should have committed multiple times due to byte limit", commitCount > 1);
+
+      // Verify all rows were inserted
+      try (ResultSet rs = conn.createStatement()
+        .executeQuery("SELECT COUNT(*) FROM " + fullTableName)) {
+        assertTrue(rs.next());
+        assertEquals(totalRows, rs.getInt(1));
+      }
     }
   }
 

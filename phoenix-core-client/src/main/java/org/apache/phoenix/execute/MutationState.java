@@ -31,10 +31,12 @@ import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILU
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.query.QueryServices.INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
@@ -98,6 +100,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
 import org.apache.phoenix.schema.MaxMutationSizeExceededException;
+import org.apache.phoenix.schema.MutationLimitReachedException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
@@ -187,6 +190,7 @@ public class MutationState implements SQLCloseable {
 
   private final boolean indexRegionObserverEnabledAllTables;
   private final boolean serverSideImmutableIndexes;
+  private final boolean preserveOnLimitExceeded;
 
   /**
    * Return result back to client. To be used when client needs to read the whole row or some
@@ -268,6 +272,9 @@ public class MutationState implements SQLCloseable {
     this.serverSideImmutableIndexes = this.connection.getQueryServices().getConfiguration()
       .getBoolean(SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
         DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
+    this.preserveOnLimitExceeded = this.connection.getQueryServices().getProps()
+      .getBoolean(PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB,
+        DEFAULT_PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED);
   }
 
   public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset,
@@ -495,15 +502,23 @@ public class MutationState implements SQLCloseable {
   }
 
   private void throwIfTooBig() throws SQLException {
-    if (numRows > maxSize) {
-      int mutationSize = numRows;
-      resetState();
-      throw new MaxMutationSizeExceededException(maxSize, mutationSize);
-    }
-    if (estimatedSize > maxSizeBytes) {
-      long mutationSizeByte = estimatedSize;
-      resetState();
-      throw new MaxMutationSizeBytesExceededException(maxSizeBytes, mutationSizeByte);
+    if (numRows > maxSize || estimatedSize > maxSizeBytes) {
+      if (preserveOnLimitExceeded) {
+        // Preserve mode: throw new exception WITHOUT resetting state
+        throw new MutationLimitReachedException();
+      } else {
+        // Legacy mode: reset state and throw old exceptions
+        if (numRows > maxSize) {
+          int mutationSize = numRows;
+          resetState();
+          throw new MaxMutationSizeExceededException(maxSize, mutationSize);
+        }
+        if (estimatedSize > maxSizeBytes) {
+          long mutationSizeByte = estimatedSize;
+          resetState();
+          throw new MaxMutationSizeBytesExceededException(maxSizeBytes, mutationSizeByte);
+        }
+      }
     }
   }
 
@@ -616,12 +631,34 @@ public class MutationState implements SQLCloseable {
   }
 
   /**
+   * Pre-checks if joining the given MutationState would exceed configured limits.
+   * Throws MutationLimitReachedException if limits would be exceeded.
+   * Does NOT modify any state - this is a read-only check.
+   *
+   * @param newMutationState the state that would be joined
+   * @throws MutationLimitReachedException if joining would exceed limits
+   */
+  private void checkLimitBeforeJoin(MutationState newMutationState)
+          throws MutationLimitReachedException {
+      if (this.numRows + newMutationState.numRows > maxSize ||
+              this.estimatedSize + newMutationState.estimatedSize > maxSizeBytes) {
+          throw new MutationLimitReachedException();
+      }
+  }
+
+  /**
    * Combine a newer mutation with this one, where in the event of overlaps, the newer one will take
    * precedence. Combine any metrics collected for the newer mutation. the newer mutation state
    */
   public void join(MutationState newMutationState) throws SQLException {
     if (this == newMutationState) { // Doesn't make sense
       return;
+    }
+
+    // Pre-check: if preserveOnLimitExceeded is enabled, check before joining
+    // to avoid merging mutations that would exceed the limit
+    if (preserveOnLimitExceeded) {
+      checkLimitBeforeJoin(newMutationState);
     }
 
     phoenixTransactionContext.join(newMutationState.getPhoenixTransactionContext());
@@ -640,7 +677,12 @@ public class MutationState implements SQLCloseable {
     } else if (readMetricQueue != null && newMutationState.readMetricQueue != null) {
       readMetricQueue.combineReadMetrics(newMutationState.readMetricQueue);
     }
-    throwIfTooBig();
+
+    // Post-check: only run in legacy mode (when preserveOnLimitExceeded is false)
+    // In preserve mode, we trust the pre-check and skip this
+    if (!preserveOnLimitExceeded) {
+      throwIfTooBig();
+    }
   }
 
   private static ImmutableBytesPtr getNewRowKeyWithRowTimestamp(ImmutableBytesPtr ptr,
