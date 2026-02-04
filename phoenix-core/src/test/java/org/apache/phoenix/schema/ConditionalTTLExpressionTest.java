@@ -55,16 +55,22 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
 
-  private static void assertConditionTTL(Connection conn, String tableName, String ttlExpr)
+  public static void assertConditionTTL(Connection conn, String tableName, String ttlExpr)
     throws SQLException {
     TTLExpression expected = new ConditionalTTLExpression(ttlExpr);
     assertTTL(conn, tableName, expected);
   }
 
-  private static void assertTTL(Connection conn, String tableName, TTLExpression expected)
+  public static void assertTTL(Connection conn, String tableName, TTLExpression expected)
     throws SQLException {
     PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
     assertEquals(expected, table.getTTLExpression());
+  }
+
+  public static void assertIsStrictTTL(Connection conn, String tableName, boolean expected)
+    throws SQLException {
+    PTable table = conn.unwrap(PhoenixConnection.class).getTable(tableName);
+    assertEquals(expected, table.isStrictTTL());
   }
 
   private void validateScan(Connection conn, String tableName, String query, String ttl,
@@ -629,25 +635,6 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
       } catch (SQLException e) {
         assertTrue(e.getCause() instanceof ColumnNotFoundException);
       }
-    }
-  }
-
-  @Test
-  public void testSettingCondTTLOnTableWithRelaxedTTLAndUncoveredIndex() throws Exception {
-    String ddlTemplate = "create table %s (id varchar not null primary key, "
-      + "col1 integer, col2 integer, col3 double, col4 varchar) IS_STRICT_TTL = false";
-    String tableName = generateUniqueName();
-    String indexTemplate = "create uncovered index %s on %s (col1)";
-    String indexName = generateUniqueName();
-    String ttl = "col2 > 100 AND col4='expired'";
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
-      String ddl = String.format(ddlTemplate, tableName);
-      conn.createStatement().execute(ddl);
-      ddl = String.format(indexTemplate, indexName, tableName);
-      conn.createStatement().execute(ddl);
-      ddl = String.format("alter table %s set TTL = '%s'", tableName, retainSingleQuotes(ttl));
-      conn.createStatement().execute(ddl);
-      assertTTL(conn, indexName, TTL_EXPRESSION_NOT_DEFINED);
     }
   }
 

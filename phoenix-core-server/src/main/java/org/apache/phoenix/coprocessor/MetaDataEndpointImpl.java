@@ -227,6 +227,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.ConditionalTTLExpression;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
@@ -1779,7 +1780,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       // If this is an index on Table get TTL from Table
       byte[] tableKey = getTableKey(tenantId == null ? null : tenantId.getBytes(),
         parentSchemaName == null ? null : parentSchemaName.getBytes(), parentTableName.getBytes());
-      ttl = getTTLForTable(tableKey, clientTimeStamp);
+      ttl = getTTLForTable(tableKey, clientTimeStamp, indexType);
     }
     if (
       tableType == INDEX && CDCUtil.isCDCIndex(tableName.getString())
@@ -1887,7 +1888,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
     // Return TTL defined at Table level for the given hierarchy as we didn't find TTL any of the
     // views.
-    return getTTLForTable(tableKey, clientTimeStamp);
+    return getTTLForTable(tableKey, clientTimeStamp, null);
 
   }
 
@@ -1905,7 +1906,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
    * @param clientTimeStamp client TimeStamp value
    * @return TTL defined for a given table if it is null then return TTL_NOT_DEFINED(0)
    */
-  private TTLExpression getTTLForTable(byte[] tableKey, long clientTimeStamp) throws IOException {
+  private TTLExpression getTTLForTable(byte[] tableKey, long clientTimeStamp, IndexType indexType)
+    throws IOException {
     Scan scan = MetaDataUtil.newTableRowsScan(tableKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
     Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
       SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
@@ -1918,7 +1920,19 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
         String ttlStr = (String) PVarchar.INSTANCE
           .toObject(result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
-        return TTLExpressionFactory.create(ttlStr);
+        TTLExpression ttl = TTLExpressionFactory.create(ttlStr);
+        // For uncovered global indexes with conditional relaxed TTL parent, don't inherit
+        if (
+          IndexType.UNCOVERED_GLOBAL.equals(indexType) && ttl instanceof ConditionalTTLExpression
+        ) {
+          byte[] isStrictTTLBytes = result.getValue(TABLE_FAMILY_BYTES, IS_STRICT_TTL_BYTES);
+          boolean isStrictTTL = isStrictTTLBytes != null
+            && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isStrictTTLBytes));
+          if (!isStrictTTL) {
+            return TTL_EXPRESSION_NOT_DEFINED;
+          }
+        }
+        return ttl;
       }
       result = scanner.next();
     } while (result != null);
@@ -3839,6 +3853,15 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         // Invalidate from cache
         for (ImmutableBytesPtr invalidateKey : invalidateList) {
           metaDataCache.invalidate(invalidateKey);
+        }
+        // Also invalidate indexes
+        if (table != null && table.getIndexes() != null) {
+          for (PTable index : table.getIndexes()) {
+            byte[] indexKey = SchemaUtil.getTableKey(tenantId,
+              index.getSchemaName() == null ? null : index.getSchemaName().getBytes(),
+              index.getTableName().getBytes());
+            metaDataCache.invalidate(new ImmutableBytesPtr(indexKey));
+          }
         }
         // Get client timeStamp from mutations, since it may get updated by the
         // mutateRowsWithLocks call

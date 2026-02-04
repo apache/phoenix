@@ -2403,10 +2403,13 @@ public class MetaDataClient {
    * @return TTL from hierarchy if defined otherwise TTL_NOT_DEFINED.
    * @throws TableNotFoundException if not able ot find any table in hierarchy
    */
-  private TTLExpression checkAndGetTTLFromHierarchy(PTable parent, String entityName)
-    throws SQLException {
+  private TTLExpression checkAndGetTTLFromHierarchy(PTable parent, String entityName,
+    IndexType indexType) throws SQLException {
     if (CDCUtil.isCDCIndex(entityName)) {
       return TTL_EXPRESSION_FOREVER;
+    }
+    if (UNCOVERED_GLOBAL.equals(indexType) && parent.hasConditionalTTL() && !parent.isStrictTTL()) {
+      return TTL_EXPRESSION_NOT_DEFINED;
     }
     return parent != null
       ? (parent.getType() == TABLE
@@ -2517,7 +2520,7 @@ public class MetaDataClient {
             SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY).setSchemaName(schemaName)
               .setTableName(tableName).build().buildException();
         }
-        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
+        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName, indexType);
         if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
           throw new SQLExceptionInfo.Builder(SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY)
             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
@@ -2531,16 +2534,9 @@ public class MetaDataClient {
         }
         ttl = getCompatibleTTLExpression(ttlProp, tableType, viewType, fullTableName);
       } else {
-        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
+        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName, indexType);
         if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
-          if (
-            UNCOVERED_GLOBAL.equals(indexType) && parent.hasConditionalTTL()
-              && !parent.isStrictTTL()
-          ) {
-            ttlFromHierarchy = TTL_EXPRESSION_NOT_DEFINED;
-          } else {
-            ttlFromHierarchy.validateTTLOnCreate(connection, statement, parent, tableProps);
-          }
+          ttlFromHierarchy.validateTTLOnCreate(connection, statement, parent, tableProps);
         }
       }
 
@@ -4864,7 +4860,7 @@ public class MetaDataClient {
           if (table.getType() != PTableType.TABLE) {
             ttlAlreadyDefined = checkAndGetTTLFromHierarchy(
               PhoenixRuntime.getTableNoCache(connection, table.getParentName().toString()),
-              tableName);
+              tableName, table.getIndexType());
           }
           if (!ttlAlreadyDefined.equals(TTL_EXPRESSION_NOT_DEFINED)) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY)
