@@ -92,6 +92,7 @@ import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENAB
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYSTEM_CATALOG_INDEXES_ENABLED;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_FOREVER;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
+import static org.apache.phoenix.schema.PTable.IndexType.UNCOVERED_GLOBAL;
 import static org.apache.phoenix.schema.PTable.LinkType.PARENT_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.PHYSICAL_TABLE;
 import static org.apache.phoenix.schema.PTable.LinkType.VIEW_INDEX_PARENT_TABLE;
@@ -1780,15 +1781,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       // If this is an index on Table get TTL from Table
       byte[] tableKey = getTableKey(tenantId == null ? null : tenantId.getBytes(),
         parentSchemaName == null ? null : parentSchemaName.getBytes(), parentTableName.getBytes());
-      boolean isNonCDCUncoveredIndex =
-        IndexType.UNCOVERED_GLOBAL.equals(indexType) && !CDCUtil.isCDCIndex(tableName.getString());
-      ttl = getTTLForParentTable(tableKey, clientTimeStamp, isNonCDCUncoveredIndex);
-    }
-    if (
-      tableType == INDEX && CDCUtil.isCDCIndex(tableName.getString())
-        && !ttl.equals(TTL_EXPRESSION_NOT_DEFINED)
-    ) {
-      ttl = TTL_EXPRESSION_FOREVER;
+      ttl = getTTLForParentTable(tableKey, clientTimeStamp, tableName.getString(), indexType);
     }
     builder.setTTL(ttl);
     builder.setEncodedCQCounter(cqCounter);
@@ -1890,7 +1883,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
     // Return TTL defined at Table level for the given hierarchy as we didn't find TTL any of the
     // views.
-    return getTTLForTable(tableKey, clientTimeStamp);
+    return getTTLForParentTable(tableKey, clientTimeStamp, null, null);
 
   }
 
@@ -1902,8 +1895,18 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     return false;
   }
 
+  /***
+   * Get TTL Value stored in SYSCAT for a parent table of an index or a view
+   * @param tableKey        of table for which we are fining TTL
+   * @param clientTimeStamp client TimeStamp value
+   * @param indexName       name of the index whose parent's ttl we are looking up
+   * @param indexType       type of the index whose parent's ttl we are looking up
+   * @return TTL defined for a given table if it is null then return TTL_NOT_DEFINED(0) For non-CDC
+   *         uncovered global indexes with conditional relaxed TTL parent, return
+   *         TTL_EXPRESSION_NOT_DEFINED For CDC index, return TTL_EXPRESSION_FOREVER
+   */
   private TTLExpression getTTLForParentTable(byte[] tableKey, long clientTimeStamp,
-    boolean isNonCDCUncoveredIndex) throws IOException {
+    String indexName, IndexType indexType) throws IOException {
     Scan scan = MetaDataUtil.newTableRowsScan(tableKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
     Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
       SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
@@ -1917,42 +1920,21 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         String ttlStr = (String) PVarchar.INSTANCE
           .toObject(result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
         TTLExpression ttl = TTLExpressionFactory.create(ttlStr);
-        // For non-CDC uncovered global indexes with conditional relaxed TTL parent, don't inherit
-        if (isNonCDCUncoveredIndex && ttl instanceof ConditionalTTLExpression) {
-          byte[] isStrictTTLBytes = result.getValue(TABLE_FAMILY_BYTES, IS_STRICT_TTL_BYTES);
-          boolean isStrictTTL = isStrictTTLBytes != null
-            && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isStrictTTLBytes));
-          if (!isStrictTTL) {
-            return TTL_EXPRESSION_NOT_DEFINED;
+        if (UNCOVERED_GLOBAL.equals(indexType)) {
+          if (CDCUtil.isCDCIndex(indexName)) {
+            if (!ttl.equals(TTL_EXPRESSION_NOT_DEFINED)) {
+              return TTL_EXPRESSION_FOREVER;
+            }
+          } else if (ttl instanceof ConditionalTTLExpression) {
+            byte[] isStrictTTLBytes = result.getValue(TABLE_FAMILY_BYTES, IS_STRICT_TTL_BYTES);
+            boolean isStrictTTL = isStrictTTLBytes != null
+              && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isStrictTTLBytes));
+            if (!isStrictTTL) {
+              return TTL_EXPRESSION_NOT_DEFINED;
+            }
           }
         }
         return ttl;
-      }
-      result = scanner.next();
-    } while (result != null);
-    return TTL_EXPRESSION_NOT_DEFINED;
-  }
-
-  /***
-   * Get TTL Value stored in SYSCAT for a given table
-   * @param tableKey        of table for which we are fining TTL
-   * @param clientTimeStamp client TimeStamp value
-   * @return TTL defined for a given table if it is null then return TTL_NOT_DEFINED(0)
-   */
-  private TTLExpression getTTLForTable(byte[] tableKey, long clientTimeStamp) throws IOException {
-    Scan scan = MetaDataUtil.newTableRowsScan(tableKey, MIN_TABLE_TIMESTAMP, clientTimeStamp);
-    Table sysCat = ServerUtil.getHTableForCoprocessorScan(this.env,
-      SchemaUtil.getPhysicalTableName(SYSTEM_CATALOG_NAME_BYTES, env.getConfiguration()));
-    ResultScanner scanner = sysCat.getScanner(scan);
-    Result result = scanner.next();
-    do {
-      if (result == null) {
-        return TTL_EXPRESSION_NOT_DEFINED;
-      }
-      if (result.getValue(TABLE_FAMILY_BYTES, TTL_BYTES) != null) {
-        String ttlStr = (String) PVarchar.INSTANCE
-          .toObject(result.getValue(DEFAULT_COLUMN_FAMILY_BYTES, TTL_BYTES));
-        return TTLExpressionFactory.create(ttlStr);
       }
       result = scanner.next();
     } while (result != null);
