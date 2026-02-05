@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.compat.hbase;
 
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics;
@@ -46,33 +45,16 @@ public class CompatScanMetrics {
     return true;
   }
 
-  public static Long getFsReadTime(Map<String, Long> scanMetrics) {
-    return scanMetrics.getOrDefault(ServerSideScanMetrics.FS_READ_TIME_METRIC_NAME, 0L);
-  }
-
   public static Long getFsReadTime(ScanMetrics scanMetrics) {
     return getCounterValue(scanMetrics, ServerSideScanMetrics.FS_READ_TIME_METRIC_NAME);
-  }
-
-  public static Long getBytesReadFromFs(Map<String, Long> scanMetrics) {
-    return scanMetrics.getOrDefault(ServerSideScanMetrics.BYTES_READ_FROM_FS_METRIC_NAME, 0L);
   }
 
   public static Long getBytesReadFromFs(ScanMetrics scanMetrics) {
     return getCounterValue(scanMetrics, ServerSideScanMetrics.BYTES_READ_FROM_FS_METRIC_NAME);
   }
 
-  public static Long getBytesReadFromMemstore(Map<String, Long> scanMetrics) {
-    return scanMetrics.getOrDefault(ServerSideScanMetrics.BYTES_READ_FROM_MEMSTORE_METRIC_NAME, 0L);
-  }
-
   public static Long getBytesReadFromMemstore(ScanMetrics scanMetrics) {
     return getCounterValue(scanMetrics, ServerSideScanMetrics.BYTES_READ_FROM_MEMSTORE_METRIC_NAME);
-  }
-
-  public static Long getBytesReadFromBlockCache(Map<String, Long> scanMetrics) {
-    return scanMetrics.getOrDefault(ServerSideScanMetrics.BYTES_READ_FROM_BLOCK_CACHE_METRIC_NAME,
-      0L);
   }
 
   public static Long getBytesReadFromBlockCache(ScanMetrics scanMetrics) {
@@ -80,20 +62,8 @@ public class CompatScanMetrics {
       ServerSideScanMetrics.BYTES_READ_FROM_BLOCK_CACHE_METRIC_NAME);
   }
 
-  public static Long getBlockReadOpsCount(Map<String, Long> scanMetrics) {
-    return scanMetrics.getOrDefault(ServerSideScanMetrics.BLOCK_READ_OPS_COUNT_METRIC_NAME, 0L);
-  }
-
   public static Long getBlockReadOpsCount(ScanMetrics scanMetrics) {
     return getCounterValue(scanMetrics, ServerSideScanMetrics.BLOCK_READ_OPS_COUNT_METRIC_NAME);
-  }
-
-  public static Long getRpcScanProcessingTime(Map<String, Long> scanMetrics) {
-    return scanMetrics.getOrDefault(ServerSideScanMetrics.RPC_SCAN_PROCESSING_TIME_METRIC_NAME, 0L);
-  }
-
-  public static Long getRpcScanQueueWaitTime(Map<String, Long> scanMetrics) {
-    return scanMetrics.getOrDefault(ServerSideScanMetrics.RPC_SCAN_QUEUE_WAIT_TIME_METRIC_NAME, 0L);
   }
 
   private static Long getCounterValue(ScanMetrics scanMetrics, String metricName) {

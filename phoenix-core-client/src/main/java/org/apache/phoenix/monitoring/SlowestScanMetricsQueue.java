@@ -37,7 +37,7 @@ public class SlowestScanMetricsQueue {
    * A no-op implementation that ignores all additions and returns an empty iterator.
    */
   public static final SlowestScanMetricsQueue NOOP_SLOWEST_SCAN_METRICS_QUEUE =
-    new SlowestScanMetricsQueue() {
+    new SlowestScanMetricsQueue(null) {
       @Override
       public void add(ScanMetricsHolder scanMetricsHolder) {
       }
@@ -49,6 +49,10 @@ public class SlowestScanMetricsQueue {
     };
 
   private final Deque<ScanMetricsHolder> slowestScanMetricsQueue;
+
+  private SlowestScanMetricsQueue(Deque<ScanMetricsHolder> slowestScanMetricsQueue) {
+    this.slowestScanMetricsQueue = slowestScanMetricsQueue;
+  }
 
   /**
    * Creates a new SlowestScanMetricsQueue with an empty concurrent deque.

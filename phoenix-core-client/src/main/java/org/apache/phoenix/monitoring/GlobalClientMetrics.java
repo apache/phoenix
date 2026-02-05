@@ -85,7 +85,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.hbase.metrics.Gauge;
 import org.apache.hadoop.hbase.metrics.MetricRegistries;
 import org.apache.hadoop.hbase.metrics.MetricRegistry;
@@ -280,29 +279,13 @@ public enum GlobalClientMetrics {
   }
 
   public static void populateMetrics(Map<String, Long> scanMetricsMap, Long dummyRowCounter) {
-    changeMetric(GLOBAL_SCAN_BYTES, scanMetricsMap.get(ScanMetrics.BYTES_IN_RESULTS_METRIC_NAME));
-    changeMetric(GLOBAL_HBASE_COUNT_RPC_CALLS,
-      scanMetricsMap.get(ScanMetrics.RPC_CALLS_METRIC_NAME));
-    changeMetric(GLOBAL_HBASE_COUNT_REMOTE_RPC_CALLS,
-      scanMetricsMap.get(ScanMetrics.REMOTE_RPC_CALLS_METRIC_NAME));
-    changeMetric(GLOBAL_HBASE_COUNT_MILLS_BETWEEN_NEXTS,
-      scanMetricsMap.get(ScanMetrics.MILLIS_BETWEEN_NEXTS_METRIC_NAME));
-    changeMetric(GLOBAL_HBASE_COUNT_NOT_SERVING_REGION_EXCEPTION,
-      scanMetricsMap.get(ScanMetrics.NOT_SERVING_REGION_EXCEPTION_METRIC_NAME));
-    changeMetric(GLOBAL_HBASE_COUNT_BYTES_REGION_SERVER_RESULTS,
-      scanMetricsMap.get(ScanMetrics.BYTES_IN_RESULTS_METRIC_NAME));
-    changeMetric(GLOBAL_HBASE_COUNT_BYTES_IN_REMOTE_RESULTS,
-      scanMetricsMap.get(ScanMetrics.BYTES_IN_REMOTE_RESULTS_METRIC_NAME));
-    changeMetric(GLOBAL_HBASE_COUNT_SCANNED_REGIONS,
-      scanMetricsMap.get(ScanMetrics.REGIONS_SCANNED_METRIC_NAME));
-    changeMetric(GLOBAL_HBASE_COUNT_RPC_RETRIES,
-      scanMetricsMap.get(ScanMetrics.RPC_RETRIES_METRIC_NAME));
-    changeMetric(GLOBAL_HBASE_COUNT_REMOTE_RPC_RETRIES,
-      scanMetricsMap.get(ScanMetrics.REMOTE_RPC_RETRIES_METRIC_NAME));
-    changeMetric(GLOBAL_HBASE_COUNT_ROWS_SCANNED,
-      scanMetricsMap.get(ScanMetrics.COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME));
-    changeMetric(GLOBAL_HBASE_COUNT_ROWS_FILTERED,
-      scanMetricsMap.get(ScanMetrics.COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME));
-    changeMetric(GLOBAL_PAGED_ROWS_COUNTER, dummyRowCounter);
+    for (GlobalClientMetrics globalMetric : GlobalClientMetrics.values()) {
+      String hbaseMetricName = globalMetric.getMetricType().getHBaseMetricName();
+      if (globalMetric.getMetricType() == MetricType.PAGED_ROWS_COUNTER) {
+        changeMetric(globalMetric, dummyRowCounter);
+      } else if (hbaseMetricName != null && !hbaseMetricName.isEmpty()) {
+        changeMetric(globalMetric, scanMetricsMap.get(hbaseMetricName));
+      }
+    }
   }
 }

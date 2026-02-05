@@ -180,7 +180,8 @@ public enum MetricType {
   QUERY_FAILED_COUNTER("qf", "Number of times query failed", LogLevel.DEBUG, PLong.INSTANCE),
   NUM_PARALLEL_SCANS("ps", "Number of scans that were executed in parallel", LogLevel.DEBUG,
     PLong.INSTANCE),
-  SCAN_BYTES("sb", "Number of bytes read by scans", LogLevel.OFF, PLong.INSTANCE),
+  SCAN_BYTES("sb", "Number of bytes read by scans", LogLevel.OFF, PLong.INSTANCE,
+    ScanMetrics.BYTES_IN_RESULTS_METRIC_NAME),
   SELECT_SQL_COUNTER("sc", "Counter for number of sql queries", LogLevel.OFF, PLong.INSTANCE),
   // task metrics
   TASK_QUEUE_WAIT_TIME("tw",

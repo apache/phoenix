@@ -21,7 +21,10 @@ import static org.apache.phoenix.thirdparty.com.google.common.collect.Maps.newHa
 import static org.apache.phoenix.util.PhoenixRuntime.ANNOTATION_ATTRIB_PREFIX;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import javax.annotation.Nullable;
@@ -29,6 +32,7 @@ import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.jdbc.AbstractRPCConnectionInfo;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.ConnectionInfo;
+import org.apache.phoenix.jdbc.PhoenixMonitoredResultSet;
 import org.apache.phoenix.jdbc.ZKConnectionInfo;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -36,6 +40,8 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 /**
  * Utilities for JDBC
@@ -139,23 +145,25 @@ public class JDBCUtil {
     return (scnStr == null ? null : Long.parseLong(scnStr));
   }
 
+  private static int getIntFromConnectionProperty(String url, Properties props,
+    ReadOnlyProps config, String connPropertyName, String configName, int defaultValue) {
+    String valueString = findProperty(url, props, connPropertyName);
+    return (valueString == null
+      ? config.getInt(configName, defaultValue)
+      : Integer.parseInt(valueString));
+  }
+
   public static int getMutateBatchSize(String url, Properties info, ReadOnlyProps props)
     throws SQLException {
-    String batchSizeStr = findProperty(url, info, PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB);
-    return (batchSizeStr == null
-      ? props.getInt(QueryServices.MUTATE_BATCH_SIZE_ATTRIB,
-        QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE)
-      : Integer.parseInt(batchSizeStr));
+    return getIntFromConnectionProperty(url, info, props, PhoenixRuntime.UPSERT_BATCH_SIZE_ATTRIB,
+      QueryServices.MUTATE_BATCH_SIZE_ATTRIB, QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
   }
 
   public static int getSlowestScanMetricsCount(String url, Properties info, ReadOnlyProps props)
     throws SQLException {
-    String slowestScanMetricsCountStr =
-      findProperty(url, info, QueryServices.SLOWEST_SCAN_METRICS_COUNT);
-    return slowestScanMetricsCountStr == null
-      ? props.getInt(QueryServices.SLOWEST_SCAN_METRICS_COUNT,
-        QueryServicesOptions.DEFAULT_SLOWEST_SCAN_METRICS_COUNT)
-      : Integer.parseInt(slowestScanMetricsCountStr);
+    return getIntFromConnectionProperty(url, info, props, QueryServices.SLOWEST_SCAN_METRICS_COUNT,
+      QueryServices.SLOWEST_SCAN_METRICS_COUNT,
+      QueryServicesOptions.DEFAULT_SLOWEST_SCAN_METRICS_COUNT);
   }
 
   public static boolean isScanMetricsByRegionEnabled(String url, Properties info,
@@ -294,5 +302,15 @@ public class JDBCUtil {
       }
     }
     return formatUrl(url);
+  }
+
+  public static List<List<JsonObject>> getTopNSlowestScanMetrics(ResultSet rs) {
+    List<List<JsonObject>> metrics;
+    if (rs != null) {
+      metrics = ((PhoenixMonitoredResultSet) rs).getTopNSlowestScanMetrics();
+    } else {
+      metrics = Collections.emptyList();
+    }
+    return metrics;
   }
 }
