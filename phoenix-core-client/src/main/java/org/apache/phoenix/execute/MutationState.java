@@ -280,14 +280,20 @@ public class MutationState implements SQLCloseable {
   public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset,
     int maxSize, long maxSizeBytes, PhoenixConnection connection) throws SQLException {
     this(maxSize, maxSizeBytes, connection, false, null, sizeOffset);
+
+    int incomingRows = mutations.size();
+    long incomingBytes = PhoenixKeyValueUtil.calculateMultiRowMutationSize(mutations);
+
+    // Check limit before updating state - at this point this.numRows=0 and this.estimatedSize=0,
+    // so checkLimit knows there's no existing state to preserve
+    checkLimit(incomingRows, incomingBytes);
+
     if (!mutations.isEmpty()) {
       addMutations(this.mutationsMap, table, mutations);
     }
-    this.numRows = mutations.size();
-    this.estimatedSize =
-      PhoenixKeyValueUtil.getEstimatedRowMutationSizeWithBatch(this.mutationsMap);
 
-    throwIfTooBig();
+    this.numRows = incomingRows;
+    this.estimatedSize = incomingBytes;
   }
 
   // add a new batch of row mutations
@@ -305,15 +311,21 @@ public class MutationState implements SQLCloseable {
   private void removeMutations(Map<TableRef, List<MultiRowMutationState>> mutationMap,
     TableRef table) {
     List<MultiRowMutationState> batches = mutationMap.get(table);
-    if (batches == null || batches.isEmpty()) {
-      mutationMap.remove(table);
-      return;
-    }
+    if (batches != null && !batches.isEmpty()) {
+      // mutation batches are committed in FIFO order so always remove from the head
+      MultiRowMutationState removed = batches.remove(0);
 
-    // mutation batches are committed in FIFO order so always remove from the head
-    batches.remove(0);
-    if (batches.isEmpty()) {
-      mutationMap.remove(table);
+      // Update counts only for data tables
+      if (table.getTable().getType() == PTableType.TABLE) {
+        numRows -= removed.size();
+        // Use calculateMultiRowMutationSize to include row key sizes, consistent with
+        // how estimatedSize is calculated via getEstimatedRowMutationSizeWithBatch
+        estimatedSize -= PhoenixKeyValueUtil.calculateMultiRowMutationSize(removed);
+      }
+
+      if (batches.isEmpty()) {
+        mutationMap.remove(table);
+      }
     }
   }
 
@@ -501,22 +513,36 @@ public class MutationState implements SQLCloseable {
     return state;
   }
 
-  private void throwIfTooBig() throws SQLException {
-    if (numRows > maxSize || estimatedSize > maxSizeBytes) {
-      if (preserveOnLimitExceeded) {
+  /**
+   * Checks if adding the incoming mutations would exceed the configured limits.
+   *
+   * @param incomingRows number of rows being added
+   * @param incomingBytes estimated size in bytes being added
+   * @throws MutationLimitReachedException if preserveOnLimitExceeded is true and there is
+   *                 existing state to preserve (this.numRows > 0 or this.estimatedSize > 0)
+   * @throws MaxMutationSizeExceededException if row limit exceeded and no state to preserve
+   * @throws MaxMutationSizeBytesExceededException if byte limit exceeded and no state to preserve
+   */
+  private void checkLimit(int incomingRows, long incomingBytes) throws SQLException {
+    long combinedRows = this.numRows + incomingRows;
+    long combinedBytes = this.estimatedSize + incomingBytes;
+
+    if (combinedRows > maxSize || combinedBytes > maxSizeBytes) {
+      // Only use preserve mode when there's existing state to preserve.
+      // Check if this MutationState already has mutations buffered.
+      boolean hasExistingState = this.numRows > 0 || this.estimatedSize > 0;
+      if (preserveOnLimitExceeded && hasExistingState) {
         // Preserve mode: throw new exception WITHOUT resetting state
         throw new MutationLimitReachedException();
       } else {
         // Legacy mode: reset state and throw old exceptions
-        if (numRows > maxSize) {
-          int mutationSize = numRows;
+        if (combinedRows > maxSize) {
           resetState();
-          throw new MaxMutationSizeExceededException(maxSize, mutationSize);
+          throw new MaxMutationSizeExceededException(maxSize, (int) combinedRows);
         }
-        if (estimatedSize > maxSizeBytes) {
-          long mutationSizeByte = estimatedSize;
+        if (combinedBytes > maxSizeBytes) {
           resetState();
-          throw new MaxMutationSizeBytesExceededException(maxSizeBytes, mutationSizeByte);
+          throw new MaxMutationSizeBytesExceededException(maxSizeBytes, combinedBytes);
         }
       }
     }
@@ -631,22 +657,6 @@ public class MutationState implements SQLCloseable {
   }
 
   /**
-   * Pre-checks if joining the given MutationState would exceed configured limits.
-   * Throws MutationLimitReachedException if limits would be exceeded.
-   * Does NOT modify any state - this is a read-only check.
-   *
-   * @param newMutationState the state that would be joined
-   * @throws MutationLimitReachedException if joining would exceed limits
-   */
-  private void checkLimitBeforeJoin(MutationState newMutationState)
-          throws MutationLimitReachedException {
-      if (this.numRows + newMutationState.numRows > maxSize ||
-              this.estimatedSize + newMutationState.estimatedSize > maxSizeBytes) {
-          throw new MutationLimitReachedException();
-      }
-  }
-
-  /**
    * Combine a newer mutation with this one, where in the event of overlaps, the newer one will take
    * precedence. Combine any metrics collected for the newer mutation. the newer mutation state
    */
@@ -655,11 +665,10 @@ public class MutationState implements SQLCloseable {
       return;
     }
 
-    // Pre-check: if preserveOnLimitExceeded is enabled, check before joining
-    // to avoid merging mutations that would exceed the limit
-    if (preserveOnLimitExceeded) {
-      checkLimitBeforeJoin(newMutationState);
-    }
+    // Check limit before joining to ensure combined state won't exceed limits.
+    // For preserveOnLimitExceeded=true: throws MutationLimitReachedException, state preserved
+    // For preserveOnLimitExceeded=false (legacy): throws old exceptions, state is reset
+    checkLimit(newMutationState.getNumRows(), newMutationState.getEstimatedSize());
 
     phoenixTransactionContext.join(newMutationState.getPhoenixTransactionContext());
 
@@ -676,12 +685,6 @@ public class MutationState implements SQLCloseable {
       readMetricQueue = newMutationState.readMetricQueue;
     } else if (readMetricQueue != null && newMutationState.readMetricQueue != null) {
       readMetricQueue.combineReadMetrics(newMutationState.readMetricQueue);
-    }
-
-    // Post-check: only run in legacy mode (when preserveOnLimitExceeded is false)
-    // In preserve mode, we trust the pre-check and skip this
-    if (!preserveOnLimitExceeded) {
-      throwIfTooBig();
     }
   }
 
@@ -1655,14 +1658,8 @@ public class MutationState implements SQLCloseable {
           shouldRetry = false;
           numFailedMutations = 0;
 
-          // Remove batches as we process them
+          // Remove batches as we process them (also updates numRows and estimatedSize for data tables)
           removeMutations(this.mutationsMap, origTableRef);
-          if (tableInfo.isDataTable()) {
-            numRows -= numMutations;
-            // recalculate the estimated size
-            estimatedSize =
-              PhoenixKeyValueUtil.getEstimatedRowMutationSizeWithBatch(this.mutationsMap);
-          }
           areAllBatchesSuccessful = true;
         } catch (Exception e) {
           long serverTimestamp = ClientUtil.parseServerTimestamp(e);

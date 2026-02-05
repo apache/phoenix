@@ -174,33 +174,6 @@ public class PhoenixKeyValueUtil {
   }
 
   /**
-   * Estimates the storage size of a row
-   * @param tableMutationMap map from table to row to RowMutationState
-   * @return estimated row size
-   */
-  public static long
-    getEstimatedRowMutationSize(Map<TableRef, MultiRowMutationState> tableMutationMap) {
-    long size = 0;
-    // iterate over table
-    for (Entry<TableRef, MultiRowMutationState> tableEntry : tableMutationMap.entrySet()) {
-      size += calculateMultiRowMutationSize(tableEntry.getValue());
-    }
-    return size;
-  }
-
-  public static long getEstimatedRowMutationSizeWithBatch(
-    Map<TableRef, List<MultiRowMutationState>> tableMutationMap) {
-    long size = 0;
-    // iterate over table
-    for (Entry<TableRef, List<MultiRowMutationState>> tableEntry : tableMutationMap.entrySet()) {
-      for (MultiRowMutationState batch : tableEntry.getValue()) {
-        size += calculateMultiRowMutationSize(batch);
-      }
-    }
-    return size;
-  }
-
-  /**
    * If c is not a KeyValue, cast it to KeyValue and return it. If c is a KeyValue, just return it
    * @param c cell
    * @return either c case to ExtendedCell, or its copy as a KeyValue
@@ -267,7 +240,7 @@ public class PhoenixKeyValueUtil {
     return cells;
   }
 
-  private static long calculateMultiRowMutationSize(MultiRowMutationState mutations) {
+  public static long calculateMultiRowMutationSize(MultiRowMutationState mutations) {
     long size = 0;
     // iterate over rows
     for (Entry<ImmutableBytesPtr, RowMutationState> rowEntry : mutations.entrySet()) {

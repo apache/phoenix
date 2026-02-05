@@ -48,6 +48,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.MutationLimitBatchException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.MaxMutationSizeExceededException;
 import org.apache.phoenix.schema.MutationLimitReachedException;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
@@ -617,6 +618,70 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
         .executeQuery("SELECT COUNT(*) FROM " + fullTableName)) {
         assertTrue(rs.next());
         assertEquals(totalRows, rs.getInt(1));
+      }
+    }
+  }
+
+  /**
+   * Tests that when preserveOnLimitExceeded is true but a single mutation exceeds
+   * the limit (constructor case), we still get the old exception type since there's
+   * no existing state to preserve.
+   */
+  @Test
+  public void testSingleMutationExceedsLimitWithPreserveOption() throws Exception {
+    String fullTableName = generateUniqueName();
+    String sourceTable = generateUniqueName();
+
+    // Use a connection without limits to create tables and set up test data
+    try (Connection setupConn = DriverManager.getConnection(getUrl())) {
+      setupConn.setAutoCommit(true);
+      try (Statement stmt = setupConn.createStatement()) {
+        stmt.execute("CREATE TABLE " + fullTableName + DDL);
+        stmt.execute("CREATE TABLE " + sourceTable + " (id VARCHAR PRIMARY KEY, val INTEGER)");
+        // Insert multiple rows into source table
+        stmt.executeUpdate("UPSERT INTO " + sourceTable + " VALUES ('a', 1)");
+        stmt.executeUpdate("UPSERT INTO " + sourceTable + " VALUES ('b', 2)");
+      }
+    }
+
+    // Now use a connection with the limit set
+    Properties props = new Properties();
+    // Set limit to 1 row so any operation producing multiple rows would exceed it
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "1");
+    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(false);
+
+      // Insert a row to have some existing state in the connection's MutationState
+      try (PreparedStatement stmt = conn.prepareStatement(
+          "UPSERT INTO " + fullTableName +
+          " (organization_id, entity_id, score) VALUES (?, ?, ?)")) {
+        stmt.setString(1, "org1");
+        stmt.setString(2, "entity1");
+        stmt.setInt(3, 1);
+        stmt.executeUpdate();
+      }
+
+      // Now do a SELECT-based UPSERT that produces multiple rows in a single mutation.
+      // This creates a new MutationState in the constructor that already exceeds the limit.
+      // Since there's no state to preserve in that NEW MutationState (only 1 row was inserted 
+      // into the connection's existing state), we should get the old exception type 
+      // (MaxMutationSizeExceededException), not MutationLimitReachedException.
+      try (Statement stmt = conn.createStatement()) {
+        try {
+          stmt.executeUpdate(
+              "UPSERT INTO " + fullTableName +
+              " (organization_id, entity_id, score) " +
+              "SELECT id, 'e', val FROM " + sourceTable);
+          fail("Expected MaxMutationSizeExceededException");
+        } catch (MaxMutationSizeExceededException e) {
+          // Expected - legacy exception even though preserveOnLimitExceeded is true,
+          // because the single mutation (from constructor) has no prior state to preserve
+        } catch (MutationLimitReachedException e) {
+          fail("Should have thrown MaxMutationSizeExceededException, not MutationLimitReachedException. " +
+               "When a single mutation exceeds the limit, there's no state to preserve.");
+        }
       }
     }
   }
