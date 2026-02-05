@@ -84,43 +84,11 @@ public class ScanMetricsHolder {
       scan.setEnableScanMetricsByRegion(isScanMetricsByRegionEnabled);
     }
     metricTypeToMetric = new HashMap<>();
-    metricTypeToMetric.put(COUNT_RPC_CALLS, readMetrics.allotMetric(COUNT_RPC_CALLS, tableName));
-    metricTypeToMetric.put(COUNT_REMOTE_RPC_CALLS,
-      readMetrics.allotMetric(COUNT_REMOTE_RPC_CALLS, tableName));
-    metricTypeToMetric.put(COUNT_MILLS_BETWEEN_NEXTS,
-      readMetrics.allotMetric(COUNT_MILLS_BETWEEN_NEXTS, tableName));
-    metricTypeToMetric.put(COUNT_NOT_SERVING_REGION_EXCEPTION,
-      readMetrics.allotMetric(COUNT_NOT_SERVING_REGION_EXCEPTION, tableName));
-    metricTypeToMetric.put(COUNT_BYTES_REGION_SERVER_RESULTS,
-      readMetrics.allotMetric(COUNT_BYTES_REGION_SERVER_RESULTS, tableName));
-    metricTypeToMetric.put(COUNT_BYTES_IN_REMOTE_RESULTS,
-      readMetrics.allotMetric(COUNT_BYTES_IN_REMOTE_RESULTS, tableName));
-    metricTypeToMetric.put(COUNT_SCANNED_REGIONS,
-      readMetrics.allotMetric(COUNT_SCANNED_REGIONS, tableName));
-    metricTypeToMetric.put(COUNT_RPC_RETRIES,
-      readMetrics.allotMetric(COUNT_RPC_RETRIES, tableName));
-    metricTypeToMetric.put(COUNT_REMOTE_RPC_RETRIES,
-      readMetrics.allotMetric(COUNT_REMOTE_RPC_RETRIES, tableName));
-    metricTypeToMetric.put(COUNT_ROWS_SCANNED,
-      readMetrics.allotMetric(COUNT_ROWS_SCANNED, tableName));
-    metricTypeToMetric.put(COUNT_ROWS_FILTERED,
-      readMetrics.allotMetric(COUNT_ROWS_FILTERED, tableName));
-    metricTypeToMetric.put(SCAN_BYTES, readMetrics.allotMetric(SCAN_BYTES, tableName));
     metricTypeToMetric.put(PAGED_ROWS_COUNTER,
       readMetrics.allotMetric(PAGED_ROWS_COUNTER, tableName));
-    metricTypeToMetric.put(FS_READ_TIME, readMetrics.allotMetric(FS_READ_TIME, tableName));
-    metricTypeToMetric.put(BYTES_READ_FROM_FS,
-      readMetrics.allotMetric(BYTES_READ_FROM_FS, tableName));
-    metricTypeToMetric.put(BYTES_READ_FROM_MEMSTORE,
-      readMetrics.allotMetric(BYTES_READ_FROM_MEMSTORE, tableName));
-    metricTypeToMetric.put(BYTES_READ_FROM_BLOCKCACHE,
-      readMetrics.allotMetric(BYTES_READ_FROM_BLOCKCACHE, tableName));
-    metricTypeToMetric.put(BLOCK_READ_OPS_COUNT,
-      readMetrics.allotMetric(BLOCK_READ_OPS_COUNT, tableName));
-    metricTypeToMetric.put(RPC_SCAN_PROCESSING_TIME,
-      readMetrics.allotMetric(RPC_SCAN_PROCESSING_TIME, tableName));
-    metricTypeToMetric.put(RPC_SCAN_QUEUE_WAIT_TIME,
-      readMetrics.allotMetric(RPC_SCAN_QUEUE_WAIT_TIME, tableName));
+    for (MetricType metric : MetricType.getHbaseScanMetrics()) {
+      metricTypeToMetric.put(metric, readMetrics.allotMetric(metric, tableName));
+    }
   }
 
   public CombinableMetric getCountOfRemoteRPCcalls() {
@@ -220,6 +188,8 @@ public class ScanMetricsHolder {
     for (Map.Entry<MetricType, CombinableMetric> entry : metricTypeToMetric.entrySet()) {
       String hbaseMetricName = entry.getKey().getHBaseMetricName();
       CombinableMetric metric = entry.getValue();
+      // PAGED_ROWS_COUNTER is not a HBase scan metric but is captured by Phoenix client
+      // for each scan, so we need to handle it separately.
       if (metric.getMetricType() == MetricType.PAGED_ROWS_COUNTER) {
         changeMetric(metric, dummyRowCounter);
       } else if (hbaseMetricName != null && !hbaseMetricName.isEmpty()) {

@@ -17,7 +17,9 @@
  */
 package org.apache.phoenix.monitoring;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
@@ -358,12 +360,16 @@ public enum MetricType {
   private LogLevel logLevel;
   private PDataType dataType;
   private final String hbaseMetricName;
+  // SCAN_BYTES and COUNT_BYTES_REGION_SERVER_RESULTS are mapped to same HBase metric but we will
+  // only keeping mapping for one of them.
   private static Map<String, MetricType> hbaseToPhoenixMetricMap = new HashMap<>();
+  private static List<MetricType> hbaseScanMetrics = new ArrayList<>();
 
   static {
     for (MetricType metric : MetricType.values()) {
       if (!StringUtils.isEmpty(metric.hbaseMetricName)) {
         hbaseToPhoenixMetricMap.put(metric.hbaseMetricName, metric);
+        hbaseScanMetrics.add(metric);
       }
     }
   }
@@ -424,5 +430,9 @@ public enum MetricType {
 
   public static MetricType getMetricType(String hbaseMetricName) {
     return hbaseToPhoenixMetricMap.get(hbaseMetricName);
+  }
+
+  public static List<MetricType> getHbaseScanMetrics() {
+    return hbaseScanMetrics;
   }
 }
