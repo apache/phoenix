@@ -374,7 +374,7 @@ public enum MetricType {
     }
   }
 
-  private MetricType(String shortName, String description, LogLevel logLevel, PDataType dataType) {
+  MetricType(String shortName, String description, LogLevel logLevel, PDataType dataType) {
     this(shortName, description, logLevel, dataType, StringUtils.EMPTY);
   }
 

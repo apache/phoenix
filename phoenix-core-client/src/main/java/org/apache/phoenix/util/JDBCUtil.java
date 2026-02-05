@@ -148,9 +148,9 @@ public class JDBCUtil {
   private static int getIntFromConnectionProperty(String url, Properties props,
     ReadOnlyProps config, String connPropertyName, String configName, int defaultValue) {
     String valueString = findProperty(url, props, connPropertyName);
-    return (valueString == null
+    return valueString == null
       ? config.getInt(configName, defaultValue)
-      : Integer.parseInt(valueString));
+      : Integer.parseInt(valueString);
   }
 
   public static int getMutateBatchSize(String url, Properties info, ReadOnlyProps props)
