@@ -2217,6 +2217,11 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
       query = "SELECT * FROM " + tableName + " WHERE hk = 'hk' AND sk >= 'sk000' "
         + "AND (sk, ihk, isk) < ('sk100', 'idx', 'isk17') ORDER BY sk, ihk, isk";
       assertValues2(conn, query);
+
+      query = "SELECT hk, sk, ihk, isk FROM " + tableName
+        + " WHERE hk = 'hk' AND sk <= 'sk200' AND (sk, ihk, isk) < ('sk100', 'idx', 'isk11')"
+        + " ORDER BY hk ASC, sk DESC, ihk DESC, isk DESC LIMIT 5";
+      assertValues3(conn, query);
     }
   }
 
@@ -2249,6 +2254,23 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
         && !results.contains("isk18") && !results.contains("isk19") && !results.contains("isk20"));
       assertEquals("isk01", results.get(0));
       assertEquals("isk16", results.get(15));
+    }
+  }
+
+  private static void assertValues3(Connection conn, String query) throws SQLException {
+    try (Statement stmt = conn.createStatement()) {
+      ResultSet rs = stmt.executeQuery(query);
+      List<String> results = Lists.newArrayList();
+      while (rs.next()) {
+        results.add(rs.getString("isk"));
+      }
+      assertEquals(5, results.size());
+      assertFalse(results.contains("isk11"));
+      assertEquals("isk10", results.get(0));
+      assertEquals("isk09", results.get(1));
+      assertEquals("isk08", results.get(2));
+      assertEquals("isk07", results.get(3));
+      assertEquals("isk06", results.get(4));
     }
   }
 

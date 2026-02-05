@@ -1580,7 +1580,7 @@ public class WhereOptimizer {
       byte[] clippedUpperRange = upperRange;
       byte[] fullUpperRange = otherRange.getUpperRange();
       boolean fullUpperRangeUsed = false;
-      if (!result.lowerUnbound() && Bytes.startsWith(fullUpperRange, clippedUpperRange)) {
+      if (!result.upperUnbound() && Bytes.startsWith(fullUpperRange, clippedUpperRange)) {
         upperRange = fullUpperRange;
         fullUpperRangeUsed = true;
       }
