@@ -131,6 +131,7 @@ import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_
 import static org.apache.phoenix.schema.PTable.EncodedCQCounter.NULL_COUNTER;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
+import static org.apache.phoenix.schema.PTable.IndexType.UNCOVERED_GLOBAL;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
 import static org.apache.phoenix.schema.PTableType.CDC;
@@ -2402,10 +2403,13 @@ public class MetaDataClient {
    * @return TTL from hierarchy if defined otherwise TTL_NOT_DEFINED.
    * @throws TableNotFoundException if not able ot find any table in hierarchy
    */
-  private TTLExpression checkAndGetTTLFromHierarchy(PTable parent, String entityName)
-    throws SQLException {
+  private TTLExpression checkAndGetTTLFromHierarchy(PTable parent, String entityName,
+    IndexType indexType) throws SQLException {
     if (CDCUtil.isCDCIndex(entityName)) {
       return TTL_EXPRESSION_FOREVER;
+    }
+    if (UNCOVERED_GLOBAL.equals(indexType) && parent.hasConditionalTTL() && !parent.isStrictTTL()) {
+      return TTL_EXPRESSION_NOT_DEFINED;
     }
     return parent != null
       ? (parent.getType() == TABLE
@@ -2516,7 +2520,7 @@ public class MetaDataClient {
             SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY).setSchemaName(schemaName)
               .setTableName(tableName).build().buildException();
         }
-        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
+        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName, indexType);
         if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
           throw new SQLExceptionInfo.Builder(SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY)
             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
@@ -2530,7 +2534,7 @@ public class MetaDataClient {
         }
         ttl = getCompatibleTTLExpression(ttlProp, tableType, viewType, fullTableName);
       } else {
-        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
+        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName, indexType);
         if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
           ttlFromHierarchy.validateTTLOnCreate(connection, statement, parent, tableProps);
         }
@@ -4856,7 +4860,7 @@ public class MetaDataClient {
           if (table.getType() != PTableType.TABLE) {
             ttlAlreadyDefined = checkAndGetTTLFromHierarchy(
               PhoenixRuntime.getTableNoCache(connection, table.getParentName().toString()),
-              tableName);
+              tableName, table.getIndexType());
           }
           if (!ttlAlreadyDefined.equals(TTL_EXPRESSION_NOT_DEFINED)) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY)
@@ -6541,7 +6545,9 @@ public class MetaDataClient {
       }
       if (metaProperties.getTTL() != table.getTTLExpression()) {
         TTLExpression newTTL = metaProperties.getTTL();
-        newTTL.validateTTLOnAlter(connection, table);
+        boolean isStrictTTL =
+          metaProperties.isStrictTTL() != null ? metaProperties.isStrictTTL : table.isStrictTTL();
+        newTTL.validateTTLOnAlter(connection, table, isStrictTTL);
         metaPropertiesEvaluated.setTTL(getCompatibleTTLExpression(metaProperties.getTTL(),
           table.getType(), table.getViewType(), table.getName().toString()));
         changingPhoenixTableProperty = true;
