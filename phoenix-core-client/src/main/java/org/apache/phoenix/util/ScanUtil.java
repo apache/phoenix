@@ -1900,6 +1900,33 @@ public class ScanUtil {
     return null;
   }
 
+  public static DistinctPrefixFilter findDistinctPrefixFilter(Scan scan) {
+    Filter filter = scan.getFilter();
+    if (filter instanceof PagingFilter) {
+      filter = ((PagingFilter) filter).getDelegateFilter();
+    }
+    return findDistinctPrefixFilter(filter);
+  }
+
+  public static DistinctPrefixFilter findDistinctPrefixFilter(Filter filter) {
+    if (filter == null) {
+      return null;
+    }
+    if (filter instanceof DistinctPrefixFilter) {
+      return (DistinctPrefixFilter) filter;
+    }
+    if (filter instanceof FilterList) {
+      Iterator<Filter> filterIterator = ((FilterList) filter).getFilters().iterator();
+      while (filterIterator.hasNext()) {
+        DistinctPrefixFilter distinctFilter = findDistinctPrefixFilter(filterIterator.next());
+        if (distinctFilter != null) {
+          return distinctFilter;
+        }
+      }
+    }
+    return null;
+  }
+
   /**
    * Verify whether the given row key is in the scan boundaries i.e. scan start and end keys.
    * @param ptr  row key.

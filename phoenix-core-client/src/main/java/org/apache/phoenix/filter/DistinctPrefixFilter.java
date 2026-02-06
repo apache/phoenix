@@ -70,6 +70,13 @@ public class DistinctPrefixFilter extends FilterBase implements Writable {
     this.offset = offset;
   }
 
+  // This is used when the DistinctPrefixFilter is present on a scan on an uncovered index
+  public void reinitialize() {
+    lastKey.set(ByteUtil.EMPTY_BYTE_ARRAY, -1, -1);
+    lastPosition = -1;
+    filterAll = false;
+  }
+
   // No @Override for HBase 3 compatibility
   public ReturnCode filterKeyValue(Cell v) throws IOException {
     return filterCell(v);

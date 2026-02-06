@@ -1439,6 +1439,66 @@ public class GlobalIndexCheckerIT extends BaseTest {
     }
   }
 
+  @Test
+  public void testUncoveredIndexWithDistinctPrefixFilter() throws Exception {
+    Assume.assumeTrue(async == false);
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      String uncoveredIndex1 = generateUniqueName();
+      conn.createStatement().execute("create table " + dataTableName
+        + " (id1 varchar(10) not null, id2 varchar(10) not null, val1 varchar(10), val2 varchar(10), "
+        + "val3 varchar(10), val4 varchar(10) constraint pk primary key(id1, id2))"
+        + tableDDLOptions);
+      conn.createStatement().execute("CREATE UNCOVERED INDEX " + uncoveredIndex1 + " on "
+        + dataTableName + " (val1)" + this.indexDDLOptions);
+
+      // create orphan unverified index row
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a1', 'a1', 'val1a', 'val2a', 'val3', 'val4')");
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a1', 'a2', 'val1a', 'val2a', 'val3', 'val4')");
+      commitWithException(conn);
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a1', 'a3', 'val1a', 'val2a', 'val31', 'val4')");
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a1', 'a4', 'val1a', 'val2b', 'val31', 'val4')");
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a1', 'a5', 'val1a', 'val2b', 'val31', 'val4')");
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a2', 'a1', 'val1a', 'val2a', 'val31', 'val4')");
+      conn.commit();
+
+      ArrayList<String> expectedValues = Lists.newArrayList("a1", "a2");
+      String selectSql = "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1a'";
+      verifyDistinctQueryOnIndex(conn, uncoveredIndex1, selectSql, expectedValues);
+      expectedValues = Lists.newArrayList("a1");
+      // add extra where conditions to the query
+      selectSql =
+        "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1a' AND val2 = 'val2b'";
+      verifyDistinctQueryOnIndex(conn, uncoveredIndex1, selectSql, expectedValues);
+
+        conn.createStatement().execute("upsert into " + dataTableName + " "
+                + "values ('a3', 'a1', 'val1b', 'val2a', 'val31', 'val4')");
+        conn.commit();
+        IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+        conn.createStatement().execute("upsert into " + dataTableName + " "
+                + "values ('a3', 'a2', 'val1b', 'val2a', 'val3', 'val4')");
+        conn.createStatement().execute("upsert into " + dataTableName + " "
+                + "values ('a3', 'a3', 'val1b', 'val2a', 'val3', 'val4')");
+        commitWithException(conn);
+        IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+        conn.createStatement().execute("upsert into " + dataTableName + " "
+                + "values ('a4', 'a1', 'val1b', 'val2a', 'val31', 'val4')");
+        conn.commit();
+        expectedValues = Lists.newArrayList("a3", "a4");
+        selectSql = "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1b'";
+        verifyDistinctQueryOnIndex(conn, uncoveredIndex1, selectSql, expectedValues);
+    }
+  }
+
   private void verifyDistinctQueryOnIndex(Connection conn, String indexName, String query,
     List<String> expectedValues) throws SQLException, IOException {
     try (ResultSet rs = conn.createStatement().executeQuery(query)) {
