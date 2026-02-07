@@ -1480,22 +1480,22 @@ public class GlobalIndexCheckerIT extends BaseTest {
         "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1a' AND val2 = 'val2b'";
       verifyDistinctQueryOnIndex(conn, uncoveredIndex1, selectSql, expectedValues);
 
-        conn.createStatement().execute("upsert into " + dataTableName + " "
-                + "values ('a3', 'a1', 'val1b', 'val2a', 'val31', 'val4')");
-        conn.commit();
-        IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
-        conn.createStatement().execute("upsert into " + dataTableName + " "
-                + "values ('a3', 'a2', 'val1b', 'val2a', 'val3', 'val4')");
-        conn.createStatement().execute("upsert into " + dataTableName + " "
-                + "values ('a3', 'a3', 'val1b', 'val2a', 'val3', 'val4')");
-        commitWithException(conn);
-        IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
-        conn.createStatement().execute("upsert into " + dataTableName + " "
-                + "values ('a4', 'a1', 'val1b', 'val2a', 'val31', 'val4')");
-        conn.commit();
-        expectedValues = Lists.newArrayList("a3", "a4");
-        selectSql = "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1b'";
-        verifyDistinctQueryOnIndex(conn, uncoveredIndex1, selectSql, expectedValues);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a3', 'a1', 'val1b', 'val2a', 'val31', 'val4')");
+      conn.commit();
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a3', 'a2', 'val1b', 'val2a', 'val3', 'val4')");
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a3', 'a3', 'val1b', 'val2a', 'val3', 'val4')");
+      commitWithException(conn);
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a4', 'a1', 'val1b', 'val2a', 'val31', 'val4')");
+      conn.commit();
+      expectedValues = Lists.newArrayList("a3", "a4");
+      selectSql = "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1b'";
+      verifyDistinctQueryOnIndex(conn, uncoveredIndex1, selectSql, expectedValues);
     }
   }
 
