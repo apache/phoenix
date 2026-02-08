@@ -84,6 +84,8 @@ import static org.apache.phoenix.monitoring.MetricType.TASK_REJECTED_COUNTER;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.metrics.Gauge;
 import org.apache.hadoop.hbase.metrics.MetricRegistries;
 import org.apache.hadoop.hbase.metrics.MetricRegistry;
@@ -174,6 +176,7 @@ public enum GlobalClientMetrics {
     QueryServicesOptions.withDefaults().isGlobalMetricsEnabled();
   private MetricType metricType;
   private GlobalMetric metric;
+  private static List<GlobalClientMetrics> hbaseScanMetrics;
 
   static {
     try {
@@ -182,6 +185,13 @@ public enum GlobalClientMetrics {
         MetricRegistry metricRegistry = createMetricRegistry();
         registerPhoenixMetricsToRegistry(metricRegistry);
         GlobalMetricRegistriesAdapter.getInstance().registerMetricRegistry(metricRegistry);
+        hbaseScanMetrics = new ArrayList<>();
+        for (GlobalClientMetrics globalMetric : GlobalClientMetrics.values()) {
+          MetricType metricType = globalMetric.getMetricType();
+          if (metricType != null && !StringUtils.isEmpty(metricType.getHBaseMetricName())) {
+            hbaseScanMetrics.add(globalMetric);
+          }
+        }
       }
     } catch (Throwable t) {
       LOGGER.error("Failed to initialize GlobalClientMetrics", t);
@@ -271,4 +281,19 @@ public enum GlobalClientMetrics {
     return isGlobalMetricsEnabled;
   }
 
+  private static void changeMetric(GlobalClientMetrics metric, Long value) {
+    if (value != null) {
+      metric.update(value);
+    }
+  }
+
+  public static void populateMetrics(Map<String, Long> scanMetricsMap, Long dummyRowCounter) {
+    // PAGED_ROWS_COUNTER is not a HBase scan metric but is captured by Phoenix client
+    // for each scan, so we need to handle it separately.
+    changeMetric(GLOBAL_PAGED_ROWS_COUNTER, dummyRowCounter);
+    for (GlobalClientMetrics globalMetric : hbaseScanMetrics) {
+      String hbaseMetricName = globalMetric.getMetricType().getHBaseMetricName();
+      changeMetric(globalMetric, scanMetricsMap.get(hbaseMetricName));
+    }
+  }
 }

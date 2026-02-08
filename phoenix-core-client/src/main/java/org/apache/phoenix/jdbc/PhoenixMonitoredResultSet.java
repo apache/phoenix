@@ -18,12 +18,17 @@
 package org.apache.phoenix.jdbc;
 
 import java.sql.ResultSet;
+import java.util.List;
 import java.util.Map;
 import org.apache.phoenix.monitoring.MetricType;
+
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 public interface PhoenixMonitoredResultSet extends ResultSet {
 
   Map<String, Map<MetricType, Long>> getReadMetrics();
+
+  List<List<JsonObject>> getTopNSlowestScanMetrics();
 
   Map<MetricType, Long> getOverAllRequestReadMetrics();
 
