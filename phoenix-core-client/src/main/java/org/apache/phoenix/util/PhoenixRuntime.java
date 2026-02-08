@@ -99,6 +99,7 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.Options;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
 
 import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 /**
  * Collection of non JDBC compliant utility methods
@@ -1545,6 +1546,30 @@ public class PhoenixRuntime {
     throws SQLException {
     PhoenixMonitoredResultSet resultSet = rs.unwrap(PhoenixMonitoredResultSet.class);
     return resultSet.getReadMetrics();
+  }
+
+  /**
+   * Method to expose the top N slowest scan metrics for a given result set. A typical pattern is:
+   *
+   * <pre>
+   * {@code
+   * List<List<JsonObject>> slowestScanMetrics = null;
+   * try (ResultSet rs = stmt.executeQuery()) {
+   *    while(rs.next()) {
+   *      .....
+   *    }
+   *    slowestScanMetrics = PhoenixRuntime.getTopNSlowestScanMetrics(rs);
+   * }
+   * }
+   * </pre>
+   *
+   * @param rs the result set to get the slowest scan metrics
+   * @return a list of lists of {@link JsonObject} objects containing the metrics for top N slowest
+   *         scans
+   */
+  public static List<List<JsonObject>> getTopNSlowestScanMetrics(ResultSet rs) throws SQLException {
+    PhoenixMonitoredResultSet resultSet = rs.unwrap(PhoenixMonitoredResultSet.class);
+    return resultSet.getTopNSlowestScanMetrics();
   }
 
   @Deprecated

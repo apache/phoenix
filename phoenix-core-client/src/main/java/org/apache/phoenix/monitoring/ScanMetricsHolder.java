@@ -39,115 +39,100 @@ import static org.apache.phoenix.monitoring.MetricType.RPC_SCAN_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.Map;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
+import org.apache.hadoop.hbase.client.metrics.ScanMetricsRegionInfo;
 import org.apache.hadoop.hbase.util.JsonMapper;
 import org.apache.phoenix.log.LogLevel;
 
+import org.apache.hbase.thirdparty.com.google.gson.JsonArray;
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
+
 public class ScanMetricsHolder {
 
-  private final CombinableMetric countOfRPCcalls;
-  private final CombinableMetric countOfRemoteRPCcalls;
-  private final CombinableMetric sumOfMillisSecBetweenNexts;
-  private final CombinableMetric countOfNSRE;
-  private final CombinableMetric countOfBytesInResults;
-  private final CombinableMetric countOfBytesInRemoteResults;
-  private final CombinableMetric countOfRegions;
-  private final CombinableMetric countOfRPCRetries;
-  private final CombinableMetric countOfRemoteRPCRetries;
-  private final CombinableMetric countOfRowsScanned;
-  private final CombinableMetric countOfRowsFiltered;
-  private final CombinableMetric countOfBytesScanned;
-  private final CombinableMetric countOfRowsPaged;
-  private final CombinableMetric fsReadTime;
-  private final CombinableMetric countOfBytesReadFromFS;
-  private final CombinableMetric countOfBytesReadFromMemstore;
-  private final CombinableMetric countOfBytesReadFromBlockcache;
-  private final CombinableMetric countOfBlockReadOps;
-  private final CombinableMetric rpcScanProcessingTime;
-  private final CombinableMetric rpcScanQueueWaitTime;
   private Map<String, Long> scanMetricMap;
+  private Map<ScanMetricsRegionInfo, Map<String, Long>> scanMetricsByRegion;
   private Object scan;
+  private final String tableName;
+  private final Map<MetricType, CombinableMetric> metricTypeToMetric;
 
   private static final ScanMetricsHolder NO_OP_INSTANCE =
-    new ScanMetricsHolder(new ReadMetricQueue(false, LogLevel.OFF), "", null);
+    new ScanMetricsHolder(new ReadMetricQueue(false, LogLevel.OFF), "", null, false);
 
   public static ScanMetricsHolder getInstance(ReadMetricQueue readMetrics, String tableName,
     Scan scan, LogLevel connectionLogLevel) {
+    return ScanMetricsHolder.getInstance(readMetrics, tableName, scan, connectionLogLevel, false);
+  }
+
+  public static ScanMetricsHolder getInstance(ReadMetricQueue readMetrics, String tableName,
+    Scan scan, LogLevel connectionLogLevel, boolean isScanMetricsByRegionEnabled) {
     if (connectionLogLevel == LogLevel.OFF && !readMetrics.isRequestMetricsEnabled()) {
       return NO_OP_INSTANCE;
     }
-    scan.setScanMetricsEnabled(true);
-    return new ScanMetricsHolder(readMetrics, tableName, scan);
+    return new ScanMetricsHolder(readMetrics, tableName, scan, isScanMetricsByRegionEnabled);
   }
 
-  private ScanMetricsHolder(ReadMetricQueue readMetrics, String tableName, Scan scan) {
+  private ScanMetricsHolder(ReadMetricQueue readMetrics, String tableName, Scan scan,
+    boolean isScanMetricsByRegionEnabled) {
     readMetrics.addScanHolder(this);
+    this.tableName = tableName;
     this.scan = scan;
-    countOfRPCcalls = readMetrics.allotMetric(COUNT_RPC_CALLS, tableName);
-    countOfRemoteRPCcalls = readMetrics.allotMetric(COUNT_REMOTE_RPC_CALLS, tableName);
-    sumOfMillisSecBetweenNexts = readMetrics.allotMetric(COUNT_MILLS_BETWEEN_NEXTS, tableName);
-    countOfNSRE = readMetrics.allotMetric(COUNT_NOT_SERVING_REGION_EXCEPTION, tableName);
-    countOfBytesInResults = readMetrics.allotMetric(COUNT_BYTES_REGION_SERVER_RESULTS, tableName);
-    countOfBytesInRemoteResults = readMetrics.allotMetric(COUNT_BYTES_IN_REMOTE_RESULTS, tableName);
-    countOfRegions = readMetrics.allotMetric(COUNT_SCANNED_REGIONS, tableName);
-    countOfRPCRetries = readMetrics.allotMetric(COUNT_RPC_RETRIES, tableName);
-    countOfRemoteRPCRetries = readMetrics.allotMetric(COUNT_REMOTE_RPC_RETRIES, tableName);
-    countOfRowsScanned = readMetrics.allotMetric(COUNT_ROWS_SCANNED, tableName);
-    countOfRowsFiltered = readMetrics.allotMetric(COUNT_ROWS_FILTERED, tableName);
-    countOfBytesScanned = readMetrics.allotMetric(SCAN_BYTES, tableName);
-    countOfRowsPaged = readMetrics.allotMetric(PAGED_ROWS_COUNTER, tableName);
-    fsReadTime = readMetrics.allotMetric(FS_READ_TIME, tableName);
-    countOfBytesReadFromFS = readMetrics.allotMetric(BYTES_READ_FROM_FS, tableName);
-    countOfBytesReadFromMemstore = readMetrics.allotMetric(BYTES_READ_FROM_MEMSTORE, tableName);
-    countOfBytesReadFromBlockcache = readMetrics.allotMetric(BYTES_READ_FROM_BLOCKCACHE, tableName);
-    countOfBlockReadOps = readMetrics.allotMetric(BLOCK_READ_OPS_COUNT, tableName);
-    rpcScanProcessingTime = readMetrics.allotMetric(RPC_SCAN_PROCESSING_TIME, tableName);
-    rpcScanQueueWaitTime = readMetrics.allotMetric(RPC_SCAN_QUEUE_WAIT_TIME, tableName);
+    if (scan != null) {
+      scan.setScanMetricsEnabled(true);
+      scan.setEnableScanMetricsByRegion(isScanMetricsByRegionEnabled);
+    }
+    metricTypeToMetric = new HashMap<>();
+    metricTypeToMetric.put(PAGED_ROWS_COUNTER,
+      readMetrics.allotMetric(PAGED_ROWS_COUNTER, tableName));
+    for (MetricType metric : MetricType.getHbaseScanMetrics()) {
+      metricTypeToMetric.put(metric, readMetrics.allotMetric(metric, tableName));
+    }
   }
 
   public CombinableMetric getCountOfRemoteRPCcalls() {
-    return countOfRemoteRPCcalls;
+    return metricTypeToMetric.get(COUNT_REMOTE_RPC_CALLS);
   }
 
   public CombinableMetric getSumOfMillisSecBetweenNexts() {
-    return sumOfMillisSecBetweenNexts;
+    return metricTypeToMetric.get(COUNT_MILLS_BETWEEN_NEXTS);
   }
 
   public CombinableMetric getCountOfNSRE() {
-    return countOfNSRE;
+    return metricTypeToMetric.get(COUNT_NOT_SERVING_REGION_EXCEPTION);
   }
 
   public CombinableMetric getCountOfBytesInRemoteResults() {
-    return countOfBytesInRemoteResults;
+    return metricTypeToMetric.get(COUNT_BYTES_IN_REMOTE_RESULTS);
   }
 
   public CombinableMetric getCountOfRegions() {
-    return countOfRegions;
+    return metricTypeToMetric.get(COUNT_SCANNED_REGIONS);
   }
 
   public CombinableMetric getCountOfRPCRetries() {
-    return countOfRPCRetries;
+    return metricTypeToMetric.get(COUNT_RPC_RETRIES);
   }
 
   public CombinableMetric getCountOfRemoteRPCRetries() {
-    return countOfRemoteRPCRetries;
+    return metricTypeToMetric.get(COUNT_REMOTE_RPC_RETRIES);
   }
 
   public CombinableMetric getCountOfRowsFiltered() {
-    return countOfRowsFiltered;
+    return metricTypeToMetric.get(COUNT_ROWS_FILTERED);
   }
 
   public CombinableMetric getCountOfRPCcalls() {
-    return countOfRPCcalls;
+    return metricTypeToMetric.get(COUNT_RPC_CALLS);
   }
 
   public CombinableMetric getCountOfBytesInResults() {
-    return countOfBytesInResults;
+    return metricTypeToMetric.get(COUNT_BYTES_REGION_SERVER_RESULTS);
   }
 
   public CombinableMetric getCountOfRowsScanned() {
-    return countOfRowsScanned;
+    return metricTypeToMetric.get(COUNT_ROWS_SCANNED);
   }
 
   public Map<String, Long> getScanMetricMap() {
@@ -155,43 +140,112 @@ public class ScanMetricsHolder {
   }
 
   public CombinableMetric getCountOfBytesScanned() {
-    return countOfBytesScanned;
+    return metricTypeToMetric.get(SCAN_BYTES);
   }
 
   public CombinableMetric getCountOfRowsPaged() {
-    return countOfRowsPaged;
+    return metricTypeToMetric.get(PAGED_ROWS_COUNTER);
   }
 
   public CombinableMetric getFsReadTime() {
-    return fsReadTime;
+    return metricTypeToMetric.get(FS_READ_TIME);
   }
 
   public CombinableMetric getCountOfBytesReadFromFS() {
-    return countOfBytesReadFromFS;
+    return metricTypeToMetric.get(BYTES_READ_FROM_FS);
   }
 
   public CombinableMetric getCountOfBytesReadFromMemstore() {
-    return countOfBytesReadFromMemstore;
+    return metricTypeToMetric.get(BYTES_READ_FROM_MEMSTORE);
   }
 
   public CombinableMetric getCountOfBytesReadFromBlockcache() {
-    return countOfBytesReadFromBlockcache;
+    return metricTypeToMetric.get(BYTES_READ_FROM_BLOCKCACHE);
   }
 
   public CombinableMetric getCountOfBlockReadOps() {
-    return countOfBlockReadOps;
+    return metricTypeToMetric.get(BLOCK_READ_OPS_COUNT);
   }
 
   public CombinableMetric getRpcScanProcessingTime() {
-    return rpcScanProcessingTime;
+    return metricTypeToMetric.get(RPC_SCAN_PROCESSING_TIME);
   }
 
   public CombinableMetric getRpcScanQueueWaitTime() {
-    return rpcScanQueueWaitTime;
+    return metricTypeToMetric.get(RPC_SCAN_QUEUE_WAIT_TIME);
   }
 
   public void setScanMetricMap(Map<String, Long> scanMetricMap) {
     this.scanMetricMap = scanMetricMap;
+  }
+
+  public void
+    setScanMetricsByRegion(Map<ScanMetricsRegionInfo, Map<String, Long>> scanMetricsByRegion) {
+    this.scanMetricsByRegion = scanMetricsByRegion;
+  }
+
+  public void populateMetrics(Long dummyRowCounter) {
+    for (Map.Entry<MetricType, CombinableMetric> entry : metricTypeToMetric.entrySet()) {
+      String hbaseMetricName = entry.getKey().getHBaseMetricName();
+      CombinableMetric metric = entry.getValue();
+      // PAGED_ROWS_COUNTER is not a HBase scan metric but is captured by Phoenix client
+      // for each scan, so we need to handle it separately.
+      if (metric.getMetricType() == MetricType.PAGED_ROWS_COUNTER) {
+        changeMetric(metric, dummyRowCounter);
+      } else if (hbaseMetricName != null && !hbaseMetricName.isEmpty()) {
+        changeMetric(metric, scanMetricMap.get(hbaseMetricName));
+      }
+    }
+  }
+
+  private void changeMetric(CombinableMetric metric, Long value) {
+    if (value != null) {
+      metric.change(value);
+    }
+  }
+
+  public Long getCostOfScan() {
+    if (scanMetricMap == null || scanMetricMap.isEmpty()) {
+      return Long.MAX_VALUE;
+    }
+    return scanMetricMap.get(ScanMetrics.MILLIS_BETWEEN_NEXTS_METRIC_NAME);
+  }
+
+  public JsonObject toJson() {
+    JsonObject tableJson = new JsonObject();
+    if (scanMetricMap == null || scanMetricMap.isEmpty()) {
+      return tableJson;
+    }
+    if (scanMetricsByRegion != null && !scanMetricsByRegion.isEmpty()) {
+      tableJson.addProperty("table", tableName);
+      JsonArray regionMetrics = new JsonArray();
+      for (Map.Entry<ScanMetricsRegionInfo, Map<String, Long>> entry : scanMetricsByRegion
+        .entrySet()) {
+        JsonObject regionJson = new JsonObject();
+        ScanMetricsRegionInfo regionInfo = entry.getKey();
+        regionJson.addProperty("region", regionInfo.getEncodedRegionName());
+        regionJson.addProperty("server", regionInfo.getServerName().toString());
+        for (Map.Entry<String, Long> scanMetricEntry : entry.getValue().entrySet()) {
+          MetricType metricType = MetricType.getMetricType(scanMetricEntry.getKey());
+          if (metricType == null) {
+            continue;
+          }
+          regionJson.addProperty(metricType.shortName(), scanMetricEntry.getValue());
+        }
+        regionMetrics.add(regionJson);
+      }
+      tableJson.add("regions", regionMetrics);
+    } else {
+      tableJson.addProperty("table", tableName);
+      for (Map.Entry<String, Long> scanMetricEntry : scanMetricMap.entrySet()) {
+        MetricType metricType = MetricType.getMetricType(scanMetricEntry.getKey());
+        if (metricType == null) {
+          continue;
+        }
+        tableJson.addProperty(metricType.shortName(), scanMetricEntry.getValue());
+      }
+    }
+    return tableJson;
   }
 
   @Override

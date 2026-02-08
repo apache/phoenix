@@ -112,22 +112,25 @@ public class ReadMetricQueue {
     return combinedMetric;
   }
 
+  public ReadMetricQueue combineReadMetrics(ReadMetricQueue other) {
+    return combineReadMetrics(other, false);
+  }
+
   /**
    * Combine the metrics. This method should only be called in a single threaded manner when the two
    * metric holders are not getting modified.
    */
-  public ReadMetricQueue combineReadMetrics(ReadMetricQueue other) {
+  public ReadMetricQueue combineReadMetrics(ReadMetricQueue other, boolean reset) {
     ConcurrentMap<MetricKey, Queue<CombinableMetric>> otherMetricsMap = other.metricsMap;
     for (Entry<MetricKey, Queue<CombinableMetric>> entry : otherMetricsMap.entrySet()) {
       MetricKey key = entry.getKey();
       Queue<CombinableMetric> otherQueue = entry.getValue();
-      CombinableMetric combinedMetric = null;
+      CombinableMetric combinedMetric = new CombinableMetricImpl(key.type);
       // combine the metrics corresponding to this metric key before putting it in the queue.
       for (CombinableMetric m : otherQueue) {
-        if (combinedMetric == null) {
-          combinedMetric = m;
-        } else {
-          combinedMetric.combine(m);
+        combinedMetric.combine(m);
+        if (reset) {
+          m.reset();
         }
       }
       if (combinedMetric != null) {

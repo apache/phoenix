@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.job.JobManager.JobCallable;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
@@ -115,8 +116,10 @@ public class ParallelIterators extends BaseResultIterators {
       context.getConnection().getQueryServices().getRenewLeaseThresholdMilliSeconds();
     for (final ScanLocator scanLocation : scanLocations) {
       final Scan scan = scanLocation.getScan();
-      final ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics,
-        physicalTableName, scan, context.getConnection().getLogLevel());
+      PhoenixConnection connection = context.getConnection();
+      final ScanMetricsHolder scanMetricsHolder =
+        ScanMetricsHolder.getInstance(readMetrics, physicalTableName, scan,
+          connection.getLogLevel(), connection.isScanMetricsByRegionEnabled());
       final TaskExecutionMetricsHolder taskMetrics =
         new TaskExecutionMetricsHolder(readMetrics, physicalTableName);
       final TableResultIterator tableResultItr =
