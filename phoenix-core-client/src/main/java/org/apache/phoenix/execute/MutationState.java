@@ -516,8 +516,7 @@ public class MutationState implements SQLCloseable {
 
   /**
    * Pre-check for preserve mode: throws MutationLimitReachedException if adding the given
-   * rows/bytes would exceed limits. Does NOT modify state - caller should only proceed with
-   * modification if this method returns normally.
+   * rows/bytes would exceed limits, which prevents the caller from modifying the state.
    */
   private void throwIfLimitWouldBeExceeded(int additionalRows, long additionalBytes)
     throws SQLException {
@@ -560,20 +559,21 @@ public class MutationState implements SQLCloseable {
     PTable table = tableRef.getTable();
     boolean isIndex = table.getType() == PTableType.INDEX;
     boolean incrementRowCount = dstMutations == this.mutationsMap;
+    boolean impactsLimits = incrementRowCount && !isIndex;
     // we only need to check if the new mutation batch (srcRows) conflicts with the
     // last mutation batch since we try to merge it with that only
     MultiRowMutationState existingRows = getLastMutationBatch(dstMutations, tableRef);
 
     if (existingRows == null) { // no rows found for this table
       // For preserve mode, check limits BEFORE modifying any state
-      if (incrementRowCount && !isIndex && preserveOnLimitExceeded) {
+      if (impactsLimits && preserveOnLimitExceeded) {
         throwIfLimitWouldBeExceeded(srcRows.size(), srcRows.estimatedSize);
       }
       // Size new map at batch size as that's what it'll likely grow to.
       MultiRowMutationState newRows = new MultiRowMutationState(connection.getMutateBatchSize());
       newRows.putAll(srcRows);
       addMutations(dstMutations, tableRef, newRows);
-      if (incrementRowCount && !isIndex) {
+      if (impactsLimits) {
         numRows += srcRows.size();
         // if we added all the rows from newMutationState we can just increment the
         // estimatedSize by newMutationState.estimatedSize
@@ -585,6 +585,7 @@ public class MutationState implements SQLCloseable {
     // for conflicting rows
     MultiRowMutationState conflictingRows =
       new MultiRowMutationState(connection.getMutateBatchSize());
+    long conflictingRowsTotalSize = 0;
 
     // Rows for this table already exist, check for conflicts
     for (Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry : srcRows.entrySet()) {
@@ -594,17 +595,18 @@ public class MutationState implements SQLCloseable {
       if (existingRowMutationState == null) {
         // For preserve mode, check limits BEFORE modifying any state
         long newRowSize = newRowMutationState.calculateEstimatedSize();
-        if (incrementRowCount && !isIndex && preserveOnLimitExceeded) {
+        if (impactsLimits && preserveOnLimitExceeded) {
           throwIfLimitWouldBeExceeded(1, newRowSize);
         }
         existingRows.put(key, newRowMutationState);
-        if (incrementRowCount && !isIndex) { // Don't count index rows in row count
+        if (impactsLimits) { // Don't count index rows in row count
           numRows++;
           // increment estimated size by the size of the new row
           estimatedSize += newRowSize;
         }
         continue;
       }
+
       Map<PColumn, byte[]> existingValues = existingRowMutationState.getColumnValues();
       Map<PColumn, byte[]> newValues = newRowMutationState.getColumnValues();
       if (existingValues != PRow.DELETE_MARKER && newValues != PRow.DELETE_MARKER) {
@@ -617,8 +619,17 @@ public class MutationState implements SQLCloseable {
           estimatedSize += sizeDiff;
         } else {
           // cannot merge regular upsert and conditional upsert
-          // conflicting row is not a new row so no need to increment numRows
+          // conflicting row goes into a separate batch (same key, different semantics)
+          // Row count unchanged (same key), but size increases
+          long conflictingRowSize = newRowMutationState.calculateEstimatedSize();
+          if (impactsLimits && preserveOnLimitExceeded) {
+            // Include already-accumulated conflicting rows size in the check
+            throwIfLimitWouldBeExceeded(0, conflictingRowsTotalSize + conflictingRowSize);
+          }
           conflictingRows.put(key, newRowMutationState);
+          if (impactsLimits) {
+            conflictingRowsTotalSize += conflictingRowSize;
+          }
         }
       } else {
         existingRows.put(key, newRowMutationState);
@@ -627,6 +638,8 @@ public class MutationState implements SQLCloseable {
 
     if (!conflictingRows.isEmpty()) {
       addMutations(dstMutations, tableRef, conflictingRows);
+      // Update estimatedSize only after actual state change
+      estimatedSize += conflictingRowsTotalSize;
     }
   }
 

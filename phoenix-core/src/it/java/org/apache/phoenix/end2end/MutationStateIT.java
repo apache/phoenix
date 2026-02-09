@@ -762,6 +762,96 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
   }
 
+  /**
+   * Tests that when preserveOnLimitExceeded=true and the limit is reached during
+   * conflicting row addition (regular upsert vs ON DUPLICATE KEY upsert on same key),
+   * the mutations are preserved. This tests the conflict case in joinMutationState.
+   */
+  @Test
+  public void testConflictingRowsPreserveOnLimitExceeded() throws Exception {
+    String fullTableName = generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    // Set byte limit low enough that adding conflicting rows will trigger it
+    Properties props = new Properties();
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "1000");
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "2000");
+    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
+
+    try (PhoenixConnection conn =
+      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(false);
+
+      // Regular UPSERT statement
+      PreparedStatement regularStmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName
+          + " (organization_id, entity_id, score, tags) VALUES (?,?,?,?)");
+
+      // ON DUPLICATE KEY UPSERT statement - conflicts with regular upsert
+      PreparedStatement onDupKeyStmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName
+          + " (organization_id, entity_id, score) VALUES (?,?,?)"
+          + " ON DUPLICATE KEY UPDATE score = score + 1");
+
+      int commitCount = 0;
+      int totalRows = 0;
+      String orgKey = "ORG000000000001";
+
+      // Alternate between regular upserts and ON DUPLICATE KEY upserts on same keys
+      // This creates conflicting rows that can't be merged
+      while (totalRows < 30) {
+        try {
+          for (int i = totalRows; i < 30; i++) {
+            String entityKey = String.format("ENT%012d", i);
+
+            // First do a regular upsert
+            regularStmt.setString(1, orgKey);
+            regularStmt.setString(2, entityKey);
+            regularStmt.setInt(3, i);
+            StringBuilder sb = new StringBuilder("data" + i + "_");
+            for (int j = 0; j < 20; j++) {
+              sb.append("X");
+            }
+            regularStmt.setString(4, sb.toString());
+            regularStmt.executeUpdate();
+
+            // Then do an ON DUPLICATE KEY upsert on the same key - this conflicts
+            onDupKeyStmt.setString(1, orgKey);
+            onDupKeyStmt.setString(2, entityKey);
+            onDupKeyStmt.setInt(3, i * 10);
+            onDupKeyStmt.executeUpdate();
+
+            totalRows = i + 1;
+          }
+          conn.commit();
+          commitCount++;
+          break;
+        } catch (MutationLimitReachedException e) {
+          // Mutations should be preserved - verify we have state
+          MutationState state = conn.getMutationState();
+          assertTrue("Mutations should be preserved on limit exceeded",
+            state.getNumRows() > 0 || state.getEstimatedSize() > 0);
+          conn.commit();
+          commitCount++;
+        }
+      }
+
+      // Should have hit limit and committed multiple times due to conflicting row size
+      assertTrue("Should have committed at least once", commitCount >= 1);
+
+      // Verify rows exist
+      try (ResultSet rs = conn.createStatement()
+        .executeQuery("SELECT COUNT(*) FROM " + fullTableName
+          + " WHERE organization_id = '" + orgKey + "'")) {
+        assertTrue("Should have results", rs.next());
+        assertTrue("Should have inserted rows", rs.getInt(1) > 0);
+      }
+    }
+  }
+
   @Test
   public void testMutationEstimatedSize() throws Exception {
     PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
@@ -829,6 +919,35 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     stmt.execute();
     assertTrue("Mutation state size should decrease",
       prevEstimatedSize + 4 > state.getEstimatedSize());
+
+    // Test that estimatedSize increases when adding conflicting rows
+    // (regular upsert + ON DUPLICATE KEY upsert on same key cannot be merged)
+    conn.commit(); // clear state
+    assertEquals("Mutation state size should be zero after commit", 0, state.getEstimatedSize());
+
+    // Regular upsert
+    stmt = conn.prepareStatement(
+      "upsert into " + fullTableName + " (organization_id, entity_id, score) values (?,?,?)");
+    stmt.setString(1, "AAAA");
+    stmt.setString(2, "BBBB");
+    stmt.setInt(3, 1);
+    stmt.execute();
+    long sizeAfterRegularUpsert = state.getEstimatedSize();
+    assertTrue("Mutation state size should be > 0 after regular upsert",
+      sizeAfterRegularUpsert > 0);
+
+    // ON DUPLICATE KEY upsert on same key - creates a conflicting row that can't be merged
+    PreparedStatement onDupStmt = conn.prepareStatement(
+      "upsert into " + fullTableName + " (organization_id, entity_id, score) values (?,?,?)"
+        + " ON DUPLICATE KEY UPDATE score = score + 1");
+    onDupStmt.setString(1, "AAAA");
+    onDupStmt.setString(2, "BBBB");
+    onDupStmt.setInt(3, 2);
+    onDupStmt.execute();
+
+    // Size should increase because conflicting row goes into a separate batch
+    assertTrue("Estimated size should increase for conflicting row",
+      state.getEstimatedSize() > sizeAfterRegularUpsert);
   }
 
   @Test
