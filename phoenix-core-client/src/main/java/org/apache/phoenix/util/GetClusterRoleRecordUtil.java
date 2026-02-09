@@ -142,7 +142,6 @@ public class GetClusterRoleRecordUtil {
   public static ClusterRoleRecord fetchClusterRoleRecord(String url, String haGroupName,
     HighAvailabilityGroup haGroup, long pollerInterval, Properties properties) throws SQLException {
     ClusterRoleRecord clusterRoleRecord = getClusterRoleRecord(url, haGroupName, true, properties);
-    // TODO: Will need to handle UNKNOWN role cases...
     if (
       clusterRoleRecord.getPolicy() == HighAvailabilityPolicy.FAILOVER
         && !clusterRoleRecord.getRole1().isActive() && !clusterRoleRecord.getRole2().isActive()
