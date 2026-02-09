@@ -30,6 +30,7 @@ import java.util.function.Function;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.util.JDBCUtil;
+
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
