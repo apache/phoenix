@@ -24,40 +24,77 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
 
+  private static final long EVENTUAL_CONSISTENCY_WAIT_MS = 17000;
+
   private final boolean columnEncoded;
   private final boolean coveredIndex;
   private final boolean isBindStatement;
+  private final boolean eventual;
 
-  public VarBinaryEncoded2IT(boolean columnEncoded, boolean coveredIndex, boolean isBindStatement) {
+  public VarBinaryEncoded2IT(boolean columnEncoded, boolean coveredIndex, boolean isBindStatement,
+    boolean eventual) {
     this.columnEncoded = columnEncoded;
     this.coveredIndex = coveredIndex;
     this.isBindStatement = isBindStatement;
+    this.eventual = eventual;
   }
 
-  @Parameterized.Parameters(name = "VarBinary2IT_columnEncoded={0}, coveredIndex={1}")
+  @BeforeClass
+  public static synchronized void doSetup() throws Exception {
+    Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+    props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+      Integer.toString(60 * 60));
+    props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
+    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+  }
+
+  @Parameterized.Parameters(
+      name = "VarBinary2IT_columnEncoded={0}, coveredIndex={1}, isBindStatement={2}, eventual={3}")
   public static synchronized Collection<Object[]> data() {
-    return Arrays.asList(new Object[][] { { false, false, false }, { false, true, false },
-      { true, false, false }, { true, true, false }, { false, false, true }, { false, true, true },
-      { true, false, true }, { true, true, true } });
+    List<Object[]> params = new ArrayList<>();
+    for (boolean columnEncoded : new boolean[] { false, true }) {
+      for (boolean coveredIndex : new boolean[] { false, true }) {
+        for (boolean isBindStatement : new boolean[] { false, true }) {
+          for (boolean eventual : new boolean[] { false, true }) {
+            params.add(new Object[] { columnEncoded, coveredIndex, isBindStatement, eventual });
+          }
+        }
+      }
+    }
+    return params;
+  }
+
+  private void waitForEventualConsistency() throws InterruptedException {
+    if (eventual) {
+      Thread.sleep(EVENTUAL_CONSISTENCY_WAIT_MS);
+    }
   }
 
   @Test
@@ -73,12 +110,13 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
           + " COL3 VARBINARY_ENCODED CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3)) "
           + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0"));
 
+      String consistencyClause = eventual ? " CONSISTENCY = EVENTUAL" : " CONSISTENCY = STRONG";
       if (this.coveredIndex) {
-        conn.createStatement().execute(
-          "CREATE INDEX " + indexName + " ON " + tableName + " (COL1, COL2) INCLUDE (COL3)");
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName
+          + " (COL1, COL2) INCLUDE (COL3)" + consistencyClause);
       } else {
-        conn.createStatement()
-          .execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (COL1, COL2)");
+        conn.createStatement().execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName
+          + " (COL1, COL2)" + consistencyClause);
       }
 
       byte[] b1 = new byte[] { 1, 1, 19, -28, 24, 1, 1, -11, -21, 1 };
@@ -152,6 +190,7 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
         upsertRow(preparedStatement, b16, b26, b36, b46, b56, b66);
       }
       conn.commit();
+      waitForEventualConsistency();
 
       PreparedStatement preparedStatement =
         conn.prepareStatement("SELECT * FROM " + tableName + " WHERE COL1 = ? AND COL2 = ?");
@@ -367,12 +406,13 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
           + " COL3 VARBINARY_ENCODED CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3)) "
           + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0"));
 
+      String consistencyClause = eventual ? " CONSISTENCY = EVENTUAL" : " CONSISTENCY = STRONG";
       if (this.coveredIndex) {
-        conn.createStatement().execute(
-          "CREATE INDEX " + indexName + " ON " + tableName + " (COL1, COL2) INCLUDE (COL3)");
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName
+          + " (COL1, COL2) INCLUDE (COL3)" + consistencyClause);
       } else {
-        conn.createStatement()
-          .execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (COL1, COL2)");
+        conn.createStatement().execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName
+          + " (COL1, COL2)" + consistencyClause);
       }
 
       byte[] b1 = new byte[] { 1, 1, 19, -28, 24, 1, 1, -11, -21, 1 };
@@ -449,6 +489,7 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
         upsertRow(preparedStatement, b16, b26, b36, b46, b56, b66);
       }
       conn.commit();
+      waitForEventualConsistency();
 
       PreparedStatement preparedStatement =
         conn.prepareStatement("SELECT * FROM " + tableName + " WHERE COL1 = ? AND COL2 = ?");
@@ -664,12 +705,13 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
           + " COL3 VARBINARY_ENCODED CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3)) "
           + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0"));
 
+      String consistencyClause = eventual ? " CONSISTENCY = EVENTUAL" : " CONSISTENCY = STRONG";
       if (this.coveredIndex) {
-        conn.createStatement().execute(
-          "CREATE INDEX " + indexName + " ON " + tableName + " (COL1, COL2) INCLUDE (COL3)");
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName
+          + " (COL1, COL2) INCLUDE (COL3)" + consistencyClause);
       } else {
-        conn.createStatement()
-          .execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (COL1, COL2)");
+        conn.createStatement().execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName
+          + " (COL1, COL2)" + consistencyClause);
       }
 
       byte[] b1 = new byte[] { 1, 1, 19, -28, 24, 1, 1, -11, -21, 1 };
@@ -743,6 +785,7 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
         upsertRow(preparedStatement, b16, b26, b36, b46, b56, b66);
       }
       conn.commit();
+      waitForEventualConsistency();
 
       PreparedStatement preparedStatement =
         conn.prepareStatement("SELECT * FROM " + tableName + " WHERE COL1 = ? AND COL2 = ?");
@@ -951,12 +994,13 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
           + " COL3 VARBINARY_ENCODED CONSTRAINT pk PRIMARY KEY(PK1, PK2, PK3)) "
           + (this.columnEncoded ? "" : "COLUMN_ENCODED_BYTES=0"));
 
+      String consistencyClause = eventual ? " CONSISTENCY = EVENTUAL" : " CONSISTENCY = STRONG";
       if (this.coveredIndex) {
-        conn.createStatement().execute(
-          "CREATE INDEX " + indexName + " ON " + tableName + " (COL1, COL2) INCLUDE (COL3)");
+        conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName
+          + " (COL1, COL2) INCLUDE (COL3)" + consistencyClause);
       } else {
-        conn.createStatement()
-          .execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (COL1, COL2)");
+        conn.createStatement().execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName
+          + " (COL1, COL2)" + consistencyClause);
       }
 
       byte[] b1 = new byte[] { 1, 1, 19, -28, 24, 1, 1, -11, -21, 1 };
@@ -1027,6 +1071,7 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
         upsertRow(preparedStatement, b16, b26, b36, b46, b56, b66);
       }
       conn.commit();
+      waitForEventualConsistency();
 
       PreparedStatement preparedStatement =
         conn.prepareStatement("SELECT * FROM " + tableName + " WHERE COL1 = ? AND COL2 = ?");

@@ -124,6 +124,7 @@ message PTable {
   optional bytes ttl = 55;
   optional bytes rowKeyMatcher = 56;
   optional bool isStrictTTL = 57;
+  optional string indexConsistency = 58;
 }
 
 message EncodedCQCounter {

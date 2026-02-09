@@ -26,6 +26,7 @@ import org.apache.phoenix.parse.CreateIndexStatement;
 import org.apache.phoenix.parse.CreateTableStatement;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.util.SchemaUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
@@ -73,6 +74,12 @@ public class SchemaSQLUtil {
     }
     if (createStmt.isAsync()) {
       sb.append(" ASYNC");
+    }
+    if (
+      createStmt.getIndexConsistency() != null
+        && createStmt.getIndexConsistency() != IndexConsistency.getDefault()
+    ) {
+      sb.append(" CONSISTENCY=").append(createStmt.getIndexConsistency().name());
     }
     appendProperties(sb, createStmt.getProps());
     return sb.toString();

@@ -21,8 +21,10 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.google.protobuf.InvalidProtocolBufferException;
 import java.io.IOException;
 import java.util.Arrays;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -41,6 +43,7 @@ import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.generated.CDCInfoProtos;
+import org.apache.phoenix.coprocessor.generated.IndexMutationsProtos;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
@@ -50,6 +53,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.CDCChangeBuilder;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -87,6 +91,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
   private CDCTableInfo cdcDataTableInfo;
   private CDCChangeBuilder changeBuilder;
 
+  private static final byte[] EMPTY_IDX_MUTATIONS = PVarchar.INSTANCE.toBytes(Base64.getEncoder()
+    .encodeToString(IndexMutationsProtos.IndexMutations.getDefaultInstance().toByteArray()));
+
   public CDCGlobalIndexRegionScanner(final RegionScanner innerScanner, final Region region,
     final Scan scan, final RegionCoprocessorEnvironment env, final Scan dataTableScan,
     final TupleProjector tupleProjector, final IndexMaintainer indexMaintainer,
@@ -102,6 +109,12 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
 
   @Override
   protected Scan prepareDataTableScan(Collection<byte[]> dataRowKeys) throws IOException {
+    if (
+      changeBuilder.isIdxMutationsInScope() && !changeBuilder.isChangeImageInScope()
+        && !changeBuilder.isPreImageInScope() && !changeBuilder.isPostImageInScope()
+    ) {
+      return null;
+    }
     // TODO: Get Timerange from the start row and end row of the index scan object
     // and set it in the datatable scan object.
     // if (scan.getStartRow().length == 8) {
@@ -120,9 +133,11 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
       List<Cell> indexRow = indexRowIterator.next();
       Cell indexCell = indexRow.get(0);
       byte[] indexRowKey = ImmutableBytesPtr.cloneCellRowIfNecessary(indexCell);
+      if (handleIdxMutationsCDCEvent(indexRow, indexRowKey, indexCell, result)) {
+        return true;
+      }
       if (indexRow.size() > 1) {
-        boolean success = handlePreImageCDCEvent(indexRow, indexRowKey, indexCell, result);
-        if (success) {
+        if (handlePreImageCDCEvent(indexRow, indexRowKey, indexCell, result)) {
           return true;
         }
       }
@@ -317,18 +332,79 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
       cdcJson.remove(QueryConstants.CDC_PRE_IMAGE);
       cdcEventBytes = JacksonUtil.getObjectWriter(HashMap.class).writeValueAsBytes(cdcJson);
     }
+    addResult(indexRowKey, indexCell, result, cdcDataCell, cdcEventBytes);
+    return true;
+  }
+
+  /**
+   * Handles CDC event when IDX_MUTATIONS scope is enabled. Returns the index mutations as a
+   * serialized IndexMutations, or an empty proto if no mutations are present. Skips the data table
+   * scan.
+   * @param indexRow    The CDC index row.
+   * @param indexRowKey The CDC index row key.
+   * @param indexCell   The primary index cell.
+   * @param result      The result list to populate.
+   * @return true if IDX_MUTATIONS scope is enabled, false otherwise.
+   * @throws InvalidProtocolBufferException if the stored proto bytes are malformed.
+   */
+  private boolean handleIdxMutationsCDCEvent(List<Cell> indexRow, byte[] indexRowKey,
+    Cell indexCell, List<Cell> result) throws InvalidProtocolBufferException {
+    if (!changeBuilder.isIdxMutationsInScope()) {
+      return false;
+    }
+    byte[] idxMutationsBytes = EMPTY_IDX_MUTATIONS;
+    Cell idxMutationsCell = indexCell;
+    IndexMutationsProtos.IndexMutations preMutations = null;
+    IndexMutationsProtos.IndexMutations postMutations = null;
+    Cell preCell = null;
+    for (Cell cell : indexRow) {
+      if (
+        Bytes.equals(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
+          QueryConstants.CDC_INDEX_PRE_MUTATIONS_CQ_BYTES, 0,
+          QueryConstants.CDC_INDEX_PRE_MUTATIONS_CQ_BYTES.length)
+      ) {
+        byte[] rawBytes = CellUtil.cloneValue(cell);
+        preMutations = IndexMutationsProtos.IndexMutations.parseFrom(rawBytes);
+        preCell = cell;
+      } else if (
+        Bytes.equals(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength(),
+          QueryConstants.CDC_INDEX_POST_MUTATIONS_CQ_BYTES, 0,
+          QueryConstants.CDC_INDEX_POST_MUTATIONS_CQ_BYTES.length)
+      ) {
+        byte[] rawBytes = CellUtil.cloneValue(cell);
+        postMutations = IndexMutationsProtos.IndexMutations.parseFrom(rawBytes);
+      }
+    }
+    if (preMutations != null) {
+      IndexMutationsProtos.IndexMutations merged = mergeIndexMutations(preMutations, postMutations);
+      String base64String = Base64.getEncoder().encodeToString(merged.toByteArray());
+      idxMutationsBytes = PVarchar.INSTANCE.toBytes(base64String);
+      idxMutationsCell = preCell;
+    }
+    addResult(indexRowKey, indexCell, result, idxMutationsCell, idxMutationsBytes);
+    return true;
+  }
+
+  private IndexMutationsProtos.IndexMutations mergeIndexMutations(
+    IndexMutationsProtos.IndexMutations pre, IndexMutationsProtos.IndexMutations post) {
+    if (post == null) {
+      return pre;
+    }
+    return IndexMutationsProtos.IndexMutations.newBuilder().addAllTables(pre.getTablesList())
+      .addAllMutations(pre.getMutationsList()).addAllTables(post.getTablesList())
+      .addAllMutations(post.getMutationsList()).build();
+  }
+
+  private void addResult(byte[] indexRowKey, Cell indexCell, List<Cell> result, Cell cdcDataCell,
+    byte[] cdcEventBytes) {
     Result cdcRow =
       createCDCResult(indexRowKey, indexCell, cdcDataCell.getTimestamp(), cdcEventBytes);
-
     if (tupleProjector != null) {
       result.add(indexCell);
       IndexUtil.addTupleAsOneCell(result, new ResultTuple(cdcRow), tupleProjector, ptr);
     } else {
       result.clear();
     }
-    LOGGER.debug(
-      "Processed CDC event with embedded data, skipped data table scan for" + " row key: {}",
-      Bytes.toStringBinary(indexRowKey));
-    return true;
   }
+
 }

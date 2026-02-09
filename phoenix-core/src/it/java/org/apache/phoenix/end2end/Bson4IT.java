@@ -37,6 +37,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.List;
 import java.util.Properties;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -47,9 +48,13 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSourceImpl;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PDouble;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.bson.BsonArray;
 import org.bson.BsonBinary;
@@ -144,6 +149,12 @@ public class Bson4IT extends ParallelStatsDisabledIT {
       PreparedStatement stmt;
 
       conn.commit();
+
+      PhoenixConnection pcon = conn.unwrap(PhoenixConnection.class);
+      PTable dataTable = pcon.getTable(new PTableKey(pcon.getTenantId(), tableName));
+      List<PTable> indexes = dataTable.getIndexes();
+      assertEquals("Data table should have exactly 2 indexes", 2, indexes.size());
+      assertFalse("Data table should not have CDC index", CDCUtil.hasCDCIndex(dataTable));
 
       ResultSet rs = conn.createStatement().executeQuery("SELECT count(*) FROM " + tableName);
       assertTrue(rs.next());

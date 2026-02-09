@@ -39,6 +39,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DISABLE_WAL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ENCODING_SCHEME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_CONSISTENCY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE_BYTES;
@@ -263,8 +264,10 @@ import org.apache.phoenix.schema.metrics.MetricsMetadataSource;
 import org.apache.phoenix.schema.metrics.MetricsMetadataSourceFactory;
 import org.apache.phoenix.schema.task.ServerTask;
 import org.apache.phoenix.schema.task.SystemTaskParams;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
@@ -418,6 +421,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, CDC_INCLUDE_BYTES);
   private static final Cell INDEX_WHERE_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, INDEX_WHERE_BYTES);
+  private static final Cell INDEX_CONSISTENCY_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, INDEX_CONSISTENCY_BYTES);
 
   private static final Cell TTL_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, TTL_BYTES);
@@ -436,7 +441,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     AUTO_PARTITION_SEQ_KV, APPEND_ONLY_SCHEMA_KV, STORAGE_SCHEME_KV, ENCODING_SCHEME_KV,
     USE_STATS_FOR_PARALLELIZATION_KV, LAST_DDL_TIMESTAMP_KV, CHANGE_DETECTION_ENABLED_KV,
     SCHEMA_VERSION_KV, EXTERNAL_SCHEMA_ID_KV, STREAMING_TOPIC_NAME_KV, INDEX_WHERE_KV,
-    CDC_INCLUDE_KV, TTL_KV, ROW_KEY_MATCHER_KV, IS_STRICT_TTL_KV);
+    CDC_INCLUDE_KV, TTL_KV, ROW_KEY_MATCHER_KV, IS_STRICT_TTL_KV, INDEX_CONSISTENCY_KV);
 
   static {
     Collections.sort(TABLE_KV_COLUMNS, CellComparatorImpl.COMPARATOR);
@@ -498,6 +503,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   private static final int TTL_INDEX = TABLE_KV_COLUMNS.indexOf(TTL_KV);
   private static final int ROW_KEY_MATCHER_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_MATCHER_KV);
   private static final int IS_STRICT_TTL_INDEX = TABLE_KV_COLUMNS.indexOf(IS_STRICT_TTL_KV);
+  private static final int INDEX_CONSISTENCY_INDEX = TABLE_KV_COLUMNS.indexOf(INDEX_CONSISTENCY_KV);
   // KeyValues for Column
   private static final KeyValue DECIMAL_DIGITS_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
@@ -1585,6 +1591,17 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         isStrictTTLKv.getValueOffset(), isStrictTTLKv.getValueLength()));
     builder.setIsStrictTTL(
       isStrictTTLKv != null ? isStrictTTL : oldTable == null || oldTable.isStrictTTL());
+
+    Cell indexConsistencyKv = tableKeyValues[INDEX_CONSISTENCY_INDEX];
+    IndexConsistency indexConsistency = null;
+    if (indexConsistencyKv != null) {
+      String consistencyStr = (String) PChar.INSTANCE.toObject(indexConsistencyKv.getValueArray(),
+        indexConsistencyKv.getValueOffset(), indexConsistencyKv.getValueLength());
+      indexConsistency = IndexConsistency.fromCode(consistencyStr);
+    }
+    builder.setIndexConsistency(indexConsistency != null ? indexConsistency
+      : oldTable != null ? oldTable.getIndexConsistency()
+      : null);
 
     // Check the cell tag to see whether the view has modified this property
     final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null)

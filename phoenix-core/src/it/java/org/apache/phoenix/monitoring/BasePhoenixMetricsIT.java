@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.monitoring;
 
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_BATCH_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.DELETE_BATCH_FAILED_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MUTATION_COMMIT_TIME;
@@ -65,6 +66,7 @@ public abstract class BasePhoenixMetricsIT extends BaseTest {
     props.put(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
     // disable renewing leases as this will force spooling to happen.
     props.put(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
+    props.put(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     // need the non-test driver for some tests that check number of hconnections, etc.
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);

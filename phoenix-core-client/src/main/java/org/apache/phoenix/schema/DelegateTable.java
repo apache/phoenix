@@ -28,6 +28,7 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.transaction.TransactionFactory;
 
@@ -281,6 +282,11 @@ public class DelegateTable implements PTable {
   @Override
   public IndexType getIndexType() {
     return delegate.getIndexType();
+  }
+
+  @Override
+  public IndexConsistency getIndexConsistency() {
+    return delegate.getIndexConsistency();
   }
 
   private final PTable delegate;

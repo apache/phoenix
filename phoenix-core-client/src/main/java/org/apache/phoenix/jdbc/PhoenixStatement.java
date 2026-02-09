@@ -220,6 +220,7 @@ import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -1650,9 +1651,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable,
       IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
       ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, IndexType indexType,
-      boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where) {
+      boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where,
+      IndexConsistency indexConsistency) {
       super(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists,
-        indexType, async, bindCount, udfParseNodes, where);
+        indexType, async, bindCount, udfParseNodes, where, indexConsistency);
     }
 
     @SuppressWarnings("unchecked")
@@ -1888,6 +1890,13 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
       ListMultimap<String, Pair<String, Object>> props) {
       super(indexTableNode, dataTableName, ifExists, state, isRebuildAll, async, props);
+    }
+
+    public ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName,
+      boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
+      ListMultimap<String, Pair<String, Object>> props, IndexConsistency indexConsistency) {
+      super(indexTableNode, dataTableName, ifExists, state, isRebuildAll, async, props,
+        indexConsistency);
     }
 
     @SuppressWarnings("unchecked")
@@ -2281,7 +2290,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, IndexType indexType,
       boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where) {
       return new ExecutableCreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns,
-        splits, props, ifNotExists, indexType, async, bindCount, udfParseNodes, where);
+        splits, props, ifNotExists, indexType, async, bindCount, udfParseNodes, where,
+        CreateIndexStatement.getIndexConsistency(props));
     }
 
     @Override
@@ -2336,6 +2346,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       ListMultimap<String, Pair<String, Object>> props) {
       return new ExecutableAlterIndexStatement(indexTableNode, dataTableName, ifExists, state,
         isRebuildAll, async, props);
+    }
+
+    @Override
+    public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName,
+      boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
+      ListMultimap<String, Pair<String, Object>> props, IndexConsistency indexConsistency) {
+      return new ExecutableAlterIndexStatement(indexTableNode, dataTableName, ifExists, state,
+        isRebuildAll, async, props, indexConsistency);
     }
 
     @Override

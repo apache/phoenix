@@ -108,6 +108,7 @@ import org.apache.phoenix.schema.transform.TransformMaintainer;
 import org.apache.phoenix.schema.tuple.BaseTuple;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.ValueGetterTuple;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinaryEncoded;
@@ -477,10 +478,12 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   private Expression indexWhere;
   private Set<ColumnReference> indexWhereColumns;
   private boolean isCDCIndex;
+  private IndexConsistency indexConsistency;
 
   protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
     this.dataRowKeySchema = dataRowKeySchema;
     this.isDataTableSalted = isDataTableSalted;
+    this.indexConsistency = null;
   }
 
   private IndexMaintainer(final PTable dataTable, final PTable index, PhoenixConnection connection)
@@ -501,6 +504,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     this.isUncovered = index.getIndexType() == IndexType.UNCOVERED_GLOBAL;
     this.encodingScheme = index.getEncodingScheme();
     this.isCDCIndex = CDCUtil.isCDCIndex(index);
+    this.indexConsistency = index.getIndexConsistency();
 
     // null check for b/w compatibility
     this.encodingScheme = index.getEncodingScheme() == null
@@ -1933,6 +1937,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     this.encodingScheme = QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
     this.dataImmutableStorageScheme = ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
     this.dataEncodingScheme = QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+    this.indexConsistency = null;
     initCachedState();
   }
 
@@ -2067,6 +2072,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       maintainer.isCDCIndex = proto.getIsCDCIndex();
     } else {
       maintainer.isCDCIndex = false;
+    }
+    if (proto.hasIndexConsistency()) {
+      maintainer.indexConsistency = IndexConsistency.valueOf(proto.getIndexConsistency());
+    } else {
+      maintainer.indexConsistency = null;
     }
     maintainer.nDataTableSaltBuckets =
       proto.hasDataTableSaltBuckets() ? proto.getDataTableSaltBuckets() : -1;
@@ -2223,6 +2233,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       }
     }
     builder.setIsCDCIndex(maintainer.isCDCIndex);
+    if (maintainer.indexConsistency != null) {
+      builder.setIndexConsistency(maintainer.indexConsistency.name());
+    }
     if (maintainer.isDataTableSalted) {
       builder.setDataTableSaltBuckets(maintainer.nDataTableSaltBuckets);
     }
@@ -2607,6 +2620,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
   public Set<ColumnReference> getIndexedColumns() {
     return indexedColumns;
+  }
+
+  public IndexConsistency getIndexConsistency() {
+    return indexConsistency;
   }
 
   public static class UDFParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {
