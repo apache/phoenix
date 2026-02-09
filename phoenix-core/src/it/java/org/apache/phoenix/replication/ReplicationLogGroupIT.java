@@ -22,13 +22,11 @@ import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvai
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
-import static org.apache.phoenix.query.QueryServices.SYNCHRONOUS_REPLICATION_ENABLED;
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
-import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -36,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
@@ -51,6 +48,7 @@ import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
+import org.apache.phoenix.jdbc.HABaseIT;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HighAvailabilityGroup;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
@@ -65,12 +63,10 @@ import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.ClassRule;
 import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,20 +74,9 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class ReplicationLogGroupIT {
+public class ReplicationLogGroupIT extends HABaseIT {
   private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogGroupIT.class);
-  private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS =
-    new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
 
-  @ClassRule
-  public static TemporaryFolder standbyFolder = new TemporaryFolder();
-  @ClassRule
-  public static TemporaryFolder localFolder = new TemporaryFolder();
-
-  private static Configuration conf1;
-  private static Configuration conf2;
-  private static URI standbyUri;
-  private static URI fallbackUri;
   private static String zkUrl;
   private static String peerZkUrl;
 
@@ -106,14 +91,6 @@ public class ReplicationLogGroupIT {
 
   @BeforeClass
   public static void doSetup() throws Exception {
-    conf1 = CLUSTERS.getHBaseCluster1().getConfiguration();
-    conf1.setBoolean(SYNCHRONOUS_REPLICATION_ENABLED, true);
-    conf2 = CLUSTERS.getHBaseCluster2().getConfiguration();
-    conf2.setBoolean(SYNCHRONOUS_REPLICATION_ENABLED, true);
-    standbyUri = new Path(standbyFolder.getRoot().toString()).toUri();
-    fallbackUri = new Path(localFolder.getRoot().toString()).toUri();
-    conf1.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
-    conf1.set(ReplicationLogGroup.REPLICATION_FALLBACK_HDFS_URL_KEY, fallbackUri.toString());
     conf1.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, 20);
     CLUSTERS.start();
     zkUrl = CLUSTERS.getZkUrl1();
@@ -309,6 +286,39 @@ public class ReplicationLogGroupIT {
       // we didn't create any tenant views so no change in the syscat entries
       expected.put(SYSTEM_CATALOG_NAME, 0);
       expected.put(SYSTEM_CHILD_LINK_NAME, 0);
+      verifyReplication(expected);
+    }
+  }
+
+  @Test
+  public void testAppendAndSyncNoIndex() throws Exception {
+    final String tableName = "T_" + generateUniqueName();
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      String ddl = String.format("create table %s (id1 integer not null, "
+        + "id2 integer not null, val1 varchar, val2 varchar "
+        + "constraint pk primary key (id1, id2))", tableName);
+      conn.createStatement().execute(ddl);
+      conn.commit();
+      PreparedStatement stmt =
+        conn.prepareStatement("upsert into " + tableName + " VALUES(?, ?, ?, ?)");
+      // upsert 50 rows
+      int rowCount = 50;
+      for (int i = 0; i < 5; ++i) {
+        for (int j = 0; j < 10; ++j) {
+          stmt.setInt(1, i);
+          stmt.setInt(2, j);
+          stmt.setString(3, "abcdefghijklmnopqrstuvwxyz");
+          stmt.setString(4, null);
+          stmt.executeUpdate();
+        }
+        conn.commit();
+      }
+      // verify replication
+      Map<String, Integer> expected = Maps.newHashMap();
+      // mutation count will be equal to row count since the atomic upsert mutations will be
+      // ignored and therefore not replicated
+      expected.put(tableName, rowCount * 2); // Put + Delete
       verifyReplication(expected);
     }
   }
