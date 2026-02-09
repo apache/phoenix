@@ -610,8 +610,8 @@ public class MutationState implements SQLCloseable {
       Map<PColumn, byte[]> existingValues = existingRowMutationState.getColumnValues();
       Map<PColumn, byte[]> newValues = newRowMutationState.getColumnValues();
       if (existingValues != PRow.DELETE_MARKER && newValues != PRow.DELETE_MARKER) {
-        // Check if we can merge existing column values with new column values
-        // For preserve mode, pass this so join() can check limits before modification
+        // Check if we can merge existing column values with new column values.
+        // For preserve mode, pass this instance so join() can check limits before modification.
         Long sizeDiff = existingRowMutationState.join(newRowMutationState,
             preserveOnLimitExceeded ? this : null);
         if (sizeDiff != null) {

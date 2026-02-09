@@ -84,6 +84,33 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
   }
 
+  /**
+   * Helper to create Properties for preserve mode tests.
+   * @param maxRows max mutation row count limit
+   * @param maxBytes max mutation byte size limit (0 to skip setting)
+   */
+  private Properties createPreserveModeProps(int maxRows, long maxBytes) {
+    Properties props = new Properties();
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxRows));
+    if (maxBytes > 0) {
+      props.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, String.valueOf(maxBytes));
+    }
+    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
+    return props;
+  }
+
+  /**
+   * Helper to verify the row count in a table.
+   */
+  private void verifyRowCount(Connection conn, String tableName, int expected)
+      throws SQLException {
+    try (ResultSet rs = conn.createStatement()
+        .executeQuery("SELECT COUNT(*) FROM " + tableName)) {
+      assertTrue("Should have results", rs.next());
+      assertEquals("Row count mismatch", expected, rs.getInt(1));
+    }
+  }
+
   public static String randString(int length) {
     return new BigInteger(164, RAND).toString().substring(0, length);
   }
@@ -331,13 +358,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
     }
 
-    // Test with preserveOnLimitExceeded=true
-    Properties props = new Properties();
-    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxMutationSize));
-    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
-
-    try (PhoenixConnection conn =
-      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
+        getUrl(), createPreserveModeProps(maxMutationSize, 0))) {
       conn.setAutoCommit(false);
 
       PreparedStatement stmt = conn.prepareStatement(
@@ -377,12 +399,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       // Should have required multiple commits due to limit
       assertTrue("Should have committed multiple times", commitCount > 1);
 
-      // Verify all rows were inserted
-      try (ResultSet rs = conn.createStatement()
-        .executeQuery("SELECT COUNT(*) FROM " + fullTableName)) {
-        assertTrue(rs.next());
-        assertEquals(totalRows, rs.getInt(1));
-      }
+      verifyRowCount(conn, fullTableName, totalRows);
     }
   }
 
@@ -400,13 +417,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
     }
 
-    // Test with preserveOnLimitExceeded=true and autoCommit=false
-    Properties props = new Properties();
-    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxMutationSize));
-    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
-
-    try (PhoenixConnection conn =
-      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
+        getUrl(), createPreserveModeProps(maxMutationSize, 0))) {
       conn.setAutoCommit(false);
 
       PreparedStatement stmt = conn.prepareStatement(
@@ -444,12 +456,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       // Should have required multiple commits
       assertTrue("Should have committed multiple times", commitCount > 1);
 
-      // Verify all rows were inserted
-      try (ResultSet rs = conn.createStatement()
-        .executeQuery("SELECT COUNT(*) FROM " + fullTableName)) {
-        assertTrue(rs.next());
-        assertEquals(totalRows, rs.getInt(1));
-      }
+      verifyRowCount(conn, fullTableName, totalRows);
     }
   }
 
@@ -467,13 +474,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
     }
 
-    // Test with preserveOnLimitExceeded=true and autoCommit=true
-    Properties props = new Properties();
-    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxMutationSize));
-    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
-
-    try (PhoenixConnection conn =
-      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
+        getUrl(), createPreserveModeProps(maxMutationSize, 0))) {
       conn.setAutoCommit(true); // autoCommit is true
 
       PreparedStatement stmt = conn.prepareStatement(
@@ -505,12 +507,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       // Should have hit limit at least once
       assertTrue("Should have hit limit at least once", exceptionCount > 0);
 
-      // Verify all rows were inserted
-      try (ResultSet rs = conn.createStatement()
-        .executeQuery("SELECT COUNT(*) FROM " + fullTableName)) {
-        assertTrue(rs.next());
-        assertEquals(totalRows, rs.getInt(1));
-      }
+      verifyRowCount(conn, fullTableName, totalRows);
     }
   }
 
@@ -571,15 +568,9 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
     }
 
-    // Test with preserveOnLimitExceeded=true and low byte limit
-    // Each row is approximately 900+ bytes, so set limit to allow ~3-4 rows
-    Properties props = new Properties();
-    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "1000000"); // High row limit
-    props.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "3000"); // Low byte limit (~3-4 rows)
-    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
-
-    try (PhoenixConnection conn =
-      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+    // High row limit, low byte limit (~3-4 rows at ~900+ bytes each)
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
+        getUrl(), createPreserveModeProps(1000000, 3000))) {
       conn.setAutoCommit(false);
 
       PreparedStatement stmt = conn.prepareStatement(
@@ -613,12 +604,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       // Should have required multiple commits due to byte limit
       assertTrue("Should have committed multiple times due to byte limit", commitCount > 1);
 
-      // Verify all rows were inserted
-      try (ResultSet rs = conn.createStatement()
-        .executeQuery("SELECT COUNT(*) FROM " + fullTableName)) {
-        assertTrue(rs.next());
-        assertEquals(totalRows, rs.getInt(1));
-      }
+      verifyRowCount(conn, fullTableName, totalRows);
     }
   }
 
@@ -699,14 +685,9 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
     }
 
-    // Set byte limit low enough that merging rows with increasing sizes will trigger it
-    Properties props = new Properties();
-    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "1000");
-    props.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "1500");
-    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
-
-    try (PhoenixConnection conn =
-      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+    // Low byte limit so merging rows with increasing sizes triggers limit
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
+        getUrl(), createPreserveModeProps(1000, 1500))) {
       conn.setAutoCommit(false);
 
       PreparedStatement stmt = conn.prepareStatement(
@@ -775,14 +756,9 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
     }
 
-    // Set byte limit low enough that adding conflicting rows will trigger it
-    Properties props = new Properties();
-    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "1000");
-    props.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, "2000");
-    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
-
-    try (PhoenixConnection conn =
-      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+    // Low byte limit so adding conflicting rows triggers limit
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
+        getUrl(), createPreserveModeProps(1000, 2000))) {
       conn.setAutoCommit(false);
 
       // Regular UPSERT statement

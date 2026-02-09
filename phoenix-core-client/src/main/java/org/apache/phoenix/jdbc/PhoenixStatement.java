@@ -2464,10 +2464,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
       // Trim the batch list to contain only unprocessed items (from index i to end)
       if (i > 0) {
-        List<PhoenixPreparedStatement> remaining =
-            new ArrayList<>(batch.subList(i, batch.size()));
-        batch.clear();
-        batch.addAll(remaining);
+        batch.subList(0, i).clear();
       }
 
       // Mark the failed index

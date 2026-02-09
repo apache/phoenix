@@ -173,6 +173,18 @@ public class PhoenixKeyValueUtil {
     return size;
   }
 
+  public static long getEstimatedRowMutationSizeWithBatch(
+    Map<TableRef, List<MultiRowMutationState>> tableMutationMap) {
+    long size = 0;
+    // iterate over table
+    for (Entry<TableRef, List<MultiRowMutationState>> tableEntry : tableMutationMap.entrySet()) {
+      for (MultiRowMutationState batch : tableEntry.getValue()) {
+        size += calculateMultiRowMutationSize(batch);
+      }
+    }
+    return size;
+  }
+
   /**
    * If c is not a KeyValue, cast it to KeyValue and return it. If c is a KeyValue, just return it
    * @param c cell
@@ -238,18 +250,6 @@ public class PhoenixKeyValueUtil {
       }
     }
     return cells;
-  }
-
-  public static long getEstimatedRowMutationSizeWithBatch(
-    Map<TableRef, List<MultiRowMutationState>> tableMutationMap) {
-    long size = 0;
-    // iterate over table
-    for (Entry<TableRef, List<MultiRowMutationState>> tableEntry : tableMutationMap.entrySet()) {
-      for (MultiRowMutationState batch : tableEntry.getValue()) {
-        size += calculateMultiRowMutationSize(batch);
-      }
-    }
-    return size;
   }
 
   private static long calculateMultiRowMutationSize(MultiRowMutationState mutations) {
