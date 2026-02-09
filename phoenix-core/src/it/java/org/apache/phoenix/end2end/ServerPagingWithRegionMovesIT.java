@@ -142,7 +142,7 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
     countOfValidResults = 0;
   }
 
-  private void assertServerPagingMetric(String tableName, ResultSet rs, boolean isPaged)
+  private void assertServerPagingMetric(String tableName, ResultSet rs, boolean isDummyRowReturned)
     throws SQLException {
     Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
     for (Map.Entry<String, Map<MetricType, Long>> entry : metrics.entrySet()) {
@@ -150,7 +150,7 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
       Map<MetricType, Long> metricValues = entry.getValue();
       Long pagedRowsCntr = metricValues.get(MetricType.PAGED_ROWS_COUNTER);
       assertNotNull(pagedRowsCntr);
-      if (isPaged) {
+      if (isDummyRowReturned) {
         assertTrue(String.format("Got %d", pagedRowsCntr), pagedRowsCntr > 0);
       } else {
         assertEquals(String.format("Got %d", pagedRowsCntr), 0, (long) pagedRowsCntr);
@@ -503,7 +503,18 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(STRINGS[i - 1], rs.getString(1));
       }
-      assertServerPagingMetric(tablename, rs, false);
+      // To ensure PAGED_ROWS_COUNTER is incremented correctly, we need to close the result set.
+      rs.close();
+      // Dummy rows are returned as because regions are being moved so, cells have been flushed to
+      // HFile. When doing a full table scan and cells are flushed to HFile, we first read a row
+      // with rowkey as startkey of the scan and cell value as lastRowCol for that rowkey as
+      // startkey is not included. This row is filtered out by HBase store scanner but as paging
+      // filter has stopped so, RegionScanner ends up returning a empty row which leads to
+      // PagingRegionScanner returning a dummy row. When region moves, same logic is repeated as
+      // HBase client scanner tracks the last read rowkey and sets that as startkey of the scan when
+      // scan is reopened but startkey is not included. Thus, we will see dummy row is returned by
+      // PagingRegionScanner when first row of query is read or first row after region move is read.
+      assertServerPagingMetric(tablename, rs, true);
       limit = 1;
       offset = 1;
       rs = conn.createStatement().executeQuery(
@@ -678,8 +689,18 @@ public class ServerPagingWithRegionMovesIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(STRINGS[i - 1], rs.getString(1));
       }
-      // no paging when serial offset
-      assertServerPagingMetric(tablename, rs, false);
+      // To ensure PAGED_ROWS_COUNTER is incremented correctly, we need to close the result set.
+      rs.close();
+      // Dummy rows are returned as because regions are being moved so, cells have been flushed to
+      // HFile. When doing a full table scan and cells are flushed to HFile, we first read a row
+      // with rowkey as startkey of the scan and cell value as lastRowCol for that rowkey as
+      // startkey is not included. This row is filtered out by HBase store scanner but as paging
+      // filter has stopped so, RegionScanner ends up returning a empty row which leads to
+      // PagingRegionScanner returning a dummy row. When region moves, same logic is repeated as
+      // HBase client scanner tracks the last read rowkey and sets that as startkey of the scan when
+      // scan is reopened but startkey is not included. Thus, we will see dummy row is returned by
+      // PagingRegionScanner when first row of query is read or first row after region move is read.
+      assertServerPagingMetric(tablename, rs, true);
       limit = 1;
       offset = 1;
       rs = conn.createStatement().executeQuery(

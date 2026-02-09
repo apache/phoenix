@@ -506,6 +506,8 @@ public class QueryServicesOptions {
 
   public static final int DEFAULT_PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE = 512;
   public static final int DEFAULT_PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_SEC = 60; // 1min
+  public static final int DEFAULT_SLOWEST_SCAN_METRICS_COUNT = 0;
+  public static final boolean DEFAULT_SCAN_METRICS_BY_REGION_ENABLED = false;
 
   private final Configuration config;
 
