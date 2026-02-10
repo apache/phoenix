@@ -27,20 +27,15 @@ import java.io.IOException;
 import java.net.URI;
 import java.sql.SQLException;
 import java.util.List;
-import java.util.Map;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.EnvironmentEdge;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
+import org.apache.phoenix.jdbc.HABaseIT;
 import org.apache.phoenix.jdbc.HAGroupStoreClient;
-import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
 import org.apache.phoenix.jdbc.PhoenixHAAdmin;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -51,16 +46,12 @@ import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 import org.mockito.Mockito;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
 @Category(NeedsOwnMiniClusterTest.class)
-public class ReplicationLogReplayServiceTestIT extends BaseTest {
+public class ReplicationLogReplayServiceTestIT extends HABaseIT {
 
   @ClassRule
   public static TemporaryFolder testFolder = new TemporaryFolder();
 
-  private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS =
-    new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
   private String zkUrl;
   private String peerZkUrl;
   private FileSystem localFs;
@@ -73,30 +64,24 @@ public class ReplicationLogReplayServiceTestIT extends BaseTest {
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     CLUSTERS.start();
   }
 
   @Before
   public void setUp() throws Exception {
-    zkUrl = getLocalZkUrl(config);
+    zkUrl = getLocalZkUrl(conf1);
     peerZkUrl = CLUSTERS.getZkUrl2();
-    localFs = FileSystem.getLocal(config);
+    localFs = FileSystem.getLocal(conf1);
     standbyUri = testFolder.getRoot().toURI();
-    haAdmin = new PhoenixHAAdmin(zkUrl, config, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
-    peerHaAdmin = new PhoenixHAAdmin(peerZkUrl, config, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
+    haAdmin = new PhoenixHAAdmin(zkUrl, conf1, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
+    peerHaAdmin = new PhoenixHAAdmin(peerZkUrl, conf2, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
     cleanupHAGroupState();
 
     // Set the required configuration for ReplicationLogReplay
-    config.set(ReplicationLogReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY, standbyUri.toString());
+    conf1.set(ReplicationLogReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY, standbyUri.toString());
     // Enable replication replay service
-    config.setBoolean(ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED, true);
-  }
+    conf1.setBoolean(ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED, true);
 
-  @After
-  public void tearDown() throws IOException {
-    localFs.delete(new Path(testFolder.getRoot().toURI()), true);
   }
 
   /**
@@ -105,8 +90,8 @@ public class ReplicationLogReplayServiceTestIT extends BaseTest {
    */
   @Test
   public void testGetConsistencyPointMultipleGroups() throws IOException, SQLException {
-    final String haGroupName1 = "testGroup1";
-    final String haGroupName2 = "testGroup2";
+    final String haGroupName1 = testName.getMethodName() + "_1";
+    final String haGroupName2 = testName.getMethodName() + "_2";
 
     // Insert HAGroupStoreRecords into the system table
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName1, zkUrl, peerZkUrl,
@@ -123,15 +108,15 @@ public class ReplicationLogReplayServiceTestIT extends BaseTest {
 
     // Create testable replays with mocked consistency points
     TestableReplicationLogReplay testableReplay1 =
-      new TestableReplicationLogReplay(config, haGroupName1);
+      new TestableReplicationLogReplay(conf1, haGroupName1);
     testableReplay1.setConsistencyPoint(consistencyPoint1);
 
     TestableReplicationLogReplay testableReplay2 =
-      new TestableReplicationLogReplay(config, haGroupName2);
+      new TestableReplicationLogReplay(conf1, haGroupName2);
     testableReplay2.setConsistencyPoint(consistencyPoint2);
 
     // Create a spy on ReplicationLogReplayService and mock getReplicationLogReplay
-    ReplicationLogReplayService service = ReplicationLogReplayService.getInstance(config);
+    ReplicationLogReplayService service = ReplicationLogReplayService.getInstance(conf1);
     ReplicationLogReplayService serviceSpy = Mockito.spy(service);
 
     Mockito.doReturn(testableReplay1).when(serviceSpy).getReplicationLogReplay(haGroupName1);
@@ -152,7 +137,7 @@ public class ReplicationLogReplayServiceTestIT extends BaseTest {
    */
   @Test
   public void testGetConsistencyPointSingleGroup() throws IOException, SQLException {
-    final String haGroupName = "testGroup";
+    final String haGroupName = testName.getMethodName();
 
     // Insert HAGroupStoreRecord into the system table
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZkUrl,
@@ -164,11 +149,11 @@ public class ReplicationLogReplayServiceTestIT extends BaseTest {
 
     // Create testable replay with mocked consistency point
     TestableReplicationLogReplay testableReplay =
-      new TestableReplicationLogReplay(config, haGroupName);
+      new TestableReplicationLogReplay(conf1, haGroupName);
     testableReplay.setConsistencyPoint(consistencyPoint);
 
     // Create a spy on ReplicationLogReplayService and mock getReplicationLogReplay
-    ReplicationLogReplayService service = ReplicationLogReplayService.getInstance(config);
+    ReplicationLogReplayService service = ReplicationLogReplayService.getInstance(conf1);
     ReplicationLogReplayService serviceSpy = Mockito.spy(service);
 
     Mockito.doReturn(testableReplay).when(serviceSpy).getReplicationLogReplay(haGroupName);
@@ -199,7 +184,7 @@ public class ReplicationLogReplayServiceTestIT extends BaseTest {
 
     try {
       // Get ReplicationLogReplayService instance
-      ReplicationLogReplayService service = ReplicationLogReplayService.getInstance(config);
+      ReplicationLogReplayService service = ReplicationLogReplayService.getInstance(conf1);
 
       // Call getConsistencyPoint
       long consistencyPoint = service.getConsistencyPoint();
