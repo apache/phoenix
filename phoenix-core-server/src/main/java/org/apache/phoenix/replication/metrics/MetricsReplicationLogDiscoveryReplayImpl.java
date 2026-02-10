@@ -17,18 +17,29 @@
  */
 package org.apache.phoenix.replication.metrics;
 
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
+
 /** Implementation of metrics source for ReplicationLogDiscoveryReplay operations. */
-public class MetricsReplicationLogDiscoveryReplayImpl extends MetricsReplicationLogDiscoveryImpl {
+public class MetricsReplicationLogDiscoveryReplayImpl extends MetricsReplicationLogDiscoveryImpl
+  implements MetricsReplicationLogDiscoveryReplay {
 
   private static final String METRICS_NAME = "ReplicationLogDiscoveryReplay";
   private static final String METRICS_DESCRIPTION =
     "Metrics about Replication Replay Log Discovery for an HA Group";
   private static final String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
+  private final MutableGaugeLong consistencyPoint;
+
   public MetricsReplicationLogDiscoveryReplayImpl(final String haGroupName) {
     super(MetricsReplicationLogDiscoveryReplayImpl.METRICS_NAME,
       MetricsReplicationLogDiscoveryReplayImpl.METRICS_DESCRIPTION,
       MetricsReplicationLogDiscoveryImpl.METRICS_CONTEXT,
       MetricsReplicationLogDiscoveryReplayImpl.METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName);
+    consistencyPoint = getMetricsRegistry().newGauge(CONSISTENCY_POINT, CONSISTENCY_POINT_DESC, 0L);
+  }
+
+  @Override
+  public void updateConsistencyPoint(long consistencyPointMs) {
+    consistencyPoint.set(consistencyPointMs);
   }
 }
