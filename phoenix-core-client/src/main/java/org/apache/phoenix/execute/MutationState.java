@@ -100,8 +100,8 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
 import org.apache.phoenix.schema.MaxMutationSizeExceededException;
-import org.apache.phoenix.schema.MutationLimitReachedException;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.MutationLimitReachedException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PMetaData;
@@ -272,9 +272,8 @@ public class MutationState implements SQLCloseable {
     this.serverSideImmutableIndexes = this.connection.getQueryServices().getConfiguration()
       .getBoolean(SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
         DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
-    this.preserveOnLimitExceeded = this.connection.getQueryServices().getProps()
-      .getBoolean(PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB,
-        DEFAULT_PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED);
+    this.preserveOnLimitExceeded = this.connection.getQueryServices().getProps().getBoolean(
+      PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, DEFAULT_PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED);
   }
 
   public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset,
@@ -612,8 +611,8 @@ public class MutationState implements SQLCloseable {
       if (existingValues != PRow.DELETE_MARKER && newValues != PRow.DELETE_MARKER) {
         // Check if we can merge existing column values with new column values.
         // For preserve mode, pass this instance so join() can check limits before modification.
-        Long sizeDiff = existingRowMutationState.join(newRowMutationState,
-            preserveOnLimitExceeded ? this : null);
+        Long sizeDiff =
+          existingRowMutationState.join(newRowMutationState, preserveOnLimitExceeded ? this : null);
         if (sizeDiff != null) {
           // Merged successfully (row count unchanged - same row key)
           estimatedSize += sizeDiff;
@@ -2447,7 +2446,7 @@ public class MutationState implements SQLCloseable {
      * Join the newRow with the current row if it doesn't conflict with it. A regular upsert
      * conflicts with a conditional upsert.
      * @param mutationState if non-null, checks limits before modification and throws
-     *        MutationLimitReachedException if size increase would exceed limits
+     *                      MutationLimitReachedException if size increase would exceed limits
      * @return the size change (can be 0, positive, or negative) if merged, or null if conflicting
      */
     Long join(RowMutationState newRow, MutationState mutationState) throws SQLException {
@@ -2474,9 +2473,9 @@ public class MutationState implements SQLCloseable {
 
       // Total size change (can be negative)
       long totalSizeDiff = colValuesSizeDiff
-          + ((combinedOnDupKey != null ? combinedOnDupKey.length : 0)
-             - (this.onDupKeyBytes != null ? this.onDupKeyBytes.length : 0))
-          + (mergedIndexes.length - statementIndexes.length) * SizedUtil.INT_SIZE;
+        + ((combinedOnDupKey != null ? combinedOnDupKey.length : 0)
+          - (this.onDupKeyBytes != null ? this.onDupKeyBytes.length : 0))
+        + (mergedIndexes.length - statementIndexes.length) * SizedUtil.INT_SIZE;
 
       // Check limit BEFORE any modification (row count unchanged for merge - same row key)
       if (mutationState != null) {

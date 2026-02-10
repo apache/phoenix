@@ -86,7 +86,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
 
   /**
    * Helper to create Properties for preserve mode tests.
-   * @param maxRows max mutation row count limit
+   * @param maxRows  max mutation row count limit
    * @param maxBytes max mutation byte size limit (0 to skip setting)
    */
   private Properties createPreserveModeProps(int maxRows, long maxBytes) {
@@ -102,10 +102,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
   /**
    * Helper to verify the row count in a table.
    */
-  private void verifyRowCount(Connection conn, String tableName, int expected)
-      throws SQLException {
-    try (ResultSet rs = conn.createStatement()
-        .executeQuery("SELECT COUNT(*) FROM " + tableName)) {
+  private void verifyRowCount(Connection conn, String tableName, int expected) throws SQLException {
+    try (ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableName)) {
       assertTrue("Should have results", rs.next());
       assertEquals("Row count mismatch", expected, rs.getInt(1));
     }
@@ -345,8 +343,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
 
   /**
    * Tests that when preserveOnLimitExceeded=true, executeUpdate() throws
-   * MutationLimitReachedException without clearing buffered mutations,
-   * allowing the client to commit and retry.
+   * MutationLimitReachedException without clearing buffered mutations, allowing the client to
+   * commit and retry.
    */
   @Test
   public void testExecuteUpdatePreserveOnRowCountLimitExceeded() throws Exception {
@@ -358,8 +356,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
     }
 
-    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
-        getUrl(), createPreserveModeProps(maxRows, 0))) {
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+      createPreserveModeProps(maxRows, 0))) {
       conn.setAutoCommit(false);
 
       PreparedStatement stmt = conn.prepareStatement(
@@ -403,8 +401,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Tests that when preserveOnLimitExceeded=true, executeBatch() throws
-   * MutationLimitBatchException with proper checkpoint info, allowing recovery.
+   * Tests that when preserveOnLimitExceeded=true, executeBatch() throws MutationLimitBatchException
+   * with proper checkpoint info, allowing recovery.
    */
   @Test
   public void testExecuteBatchPreserveOnLimitExceeded() throws Exception {
@@ -416,8 +414,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
     }
 
-    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
-        getUrl(), createPreserveModeProps(maxRows, 0))) {
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+      createPreserveModeProps(maxRows, 0))) {
       conn.setAutoCommit(false);
 
       PreparedStatement stmt = conn.prepareStatement(
@@ -459,8 +457,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Tests executeBatch() with autoCommit=true and preserveOnLimitExceeded=true.
-   * In this case, executeBatch() should auto-commit on limit and trim batch.
+   * Tests executeBatch() with autoCommit=true and preserveOnLimitExceeded=true. In this case,
+   * executeBatch() should auto-commit on limit and trim batch.
    */
   @Test
   public void testExecuteBatchAutoCommitPreserveOnLimitExceeded() throws Exception {
@@ -472,8 +470,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
     }
 
-    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
-        getUrl(), createPreserveModeProps(maxRows, 0))) {
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+      createPreserveModeProps(maxRows, 0))) {
       conn.setAutoCommit(true); // autoCommit is true
 
       PreparedStatement stmt = conn.prepareStatement(
@@ -509,8 +507,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Tests that when preserveOnLimitExceeded=false (default), the old behavior
-   * is maintained - mutations are cleared on limit exceeded.
+   * Tests that when preserveOnLimitExceeded=false (default), the old behavior is maintained -
+   * mutations are cleared on limit exceeded.
    */
   @Test
   public void testExecuteUpdateDefaultBehaviorClearsMutations() throws Exception {
@@ -527,8 +525,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxRows));
     // Not setting PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, should default to false
 
-    try (PhoenixConnection conn =
-      (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+    try (
+      PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
       conn.setAutoCommit(false);
 
       PreparedStatement stmt = conn.prepareStatement(
@@ -567,12 +565,12 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
 
     // High row limit, low byte limit (~3-4 rows at ~900+ bytes each)
-    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
-        getUrl(), createPreserveModeProps(1000000, 3000))) {
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+      createPreserveModeProps(1000000, 3000))) {
       conn.setAutoCommit(false);
 
-      PreparedStatement stmt = conn.prepareStatement(
-        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score, tags) VALUES (?,?,?,?)");
+      PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName
+        + " (organization_id, entity_id, score, tags) VALUES (?,?,?,?)");
 
       int totalRows = 10;
       int processed = 0;
@@ -606,9 +604,9 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Tests that when preserveOnLimitExceeded is true but a single mutation exceeds
-   * the limit (constructor case), we still get the old exception type since there's
-   * no existing state to preserve.
+   * Tests that when preserveOnLimitExceeded is true but a single mutation exceeds the limit
+   * (constructor case), we still get the old exception type since there's no existing state to
+   * preserve.
    */
   @Test
   public void testSingleMutationExceedsLimitWithPreserveOption() throws Exception {
@@ -628,14 +626,13 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
 
     // Now use a connection with the limit set
-    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
-        getUrl(), createPreserveModeProps(1, 0))) {
+    try (PhoenixConnection conn =
+      (PhoenixConnection) DriverManager.getConnection(getUrl(), createPreserveModeProps(1, 0))) {
       conn.setAutoCommit(false);
 
       // Insert a row to have some existing state in the connection's MutationState
       try (PreparedStatement stmt = conn.prepareStatement(
-          "UPSERT INTO " + fullTableName +
-          " (organization_id, entity_id, score) VALUES (?, ?, ?)")) {
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score) VALUES (?, ?, ?)")) {
         stmt.setString(1, "org1");
         stmt.setString(2, "entity1");
         stmt.setInt(3, 1);
@@ -649,17 +646,16 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       // (MaxMutationSizeExceededException), not MutationLimitReachedException.
       try (Statement stmt = conn.createStatement()) {
         try {
-          stmt.executeUpdate(
-              "UPSERT INTO " + fullTableName +
-              " (organization_id, entity_id, score) " +
-              "SELECT id, 'e', val FROM " + sourceTable);
+          stmt.executeUpdate("UPSERT INTO " + fullTableName
+            + " (organization_id, entity_id, score) " + "SELECT id, 'e', val FROM " + sourceTable);
           fail("Expected MaxMutationSizeExceededException");
         } catch (MaxMutationSizeExceededException e) {
           // Expected - legacy exception even though preserveOnLimitExceeded is true,
           // because the single mutation (from constructor) has no prior state to preserve
         } catch (MutationLimitReachedException e) {
-          fail("Should have thrown MaxMutationSizeExceededException, not MutationLimitReachedException. " +
-               "When a single mutation exceeds the limit, there's no state to preserve.");
+          fail(
+            "Should have thrown MaxMutationSizeExceededException, not MutationLimitReachedException. "
+              + "When a single mutation exceeds the limit, there's no state to preserve.");
         }
       }
       MutationState state = conn.getMutationState();
@@ -668,9 +664,9 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Tests that when preserveOnLimitExceeded=true and the limit is reached during
-   * row merge (same row key updated multiple times), the mutations are preserved.
-   * This specifically tests the 3rd case in joinMutationState where rows are merged.
+   * Tests that when preserveOnLimitExceeded=true and the limit is reached during row merge (same
+   * row key updated multiple times), the mutations are preserved. This specifically tests the 3rd
+   * case in joinMutationState where rows are merged.
    */
   @Test
   public void testRowMergePreserveOnLimitExceeded() throws Exception {
@@ -681,13 +677,12 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
 
     // Low byte limit so merging rows with increasing sizes triggers limit
-    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
-        getUrl(), createPreserveModeProps(1000, 1500))) {
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+      createPreserveModeProps(1000, 1500))) {
       conn.setAutoCommit(false);
 
-      PreparedStatement stmt = conn.prepareStatement(
-        "UPSERT INTO " + fullTableName
-          + " (organization_id, entity_id, score, tags) VALUES (?,?,?,?)");
+      PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName
+        + " (organization_id, entity_id, score, tags) VALUES (?,?,?,?)");
 
       int commitCount = 0;
       int totalUpdates = 0;
@@ -729,9 +724,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       assertTrue("Should have committed multiple times", commitCount > 1);
 
       // Verify the row exists with the latest value
-      try (ResultSet rs = conn.createStatement()
-        .executeQuery("SELECT score FROM " + fullTableName
-          + " WHERE organization_id = '" + baseKey + "' AND entity_id = '" + entityKey + "'")) {
+      try (ResultSet rs = conn.createStatement().executeQuery("SELECT score FROM " + fullTableName
+        + " WHERE organization_id = '" + baseKey + "' AND entity_id = '" + entityKey + "'")) {
         assertTrue("Row should exist", rs.next());
         // Score should be the last successfully committed value
         assertEquals("Score should be set to the max value", maxScore, rs.getInt(1));
@@ -740,9 +734,9 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Tests that when preserveOnLimitExceeded=true and the limit is reached during
-   * conflicting row addition (regular upsert vs ON DUPLICATE KEY upsert on same key),
-   * the mutations are preserved. This tests the conflict case in joinMutationState.
+   * Tests that when preserveOnLimitExceeded=true and the limit is reached during conflicting row
+   * addition (regular upsert vs ON DUPLICATE KEY upsert on same key), the mutations are preserved.
+   * This tests the conflict case in joinMutationState.
    */
   @Test
   public void testConflictingRowsPreserveOnLimitExceeded() throws Exception {
@@ -753,19 +747,17 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
 
     // Low byte limit so adding conflicting rows triggers limit
-    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
-        getUrl(), createPreserveModeProps(1000, 2000))) {
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+      createPreserveModeProps(1000, 2000))) {
       conn.setAutoCommit(false);
 
       // Regular UPSERT statement
-      PreparedStatement regularStmt = conn.prepareStatement(
-        "UPSERT INTO " + fullTableName
-          + " (organization_id, entity_id, score, tags) VALUES (?,?,?,?)");
+      PreparedStatement regularStmt = conn.prepareStatement("UPSERT INTO " + fullTableName
+        + " (organization_id, entity_id, score, tags) VALUES (?,?,?,?)");
 
       // ON DUPLICATE KEY UPSERT statement - conflicts with regular upsert
       PreparedStatement onDupKeyStmt = conn.prepareStatement(
-        "UPSERT INTO " + fullTableName
-          + " (organization_id, entity_id, score) VALUES (?,?,?)"
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score) VALUES (?,?,?)"
           + " ON DUPLICATE KEY UPDATE score = score + 1");
 
       int commitCount = 0;

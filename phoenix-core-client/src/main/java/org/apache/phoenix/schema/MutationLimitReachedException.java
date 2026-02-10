@@ -22,18 +22,16 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 
 /**
- * Exception thrown when a mutation operation would exceed the configured
- * mutation buffer size limit. Unlike MaxMutationSizeBytesExceededException,
- * existing buffered mutations are preserved and can be committed before retrying.
+ * Exception thrown when a mutation operation would exceed the configured mutation buffer size
+ * limit. Unlike MaxMutationSizeBytesExceededException, existing buffered mutations are preserved
+ * and can be committed before retrying.
  */
 public class MutationLimitReachedException extends SQLException {
-    private static final long serialVersionUID = 1L;
-    private static final SQLExceptionCode CODE =
-        SQLExceptionCode.MUTATION_LIMIT_REACHED;
+  private static final long serialVersionUID = 1L;
+  private static final SQLExceptionCode CODE = SQLExceptionCode.MUTATION_LIMIT_REACHED;
 
-    public MutationLimitReachedException() {
-        super(new SQLExceptionInfo.Builder(CODE).build().toString(),
-              CODE.getSQLState(),
-              CODE.getErrorCode());
-    }
+  public MutationLimitReachedException() {
+    super(new SQLExceptionInfo.Builder(CODE).build().toString(), CODE.getSQLState(),
+      CODE.getErrorCode());
+  }
 }

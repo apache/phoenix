@@ -21,37 +21,30 @@ import java.sql.BatchUpdateException;
 import org.apache.phoenix.schema.MutationLimitReachedException;
 
 /**
- * Thrown from executeBatch() when the mutation buffer limit is reached.
- * The batch is automatically trimmed to contain only unprocessed items.
+ * Thrown from executeBatch() when the mutation buffer limit is reached. The batch is automatically
+ * trimmed to contain only unprocessed items.
  */
 public class MutationLimitBatchException extends BatchUpdateException {
-    private static final long serialVersionUID = 1L;
+  private static final long serialVersionUID = 1L;
 
-    private final int processedCount;
+  private final int processedCount;
 
-    /**
-     * @param updateCounts array of update counts for each statement in the batch
-     * @param cause the underlying MutationLimitReachedException
-     * @param processedCount number of statements successfully processed
-     */
-    public MutationLimitBatchException(
-            int[] updateCounts,
-            MutationLimitReachedException cause,
-            int processedCount) {
-        super(cause.getMessage(),
-              cause.getSQLState(),
-              cause.getErrorCode(),
-              updateCounts,
-              cause);
-        this.processedCount = processedCount;
-    }
+  /**
+   * @param updateCounts   array of update counts for each statement in the batch
+   * @param cause          the underlying MutationLimitReachedException
+   * @param processedCount number of statements successfully processed
+   */
+  public MutationLimitBatchException(int[] updateCounts, MutationLimitReachedException cause,
+    int processedCount) {
+    super(cause.getMessage(), cause.getSQLState(), cause.getErrorCode(), updateCounts, cause);
+    this.processedCount = processedCount;
+  }
 
-    /**
-     * Returns the number of statements that were successfully processed
-     * before the limit was reached. The batch has been trimmed to contain
-     * only the remaining unprocessed items.
-     */
-    public int getProcessedCount() {
-        return processedCount;
-    }
+  /**
+   * Returns the number of statements that were successfully processed before the limit was reached.
+   * The batch has been trimmed to contain only the remaining unprocessed items.
+   */
+  public int getProcessedCount() {
+    return processedCount;
+  }
 }
