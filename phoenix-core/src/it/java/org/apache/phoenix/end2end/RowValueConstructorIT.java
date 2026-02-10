@@ -2166,4 +2166,112 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
     PreparedStatement stmt2 = tenantConn.prepareStatement(tenantViewDdl);
     stmt2.execute();
   }
+
+  @Test
+  public void testRVCOverlappingKeyRange() throws Exception {
+    String tableName = generateUniqueName();
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName + " (" + "hk VARCHAR NOT NULL, "
+          + "sk VARCHAR NOT NULL, " + "ihk VARCHAR NOT NULL, " + "isk VARCHAR NOT NULL, "
+          + "data VARCHAR " + "CONSTRAINT pk PRIMARY KEY (hk, sk, ihk, isk))");
+
+      PreparedStatement upsert = conn.prepareStatement(
+        "UPSERT INTO " + tableName + " (hk, sk, ihk, isk, data) VALUES (?, ?, ?, ?, ?)");
+      for (int i = 1; i <= 20; i++) {
+        String pad = String.format("%02d", i);
+        upsert.setString(1, "hk");
+        upsert.setString(2, "sk100");
+        upsert.setString(3, "idx");
+        upsert.setString(4, "isk" + pad);
+        upsert.setString(5, "data" + pad);
+        upsert.execute();
+      }
+      conn.commit();
+
+      String query = "SELECT * FROM " + tableName + " WHERE hk = 'hk' AND "
+        + "(sk, ihk, isk) > ('sk100', 'idx', 'isk11') ORDER BY sk, ihk, isk LIMIT 5";
+      assertValues1(conn, query);
+
+      query = "SELECT * FROM " + tableName + " WHERE hk = 'hk' AND sk <= 'sk200' "
+        + "AND (sk, ihk, isk) > ('sk100', 'idx', 'isk11') ORDER BY sk, ihk, isk" + " LIMIT 5";
+      assertValues1(conn, query);
+
+      query =
+        "SELECT * FROM " + tableName + " WHERE hk = 'hk'" + " AND sk <= 'sk200' AND sk >= 'sk1'"
+          + " AND (sk, ihk, isk) > ('sk100', 'idx', 'isk11')" + " ORDER BY sk, ihk, isk LIMIT 5";
+      assertValues1(conn, query);
+
+      query = "SELECT * FROM " + tableName + " WHERE hk = 'hk' AND sk >= 'sk000' "
+        + "AND (sk, ihk, isk) >= ('sk100', 'idx', 'isk12') "
+        + "AND (sk, ihk, isk) < ('sk100', 'idx', 'isk17') ORDER BY sk, ihk, isk";
+      assertValues1(conn, query);
+
+      query = "SELECT * FROM " + tableName + " WHERE hk = 'hk' AND sk >= 'sk000' "
+        + "AND (sk, ihk, isk) > ('sk100', 'idx', 'isk11') "
+        + "AND (sk, ihk, isk) < ('sk100', 'idx', 'isk17') ORDER BY sk, ihk, isk";
+      assertValues1(conn, query);
+
+      query = "SELECT * FROM " + tableName + " WHERE hk = 'hk' AND sk >= 'sk000' "
+        + "AND (sk, ihk, isk) < ('sk100', 'idx', 'isk17') ORDER BY sk, ihk, isk";
+      assertValues2(conn, query);
+
+      query = "SELECT hk, sk, ihk, isk FROM " + tableName
+        + " WHERE hk = 'hk' AND sk <= 'sk200' AND (sk, ihk, isk) < ('sk100', 'idx', 'isk11')"
+        + " ORDER BY hk ASC, sk DESC, ihk DESC, isk DESC LIMIT 5";
+      assertValues3(conn, query);
+    }
+  }
+
+  private static void assertValues1(Connection conn, String query) throws SQLException {
+    try (Statement stmt = conn.createStatement()) {
+      ResultSet rs = stmt.executeQuery(query);
+      List<String> results = Lists.newArrayList();
+      while (rs.next()) {
+        results.add(rs.getString("isk"));
+      }
+      assertEquals(5, results.size());
+      assertFalse("Should not include isk11", results.contains("isk11"));
+      assertEquals("isk12", results.get(0));
+      assertEquals("isk13", results.get(1));
+      assertEquals("isk14", results.get(2));
+      assertEquals("isk15", results.get(3));
+      assertEquals("isk16", results.get(4));
+    }
+  }
+
+  private static void assertValues2(Connection conn, String query) throws SQLException {
+    try (Statement stmt = conn.createStatement()) {
+      ResultSet rs = stmt.executeQuery(query);
+      List<String> results = Lists.newArrayList();
+      while (rs.next()) {
+        results.add(rs.getString("isk"));
+      }
+      assertEquals(16, results.size());
+      assertTrue("Should not include isk17-isk20 range", !results.contains("isk17")
+        && !results.contains("isk18") && !results.contains("isk19") && !results.contains("isk20"));
+      assertEquals("isk01", results.get(0));
+      assertEquals("isk16", results.get(15));
+    }
+  }
+
+  private static void assertValues3(Connection conn, String query) throws SQLException {
+    try (Statement stmt = conn.createStatement()) {
+      ResultSet rs = stmt.executeQuery(query);
+      List<String> results = Lists.newArrayList();
+      while (rs.next()) {
+        results.add(rs.getString("isk"));
+      }
+      assertEquals(5, results.size());
+      assertFalse(results.contains("isk11"));
+      assertEquals("isk10", results.get(0));
+      assertEquals("isk09", results.get(1));
+      assertEquals("isk08", results.get(2));
+      assertEquals("isk07", results.get(3));
+      assertEquals("isk06", results.get(4));
+    }
+  }
+
 }

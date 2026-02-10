@@ -1571,20 +1571,30 @@ public class WhereOptimizer {
       byte[] lowerRange = result.getLowerRange();
       byte[] clippedLowerRange = lowerRange;
       byte[] fullLowerRange = otherRange.getLowerRange();
+      boolean fullLowerRangeUsed = false;
       if (!result.lowerUnbound() && Bytes.startsWith(fullLowerRange, clippedLowerRange)) {
         lowerRange = fullLowerRange;
+        fullLowerRangeUsed = true;
       }
       byte[] upperRange = result.getUpperRange();
       byte[] clippedUpperRange = upperRange;
       byte[] fullUpperRange = otherRange.getUpperRange();
-      if (!result.lowerUnbound() && Bytes.startsWith(fullUpperRange, clippedUpperRange)) {
+      boolean fullUpperRangeUsed = false;
+      if (!result.upperUnbound() && Bytes.startsWith(fullUpperRange, clippedUpperRange)) {
         upperRange = fullUpperRange;
+        fullUpperRangeUsed = true;
       }
       if (lowerRange == clippedLowerRange && upperRange == clippedUpperRange) {
         return result;
       }
-      return KeyRange.getKeyRange(lowerRange, result.isLowerInclusive(), upperRange,
-        result.isUpperInclusive());
+      // When we restore the full range bytes from otherRange, we must also use
+      // the inclusivity from otherRange. Otherwise, an exclusive bound would incorrectly
+      // become inclusive (PHOENIX-7760).
+      boolean lowerInclusive =
+        fullLowerRangeUsed ? otherRange.isLowerInclusive() : result.isLowerInclusive();
+      boolean upperInclusive =
+        fullUpperRangeUsed ? otherRange.isUpperInclusive() : result.isUpperInclusive();
+      return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
     }
 
     /**
