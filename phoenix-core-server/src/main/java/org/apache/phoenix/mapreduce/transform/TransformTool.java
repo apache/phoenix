@@ -21,7 +21,6 @@ import static org.apache.hadoop.hbase.HConstants.EMPTY_BYTE_ARRAY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexTool.createIndexToolTables;
 import static org.apache.phoenix.mapreduce.index.IndexTool.isTimeRangeSet;
-import static org.apache.phoenix.mapreduce.index.IndexTool.validateTimeRange;
 import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.setCurrentScnValue;
 import static org.apache.phoenix.query.QueryConstants.UNVERIFIED_BYTES;
 import static org.apache.phoenix.util.QueryUtil.getConnection;
@@ -335,10 +334,6 @@ public class TransformTool extends Configured implements Tool {
       endTime = new Long(cmdLine.getOptionValue(END_TIME_OPTION.getOpt()));
     }
 
-    if (isTimeRangeSet(startTime, endTime)) {
-      validateTimeRange(startTime, endTime);
-    }
-
     if (
       (isPartialTransform || shouldFixUnverified) && (cmdLine.hasOption(AUTO_SPLIT_OPTION.getOpt()))
     ) {
@@ -363,6 +358,9 @@ public class TransformTool extends Configured implements Tool {
     dataTable = cmdLine.getOptionValue(DATA_TABLE_OPTION.getOpt());
     indexTable = cmdLine.getOptionValue(INDEX_TABLE_OPTION.getOpt());
     qDataTable = SchemaUtil.getQualifiedTableName(schemaName, dataTable);
+    if (isTimeRangeSet(startTime, endTime)) {
+      PhoenixMapReduceUtil.validateTimeRange(startTime, endTime, qDataTable);
+    }
     isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
     if (cmdLine.hasOption(SPLIT_SIZE_OPTION.getOpt())) {
       splitSize = Integer.parseInt(cmdLine.getOptionValue(SPLIT_SIZE_OPTION.getOpt()));

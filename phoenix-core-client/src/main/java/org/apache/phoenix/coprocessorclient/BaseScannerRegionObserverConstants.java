@@ -194,6 +194,29 @@ public class BaseScannerRegionObserverConstants {
    */
   public static final String CUSTOM_ANNOTATIONS = "_Annot";
 
+  /**
+   * SyncTableTool scan attributes for server-side chunk formation and checksum
+   */
+  public static final String SYNC_TABLE_CHUNK_FORMATION = "_SyncTableChunk";
+  public static final String SYNC_TABLE_MAPPER_REGION_END_KEY = "_SyncTableMapperRegionEnd";
+  public static final String SYNC_TABLE_CHUNK_SIZE_BYTES = "_SyncTableChunkSizeBytes";
+  public static final String SYNC_TABLE_CHUNK_MAX_ROWS = "_SyncTableChunkMaxRows";
+  public static final String SYNC_TABLE_FORCE_FULL_RANGE = "_SyncTableForceFullRange";
+  public static final String SYNC_TABLE_CONTINUED_DIGEST_STATE = "_SyncTableContinuedDigestState";
+
+  /**
+   * SyncTableTool chunk metadata cell qualifiers. These define the wire protocol between
+   * PhoenixSyncTableRegionScanner (server-side coprocessor) and PhoenixSyncTableMapper (client-side
+   * mapper). The coprocessor returns chunk metadata as HBase cells with these qualifiers, and the
+   * mapper parses them to extract chunk information.
+   */
+  public static final byte[] SYNC_TABLE_START_KEY_QUALIFIER = Bytes.toBytes("START_KEY");
+  public static final byte[] SYNC_TABLE_END_KEY_QUALIFIER = Bytes.toBytes("END_KEY");
+  public static final byte[] SYNC_TABLE_HASH_QUALIFIER = Bytes.toBytes("HASH");
+  public static final byte[] SYNC_TABLE_ROW_COUNT_QUALIFIER = Bytes.toBytes("ROW_COUNT");
+  public static final byte[] SYNC_TABLE_IS_PARTIAL_QUALIFIER = Bytes.toBytes("IS_PARTIAL");
+  public static final byte[] SYNC_TABLE_HAS_MORE_ROWS_QUALIFIER = Bytes.toBytes("HAS_MORE_ROWS");
+
   /** Exposed for testing */
   public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
 }

@@ -248,6 +248,11 @@ public class QueryServicesOptions {
                                                                                                // hrs
   public static final long DEFAULT_INDEX_PENDING_DISABLE_THRESHOLD = 30000; // 30 secs
 
+  public static final long DEFAULT_SYNC_TABLE_QUERY_TIMEOUT = (5 * 30000 * 60) + 2100;
+  public static final long DEFAULT_SYNC_TABLE_RPC_TIMEOUT = 30000 * 60; // 30 mins
+  public static final long DEFAULT_SYNC_TABLE_CLIENT_SCANNER_TIMEOUT = 30000 * 60; // 30 mins
+  public static final int DEFAULT_SYNC_TABLE_RPC_RETRIES_COUNTER = 5; // 5 total tries at rpc level
+
   /**
    * HConstants#HIGH_QOS is the max we will see to a standard table. We go higher to differentiate
    * and give some room for things in the middle
