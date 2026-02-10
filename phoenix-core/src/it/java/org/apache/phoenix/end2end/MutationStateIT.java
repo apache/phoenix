@@ -349,9 +349,9 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
    * allowing the client to commit and retry.
    */
   @Test
-  public void testExecuteUpdatePreserveOnLimitExceeded() throws Exception {
+  public void testExecuteUpdatePreserveOnRowCountLimitExceeded() throws Exception {
     String fullTableName = generateUniqueName();
-    int maxMutationSize = 5;
+    int maxRows = 5;
 
     // Create table
     try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -359,7 +359,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
 
     try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
-        getUrl(), createPreserveModeProps(maxMutationSize, 0))) {
+        getUrl(), createPreserveModeProps(maxRows, 0))) {
       conn.setAutoCommit(false);
 
       PreparedStatement stmt = conn.prepareStatement(
@@ -397,8 +397,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       }
 
       // Should have required multiple commits due to limit
-      assertTrue("Should have committed multiple times", commitCount > 1);
-
+      assertTrue("Should have committed multiple times", commitCount == 3);
       verifyRowCount(conn, fullTableName, totalRows);
     }
   }
@@ -410,7 +409,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
   @Test
   public void testExecuteBatchPreserveOnLimitExceeded() throws Exception {
     String fullTableName = generateUniqueName();
-    int maxMutationSize = 5;
+    int maxRows = 5;
 
     // Create table
     try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -418,7 +417,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
 
     try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
-        getUrl(), createPreserveModeProps(maxMutationSize, 0))) {
+        getUrl(), createPreserveModeProps(maxRows, 0))) {
       conn.setAutoCommit(false);
 
       PreparedStatement stmt = conn.prepareStatement(
@@ -454,8 +453,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       }
 
       // Should have required multiple commits
-      assertTrue("Should have committed multiple times", commitCount > 1);
-
+      assertTrue("Should have committed multiple times", commitCount == 3);
       verifyRowCount(conn, fullTableName, totalRows);
     }
   }
@@ -467,7 +465,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
   @Test
   public void testExecuteBatchAutoCommitPreserveOnLimitExceeded() throws Exception {
     String fullTableName = generateUniqueName();
-    int maxMutationSize = 5;
+    int maxRows = 5;
 
     // Create table
     try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -475,7 +473,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
 
     try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
-        getUrl(), createPreserveModeProps(maxMutationSize, 0))) {
+        getUrl(), createPreserveModeProps(maxRows, 0))) {
       conn.setAutoCommit(true); // autoCommit is true
 
       PreparedStatement stmt = conn.prepareStatement(
@@ -506,7 +504,6 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
 
       // Should have hit limit at least once
       assertTrue("Should have hit limit at least once", exceptionCount > 0);
-
       verifyRowCount(conn, fullTableName, totalRows);
     }
   }
@@ -518,7 +515,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
   @Test
   public void testExecuteUpdateDefaultBehaviorClearsMutations() throws Exception {
     String fullTableName = generateUniqueName();
-    int maxMutationSize = 5;
+    int maxRows = 5;
 
     // Create table
     try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -527,7 +524,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
 
     // Test with preserveOnLimitExceeded=false (default)
     Properties props = new Properties();
-    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxMutationSize));
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxRows));
     // Not setting PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, should default to false
 
     try (PhoenixConnection conn =
@@ -551,8 +548,9 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
 
         // Verify mutations were cleared (old behavior)
         MutationState state = conn.getMutationState();
-        assertEquals("Mutations should be cleared", 0, state.getNumRows());
+        assertEquals("Mutations should have been cleared", 0, state.getNumRows());
       }
+      verifyRowCount(conn, fullTableName, 0);
     }
   }
 
@@ -603,7 +601,6 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
 
       // Should have required multiple commits due to byte limit
       assertTrue("Should have committed multiple times due to byte limit", commitCount > 1);
-
       verifyRowCount(conn, fullTableName, totalRows);
     }
   }
@@ -631,12 +628,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
 
     // Now use a connection with the limit set
-    Properties props = new Properties();
-    // Set limit to 1 row so any operation producing multiple rows would exceed it
-    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, "1");
-    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
-
-    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(
+        getUrl(), createPreserveModeProps(1, 0))) {
       conn.setAutoCommit(false);
 
       // Insert a row to have some existing state in the connection's MutationState
@@ -651,8 +644,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
 
       // Now do a SELECT-based UPSERT that produces multiple rows in a single mutation.
       // This creates a new MutationState in the constructor that already exceeds the limit.
-      // Since there's no state to preserve in that NEW MutationState (only 1 row was inserted 
-      // into the connection's existing state), we should get the old exception type 
+      // Since there's no state to preserve in that NEW MutationState (only 1 row was inserted
+      // into the connection's existing state), we should get the old exception type
       // (MaxMutationSizeExceededException), not MutationLimitReachedException.
       try (Statement stmt = conn.createStatement()) {
         try {
@@ -669,6 +662,8 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
                "When a single mutation exceeds the limit, there's no state to preserve.");
         }
       }
+      MutationState state = conn.getMutationState();
+      assertEquals("Mutation should not have been cleared", 1, state.getNumRows());
     }
   }
 
@@ -698,12 +693,13 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       int totalUpdates = 0;
       String baseKey = "ORG000000000001";
       String entityKey = "ENT000000000001";
+      int maxScore = 50;
 
       // Keep updating the SAME row with larger values until limit reached
       // Each update merges with the existing row, increasing the size
-      while (totalUpdates < 50) {
+      while (totalUpdates <= maxScore) {
         try {
-          for (int i = totalUpdates; i < 50; i++) {
+          for (int i = totalUpdates; i <= maxScore; i++) {
             stmt.setString(1, baseKey);
             stmt.setString(2, entityKey);
             stmt.setInt(3, i);
@@ -730,7 +726,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       }
 
       // Should have hit limit and committed multiple times due to row merge size growth
-      assertTrue("Should have committed at least once", commitCount >= 1);
+      assertTrue("Should have committed multiple times", commitCount > 1);
 
       // Verify the row exists with the latest value
       try (ResultSet rs = conn.createStatement()
@@ -738,7 +734,7 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
           + " WHERE organization_id = '" + baseKey + "' AND entity_id = '" + entityKey + "'")) {
         assertTrue("Row should exist", rs.next());
         // Score should be the last successfully committed value
-        assertTrue("Score should be set", rs.getInt(1) >= 0);
+        assertEquals("Score should be set to the max value", maxScore, rs.getInt(1));
       }
     }
   }
@@ -816,15 +812,9 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       }
 
       // Should have hit limit and committed multiple times due to conflicting row size
-      assertTrue("Should have committed at least once", commitCount >= 1);
-
+      assertTrue("Should have committed multiple times", commitCount > 1);
       // Verify rows exist
-      try (ResultSet rs = conn.createStatement()
-        .executeQuery("SELECT COUNT(*) FROM " + fullTableName
-          + " WHERE organization_id = '" + orgKey + "'")) {
-        assertTrue("Should have results", rs.next());
-        assertTrue("Should have inserted rows", rs.getInt(1) > 0);
-      }
+      verifyRowCount(conn, fullTableName, totalRows);
     }
   }
 
