@@ -33,10 +33,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Repository for managing the PHOENIX_SYNC_TABLE_OUTPUT table. This table stores checkpoint
- * information for the PhoenixSyncTableTool, enabling: 1. Job-level checkpointing (skip completed
- * mapper regions on restart) 2. Mapper-level checkpointing (skip completed chunks within a region)
- * 3. Audit trail of all sync operations
+ * Repository for managing the PHOENIX_SYNC_TABLE_CHECKPOINT table. This table stores checkpoint
+ * information for the PhoenixSyncTableTool, enabling: 1. Mapper Level checkpointing (skip completed
+ * mapper regions on restart) 2. Chunk level checkpointing (skip completed chunks)
  */
 public class PhoenixSyncTableOutputRepository {
 
@@ -48,19 +47,13 @@ public class PhoenixSyncTableOutputRepository {
   private static final byte[] EMPTY_START_KEY_SENTINEL = new byte[] { 0x00 };
 
   /**
-   * Constructor
    * @param connection Phoenix connection
    */
   public PhoenixSyncTableOutputRepository(Connection connection) {
     this.connection = connection;
   }
 
-  /**
-   * Creates the PHOENIX_SYNC_TABLE_OUTPUT table if it doesn't exist. Table schema: - Primary key:
-   * (TABLE_NAME, TARGET_CLUSTER, FROM_TIME, TO_TIME, ENTRY_TYPE, START_ROW_KEY, END_ROW_KEY) - TTL:
-   * 30 days - Salt buckets: 4 (for better distribution)
-   */
-  public void createOutputTableIfNotExists() throws SQLException {
+  public void createSyncCheckpointTableIfNotExists() throws SQLException {
     String ddl = "CREATE TABLE IF NOT EXISTS " + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (\n"
       + "    TABLE_NAME VARCHAR NOT NULL,\n" + "    TARGET_CLUSTER VARCHAR NOT NULL,\n"
       + "    ENTRY_TYPE VARCHAR(20) NOT NULL,\n" + "    FROM_TIME BIGINT NOT NULL,\n"
@@ -81,55 +74,6 @@ public class PhoenixSyncTableOutputRepository {
     }
   }
 
-  /**
-   * Logs a chunk-level sync result to the output table.
-   * @param tableName          Source table name
-   * @param targetCluster      Target cluster ZK quorum
-   * @param fromTime           Start timestamp for sync (nullable)
-   * @param toTime             End timestamp for sync (nullable)
-   * @param isDryRun           Whether this is a dry run
-   * @param startKey           Chunk start row key
-   * @param endKey             Chunk end row key
-   * @param status             Sync status (IN_PROGRESS/VERIFIED)
-   * @param executionStartTime When chunk processing started
-   * @param executionEndTime   When chunk processing completed
-   */
-  // public void logChunkResult(String tableName, String targetCluster, Long fromTime, Long toTime,
-  // boolean isDryRun, byte[] startKey, byte[] endKey, Status status,
-  // Timestamp executionStartTime, Timestamp executionEndTime)
-  // throws SQLException {
-  //
-  // checkpointSyncTableResult(tableName, targetCluster, Type.CHUNK, fromTime, toTime, isDryRun,
-  // startKey, endKey, status, executionStartTime, executionEndTime);
-  // }
-
-  /**
-   * Logs a mapper region completion to the output table. This indicates that all chunks within the
-   * region have been processed.
-   * @param tableName          Source table name
-   * @param targetCluster      Target cluster ZK quorum
-   * @param fromTime           Start timestamp for sync (nullable)
-   * @param toTime             End timestamp for sync (nullable)
-   * @param isDryRun           Whether this is a dry run
-   * @param regionStart        Mapper region start row key
-   * @param regionEnd          Mapper region end row key
-   * @param status             Overall status for the region
-   * @param executionStartTime When mapper started processing this region
-   * @param executionEndTime   When mapper finished processing this region
-   */
-  // public void logMapperRegionResult(String tableName, String targetCluster, Long fromTime,
-  // Long toTime, boolean isDryRun, byte[] regionStart, byte[] regionEnd, Status status,
-  // Timestamp executionStartTime, Timestamp executionEndTime)
-  // throws SQLException {
-  //
-  // checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, fromTime, toTime,
-  // isDryRun,
-  // regionStart, regionEnd, status, executionStartTime, executionEndTime);
-  // }
-
-  /**
-   * Internal method to log sync results to the output table
-   */
   public void checkpointSyncTableResult(String tableName, String targetCluster, Type type,
     Long fromTime, Long toTime, boolean isDryRun, byte[] startKey, byte[] endKey, Status status,
     Timestamp executionStartTime, Timestamp executionEndTime, String counters) throws SQLException {
@@ -148,15 +92,13 @@ public class PhoenixSyncTableOutputRepository {
       throw new IllegalArgumentException("FromTime and ToTime cannot be null for checkpoint");
     }
 
-    String upsert = "UPSERT INTO " + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " ("
-      + "TABLE_NAME, TARGET_CLUSTER, ENTRY_TYPE, FROM_TIME, TO_TIME, IS_DRY_RUN, "
-      + "START_ROW_KEY, END_ROW_KEY, IS_FIRST_REGION, EXECUTION_START_TIME, EXECUTION_END_TIME, "
-      + "STATUS, COUNTERS) " + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    String upsert = "UPSERT INTO " + SYNC_TABLE_CHECKPOINT_TABLE_NAME
+      + " (TABLE_NAME, TARGET_CLUSTER, ENTRY_TYPE, FROM_TIME, TO_TIME, IS_DRY_RUN,"
+      + " START_ROW_KEY, END_ROW_KEY, IS_FIRST_REGION, EXECUTION_START_TIME, EXECUTION_END_TIME,"
+      + " STATUS, COUNTERS) " + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     byte[] effectiveStartKey =
       (startKey == null || startKey.length == 0) ? EMPTY_START_KEY_SENTINEL : startKey;
-
-    // Determine if this is the first region (empty start key)
     boolean isFirstRegion = (startKey == null || startKey.length == 0);
 
     try (PreparedStatement ps = connection.prepareStatement(upsert)) {
@@ -179,15 +121,8 @@ public class PhoenixSyncTableOutputRepository {
   }
 
   /**
-   * Helper to check if a key represents an empty boundary
-   */
-  // private boolean isEmptyBoundary(byte[] key) {
-  // return key != null && key.length == 1 && Bytes.equals(key, HConstants.EMPTY_BYTE_ARRAY);
-  // }
-
-  /**
-   * Converts stored key back to HBase empty key if needed. For first region, converts
-   * EMPTY_START_KEY_SENTINEL back to HConstants.EMPTY_BYTE_ARRAY.
+   * Converts stored key back to HBase empty key if needed. For first region(empty startKey),
+   * converts EMPTY_START_KEY_SENTINEL back to HConstants.EMPTY_BYTE_ARRAY.
    */
   private byte[] toHBaseKey(byte[] storedKey, boolean isFirstRegion) {
     if (isFirstRegion && Arrays.equals(storedKey, EMPTY_START_KEY_SENTINEL)) {
@@ -213,7 +148,6 @@ public class PhoenixSyncTableOutputRepository {
       + " AND ENTRY_TYPE = ? AND FROM_TIME = ? AND TO_TIME = ? AND STATUS IN ( ?, ?)"
       + " ORDER BY START_ROW_KEY ";
     List<PhoenixSyncTableOutputRow> results = new ArrayList<>();
-
     try (PreparedStatement ps = connection.prepareStatement(query)) {
       int paramIndex = 1;
       ps.setString(paramIndex++, tableName);
@@ -251,8 +185,8 @@ public class PhoenixSyncTableOutputRepository {
     Long fromTime, Long toTime, byte[] mapperRegionStart, byte[] mapperRegionEnd)
     throws SQLException {
     String query = "SELECT START_ROW_KEY, END_ROW_KEY, IS_FIRST_REGION FROM "
-      + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " WHERE TABLE_NAME = ? " + "  AND TARGET_CLUSTER = ? "
-      + "  " + " AND ENTRY_TYPE = ? AND FROM_TIME = ? AND TO_TIME = ? AND START_ROW_KEY < ? "
+      + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " WHERE TABLE_NAME = ?  AND TARGET_CLUSTER = ? "
+      + " AND ENTRY_TYPE = ? AND FROM_TIME = ? AND TO_TIME = ? AND START_ROW_KEY < ? "
       + " AND END_ROW_KEY > ? AND STATUS IN (?, ?)" + " ORDER BY START_ROW_KEY";
 
     List<PhoenixSyncTableOutputRow> results = new ArrayList<>();
@@ -279,17 +213,4 @@ public class PhoenixSyncTableOutputRepository {
     }
     return results;
   }
-
-  // /**
-  // * For testing: clears all entries for a given table
-  // */
-  // @VisibleForTesting
-  // public void deleteEntriesForTable(String tableName) throws SQLException {
-  // String delete = "DELETE FROM " + OUTPUT_TABLE_NAME + " WHERE TABLE_NAME = ?";
-  // try (PreparedStatement ps = connection.prepareStatement(delete)) {
-  // ps.setString(1, tableName);
-  // ps.executeUpdate();
-  // connection.commit();
-  // }
-  // }
 }

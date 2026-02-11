@@ -326,7 +326,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
    */
   private void createSyncOutputTable(Connection connection) throws SQLException {
     PhoenixSyncTableOutputRepository repository = new PhoenixSyncTableOutputRepository(connection);
-    repository.createOutputTableIfNotExists();
+    repository.createSyncCheckpointTableIfNotExists();
   }
 
   /**

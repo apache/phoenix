@@ -240,9 +240,7 @@ public final class PhoenixConfigurationUtil {
   public static final String PHOENIX_SYNC_TABLE_CHUNK_MAX_ROWS =
     "phoenix.sync.table.chunk.max.rows";
 
-  public static final long DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES = 100 * 1024 * 1024; // 100MB
-
-  public static final int DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_MAX_ROWS = 100000;
+  public static final long DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES = 1024 * 1024 * 1024; // 1GB
 
   /**
    * Determines type of Phoenix Map Reduce job. 1. QUERY allows running arbitrary queries without
@@ -1023,18 +1021,5 @@ public final class PhoenixConfigurationUtil {
     Preconditions.checkNotNull(conf);
     return conf.getLong(PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES,
       DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES);
-  }
-
-  public static void setPhoenixSyncTableChunkMaxRows(Configuration conf, Integer chunkMaxRows) {
-    Preconditions.checkNotNull(conf);
-    if (chunkMaxRows != null) {
-      conf.setInt(PHOENIX_SYNC_TABLE_CHUNK_MAX_ROWS, chunkMaxRows);
-    }
-  }
-
-  public static int getPhoenixSyncTableChunkMaxRows(Configuration conf) {
-    Preconditions.checkNotNull(conf);
-    return conf.getInt(PHOENIX_SYNC_TABLE_CHUNK_MAX_ROWS,
-      DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_MAX_ROWS);
   }
 }

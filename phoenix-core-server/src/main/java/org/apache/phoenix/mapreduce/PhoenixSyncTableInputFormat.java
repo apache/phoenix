@@ -147,24 +147,17 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
       PhoenixInputSplit split = (PhoenixInputSplit) allSplits.get(splitIdx);
       KeyRange splitRange = split.getKeyRange();
       KeyRange completedRange = completedRegions.get(completedIdx);
-
-      // Normalize boundaries (null becomes empty byte array)
       byte[] splitStart = normalizeKey(splitRange.getLowerRange());
       byte[] splitEnd = normalizeKey(splitRange.getUpperRange());
       byte[] completedStart = normalizeKey(completedRange.getLowerRange());
       byte[] completedEnd = normalizeKey(completedRange.getUpperRange());
 
-      // Completed region ends before split starts
       if (Bytes.compareTo(completedEnd, splitStart) <= 0) {
         completedIdx++;
-      }
-      // Completed region starts after split ends
-      else if (Bytes.compareTo(completedStart, splitEnd) >= 0) {
+      } else if (Bytes.compareTo(completedStart, splitEnd) >= 0) {
         unprocessedSplits.add(allSplits.get(splitIdx));
         splitIdx++;
-      }
-      // Overlap exists - check if split fully contained in completed
-      else {
+      } else {
         // Split is fully contained if: completedStart <= splitStart AND splitEnd <= completedEnd
         boolean startContained = Bytes.compareTo(completedStart, splitStart) <= 0;
         boolean endContained = Bytes.compareTo(splitEnd, completedEnd) <= 0;
