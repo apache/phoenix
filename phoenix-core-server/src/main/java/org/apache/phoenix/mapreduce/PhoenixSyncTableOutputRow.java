@@ -21,7 +21,7 @@ import java.util.Arrays;
 import org.apache.hadoop.hbase.util.Bytes;
 
 /**
- * Data model class representing a row in the PHOENIX_SYNC_TABLE_CHECKPOINT table
+ * Data model class representing required row in the PHOENIX_SYNC_TABLE_CHECKPOINT table
  */
 public class PhoenixSyncTableOutputRow {
 

@@ -237,9 +237,6 @@ public final class PhoenixConfigurationUtil {
   public static final String PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES =
     "phoenix.sync.table.chunk.size.bytes";
 
-  public static final String PHOENIX_SYNC_TABLE_CHUNK_MAX_ROWS =
-    "phoenix.sync.table.chunk.max.rows";
-
   public static final long DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES = 1024 * 1024 * 1024; // 1GB
 
   /**
@@ -1009,7 +1006,7 @@ public final class PhoenixConfigurationUtil {
 
   public static boolean getPhoenixSyncTableDryRun(Configuration conf) {
     Preconditions.checkNotNull(conf);
-    return conf.getBoolean(PHOENIX_SYNC_TABLE_DRY_RUN, false);
+    return conf.getBoolean(PHOENIX_SYNC_TABLE_DRY_RUN, true);
   }
 
   public static void setPhoenixSyncTableChunkSizeBytes(Configuration conf, Long chunkSizeBytes) {

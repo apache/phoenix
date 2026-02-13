@@ -197,10 +197,8 @@ public class BaseScannerRegionObserverConstants {
   /**
    * PhoenixSyncTableTool scan attributes for server-side chunk formation and checksum
    */
-  public static final String SYNC_TABLE_CHUNK_FORMATION = "_SyncTableChunk";
-  public static final String SYNC_TABLE_MAPPER_REGION_END_KEY = "_SyncTableMapperRegionEnd";
+  public static final String SYNC_TABLE_CHUNK_FORMATION = "_SyncTableChunkFormation";
   public static final String SYNC_TABLE_CHUNK_SIZE_BYTES = "_SyncTableChunkSizeBytes";
-  public static final String SYNC_TABLE_FORCE_FULL_RANGE = "_SyncTableForceFullRange";
   public static final String SYNC_TABLE_CONTINUED_DIGEST_STATE = "_SyncTableContinuedDigestState";
 
   /**
@@ -214,8 +212,6 @@ public class BaseScannerRegionObserverConstants {
   public static final byte[] SYNC_TABLE_ROW_COUNT_QUALIFIER = Bytes.toBytes("ROW_COUNT");
   public static final byte[] SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER =
     Bytes.toBytes("IS_PARTIAL_CHUNK");
-  public static final byte[] SYNC_TABLE_HAS_MORE_ROWS_IN_REGION_QUALIFIER =
-    Bytes.toBytes("HAS_MORE_ROWS_IN_REGION");
 
   /** Exposed for testing */
   public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";

@@ -56,11 +56,12 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
    * <p>
    * PhoenixSyncTableMapper doesn't need actual row data from the RecordReader - it extracts region
    * boundaries from the InputSplit and delegates all scanning to the PhoenixSyncTableRegionScanner
-   * coprocessor. Using PhoenixNoOpSingleRecordReader ensures that {@code map()} is called exactly
+   * coprocessor.
+   * Using PhoenixNoOpSingleRecordReader ensures that {@code map()} is called exactly
    * once per region no matter what scan looks like, avoiding the overhead of the default
    * PhoenixRecordReader which would call {@code map()} for every row of scan.
    * @param split Input Split
-   * @return A SingleRecordReader instance
+   * @return A PhoenixNoOpSingleRecordReader instance
    */
   @SuppressWarnings("rawtypes")
   @Override
@@ -69,8 +70,8 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
   }
 
   /**
-   * Generates InputSplits for the sync job, filtering out already-completed regions using synn
-   * checkpoint table.
+   * Generates InputSplits for the Phoenix sync table job, splits are done based on region boundary
+   * and then filter out already-completed regions using sync table checkpoint table.
    */
   @Override
   public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
@@ -79,7 +80,6 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
     String targetZkQuorum = PhoenixConfigurationUtil.getPhoenixSyncTableTargetZkQuorum(conf);
     Long fromTime = PhoenixConfigurationUtil.getPhoenixSyncTableFromTime(conf);
     Long toTime = PhoenixConfigurationUtil.getPhoenixSyncTableToTime(conf);
-
     List<InputSplit> allSplits = super.getSplits(context);
     if (allSplits == null || allSplits.isEmpty()) {
       throw new IOException(String.format(
@@ -96,10 +96,8 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
       throw new RuntimeException(e);
     }
     if (completedRegions.isEmpty()) {
-      if (LOGGER.isDebugEnabled()) {
-        LOGGER.debug("No completed regions for table {} - processing all {} splits", tableName,
+      LOGGER.info("No completed regions for table {} - processing all {} splits", tableName,
           allSplits.size());
-      }
       return allSplits;
     }
 
@@ -143,6 +141,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
     List<InputSplit> unprocessedSplits = new ArrayList<>();
     int splitIdx = 0;
     int completedIdx = 0;
+    // Two pointer comparison across splitRange and completedRange
     while (splitIdx < allSplits.size() && completedIdx < completedRegions.size()) {
       PhoenixInputSplit split = (PhoenixInputSplit) allSplits.get(splitIdx);
       KeyRange splitRange = split.getKeyRange();
@@ -152,13 +151,18 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
       byte[] completedStart = normalizeKey(completedRange.getLowerRange());
       byte[] completedEnd = normalizeKey(completedRange.getUpperRange());
 
+      // No overlap b/w completedRange/splitRange.
+      // completedEnd is before splitStart, increment completed pointer to catch up
       if (Bytes.compareTo(completedEnd, splitStart) <= 0) {
         completedIdx++;
       } else if (Bytes.compareTo(completedStart, splitEnd) >= 0) {
+        // No overlap. completedStart is after splitEnd, splitRange needs to be processed,
+        // add to unprocessed list and increment
         unprocessedSplits.add(allSplits.get(splitIdx));
         splitIdx++;
       } else {
-        // Split is fully contained if: completedStart <= splitStart AND splitEnd <= completedEnd
+        // Some overlap detected, check if SplitRange is fullyContained within completedRange
+        // Fully contained if: completedStart <= splitStart AND splitEnd <= completedEnd
         boolean startContained = Bytes.compareTo(completedStart, splitStart) <= 0;
         boolean endContained = Bytes.compareTo(splitEnd, completedEnd) <= 0;
         boolean fullyContained = startContained && endContained;

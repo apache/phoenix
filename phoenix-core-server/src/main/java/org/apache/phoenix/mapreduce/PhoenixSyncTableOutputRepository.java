@@ -34,8 +34,10 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Repository for managing the PHOENIX_SYNC_TABLE_CHECKPOINT table. This table stores checkpoint
- * information for the PhoenixSyncTableTool, enabling: 1. Mapper Level checkpointing (skip completed
- * mapper regions on restart) 2. Chunk level checkpointing (skip completed chunks)
+ * information for the PhoenixSyncTableTool, enabling:
+ * 1. Mapper Level checkpointing (skip completed
+ * mapper regions on restart)
+ * 2. Chunk level checkpointing (skip completed chunks)
  */
 public class PhoenixSyncTableOutputRepository {
 
@@ -145,8 +147,7 @@ public class PhoenixSyncTableOutputRepository {
 
     String query = "SELECT START_ROW_KEY, END_ROW_KEY, IS_FIRST_REGION FROM "
       + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " WHERE TABLE_NAME = ?  AND TARGET_CLUSTER = ?"
-      + " AND ENTRY_TYPE = ? AND FROM_TIME = ? AND TO_TIME = ? AND STATUS IN ( ?, ?)"
-      + " ORDER BY START_ROW_KEY ";
+      + " AND ENTRY_TYPE = ? AND FROM_TIME = ? AND TO_TIME = ? AND STATUS IN ( ?, ?)";
     List<PhoenixSyncTableOutputRow> results = new ArrayList<>();
     try (PreparedStatement ps = connection.prepareStatement(query)) {
       int paramIndex = 1;
@@ -171,7 +172,7 @@ public class PhoenixSyncTableOutputRepository {
   }
 
   /**
-   * Queries for processed chunks within a mapper region. Used by PhoenixSyncTableMapper to skip
+   * Queries for processed chunks. Used by PhoenixSyncTableMapper to skip
    * already-processed chunks.
    * @param tableName         Source table name
    * @param targetCluster     Target cluster ZK quorum
@@ -187,7 +188,7 @@ public class PhoenixSyncTableOutputRepository {
     String query = "SELECT START_ROW_KEY, END_ROW_KEY, IS_FIRST_REGION FROM "
       + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " WHERE TABLE_NAME = ?  AND TARGET_CLUSTER = ? "
       + " AND ENTRY_TYPE = ? AND FROM_TIME = ? AND TO_TIME = ? AND START_ROW_KEY < ? "
-      + " AND END_ROW_KEY > ? AND STATUS IN (?, ?)" + " ORDER BY START_ROW_KEY";
+      + " AND END_ROW_KEY > ? AND STATUS IN (?, ?) ";
 
     List<PhoenixSyncTableOutputRow> results = new ArrayList<>();
     try (PreparedStatement ps = connection.prepareStatement(query)) {
