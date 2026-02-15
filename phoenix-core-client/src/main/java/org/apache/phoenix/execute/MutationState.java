@@ -2466,7 +2466,7 @@ public class MutationState implements SQLCloseable {
         for (Map.Entry<PColumn, byte[]> entry : newRow.columnValues.entrySet()) {
           byte[] oldValue = columnValues.get(entry.getKey());
           if (oldValue != null) {
-            colValuesSizeDiff -= (entry.getKey().getEstimatedSize() + oldValue.length);
+            colValuesSizeDiff -= entry.getKey().getEstimatedSize() + oldValue.length;
           }
         }
       }
