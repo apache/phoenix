@@ -45,8 +45,11 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.jdbc.MutationLimitBatchException;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.MaxMutationSizeExceededException;
+import org.apache.phoenix.schema.MutationLimitReachedException;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.Repeat;
@@ -78,6 +81,31 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
       stmt.setString(2, "BBBB" + i);
       stmt.setInt(3, 1);
       stmt.execute();
+    }
+  }
+
+  /**
+   * Helper to create Properties for preserve mode tests.
+   * @param maxRows  max mutation row count limit
+   * @param maxBytes max mutation byte size limit (0 to skip setting)
+   */
+  private Properties createPreserveModeProps(int maxRows, long maxBytes) {
+    Properties props = new Properties();
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxRows));
+    if (maxBytes > 0) {
+      props.setProperty(QueryServices.MAX_MUTATION_SIZE_BYTES_ATTRIB, String.valueOf(maxBytes));
+    }
+    props.setProperty(QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, "true");
+    return props;
+  }
+
+  /**
+   * Helper to verify the row count in a table.
+   */
+  private void verifyRowCount(Connection conn, String tableName, int expected) throws SQLException {
+    try (ResultSet rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM " + tableName)) {
+      assertTrue("Should have results", rs.next());
+      assertEquals("Row count mismatch", expected, rs.getInt(1));
     }
   }
 
@@ -313,6 +341,475 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     }
   }
 
+  /**
+   * Tests that when preserveOnLimitExceeded=true, executeUpdate() throws
+   * MutationLimitReachedException without clearing buffered mutations, allowing the client to
+   * commit and retry.
+   */
+  @Test
+  public void testExecuteUpdatePreserveOnRowCountLimitExceeded() throws Exception {
+    String fullTableName = generateUniqueName();
+    int maxRows = 5;
+
+    // Create table
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+      createPreserveModeProps(maxRows, 0))) {
+      conn.setAutoCommit(false);
+
+      PreparedStatement stmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score) VALUES (?,?,?)");
+
+      int totalRows = 12;
+      int processed = 0;
+      int commitCount = 0;
+
+      while (processed < totalRows) {
+        try {
+          for (int i = processed; i < totalRows; i++) {
+            stmt.setString(1, "ORG" + String.format("%011d", i));
+            stmt.setString(2, "ENT" + String.format("%011d", i));
+            stmt.setInt(3, i);
+            stmt.executeUpdate();
+            processed = i + 1;
+          }
+          conn.commit();
+          commitCount++;
+          break; // All done
+        } catch (MutationLimitReachedException e) {
+          // Verify the exception is the expected type
+          assertEquals(SQLExceptionCode.MUTATION_LIMIT_REACHED.getErrorCode(), e.getErrorCode());
+
+          // Verify mutations were preserved - MutationState should have rows
+          MutationState state = conn.getMutationState();
+          assertTrue("Mutations should be preserved", state.getNumRows() > 0);
+
+          // Commit what we have so far
+          conn.commit();
+          commitCount++;
+          // Loop continues from 'processed' index
+        }
+      }
+
+      // Should have required multiple commits due to limit
+      assertTrue("Should have committed multiple times", commitCount == 3);
+      verifyRowCount(conn, fullTableName, totalRows);
+    }
+  }
+
+  /**
+   * Tests that when preserveOnLimitExceeded=true, executeBatch() throws MutationLimitBatchException
+   * with proper checkpoint info, allowing recovery.
+   */
+  @Test
+  public void testExecuteBatchPreserveOnLimitExceeded() throws Exception {
+    String fullTableName = generateUniqueName();
+    int maxRows = 5;
+
+    // Create table
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+      createPreserveModeProps(maxRows, 0))) {
+      conn.setAutoCommit(false);
+
+      PreparedStatement stmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score) VALUES (?,?,?)");
+
+      int totalRows = 15;
+      int commitCount = 0;
+
+      // Add all rows to batch
+      for (int i = 0; i < totalRows; i++) {
+        stmt.setString(1, "ORG" + String.format("%011d", i));
+        stmt.setString(2, "ENT" + String.format("%011d", i));
+        stmt.setInt(3, i);
+        stmt.addBatch();
+      }
+
+      // Execute batch - should hit limit and throw MutationLimitBatchException
+      while (true) {
+        try {
+          stmt.executeBatch();
+          conn.commit();
+          commitCount++;
+          break; // All done
+        } catch (MutationLimitBatchException e) {
+          // Verify we got processedCount
+          assertTrue("ProcessedCount should be > 0", e.getProcessedCount() > 0);
+
+          // Commit what was successfully buffered
+          conn.commit();
+          commitCount++;
+          // executeBatch() trims the batch, so just retry
+        }
+      }
+
+      // Should have required multiple commits
+      assertTrue("Should have committed multiple times", commitCount == 3);
+      verifyRowCount(conn, fullTableName, totalRows);
+    }
+  }
+
+  /**
+   * Tests executeBatch() with autoCommit=true and preserveOnLimitExceeded=true. In this case,
+   * executeBatch() should auto-commit on limit and trim batch.
+   */
+  @Test
+  public void testExecuteBatchAutoCommitPreserveOnLimitExceeded() throws Exception {
+    String fullTableName = generateUniqueName();
+    int maxRows = 5;
+
+    // Create table
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+      createPreserveModeProps(maxRows, 0))) {
+      conn.setAutoCommit(true); // autoCommit is true
+
+      PreparedStatement stmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score) VALUES (?,?,?)");
+
+      int totalRows = 15;
+      int exceptionCount = 0;
+
+      // Add all rows to batch
+      for (int i = 0; i < totalRows; i++) {
+        stmt.setString(1, "ORG" + String.format("%011d", i));
+        stmt.setString(2, "ENT" + String.format("%011d", i));
+        stmt.setInt(3, i);
+        stmt.addBatch();
+      }
+
+      // Execute batch - with autoCommit=true, it should auto-commit and trim
+      while (true) {
+        try {
+          stmt.executeBatch();
+          break; // All done
+        } catch (MutationLimitBatchException e) {
+          exceptionCount++;
+          // With autoCommit=true, mutations were already committed
+          // Batch is trimmed, just retry
+        }
+      }
+
+      // Should have hit limit at least once
+      assertTrue("Should have hit limit at least once", exceptionCount > 0);
+      verifyRowCount(conn, fullTableName, totalRows);
+    }
+  }
+
+  /**
+   * Tests that when preserveOnLimitExceeded=false (default), the old behavior is maintained -
+   * mutations are cleared on limit exceeded.
+   */
+  @Test
+  public void testExecuteUpdateDefaultBehaviorClearsMutations() throws Exception {
+    String fullTableName = generateUniqueName();
+    int maxRows = 5;
+
+    // Create table
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    // Test with preserveOnLimitExceeded=false (default)
+    Properties props = new Properties();
+    props.setProperty(QueryServices.MAX_MUTATION_SIZE_ATTRIB, String.valueOf(maxRows));
+    // Not setting PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, should default to false
+
+    try (
+      PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(false);
+
+      PreparedStatement stmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score) VALUES (?,?,?)");
+
+      try {
+        for (int i = 0; i < 20; i++) {
+          stmt.setString(1, "ORG" + String.format("%011d", i));
+          stmt.setString(2, "ENT" + String.format("%011d", i));
+          stmt.setInt(3, i);
+          stmt.executeUpdate();
+        }
+        fail("Should have thrown MaxMutationSizeExceededException");
+      } catch (SQLException e) {
+        // Should be the old exception type, not MutationLimitReachedException
+        assertEquals(SQLExceptionCode.MAX_MUTATION_SIZE_EXCEEDED.getErrorCode(), e.getErrorCode());
+
+        // Verify mutations were cleared (old behavior)
+        MutationState state = conn.getMutationState();
+        assertEquals("Mutations should have been cleared", 0, state.getNumRows());
+      }
+      verifyRowCount(conn, fullTableName, 0);
+    }
+  }
+
+  /**
+   * Tests byte size limit with preserveOnLimitExceeded=true.
+   */
+  @Test
+  public void testExecuteUpdatePreserveOnByteLimitExceeded() throws Exception {
+    String fullTableName = generateUniqueName();
+
+    // Create table with a VARCHAR column for large values
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    // High row limit, low byte limit (~3-4 rows at ~900+ bytes each)
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+      createPreserveModeProps(1000000, 3000))) {
+      conn.setAutoCommit(false);
+
+      PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName
+        + " (organization_id, entity_id, score, tags) VALUES (?,?,?,?)");
+
+      int totalRows = 10;
+      int processed = 0;
+      int commitCount = 0;
+      String largeValue = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"; // ~36 bytes per row in tags
+
+      while (processed < totalRows) {
+        try {
+          for (int i = processed; i < totalRows; i++) {
+            stmt.setString(1, "ORG" + String.format("%011d", i));
+            stmt.setString(2, "ENT" + String.format("%011d", i));
+            stmt.setInt(3, i);
+            stmt.setString(4, largeValue + i);
+            stmt.executeUpdate();
+            processed = i + 1;
+          }
+          conn.commit();
+          commitCount++;
+          break;
+        } catch (MutationLimitReachedException e) {
+          assertEquals(SQLExceptionCode.MUTATION_LIMIT_REACHED.getErrorCode(), e.getErrorCode());
+          conn.commit();
+          commitCount++;
+        }
+      }
+
+      // Should have required multiple commits due to byte limit
+      assertTrue("Should have committed multiple times due to byte limit", commitCount > 1);
+      verifyRowCount(conn, fullTableName, totalRows);
+    }
+  }
+
+  /**
+   * Tests that when preserveOnLimitExceeded is true but a single mutation exceeds the limit
+   * (constructor case), we still get the old exception type since there's no existing state to
+   * preserve.
+   */
+  @Test
+  public void testSingleMutationExceedsLimitWithPreserveOption() throws Exception {
+    String fullTableName = generateUniqueName();
+    String sourceTable = generateUniqueName();
+
+    // Use a connection without limits to create tables and set up test data
+    try (Connection setupConn = DriverManager.getConnection(getUrl())) {
+      setupConn.setAutoCommit(true);
+      try (Statement stmt = setupConn.createStatement()) {
+        stmt.execute("CREATE TABLE " + fullTableName + DDL);
+        stmt.execute("CREATE TABLE " + sourceTable + " (id VARCHAR PRIMARY KEY, val INTEGER)");
+        // Insert multiple rows into source table
+        stmt.executeUpdate("UPSERT INTO " + sourceTable + " VALUES ('a', 1)");
+        stmt.executeUpdate("UPSERT INTO " + sourceTable + " VALUES ('b', 2)");
+      }
+    }
+
+    // Now use a connection with the limit set
+    try (PhoenixConnection conn =
+      (PhoenixConnection) DriverManager.getConnection(getUrl(), createPreserveModeProps(1, 0))) {
+      conn.setAutoCommit(false);
+
+      // Insert a row to have some existing state in the connection's MutationState
+      try (PreparedStatement stmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score) VALUES (?, ?, ?)")) {
+        stmt.setString(1, "org1");
+        stmt.setString(2, "entity1");
+        stmt.setInt(3, 1);
+        stmt.executeUpdate();
+      }
+
+      // Now do a SELECT-based UPSERT that produces multiple rows in a single mutation.
+      // This creates a new MutationState in the constructor that already exceeds the limit.
+      // Since there's no state to preserve in that NEW MutationState (only 1 row was inserted
+      // into the connection's existing state), we should get the old exception type
+      // (MaxMutationSizeExceededException), not MutationLimitReachedException.
+      try (Statement stmt = conn.createStatement()) {
+        try {
+          stmt.executeUpdate("UPSERT INTO " + fullTableName
+            + " (organization_id, entity_id, score) " + "SELECT id, 'e', val FROM " + sourceTable);
+          fail("Expected MaxMutationSizeExceededException");
+        } catch (MaxMutationSizeExceededException e) {
+          // Expected - legacy exception even though preserveOnLimitExceeded is true,
+          // because the single mutation (from constructor) has no prior state to preserve
+        } catch (MutationLimitReachedException e) {
+          fail(
+            "Should have thrown MaxMutationSizeExceededException, not MutationLimitReachedException. "
+              + "When a single mutation exceeds the limit, there's no state to preserve.");
+        }
+      }
+      MutationState state = conn.getMutationState();
+      assertEquals("Mutation should not have been cleared", 1, state.getNumRows());
+    }
+  }
+
+  /**
+   * Tests that when preserveOnLimitExceeded=true and the limit is reached during row merge (same
+   * row key updated multiple times), the mutations are preserved. This specifically tests the 3rd
+   * case in joinMutationState where rows are merged.
+   */
+  @Test
+  public void testRowMergePreserveOnLimitExceeded() throws Exception {
+    String fullTableName = generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    // Low byte limit so merging rows with increasing sizes triggers limit
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+      createPreserveModeProps(1000, 1500))) {
+      conn.setAutoCommit(false);
+
+      PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + fullTableName
+        + " (organization_id, entity_id, score, tags) VALUES (?,?,?,?)");
+
+      int commitCount = 0;
+      int totalUpdates = 0;
+      String baseKey = "ORG000000000001";
+      String entityKey = "ENT000000000001";
+      int maxScore = 50;
+
+      // Keep updating the SAME row with larger values until limit reached
+      // Each update merges with the existing row, increasing the size
+      while (totalUpdates <= maxScore) {
+        try {
+          for (int i = totalUpdates; i <= maxScore; i++) {
+            stmt.setString(1, baseKey);
+            stmt.setString(2, entityKey);
+            stmt.setInt(3, i);
+            // Increasing size with each update - this will eventually exceed byte limit
+            StringBuilder sb = new StringBuilder("update" + i + "_");
+            for (int j = 0; j < i * 10; j++) {
+              sb.append("X");
+            }
+            stmt.setString(4, sb.toString());
+            stmt.executeUpdate();
+            totalUpdates = i + 1;
+          }
+          conn.commit();
+          commitCount++;
+          break;
+        } catch (MutationLimitReachedException e) {
+          // Mutations should be preserved - verify we have state
+          MutationState state = conn.getMutationState();
+          assertTrue("Mutations should be preserved on limit exceeded",
+            state.getNumRows() > 0 || state.getEstimatedSize() > 0);
+          conn.commit();
+          commitCount++;
+        }
+      }
+
+      // Should have hit limit and committed multiple times due to row merge size growth
+      assertTrue("Should have committed multiple times", commitCount > 1);
+
+      // Verify the row exists with the latest value
+      try (ResultSet rs = conn.createStatement().executeQuery("SELECT score FROM " + fullTableName
+        + " WHERE organization_id = '" + baseKey + "' AND entity_id = '" + entityKey + "'")) {
+        assertTrue("Row should exist", rs.next());
+        // Score should be the last successfully committed value
+        assertEquals("Score should be set to the max value", maxScore, rs.getInt(1));
+      }
+    }
+  }
+
+  /**
+   * Tests that when preserveOnLimitExceeded=true and the limit is reached during conflicting row
+   * addition (regular upsert vs ON DUPLICATE KEY upsert on same key), the mutations are preserved.
+   * This tests the conflict case in joinMutationState.
+   */
+  @Test
+  public void testConflictingRowsPreserveOnLimitExceeded() throws Exception {
+    String fullTableName = generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + fullTableName + DDL);
+    }
+
+    // Low byte limit so adding conflicting rows triggers limit
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl(),
+      createPreserveModeProps(1000, 2000))) {
+      conn.setAutoCommit(false);
+
+      // Regular UPSERT statement
+      PreparedStatement regularStmt = conn.prepareStatement("UPSERT INTO " + fullTableName
+        + " (organization_id, entity_id, score, tags) VALUES (?,?,?,?)");
+
+      // ON DUPLICATE KEY UPSERT statement - conflicts with regular upsert
+      PreparedStatement onDupKeyStmt = conn.prepareStatement(
+        "UPSERT INTO " + fullTableName + " (organization_id, entity_id, score) VALUES (?,?,?)"
+          + " ON DUPLICATE KEY UPDATE score = score + 1");
+
+      int commitCount = 0;
+      int totalRows = 0;
+      String orgKey = "ORG000000000001";
+
+      // Alternate between regular upserts and ON DUPLICATE KEY upserts on same keys
+      // This creates conflicting rows that can't be merged
+      while (totalRows < 30) {
+        try {
+          for (int i = totalRows; i < 30; i++) {
+            String entityKey = String.format("ENT%012d", i);
+
+            // First do a regular upsert
+            regularStmt.setString(1, orgKey);
+            regularStmt.setString(2, entityKey);
+            regularStmt.setInt(3, i);
+            StringBuilder sb = new StringBuilder("data" + i + "_");
+            for (int j = 0; j < 20; j++) {
+              sb.append("X");
+            }
+            regularStmt.setString(4, sb.toString());
+            regularStmt.executeUpdate();
+
+            // Then do an ON DUPLICATE KEY upsert on the same key - this conflicts
+            onDupKeyStmt.setString(1, orgKey);
+            onDupKeyStmt.setString(2, entityKey);
+            onDupKeyStmt.setInt(3, i * 10);
+            onDupKeyStmt.executeUpdate();
+
+            totalRows = i + 1;
+          }
+          conn.commit();
+          commitCount++;
+          break;
+        } catch (MutationLimitReachedException e) {
+          // Mutations should be preserved - verify we have state
+          MutationState state = conn.getMutationState();
+          assertTrue("Mutations should be preserved on limit exceeded",
+            state.getNumRows() > 0 || state.getEstimatedSize() > 0);
+          conn.commit();
+          commitCount++;
+        }
+      }
+
+      // Should have hit limit and committed multiple times due to conflicting row size
+      assertTrue("Should have committed multiple times", commitCount > 1);
+      // Verify rows exist
+      verifyRowCount(conn, fullTableName, totalRows);
+    }
+  }
+
   @Test
   public void testMutationEstimatedSize() throws Exception {
     PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl());
@@ -380,6 +877,35 @@ public class MutationStateIT extends ParallelStatsDisabledIT {
     stmt.execute();
     assertTrue("Mutation state size should decrease",
       prevEstimatedSize + 4 > state.getEstimatedSize());
+
+    // Test that estimatedSize increases when adding conflicting rows
+    // (regular upsert + ON DUPLICATE KEY upsert on same key cannot be merged)
+    conn.commit(); // clear state
+    assertEquals("Mutation state size should be zero after commit", 0, state.getEstimatedSize());
+
+    // Regular upsert
+    stmt = conn.prepareStatement(
+      "upsert into " + fullTableName + " (organization_id, entity_id, score) values (?,?,?)");
+    stmt.setString(1, "AAAA");
+    stmt.setString(2, "BBBB");
+    stmt.setInt(3, 1);
+    stmt.execute();
+    long sizeAfterRegularUpsert = state.getEstimatedSize();
+    assertTrue("Mutation state size should be > 0 after regular upsert",
+      sizeAfterRegularUpsert > 0);
+
+    // ON DUPLICATE KEY upsert on same key - creates a conflicting row that can't be merged
+    PreparedStatement onDupStmt = conn.prepareStatement(
+      "upsert into " + fullTableName + " (organization_id, entity_id, score) values (?,?,?)"
+        + " ON DUPLICATE KEY UPDATE score = score + 1");
+    onDupStmt.setString(1, "AAAA");
+    onDupStmt.setString(2, "BBBB");
+    onDupStmt.setInt(3, 2);
+    onDupStmt.execute();
+
+    // Size should increase because conflicting row goes into a separate batch
+    assertTrue("Estimated size should increase for conflicting row",
+      state.getEstimatedSize() > sizeAfterRegularUpsert);
   }
 
   @Test
