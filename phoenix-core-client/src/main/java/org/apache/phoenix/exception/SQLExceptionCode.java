@@ -733,6 +733,9 @@ public enum SQLExceptionCode {
           info.getMaxPhoenixColumnSizeBytes(), info.getPhoenixColumnSizeBytes());
       }
     }),
+  MUTATION_LIMIT_REACHED(733, "LIM04",
+    "Mutation buffer limit reached. Existing mutations are preserved. "
+      + "Commit current mutations and retry the failed operation."),
   INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
   HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found"),
 
