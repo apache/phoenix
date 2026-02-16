@@ -817,6 +817,16 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     assertEquals(expectedScanType, planAttributes.getExplainScanType());
   }
 
+  private void assertQueryUsesIndex(PreparedStatement stmt, String indexName) throws SQLException {
+    QueryPlan queryPlan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+    ExplainPlan explain = queryPlan.getExplainPlan();
+    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
+    String tableName = planAttributes.getTableName();
+    System.out.println("Explain plan: " + explain.toString());
+    assertTrue("Expected query to use index " + indexName + " but used table " + tableName,
+      tableName != null && tableName.contains(indexName));
+  }
+
   private void createTableASCPkColumns(String tableName) throws SQLException {
     String ddl = "CREATE TABLE " + tableName + " (" + "pk1 INTEGER NOT NULL, " + "pk2 VARCHAR(3), "
       + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)" + ")";
@@ -1160,4 +1170,141 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
       }
     }
   }
+
+  @Test
+  public void testQueryWithIndexAfterAddingNullablePKColumn() throws Exception {
+    String tableName = generateUniqueName();
+    String indexName = "IDX_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      // Step 1: Create table with one nullable PK column (PK3) at the end
+      String createTableDdl = "CREATE TABLE " + tableName + " ("
+        + "PK1 VARCHAR NOT NULL, "
+        + "PK2 VARCHAR NOT NULL, "
+        + "PK3 VARCHAR, "  // Nullable PK column at end
+        + "COL1 VARCHAR, "
+        + "COL2 VARCHAR, "
+        + "CONSTRAINT pk PRIMARY KEY (PK1, PK2, PK3)"
+        + ")";
+      conn.createStatement().execute(createTableDdl);
+      conn.commit();
+
+      // Step 2: Create a covered global index on the data table
+      String createIndexDdl = "CREATE INDEX " + indexName + " ON " + tableName
+        + " (COL1) INCLUDE (COL2)";
+      conn.createStatement().execute(createIndexDdl);
+      conn.commit();
+
+      // Step 3: Insert initial data (before ALTER TABLE)
+      // Row 1: PK3 is NULL
+      String upsertSql = "UPSERT INTO " + tableName
+        + " (PK1, PK2, PK3, COL1, COL2) VALUES (?, ?, ?, ?, ?)";
+      try (PreparedStatement stmt = conn.prepareStatement(upsertSql)) {
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setNull(3, Types.VARCHAR);
+        stmt.setString(4, "indexed_val1");
+        stmt.setString(5, "col2_val1");
+        stmt.executeUpdate();
+
+        // Row 2: PK3 has a value
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setString(3, "pk3_val1");
+        stmt.setString(4, "indexed_val2");
+        stmt.setString(5, "col2_val2");
+        stmt.executeUpdate();
+
+        // Row 3: Different PK prefix
+        stmt.setString(1, "C");
+        stmt.setString(2, "D");
+        stmt.setNull(3, Types.VARCHAR);
+        stmt.setString(4, "indexed_val3");
+        stmt.setString(5, "col2_val3");
+        stmt.executeUpdate();
+      }
+      conn.commit();
+
+      // Step 4: Add a new nullable PK column (PK4) via ALTER TABLE
+      String alterTableDdl = "ALTER TABLE " + tableName + " ADD PK4 VARCHAR PRIMARY KEY";
+      conn.createStatement().execute(alterTableDdl);
+      conn.commit();
+
+      // Step 5: Insert more data with same PK prefix but different PK4 values
+      upsertSql = "UPSERT INTO " + tableName
+        + " (PK1, PK2, PK3, PK4, COL1, COL2) VALUES (?, ?, ?, ?, ?, ?)";
+      try (PreparedStatement stmt = conn.prepareStatement(upsertSql)) {
+        // Row 4: Same prefix as Row 1 (A, B, NULL) but PK4 = 'X'
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setNull(3, Types.VARCHAR);
+        stmt.setString(4, "X");
+        stmt.setString(5, "indexed_val4");
+        stmt.setString(6, "col2_val4");
+        stmt.executeUpdate();
+
+        // Row 5: Same prefix as Row 1 (A, B, NULL) but PK4 = 'Y'
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setNull(3, Types.VARCHAR);
+        stmt.setString(4, "Y");
+        stmt.setString(5, "indexed_val5");
+        stmt.setString(6, "col2_val5");
+        stmt.executeUpdate();
+
+        // Row 6: Same prefix as Row 2 (A, B, pk3_val1) but PK4 = 'Y'
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setString(3, "pk3_val1");
+        stmt.setString(4, "Y");
+        stmt.setString(5, "indexed_val6");
+        stmt.setString(6, "col2_val6");
+        stmt.executeUpdate();
+
+        // Row 7: Same prefix as Row 2 (A, B, NULL) but PK4 = 'Z'
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setNull(3, Types.VARCHAR);
+        stmt.setString(4, "Z");
+        stmt.setString(5, "indexed_val7");
+        stmt.setString(6, "col2_val7");
+        stmt.executeUpdate();
+      }
+      conn.commit();
+
+      String selectSql = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ "
+        + "PK1, PK2, PK3, PK4, COL1, COL2 FROM " + tableName
+        + " WHERE PK1 = ? AND PK2 = ? AND PK3 IS NULL AND (PK4 IS NULL OR PK4 = ANY(?)) AND COL1 = ANY(?)";
+      Array pk4Arr = conn.createArrayOf("VARCHAR", new String[] { "Z", "Y" });
+      Array col1Arr = conn.createArrayOf("VARCHAR", new String[] { "indexed_val5", "indexed_val1", "indexed_val7", "indexed_val4" });
+      try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setArray(3, pk4Arr);
+        stmt.setArray(4, col1Arr);
+        try (ResultSet rs = stmt.executeQuery()) {
+          assertTrue(rs.next());
+          String pk4Val = rs.getString("PK4");
+          assertNull(pk4Val);
+
+          assertTrue(rs.next());
+          pk4Val = rs.getString("PK4");
+          assertTrue("Y".equals(pk4Val));
+
+          assertTrue(rs.next());
+          pk4Val = rs.getString("PK4");
+          assertTrue("Z".equals(pk4Val));
+
+          // No more rows
+          assertFalse(rs.next());
+        }
+        // Should generate point lookups for the three PK4 values
+        assertPointLookupsAreGenerated(stmt, 12);
+        // Assert that the query uses the index table
+        assertQueryUsesIndex(stmt, indexName);
+      }
+    }
+  }
+
+  
 }

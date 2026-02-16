@@ -100,9 +100,10 @@ public class ScanRanges {
     }
     TimeRange rowTimestampRange = getRowTimestampColumnRange(ranges, schema, rowTimestampColIndex);
     boolean isPointLookup = isPointLookup(schema, ranges, slotSpan, useSkipScan);
+    boolean isPointLookupWithNull = false;
     if (isPointLookup) {
       if (ranges.get(ranges.size() - 1).get(0) == KeyRange.IS_NULL_RANGE) {
-        System.out.println("IS_NULL_RANGE: ");
+        isPointLookupWithNull = true;
       }
       // TODO: consider keeping original to use for serialization as it would be smaller?
       List<byte[]> keys = ScanRanges.getPointKeys(ranges, slotSpan, schema, nBuckets);
@@ -148,6 +149,9 @@ public class ScanRanges {
     if (nBuckets == null || !isPointLookup || !useSkipScan) {
       byte[] minKey = ScanUtil.getMinKey(schema, sortedRanges, slotSpan);
       byte[] maxKey = ScanUtil.getMaxKey(schema, sortedRanges, slotSpan);
+      if (isPointLookupWithNull) {
+        System.out.println("IS_NULL_RANGE: ");
+      }
       // If the maxKey has crossed the salt byte boundary, then we do not
       // have anything to filter at the upper end of the range
       if (ScanUtil.crossesPrefixBoundary(maxKey, ScanUtil.getPrefix(minKey, offset), offset)) {
@@ -650,7 +654,7 @@ public class ScanRanges {
     boolean isSalted = bucketNum != null;
     int count = 1;
     int offset = isSalted ? 1 : 0;
-    int lastNonNullIndex = -1;
+    int lastNonNullIndex = offset - 1;
     // Skip salt byte range in the first position if salted
     for (int i = offset; i < ranges.size(); i++) {
       count *= ranges.get(i).size();
@@ -659,7 +663,7 @@ public class ScanRanges {
       }
       lastNonNullIndex = i;
     }
-    if (lastNonNullIndex != -1) {
+    if (lastNonNullIndex < ranges.size() - 1) {
       // Create ranges without trailing null
       ranges = ranges.subList(0, lastNonNullIndex + 1);
     }
