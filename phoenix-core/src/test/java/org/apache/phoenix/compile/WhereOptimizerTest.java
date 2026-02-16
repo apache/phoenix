@@ -2696,10 +2696,16 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     StatementContext context = compileStatement(query, Collections.<Object> emptyList());
     Scan scan = context.getScan();
     Filter filter = scan.getFilter();
+    // With trailing IS NULL as point lookup, no filter is needed
     assertNull(filter);
-    assertArrayEquals(Bytes.toBytes("a"), scan.getStartRow());
-    assertArrayEquals(ByteUtil.concat(Bytes.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY,
-      QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+    // Point lookup for trailing IS NULL: startRow = "a", stopRow = "a\0"
+    // The separator is added to create an exclusive upper bound
+    byte[] expectedStartKey = Bytes.toBytes("a");
+    byte[] expectedStopKey = ByteUtil.concat(expectedStartKey, QueryConstants.SEPARATOR_BYTE_ARRAY);
+    assertArrayEquals(expectedStartKey, scan.getStartRow());
+    assertArrayEquals(expectedStopKey, scan.getStopRow());
+    // Verify it's a point lookup
+    assertTrue(context.getScanRanges().isPointLookup());
   }
 
   @Test
@@ -2714,18 +2720,24 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     StatementContext context = compileStatement(query, Collections.<Object> emptyList());
     Scan scan = context.getScan();
     Filter filter = scan.getFilter();
+    // With trailing IS NULL as point lookup, when combined with OR, it becomes
+    // a point lookup with 2 keys (one for NULL, one for 'b')
     assertTrue(filter instanceof SkipScanFilter);
     SkipScanFilter skipScan = (SkipScanFilter) filter;
     List<List<KeyRange>> slots = skipScan.getSlots();
-    assertEquals(2, slots.size());
-    assertEquals(1, slots.get(0).size());
-    assertEquals(2, slots.get(1).size());
-    assertEquals(KeyRange.getKeyRange(Bytes.toBytes("a")), slots.get(0).get(0));
-    assertTrue(KeyRange.IS_NULL_RANGE == slots.get(1).get(0));
-    assertEquals(KeyRange.getKeyRange(Bytes.toBytes("b")), slots.get(1).get(1));
-    assertArrayEquals(Bytes.toBytes("a"), scan.getStartRow());
-    assertArrayEquals(ByteUtil.concat(Bytes.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY,
-      Bytes.toBytes("b"), QueryConstants.SEPARATOR_BYTE_ARRAY), scan.getStopRow());
+    // Point lookup collapses to single slot with 2 keys
+    assertEquals(1, slots.size());
+    assertEquals(2, slots.get(0).size());
+    // Verify it's a point lookup
+    assertTrue(context.getScanRanges().isPointLookup());
+    // Key 1: "a" (for b IS NULL - trailing separator stripped)
+    byte[] key1 = Bytes.toBytes("a");
+    // Key 2: "a\0b" (for b = 'b' - trailing separator stripped for last column)
+    byte[] key2 = ByteUtil.concat(Bytes.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY,
+      Bytes.toBytes("b"));
+    // Keys are sorted, so key1 comes before key2
+    assertEquals(KeyRange.getKeyRange(key1), slots.get(0).get(0));
+    assertEquals(KeyRange.getKeyRange(key2), slots.get(0).get(1));
   }
 
   @Test

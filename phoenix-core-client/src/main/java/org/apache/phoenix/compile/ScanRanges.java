@@ -101,6 +101,9 @@ public class ScanRanges {
     TimeRange rowTimestampRange = getRowTimestampColumnRange(ranges, schema, rowTimestampColIndex);
     boolean isPointLookup = isPointLookup(schema, ranges, slotSpan, useSkipScan);
     if (isPointLookup) {
+      if (ranges.get(ranges.size() - 1).get(0) == KeyRange.IS_NULL_RANGE) {
+        System.out.println("IS_NULL_RANGE: ");
+      }
       // TODO: consider keeping original to use for serialization as it would be smaller?
       List<byte[]> keys = ScanRanges.getPointKeys(ranges, slotSpan, schema, nBuckets);
       List<KeyRange> keyRanges = Lists.newArrayListWithExpectedSize(keys.size());
@@ -618,9 +621,12 @@ public class ScanRanges {
         return false;
       }
       for (KeyRange keyRange : orRanges) {
-        // Special case for single trailing IS NULL. We cannot consider this as a point key because
-        // we strip trailing nulls when we form the key.
-        if (!keyRange.isSingleKey() || (i == lastIndex && keyRange == KeyRange.IS_NULL_RANGE)) {
+        // COL IS NULL on trailing nullable PK column can be treated as a point lookup
+        // because:
+        // 1. Trailing nulls are stripped when storing the key (no trailing separator bytes)
+        // 2. getPointKeys() generates the correct key without trailing null bytes
+        // 3. The generated key matches exactly what's stored for rows with trailing NULL
+        if (!keyRange.isSingleKey()) {
           return false;
         }
       }
@@ -644,9 +650,18 @@ public class ScanRanges {
     boolean isSalted = bucketNum != null;
     int count = 1;
     int offset = isSalted ? 1 : 0;
+    int lastNonNullIndex = -1;
     // Skip salt byte range in the first position if salted
     for (int i = offset; i < ranges.size(); i++) {
       count *= ranges.get(i).size();
+      if (ranges.get(i).size() == 1 && ranges.get(i).get(0) == KeyRange.IS_NULL_RANGE) {
+        continue;
+      }
+      lastNonNullIndex = i;
+    }
+    if (lastNonNullIndex != -1) {
+      // Create ranges without trailing null
+      ranges = ranges.subList(0, lastNonNullIndex + 1);
     }
     List<byte[]> keys = Lists.newArrayListWithExpectedSize(count);
     int[] position = new int[ranges.size()];
