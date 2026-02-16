@@ -1306,5 +1306,140 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     }
   }
 
-  
+  @Test
+  public void testMultiPointLookupsOnViewWithNullablePKColumns() throws Exception {
+    String tableName = generateUniqueName();
+    String viewName = "VW_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      // Step 1: Create parent table with fixed-width NOT NULL last PK
+      // Using CHAR (fixed-width) for PK2 to allow view to add PK columns
+      String createTableDdl = "CREATE TABLE " + tableName + " ("
+        + "PK1 VARCHAR NOT NULL, "
+        + "PK2 CHAR(10) NOT NULL, "  // Fixed-width NOT NULL - allows view to add PKs
+        + "COL1 VARCHAR, "
+        + "COL2 VARCHAR, "
+        + "CONSTRAINT pk PRIMARY KEY (PK1, PK2)"
+        + ")";
+      conn.createStatement().execute(createTableDdl);
+      conn.commit();
+
+      // Step 2: Create view that adds two nullable PK columns
+      String createViewDdl = "CREATE VIEW " + viewName + " ("
+        + "VIEW_PK1 VARCHAR, "  // Nullable PK column added by view
+        + "VIEW_PK2 VARCHAR, "  // Second nullable PK column added by view
+        + "VIEW_COL1 VARCHAR, "
+        + "CONSTRAINT view_pk PRIMARY KEY (VIEW_PK1, VIEW_PK2)"
+        + ") AS SELECT * FROM " + tableName;
+      conn.createStatement().execute(createViewDdl);
+      conn.commit();
+
+      // Step 3: Insert data through the view with various combinations
+      String upsertSql = "UPSERT INTO " + viewName
+        + " (PK1, PK2, VIEW_PK1, VIEW_PK2, COL1, COL2, VIEW_COL1) VALUES (?, ?, ?, ?, ?, ?, ?)";
+      try (PreparedStatement stmt = conn.prepareStatement(upsertSql)) {
+        // Row 1: Both VIEW_PK1 and VIEW_PK2 are NULL
+        stmt.setString(1, "A");
+        stmt.setString(2, "BASE1");
+        stmt.setNull(3, Types.VARCHAR);
+        stmt.setNull(4, Types.VARCHAR);
+        stmt.setString(5, "col1_val1");
+        stmt.setString(6, "col2_val1");
+        stmt.setString(7, "view_col1_val1");
+        stmt.executeUpdate();
+
+        // Row 2: VIEW_PK1 = 'X', VIEW_PK2 is NULL
+        stmt.setString(1, "A");
+        stmt.setString(2, "BASE1");
+        stmt.setString(3, "X");
+        stmt.setNull(4, Types.VARCHAR);
+        stmt.setString(5, "col1_val2");
+        stmt.setString(6, "col2_val2");
+        stmt.setString(7, "view_col1_val2");
+        stmt.executeUpdate();
+
+        // Row 3: VIEW_PK1 = 'X', VIEW_PK2 = 'P'
+        stmt.setString(1, "A");
+        stmt.setString(2, "BASE1");
+        stmt.setString(3, "X");
+        stmt.setString(4, "P");
+        stmt.setString(5, "col1_val3");
+        stmt.setString(6, "col2_val3");
+        stmt.setString(7, "view_col1_val3");
+        stmt.executeUpdate();
+
+        // Row 4: VIEW_PK1 = 'X', VIEW_PK2 = 'Q'
+        stmt.setString(1, "A");
+        stmt.setString(2, "BASE1");
+        stmt.setString(3, "X");
+        stmt.setString(4, "Q");
+        stmt.setString(5, "col1_val4");
+        stmt.setString(6, "col2_val4");
+        stmt.setString(7, "view_col1_val4");
+        stmt.executeUpdate();
+
+        // Row 5: VIEW_PK1 = 'Y', VIEW_PK2 is NULL
+        stmt.setString(1, "A");
+        stmt.setString(2, "BASE1");
+        stmt.setString(3, "Y");
+        stmt.setNull(4, Types.VARCHAR);
+        stmt.setString(5, "col1_val5");
+        stmt.setString(6, "col2_val5");
+        stmt.setString(7, "view_col1_val5");
+        stmt.executeUpdate();
+
+        // Row 6: VIEW_PK1 = 'Y', VIEW_PK2 = 'Q'
+        stmt.setString(1, "A");
+        stmt.setString(2, "BASE1");
+        stmt.setString(3, "Y");
+        stmt.setString(4, "Q");
+        stmt.setString(5, "col1_val6");
+        stmt.setString(6, "col2_val6");
+        stmt.setString(7, "view_col1_val6");
+        stmt.executeUpdate();
+
+        // Row 7: Different base PK prefix
+        stmt.setString(1, "B");
+        stmt.setString(2, "BASE2");
+        stmt.setString(3, "X");
+        stmt.setString(4, "P");
+        stmt.setString(5, "col1_val7");
+        stmt.setString(6, "col2_val7");
+        stmt.setString(7, "view_col1_val7");
+        stmt.executeUpdate();
+      }
+      conn.commit();
+
+      String selectSql = "SELECT PK1, PK2, VIEW_PK1, VIEW_PK2, COL1, VIEW_COL1 FROM " + viewName
+        + " WHERE PK1 = ? AND PK2 = ? AND VIEW_PK1 = ANY(?) AND (VIEW_PK2 IS NULL OR VIEW_PK2 = ANY(?))";
+      Array viewPk1Arr = conn.createArrayOf("VARCHAR", new String[] { "X", "Y" });
+      Array viewPk2Arr = conn.createArrayOf("VARCHAR", new String[] { "P", "Q" });
+      try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
+        stmt.setString(1, "A");
+        stmt.setString(2, "BASE1");
+        stmt.setArray(3, viewPk1Arr);
+        stmt.setArray(4, viewPk2Arr);
+        try (ResultSet rs = stmt.executeQuery()) {
+          int rowCount = 0;
+          while (rs.next()) {
+            rowCount++;
+            String viewPk1 = rs.getString("VIEW_PK1");
+            String viewPk2 = rs.getString("VIEW_PK2");
+            // Verify VIEW_PK1 is either X or Y
+            assertTrue("X".equals(viewPk1) || "Y".equals(viewPk1));
+            // Verify VIEW_PK2 is NULL, P, or Q
+            assertTrue(viewPk2 == null || "P".equals(viewPk2) || "Q".equals(viewPk2));
+          }
+          // Expected rows: 
+          // (A, BASE1, X, NULL), (A, BASE1, X, P), (A, BASE1, X, Q),
+          // (A, BASE1, Y, NULL), (A, BASE1, Y, Q)
+          assertEquals(5, rowCount);
+        }
+        // Assert point lookups are generated
+        // VIEW_PK1 has 2 values (X, Y), VIEW_PK2 has 3 values (NULL, P, Q)
+        // Total combinations: 2 * 3 = 6 point lookups
+        assertPointLookupsAreGenerated(stmt, 6);
+      }
+    }
+  }
 }
