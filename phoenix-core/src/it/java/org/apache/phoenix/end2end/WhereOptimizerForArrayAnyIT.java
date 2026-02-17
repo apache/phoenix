@@ -782,16 +782,6 @@ public class WhereOptimizerForArrayAnyIT extends WhereOptimizerForArrayAnyITBase
     assertPointLookupsAreGenerated(queryPlan, noOfPointLookups);
   }
 
-  private void assertSkipScanIsGenerated(PreparedStatement stmt, int skipListSize)
-    throws SQLException {
-    QueryPlan queryPlan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
-    ExplainPlan explain = queryPlan.getExplainPlan();
-    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
-    String expectedScanType =
-      "SKIP SCAN ON " + skipListSize + " KEY" + (skipListSize > 1 ? "S " : " ");
-    assertEquals(expectedScanType, planAttributes.getExplainScanType());
-  }
-
   private void createTableASCPkColumns(String tableName) throws SQLException {
     String ddl = "CREATE TABLE " + tableName + " (" + "pk1 INTEGER NOT NULL, " + "pk2 VARCHAR(3), "
       + "col1 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (pk1, pk2)" + ")";

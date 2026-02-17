@@ -2733,8 +2733,8 @@ public class WhereOptimizerTest extends BaseConnectionlessQueryTest {
     // Key 1: "a" (for b IS NULL - trailing separator stripped)
     byte[] key1 = Bytes.toBytes("a");
     // Key 2: "a\0b" (for b = 'b' - trailing separator stripped for last column)
-    byte[] key2 = ByteUtil.concat(Bytes.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY,
-      Bytes.toBytes("b"));
+    byte[] key2 =
+      ByteUtil.concat(Bytes.toBytes("a"), QueryConstants.SEPARATOR_BYTE_ARRAY, Bytes.toBytes("b"));
     // Keys are sorted, so key1 comes before key2
     assertEquals(KeyRange.getKeyRange(key1), slots.get(0).get(0));
     assertEquals(KeyRange.getKeyRange(key2), slots.get(0).get(1));

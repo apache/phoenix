@@ -100,11 +100,7 @@ public class ScanRanges {
     }
     TimeRange rowTimestampRange = getRowTimestampColumnRange(ranges, schema, rowTimestampColIndex);
     boolean isPointLookup = isPointLookup(schema, ranges, slotSpan, useSkipScan);
-    boolean isPointLookupWithNull = false;
     if (isPointLookup) {
-      if (ranges.get(ranges.size() - 1).get(0) == KeyRange.IS_NULL_RANGE) {
-        isPointLookupWithNull = true;
-      }
       // TODO: consider keeping original to use for serialization as it would be smaller?
       List<byte[]> keys = ScanRanges.getPointKeys(ranges, slotSpan, schema, nBuckets);
       List<KeyRange> keyRanges = Lists.newArrayListWithExpectedSize(keys.size());
@@ -149,9 +145,6 @@ public class ScanRanges {
     if (nBuckets == null || !isPointLookup || !useSkipScan) {
       byte[] minKey = ScanUtil.getMinKey(schema, sortedRanges, slotSpan);
       byte[] maxKey = ScanUtil.getMaxKey(schema, sortedRanges, slotSpan);
-      if (isPointLookupWithNull) {
-        System.out.println("IS_NULL_RANGE: ");
-      }
       // If the maxKey has crossed the salt byte boundary, then we do not
       // have anything to filter at the upper end of the range
       if (ScanUtil.crossesPrefixBoundary(maxKey, ScanUtil.getPrefix(minKey, offset), offset)) {
@@ -631,12 +624,9 @@ public class ScanRanges {
         // 2. getPointKeys() generates the correct key without trailing null bytes
         // 3. The generated key matches exactly what's stored for rows with trailing NULL
         // 4. Not handling legcay tables with DESC sort order and impacted via bug PHOENIX-2067
-        if (
-          !keyRange.isSingleKey()
-        ) {
+        if (!keyRange.isSingleKey()) {
           return false;
-        }
-        else if (i == lastIndex && keyRange == KeyRange.IS_NULL_RANGE) {
+        } else if (i == lastIndex && keyRange == KeyRange.IS_NULL_RANGE) {
           Field lastField = schema.getField(schema.getFieldCount() - 1);
           SortOrder lastFieldSortOrder = lastField.getSortOrder();
           if (lastFieldSortOrder == SortOrder.DESC && !schema.rowKeyOrderOptimizable()) {
