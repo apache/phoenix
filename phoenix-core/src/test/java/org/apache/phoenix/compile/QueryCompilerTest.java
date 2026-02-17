@@ -99,6 +99,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDecimal;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -7878,4 +7879,192 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       assertTrue(orderBy.getOrderByExpressions().get(3).toString().equals("VALID_CLICK_COUNT"));
     }
   }
+
+  @Test
+  public void testRVCScanBoundaries1() throws Exception {
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute(
+        "CREATE TABLE " + tableName + " (" + "category VARCHAR NOT NULL, score DECIMAL NOT NULL, "
+          + "pk VARCHAR NOT NULL, sk BIGINT NOT NULL, "
+          + "CONSTRAINT table_pk PRIMARY KEY (category, score, pk, sk))");
+
+      byte[] cat0 = PVarchar.INSTANCE.toBytes("category_0");
+      byte[] cat7 = PVarchar.INSTANCE.toBytes("category_7");
+      byte[] SEP = new byte[] { QueryConstants.SEPARATOR_BYTE };
+
+      byte[] dec4970 = PDecimal.INSTANCE.toBytes(new BigDecimal("4970"));
+      byte[] dec4980 = PDecimal.INSTANCE.toBytes(new BigDecimal("4980"));
+      byte[] dec4990 = PDecimal.INSTANCE.toBytes(new BigDecimal("4990"));
+      byte[] dec5000 = PDecimal.INSTANCE.toBytes(new BigDecimal("5000"));
+      byte[] dec5010 = PDecimal.INSTANCE.toBytes(new BigDecimal("5010"));
+      byte[] dec2000 = PDecimal.INSTANCE.toBytes(new BigDecimal("2000"));
+      byte[] dec2037 = PDecimal.INSTANCE.toBytes(new BigDecimal("2037"));
+      byte[] dec7997 = PDecimal.INSTANCE.toBytes(new BigDecimal("7997"));
+      byte[] dec8000 = PDecimal.INSTANCE.toBytes(new BigDecimal("8000"));
+
+      byte[] pk0 = PVarchar.INSTANCE.toBytes("pk_0");
+      byte[] pk10 = PVarchar.INSTANCE.toBytes("pk_10");
+      byte[] pk37 = PVarchar.INSTANCE.toBytes("pk_37");
+      byte[] pk70 = PVarchar.INSTANCE.toBytes("pk_70");
+      byte[] pk90 = PVarchar.INSTANCE.toBytes("pk_90");
+      byte[] pk97 = PVarchar.INSTANCE.toBytes("pk_97");
+      byte[] long4970 = PLong.INSTANCE.toBytes(4970L);
+      byte[] long4990 = PLong.INSTANCE.toBytes(4990L);
+      byte[] long5010 = PLong.INSTANCE.toBytes(5010L);
+      byte[] long7997 = PLong.INSTANCE.toBytes(7997L);
+      byte[] long2037 = PLong.INSTANCE.toBytes(2037L);
+
+      String sql = "SELECT * FROM " + tableName + " WHERE category = 'category_0' AND score <= 5000"
+        + " AND (score, pk, sk) > (4990, 'pk_90', 4990)";
+      Scan scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(
+        ByteUtil.nextKey(ByteUtil.concat(cat0, SEP, dec4990, SEP, pk90, SEP, long4990)),
+        scan.getStartRow());
+      assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(cat0, SEP, dec5000, SEP)),
+        scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName + " WHERE category = 'category_0' AND score < 5000"
+        + " AND (score, pk, sk) > (4990, 'pk_90', 4990)";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(
+        ByteUtil.nextKey(ByteUtil.concat(cat0, SEP, dec4990, SEP, pk90, SEP, long4990)),
+        scan.getStartRow());
+      assertArrayEquals(ByteUtil.concat(cat0, SEP, dec5000), scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName + " WHERE category = 'category_0' AND score >= 4980"
+        + " AND (score, pk, sk) < (5010, 'pk_10', 5010)";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(ByteUtil.concat(cat0, SEP, dec4980, SEP), scan.getStartRow());
+      assertArrayEquals(ByteUtil.concat(cat0, SEP, dec5010, SEP, pk10, SEP, long5010),
+        scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName + " WHERE category = 'category_0'"
+        + " AND (score, pk) <= (5000, 'pk_0')" + " AND (score, pk, sk) > (4970, 'pk_70', 4970)";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(
+        ByteUtil.nextKey(ByteUtil.concat(cat0, SEP, dec4970, SEP, pk70, SEP, long4970)),
+        scan.getStartRow());
+      assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(cat0, SEP, dec5000, SEP, pk0, SEP)),
+        scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName + " WHERE category = 'category_0'"
+        + " AND (score, pk) < (5000, 'pk_0')" + " AND (score, pk, sk) > (4970, 'pk_70', 4970)";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(
+        ByteUtil.nextKey(ByteUtil.concat(cat0, SEP, dec4970, SEP, pk70, SEP, long4970)),
+        scan.getStartRow());
+      assertArrayEquals(ByteUtil.concat(cat0, SEP, dec5000, SEP, pk0), scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName
+        + " WHERE category = 'category_7' AND score BETWEEN 2000 AND 8000"
+        + " AND (score, pk, sk) > (7997, 'pk_97', 7997)";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(
+        ByteUtil.nextKey(ByteUtil.concat(cat7, SEP, dec7997, SEP, pk97, SEP, long7997)),
+        scan.getStartRow());
+      assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(cat7, SEP, dec8000, SEP)),
+        scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName
+        + " WHERE category = 'category_7' AND score BETWEEN 2000 AND 8000"
+        + " AND (score, pk, sk) >= (7997, 'pk_97', 7997)";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(ByteUtil.concat(cat7, SEP, dec7997, SEP, pk97, SEP, long7997),
+        scan.getStartRow());
+      assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(cat7, SEP, dec8000, SEP)),
+        scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName
+        + " WHERE category = 'category_7' AND score BETWEEN 2000 AND 8000"
+        + " AND (score, pk, sk) < (2037, 'pk_37', 2037)";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(ByteUtil.concat(cat7, SEP, dec2000, SEP), scan.getStartRow());
+      assertArrayEquals(ByteUtil.concat(cat7, SEP, dec2037, SEP, pk37, SEP, long2037),
+        scan.getStopRow());
+    }
+  }
+
+  @Test
+  public void testRVCScanBoundaries2() throws Exception {
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName + " ("
+          + "a VARCHAR NOT NULL, b BIGINT NOT NULL, c VARCHAR NOT NULL, "
+          + "d INTEGER NOT NULL, e VARCHAR NOT NULL, f BIGINT NOT NULL, "
+          + "val VARCHAR, CONSTRAINT pk PRIMARY KEY (a, b, c, d, e, f))");
+
+      byte[] a0 = PVarchar.INSTANCE.toBytes("a_0");
+      byte[] SEP = new byte[] { QueryConstants.SEPARATOR_BYTE };
+      byte[] c5 = PVarchar.INSTANCE.toBytes("c_5");
+      byte[] c3 = PVarchar.INSTANCE.toBytes("c_3");
+      byte[] c1 = PVarchar.INSTANCE.toBytes("c_1");
+      byte[] c6 = PVarchar.INSTANCE.toBytes("c_6");
+      byte[] e1 = PVarchar.INSTANCE.toBytes("e_1");
+      byte[] e2 = PVarchar.INSTANCE.toBytes("e_2");
+
+      String sql = "SELECT * FROM " + tableName + " WHERE a = 'a_0' AND b >= 24990 AND b <= 25010";
+      Scan scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(24990L)),
+        scan.getStartRow());
+      assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(25010L))),
+        scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName
+        + " WHERE a = 'a_0' AND b <= 25010 AND (b, c) > (24995, 'c_5')";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(
+        ByteUtil.nextKey(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(24995L), c5, SEP)),
+        scan.getStartRow());
+      assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(25010L))),
+        scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName
+        + " WHERE a = 'a_0' AND b <= 25010 AND (b, c, d) > (25000, 'c_3', 0)";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(25000L),
+        c3, SEP, PInteger.INSTANCE.toBytes(0))), scan.getStartRow());
+      assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(25010L))),
+        scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName
+        + " WHERE a = 'a_0' AND b <= 25010 AND (b, c, d, e) > (25000, 'c_3', 0, 'e_1')";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(25000L),
+        c3, SEP, PInteger.INSTANCE.toBytes(0), e1, SEP)), scan.getStartRow());
+      assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(25010L))),
+        scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName + " WHERE a = 'a_0' AND (b, c) <= (25005, 'c_1')"
+        + " AND (b, c, d) > (24995, 'c_5', 95)";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(24995L),
+        c5, SEP, PInteger.INSTANCE.toBytes(95))), scan.getStartRow());
+      assertArrayEquals(
+        ByteUtil.nextKey(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(25005L), c1, SEP)),
+        scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName + " WHERE a = 'a_0' AND (b, c, d) <= (25005, 'c_1', 5)"
+        + " AND (b, c, d, e, f) > (24995, 'c_5', 95, 'e_2', 24995)";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(
+        ByteUtil.nextKey(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(24995L), c5, SEP,
+          PInteger.INSTANCE.toBytes(95), e2, SEP, PLong.INSTANCE.toBytes(24995L))),
+        scan.getStartRow());
+      assertArrayEquals(ByteUtil.nextKey(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(25005L),
+        c1, SEP, PInteger.INSTANCE.toBytes(5))), scan.getStopRow());
+
+      sql = "SELECT * FROM " + tableName
+        + " WHERE a = 'a_0' AND b >= 24995 AND (b, c, d) < (25010, 'c_6', 10)";
+      scan = TestUtil.getOptimizeQueryPlanNoIterator(conn, sql).getContext().getScan();
+      assertArrayEquals(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(24995L)),
+        scan.getStartRow());
+      assertArrayEquals(ByteUtil.concat(a0, SEP, PLong.INSTANCE.toBytes(25010L), c6, SEP,
+        PInteger.INSTANCE.toBytes(10)), scan.getStopRow());
+    }
+  }
+
 }
