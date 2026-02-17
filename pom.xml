@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>30</version>
+    <version>31</version>
   </parent>
   <groupId>org.apache.phoenix</groupId>
   <artifactId>phoenix</artifactId>
@@ -157,7 +157,6 @@
     <lifecycle-mapping.version>1.0.0</lifecycle-mapping.version>
     <maven-bundle-plugin.version>5.1.9</maven-bundle-plugin.version>
     <exec-maven-plugin.version>3.1.1</exec-maven-plugin.version>
-    <maven-checkstyle-plugin.version>3.3.0</maven-checkstyle-plugin.version>
     <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
     <!-- This overrides the property in the ASF parent project-->
     <version.maven-site-plugin>3.21.0</version.maven-site-plugin>
@@ -909,6 +908,18 @@
           </exclusion>
         </exclusions>
       </dependency>
+      <dependency>
+        <groupId>org.apache.hbase</groupId>
+        <artifactId>hbase-zookeeper</artifactId>
+        <version>${hbase.version}</version>
+        <type>test-jar</type>
+        <exclusions>
+          <exclusion>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
 
       <!-- HBase test dependencies -->
       <dependency>
@@ -1600,7 +1611,6 @@
         </plugin>
         <plugin>
           <artifactId>maven-dependency-plugin</artifactId>
-          <version>3.1.1</version>
           <configuration>
             <ignoredUnusedDeclaredDependencies>
               <ignoredUnusedDeclaredDependency>org.apache.omid:*</ignoredUnusedDeclaredDependency>
@@ -1748,7 +1758,6 @@
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-checkstyle-plugin</artifactId>
-        <version>${maven-checkstyle-plugin.version}</version>
         <configuration>
           <configLocation>${top.dir}/src/main/config/checkstyle/checker.xml</configLocation>
           <suppressionsLocation>${top.dir}/src/main/config/checkstyle/suppressions.xml</suppressionsLocation>
