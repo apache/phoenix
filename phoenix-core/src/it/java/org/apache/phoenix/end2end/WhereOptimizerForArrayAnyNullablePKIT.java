@@ -28,6 +28,7 @@ import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
@@ -270,7 +271,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         stmt.setString(2, "B");
         stmt.setBigDecimal(3, PK3_VAL);
         stmt.setString(4, "X");
-        try (java.sql.ResultSet rs = stmt.executeQuery()) {
+        try (ResultSet rs = stmt.executeQuery()) {
           // Should return 1 row: PK4='X' with PK5 IS NULL
           assertTrue(rs.next());
           assertEquals("X", rs.getString("PK4"));
@@ -286,7 +287,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         assertPointLookupsAreGenerated(stmt, 1);
 
         stmt.setString(4, "Y");
-        try (java.sql.ResultSet rs = stmt.executeQuery()) {
+        try (ResultSet rs = stmt.executeQuery()) {
           // Should return 1 row: PK4='Y' with PK5 IS NULL
           assertTrue(rs.next());
           assertEquals("Y", rs.getString("PK4"));
@@ -322,7 +323,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         stmt.setString(2, "B");
         stmt.setBigDecimal(3, PK3_VAL);
         stmt.setArray(4, pk4Arr);
-        try (java.sql.ResultSet rs = stmt.executeQuery()) {
+        try (ResultSet rs = stmt.executeQuery()) {
           // Should return 2 rows: PK4='X' and PK4='Y' with PK5 IS NULL
           assertTrue(rs.next());
           String pk4Val1 = rs.getString("PK4");
@@ -463,7 +464,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         stmt.setString(2, "B");
         stmt.setArray(3, pk4Arr);
         stmt.setArray(4, col1Arr);
-        try (java.sql.ResultSet rs = stmt.executeQuery()) {
+        try (ResultSet rs = stmt.executeQuery()) {
           assertTrue(rs.next());
           String pk4Val = rs.getString("PK4");
           assertNull(pk4Val);
@@ -597,7 +598,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         stmt.setString(2, "BASE1");
         stmt.setArray(3, viewPk1Arr);
         stmt.setArray(4, viewPk2Arr);
-        try (java.sql.ResultSet rs = stmt.executeQuery()) {
+        try (ResultSet rs = stmt.executeQuery()) {
           int rowCount = 0;
           while (rs.next()) {
             rowCount++;
@@ -624,14 +625,14 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
   }
 
   /**
-   * Test for point lookup with IS NULL check on all PK columns. Uses class-level
+   * Test for degenerate scan with IS NULL check on all PK columns. Uses class-level
    * columnConfig.isDesc() for sort order of all PK columns. Note: columnConfig's fixed-width vs
    * variable-width aspect is not applicable here, so FIXED_WIDTH and VARWIDTH_ASC behave the same
    * (both use ASC sort order). The secondarySortDesc parameter is also not applicable for this
    * test.
    */
   @Test
-  public void testPointLookupWithIsNullCheckOnAllPKColumns() throws Exception {
+  public void testDegenerateScanWithIsNullCheckOnAllPKColumns() throws Exception {
     Assume.assumeFalse(columnConfig.isFixedWidth() || secondarySortDesc);
     String tableName = generateUniqueName();
     String sortOrder = columnConfig.isDesc() ? " DESC" : "";
@@ -693,12 +694,10 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
       String selectSql = "SELECT COL1, COL2 FROM " + tableName
         + " WHERE PK1 IS NULL AND PK2 IS NULL AND PK3 IS NULL";
       try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
-        try (java.sql.ResultSet rs = stmt.executeQuery()) {
+        try (ResultSet rs = stmt.executeQuery()) {
           assertFalse(rs.next());
         }
-        String scanType = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-          .getExplainPlan().getPlanStepsAsAttributes().getExplainScanType();
-        assertNull(scanType);
+        assertDegenerateScanIsGenerated(stmt);
       }
     }
   }
@@ -796,7 +795,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         stmt.setString(1, "A");
         stmt.setString(2, "B");
         stmt.setBigDecimal(3, PK3_VAL);
-        try (java.sql.ResultSet rs = stmt.executeQuery()) {
+        try (ResultSet rs = stmt.executeQuery()) {
           // Should return 2 rows where PK4 IS NULL:
           // - Row 1: PK4 NULL, PK5 NULL (val1, val2)
           // - Row 2: PK4 NULL, PK5=2.0 (val3, val4)
@@ -827,8 +826,8 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         stmt.setString(1, "A");
         stmt.setString(2, "B");
         stmt.setArray(3, pk3Arr);
-        try (java.sql.ResultSet rs = stmt.executeQuery()) {
-          // Should return 3 rows where PK4 IS NULL but returns all 5 rows due to existing bug
+        try (ResultSet rs = stmt.executeQuery()) {
+          // Should return 3 rows where PK4 IS NULL but returns 4 or 5 rows due to existing bug
           // inolving skip scan with IS NULL in where clause.
           // - Row 1: PK3=100.5, PK4 NULL, PK5 NULL (val1, val2)
           // - Row 2: PK3=100.5, PK4 NULL, PK5=2.0 (val3, val4)
@@ -855,4 +854,119 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
     }
   }
 
+  /**
+   * Test for multi-point lookups with IS NULL on a fixed-width NOT NULL PK column. This test
+   * verifies that degenerate scan is generated when using IS NULL on a fixed-width column (INTEGER
+   * NOT NULL) in the primary key, and no rows are returned since a NOT NULL column can never have
+   * NULL values. Uses class-level parameters: - salted for table salting - columnConfig for PK3
+   * (nullable, variable-width) type and sort order - secondarySortDesc for PK4 (INTEGER NOT NULL,
+   * fixed-width) sort order
+   */
+  @Test
+  public void testDegenerateScanWithIsNullOnFixedWidthPK() throws Exception {
+    String tableName = generateUniqueName();
+    String pk4SortOrder = secondarySortDesc ? " DESC" : "";
+    boolean isPK3FixedWidth = columnConfig.isFixedWidth();
+
+    String ddl = "CREATE TABLE " + tableName + " (" + "PK1 VARCHAR NOT NULL, "
+      + "PK2 VARCHAR NOT NULL, " + "PK3 " + columnConfig.getDataType() + ", " // Nullable
+                                                                              // variable-width
+                                                                              // column
+      + "PK4 INTEGER NOT NULL, " // Fixed-width NOT NULL column
+      + "COL1 VARCHAR, " + "COL2 VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (PK1, PK2, PK3"
+      + columnConfig.getSortOrderClause() + ", PK4" + pk4SortOrder + ")" + ")" + getSaltClause();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(ddl);
+      conn.commit();
+    }
+
+    // Insert test data with various PK3 values (some NULL, some non-NULL)
+    // PK4 is always non-NULL since it's a fixed-width NOT NULL column
+    String upsertStmt =
+      "UPSERT INTO " + tableName + " (PK1, PK2, PK3, PK4, COL1, COL2) VALUES (?, ?, ?, ?, ?, ?)";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (PreparedStatement stmt = conn.prepareStatement(upsertStmt)) {
+        // Row 1: PK3='X', PK4=1
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setString(3, "X");
+        stmt.setInt(4, 1);
+        stmt.setString(5, "val1");
+        stmt.setString(6, "val2");
+        stmt.executeUpdate();
+
+        // Row 2: PK3='Y', PK4=2
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setString(3, "Y");
+        stmt.setInt(4, 2);
+        stmt.setString(5, "val3");
+        stmt.setString(6, "val4");
+        stmt.executeUpdate();
+
+        // Row 3: PK3 is NULL, PK4=1
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        if (isPK3FixedWidth) {
+          stmt.setString(3, "U");
+        } else {
+          stmt.setNull(3, Types.VARCHAR);
+        }
+        stmt.setInt(4, 1);
+        stmt.setString(5, "val5");
+        stmt.setString(6, "val6");
+        stmt.executeUpdate();
+
+        // Row 4: PK3='Z', PK4=3
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setString(3, "Z");
+        stmt.setInt(4, 3);
+        stmt.setString(5, "val7");
+        stmt.setString(6, "val8");
+        stmt.executeUpdate();
+
+        // Row 5: PK3 is NULL, PK4=2
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        if (isPK3FixedWidth) {
+          stmt.setString(3, "U");
+        } else {
+          stmt.setNull(3, Types.VARCHAR);
+        }
+        stmt.setInt(4, 2);
+        stmt.setString(5, "val9");
+        stmt.setString(6, "val10");
+        stmt.executeUpdate();
+
+        // Row 6: Different PK1, PK3='X', PK4=1
+        stmt.setString(1, "C");
+        stmt.setString(2, "B");
+        stmt.setString(3, "X");
+        stmt.setInt(4, 1);
+        stmt.setString(5, "val11");
+        stmt.setString(6, "val12");
+        stmt.executeUpdate();
+
+        conn.commit();
+      }
+    }
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String selectSql = "SELECT COL1, COL2, PK3, PK4 FROM " + tableName
+        + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ANY(?) AND PK4 IS NULL";
+      Array pk3Arr = conn.createArrayOf("VARCHAR", new String[] { "X", "Y" });
+      try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setArray(3, pk3Arr);
+        try (ResultSet rs = stmt.executeQuery()) {
+          // Should return 0 rows since PK4 is NOT NULL and cannot have NULL values
+          assertFalse("Expected no rows since PK4 (INTEGER NOT NULL) cannot be NULL", rs.next());
+        }
+        assertDegenerateScanIsGenerated(stmt);
+      }
+    }
+  }
 }

@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -71,5 +72,12 @@ public abstract class WhereOptimizerForArrayAnyITBase extends BaseTest {
     ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
     String expectedScanType = "RANGE SCAN ";
     assertEquals(expectedScanType, planAttributes.getExplainScanType());
+  }
+
+  protected void assertDegenerateScanIsGenerated(PreparedStatement stmt) throws SQLException {
+    QueryPlan queryPlan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+    ExplainPlan explain = queryPlan.getExplainPlan();
+    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
+    assertNull(planAttributes.getExplainScanType());
   }
 }
