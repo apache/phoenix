@@ -654,18 +654,9 @@ public class ScanRanges {
     boolean isSalted = bucketNum != null;
     int count = 1;
     int offset = isSalted ? 1 : 0;
-    int lastNonNullIndex = offset - 1;
     // Skip salt byte range in the first position if salted
     for (int i = offset; i < ranges.size(); i++) {
       count *= ranges.get(i).size();
-      if (ranges.get(i).size() == 1 && ranges.get(i).get(0) == KeyRange.IS_NULL_RANGE) {
-        continue;
-      }
-      lastNonNullIndex = i;
-    }
-    if (lastNonNullIndex < ranges.size() - 1) {
-      // Create ranges without trailing null
-      ranges = ranges.subList(0, lastNonNullIndex + 1);
     }
     List<byte[]> keys = Lists.newArrayListWithExpectedSize(count);
     int[] position = new int[ranges.size()];
@@ -678,6 +669,7 @@ public class ScanRanges {
       if (isSalted) {
         key[0] = SaltingUtil.getSaltingByte(key, offset, length, bucketNum);
       }
+      
       keys.add(Arrays.copyOf(key, length + offset));
     } while (incrementKey(ranges, position));
     return keys;
