@@ -281,7 +281,7 @@ public final class PhoenixMapReduceUtil {
       long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
       if (endTime < minTimestamp) {
         throw new IllegalArgumentException(String.format(
-          "Table %s sync can't look back past the configured max lookback age: %d ms. "
+          "Table %s can't look back past the configured max lookback age: %d ms. "
             + "End time: %d, Min allowed timestamp: %d",
           tableName, maxLookBackAge, endTime, minTimestamp));
       }

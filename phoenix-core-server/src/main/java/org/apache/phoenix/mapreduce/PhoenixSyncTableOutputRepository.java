@@ -54,30 +54,17 @@ public class PhoenixSyncTableOutputRepository {
   }
 
   public void createSyncCheckpointTableIfNotExists() throws SQLException {
-    String ddl = "CREATE TABLE IF NOT EXISTS "
-        + SYNC_TABLE_CHECKPOINT_TABLE_NAME+ " (\n"
-      + "    TABLE_NAME VARCHAR NOT NULL,\n"
-      + "    TARGET_CLUSTER VARCHAR NOT NULL,\n"
-      + "    TYPE VARCHAR(20) NOT NULL,\n"
-      + "    FROM_TIME BIGINT NOT NULL,\n"
-      + "    TO_TIME BIGINT NOT NULL,\n"
-      + "    IS_DRY_RUN BOOLEAN NOT NULL,\n"
-      + "    START_ROW_KEY VARBINARY NOT NULL,\n"
-      + "    END_ROW_KEY VARBINARY,\n"
-      + "    IS_FIRST_REGION BOOLEAN, \n"
-      + "    EXECUTION_START_TIME TIMESTAMP,\n"
-      + "    EXECUTION_END_TIME TIMESTAMP,\n"
-      + "    STATUS VARCHAR(20),\n"
-      + "    COUNTERS VARCHAR(255), \n"
-      + "    CONSTRAINT PK PRIMARY KEY (\n"
-      + "        TABLE_NAME,\n"
-      + "        TARGET_CLUSTER,\n"
-      + "        TYPE ,\n"
-      + "        FROM_TIME,\n"
-      + "        TO_TIME,\n"
-      + "        IS_DRY_RUN,\n"
-      + "        START_ROW_KEY )"
-      + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS;
+    String ddl = "CREATE TABLE IF NOT EXISTS " + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (\n"
+      + "    TABLE_NAME VARCHAR NOT NULL,\n" + "    TARGET_CLUSTER VARCHAR NOT NULL,\n"
+      + "    TYPE VARCHAR(20) NOT NULL,\n" + "    FROM_TIME BIGINT NOT NULL,\n"
+      + "    TO_TIME BIGINT NOT NULL,\n" + "    IS_DRY_RUN BOOLEAN NOT NULL,\n"
+      + "    START_ROW_KEY VARBINARY NOT NULL,\n" + "    END_ROW_KEY VARBINARY,\n"
+      + "    IS_FIRST_REGION BOOLEAN, \n" + "    EXECUTION_START_TIME TIMESTAMP,\n"
+      + "    EXECUTION_END_TIME TIMESTAMP,\n" + "    STATUS VARCHAR(20),\n"
+      + "    COUNTERS VARCHAR(255), \n" + "    CONSTRAINT PK PRIMARY KEY (\n"
+      + "        TABLE_NAME,\n" + "        TARGET_CLUSTER,\n" + "        TYPE ,\n"
+      + "        FROM_TIME,\n" + "        TO_TIME,\n" + "        IS_DRY_RUN,\n"
+      + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS;
 
     try (Statement stmt = connection.createStatement()) {
       stmt.execute(ddl);
@@ -197,9 +184,8 @@ public class PhoenixSyncTableOutputRepository {
     throws SQLException {
     StringBuilder queryBuilder = new StringBuilder();
     queryBuilder.append("SELECT START_ROW_KEY, END_ROW_KEY, IS_FIRST_REGION FROM "
-            + SYNC_TABLE_CHECKPOINT_TABLE_NAME
-           + " WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
-           + " AND TYPE = ? AND FROM_TIME = ? AND TO_TIME = ?");
+      + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
+      + " AND TYPE = ? AND FROM_TIME = ? AND TO_TIME = ?");
 
     // Check if mapper region boundaries are non-empty (i.e., NOT first/last regions)
     // Only add boundary conditions for non-empty boundaries
