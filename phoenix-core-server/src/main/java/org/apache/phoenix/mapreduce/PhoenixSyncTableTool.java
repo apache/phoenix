@@ -48,7 +48,6 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
@@ -69,12 +68,12 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
  * regions based on HBase region boundaries.</li>
  * <li><b>Server-Side Chunking:</b> Each mapper triggers a coprocessor scan on both source and
  * target clusters. The {@link PhoenixSyncTableRegionScanner} coprocessor accumulates rows into
- * chunks (configurable size, default 1GB) and computes a SHA-256 hash of all row data (keys +
+ * chunks (configurable size, default 1GB) and computes an SHA-256 hash of all row data (keys +
  * column families + qualifiers + timestamps + values).</li>
  * <li><b>Hash Comparison:</b> The {@link PhoenixSyncTableMapper} receives chunk metadata (start
  * key, end key, row count, hash) from both clusters and compares the hashes. Matching hashes mean
  * the chunk data is identical; mismatched hashes indicate inconsistency.</li>
- * <li><b>Result Tracking:</b> Results are checkpointed to the {@code PHOENIX_SYNC_TABLE_OUTPUT}
+ * <li><b>Result Tracking:</b> Results are check pointed to the {@code PHOENIX_SYNC_TABLE_OUTPUT}
  * table, tracking verified chunks, mismatched chunks, and processing progress for resumable
  * operations.</li>
  * </ol>
@@ -126,7 +125,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   private PTable pTable;
 
   /**
-   * Creates a MR job that uses server-side chunking and checksum calculation
+   * Creates an MR job that uses server-side chunking and checksum calculation
    * @return Configured MapReduce job ready for submission
    * @throws Exception if job creation fails
    */
@@ -173,8 +172,6 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       configuration.getInt(QueryServices.SYNC_TABLE_RPC_RETRIES_COUNTER,
         QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_RETRIES_COUNTER);
 
-    configuration.set(QueryServices.THREAD_TIMEOUT_MS_ATTRIB,
-      Long.toString(syncTableQueryTimeoutMs));
     configuration.set(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD,
       Long.toString(syncTableClientScannerTimeoutMs));
     configuration.set(HConstants.HBASE_RPC_TIMEOUT_KEY, Long.toString(syncTableRPCTimeoutMs));
@@ -201,7 +198,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       .setBooleanIfUnset(PhoenixConfigurationUtil.MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER, true);
   }
 
-  private void configureInput(Job job, PTableType tableType) throws Exception {
+  private void configureInput(Job job, PTableType tableType) {
     // With below query plan, we get Input split based on region boundary
     String hint = (tableType == PTableType.INDEX) ? "" : "/*+ NO_INDEX */ ";
     String selectStatement = "SELECT " + hint + "1 FROM " + qTable;
@@ -283,26 +280,26 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     System.exit(exitCode);
   }
 
-  public void populateSyncTableToolAttributes(CommandLine cmdLine) throws Exception {
+  public void populateSyncTableToolAttributes(CommandLine cmdLine) {
     tableName = cmdLine.getOptionValue(TABLE_NAME_OPTION.getOpt());
     targetZkQuorum = cmdLine.getOptionValue(TARGET_CLUSTER_OPTION.getOpt());
     schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
 
     if (cmdLine.hasOption(FROM_TIME_OPTION.getOpt())) {
-      startTime = Long.valueOf(cmdLine.getOptionValue(FROM_TIME_OPTION.getOpt()));
+      startTime = Long.parseLong(cmdLine.getOptionValue(FROM_TIME_OPTION));
     } else {
       startTime = 0L;
     }
 
     if (cmdLine.hasOption(TO_TIME_OPTION.getOpt())) {
-      endTime = Long.valueOf(cmdLine.getOptionValue(TO_TIME_OPTION.getOpt()));
+      endTime = Long.parseLong(cmdLine.getOptionValue(TO_TIME_OPTION));
     } else {
       // Default endTime, current time - 1 hour
       endTime = EnvironmentEdgeManager.currentTimeMillis(); // - (60 * 60 * 1000);
     }
 
     if (cmdLine.hasOption(CHUNK_SIZE_OPTION.getOpt())) {
-      chunkSizeBytes = Long.valueOf(cmdLine.getOptionValue(CHUNK_SIZE_OPTION.getOpt()));
+      chunkSizeBytes = Long.parseLong(cmdLine.getOptionValue(CHUNK_SIZE_OPTION));
     }
     if (cmdLine.hasOption(TENANT_ID_OPTION.getOpt())) {
       tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
@@ -362,17 +359,28 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
         job.getJobName(), qTable, targetZkQuorum);
     }
     Counters counters = job.getCounters();
-    LOGGER.info(
-      "PhoenixSyncTable job completed, gathered counters are \n Input Record: {}, \n"
-        + "Ouput Record: {}, \n Failed Record: {}, \n Chunks Verified: {}, \n"
-        + "Chunks Mimatched: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}",
-      counters.findCounter(PhoenixJobCounters.INPUT_RECORDS).getValue(),
-      counters.findCounter(PhoenixJobCounters.OUTPUT_RECORDS).getValue(),
-      counters.findCounter(PhoenixJobCounters.FAILED_RECORDS).getValue(),
-      counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_VERIFIED).getValue(),
-      counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED).getValue(),
-      counters.findCounter(PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED).getValue(),
-      counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED).getValue());
+    if (counters != null) {
+      long inputRecords = counters.findCounter(PhoenixJobCounters.INPUT_RECORDS).getValue();
+      long outputRecords = counters.findCounter(PhoenixJobCounters.OUTPUT_RECORDS).getValue();
+      long failedRecords = counters.findCounter(PhoenixJobCounters.FAILED_RECORDS).getValue();
+      long chunksVerified =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_VERIFIED).getValue();
+      long chunksMismatched =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED).getValue();
+      long sourceRowsProcessed =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
+      long targetRowsProcessed =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED).getValue();
+      LOGGER.info(
+        "PhoenixSyncTable job completed, gathered counters are \n Input Record: {}, \n"
+          + "Output Record: {}, \n Failed Record: {}, \n Chunks Verified: {}, \n"
+          + "Chunks Mismatched: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}",
+        inputRecords, outputRecords, failedRecords, chunksVerified, chunksMismatched,
+        sourceRowsProcessed, targetRowsProcessed);
+    } else {
+      LOGGER.warn("Unable to retrieve job counters for table {} - job may have failed "
+        + "during initialization", qTable);
+    }
     return success;
   }
 
@@ -406,36 +414,5 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   public static void main(String[] args) throws Exception {
     int exitCode = ToolRunner.run(new PhoenixSyncTableTool(), args);
     System.exit(exitCode);
-  }
-
-  // Getters for testing
-  @VisibleForTesting
-  public String getQTable() {
-    return qTable;
-  }
-
-  @VisibleForTesting
-  public String getTargetZkQuorum() {
-    return targetZkQuorum;
-  }
-
-  @VisibleForTesting
-  public boolean isDryRun() {
-    return isDryRun;
-  }
-
-  @VisibleForTesting
-  public Job getJob() {
-    return job;
-  }
-
-  @VisibleForTesting
-  public long getStartTime() {
-    return startTime;
-  }
-
-  @VisibleForTesting
-  public long getEndTime() {
-    return endTime;
   }
 }

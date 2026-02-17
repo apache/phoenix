@@ -45,9 +45,6 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixSyncTableInputFormat.class);
 
-  /**
-   * Instantiated by MapReduce framework
-   */
   public PhoenixSyncTableInputFormat() {
     super();
   }
@@ -88,7 +85,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
     }
     LOGGER.info("Total splits generated {} of table {} for PhoenixSyncTable ", allSplits.size(),
       tableName);
-    List<KeyRange> completedRegions = null;
+    List<KeyRange> completedRegions;
     try {
       completedRegions =
         queryCompletedMapperRegions(conf, tableName, targetZkQuorum, fromTime, toTime);
@@ -153,7 +150,11 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
       byte[] completedEnd = completedRange.getUpperRange();
 
       // No overlap b/w completedRange/splitRange.
-      // completedEnd is before splitStart, increment completed pointer to catch up
+      // completedEnd is before splitStart, increment completed pointer to catch up. For scenario
+      // like below
+      // [----splitRange-----)
+      // [----completed----)
+      // If completedEnd is [], it means this is for last region, this check has no meaning.
       if (
         !Bytes.equals(completedEnd, HConstants.EMPTY_END_ROW)
           && Bytes.compareTo(completedEnd, splitStart) <= 0
@@ -163,21 +164,35 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
         !Bytes.equals(splitEnd, HConstants.EMPTY_END_ROW)
           && Bytes.compareTo(completedStart, splitEnd) >= 0
       ) {
-        // No overlap. completedStart is after splitEnd, splitRange needs to be processed,
-        // add to unprocessed list and increment
+        // No overlap b/w completedRange/splitRange.
+        // splitEnd is before completedStart, add this splitRange to unprocessed. For scenario like
+        // below
+        // [----splitRange-----)
+        // [----completed----)
+        // If splitEnd is [], it means this is for last region, this check has no meaning.
         unprocessedSplits.add(allSplits.get(splitIdx));
         splitIdx++;
       } else {
         // Some overlap detected, check if SplitRange is fullyContained within completedRange
-        // Fully contained if: completedStart <= splitStart AND splitEnd <= completedEnd
-
+        // [----splitRange-----)
+        // [----completed----) // partialContained -- unprocessedSplits
+        // OR
+        // [----splitRange-----)
+        // [----completed----) // partialContained -- unprocessedSplits
+        // OR
+        // [----splitRange-----------)
+        // [----completed--) // partialContained -- unprocessedSplits
+        // OR
+        // [----splitRange-----)
+        // [----completed----------) // fullyContained -- nothing to process
         boolean startContained = Bytes.compareTo(completedStart, splitStart) <= 0;
+        // If we are at end of completedRange region, we can assume end boundary is always contained
+        // wrt splitRange
         boolean endContained = Bytes.equals(completedEnd, HConstants.EMPTY_END_ROW)
           || Bytes.compareTo(splitEnd, completedEnd) <= 0;
 
         boolean fullyContained = startContained && endContained;
         if (!fullyContained) {
-          // Not fully contained, keep the split
           unprocessedSplits.add(allSplits.get(splitIdx));
         }
         splitIdx++;

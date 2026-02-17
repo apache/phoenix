@@ -45,6 +45,11 @@ public class PhoenixSyncTableOutputRepository {
   private static final int OUTPUT_TABLE_TTL_SECONDS = 30 * 24 * 60 * 60;
   private final Connection connection;
   private static final byte[] EMPTY_START_KEY_SENTINEL = new byte[] { 0x00 };
+  private static final String UPSERT_CHECKPOINT_SQL =
+    "UPSERT INTO " + SYNC_TABLE_CHECKPOINT_TABLE_NAME
+      + " (TABLE_NAME, TARGET_CLUSTER, TYPE, FROM_TIME, TO_TIME, IS_DRY_RUN,"
+      + " START_ROW_KEY, END_ROW_KEY, IS_FIRST_REGION, EXECUTION_START_TIME, EXECUTION_END_TIME,"
+      + " STATUS, COUNTERS) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   /**
    * @param connection Phoenix connection
@@ -92,16 +97,11 @@ public class PhoenixSyncTableOutputRepository {
       throw new IllegalArgumentException("FromTime and ToTime cannot be null for checkpoint");
     }
 
-    String upsert = "UPSERT INTO " + SYNC_TABLE_CHECKPOINT_TABLE_NAME
-      + " (TABLE_NAME, TARGET_CLUSTER, TYPE, FROM_TIME, TO_TIME, IS_DRY_RUN,"
-      + " START_ROW_KEY, END_ROW_KEY, IS_FIRST_REGION, EXECUTION_START_TIME, EXECUTION_END_TIME,"
-      + " STATUS, COUNTERS) " + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-
     byte[] effectiveStartKey =
       (startKey == null || startKey.length == 0) ? EMPTY_START_KEY_SENTINEL : startKey;
     boolean isFirstRegion = (startKey == null || startKey.length == 0);
 
-    try (PreparedStatement ps = connection.prepareStatement(upsert)) {
+    try (PreparedStatement ps = connection.prepareStatement(UPSERT_CHECKPOINT_SQL)) {
       ps.setString(1, tableName);
       ps.setString(2, targetCluster);
       ps.setString(3, type.name());

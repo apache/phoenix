@@ -24,7 +24,9 @@ import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.*;
+import java.util.List;
+import java.util.Arrays;
+import java.util.ArrayList;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -147,7 +149,7 @@ public class PhoenixSyncTableMapper
 
   /**
    * Processes a mapper region by comparing chunks between source and target clusters. Gets already
-   * processed chunks from checkpoint table, resumes from checkpointed progress and records final
+   * processed chunks from checkpoint table, resumes from check pointed progress and records final
    * status for chunks & mapper (VERIFIED/MISMATCHED).
    */
   @Override
@@ -160,18 +162,9 @@ public class PhoenixSyncTableMapper
           mapperRegionStart, mapperRegionEnd);
       List<Pair<byte[], byte[]>> unprocessedRanges =
         calculateUnprocessedRanges(mapperRegionStart, mapperRegionEnd, processedChunks);
-      // Checking if start key should be inclusive, this is specific to scenario when there are
-      // processed
-      // chunks within this Mapper region boundary.
+
       boolean isStartKeyInclusive = shouldStartKeyBeInclusive(mapperRegionStart, processedChunks);
       for (Pair<byte[], byte[]> range : unprocessedRanges) {
-        // From a Mapper region boundary, if we get multiple fragments of ranges it means there were
-        // some processed chunks in this region boundary
-        // And since chunks are inclusive of start and endKey, we just needed to confirm whether
-        // first fragment of range should have start key inclusive.
-        // Other fragment will not have start key inclusive since these ranges are carved out of
-        // chunk boundary,
-        // both start and key would already have been processed as part of chunk itself
         processMapperRanges(range.getFirst(), range.getSecond(), isStartKeyInclusive, context);
         isStartKeyInclusive = false;
       }
@@ -181,12 +174,8 @@ public class PhoenixSyncTableMapper
       long sourceRowsProcessed = context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
       long targetRowsProcessed = context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).getValue();
       Timestamp mapperEndTime = new Timestamp(System.currentTimeMillis());
-      Map<String, Long> mapperCounters = new LinkedHashMap<>();
-      mapperCounters.put(SyncCounters.CHUNKS_VERIFIED.name(), verifiedChunk);
-      mapperCounters.put(SyncCounters.CHUNKS_MISMATCHED.name(), mismatchedChunk);
-      mapperCounters.put(SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRowsProcessed);
-      mapperCounters.put(SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRowsProcessed);
-      String counters = formatCounters(mapperCounters);
+      String counters = formatMapperCounters(verifiedChunk, mismatchedChunk, sourceRowsProcessed,
+        targetRowsProcessed);
 
       if (sourceRowsProcessed > 0) {
         if (mismatchedChunk == 0) {
@@ -196,12 +185,12 @@ public class PhoenixSyncTableMapper
             mapperRegionStart, mapperRegionEnd, PhoenixSyncTableOutputRow.Status.VERIFIED,
             mapperStartTime, mapperEndTime, counters);
           LOGGER.info(
-            "PhoenixSyncTable mapper completed with verified: {} verifiedChunk chunks, {} mismatchedChunk chunks",
+            "PhoenixSyncTable mapper completed with verified: {} verified chunks, {} mismatched chunks",
             verifiedChunk, mismatchedChunk);
         } else {
           context.getCounter(PhoenixJobCounters.FAILED_RECORDS).increment(1);
           LOGGER.warn(
-            "PhoenixSyncTable mapper completed with mismatch: {} verifiedChunk chunks, {} mismatchedChunk chunks",
+            "PhoenixSyncTable mapper completed with mismatch: {} verified chunks, {} mismatched chunks",
             verifiedChunk, mismatchedChunk);
           syncTableOutputRepository.checkpointSyncTableResult(tableName, targetZkQuorum,
             PhoenixSyncTableOutputRow.Type.MAPPER_REGION, fromTime, toTime, isDryRun,
@@ -255,10 +244,7 @@ public class PhoenixSyncTableMapper
             sourceChunk.rowCount, targetChunk.rowCount, matched);
         }
         sourceChunk.executionEndTime = new Timestamp(System.currentTimeMillis());
-        Map<String, Long> mapperCounters = new LinkedHashMap<>();
-        mapperCounters.put(SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceChunk.rowCount);
-        mapperCounters.put(SyncCounters.TARGET_ROWS_PROCESSED.name(), targetChunk.rowCount);
-        String counters = formatCounters(mapperCounters);
+        String counters = formatChunkCounters(sourceChunk.rowCount, targetChunk.rowCount);
         if (matched) {
           handleVerifiedChunk(sourceChunk, context, counters);
         } else {
@@ -287,7 +273,7 @@ public class PhoenixSyncTableMapper
     ChunkInfo combinedTargetChunk = new ChunkInfo();
     combinedTargetChunk.startKey = startKey;
     combinedTargetChunk.endKey = endKey;
-    combinedTargetChunk.hash = new byte[0];
+    combinedTargetChunk.hash = null;
     combinedTargetChunk.rowCount = 0;
     combinedTargetChunk.isPartial = false;
     byte[] currentStartKey = startKey;
@@ -298,7 +284,8 @@ public class PhoenixSyncTableMapper
       // This chunk could be partial or full depending on whether the source region boundary is part
       // of one or multiple target region.
       // For every target region scanned, we want to have one row processed and returned back
-      // immediately(that's why we set scan.setLimit(1)), since output from one region partial chunk
+      // immediately(that's why we set scan.setLimit(1)/scan.setCaching(1)), since output from one
+      // region partial chunk
       // scanner is input to next region scanner.
       try (ChunkScannerContext scanner = createChunkScanner(conn, currentStartKey, endKey,
         continuedDigestState, isStartKeyInclusive, true, true)) {
@@ -398,25 +385,32 @@ public class PhoenixSyncTableMapper
   }
 
   /**
-   * Formats counters as a comma-separated key=value string. Example:
-   * "CHUNKS_VERIFIED=10,CHUNKS_MISMATCHED=2,SOURCE_ROWS_PROCESSED=5678..."
-   * @param counters Map of counter names to values
-   * @return Formatted string or null if counters is null/empty
+   * Formats chunk counters as a comma-separated string (optimized for hot path). Avoids
+   * LinkedHashMap allocation by building string directly.
+   * @param sourceRows Source rows processed
+   * @param targetRows Target rows processed
+   * @return Formatted string: "SOURCE_ROWS_PROCESSED=123,TARGET_ROWS_PROCESSED=456"
    */
-  private String formatCounters(Map<String, Long> counters) {
-    if (counters == null || counters.isEmpty()) {
-      return null;
-    }
-    StringBuilder sb = new StringBuilder();
-    boolean first = true;
-    for (Map.Entry<String, Long> entry : counters.entrySet()) {
-      if (!first) {
-        sb.append(",");
-      }
-      sb.append(entry.getKey()).append("=").append(entry.getValue());
-      first = false;
-    }
-    return sb.toString();
+  private String formatChunkCounters(long sourceRows, long targetRows) {
+    return String.format("%s=%d,%s=%d", SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRows,
+      SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows);
+  }
+
+  /**
+   * Formats mapper counters as a comma-separated string. Avoids LinkedHashMap allocation by
+   * building string directly.
+   * @param chunksVerified   Chunks verified count
+   * @param chunksMismatched Chunks mismatched count
+   * @param sourceRows       Source rows processed
+   * @param targetRows       Target rows processed
+   * @return Formatted string with all mapper counters
+   */
+  private String formatMapperCounters(long chunksVerified, long chunksMismatched, long sourceRows,
+    long targetRows) {
+    return String.format("%s=%d,%s=%d,%s=%d,%s=%d", SyncCounters.CHUNKS_VERIFIED.name(),
+      chunksVerified, SyncCounters.CHUNKS_MISMATCHED.name(), chunksMismatched,
+      SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRows,
+      SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows);
   }
 
   /***
@@ -561,6 +555,15 @@ public class PhoenixSyncTableMapper
     return gaps;
   }
 
+  /***
+   * Checking if start key should be inclusive, this is specific to scenario when there are
+   * processed chunks within this Mapper region boundary. [---MapperRegion---------------)
+   * [--chunk1--] [--chunk2--] // With processed chunk, for this specific scenario, only we need to
+   * have first unprocessedRanges startKeyInclusive = true, for unprocessedRanges, their startkey
+   * would be false, since it would have been already covered by processed chunk
+   * [---MapperRegion---------------) [--chunk1--] [--chunk2--] // In such scenario, we don't want
+   * startKeyInclusive for any unprocessedRanges
+   */
   boolean shouldStartKeyBeInclusive(byte[] mapperRegionStart,
     List<PhoenixSyncTableOutputRow> processedChunks) {
     if (

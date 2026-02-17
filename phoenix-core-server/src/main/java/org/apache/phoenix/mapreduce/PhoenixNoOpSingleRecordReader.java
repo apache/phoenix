@@ -64,7 +64,8 @@ public class PhoenixNoOpSingleRecordReader extends RecordReader<NullWritable, DB
 
   /**
    * Returns true exactly once to trigger a single map() call per split.
-   * @return true on first call, false on all subsequent calls
+   * @return true on first call, false on subsequent calls which makes Mapper task to exit calling
+   *         map method
    */
   @Override
   public boolean nextKeyValue() {

@@ -24,10 +24,9 @@ import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.hadoop.hbase.Cell;
@@ -77,10 +76,14 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
   private byte[] chunkEndKey = null;
   private long currentChunkSize = 0L;
   private long currentChunkRowCount = 0L;
+  // We are not using jdk bundled SHA, since their digest can't be serialization/deserialization
+  // which is needed for passing around partial chunk
   private SHA256Digest digest;
   private boolean hasMoreRows = true;
-  private boolean isUsingContinuedDigest; // If target chunk was partial, and we are continuing to
-                                          // update digest before calculating checksum
+  // If target chunk was partial, and we are continuing to
+  // update digest before calculating checksum
+  private boolean isUsingContinuedDigest;
+  private final byte[] timestampBuffer = new byte[8];
 
   /**
    * @param innerScanner                     The underlying region scanner
@@ -235,14 +238,15 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
       digest.update(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength());
       long ts = cell.getTimestamp();
       // Big-Endian Byte Serialization
-      digest.update((byte) (ts >>> 56));
-      digest.update((byte) (ts >>> 48));
-      digest.update((byte) (ts >>> 40));
-      digest.update((byte) (ts >>> 32));
-      digest.update((byte) (ts >>> 24));
-      digest.update((byte) (ts >>> 16));
-      digest.update((byte) (ts >>> 8));
-      digest.update((byte) (ts));
+      timestampBuffer[0] = (byte) (ts >>> 56);
+      timestampBuffer[1] = (byte) (ts >>> 48);
+      timestampBuffer[2] = (byte) (ts >>> 40);
+      timestampBuffer[3] = (byte) (ts >>> 32);
+      timestampBuffer[4] = (byte) (ts >>> 24);
+      timestampBuffer[5] = (byte) (ts >>> 16);
+      timestampBuffer[6] = (byte) (ts >>> 8);
+      timestampBuffer[7] = (byte) (ts);
+      digest.update(timestampBuffer, 0, 8);
 
       digest.update(cell.getType().getCode());
       digest.update(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
@@ -256,16 +260,13 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
    * corrupted serialization
    * @param digest The digest whose state should be encoded
    * @return Byte array containing 4-byte length prefix + encoded state
-   * @throws IOException if encoding fails
    */
-  private byte[] encodeDigestState(SHA256Digest digest) throws IOException {
+  private byte[] encodeDigestState(SHA256Digest digest) {
     byte[] encoded = digest.getEncodedState();
-    ByteArrayOutputStream bos = new ByteArrayOutputStream();
-    DataOutputStream dos = new DataOutputStream(bos);
-    dos.writeInt(encoded.length);
-    dos.write(encoded);
-    dos.flush();
-    return bos.toByteArray();
+    ByteBuffer buffer = ByteBuffer.allocate(4 + encoded.length);
+    buffer.putInt(encoded.length);
+    buffer.put(encoded);
+    return buffer.array();
   }
 
   /**
@@ -276,11 +277,10 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
    */
   private SHA256Digest decodeDigestState(byte[] encodedState) throws IOException {
     if (encodedState == null) {
-      String regionName = region.getRegionInfo().getRegionNameAsString();
-      String tableName = region.getRegionInfo().getTable().getNameAsString();
       throw new IllegalArgumentException(
         String.format("Invalid encoded digest state in region %s table %s: encodedState is null",
-          regionName, tableName));
+          region.getRegionInfo().getRegionNameAsString(),
+          region.getRegionInfo().getTable().getNameAsString()));
     }
 
     DataInputStream dis = new DataInputStream(new ByteArrayInputStream(encodedState));
@@ -288,11 +288,11 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
     // Prevent malicious large allocations, hash digest can never go beyond ~96 bytes, giving some
     // buffer upto 128 Bytes
     if (stateLength > MAX_SHA256_DIGEST_STATE_SIZE) {
-      String regionName = region.getRegionInfo().getRegionNameAsString();
-      String tableName = region.getRegionInfo().getTable().getNameAsString();
       throw new IllegalArgumentException(
         String.format("Invalid SHA256 state length in region %s table %s: %d expected <= %d",
-          regionName, tableName, stateLength, MAX_SHA256_DIGEST_STATE_SIZE));
+          region.getRegionInfo().getRegionNameAsString(),
+          region.getRegionInfo().getTable().getNameAsString(), stateLength,
+          MAX_SHA256_DIGEST_STATE_SIZE));
     }
     byte[] state = new byte[stateLength];
     dis.readFully(state);
@@ -319,8 +319,7 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
       Bytes.toBytes(currentChunkRowCount)));
     if (isPartialChunk) {
       // Partial chunk digest
-      SHA256Digest cloned = new SHA256Digest(digest);
-      byte[] digestState = encodeDigestState(cloned);
+      byte[] digestState = encodeDigestState(digest);
       results.add(PhoenixKeyValueUtil.newKeyValue(resultRowKey, CHUNK_METADATA_FAMILY,
         BaseScannerRegionObserverConstants.SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER, AGG_TIMESTAMP,
         TRUE_BYTES));
@@ -345,11 +344,5 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
     } catch (Exception e) {
       LOGGER.error("Error closing PhoenixSyncTableRegionScanner", e);
     }
-  }
-
-  // Getters for testing
-  @VisibleForTesting
-  public long getChunkSizeBytes() {
-    return chunkSizeBytes;
   }
 }
