@@ -34,6 +34,11 @@ import static org.apache.phoenix.query.QueryServices.INDEX_REGION_OBSERVER_ENABL
 import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES;
+import static org.apache.phoenix.query.QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 
@@ -95,6 +100,7 @@ import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.MaxMutationSizeBytesExceededException;
 import org.apache.phoenix.schema.MaxMutationSizeExceededException;
 import org.apache.phoenix.schema.MetaDataClient;
+import org.apache.phoenix.schema.MutationLimitReachedException;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PMetaData;
@@ -178,6 +184,7 @@ public class MutationState implements SQLCloseable {
   private static boolean allDeletesMutations = true;
 
   private final boolean indexRegionObserverEnabledAllTables;
+  private final boolean preserveOnLimitExceeded;
 
   public static void resetAllMutationState() {
     allDeletesMutations = true;
@@ -245,6 +252,8 @@ public class MutationState implements SQLCloseable {
     this.indexRegionObserverEnabledAllTables = Boolean.parseBoolean(this.connection
       .getQueryServices().getConfiguration().get(INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES_ATTRIB,
         DEFAULT_INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES));
+    this.preserveOnLimitExceeded = this.connection.getQueryServices().getProps().getBoolean(
+      PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB, DEFAULT_PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED);
   }
 
   public MutationState(TableRef table, MultiRowMutationState mutations, long sizeOffset,
@@ -484,6 +493,17 @@ public class MutationState implements SQLCloseable {
     }
   }
 
+  /**
+   * Pre-check for preserve mode: throws MutationLimitReachedException if adding the given
+   * rows/bytes would exceed limits, which prevents the caller from modifying the state.
+   */
+  private void throwIfLimitWouldBeExceeded(int additionalRows, long additionalBytes)
+    throws SQLException {
+    if (numRows + additionalRows > maxSize || estimatedSize + additionalBytes > maxSizeBytes) {
+      throw new MutationLimitReachedException();
+    }
+  }
+
   public long getUpdateCount() {
     return sizeOffset + numRows;
   }
@@ -506,20 +526,25 @@ public class MutationState implements SQLCloseable {
   }
 
   private void joinMutationState(TableRef tableRef, MultiRowMutationState srcRows,
-    Map<TableRef, List<MultiRowMutationState>> dstMutations) {
+    Map<TableRef, List<MultiRowMutationState>> dstMutations) throws SQLException {
     PTable table = tableRef.getTable();
     boolean isIndex = table.getType() == PTableType.INDEX;
     boolean incrementRowCount = dstMutations == this.mutationsMap;
+    boolean impactsLimits = incrementRowCount && !isIndex;
     // we only need to check if the new mutation batch (srcRows) conflicts with the
     // last mutation batch since we try to merge it with that only
     MultiRowMutationState existingRows = getLastMutationBatch(dstMutations, tableRef);
 
     if (existingRows == null) { // no rows found for this table
+      // For preserve mode, check limits BEFORE modifying any state
+      if (impactsLimits && preserveOnLimitExceeded) {
+        throwIfLimitWouldBeExceeded(srcRows.size(), srcRows.estimatedSize);
+      }
       // Size new map at batch size as that's what it'll likely grow to.
       MultiRowMutationState newRows = new MultiRowMutationState(connection.getMutateBatchSize());
       newRows.putAll(srcRows);
       addMutations(dstMutations, tableRef, newRows);
-      if (incrementRowCount && !isIndex) {
+      if (impactsLimits) {
         numRows += srcRows.size();
         // if we added all the rows from newMutationState we can just increment the
         // estimatedSize by newMutationState.estimatedSize
@@ -531,6 +556,7 @@ public class MutationState implements SQLCloseable {
     // for conflicting rows
     MultiRowMutationState conflictingRows =
       new MultiRowMutationState(connection.getMutateBatchSize());
+    long conflictingRowsTotalSize = 0;
 
     // Rows for this table already exist, check for conflicts
     for (Map.Entry<ImmutableBytesPtr, RowMutationState> rowEntry : srcRows.entrySet()) {
@@ -538,29 +564,43 @@ public class MutationState implements SQLCloseable {
       RowMutationState newRowMutationState = rowEntry.getValue();
       RowMutationState existingRowMutationState = existingRows.get(key);
       if (existingRowMutationState == null) {
+        // For preserve mode, check limits BEFORE modifying any state
+        long newRowSize = newRowMutationState.calculateEstimatedSize();
+        if (impactsLimits && preserveOnLimitExceeded) {
+          throwIfLimitWouldBeExceeded(1, newRowSize);
+        }
         existingRows.put(key, newRowMutationState);
-        if (incrementRowCount && !isIndex) { // Don't count index rows in row count
+        if (impactsLimits) { // Don't count index rows in row count
           numRows++;
           // increment estimated size by the size of the new row
-          estimatedSize += newRowMutationState.calculateEstimatedSize();
+          estimatedSize += newRowSize;
         }
         continue;
       }
+
       Map<PColumn, byte[]> existingValues = existingRowMutationState.getColumnValues();
       Map<PColumn, byte[]> newValues = newRowMutationState.getColumnValues();
       if (existingValues != PRow.DELETE_MARKER && newValues != PRow.DELETE_MARKER) {
-        // Check if we can merge existing column values with new column values
-        long beforeMergeSize = existingRowMutationState.calculateEstimatedSize();
-        boolean isMerged = existingRowMutationState.join(rowEntry.getValue());
-        if (isMerged) {
-          // decrement estimated size by the size of the old row
-          estimatedSize -= beforeMergeSize;
-          // increment estimated size by the size of the new row
-          estimatedSize += existingRowMutationState.calculateEstimatedSize();
+        // Check if we can merge existing column values with new column values.
+        // For preserve mode, pass this instance so join() can check limits before modification.
+        Long sizeDiff =
+          existingRowMutationState.join(newRowMutationState, preserveOnLimitExceeded ? this : null);
+        if (sizeDiff != null) {
+          // Merged successfully (row count unchanged - same row key)
+          estimatedSize += sizeDiff;
         } else {
           // cannot merge regular upsert and conditional upsert
-          // conflicting row is not a new row so no need to increment numRows
+          // conflicting row goes into a separate batch (same key, different semantics)
+          // Row count unchanged (same key), but size increases
+          long conflictingRowSize = newRowMutationState.calculateEstimatedSize();
+          if (impactsLimits && preserveOnLimitExceeded) {
+            // Include already-accumulated conflicting rows size in the check
+            throwIfLimitWouldBeExceeded(0, conflictingRowsTotalSize + conflictingRowSize);
+          }
           conflictingRows.put(key, newRowMutationState);
+          if (impactsLimits) {
+            conflictingRowsTotalSize += conflictingRowSize;
+          }
         }
       } else {
         existingRows.put(key, newRowMutationState);
@@ -569,11 +609,13 @@ public class MutationState implements SQLCloseable {
 
     if (!conflictingRows.isEmpty()) {
       addMutations(dstMutations, tableRef, conflictingRows);
+      // Update estimatedSize only after actual state change
+      estimatedSize += conflictingRowsTotalSize;
     }
   }
 
   private void joinMutationState(Map<TableRef, List<MultiRowMutationState>> srcMutations,
-    Map<TableRef, List<MultiRowMutationState>> dstMutations) {
+    Map<TableRef, List<MultiRowMutationState>> dstMutations) throws SQLException {
     // Merge newMutation with this one, keeping state from newMutation for any overlaps
     for (Map.Entry<TableRef, List<MultiRowMutationState>> entry : srcMutations.entrySet()) {
       TableRef tableRef = entry.getKey();
@@ -1507,7 +1549,6 @@ public class MutationState implements SQLCloseable {
               "Sent batch of " + mutationBatch.size() + " for " + Bytes.toString(htableName));
           }
           child.stop();
-          child.stop();
           shouldRetry = false;
           numFailedMutations = 0;
 
@@ -2286,33 +2327,53 @@ public class MutationState implements SQLCloseable {
 
     /**
      * Join the newRow with the current row if it doesn't conflict with it. A regular upsert
-     * conflicts with a conditional upsert
-     * @return True if the rows were successfully joined else False
+     * conflicts with a conditional upsert.
+     * @param mutationState if non-null, checks limits before modification and throws
+     *                      MutationLimitReachedException if size increase would exceed limits
+     * @return the size change (can be 0, positive, or negative) if merged, or null if conflicting
      */
-    boolean join(RowMutationState newRow) {
+    Long join(RowMutationState newRow, MutationState mutationState) throws SQLException {
       if (isConflicting(newRow)) {
-        return false;
+        return null;
       }
-      // If we already have a row and the new row has an ON DUPLICATE KEY clause
-      // ignore the new values (as that's what the server will do).
+
+      // Pre-compute merged results (no side effects - these return new objects)
+      byte[] combinedOnDupKey =
+        PhoenixIndexBuilderHelper.combineOnDupKey(this.onDupKeyBytes, newRow.onDupKeyBytes);
+      int[] mergedIndexes = joinSortedIntArrays(statementIndexes, newRow.getStatementIndexes());
+
+      // Calculate column values size change
+      long colValuesSizeDiff = 0;
       if (newRow.onDupKeyBytes == null) {
-        // increment the column value size by the new row column value size
-        colValuesSize += newRow.colValuesSize;
+        colValuesSizeDiff = newRow.colValuesSize;
         for (Map.Entry<PColumn, byte[]> entry : newRow.columnValues.entrySet()) {
-          PColumn col = entry.getKey();
-          byte[] oldValue = columnValues.put(col, entry.getValue());
+          byte[] oldValue = columnValues.get(entry.getKey());
           if (oldValue != null) {
-            // decrement column value size by the size of all column values that were replaced
-            colValuesSize -= (col.getEstimatedSize() + oldValue.length);
+            colValuesSizeDiff -= entry.getKey().getEstimatedSize() + oldValue.length;
           }
         }
       }
-      // Concatenate ON DUPLICATE KEY bytes to allow multiple
-      // increments of the same row in the same commit batch.
-      this.onDupKeyBytes =
-        PhoenixIndexBuilderHelper.combineOnDupKey(this.onDupKeyBytes, newRow.onDupKeyBytes);
-      statementIndexes = joinSortedIntArrays(statementIndexes, newRow.getStatementIndexes());
-      return true;
+
+      // Total size change (can be negative)
+      long totalSizeDiff = colValuesSizeDiff
+        + ((combinedOnDupKey != null ? combinedOnDupKey.length : 0)
+          - (this.onDupKeyBytes != null ? this.onDupKeyBytes.length : 0))
+        + (mergedIndexes.length - statementIndexes.length) * SizedUtil.INT_SIZE;
+
+      // Check limit BEFORE any modification (row count unchanged for merge - same row key)
+      if (mutationState != null) {
+        mutationState.throwIfLimitWouldBeExceeded(0, totalSizeDiff);
+      }
+
+      // Apply modifications
+      this.onDupKeyBytes = combinedOnDupKey;
+      this.statementIndexes = mergedIndexes;
+      if (newRow.onDupKeyBytes == null) {
+        columnValues.putAll(newRow.columnValues);
+        colValuesSize += colValuesSizeDiff;
+      }
+
+      return totalSizeDiff;
     }
 
     @Nonnull
