@@ -42,6 +42,8 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
  */
 public final class PhoenixMapReduceUtil {
 
+  public static final String INVALID_TIME_RANGE_EXCEPTION_MESSAGE = "Invalid time range for table";
+
   private PhoenixMapReduceUtil() {
 
   }
@@ -255,15 +257,15 @@ public final class PhoenixMapReduceUtil {
    * @throws IllegalArgumentException if time range is invalid
    */
   public static void validateTimeRange(Long startTime, Long endTime, String tableName) {
-    Long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-    Long st = (startTime == null) ? 0L : startTime;
-    Long et = (endTime == null) ? currentTime : endTime;
+    long currentTime = EnvironmentEdgeManager.currentTimeMillis();
+    long st = (startTime == null) ? 0L : startTime;
+    long et = (endTime == null) ? currentTime : endTime;
 
-    if (st.compareTo(currentTime) > 0 || et.compareTo(currentTime) > 0 || st.compareTo(et) >= 0) {
+    if (et > currentTime || st >= et) {
       throw new IllegalArgumentException(String.format(
-        "Invalid time range for table %s: start and end times must be in the past and start < end. "
-          + "Start: %d, End: %d, Current: %d",
-        tableName, st, et, currentTime));
+        "%s %s: start and end times must be in the past "
+          + "and start < end. Start: %d, End: %d, Current: %d",
+        INVALID_TIME_RANGE_EXCEPTION_MESSAGE, tableName, st, et, currentTime));
     }
   }
 

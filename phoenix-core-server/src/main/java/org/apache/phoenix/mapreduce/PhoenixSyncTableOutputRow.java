@@ -46,11 +46,11 @@ public class PhoenixSyncTableOutputRow {
   }
 
   public byte[] getStartRowKey() {
-    return startRowKey;
+    return startRowKey != null ? Arrays.copyOf(startRowKey, startRowKey.length) : null;
   }
 
   public byte[] getEndRowKey() {
-    return endRowKey;
+    return endRowKey != null ? Arrays.copyOf(endRowKey, endRowKey.length) : null;
   }
 
   /**

@@ -296,9 +296,6 @@ public class IndexTool extends Configured implements Tool {
 
   public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
-  public static final String INVALID_TIME_RANGE_EXCEPTION_MESSAGE = "startTime is greater than "
-    + "or equal to endTime " + "or either of them are set in the future; IndexTool can't proceed.";
-
   public static final String FEATURE_NOT_APPLICABLE =
     "start-time/end-time and retry verify feature are only "
       + "applicable for local or non-transactional global indexes";

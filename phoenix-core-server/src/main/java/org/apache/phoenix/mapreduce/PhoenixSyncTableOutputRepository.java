@@ -52,7 +52,10 @@ public class PhoenixSyncTableOutputRepository {
       + " STATUS, COUNTERS) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   /**
-   * @param connection Phoenix connection
+   * Creates a repository for managing sync table checkpoint operations. Note: The connection is
+   * stored as-is and shared across operations. The caller retains ownership and is responsible for
+   * connection lifecycle.
+   * @param connection Phoenix connection (must remain open for repository lifetime)
    */
   public PhoenixSyncTableOutputRepository(Connection connection) {
     this.connection = connection;
@@ -99,7 +102,7 @@ public class PhoenixSyncTableOutputRepository {
 
     byte[] effectiveStartKey =
       (startKey == null || startKey.length == 0) ? EMPTY_START_KEY_SENTINEL : startKey;
-    boolean isFirstRegion = (startKey == null || startKey.length == 0);
+    boolean isFirstRegion = startKey == null || startKey.length == 0;
 
     try (PreparedStatement ps = connection.prepareStatement(UPSERT_CHECKPOINT_SQL)) {
       ps.setString(1, tableName);

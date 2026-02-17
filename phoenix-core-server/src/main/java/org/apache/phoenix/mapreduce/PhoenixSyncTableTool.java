@@ -82,6 +82,7 @@ import org.apache.phoenix.thirdparty.org.apache.commons.cli.ParseException;
  * <pre>
  * hbase org.apache.phoenix.mapreduce.PhoenixSyncTableTool \ --table-name MY_TABLE \
  * --target-cluster target-zk1,target-zk2:2181:/hbase
+ * </pre>
  */
 public class PhoenixSyncTableTool extends Configured implements Tool {
 
@@ -286,20 +287,20 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     schemaName = cmdLine.getOptionValue(SCHEMA_NAME_OPTION.getOpt());
 
     if (cmdLine.hasOption(FROM_TIME_OPTION.getOpt())) {
-      startTime = Long.parseLong(cmdLine.getOptionValue(FROM_TIME_OPTION));
+      startTime = Long.valueOf(cmdLine.getOptionValue(FROM_TIME_OPTION.getOpt()));
     } else {
       startTime = 0L;
     }
 
     if (cmdLine.hasOption(TO_TIME_OPTION.getOpt())) {
-      endTime = Long.parseLong(cmdLine.getOptionValue(TO_TIME_OPTION));
+      endTime = Long.valueOf(cmdLine.getOptionValue(TO_TIME_OPTION.getOpt()));
     } else {
       // Default endTime, current time - 1 hour
       endTime = EnvironmentEdgeManager.currentTimeMillis(); // - (60 * 60 * 1000);
     }
 
     if (cmdLine.hasOption(CHUNK_SIZE_OPTION.getOpt())) {
-      chunkSizeBytes = Long.parseLong(cmdLine.getOptionValue(CHUNK_SIZE_OPTION));
+      chunkSizeBytes = Long.valueOf(cmdLine.getOptionValue(CHUNK_SIZE_OPTION.getOpt()));
     }
     if (cmdLine.hasOption(TENANT_ID_OPTION.getOpt())) {
       tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
@@ -414,5 +415,9 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   public static void main(String[] args) throws Exception {
     int exitCode = ToolRunner.run(new PhoenixSyncTableTool(), args);
     System.exit(exitCode);
+  }
+
+  public Job getJob() {
+    return job;
   }
 }

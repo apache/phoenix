@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.*;
+import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
@@ -86,11 +86,13 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
   private final byte[] timestampBuffer = new byte[8];
 
   /**
+   * Creates a PhoenixSyncTableRegionScanner for chunk-based hashing.
    * @param innerScanner                     The underlying region scanner
    * @param region                           The region being scanned
    * @param scan                             The scan request
    * @param env                              The coprocessor environment
    * @param ungroupedAggregateRegionObserver Parent observer for region state checks
+   * @throws IllegalStateException if digest state restoration fails
    */
   @VisibleForTesting
   public PhoenixSyncTableRegionScanner(final RegionScanner innerScanner, final Region region,
@@ -118,7 +120,7 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
         this.digest = decodeDigestState(continuedDigestStateAttr);
         this.isUsingContinuedDigest = true;
       } catch (IOException e) {
-        throw new RuntimeException("Failed to restore continued digest state", e);
+        throw new IllegalStateException("Failed to restore continued digest state", e);
       }
     } else {
       this.digest = new SHA256Digest();
@@ -245,7 +247,7 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
       timestampBuffer[4] = (byte) (ts >>> 24);
       timestampBuffer[5] = (byte) (ts >>> 16);
       timestampBuffer[6] = (byte) (ts >>> 8);
-      timestampBuffer[7] = (byte) (ts);
+      timestampBuffer[7] = (byte) ts;
       digest.update(timestampBuffer, 0, 8);
 
       digest.update(cell.getType().getCode());
@@ -286,7 +288,7 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
     DataInputStream dis = new DataInputStream(new ByteArrayInputStream(encodedState));
     int stateLength = dis.readInt();
     // Prevent malicious large allocations, hash digest can never go beyond ~96 bytes, giving some
-    // buffer upto 128 Bytes
+    // buffer up to 128 Bytes
     if (stateLength > MAX_SHA256_DIGEST_STATE_SIZE) {
       throw new IllegalArgumentException(
         String.format("Invalid SHA256 state length in region %s table %s: %d expected <= %d",

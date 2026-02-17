@@ -24,9 +24,9 @@ import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.List;
-import java.util.Arrays;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -500,8 +500,8 @@ public class PhoenixSyncTableMapper
       PhoenixSyncTableOutputRow chunk = processedChunks.get(i);
       byte[] chunkStart = chunk.getStartRowKey();
       byte[] chunkEnd = chunk.getEndRowKey();
-      boolean initialChunk = (i == 0);
-      boolean lastChunk = (i == processedChunks.size() - 1);
+      boolean initialChunk = i == 0;
+      boolean lastChunk = i == processedChunks.size() - 1;
 
       // Determine effective start boundary for this chunk
       // Only the first chunk might start before mapperRegionStart and need clipping
