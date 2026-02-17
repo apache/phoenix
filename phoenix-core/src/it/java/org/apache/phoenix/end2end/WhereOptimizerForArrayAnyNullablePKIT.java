@@ -30,54 +30,138 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
+import java.util.Arrays;
+import java.util.Collection;
 
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.junit.Assume;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+import org.junit.runners.Parameterized.Parameters;
 
+/**
+ * Integration tests for WHERE clause optimization with nullable PK columns.
+ * <p>
+ * Parameterized at class level with the following parameters:
+ * <ul>
+ *   <li>{@code salted} - whether the table uses salt buckets</li>
+ *   <li>{@code columnConfig} - primary column configuration (fixed-width, variable-width ASC/DESC)</li>
+ *   <li>{@code secondarySortDesc} - sort order for secondary columns (true=DESC, false=ASC)</li>
+ * </ul>
+ * This covers all combinations of column types and sort orders across all tests.
+ */
 @Category(NeedsOwnMiniClusterTest.class)
+@RunWith(Parameterized.class)
 public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArrayAnyITBase {
 
   private static final BigDecimal PK3_VAL = new BigDecimal("100.5");
+  private static final int SALT_BUCKETS = 3;
 
   /**
-   * Configuration for PK4 column type and sort order.
+   * Configuration for column type and sort order.
+   * Used for primary configurable columns in tests.
    */
-  private enum Pk4Config {
+  public enum ColumnConfig {
     /** Fixed-width CHAR(1) NOT NULL */
-    FIXED_WIDTH_CHAR("CHAR(1) NOT NULL", ""),
-    /** Nullable VARCHAR with ASC sort order (default) */
-    NULLABLE_ASC("VARCHAR NOT NULL", ""),
-    /** Nullable VARCHAR with DESC sort order */
-    NULLABLE_DESC("VARCHAR NOT NULL", " DESC");
+    FIXED_WIDTH("CHAR(1) NOT NULL", "", false),
+    /** Variable-width VARCHAR with ASC sort order (default) */
+    VARWIDTH_ASC("VARCHAR", "", false),
+    /** Variable-width VARCHAR with DESC sort order */
+    VARWIDTH_DESC("VARCHAR", " DESC", true);
 
     private final String dataType;
-    private final String sortOrder;
+    private final String sortOrderClause;
+    private final boolean isDesc;
 
-    Pk4Config(String dataType, String sortOrder) {
+    ColumnConfig(String dataType, String sortOrderClause, boolean isDesc) {
       this.dataType = dataType;
-      this.sortOrder = sortOrder;
+      this.sortOrderClause = sortOrderClause;
+      this.isDesc = isDesc;
     }
 
     public String getDataType() {
       return dataType;
     }
 
-    public String getSortOrder() {
-      return sortOrder;
+    public String getSortOrderClause() {
+      return sortOrderClause;
+    }
+
+    public boolean isDesc() {
+      return isDesc;
+    }
+
+    public boolean isFixedWidth() {
+      return this == FIXED_WIDTH;
+    }
+
+    /**
+     * Returns the data type with NOT NULL constraint for PK columns that must be NOT NULL.
+     */
+    public String getNotNullDataType() {
+      if (this == FIXED_WIDTH) {
+        return dataType; // Already includes NOT NULL
+      }
+      return dataType + " NOT NULL";
     }
 
     @Override
     public String toString() {
-      return name() + "[" + dataType + (sortOrder.isEmpty() ? "" : sortOrder) + "]";
+      return name();
     }
+  }
+
+  @Parameters(name = "salted={0}, columnConfig={1}, secondarySortDesc={2}")
+  public static Collection<Object[]> data() {
+    return Arrays.asList(new Object[][] {
+      { false, ColumnConfig.FIXED_WIDTH, false },
+      { false, ColumnConfig.FIXED_WIDTH, true },
+      { false, ColumnConfig.VARWIDTH_ASC, false },
+      { false, ColumnConfig.VARWIDTH_ASC, true },
+      { false, ColumnConfig.VARWIDTH_DESC, false },
+      { false, ColumnConfig.VARWIDTH_DESC, true },
+      { true, ColumnConfig.FIXED_WIDTH, false },
+      { true, ColumnConfig.FIXED_WIDTH, true },
+      { true, ColumnConfig.VARWIDTH_ASC, false },
+      { true, ColumnConfig.VARWIDTH_ASC, true },
+      { true, ColumnConfig.VARWIDTH_DESC, false },
+      { true, ColumnConfig.VARWIDTH_DESC, true }
+    });
+  }
+
+  private final boolean salted;
+  private final ColumnConfig columnConfig;
+  private final boolean secondarySortDesc;
+
+  public WhereOptimizerForArrayAnyNullablePKIT(boolean salted, ColumnConfig columnConfig, 
+      boolean secondarySortDesc) {
+    this.salted = salted;
+    this.columnConfig = columnConfig;
+    this.secondarySortDesc = secondarySortDesc;
+  }
+
+  /**
+   * Returns the SALT_BUCKETS clause if salted, otherwise empty string.
+   */
+  private String getSaltClause() {
+    return salted ? " SALT_BUCKETS=" + SALT_BUCKETS : "";
+  }
+
+  /**
+   * Returns the sort order clause for secondary columns based on secondarySortDesc parameter.
+   */
+  private String getSecondarySortOrder() {
+    return secondarySortDesc ? " DESC" : "";
   }
 
   /**
    * Creates a table with 5 PK columns (last one nullable) and inserts test data.
+   * Uses class-level columnConfig for PK4 and secondarySortDesc for PK5.
    * Schema: PK1 VARCHAR, PK2 VARCHAR, PK3 DECIMAL, PK4 (configurable), PK5 DECIMAL (nullable)
    *         COL1 VARCHAR, COL2 VARCHAR, COL3 VARCHAR
    * Inserts 5 rows:
@@ -86,24 +170,22 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
    *   Row 3: (A, B, 100.5, X, 1.0, val7, val8, val9)
    *   Row 4: (A, B, 100.5, Z, NULL, val10, val11, val12)
    *   Row 5: (C, B, 100.5, X, NULL, val13, val14, val15)
-   * @param pk4Config configuration for PK4 column type and sort order
-   * @param pk5Desc if true, PK5 will have DESC sort order
    * @return the generated table name
    */
-  private String createTableAndInsertTestDataForNullablePKTests(Pk4Config pk4Config, boolean pk5Desc) throws Exception {
+  private String createTableAndInsertTestDataForNullablePKTests() throws Exception {
     String tableName = generateUniqueName();
-    String pk5SortOrder = pk5Desc ? " DESC" : "";
     String ddl = "CREATE TABLE " + tableName + " ("
       + "PK1 VARCHAR NOT NULL, "
       + "PK2 VARCHAR NOT NULL, "
       + "PK3 DECIMAL NOT NULL, "
-      + "PK4 " + pk4Config.getDataType() + ", "
+      + "PK4 " + columnConfig.getNotNullDataType() + ", "
       + "PK5 DECIMAL, "
       + "COL1 VARCHAR, "
       + "COL2 VARCHAR, "
       + "COL3 VARCHAR, "
-      + "CONSTRAINT pk PRIMARY KEY (PK1, PK2, PK3, PK4" + pk4Config.getSortOrder() + ", PK5" + pk5SortOrder + ")"
-      + ")";
+      + "CONSTRAINT pk PRIMARY KEY (PK1, PK2, PK3, PK4" + columnConfig.getSortOrderClause() 
+      + ", PK5" + getSecondarySortOrder() + ")"
+      + ")" + getSaltClause();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       try (java.sql.Statement stmt = conn.createStatement()) {
         stmt.execute(ddl);
@@ -188,29 +270,14 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
   }
 
   /**
-   * Parameterized test for single point lookup with nullable PK.
-   * Tests all combinations of:
-   * - PK4 config: FIXED_WIDTH_CHAR, NULLABLE_ASC, NULLABLE_DESC
-   * - PK5 sort order: ASC, DESC
+   * Test for single point lookup with nullable PK.
+   * Uses class-level parameters:
+   * - columnConfig for PK4 type and sort order
+   * - secondarySortDesc for PK5 sort order
    */
   @Test
   public void testSinglePointLookupWithNullablePK() throws Exception {
-    for (Pk4Config pk4Config : Pk4Config.values()) {
-      for (boolean pk5Desc : new boolean[] { false, true }) {
-        String configDesc = "PK4=" + pk4Config + ", PK5 DESC=" + pk5Desc;
-        try {
-          doTestSinglePointLookupWithNullablePK(pk4Config, pk5Desc);
-        } catch (AssertionError e) {
-          throw new AssertionError("Failed for configuration: " + configDesc, e);
-        } catch (Exception e) {
-          throw new Exception("Failed for configuration: " + configDesc, e);
-        }
-      }
-    }
-  }
-
-  private void doTestSinglePointLookupWithNullablePK(Pk4Config pk4Config, boolean pk5Desc) throws Exception {
-    String tableName = createTableAndInsertTestDataForNullablePKTests(pk4Config, pk5Desc);
+    String tableName = createTableAndInsertTestDataForNullablePKTests();
 
     // Query with = for PK4 and IS NULL for PK5
     // IS NULL on trailing nullable PK column generates POINT LOOKUP because:
@@ -257,29 +324,14 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
   }
 
   /**
-   * Parameterized test for multi-point lookups with nullable PK.
-   * Tests all combinations of:
-   * - PK4 config: FIXED_WIDTH_CHAR, NULLABLE_ASC, NULLABLE_DESC
-   * - PK5 sort order: ASC, DESC
+   * Test for multi-point lookups with nullable PK.
+   * Uses class-level parameters:
+   * - columnConfig for PK4 type and sort order
+   * - secondarySortDesc for PK5 sort order
    */
   @Test
   public void testMultiPointLookupsWithNullablePK() throws Exception {
-    for (Pk4Config pk4Config : Pk4Config.values()) {
-      for (boolean pk5Desc : new boolean[] { false, true }) {
-        String configDesc = "PK4=" + pk4Config + ", PK5 DESC=" + pk5Desc;
-        try {
-          doTestMultiPointLookupsWithNullablePK(pk4Config, pk5Desc);
-        } catch (AssertionError e) {
-          throw new AssertionError("Failed for configuration: " + configDesc, e);
-        } catch (Exception e) {
-          throw new Exception("Failed for configuration: " + configDesc, e);
-        }
-      }
-    }
-  }
-
-  private void doTestMultiPointLookupsWithNullablePK(Pk4Config pk4Config, boolean pk5Desc) throws Exception {
-    String tableName = createTableAndInsertTestDataForNullablePKTests(pk4Config, pk5Desc);
+    String tableName = createTableAndInsertTestDataForNullablePKTests();
 
     // Query with =ANY(?) for PK4 and IS NULL for PK5
     // IS NULL on trailing nullable PK column generates POINT LOOKUPS because:
@@ -317,33 +369,21 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
   }
 
   /**
-   * Parameterized test for query with index after adding nullable PK column.
-   * Tests all combinations of:
-   * - PK3 sort order: ASC, DESC
-   * - PK4 sort order: ASC, DESC
+   * Test for query with index after adding nullable PK column.
+   * Uses class-level parameters:
+   * - columnConfig.isDesc() for PK3 sort order
+   * - secondarySortDesc for PK4 sort order (added via ALTER TABLE)
+   * Note: columnConfig's fixed-width vs variable-width aspect is not applicable here,
+   * so FIXED_WIDTH and VARWIDTH_ASC behave the same (both use ASC sort order).
    */
   @Test
   public void testQueryWithIndexAfterAddingNullablePKColumn() throws Exception {
-    for (boolean pk3Desc : new boolean[] { false, true }) {
-      for (boolean pk4Desc : new boolean[] { false, true }) {
-        String configDesc = "PK3 DESC=" + pk3Desc + ", PK4 DESC=" + pk4Desc;
-        try {
-          doTestQueryWithIndexAfterAddingNullablePKColumn(pk3Desc, pk4Desc);
-        } catch (AssertionError e) {
-          throw new AssertionError("Failed for configuration: " + configDesc, e);
-        } catch (Exception e) {
-          throw new Exception("Failed for configuration: " + configDesc, e);
-        }
-      }
-    }
-  }
-
-  private void doTestQueryWithIndexAfterAddingNullablePKColumn(boolean pk3Desc, boolean pk4Desc) throws Exception {
+    Assume.assumeFalse(columnConfig.isFixedWidth());
     String tableName = generateUniqueName();
     String indexName = "IDX_" + generateUniqueName();
 
-    String pk3SortOrder = pk3Desc ? " DESC" : "";
-    String pk4SortOrder = pk4Desc ? " DESC" : "";
+    String pk3SortOrder = columnConfig.isDesc() ? " DESC" : "";
+    String pk4SortOrder = secondarySortDesc ? " DESC" : "";
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       // Step 1: Create table with one nullable PK column (PK3) at the end
@@ -354,13 +394,13 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         + "COL1 VARCHAR, "
         + "COL2 VARCHAR, "
         + "CONSTRAINT pk PRIMARY KEY (PK1, PK2, PK3" + pk3SortOrder + ")"
-        + ")";
+        + ")" + getSaltClause();
       conn.createStatement().execute(createTableDdl);
       conn.commit();
 
       // Step 2: Create a covered global index on the data table
       String createIndexDdl = "CREATE INDEX " + indexName + " ON " + tableName
-        + " (COL1) INCLUDE (COL2)";
+        + " (COL1) INCLUDE (COL2) " + getSaltClause();
       conn.createStatement().execute(createIndexDdl);
       conn.commit();
 
@@ -476,87 +516,13 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
   }
 
   /**
-   * Configuration for VIEW_PK1 column type and sort order.
-   */
-  private enum ViewPk1Config {
-    /** Fixed-width CHAR(1) */
-    FIXED_WIDTH_CHAR("CHAR(1) NOT NULL", ""),
-    /** Nullable VARCHAR with ASC sort order (default) */
-    NULLABLE_ASC("VARCHAR", ""),
-    /** Nullable VARCHAR with DESC sort order */
-    NULLABLE_DESC("VARCHAR", " DESC");
-
-    private final String dataType;
-    private final String sortOrder;
-
-    ViewPk1Config(String dataType, String sortOrder) {
-      this.dataType = dataType;
-      this.sortOrder = sortOrder;
-    }
-
-    public String getDataType() {
-      return dataType;
-    }
-
-    public String getSortOrder() {
-      return sortOrder;
-    }
-
-    @Override
-    public String toString() {
-      return name() + "[" + dataType + (sortOrder.isEmpty() ? "" : sortOrder) + "]";
-    }
-  }
-
-  /**
-   * Configuration for VIEW_PK2 column sort order (always nullable VARCHAR).
-   */
-  private enum ViewPk2Config {
-    /** Nullable VARCHAR with ASC sort order (default) */
-    NULLABLE_ASC(""),
-    /** Nullable VARCHAR with DESC sort order */
-    NULLABLE_DESC(" DESC");
-
-    private final String sortOrder;
-
-    ViewPk2Config(String sortOrder) {
-      this.sortOrder = sortOrder;
-    }
-
-    public String getSortOrder() {
-      return sortOrder;
-    }
-
-    @Override
-    public String toString() {
-      return name() + "[VARCHAR" + (sortOrder.isEmpty() ? "" : sortOrder) + "]";
-    }
-  }
-
-  /**
-   * Parameterized test for multi-point lookups on view with nullable PK columns.
-   * Tests all combinations of:
-   * - VIEW_PK1 config: FIXED_WIDTH_CHAR, NULLABLE_ASC, NULLABLE_DESC
-   * - VIEW_PK2 config: NULLABLE_ASC, NULLABLE_DESC
+   * Test for multi-point lookups on view with nullable PK columns.
+   * Uses class-level parameters:
+   * - columnConfig for VIEW_PK1 type and sort order
+   * - secondarySortDesc for VIEW_PK2 sort order
    */
   @Test
   public void testMultiPointLookupsOnViewWithNullablePKColumns() throws Exception {
-    for (ViewPk1Config viewPk1Config : ViewPk1Config.values()) {
-      for (ViewPk2Config viewPk2Config : ViewPk2Config.values()) {
-        String configDesc = "VIEW_PK1=" + viewPk1Config + ", VIEW_PK2=" + viewPk2Config;
-        try {
-          doTestMultiPointLookupsOnViewWithNullablePKColumns(viewPk1Config, viewPk2Config);
-        } catch (AssertionError e) {
-          throw new AssertionError("Failed for configuration: " + configDesc, e);
-        } catch (Exception e) {
-          throw new Exception("Failed for configuration: " + configDesc, e);
-        }
-      }
-    }
-  }
-
-  private void doTestMultiPointLookupsOnViewWithNullablePKColumns(
-      ViewPk1Config viewPk1Config, ViewPk2Config viewPk2Config) throws Exception {
     String tableName = generateUniqueName();
     String viewName = "VW_" + generateUniqueName();
 
@@ -569,17 +535,17 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         + "COL1 VARCHAR, "
         + "COL2 VARCHAR, "
         + "CONSTRAINT pk PRIMARY KEY (PK1, PK2)"
-        + ")";
+        + ")" + getSaltClause();
       conn.createStatement().execute(createTableDdl);
       conn.commit();
 
       // Step 2: Create view that adds two nullable PK columns with configured types/sort orders
       String createViewDdl = "CREATE VIEW " + viewName + " ("
-        + "VIEW_PK1 " + viewPk1Config.getDataType() + ", "
+        + "VIEW_PK1 " + columnConfig.getDataType() + ", "
         + "VIEW_PK2 VARCHAR, "
         + "VIEW_COL1 VARCHAR, "
-        + "CONSTRAINT view_pk PRIMARY KEY (VIEW_PK1" + viewPk1Config.getSortOrder() 
-        + ", VIEW_PK2" + viewPk2Config.getSortOrder() + ")"
+        + "CONSTRAINT view_pk PRIMARY KEY (VIEW_PK1" + columnConfig.getSortOrderClause() 
+        + ", VIEW_PK2" + getSecondarySortOrder() + ")"
         + ") AS SELECT * FROM " + tableName;
       conn.createStatement().execute(createViewDdl);
       conn.commit();
@@ -685,26 +651,18 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
     }
   }
 
+  /**
+   * Test for point lookup with IS NULL check on all PK columns.
+   * Uses class-level columnConfig.isDesc() for sort order of all PK columns.
+   * Note: columnConfig's fixed-width vs variable-width aspect is not applicable here,
+   * so FIXED_WIDTH and VARWIDTH_ASC behave the same (both use ASC sort order).
+   * The secondarySortDesc parameter is also not applicable for this test.
+   */
   @Test
   public void testPointLookupWithIsNullCheckOnAllPKColumns() throws Exception {
-    for (boolean descSortOrder : new boolean[] { false, true }) {
-      for (boolean salted : new boolean[] { false, true }) {
-        String configDesc = "DESC=" + descSortOrder + ", SALTED=" + salted;
-        try {
-          doTestPointLookupWithIsNullCheckOnAllPKColumns(descSortOrder, salted);
-        } catch (AssertionError e) {
-          throw new AssertionError("Failed for configuration: " + configDesc, e);
-        } catch (Exception e) {
-          throw new Exception("Failed for configuration: " + configDesc, e);
-        }
-      }
-    }
-  }
-
-  private void doTestPointLookupWithIsNullCheckOnAllPKColumns(boolean descSortOrder, boolean salted)
-      throws Exception {
+    Assume.assumeFalse(columnConfig.isFixedWidth() || secondarySortDesc);
     String tableName = generateUniqueName();
-    String sortOrder = descSortOrder ? " DESC" : "";
+    String sortOrder = columnConfig.isDesc() ? " DESC" : "";
 
     // Create table with all nullable PK columns
     String ddl = "CREATE TABLE " + tableName + " ("
@@ -714,7 +672,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
       + "COL1 VARCHAR, "
       + "COL2 VARCHAR, "
       + "CONSTRAINT pk PRIMARY KEY (PK1 " + sortOrder + ", PK2 " + sortOrder + ", PK3 " + sortOrder + ")"
-      + ")" + (salted ? " SALT_BUCKETS=3" : "");
+      + ")" + getSaltClause();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       try (java.sql.Statement stmt = conn.createStatement()) {
         stmt.execute(ddl);
