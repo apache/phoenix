@@ -23,6 +23,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
@@ -140,21 +141,25 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
     List<InputSplit> unprocessedSplits = new ArrayList<>();
     int splitIdx = 0;
     int completedIdx = 0;
+
     // Two pointer comparison across splitRange and completedRange
     while (splitIdx < allSplits.size() && completedIdx < completedRegions.size()) {
       PhoenixInputSplit split = (PhoenixInputSplit) allSplits.get(splitIdx);
       KeyRange splitRange = split.getKeyRange();
       KeyRange completedRange = completedRegions.get(completedIdx);
-      byte[] splitStart = normalizeKey(splitRange.getLowerRange());
-      byte[] splitEnd = normalizeKey(splitRange.getUpperRange());
-      byte[] completedStart = normalizeKey(completedRange.getLowerRange());
-      byte[] completedEnd = normalizeKey(completedRange.getUpperRange());
+      byte[] splitStart = splitRange.getLowerRange();
+      byte[] splitEnd = splitRange.getUpperRange();
+      byte[] completedStart = completedRange.getLowerRange();
+      byte[] completedEnd = completedRange.getUpperRange();
+
 
       // No overlap b/w completedRange/splitRange.
       // completedEnd is before splitStart, increment completed pointer to catch up
-      if (Bytes.compareTo(completedEnd, splitStart) <= 0) {
+      if (!Bytes.equals(completedEnd, HConstants.EMPTY_END_ROW)
+          && Bytes.compareTo(completedEnd, splitStart) <= 0) {
         completedIdx++;
-      } else if (Bytes.compareTo(completedStart, splitEnd) >= 0) {
+      } else if (!Bytes.equals(splitEnd, HConstants.EMPTY_END_ROW)
+          && Bytes.compareTo(completedStart, splitEnd) >= 0) {
         // No overlap. completedStart is after splitEnd, splitRange needs to be processed,
         // add to unprocessed list and increment
         unprocessedSplits.add(allSplits.get(splitIdx));
@@ -162,11 +167,14 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
       } else {
         // Some overlap detected, check if SplitRange is fullyContained within completedRange
         // Fully contained if: completedStart <= splitStart AND splitEnd <= completedEnd
+
         boolean startContained = Bytes.compareTo(completedStart, splitStart) <= 0;
-        boolean endContained = Bytes.compareTo(splitEnd, completedEnd) <= 0;
+        boolean endContained = Bytes.equals(completedEnd, HConstants.EMPTY_END_ROW)
+            || Bytes.compareTo(splitEnd, completedEnd) <= 0;
+
         boolean fullyContained = startContained && endContained;
         if (!fullyContained) {
-          // Not fully contained - keep the split
+          // Not fully contained, keep the split
           unprocessedSplits.add(allSplits.get(splitIdx));
         }
         splitIdx++;
@@ -180,14 +188,5 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
       splitIdx++;
     }
     return unprocessedSplits;
-  }
-
-  /**
-   * Normalizes a key boundary for comparison
-   * @param key The key to normalize
-   * @return Empty byte array if key is null, otherwise the key unchanged
-   */
-  private byte[] normalizeKey(byte[] key) {
-    return key == null ? new byte[0] : key;
   }
 }

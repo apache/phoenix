@@ -18,6 +18,8 @@
 package org.apache.phoenix.mapreduce;
 
 import java.util.Arrays;
+
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
 
 /**
@@ -63,12 +65,14 @@ public class PhoenixSyncTableOutputRow {
     }
 
     public Builder setStartRowKey(byte[] startRowKey) {
-      row.startRowKey = startRowKey != null ? Arrays.copyOf(startRowKey, startRowKey.length) : null;
+      row.startRowKey = Arrays.copyOf(startRowKey, startRowKey.length);
       return this;
     }
 
     public Builder setEndRowKey(byte[] endRowKey) {
-      row.endRowKey = endRowKey != null ? Arrays.copyOf(endRowKey, endRowKey.length) : null;
+      row.endRowKey = (endRowKey == null || endRowKey.length == 0)
+                      ? HConstants.EMPTY_END_ROW
+                      : Arrays.copyOf(endRowKey, endRowKey.length);
       return this;
     }
 

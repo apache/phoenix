@@ -54,17 +54,30 @@ public class PhoenixSyncTableOutputRepository {
   }
 
   public void createSyncCheckpointTableIfNotExists() throws SQLException {
-    String ddl = "CREATE TABLE IF NOT EXISTS " + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (\n"
-      + "    TABLE_NAME VARCHAR NOT NULL,\n" + "    TARGET_CLUSTER VARCHAR NOT NULL,\n"
-      + "    ENTRY_TYPE VARCHAR(20) NOT NULL,\n" + "    FROM_TIME BIGINT NOT NULL,\n"
-      + "    TO_TIME BIGINT NOT NULL,\n" + "    IS_DRY_RUN BOOLEAN NOT NULL,\n"
-      + "    START_ROW_KEY VARBINARY NOT NULL,\n" + "    END_ROW_KEY VARBINARY,\n"
-      + "    IS_FIRST_REGION BOOLEAN, \n" + "    EXECUTION_START_TIME TIMESTAMP,\n"
-      + "    EXECUTION_END_TIME TIMESTAMP,\n" + "    STATUS VARCHAR(20),\n"
-      + "    COUNTERS VARCHAR(255), \n" + "    CONSTRAINT PK PRIMARY KEY (\n"
-      + "        TABLE_NAME,\n" + "        TARGET_CLUSTER,\n" + "        ENTRY_TYPE ,\n"
-      + "        FROM_TIME,\n" + "        TO_TIME,\n" + "        IS_DRY_RUN,\n"
-      + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS;
+    String ddl = "CREATE TABLE IF NOT EXISTS "
+        + SYNC_TABLE_CHECKPOINT_TABLE_NAME+ " (\n"
+      + "    TABLE_NAME VARCHAR NOT NULL,\n"
+      + "    TARGET_CLUSTER VARCHAR NOT NULL,\n"
+      + "    TYPE VARCHAR(20) NOT NULL,\n"
+      + "    FROM_TIME BIGINT NOT NULL,\n"
+      + "    TO_TIME BIGINT NOT NULL,\n"
+      + "    IS_DRY_RUN BOOLEAN NOT NULL,\n"
+      + "    START_ROW_KEY VARBINARY NOT NULL,\n"
+      + "    END_ROW_KEY VARBINARY,\n"
+      + "    IS_FIRST_REGION BOOLEAN, \n"
+      + "    EXECUTION_START_TIME TIMESTAMP,\n"
+      + "    EXECUTION_END_TIME TIMESTAMP,\n"
+      + "    STATUS VARCHAR(20),\n"
+      + "    COUNTERS VARCHAR(255), \n"
+      + "    CONSTRAINT PK PRIMARY KEY (\n"
+      + "        TABLE_NAME,\n"
+      + "        TARGET_CLUSTER,\n"
+      + "        TYPE ,\n"
+      + "        FROM_TIME,\n"
+      + "        TO_TIME,\n"
+      + "        IS_DRY_RUN,\n"
+      + "        START_ROW_KEY )"
+      + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS;
 
     try (Statement stmt = connection.createStatement()) {
       stmt.execute(ddl);
@@ -93,7 +106,7 @@ public class PhoenixSyncTableOutputRepository {
     }
 
     String upsert = "UPSERT INTO " + SYNC_TABLE_CHECKPOINT_TABLE_NAME
-      + " (TABLE_NAME, TARGET_CLUSTER, ENTRY_TYPE, FROM_TIME, TO_TIME, IS_DRY_RUN,"
+      + " (TABLE_NAME, TARGET_CLUSTER, TYPE, FROM_TIME, TO_TIME, IS_DRY_RUN,"
       + " START_ROW_KEY, END_ROW_KEY, IS_FIRST_REGION, EXECUTION_START_TIME, EXECUTION_END_TIME,"
       + " STATUS, COUNTERS) " + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
@@ -105,8 +118,8 @@ public class PhoenixSyncTableOutputRepository {
       ps.setString(1, tableName);
       ps.setString(2, targetCluster);
       ps.setString(3, type.name());
-      ps.setObject(4, fromTime);
-      ps.setObject(5, toTime);
+      ps.setLong(4, fromTime);
+      ps.setLong(5, toTime);
       ps.setBoolean(6, isDryRun);
       ps.setBytes(7, effectiveStartKey);
       ps.setBytes(8, endKey);
@@ -145,7 +158,7 @@ public class PhoenixSyncTableOutputRepository {
 
     String query = "SELECT START_ROW_KEY, END_ROW_KEY, IS_FIRST_REGION FROM "
       + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " WHERE TABLE_NAME = ?  AND TARGET_CLUSTER = ?"
-      + " AND ENTRY_TYPE = ? AND FROM_TIME = ? AND TO_TIME = ? AND STATUS IN ( ?, ?)";
+      + " AND TYPE = ? AND FROM_TIME = ? AND TO_TIME = ? AND STATUS IN ( ?, ?)";
     List<PhoenixSyncTableOutputRow> results = new ArrayList<>();
     try (PreparedStatement ps = connection.prepareStatement(query)) {
       int paramIndex = 1;
@@ -182,21 +195,42 @@ public class PhoenixSyncTableOutputRepository {
   public List<PhoenixSyncTableOutputRow> getProcessedChunks(String tableName, String targetCluster,
     Long fromTime, Long toTime, byte[] mapperRegionStart, byte[] mapperRegionEnd)
     throws SQLException {
-    String query = "SELECT START_ROW_KEY, END_ROW_KEY, IS_FIRST_REGION FROM "
-      + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " WHERE TABLE_NAME = ?  AND TARGET_CLUSTER = ? "
-      + " AND ENTRY_TYPE = ? AND FROM_TIME = ? AND TO_TIME = ? AND START_ROW_KEY < ? "
-      + " AND END_ROW_KEY > ? AND STATUS IN (?, ?) ";
+    StringBuilder queryBuilder = new StringBuilder();
+    queryBuilder.append("SELECT START_ROW_KEY, END_ROW_KEY, IS_FIRST_REGION FROM "
+            + SYNC_TABLE_CHECKPOINT_TABLE_NAME
+           + " WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
+           + " AND TYPE = ? AND FROM_TIME = ? AND TO_TIME = ?");
+
+    // Check if mapper region boundaries are non-empty (i.e., NOT first/last regions)
+    // Only add boundary conditions for non-empty boundaries
+    boolean hasEndBoundary = mapperRegionEnd != null && mapperRegionEnd.length > 0;
+    boolean hasStartBoundary = mapperRegionStart != null && mapperRegionStart.length > 0;
+
+    // Filter chunks that overlap with this mapper region:
+    // - Chunk overlaps if: chunkStart < mapperRegionEnd (when end boundary exists)
+    // - Chunk overlaps if: chunkEnd > mapperRegionStart (when start boundary exists)
+    if (hasEndBoundary) {
+      queryBuilder.append(" AND START_ROW_KEY <= ?");
+    }
+    if (hasStartBoundary) {
+      queryBuilder.append(" AND END_ROW_KEY >= ?");
+    }
+    queryBuilder.append(" AND STATUS IN (?, ?)");
 
     List<PhoenixSyncTableOutputRow> results = new ArrayList<>();
-    try (PreparedStatement ps = connection.prepareStatement(query)) {
+    try (PreparedStatement ps = connection.prepareStatement(queryBuilder.toString())) {
       int paramIndex = 1;
       ps.setString(paramIndex++, tableName);
       ps.setString(paramIndex++, targetCluster);
       ps.setString(paramIndex++, Type.CHUNK.name());
       ps.setLong(paramIndex++, fromTime);
       ps.setLong(paramIndex++, toTime);
-      ps.setBytes(paramIndex++, mapperRegionEnd);
-      ps.setBytes(paramIndex++, mapperRegionStart);
+      if (hasEndBoundary) {
+        ps.setBytes(paramIndex++, mapperRegionEnd);
+      }
+      if (hasStartBoundary) {
+        ps.setBytes(paramIndex++, mapperRegionStart);
+      }
       ps.setString(paramIndex++, Status.VERIFIED.name());
       ps.setString(paramIndex, Status.MISMATCHED.name());
       try (ResultSet rs = ps.executeQuery()) {
