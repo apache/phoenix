@@ -686,18 +686,35 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
   }
 
   @Test
-  public void testPointLookupWithAllNullablePKColumns() throws Exception {
+  public void testPointLookupWithIsNullCheckOnAllPKColumns() throws Exception {
+    for (boolean descSortOrder : new boolean[] { false, true }) {
+      for (boolean salted : new boolean[] { false, true }) {
+        String configDesc = "DESC=" + descSortOrder + ", SALTED=" + salted;
+        try {
+          doTestPointLookupWithIsNullCheckOnAllPKColumns(descSortOrder, salted);
+        } catch (AssertionError e) {
+          throw new AssertionError("Failed for configuration: " + configDesc, e);
+        } catch (Exception e) {
+          throw new Exception("Failed for configuration: " + configDesc, e);
+        }
+      }
+    }
+  }
+
+  private void doTestPointLookupWithIsNullCheckOnAllPKColumns(boolean descSortOrder, boolean salted)
+      throws Exception {
     String tableName = generateUniqueName();
+    String sortOrder = descSortOrder ? " DESC" : "";
 
     // Create table with all nullable PK columns
     String ddl = "CREATE TABLE " + tableName + " ("
-      + "PK1 VARCHAR, "      // Nullable, fixed-width
-      + "PK2 VARCHAR, "      // Nullable
-      + "PK3 DECIMAL, "      // Nullable
+      + "PK1 VARCHAR, "
+      + "PK2 VARCHAR, "
+      + "PK3 DECIMAL, "
       + "COL1 VARCHAR, "
       + "COL2 VARCHAR, "
-      + "CONSTRAINT pk PRIMARY KEY (PK1, PK2, PK3)"
-      + ")";
+      + "CONSTRAINT pk PRIMARY KEY (PK1 " + sortOrder + ", PK2 " + sortOrder + ", PK3 " + sortOrder + ")"
+      + ")" + (salted ? " SALT_BUCKETS=3" : "");
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       try (java.sql.Statement stmt = conn.createStatement()) {
         stmt.execute(ddl);
@@ -706,11 +723,11 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
     }
 
     // Insert test data with various null combinations
-    String upsertSql = "UPSERT INTO " + tableName
-      + " (PK1, PK2, PK3, COL1, COL2) VALUES (?, ?, ?, ?, ?)";
+    String upsertSql =
+      "UPSERT INTO " + tableName + " (PK1, PK2, PK3, COL1, COL2) VALUES (?, ?, ?, ?, ?)";
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       try (PreparedStatement stmt = conn.prepareStatement(upsertSql)) {
-        // Row 2: PK1 has value, PK2 and PK3 are NULL
+        // Row 1: PK1 has value, PK2 and PK3 are NULL
         stmt.setString(1, "A");
         stmt.setNull(2, Types.VARCHAR);
         stmt.setNull(3, Types.DECIMAL);
@@ -718,7 +735,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         stmt.setString(5, "val4");
         stmt.executeUpdate();
 
-        // Row 3: PK1 and PK2 have values, PK3 is NULL
+        // Row 2: PK1 and PK2 have values, PK3 is NULL
         stmt.setString(1, "A");
         stmt.setString(2, "B");
         stmt.setNull(3, Types.DECIMAL);
@@ -726,7 +743,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         stmt.setString(5, "val6");
         stmt.executeUpdate();
 
-        // Row 4: All PKs have values (no nulls)
+        // Row 3: All PKs have values (no nulls)
         stmt.setString(1, "A");
         stmt.setString(2, "B");
         stmt.setBigDecimal(3, new BigDecimal("100.5"));
@@ -734,7 +751,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         stmt.setString(5, "val8");
         stmt.executeUpdate();
 
-        // Row 5: PK1 is NULL, PK2 has value, PK3 is NULL
+        // Row 4: PK1 is NULL, PK2 has value, PK3 is NULL
         stmt.setNull(1, Types.CHAR);
         stmt.setString(2, "C");
         stmt.setNull(3, Types.DECIMAL);
@@ -754,8 +771,9 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         try (java.sql.ResultSet rs = stmt.executeQuery()) {
           assertFalse(rs.next());
         }
-        // IS NULL on all trailing nullable PK columns generates single POINT LOOKUP
-        assertPointLookupsAreGenerated(stmt, 1);
+        String scanType = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery()
+          .getExplainPlan().getPlanStepsAsAttributes().getExplainScanType();
+        assertNull(scanType);
       }
     }
   }

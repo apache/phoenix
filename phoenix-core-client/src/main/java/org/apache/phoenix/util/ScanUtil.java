@@ -610,6 +610,7 @@ public class ScanUtil {
         --i >= schemaStartIndex && offset > byteOffset
           && !(field = schema.getField(--fieldIndex)).getDataType().isFixedWidth()
           && hasSeparatorBytes(key, field, offset)
+          && ((field.getSortOrder() == SortOrder.DESC && schema.rowKeyOrderOptimizable()) || field.getSortOrder() == SortOrder.ASC)
       ) {
         if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
           offset--;

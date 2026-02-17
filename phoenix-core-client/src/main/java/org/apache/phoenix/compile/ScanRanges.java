@@ -630,8 +630,18 @@ public class ScanRanges {
         // 1. Trailing nulls are stripped when storing the key (no trailing separator bytes)
         // 2. getPointKeys() generates the correct key without trailing null bytes
         // 3. The generated key matches exactly what's stored for rows with trailing NULL
-        if (!keyRange.isSingleKey()) {
+        // 4. Not handling legcay tables with DESC sort order and impacted via bug PHOENIX-2067
+        if (
+          !keyRange.isSingleKey()
+        ) {
           return false;
+        }
+        else if (i == lastIndex && keyRange == KeyRange.IS_NULL_RANGE) {
+          Field lastField = schema.getField(schema.getFieldCount() - 1);
+          SortOrder lastFieldSortOrder = lastField.getSortOrder();
+          if (lastFieldSortOrder == SortOrder.DESC && !schema.rowKeyOrderOptimizable()) {
+            return false;
+          }
         }
       }
     }
@@ -666,10 +676,13 @@ public class ScanRanges {
     do {
       length = ScanUtil.setKey(schema, ranges, slotSpan, position, Bound.LOWER, key, offset, offset,
         ranges.size(), offset);
+      // Handle case when generated single point key is empty byte array
+      if (length == 0) {
+        continue;
+      }
       if (isSalted) {
         key[0] = SaltingUtil.getSaltingByte(key, offset, length, bucketNum);
       }
-      
       keys.add(Arrays.copyOf(key, length + offset));
     } while (incrementKey(ranges, position));
     return keys;
