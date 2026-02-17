@@ -298,7 +298,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       endTime = Long.valueOf(cmdLine.getOptionValue(TO_TIME_OPTION.getOpt()));
     } else {
       // Default endTime, current time - 1 hour
-      endTime = EnvironmentEdgeManager.currentTimeMillis(); //- (60 * 60 * 1000);
+      endTime = EnvironmentEdgeManager.currentTimeMillis(); // - (60 * 60 * 1000);
     }
 
     if (cmdLine.hasOption(CHUNK_SIZE_OPTION.getOpt())) {
@@ -363,16 +363,16 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     }
     Counters counters = job.getCounters();
     LOGGER.info(
-        "PhoenixSyncTable job completed, gathered counters are \n Input Record: {}, \n"
-            + "Ouput Record: {}, \n Failed Record: {}, \n Chunks Verified: {}, \n"
-            + "Chunks Mimatched: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}",
-        counters.findCounter(PhoenixJobCounters.INPUT_RECORDS).getValue(),
-        counters.findCounter(PhoenixJobCounters.OUTPUT_RECORDS).getValue(),
-        counters.findCounter(PhoenixJobCounters.FAILED_RECORDS).getValue(),
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_VERIFIED).getValue(),
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED).getValue(),
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED).getValue(),
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED).getValue());
+      "PhoenixSyncTable job completed, gathered counters are \n Input Record: {}, \n"
+        + "Ouput Record: {}, \n Failed Record: {}, \n Chunks Verified: {}, \n"
+        + "Chunks Mimatched: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}",
+      counters.findCounter(PhoenixJobCounters.INPUT_RECORDS).getValue(),
+      counters.findCounter(PhoenixJobCounters.OUTPUT_RECORDS).getValue(),
+      counters.findCounter(PhoenixJobCounters.FAILED_RECORDS).getValue(),
+      counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_VERIFIED).getValue(),
+      counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED).getValue(),
+      counters.findCounter(PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED).getValue(),
+      counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED).getValue());
     return success;
   }
 

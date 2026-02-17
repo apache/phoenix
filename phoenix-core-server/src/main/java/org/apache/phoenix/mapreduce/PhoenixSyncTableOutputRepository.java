@@ -34,10 +34,8 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Repository for managing the PHOENIX_SYNC_TABLE_CHECKPOINT table. This table stores checkpoint
- * information for the PhoenixSyncTableTool, enabling:
- * 1. Mapper Level checkpointing (skip completed
- * mapper regions on restart)
- * 2. Chunk level checkpointing (skip completed chunks)
+ * information for the PhoenixSyncTableTool, enabling: 1. Mapper Level checkpointing (skip completed
+ * mapper regions on restart) 2. Chunk level checkpointing (skip completed chunks)
  */
 public class PhoenixSyncTableOutputRepository {
 
@@ -172,8 +170,7 @@ public class PhoenixSyncTableOutputRepository {
   }
 
   /**
-   * Queries for processed chunks. Used by PhoenixSyncTableMapper to skip
-   * already-processed chunks.
+   * Queries for processed chunks. Used by PhoenixSyncTableMapper to skip already-processed chunks.
    * @param tableName         Source table name
    * @param targetCluster     Target cluster ZK quorum
    * @param fromTime          Start timestamp (nullable)

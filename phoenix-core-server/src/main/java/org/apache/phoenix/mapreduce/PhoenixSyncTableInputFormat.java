@@ -56,8 +56,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
    * <p>
    * PhoenixSyncTableMapper doesn't need actual row data from the RecordReader - it extracts region
    * boundaries from the InputSplit and delegates all scanning to the PhoenixSyncTableRegionScanner
-   * coprocessor.
-   * Using PhoenixNoOpSingleRecordReader ensures that {@code map()} is called exactly
+   * coprocessor. Using PhoenixNoOpSingleRecordReader ensures that {@code map()} is called exactly
    * once per region no matter what scan looks like, avoiding the overhead of the default
    * PhoenixRecordReader which would call {@code map()} for every row of scan.
    * @param split Input Split
@@ -97,7 +96,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
     }
     if (completedRegions.isEmpty()) {
       LOGGER.info("No completed regions for table {} - processing all {} splits", tableName,
-          allSplits.size());
+        allSplits.size());
       return allSplits;
     }
 

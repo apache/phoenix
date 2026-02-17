@@ -51,14 +51,14 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * Server-side coprocessor that performs chunk formation and SHA-256 hashing for
  * PhoenixSyncTableTool.
  * <p>
- * Accumulates rows into chunks (based on size limits) and computes a hash of all row data
- * (keys, column families, qualifiers, timestamps, cell types, values).
+ * Accumulates rows into chunks (based on size limits) and computes a hash of all row data (keys,
+ * column families, qualifiers, timestamps, cell types, values).
  * <p>
  * Source scan (isTargetScan=false): Returns complete chunks bounded by region boundaries. Sets
  * hasMoreRows=false when region is exhausted.
  * <p>
- * Target scan (isTargetScan=true): Returns partial chunks with serialized digest state when
- * region boundary is reached, allowing cross-region hash continuation.
+ * Target scan (isTargetScan=true): Returns partial chunks with serialized digest state when region
+ * boundary is reached, allowing cross-region hash continuation.
  * <p>
  * Returns chunk metadata cells: END_KEY, HASH (or digest state), ROW_COUNT, IS_PARTIAL_CHUNK
  */
@@ -302,8 +302,8 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
   /**
    * Builds chunk metadata result cells and adds them to the results list. Returns a single
    * "row"[rowkey=chunkStartKey] with multiple cells containing chunk metadata[chunkEndKey,
-   * hash/digest, rowCount, hasMoreRows, isPartialChunk]. For complete chunks: includes
-   * final SHA-256 hash (32 bytes) For partial chunks: includes serialized MessageDigest state for
+   * hash/digest, rowCount, hasMoreRows, isPartialChunk]. For complete chunks: includes final
+   * SHA-256 hash (32 bytes) For partial chunks: includes serialized MessageDigest state for
    * continuation
    * @param results        Output list to populate with chunk metadata cells
    * @param isPartialChunk true if this is a partial chunk (region boundary reached before
