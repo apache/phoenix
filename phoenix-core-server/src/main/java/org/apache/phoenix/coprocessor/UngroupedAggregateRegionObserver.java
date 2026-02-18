@@ -17,14 +17,6 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.adjustScanFilter;
-import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
-import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
-import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
-import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
-import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.COMPACTION_UPDATE_STATS_ROW_COUNT;
-import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.CONCURRENT_UPDATE_STATS_ROW_COUNT;
-
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOException;
@@ -122,6 +114,14 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+
+import static org.apache.phoenix.coprocessor.GlobalIndexRegionScanner.adjustScanFilter;
+import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
+import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN;
+import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
+import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
+import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.COMPACTION_UPDATE_STATS_ROW_COUNT;
+import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.CONCURRENT_UPDATE_STATS_ROW_COUNT;
 
 /**
  * Region observer that aggregates ungrouped rows(i.e. SQL query with aggregation function and no

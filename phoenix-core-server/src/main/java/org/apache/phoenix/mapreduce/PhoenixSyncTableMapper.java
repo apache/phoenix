@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
-
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.sql.Connection;
@@ -52,6 +50,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+
+import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 /**
  * Mapper that acts as a driver for synchronizing table between source and target clusters. The
