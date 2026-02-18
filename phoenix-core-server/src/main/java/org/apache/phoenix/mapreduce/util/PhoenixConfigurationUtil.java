@@ -224,6 +224,21 @@ public final class PhoenixConfigurationUtil {
   // non-index jobs benefit less from this
   public static final boolean DEFAULT_MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER = false;
 
+  public static final String PHOENIX_SYNC_TABLE_NAME = "phoenix.sync.table.table.name";
+
+  public static final String PHOENIX_SYNC_TABLE_TARGET_ZK_QUORUM = "phoenix.sync.table.target.zk";
+
+  public static final String PHOENIX_SYNC_TABLE_FROM_TIME = "phoenix.sync.table.from.time";
+
+  public static final String PHOENIX_SYNC_TABLE_TO_TIME = "phoenix.sync.table.to.time";
+
+  public static final String PHOENIX_SYNC_TABLE_DRY_RUN = "phoenix.sync.table.dry.run";
+
+  public static final String PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES =
+    "phoenix.sync.table.chunk.size.bytes";
+
+  public static final long DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES = 1024 * 1024 * 1024; // 1GB
+
   /**
    * Determines type of Phoenix Map Reduce job. 1. QUERY allows running arbitrary queries without
    * aggregates 2. UPDATE_STATS collects statistics for the table
@@ -940,5 +955,68 @@ public final class PhoenixConfigurationUtil {
     Preconditions.checkNotNull(configuration);
     return configuration.getBoolean(MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER,
       DEFAULT_MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER);
+  }
+
+  public static void setPhoenixSyncTableName(Configuration conf, String tableName) {
+    Preconditions.checkNotNull(conf);
+    conf.set(PHOENIX_SYNC_TABLE_NAME, tableName);
+  }
+
+  public static String getPhoenixSyncTableName(Configuration conf) {
+    Preconditions.checkNotNull(conf);
+    return conf.get(PHOENIX_SYNC_TABLE_NAME);
+  }
+
+  public static void setPhoenixSyncTableTargetZkQuorum(Configuration conf, String zkQuorum) {
+    Preconditions.checkNotNull(conf);
+    conf.set(PHOENIX_SYNC_TABLE_TARGET_ZK_QUORUM, zkQuorum);
+  }
+
+  public static String getPhoenixSyncTableTargetZkQuorum(Configuration conf) {
+    Preconditions.checkNotNull(conf);
+    return conf.get(PHOENIX_SYNC_TABLE_TARGET_ZK_QUORUM);
+  }
+
+  public static void setPhoenixSyncTableFromTime(Configuration conf, Long fromTime) {
+    Preconditions.checkNotNull(conf);
+    conf.setLong(PHOENIX_SYNC_TABLE_FROM_TIME, fromTime);
+  }
+
+  public static Long getPhoenixSyncTableFromTime(Configuration conf) {
+    Preconditions.checkNotNull(conf);
+    String value = conf.get(PHOENIX_SYNC_TABLE_FROM_TIME);
+    return Long.valueOf(value);
+  }
+
+  public static void setPhoenixSyncTableToTime(Configuration conf, Long toTime) {
+    Preconditions.checkNotNull(conf);
+    conf.setLong(PHOENIX_SYNC_TABLE_TO_TIME, toTime);
+  }
+
+  public static Long getPhoenixSyncTableToTime(Configuration conf) {
+    Preconditions.checkNotNull(conf);
+    String value = conf.get(PHOENIX_SYNC_TABLE_TO_TIME);
+    return Long.valueOf(value);
+  }
+
+  public static void setPhoenixSyncTableDryRun(Configuration conf, boolean dryRun) {
+    Preconditions.checkNotNull(conf);
+    conf.setBoolean(PHOENIX_SYNC_TABLE_DRY_RUN, dryRun);
+  }
+
+  public static boolean getPhoenixSyncTableDryRun(Configuration conf) {
+    Preconditions.checkNotNull(conf);
+    return conf.getBoolean(PHOENIX_SYNC_TABLE_DRY_RUN, true);
+  }
+
+  public static void setPhoenixSyncTableChunkSizeBytes(Configuration conf, Long chunkSizeBytes) {
+    Preconditions.checkNotNull(conf);
+    conf.setLong(PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES, chunkSizeBytes);
+  }
+
+  public static long getPhoenixSyncTableChunkSizeBytes(Configuration conf) {
+    Preconditions.checkNotNull(conf);
+    return conf.getLong(PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES,
+      DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES);
   }
 }
