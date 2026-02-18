@@ -417,6 +417,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
           return rebuildIndices(s, region, scan, env);
         }
       });
+    } else if (ScanUtil.isSyncTableChunkFormation(scan)) {
+      return User.runAsLoginUser(new PrivilegedExceptionAction<RegionScanner>() {
+        @Override
+        public RegionScanner run() throws Exception {
+          return new PhoenixSyncTableRegionScanner(s, region, scan, env,
+              UngroupedAggregateRegionObserver.this);
+        }
+      });
     }
 
     boolean useNewValueColumnQualifier = EncodedColumnsUtil.useNewValueColumnQualifier(scan);

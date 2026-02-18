@@ -18,19 +18,29 @@
 package org.apache.phoenix.mapreduce.util;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 /**
  * Utility class for setting Configuration parameters for the Map Reduce job
  */
 public final class PhoenixMapReduceUtil {
+
+  public static final String INVALID_TIME_RANGE_EXCEPTION_MESSAGE = "Invalid time range for table";
 
   private PhoenixMapReduceUtil() {
 
@@ -223,4 +233,100 @@ public final class PhoenixMapReduceUtil {
     PhoenixConfigurationUtil.setTenantId(job.getConfiguration(), tenantId);
   }
 
+  /**
+   * Validates that start and end times are in the past and start < end.
+   * @param startTime Start timestamp in millis (nullable, defaults to 0)
+   * @param endTime   End timestamp in millis (nullable, defaults to current time)
+   * @param tableName Table name for error messages
+   * @throws IllegalArgumentException if time range is invalid
+   */
+  public static void validateTimeRange(Long startTime, Long endTime, String tableName) {
+    long currentTime = EnvironmentEdgeManager.currentTimeMillis();
+    long st = (startTime == null) ? 0L : startTime;
+    long et = (endTime == null) ? currentTime : endTime;
+
+    if (et > currentTime || st >= et) {
+      throw new IllegalArgumentException(String.format(
+          "%s %s: start and end times must be in the past "
+              + "and start < end. Start: %d, End: %d, Current: %d",
+          INVALID_TIME_RANGE_EXCEPTION_MESSAGE, tableName, st, et, currentTime));
+    }
+  }
+
+  /**
+   * Validates that the end time doesn't exceed the max lookback age configured in Phoenix.
+   * @param configuration Hadoop configuration
+   * @param endTime       End timestamp in millis
+   * @param tableName     Table name for error messages
+   * @throws IllegalArgumentException if endTime is before min allowed timestamp
+   */
+  public static void validateMaxLookbackAge(Configuration configuration, Long endTime,
+      String tableName) {
+    long maxLookBackAge = BaseScannerRegionObserverConstants.getMaxLookbackInMillis(configuration);
+    if (maxLookBackAge > 0) {
+      long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
+      if (endTime < minTimestamp) {
+        throw new IllegalArgumentException(String.format(
+            "Table %s can't look back past the configured max lookback age: %d ms. "
+                + "End time: %d, Min allowed timestamp: %d",
+            tableName, maxLookBackAge, endTime, minTimestamp));
+      }
+    }
+  }
+
+  /**
+   * Validates that a table is suitable for MR operations. Checks table existence, type, and state.
+   * @param connection         Phoenix connection
+   * @param qualifiedTableName Qualified table name
+   * @param allowViews         Whether to allow VIEW tables
+   * @param allowIndexes       Whether to allow INDEX tables
+   * @return PTable instance
+   * @throws SQLException             if connection fails
+   * @throws IllegalArgumentException if validation fails
+   */
+  public static PTable validateTableForMRJob(Connection connection, String qualifiedTableName,
+      boolean allowViews, boolean allowIndexes) throws SQLException {
+    PTable pTable = connection.unwrap(PhoenixConnection.class).getTableNoCache(qualifiedTableName);
+
+    if (pTable == null) {
+      throw new IllegalArgumentException(
+          String.format("Table %s does not exist", qualifiedTableName));
+    } else if (!allowViews && pTable.getType() == PTableType.VIEW) {
+      throw new IllegalArgumentException(
+          String.format("Cannot run MR job on VIEW table %s", qualifiedTableName));
+    } else if (!allowIndexes && pTable.getType() == PTableType.INDEX) {
+      throw new IllegalArgumentException(
+          String.format("Cannot run MR job on INDEX table %s directly", qualifiedTableName));
+    }
+
+    return pTable;
+  }
+
+  /**
+   * Configures a Configuration object with ZooKeeper settings from a ZK quorum string.
+   * @param baseConf Base configuration to create from (typically job configuration)
+   * @param zkQuorum ZooKeeper quorum string in format: "zk_quorum:port:znode" Example:
+   *                 "zk1,zk2,zk3:2181:/hbase"
+   * @return New Configuration with ZK settings applied
+   * @throws RuntimeException if zkQuorum format is invalid (must have exactly 3 parts)
+   */
+  public static Configuration createConfigurationForZkQuorum(Configuration baseConf,
+      String zkQuorum) {
+    Configuration conf = org.apache.hadoop.hbase.HBaseConfiguration.create(baseConf);
+    String[] parts = zkQuorum.split(":");
+
+    if (!(parts.length == 3 || parts.length == 4)) {
+      throw new RuntimeException(
+          "Invalid ZooKeeper quorum format. Expected: zk_quorum:port:znode OR "
+              + "zk_quorum:port:znode:krb_principal. Got: " + zkQuorum);
+    }
+
+    conf.set(HConstants.ZOOKEEPER_QUORUM, parts[0]);
+    conf.set(HConstants.ZOOKEEPER_CLIENT_PORT, parts[1]);
+    conf.set(HConstants.ZOOKEEPER_ZNODE_PARENT, parts[2]);
+    if (parts.length == 4) {
+      conf.set(HConstants.ZK_CLIENT_KERBEROS_PRINCIPAL, parts[3]);
+    }
+    return conf;
+  }
 }
