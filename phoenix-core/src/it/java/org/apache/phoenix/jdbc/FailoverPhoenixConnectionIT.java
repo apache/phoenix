@@ -809,9 +809,10 @@ public class FailoverPhoenixConnectionIT extends HABaseIT {
     }
 
     // For the given ha group of current test the value in URLS set for current haGroupInfo
-    // should be numThreads + 2 as all the connections created with same principal should have
-    // one entry in map and one extra for null principal
-    Assert.assertEquals(numThreads + 2, URLS.get(haGroup.getGroupInfo()).size());
+    // should be numThreads + 3 as all the connections created with same principal should have
+    // one entry in map and one extra for null principal and one from the setup() method for
+    // USER_FOO principal
+    Assert.assertEquals(numThreads + 3, URLS.get(haGroup.getGroupInfo()).size());
   }
 
   /**
