@@ -391,6 +391,34 @@ public class ScanUtil {
     return getKey(schema, slots, slotSpan, Bound.UPPER);
   }
 
+  private static Field getActualEndField(RowKeySchema schema, int startFieldIndex, int slotSpan,
+    KeyRange range, Bound bound) {
+    if (slotSpan > 0) {
+      byte[] boundBytes = range.getRange(bound);
+      // For multi-span slots, the bound bytes might cover fewer fields than the slotSpan. In such
+      // cases, we need to use the actual last field covered by the bytes for separator logic.
+      // Otherwise, a variable-length field may incorrectly omit its separator byte, producing an
+      // incorrect scan boundary.
+      if (boundBytes.length > 0 && boundBytes != KeyRange.UNBOUND) {
+        ImmutableBytesWritable spanPtr =
+          new ImmutableBytesWritable(boundBytes, 0, boundBytes.length);
+        if (!schema.position(spanPtr, startFieldIndex, startFieldIndex + slotSpan)) {
+          // The bytes don't cover the full span. Find the actual last field covered.
+          int actualEndFieldIdx = startFieldIndex;
+          for (int i = startFieldIndex + 1; i <= startFieldIndex + slotSpan; i++) {
+            spanPtr = new ImmutableBytesWritable(boundBytes, 0, boundBytes.length);
+            if (!schema.position(spanPtr, startFieldIndex, i)) {
+              break;
+            }
+            actualEndFieldIdx = i;
+          }
+          return schema.getField(actualEndFieldIdx);
+        }
+      }
+    }
+    return schema.getField(startFieldIndex + slotSpan);
+  }
+
   private static byte[] getKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan,
     Bound bound) {
     if (slots.isEmpty()) {
@@ -403,7 +431,9 @@ public class ScanUtil {
       position[i] = bound == Bound.LOWER ? 0 : slots.get(i).size() - 1;
       KeyRange range = slots.get(i).get(position[i]);
       slotEndingFieldPos = slotEndingFieldPos + slotSpan[i] + 1;
-      Field field = schema.getField(slotEndingFieldPos);
+      int startFieldPos = slotEndingFieldPos - slotSpan[i];
+      // Use the actual end field based on how many fields the bound bytes cover.
+      Field field = getActualEndField(schema, startFieldPos, slotSpan[i], range, bound);
       int keyLength = range.getRange(bound).length;
       if (!field.getDataType().isFixedWidth()) {
         if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
@@ -472,8 +502,9 @@ public class ScanUtil {
       // Build up the key by appending the bound of each key range
       // from the current position of each slot.
       KeyRange range = slots.get(i).get(position[i]);
-      // Use last slot in a multi-span column to determine if fixed width
-      field = schema.getField(fieldIndex + slotSpan[i]);
+      // Use last slot in a multi-span column to determine if fixed width.
+      // Use the actual end field based on how many fields the bound bytes cover.
+      field = getActualEndField(schema, fieldIndex, slotSpan[i], range, bound);
       boolean isFixedWidth = field.getDataType().isFixedWidth();
       /*
        * If the current slot is unbound then stop if: 1) setting the upper bound. There's no value
