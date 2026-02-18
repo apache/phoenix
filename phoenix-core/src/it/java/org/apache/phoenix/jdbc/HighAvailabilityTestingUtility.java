@@ -1155,6 +1155,7 @@ public class HighAvailabilityTestingUtility {
   }
 
   public static void sleepThreadFor(long sleepTime) {
+    LOG.info("Sleeping thread for {} milliseconds", sleepTime);
     long start = System.currentTimeMillis();
     while (System.currentTimeMillis() - start < sleepTime) {
       try {
