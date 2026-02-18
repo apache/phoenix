@@ -18,6 +18,9 @@
 package org.apache.phoenix.index;
 
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.INDEX_USE_SERVER_METADATA_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.sql.SQLException;
@@ -32,14 +35,20 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.join.MaxServerCacheSizeExceededException;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.ScanUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class IndexMetaDataCacheClient {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(IndexMetaDataCacheClient.class);
 
   private final ServerCacheClient serverCache;
   private PTable cacheUsingTable;
@@ -120,10 +129,60 @@ public class IndexMetaDataCacheClient {
       txState = connection.getMutationState().encodeTransaction();
     }
     boolean hasIndexMetaData = indexMetaDataPtr.getLength() > 0;
+    ReadOnlyProps props = connection.getQueryServices().getProps();
     if (hasIndexMetaData) {
-      if (
+      List<PTable> indexes = table.getIndexes();
+      boolean sendIndexMaintainers = false;
+      if (indexes != null) {
+        for (PTable index : indexes) {
+          if (IndexMaintainer.sendIndexMaintainer(index)) {
+            sendIndexMaintainers = true;
+            break;
+          }
+        }
+      }
+      boolean useServerMetadata = props.getBoolean(INDEX_USE_SERVER_METADATA_ATTRIB,
+        QueryServicesOptions.DEFAULT_INDEX_USE_SERVER_METADATA)
+        && props.getBoolean(QueryServices.INDEX_REGION_OBSERVER_ENABLED_ATTRIB,
+          QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED);
+      boolean serverSideImmutableIndexes =
+        props.getBoolean(SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+          DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
+      boolean useServerCacheRpc =
         useIndexMetadataCache(connection, mutations, indexMetaDataPtr.getLength() + txState.length)
+          && sendIndexMaintainers;
+      long updateCacheFreq = table.getUpdateCacheFrequency();
+      // PHOENIX-7727 Eliminate IndexMetadataCache RPCs by leveraging server PTable cache and
+      // retrieve IndexMaintainer objects for each active index from the PTable object.
+      // To optimize rpc calls, use it only when all of these conditions are met:
+      // 1. Use server metadata feature is enabled (enabled by default).
+      // 2. New index design is used (IndexRegionObserver coproc).
+      // 3. Table is not of type System.
+      // 4. Either table has mutable indexes or server side handling of immutable indexes is
+      // enabled.
+      // 5. Table's UPDATE_CACHE_FREQUENCY is not ALWAYS. This ensures IndexRegionObserver
+      // does not have to make additional getTable() rpc call with each batchMutate() rpc call.
+      // 6. Table's UPDATE_CACHE_FREQUENCY is ALWAYS but addServerCache() rpc call is needed
+      // due to the size of mutations. Unless expensive addServerCache() rpc call is required,
+      // client can attach index maintainer mutation attribute so that IndexRegionObserver
+      // does not have to make additional getTable() rpc call with each batchMutate() rpc call
+      // with small mutation size (size < phoenix.index.mutableBatchSizeThreshold value).
+      // If (a) above conditions do not match, (b) the mutation size is greater than
+      // "phoenix.index.mutableBatchSizeThreshold" value, and (c) data table needs to send index
+      // mutation with the data table mutation, we can use expensive addServerCache() rpc call.
+      // However, (a) above conditions do not match, (b) the mutation size is greater than
+      // "phoenix.index.mutableBatchSizeThreshold" value, and (c) data table mutation does not need
+      // to send index mutation (because all indexes are only in any of DISABLE, CREATE_DISABLE,
+      // PENDING_ACTIVE states), we can avoid expensive addServerCache() rpc call.
+      if (
+        useServerMetadata && table.getType() != PTableType.SYSTEM
+          && (!table.isImmutableRows() || serverSideImmutableIndexes)
+          && (updateCacheFreq > 0 || useServerCacheRpc)
       ) {
+        LOGGER.trace("Using server-side metadata for table {}, not sending IndexMaintainer or UUID",
+          table.getTableName());
+        uuidValue = ByteUtil.EMPTY_BYTE_ARRAY;
+      } else if (useServerCacheRpc) {
         IndexMetaDataCacheClient client = new IndexMetaDataCacheClient(connection, table);
         cache = client.addIndexMetadataCache(mutations, indexMetaDataPtr, txState);
         uuidValue = cache.getId();

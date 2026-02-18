@@ -15,22 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.hbase.ipc.controller;
+package org.apache.phoenix.compat.hbase;
 
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
+import java.io.IOException;
+import java.util.List;
+import org.apache.hadoop.hbase.MetaTableAccessor;
+import org.apache.hadoop.hbase.client.Connection;
+import org.apache.hadoop.hbase.client.RegionInfo;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-/**
- * {@link RpcControllerFactory} that sets the priority of metadata rpc calls so that they get
- * processed in their own queue. This controller factory should only be configured on the region
- * servers. It is meant to control inter region server RPCs destined for Phoenix SYSTEM tables.
- * <p>
- * This class is left here only for legacy reasons so as to not break users who have configured this
- * {@link RpcControllerFactory} in their hbase-site.xml.
- */
-@Deprecated
-public class ServerRpcControllerFactory extends InterRegionServerMetadataRpcControllerFactory {
-  public ServerRpcControllerFactory(Configuration conf) {
-    super(conf);
+public class CompatUtil {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(CompatUtil.class);
+
+  private CompatUtil() {
+    // Not to be instantiated
   }
+
+  public static List<RegionInfo> getMergeRegions(Connection conn, RegionInfo regionInfo)
+    throws IOException {
+    return MetaTableAccessor.getMergeRegions(conn, regionInfo);
+  }
+
 }

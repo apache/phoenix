@@ -620,6 +620,13 @@ public enum SQLExceptionCode {
   // 1153 code is taken by CANNOT_DROP_CDC_INDEX
   SPLIT_FILE_DONT_EXIST(1154, "XCL54", "Either split file don't exist or is not a file"),
   UNABLE_TO_OPEN_SPLIT_FILE(1155, "XCL55", "Exception occurred while opening splits file"),
+  CANNOT_TRUNCATE_MULTITENANT_TABLE(1158, "XCL58",
+    "Cannot truncate a multi-tenant table from a tenant-specific connection."),
+  TRUNCATE_NOT_ALLOWED_ON_VIEW(1159, "XCL59", "Truncate is not allowed on views."),
+  TRUNCATE_NOT_ALLOWED_ON_SYSTEM_TABLE(1160, "XCL60",
+    "Cannot truncate tables of type" + PTableType.SYSTEM),
+  TRUNCATE_MUST_PRESERVE_SPLITS_FOR_SALTED_TABLE(1161, "XCL61",
+    "Truncate must preserve splits for salted tables."),
 
   /**
    * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
@@ -733,6 +740,9 @@ public enum SQLExceptionCode {
           info.getMaxPhoenixColumnSizeBytes(), info.getPhoenixColumnSizeBytes());
       }
     }),
+  MUTATION_LIMIT_REACHED(733, "LIM04",
+    "Mutation buffer limit reached. Existing mutations are preserved. "
+      + "Commit current mutations and retry the failed operation."),
   INSUFFICIENT_MEMORY(999, "50M01", "Unable to allocate enough memory."),
   HASH_JOIN_CACHE_NOT_FOUND(900, "HJ01", "Hash Join cache not found"),
 

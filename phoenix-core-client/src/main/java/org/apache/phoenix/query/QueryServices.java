@@ -97,6 +97,8 @@ public interface QueryServices extends SQLCloseable {
   public static final String SCAN_CACHE_SIZE_ATTRIB = "hbase.client.scanner.caching";
   public static final String MAX_MUTATION_SIZE_ATTRIB = "phoenix.mutate.maxSize";
   public static final String MAX_MUTATION_SIZE_BYTES_ATTRIB = "phoenix.mutate.maxSizeBytes";
+  public static final String PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB =
+    "phoenix.mutate.preserveOnLimitExceeded";
   public static final String HBASE_CLIENT_KEYVALUE_MAXSIZE = "hbase.client.keyvalue.maxsize";
 
   public static final String MUTATE_BATCH_SIZE_ATTRIB = "phoenix.mutate.batchSize";
@@ -115,6 +117,7 @@ public interface QueryServices extends SQLCloseable {
   public static final String IMMUTABLE_ROWS_ATTRIB = "phoenix.mutate.immutableRows";
   public static final String INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB =
     "phoenix.index.mutableBatchSizeThreshold";
+  public static final String INDEX_USE_SERVER_METADATA_ATTRIB = "phoenix.index.useServerMetadata";
   public static final String DROP_METADATA_ATTRIB = "phoenix.schema.dropMetaData";
   public static final String GROUPBY_SPILLABLE_ATTRIB = "phoenix.groupby.spillable";
   public static final String GROUPBY_SPILL_FILES_ATTRIB = "phoenix.groupby.spillFiles";
@@ -636,6 +639,11 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.uncovered.index.threads.keepalive.sec";
 
   String USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP = "phoenix.bloomfilter.multikey.pointlookup";
+  // Value of N for the top N slowest scan metrics to be collected. Accepts integer values.
+  String SLOWEST_SCAN_METRICS_COUNT = "phoenix.slowest.scan.metrics.count";
+  // Whether to collect region name and server name in the slowest scan metrics. Accepts boolean
+  // values.
+  String SCAN_METRICS_BY_REGION_ENABLED = "phoenix.scan.metrics.by.region.enabled";
 
   /**
    * Get executor service used for parallel scans

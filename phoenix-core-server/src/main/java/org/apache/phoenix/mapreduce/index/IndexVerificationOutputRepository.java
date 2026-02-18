@@ -23,20 +23,12 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import org.apache.hadoop.hbase.TableExistsException;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
-import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.client.TableDescriptor;
-import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.table.HTableFactory;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -60,10 +52,16 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
     IndexTool.IndexDisableLoggingType.NONE;
   private boolean shouldLogBeyondMaxLookback = true;
 
-  public final static String OUTPUT_TABLE_NAME = "PHOENIX_INDEX_TOOL";
-  public final static byte[] OUTPUT_TABLE_NAME_BYTES = Bytes.toBytes(OUTPUT_TABLE_NAME);
   public final static byte[] OUTPUT_TABLE_COLUMN_FAMILY =
     QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+
+  public static String getOutputTableName() {
+    return IndexToolTableUtil.OUTPUT_TABLE_FULL_NAME;
+  }
+
+  public static byte[] getOutputTableNameBytes() {
+    return IndexToolTableUtil.OUTPUT_TABLE_FULL_NAME_BYTES;
+  }
 
   public final static String DATA_TABLE_NAME = "DTName";
   public final static byte[] DATA_TABLE_NAME_BYTES = Bytes.toBytes(DATA_TABLE_NAME);
@@ -116,7 +114,7 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
   @VisibleForTesting
   public IndexVerificationOutputRepository(byte[] indexName, Connection conn) throws SQLException {
     ConnectionQueryServices queryServices = conn.unwrap(PhoenixConnection.class).getQueryServices();
-    outputTable = queryServices.getTable(OUTPUT_TABLE_NAME_BYTES);
+    outputTable = queryServices.getTable(getOutputTableNameBytes());
     indexTable = queryServices.getTable(indexName);
   }
 
@@ -131,7 +129,7 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
   public IndexVerificationOutputRepository(byte[] indexName, HTableFactory hTableFactory,
     IndexTool.IndexDisableLoggingType disableLoggingVerifyType) throws IOException {
     this.indexName = indexName;
-    outputTable = hTableFactory.getTable(new ImmutableBytesPtr(OUTPUT_TABLE_NAME_BYTES));
+    outputTable = hTableFactory.getTable(new ImmutableBytesPtr(getOutputTableNameBytes()));
     indexTable = hTableFactory.getTable(new ImmutableBytesPtr(indexName));
     this.disableLoggingVerifyType = disableLoggingVerifyType;
   }
@@ -180,25 +178,7 @@ public class IndexVerificationOutputRepository implements AutoCloseable {
   }
 
   public void createOutputTable(Connection connection) throws IOException, SQLException {
-    ConnectionQueryServices queryServices =
-      connection.unwrap(PhoenixConnection.class).getQueryServices();
-    try (Admin admin = queryServices.getAdmin()) {
-      TableName outputTableName = TableName.valueOf(OUTPUT_TABLE_NAME);
-      if (!admin.tableExists(outputTableName)) {
-        ColumnFamilyDescriptor columnDescriptor =
-          ColumnFamilyDescriptorBuilder.newBuilder(OUTPUT_TABLE_COLUMN_FAMILY)
-            .setTimeToLive(MetaDataProtocol.DEFAULT_LOG_TTL).build();
-        TableDescriptor tableDescriptor =
-          TableDescriptorBuilder.newBuilder(TableName.valueOf(OUTPUT_TABLE_NAME))
-            .setColumnFamily(columnDescriptor).build();
-        try {
-          admin.createTable(tableDescriptor);
-        } catch (TableExistsException e) {
-          LOGGER.warn("Table exists, ignoring", e);
-        }
-        outputTable = admin.getConnection().getTable(outputTableName);
-      }
-    }
+    outputTable = IndexToolTableUtil.createOutputTable(connection);
   }
 
   @VisibleForTesting

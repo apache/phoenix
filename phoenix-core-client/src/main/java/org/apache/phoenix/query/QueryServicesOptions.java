@@ -66,6 +66,7 @@ import static org.apache.phoenix.query.QueryServices.INDEX_CREATE_DEFAULT_STATE;
 import static org.apache.phoenix.query.QueryServices.INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.INDEX_POPULATION_SLEEP_TIME;
 import static org.apache.phoenix.query.QueryServices.INDEX_REBUILD_TASK_INITIAL_DELAY;
+import static org.apache.phoenix.query.QueryServices.INDEX_USE_SERVER_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.IS_NAMESPACE_MAPPING_ENABLED;
 import static org.apache.phoenix.query.QueryServices.IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE;
 import static org.apache.phoenix.query.QueryServices.KEEP_ALIVE_MS_ATTRIB;
@@ -173,6 +174,7 @@ public class QueryServicesOptions {
   public static final boolean DEFAULT_CALL_QUEUE_ROUND_ROBIN = true;
   public static final int DEFAULT_MAX_MUTATION_SIZE = 500000;
   public static final int DEFAULT_MAX_MUTATION_SIZE_BYTES = 104857600; // 100 Mb
+  public static final boolean DEFAULT_PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED = false;
   public static final int DEFAULT_HBASE_CLIENT_KEYVALUE_MAXSIZE = 10485760; // 10 Mb
   public static final boolean DEFAULT_USE_INDEXES = true; // Use indexes
   public static final boolean DEFAULT_IMMUTABLE_ROWS = false; // Tables rows may be updated
@@ -202,6 +204,7 @@ public class QueryServicesOptions {
   public static final int DEFAULT_DISTINCT_VALUE_COMPRESS_THRESHOLD = 1024 * 1024 * 1; // 1 Mb
   public static final int DEFAULT_AGGREGATE_CHUNK_SIZE_INCREASE = 1024 * 1024 * 1; // 1 Mb
   public static final int DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD = 3;
+  public static final boolean DEFAULT_INDEX_USE_SERVER_METADATA = true;
   public static final long DEFAULT_MAX_SPOOL_TO_DISK_BYTES = 1024000000;
   // Only the first chunked batches are fetched in parallel, so this default
   // should be on the relatively bigger side of things. Bigger means more
@@ -255,7 +258,7 @@ public class QueryServicesOptions {
    * HConstants#HIGH_QOS is the max we will see to a standard table. We go higher to differentiate
    * and give some room for things in the middle
    */
-  public static final int DEFAULT_SERVER_SIDE_PRIORITY = 500;
+  public static final int DEFAULT_SERVER_SIDE_PRIORITY = 5000;
   public static final int DEFAULT_INDEX_PRIORITY = 1000;
   public static final int DEFAULT_METADATA_PRIORITY = 2000;
   public static final int DEFAULT_INVALIDATE_METADATA_CACHE_PRIORITY = 3000;
@@ -504,6 +507,8 @@ public class QueryServicesOptions {
 
   public static final int DEFAULT_PHOENIX_UNCOVERED_INDEX_MAX_POOL_SIZE = 512;
   public static final int DEFAULT_PHOENIX_UNCOVERED_INDEX_KEEP_ALIVE_TIME_SEC = 60; // 1min
+  public static final int DEFAULT_SLOWEST_SCAN_METRICS_COUNT = 0;
+  public static final boolean DEFAULT_SCAN_METRICS_BY_REGION_ENABLED = false;
 
   private final Configuration config;
 
@@ -551,6 +556,7 @@ public class QueryServicesOptions {
       .setIfUnset(IMMUTABLE_ROWS_ATTRIB, DEFAULT_IMMUTABLE_ROWS)
       .setIfUnset(INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB,
         DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD)
+      .setIfUnset(INDEX_USE_SERVER_METADATA_ATTRIB, DEFAULT_INDEX_USE_SERVER_METADATA)
       .setIfUnset(MAX_SPOOL_TO_DISK_BYTES_ATTRIB, DEFAULT_MAX_SPOOL_TO_DISK_BYTES)
       .setIfUnset(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA)
       .setIfUnset(GROUPBY_SPILLABLE_ATTRIB, DEFAULT_GROUPBY_SPILLABLE)

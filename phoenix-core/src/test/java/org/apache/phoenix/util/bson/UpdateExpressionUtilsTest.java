@@ -1065,4 +1065,203 @@ public class UpdateExpressionUtilsTest {
     return RawBsonDocument.parse(json);
   }
 
+  @Test
+  public void testArithmeticWithIfNotExists() {
+    String initialDocJson = "{\n" + "  \"existingCounter\": 100,\n" + "  \"anotherCounter\": 50,\n"
+      + "  \"updateCount\": 25,\n" + "  \"name\": \"test\"\n" + "}";
+    BsonDocument bsonDocument = BsonDocument.parse(initialDocJson);
+
+    // Test Case 1: if_not_exists with non-existent field (should use fallback 0) + 5 = 5
+    // Test Case 2: if_not_exists with existing field (existingCounter=100) + 10 = 110
+    // Test Case 3: 20 + if_not_exists(missingField, 30) = 20 + 30 = 50
+    // Test Case 4: if_not_exists(anotherCounter=50, 0) - if_not_exists(missing, 10) = 50 - 10 = 40
+    // Test Case 5: updateCount = if_not_exists(updateCount=25, 0) + 1 = 26
+    // Test Case 6: newCounter = if_not_exists(newCounter, 0) + 1 = 0 + 1 = 1 (field doesn't exist)
+    String updateExpression =
+      "{\n" + "  \"$SET\": {\n" + "    \"newFieldFromFallback\": {\n" + "      \"$ADD\": [\n"
+        + "        {\"$IF_NOT_EXISTS\": {\"nonExistentField\": 0}},\n" + "        5\n" + "      ]\n"
+        + "    },\n" + "    \"existingFieldIncrement\": {\n" + "      \"$ADD\": [\n"
+        + "        {\"$IF_NOT_EXISTS\": {\"existingCounter\": 0}},\n" + "        10\n" + "      ]\n"
+        + "    },\n" + "    \"reversedOperands\": {\n" + "      \"$ADD\": [\n" + "        20,\n"
+        + "        {\"$IF_NOT_EXISTS\": {\"missingField\": 30}}\n" + "      ]\n" + "    },\n"
+        + "    \"bothIfNotExists\": {\n" + "      \"$SUBTRACT\": [\n"
+        + "        {\"$IF_NOT_EXISTS\": {\"anotherCounter\": 0}},\n"
+        + "        {\"$IF_NOT_EXISTS\": {\"missingCounter\": 10}}\n" + "      ]\n" + "    },\n"
+        + "    \"updateCount\": {\n" + "      \"$ADD\": [\n"
+        + "        {\"$IF_NOT_EXISTS\": {\"updateCount\": 0}},\n" + "        1\n" + "      ]\n"
+        + "    },\n" + "    \"newCounter\": {\n" + "      \"$ADD\": [\n"
+        + "        {\"$IF_NOT_EXISTS\": {\"newCounter\": 0}},\n" + "        1\n" + "      ]\n"
+        + "    }\n" + "  }\n" + "}";
+
+    RawBsonDocument expressionDoc = RawBsonDocument.parse(updateExpression);
+    UpdateExpressionUtils.updateExpression(expressionDoc, bsonDocument);
+
+    // Verify results
+    // Case 1: nonExistentField doesn't exist, so fallback 0 + 5 = 5
+    Assert.assertEquals(5, bsonDocument.getInt32("newFieldFromFallback").getValue());
+
+    // Case 2: existingCounter exists with value 100, so 100 + 10 = 110
+    Assert.assertEquals(110, bsonDocument.getInt32("existingFieldIncrement").getValue());
+
+    // Case 3: 20 + if_not_exists(missingField, 30) = 20 + 30 = 50
+    Assert.assertEquals(50, bsonDocument.getInt32("reversedOperands").getValue());
+
+    // Case 4: if_not_exists(anotherCounter=50, 0) - if_not_exists(missingCounter, 10) = 50 - 10 =
+    // 40
+    Assert.assertEquals(40, bsonDocument.getInt32("bothIfNotExists").getValue());
+
+    // Case 5: updateCount = if_not_exists(updateCount=25, 0) + 1 = 26
+    Assert.assertEquals(26, bsonDocument.getInt32("updateCount").getValue());
+
+    // Case 6: newCounter = if_not_exists(newCounter, 0) + 1 = 0 + 1 = 1
+    Assert.assertEquals(1, bsonDocument.getInt32("newCounter").getValue());
+
+    // Verify original fields are unchanged
+    Assert.assertEquals(100, bsonDocument.getInt32("existingCounter").getValue());
+    Assert.assertEquals(50, bsonDocument.getInt32("anotherCounter").getValue());
+    Assert.assertEquals("test", bsonDocument.getString("name").getValue());
+  }
+
+  /**
+   * Test arithmetic with $IF_NOT_EXISTS on nested document paths.
+   */
+  @Test
+  public void testArithmeticWithIfNotExistsNestedPaths() {
+    String initialDocJson = "{\n" + "  \"stats\": {\n" + "    \"viewCount\": 100,\n"
+      + "    \"nested\": {\n" + "      \"deepCounter\": 500\n" + "    }\n" + "  },\n"
+      + "  \"items\": [10, 20, 30]\n" + "}";
+    BsonDocument bsonDocument = BsonDocument.parse(initialDocJson);
+
+    // Test nested path: stats.viewCount exists (100) + 1 = 101
+    // Test nested path: stats.likeCount doesn't exist, fallback 0 + 5 = 5
+    // Test deep nested: stats.nested.deepCounter exists (500) + 100 = 600
+    // Test array element: items[1] exists (20) + 5 = 25
+    String updateExpression = "{\n" + "  \"$SET\": {\n" + "    \"stats.viewCount\": {\n"
+      + "      \"$ADD\": [\n" + "        {\"$IF_NOT_EXISTS\": {\"stats.viewCount\": 0}},\n"
+      + "        1\n" + "      ]\n" + "    },\n" + "    \"stats.likeCount\": {\n"
+      + "      \"$ADD\": [\n" + "        {\"$IF_NOT_EXISTS\": {\"stats.likeCount\": 0}},\n"
+      + "        5\n" + "      ]\n" + "    },\n" + "    \"stats.nested.deepCounter\": {\n"
+      + "      \"$ADD\": [\n" + "        {\"$IF_NOT_EXISTS\": {\"stats.nested.deepCounter\": 0}},\n"
+      + "        100\n" + "      ]\n" + "    },\n" + "    \"items[1]\": {\n" + "      \"$ADD\": [\n"
+      + "        {\"$IF_NOT_EXISTS\": {\"items[1]\": 0}},\n" + "        5\n" + "      ]\n"
+      + "    }\n" + "  }\n" + "}";
+
+    RawBsonDocument expressionDoc = RawBsonDocument.parse(updateExpression);
+    UpdateExpressionUtils.updateExpression(expressionDoc, bsonDocument);
+
+    // Verify nested path results
+    BsonDocument stats = bsonDocument.getDocument("stats");
+    Assert.assertEquals(101, stats.getInt32("viewCount").getValue());
+    Assert.assertEquals(5, stats.getInt32("likeCount").getValue());
+    Assert.assertEquals(600, stats.getDocument("nested").getInt32("deepCounter").getValue());
+
+    // Verify array element
+    Assert.assertEquals(25, bsonDocument.getArray("items").get(1).asInt32().getValue());
+  }
+
+  /**
+   * Test arithmetic with $IF_NOT_EXISTS using decimal/double values.
+   */
+  @Test
+  public void testArithmeticWithIfNotExistsDecimalValues() {
+    String initialDocJson = "{\n" + "  \"price\": 99.99,\n" + "  \"quantity\": 5\n" + "}";
+    BsonDocument bsonDocument = BsonDocument.parse(initialDocJson);
+
+    // Test with decimal values
+    // price exists (99.99) + 0.01 = 100.0
+    // discount doesn't exist, fallback 0.0 + 10.5 = 10.5
+    // mixed: quantity (int 5) + 2.5 = 7.5
+    String updateExpression = "{\n" + "  \"$SET\": {\n" + "    \"price\": {\n"
+      + "      \"$ADD\": [\n" + "        {\"$IF_NOT_EXISTS\": {\"price\": 0.0}},\n"
+      + "        0.01\n" + "      ]\n" + "    },\n" + "    \"discount\": {\n"
+      + "      \"$ADD\": [\n" + "        {\"$IF_NOT_EXISTS\": {\"discount\": 0.0}},\n"
+      + "        10.5\n" + "      ]\n" + "    },\n" + "    \"total\": {\n" + "      \"$ADD\": [\n"
+      + "        {\"$IF_NOT_EXISTS\": {\"quantity\": 0}},\n" + "        2.5\n" + "      ]\n"
+      + "    }\n" + "  }\n" + "}";
+
+    RawBsonDocument expressionDoc = RawBsonDocument.parse(updateExpression);
+    UpdateExpressionUtils.updateExpression(expressionDoc, bsonDocument);
+
+    // Verify decimal results
+    Assert.assertEquals(100.0, bsonDocument.getDouble("price").getValue(), 0.001);
+    Assert.assertEquals(10.5, bsonDocument.getDouble("discount").getValue(), 0.001);
+    Assert.assertEquals(7.5, bsonDocument.getDouble("total").getValue(), 0.001);
+  }
+
+  @Test
+  public void testMixedSetExpressions() {
+    String initialDocJson = "{\n" + "  \"fieldA\": 10,\n" + "  \"fieldB\": 25,\n"
+      + "  \"existingValue\": \"will be overwritten\",\n" + "  \"items\": [100, 200, 300],\n"
+      + "  \"counter\": 50,\n" + "  \"nested\": {\"value\": 5},\n" + "  \"a.b\": 7\n" + "}";
+    BsonDocument bsonDocument = BsonDocument.parse(initialDocJson);
+
+    String updateExpression = "{\n" + "  \"$SET\": {\n"
+    // 1. Simple key = value
+      + "    \"simpleField\": \"newValue\",\n" + "    \"numericField\": 42,\n"
+      // 2. string-based arithmetic: fieldA + fieldB = 10 + 25 = 35
+      + "    \"sumField\": \"fieldA + fieldB\",\n"
+      // 2b. string-based arithmetic with subtraction: fieldB - fieldA = 25 - 10 = 15
+      + "    \"diffField\": \"fieldB - fieldA\",\n"
+      // 3. Array element set: items[1] = 999
+      + "    \"items[1]\": 999,\n"
+      // 4. Standalone $IF_NOT_EXISTS - field exists, should use existing value
+      + "    \"existingCopy\": {\n" + "      \"$IF_NOT_EXISTS\": {\n" + "        \"counter\": 0\n"
+      + "      }\n" + "    },\n"
+      // 4b. Standalone $IF_NOT_EXISTS - field doesn't exist, should use fallback
+      + "    \"newField\": {\n" + "      \"$IF_NOT_EXISTS\": {\n"
+      + "        \"nonExistent\": \"fallbackValue\"\n" + "      }\n" + "    },\n"
+      // 5. document format: counter = if_not_exists(counter, 0) + 1 = 50 + 1 = 51
+      + "    \"counter\": {\n" + "      \"$ADD\": [\n"
+      + "        {\"$IF_NOT_EXISTS\": {\"counter\": 0}},\n" + "        1\n" + "      ]\n"
+      + "    },\n"
+      // 5b. document format with non-existent field: newCounter = if_not_exists(newCounter, 0) + 10
+      // = 0 + 10 = 10
+      + "    \"newCounter\": {\n" + "      \"$ADD\": [\n"
+      + "        {\"$IF_NOT_EXISTS\": {\"newCounter\": 0}},\n" + "        10\n" + "      ]\n"
+      + "    },\n"
+      // 5c. document format with 2 simple operands: fieldA = fieldA + 1 = 10 + 1 = 11
+      + "    \"fieldA\": {\n" + "      \"$ADD\": [\"fieldA\", 1]\n" + "    },\n"
+      // 5d. document format with nested path: nested.value = nested.value + 1 = 5 + 1 = 6
+      + "    \"nested.value\": {\n" + "      \"$ADD\": [\"nested.value\", 1]\n" + "    },\n"
+      // 5e. document format with top-level dotted key: a.b = a.b + 1 = 7 + 1 = 8
+      + "    \"a.b\": {\n" + "      \"$ADD\": [\"a.b\", 1]\n" + "    }\n" + "  }\n" + "}";
+
+    RawBsonDocument expressionDoc = RawBsonDocument.parse(updateExpression);
+    UpdateExpressionUtils.updateExpression(expressionDoc, bsonDocument);
+
+    // 1. Verify simple key = value
+    Assert.assertEquals("newValue", bsonDocument.getString("simpleField").getValue());
+    Assert.assertEquals(42, bsonDocument.getInt32("numericField").getValue());
+
+    // 2. Verify string-based arithmetic
+    Assert.assertEquals(35, bsonDocument.getInt32("sumField").getValue());
+    Assert.assertEquals(15, bsonDocument.getInt32("diffField").getValue());
+
+    // 3. Verify array element set
+    Assert.assertEquals(999, bsonDocument.getArray("items").get(1).asInt32().getValue());
+    // Other elements unchanged
+    Assert.assertEquals(100, bsonDocument.getArray("items").get(0).asInt32().getValue());
+    Assert.assertEquals(300, bsonDocument.getArray("items").get(2).asInt32().getValue());
+
+    // 4. Verify standalone $IF_NOT_EXISTS
+    Assert.assertEquals(50, bsonDocument.getInt32("existingCopy").getValue());
+    Assert.assertEquals("fallbackValue", bsonDocument.getString("newField").getValue());
+
+    // 5. Verify document format: $ADD with $IF_NOT_EXISTS
+    Assert.assertEquals(51, bsonDocument.getInt32("counter").getValue());
+    Assert.assertEquals(10, bsonDocument.getInt32("newCounter").getValue());
+
+    // 5c. Verify document format: $ADD with 2 simple operands (fieldA = fieldA + 1)
+    Assert.assertEquals(11, bsonDocument.getInt32("fieldA").getValue());
+
+    // 5d. Verify document format: $ADD with nested path (nested.value = nested.value + 1)
+    Assert.assertEquals(6, bsonDocument.getDocument("nested").getInt32("value").getValue());
+
+    // 5e. Verify document format: $ADD with top-level dotted key (a.b = a.b + 1)
+    Assert.assertEquals(8, bsonDocument.getInt32("a.b").getValue());
+
+    // Verify original fields unchanged where expected
+    Assert.assertEquals(25, bsonDocument.getInt32("fieldB").getValue());
+  }
+
 }

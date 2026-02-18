@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>5.3.0-SNAPSHOT</version>
+    <version>5.4.0-SNAPSHOT</version>
   </parent>
   <artifactId>phoenix-core-client</artifactId>
   <name>Phoenix Core Client</name>
@@ -292,6 +292,9 @@
                     || ("${hbase.compat.version}".equals("2.6.0")
                       &amp;&amp; hbaseMinor == 6
                       &amp;&amp; hbasePatch &gt;=0)
+                    || ("${hbase.compat.version}".equals("2.6.4")
+                      &amp;&amp; hbaseMinor == 6
+                      &amp;&amp; hbasePatch &gt;=4)
                   )</condition>
             </evaluateBeanshell>
           </rules>

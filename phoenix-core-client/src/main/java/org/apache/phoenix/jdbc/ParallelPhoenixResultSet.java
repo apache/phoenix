@@ -29,16 +29,23 @@ import java.util.concurrent.CompletionException;
 import java.util.function.Function;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.util.JDBCUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
+
 /**
- * ParallelPhoenixResultSet that provides the standard wait until at least one cluster completes
- * approach
+ * ParallelPhoenixResultSet that provides the standard wait until at least one cluster completes. We
+ * close the idle result set to release server resources asynchronously.
  */
 public class ParallelPhoenixResultSet extends DelegateResultSet
   implements PhoenixMonitoredResultSet {
+
+  private static final Logger LOGGER = LoggerFactory.getLogger(ParallelPhoenixResultSet.class);
 
   private final ParallelPhoenixContext context;
   private final CompletableFuture<ResultSet> rs1, rs2;
@@ -80,9 +87,11 @@ public class ParallelPhoenixResultSet extends DelegateResultSet
       try {
         if (next1.isDone() && !next1.isCompletedExceptionally()) {
           rs = rs1.get();
+          closeIdleResultSet(rs2);
           return next1.get();
         } else { // (next2.isDone() && !next2.isCompletedExceptionally())
           rs = rs2.get();
+          closeIdleResultSet(rs1);
           return next2.get();
         }
       } catch (Exception e) {
@@ -128,6 +137,11 @@ public class ParallelPhoenixResultSet extends DelegateResultSet
   }
 
   @Override
+  public List<List<JsonObject>> getTopNSlowestScanMetrics() {
+    return JDBCUtil.getTopNSlowestScanMetrics(rs);
+  }
+
+  @Override
   public Map<MetricType, Long> getOverAllRequestReadMetrics() {
     Map<MetricType, Long> metrics;
     if (rs != null) {
@@ -145,6 +159,22 @@ public class ParallelPhoenixResultSet extends DelegateResultSet
     }
     // reset our metrics
     context.resetMetrics();
+  }
+
+  /**
+   * Closes the idle result set to release server resources immediately. This is called after we've
+   * bound to the winning result set.
+   */
+  private void closeIdleResultSet(CompletableFuture<ResultSet> idleFuture) {
+    idleFuture.whenComplete((resultSet, throwable) -> {
+      if (throwable == null && resultSet != null) {
+        try {
+          resultSet.close();
+        } catch (Exception e) {
+          LOGGER.warn("Failed to close idle result set: {}", e.getMessage(), e);
+        }
+      }
+    });
   }
 
   @SuppressWarnings("unchecked")

@@ -189,6 +189,7 @@ import org.apache.phoenix.parse.ShowTablesStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TraceStatement;
+import org.apache.phoenix.parse.TruncateTableStatement;
 import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UpsertStatement;
@@ -203,6 +204,7 @@ import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
+import org.apache.phoenix.schema.MutationLimitReachedException;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
@@ -1181,7 +1183,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     implements CompilableStatement {
 
     private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode,
-      List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount,
+      List<ColumnName> columns, List<List<ParseNode>> values, SelectStatement select, int bindCount,
       Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
       OnDuplicateKeyType onDupKeyType, boolean returningRow) {
       super(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs,
@@ -1242,6 +1244,33 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       MutationPlan plan = compiler.compile(this, returnResult);
       plan.getContext().getSequenceManager().validateSequences(seqAction);
       return plan;
+    }
+  }
+
+  private static class ExecutableTruncateTableStatement extends TruncateTableStatement
+    implements CompilableStatement {
+    ExecutableTruncateTableStatement(TableName tableName, PTableType tableType,
+      boolean preserveSplits) {
+      super(tableName, tableType, preserveSplits);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
+      throws SQLException {
+      final StatementContext context = new StatementContext(stmt);
+      return new BaseMutationPlan(context, this.getOperation()) {
+        @Override
+        public ExplainPlan getExplainPlan() throws SQLException {
+          return new ExplainPlan(Collections.singletonList("Truncate Table"));
+        }
+
+        @Override
+        public MutationState execute() throws SQLException {
+          MetaDataClient client = new MetaDataClient(getContext().getConnection());
+          return client.truncateTable(ExecutableTruncateTableStatement.this);
+        }
+      };
     }
   }
 
@@ -2126,7 +2155,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     @Override
     public ExecutableUpsertStatement upsert(NamedTableNode table, HintNode hintNode,
-      List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount,
+      List<ColumnName> columns, List<List<ParseNode>> values, SelectStatement select, int bindCount,
       Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
       UpsertStatement.OnDuplicateKeyType onDupKeyType, boolean returningRow) {
       return new ExecutableUpsertStatement(table, hintNode, columns, values, select, bindCount,
@@ -2199,6 +2228,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       boolean ifNotExists, int bindCount) {
       return new ExecutableCreateCDCStatement(cdcObj, dataTable, includeScopes, props, ifNotExists,
         bindCount);
+    }
+
+    @Override
+    public TruncateTableStatement truncateTable(TableName tableName, PTableType tableType,
+      boolean preserveSplits) {
+      return new ExecutableTruncateTableStatement(tableName, tableType, preserveSplits);
     }
 
     @Override
@@ -2417,6 +2452,26 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         connection.commit();
       }
       return returnCodes;
+    } catch (MutationLimitReachedException limitEx) {
+      // Special handling: limit reached but existing mutations preserved
+      // Statements 0 through i-1 were successfully added to MutationState
+      // Statement at index i was NOT added (its join was rejected by the pre-check)
+
+      // If original autoCommit was true, commit what we have buffered
+      if (autoCommit) {
+        connection.commit();
+      }
+
+      // Trim the batch list to contain only unprocessed items (from index i to end)
+      if (i > 0) {
+        batch.subList(0, i).clear();
+      }
+
+      // Mark the failed index
+      returnCodes[i] = Statement.EXECUTE_FAILED;
+
+      // Throw MutationLimitBatchException with checkpoint information
+      throw new MutationLimitBatchException(returnCodes, limitEx, i);
     } catch (SQLException t) {
       if (i == returnCodes.length) {
         // Exception after for loop, perhaps in commit(), discard returnCodes.

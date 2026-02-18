@@ -161,6 +161,9 @@ tokens
     REGIONS = 'regions';
     NOVERIFY = 'noverify';
     RETURNING = 'returning';
+    TRUNCATE = 'truncate';
+    PRESERVE='preserve';
+    SPLITS='splits';
 }
 
 
@@ -432,6 +435,7 @@ oneStatement returns [BindableStatement ret]
     |	s=upsert_node
     |   s=delete_node
     |   s=create_table_node
+    |   s=truncate_table_node
     |   s=create_schema_node
     |   s=create_view_node
     |   s=create_index_node
@@ -487,7 +491,21 @@ create_table_node returns [CreateTableStatement ret]
         (COLUMN_QUALIFIER_COUNTER LPAREN cqc=initializiation_list RPAREN)?
         {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount(), im!=null ? true : null, cqc, noverify!=null); }
     ;
-   
+
+// Parse a truncate table statement.
+truncate_table_node returns [TruncateTableStatement ret]
+    :   TRUNCATE TABLE t=from_table_name
+        (
+            // Case 1: Explicitly DROP SPLITS
+            DROP SPLITS
+            { $ret = factory.truncateTable(t, PTableType.TABLE, false); }
+        |
+            // Default Case: PRESERVE SPLITS or Nothing (Both mean preserve=true)
+            (PRESERVE SPLITS)?
+            { $ret = factory.truncateTable(t, PTableType.TABLE, true); }
+        )
+    ;
+
 // Parse a create schema statement.
 create_schema_node returns [CreateSchemaStatement ret]
     :   CREATE SCHEMA (IF NOT ex=EXISTS)? s=identifier
@@ -865,9 +883,10 @@ finally{ contextStack.pop(); }
 
 // Parse a full upsert expression structure.
 upsert_node returns [UpsertStatement ret]
+@init{List<List<ParseNode>> v = new ArrayList<List<ParseNode>>(); }
     :   UPSERT (hint=hintClause)? INTO t=from_table_name
         (LPAREN p=upsert_column_refs RPAREN)?
-        ((VALUES LPAREN v=one_or_more_expressions RPAREN (
+        ((VALUES LPAREN e = one_or_more_expressions {v.add(e);} RPAREN (COMMA LPAREN e = one_or_more_expressions {v.add(e);} RPAREN )* (
             ON DUPLICATE KEY (
                 ig=IGNORE
               | ( upd=UPDATE pairs=update_column_pairs )

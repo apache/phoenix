@@ -43,9 +43,9 @@ public class XMLConfigParser {
   private static final Logger LOGGER = LoggerFactory.getLogger(XMLConfigParser.class);
   private String filePattern;
   private List<DataModel> dataModels;
-  private List<Scenario> scenarios = null;
+  private List<Scenario> scenarios;
   private ResourceList resourceList;
-  private Collection<Path> paths = null;
+  private Collection<Path> paths;
 
   public XMLConfigParser(String pattern) throws Exception {
     init(pattern);

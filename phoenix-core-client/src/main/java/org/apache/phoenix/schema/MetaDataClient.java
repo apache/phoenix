@@ -23,12 +23,14 @@ import static org.apache.phoenix.coprocessorclient.tasks.IndexRebuildTaskConstan
 import static org.apache.phoenix.coprocessorclient.tasks.IndexRebuildTaskConstants.REBUILD_ALL;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_CONDITIONAL_TTL_ON_TABLE_WITH_MULTIPLE_COLUMN_FAMILIES;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRUNCATE_MULTITENANT_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.CDC_ALREADY_ENABLED;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
 import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
 import static org.apache.phoenix.exception.SQLExceptionCode.SALTING_NOT_ALLOWED_FOR_CDC;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
+import static org.apache.phoenix.exception.SQLExceptionCode.TRUNCATE_NOT_ALLOWED_ON_SYSTEM_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
@@ -90,7 +92,6 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.STREAMING_TOPIC_NA
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYNC_INDEX_CREATED_DATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAMESPACE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
@@ -130,6 +131,7 @@ import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_
 import static org.apache.phoenix.schema.PTable.EncodedCQCounter.NULL_COUNTER;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
+import static org.apache.phoenix.schema.PTable.IndexType.UNCOVERED_GLOBAL;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
 import static org.apache.phoenix.schema.PTableType.CDC;
@@ -254,6 +256,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.TruncateTableStatement;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UseSchemaStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -2400,10 +2403,13 @@ public class MetaDataClient {
    * @return TTL from hierarchy if defined otherwise TTL_NOT_DEFINED.
    * @throws TableNotFoundException if not able ot find any table in hierarchy
    */
-  private TTLExpression checkAndGetTTLFromHierarchy(PTable parent, String entityName)
-    throws SQLException {
+  private TTLExpression checkAndGetTTLFromHierarchy(PTable parent, String entityName,
+    IndexType indexType) throws SQLException {
     if (CDCUtil.isCDCIndex(entityName)) {
       return TTL_EXPRESSION_FOREVER;
+    }
+    if (UNCOVERED_GLOBAL.equals(indexType) && parent.hasConditionalTTL() && !parent.isStrictTTL()) {
+      return TTL_EXPRESSION_NOT_DEFINED;
     }
     return parent != null
       ? (parent.getType() == TABLE
@@ -2514,7 +2520,7 @@ public class MetaDataClient {
             SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY).setSchemaName(schemaName)
               .setTableName(tableName).build().buildException();
         }
-        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
+        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName, indexType);
         if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
           throw new SQLExceptionInfo.Builder(SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY)
             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
@@ -2528,7 +2534,7 @@ public class MetaDataClient {
         }
         ttl = getCompatibleTTLExpression(ttlProp, tableType, viewType, fullTableName);
       } else {
-        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
+        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName, indexType);
         if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
           ttlFromHierarchy.validateTTLOnCreate(connection, statement, parent, tableProps);
         }
@@ -4035,6 +4041,131 @@ public class MetaDataClient {
     }
   }
 
+  private void deleteStatistics(List<String> truncatedObjectList) throws SQLException {
+    if (truncatedObjectList == null || truncatedObjectList.isEmpty()) {
+      return;
+    }
+    String deleteStatsSql = "DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " WHERE "
+      + PhoenixDatabaseMetaData.PHYSICAL_NAME + " = ?";
+    try (PreparedStatement stmt = connection.prepareStatement(deleteStatsSql)) {
+      for (String physicalName : truncatedObjectList) {
+        stmt.setString(1, physicalName);
+        stmt.executeUpdate();
+      }
+      connection.commit();
+    }
+  }
+
+  private PTable getPTableRef(String schemaName, String tableName) throws SQLException {
+    return connection.getTable(
+      new PTableKey(connection.getTenantId(), SchemaUtil.getTableName(schemaName, tableName)));
+  }
+
+  private void validateObjectTypeBeingTruncated(PTable pTable, String tableName, String schemaName,
+    boolean preserveSplits) throws SQLException {
+    // Cannot drop splits on a salted table
+    if (!preserveSplits && pTable.getBucketNum() != null) {
+      throw new SQLExceptionInfo.Builder(
+        SQLExceptionCode.TRUNCATE_MUST_PRESERVE_SPLITS_FOR_SALTED_TABLE).setSchemaName(schemaName)
+          .setTableName(tableName).build().buildException();
+    }
+    // disallow truncating a view
+    if (pTable.getType() == PTableType.VIEW) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.TRUNCATE_NOT_ALLOWED_ON_VIEW)
+        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+    }
+    // block if the table type is SYSTEM or if it resides in the SYSTEM schema
+    if (
+      pTable.getType() == PTableType.SYSTEM
+        || PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(schemaName)
+    ) {
+      throw new SQLExceptionInfo.Builder(TRUNCATE_NOT_ALLOWED_ON_SYSTEM_TABLE)
+        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+    }
+    // Block truncate as it would wipe data for ALL tenants
+    if (pTable.isMultiTenant() && connection.getTenantId() != null) {
+      throw new SQLExceptionInfo.Builder(CANNOT_TRUNCATE_MULTITENANT_TABLE)
+        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+    }
+  }
+
+  private void truncateGlobalIndexes(PTable pTable, List<String> truncatedObjectList,
+    boolean preserveSplits) throws SQLException {
+    for (PTable index : pTable.getIndexes()) {
+      if (index.getIndexType() != IndexType.LOCAL) {
+        if (!preserveSplits && index.getBucketNum() != null) {
+          throw new SQLExceptionInfo.Builder(
+            SQLExceptionCode.TRUNCATE_MUST_PRESERVE_SPLITS_FOR_SALTED_TABLE)
+              .setTableName(index.getName().getString()).build().buildException();
+        }
+        String indexSchemaName = index.getSchemaName().getString();
+        String indexTableName = index.getTableName().getString();
+        connection.getQueryServices().truncateTable(indexSchemaName, indexTableName,
+          index.isNamespaceMapped(), preserveSplits);
+        truncatedObjectList.add(index.getPhysicalName().getString());
+      }
+    }
+  }
+
+  private void truncateSharedViewIndexTable(PTable pTable, List<String> truncatedObjectList,
+    boolean preserveSplits) throws SQLException {
+    if (pTable.getType() == PTableType.TABLE) {
+      byte[] viewIndexPhysicalNameBytes =
+        MetaDataUtil.getViewIndexPhysicalName(pTable.getPhysicalName().getBytes());
+      String viewIndexPhysicalName = Bytes.toString(viewIndexPhysicalNameBytes);
+
+      try (Admin admin = connection.getQueryServices().getAdmin()) {
+        org.apache.hadoop.hbase.TableName viewIdxTableName =
+          org.apache.hadoop.hbase.TableName.valueOf(viewIndexPhysicalName);
+        if (admin.tableExists(viewIdxTableName)) {
+          String viewIdxSchema = SchemaUtil.getSchemaNameFromFullName(viewIndexPhysicalName);
+          String viewIdxTableStr = SchemaUtil.getTableNameFromFullName(viewIndexPhysicalName);
+          connection.getQueryServices().truncateTable(viewIdxSchema, viewIdxTableStr, false,
+            preserveSplits);
+          connection.getQueryServices().clearTableRegionCache(viewIdxTableName);
+          truncatedObjectList.add(viewIndexPhysicalName);
+        }
+      } catch (IOException e) {
+        throw ClientUtil.parseServerException(e);
+      }
+    }
+  }
+
+  public MutationState truncateTable(TruncateTableStatement statement) throws SQLException {
+    String schemaName =
+      connection.getSchema() != null && statement.getTableName().getSchemaName() == null
+        ? connection.getSchema()
+        : statement.getTableName().getSchemaName();
+    boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(statement.getTableType(),
+      connection.getQueryServices().getProps());
+    String tableName = statement.getTableName().getTableName();
+    boolean preserveSplits = statement.preserveSplits();
+    PTable pTable = getPTableRef(schemaName, tableName);
+
+    // Allow truncate only for valid object types
+    validateObjectTypeBeingTruncated(pTable, tableName, schemaName, preserveSplits);
+
+    try {
+      List<String> truncatedObjectList = new ArrayList<>();
+      // Truncate the Base Table
+      connection.getQueryServices().truncateTable(schemaName, tableName, isNamespaceMapped,
+        preserveSplits);
+      // Mark for stats deletion
+      truncatedObjectList.add(pTable.getPhysicalName().getString());
+      // Identify and Truncate Global Indexes
+      truncateGlobalIndexes(pTable, truncatedObjectList, preserveSplits);
+      // Identify and Truncate Shared View Index Table
+      truncateSharedViewIndexTable(pTable, truncatedObjectList, preserveSplits);
+      // Delete Statistics of all the tables being truncated
+      deleteStatistics(truncatedObjectList);
+      // Update cache post truncation
+      updateCache(schemaName, tableName);
+      return new MutationState(0, 0, connection);
+    } catch (SQLException e) {
+      throw e;
+    }
+  }
+
   public MutationState dropTable(DropTableStatement statement) throws SQLException {
     String schemaName =
       connection.getSchema() != null && statement.getTableName().getSchemaName() == null
@@ -4061,42 +4192,35 @@ public class MetaDataClient {
     String schemaName = statement.getTableName().getSchemaName();
     String cdcTableName = statement.getCdcObjName().getName();
     String parentTableName = statement.getTableName().getTableName();
-    String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
-    // Mark CDC Stream as Disabled
-    long cdcIndexTimestamp = connection.getTable(indexName).getTimeStamp();
-    String streamName = String.format(CDC_STREAM_NAME_FORMAT, parentTableName, cdcTableName,
-      cdcIndexTimestamp, CDCUtil.getCDCCreationUTCDateTime(cdcIndexTimestamp));
-    markCDCStreamStatus(parentTableName, streamName, CDCUtil.CdcStreamStatus.DISABLED);
-    // Dropping the virtual CDC Table
-    dropTable(schemaName, cdcTableName, parentTableName, PTableType.CDC, statement.ifExists(),
-      false, false);
-    // Dropping the uncovered index associated with the CDC Table
+    boolean ifExists = statement.ifExists();
+    MutationState mutationState = new MutationState(0, 0, connection);
     try {
-      return dropTable(schemaName, indexName, parentTableName, PTableType.INDEX,
-        statement.ifExists(), false, false);
-    } catch (SQLException e) {
-      throw new SQLExceptionInfo.Builder(SQLExceptionCode.fromErrorCode(e.getErrorCode()))
-        .setTableName(statement.getCdcObjName().getName()).setRootCause(e.getCause()).build()
-        .buildException();
+      String indexName = CDCUtil.getCDCIndexName(statement.getCdcObjName().getName());
+      // Mark CDC Stream as Disabled
+      long cdcIndexTimestamp =
+        connection.getTable(SchemaUtil.getTableName(schemaName, indexName)).getTimeStamp();
+      String fullParentTableName = SchemaUtil.getTableName(schemaName, parentTableName);
+      String streamName = String.format(CDC_STREAM_NAME_FORMAT, fullParentTableName, cdcTableName,
+        cdcIndexTimestamp, CDCUtil.getCDCCreationUTCDateTime(cdcIndexTimestamp));
+      markCDCStreamStatus(fullParentTableName, streamName, CDCUtil.CdcStreamStatus.DISABLED);
+      // Dropping the virtual CDC Table
+      dropTable(schemaName, cdcTableName, parentTableName, PTableType.CDC, statement.ifExists(),
+        false, false);
+      // Dropping the uncovered index associated with the CDC Table
+      try {
+        mutationState = dropTable(schemaName, indexName, parentTableName, PTableType.INDEX,
+          statement.ifExists(), false, false);
+      } catch (SQLException e) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.fromErrorCode(e.getErrorCode()))
+          .setTableName(statement.getCdcObjName().getName()).setRootCause(e.getCause()).build()
+          .buildException();
+      }
+    } catch (MetaDataEntityNotFoundException e) {
+      if (!ifExists) {
+        throw e;
+      }
     }
-  }
-
-  private void deleteAllStreamMetadataForTable(String tableName) throws SQLException {
-    String deleteStreamStatusQuery =
-      "DELETE FROM " + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME = ?";
-    String deleteStreamPartitionsQuery =
-      "DELETE FROM " + SYSTEM_CDC_STREAM_NAME + " WHERE TABLE_NAME = ?";
-    LOGGER.info("Deleting Stream Metadata for table {}", tableName);
-    try (PreparedStatement ps = connection.prepareStatement(deleteStreamStatusQuery)) {
-      ps.setString(1, tableName);
-      ps.executeUpdate();
-      connection.commit();
-    }
-    try (PreparedStatement ps = connection.prepareStatement(deleteStreamPartitionsQuery)) {
-      ps.setString(1, tableName);
-      ps.executeUpdate();
-      connection.commit();
-    }
+    return mutationState;
   }
 
   private void markCDCStreamStatus(String tableName, String streamName,
@@ -4161,8 +4285,9 @@ public class MetaDataClient {
     String fullTableName = SchemaUtil.getTableName(schemaName, tableName);
     try {
       PTable ptable = connection.getTable(fullTableName);
-      if (PTableType.TABLE.equals(ptable.getType()) && CDCUtil.hasCDCIndex(ptable)) {
-        deleteAllStreamMetadataForTable(fullTableName);
+      if (PTableType.TABLE.equals(ptable.getType())) {
+        connection.unwrap(PhoenixConnection.class).getQueryServices()
+          .deleteAllStreamMetadataForTable(connection, fullTableName);
       }
       if (
         parentTableName != null && !parentTableName.equals(ptable.getParentTableName().getString())
@@ -4735,7 +4860,7 @@ public class MetaDataClient {
           if (table.getType() != PTableType.TABLE) {
             ttlAlreadyDefined = checkAndGetTTLFromHierarchy(
               PhoenixRuntime.getTableNoCache(connection, table.getParentName().toString()),
-              tableName);
+              tableName, table.getIndexType());
           }
           if (!ttlAlreadyDefined.equals(TTL_EXPRESSION_NOT_DEFINED)) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY)
@@ -4745,9 +4870,9 @@ public class MetaDataClient {
           /**
            * To check if TTL is defined at any of the child below we are checking it at
            * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#mutateColumn(List, ColumnMutator, int, PTable, PTable, boolean)}
-           * level where in function
-           * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl# validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[], byte[], List, int)}
-           * we are already traversing through allDescendantViews.
+           * level where in function {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#
+           * validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[],
+           * byte[], List, int)} we are already traversing through allDescendantViews.
            */
         }
 
@@ -6420,7 +6545,9 @@ public class MetaDataClient {
       }
       if (metaProperties.getTTL() != table.getTTLExpression()) {
         TTLExpression newTTL = metaProperties.getTTL();
-        newTTL.validateTTLOnAlter(connection, table);
+        boolean isStrictTTL =
+          metaProperties.isStrictTTL() != null ? metaProperties.isStrictTTL : table.isStrictTTL();
+        newTTL.validateTTLOnAlter(connection, table, isStrictTTL);
         metaPropertiesEvaluated.setTTL(getCompatibleTTLExpression(metaProperties.getTTL(),
           table.getType(), table.getViewType(), table.getName().toString()));
         changingPhoenixTableProperty = true;

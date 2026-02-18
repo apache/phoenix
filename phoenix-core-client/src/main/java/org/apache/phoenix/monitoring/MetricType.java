@@ -17,6 +17,13 @@
  */
 package org.apache.phoenix.monitoring;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
+import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.log.LogLevel;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
@@ -175,7 +182,8 @@ public enum MetricType {
   QUERY_FAILED_COUNTER("qf", "Number of times query failed", LogLevel.DEBUG, PLong.INSTANCE),
   NUM_PARALLEL_SCANS("ps", "Number of scans that were executed in parallel", LogLevel.DEBUG,
     PLong.INSTANCE),
-  SCAN_BYTES("sb", "Number of bytes read by scans", LogLevel.OFF, PLong.INSTANCE),
+  SCAN_BYTES("sb", "Number of bytes read by scans", LogLevel.OFF, PLong.INSTANCE,
+    ScanMetrics.BYTES_IN_RESULTS_METRIC_NAME),
   SELECT_SQL_COUNTER("sc", "Counter for number of sql queries", LogLevel.OFF, PLong.INSTANCE),
   // task metrics
   TASK_QUEUE_WAIT_TIME("tw",
@@ -248,21 +256,43 @@ public enum MetricType {
     "Number of StaleMetadataCacheException encountered.", LogLevel.DEBUG, PLong.INSTANCE),
 
   // hbase metrics
-  COUNT_RPC_CALLS("rp", "Number of RPC calls", LogLevel.DEBUG, PLong.INSTANCE),
-  COUNT_REMOTE_RPC_CALLS("rr", "Number of remote RPC calls", LogLevel.DEBUG, PLong.INSTANCE),
+  COUNT_RPC_CALLS("rp", "Number of RPC calls", LogLevel.DEBUG, PLong.INSTANCE,
+    ScanMetrics.RPC_CALLS_METRIC_NAME),
+  COUNT_REMOTE_RPC_CALLS("rr", "Number of remote RPC calls", LogLevel.DEBUG, PLong.INSTANCE,
+    ScanMetrics.REMOTE_RPC_CALLS_METRIC_NAME),
   COUNT_MILLS_BETWEEN_NEXTS("n", "Sum of milliseconds between sequential next calls",
-    LogLevel.DEBUG, PLong.INSTANCE),
+    LogLevel.DEBUG, PLong.INSTANCE, ScanMetrics.MILLIS_BETWEEN_NEXTS_METRIC_NAME),
   COUNT_NOT_SERVING_REGION_EXCEPTION("nsr", "Number of NotServingRegionException caught",
-    LogLevel.DEBUG, PLong.INSTANCE),
+    LogLevel.DEBUG, PLong.INSTANCE, ScanMetrics.NOT_SERVING_REGION_EXCEPTION_METRIC_NAME),
   COUNT_BYTES_REGION_SERVER_RESULTS("rs", "Number of bytes in Result objects from region servers",
-    LogLevel.DEBUG, PLong.INSTANCE),
+    LogLevel.DEBUG, PLong.INSTANCE, ScanMetrics.BYTES_IN_RESULTS_METRIC_NAME),
   COUNT_BYTES_IN_REMOTE_RESULTS("rrs",
-    "Number of bytes in Result objects from remote region servers", LogLevel.DEBUG, PLong.INSTANCE),
-  COUNT_SCANNED_REGIONS("rg", "Number of regions scanned", LogLevel.DEBUG, PLong.INSTANCE),
-  COUNT_RPC_RETRIES("rpr", "Number of RPC retries", LogLevel.DEBUG, PLong.INSTANCE),
-  COUNT_REMOTE_RPC_RETRIES("rrr", "Number of remote RPC retries", LogLevel.DEBUG, PLong.INSTANCE),
-  COUNT_ROWS_SCANNED("ws", "Number of rows scanned", LogLevel.DEBUG, PLong.INSTANCE),
-  COUNT_ROWS_FILTERED("wf", "Number of rows filtered", LogLevel.DEBUG, PLong.INSTANCE),
+    "Number of bytes in Result objects from remote region servers", LogLevel.DEBUG, PLong.INSTANCE,
+    ScanMetrics.BYTES_IN_REMOTE_RESULTS_METRIC_NAME),
+  COUNT_SCANNED_REGIONS("rg", "Number of regions scanned", LogLevel.DEBUG, PLong.INSTANCE,
+    ScanMetrics.REGIONS_SCANNED_METRIC_NAME),
+  COUNT_RPC_RETRIES("rpr", "Number of RPC retries", LogLevel.DEBUG, PLong.INSTANCE,
+    ScanMetrics.RPC_RETRIES_METRIC_NAME),
+  COUNT_REMOTE_RPC_RETRIES("rrr", "Number of remote RPC retries", LogLevel.DEBUG, PLong.INSTANCE,
+    ScanMetrics.REMOTE_RPC_RETRIES_METRIC_NAME),
+  COUNT_ROWS_SCANNED("ws", "Number of rows scanned", LogLevel.DEBUG, PLong.INSTANCE,
+    ScanMetrics.COUNT_OF_ROWS_SCANNED_KEY_METRIC_NAME),
+  COUNT_ROWS_FILTERED("wf", "Number of rows filtered", LogLevel.DEBUG, PLong.INSTANCE,
+    ScanMetrics.COUNT_OF_ROWS_FILTERED_KEY_METRIC_NAME),
+  FS_READ_TIME("frt", "Time spent in filesystem read", LogLevel.DEBUG, PLong.INSTANCE,
+    CompatScanMetrics.FS_READ_TIME_METRIC_NAME),
+  BYTES_READ_FROM_FS("brff", "Number of bytes read from filesystem", LogLevel.DEBUG, PLong.INSTANCE,
+    CompatScanMetrics.BYTES_READ_FROM_FS_METRIC_NAME),
+  BYTES_READ_FROM_MEMSTORE("brfm", "Number of bytes read from memstore", LogLevel.DEBUG,
+    PLong.INSTANCE, CompatScanMetrics.BYTES_READ_FROM_MEMSTORE_METRIC_NAME),
+  BYTES_READ_FROM_BLOCKCACHE("brfc", "Number of bytes read from blockcache", LogLevel.DEBUG,
+    PLong.INSTANCE, CompatScanMetrics.BYTES_READ_FROM_BLOCK_CACHE_METRIC_NAME),
+  BLOCK_READ_OPS_COUNT("broc", "Number of block read operations", LogLevel.DEBUG, PLong.INSTANCE,
+    CompatScanMetrics.BLOCK_READ_OPS_COUNT_METRIC_NAME),
+  RPC_SCAN_PROCESSING_TIME("spt", "Time spent in RPC scan processing", LogLevel.DEBUG,
+    PLong.INSTANCE, CompatScanMetrics.RPC_SCAN_PROCESSING_TIME_METRIC_NAME),
+  RPC_SCAN_QUEUE_WAIT_TIME("sqwt", "Time spent in RPC scan queue wait", LogLevel.DEBUG,
+    PLong.INSTANCE, CompatScanMetrics.RPC_SCAN_QUEUE_WAIT_TIME_METRIC_NAME),
   COUNTER_METADATA_INCONSISTENCY("mi", "Number of times the metadata inconsistencies ",
     LogLevel.DEBUG, PLong.INSTANCE),
   NUM_SYSTEM_TABLE_RPC_SUCCESS("nstrs", "Number of successful system table RPC calls",
@@ -331,12 +361,32 @@ public enum MetricType {
   private final String shortName;
   private LogLevel logLevel;
   private PDataType dataType;
+  private final String hbaseMetricName;
+  // SCAN_BYTES and COUNT_BYTES_REGION_SERVER_RESULTS are mapped to same HBase metric but we will
+  // only keeping mapping for one of them.
+  private static Map<String, MetricType> hbaseToPhoenixMetricMap = new HashMap<>();
+  private static List<MetricType> hbaseScanMetrics = new ArrayList<>();
 
-  private MetricType(String shortName, String description, LogLevel logLevel, PDataType dataType) {
+  static {
+    for (MetricType metric : MetricType.values()) {
+      if (!StringUtils.isEmpty(metric.hbaseMetricName)) {
+        hbaseToPhoenixMetricMap.put(metric.hbaseMetricName, metric);
+        hbaseScanMetrics.add(metric);
+      }
+    }
+  }
+
+  MetricType(String shortName, String description, LogLevel logLevel, PDataType dataType) {
+    this(shortName, description, logLevel, dataType, StringUtils.EMPTY);
+  }
+
+  MetricType(String shortName, String description, LogLevel logLevel, PDataType dataType,
+    String hbaseMetricName) {
     this.shortName = shortName;
     this.description = description;
     this.logLevel = logLevel;
     this.dataType = dataType;
+    this.hbaseMetricName = hbaseMetricName;
   }
 
   public String description() {
@@ -359,6 +409,10 @@ public enum MetricType {
     return name();
   }
 
+  public String getHBaseMetricName() {
+    return hbaseMetricName;
+  }
+
   public boolean isLoggingEnabled(LogLevel connectionLogLevel) {
     return logLevel() != LogLevel.OFF && (logLevel().ordinal() <= connectionLogLevel.ordinal());
   }
@@ -376,4 +430,11 @@ public enum MetricType {
     return buffer.toString();
   }
 
+  public static MetricType getMetricType(String hbaseMetricName) {
+    return hbaseToPhoenixMetricMap.get(hbaseMetricName);
+  }
+
+  public static List<MetricType> getHbaseScanMetrics() {
+    return hbaseScanMetrics;
+  }
 }

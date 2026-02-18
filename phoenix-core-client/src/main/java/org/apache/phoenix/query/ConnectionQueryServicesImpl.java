@@ -28,7 +28,7 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_15_0;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_4_16_0;
-import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0;
+import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.PHOENIX_MAJOR_VERSION;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.PHOENIX_MINOR_VERSION;
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.PHOENIX_PATCH_NUMBER;
@@ -56,6 +56,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_HBASE_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_COLUMN_NAME_BYTES;
@@ -186,6 +188,7 @@ import org.apache.hadoop.hbase.ipc.HBaseRpcController;
 import org.apache.hadoop.hbase.ipc.RpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.ipc.controller.InvalidateMetadataCacheControllerFactory;
+import org.apache.hadoop.hbase.ipc.controller.ServerRpcControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerSideRPCControllerFactory;
 import org.apache.hadoop.hbase.ipc.controller.ServerToServerRpcController;
 import org.apache.hadoop.hbase.protobuf.generated.ClientProtos.MutationProto;
@@ -256,6 +259,7 @@ import org.apache.phoenix.log.ConnectionLimiter;
 import org.apache.phoenix.log.DefaultConnectionLimiter;
 import org.apache.phoenix.log.LoggingConnectionLimiter;
 import org.apache.phoenix.log.QueryLoggerDisruptor;
+import org.apache.phoenix.mapreduce.index.IndexToolTableUtil;
 import org.apache.phoenix.monitoring.HTableThreadPoolHistograms;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.parse.PFunction;
@@ -2815,6 +2819,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     dropTables(Collections.<byte[]> singletonList(tableNameToDelete));
   }
 
+  @Override
+  public void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped,
+    boolean preserveSplits) throws SQLException {
+    SQLException sqlE = null;
+    TableName hbaseTableName = SchemaUtil.getPhysicalTableName(
+      SchemaUtil.getTableName(schemaName, tableName).getBytes(StandardCharsets.UTF_8),
+      isNamespaceMapped);
+    try {
+      Admin admin = getAdmin();
+      admin.disableTable(hbaseTableName);
+      admin.truncateTable(hbaseTableName, preserveSplits);
+      assert admin.isTableEnabled(hbaseTableName);
+      // Invalidate the region cache post truncation
+      clearTableRegionCache(hbaseTableName);
+    } catch (Exception e) {
+      sqlE = ClientUtil.parseServerException(e);
+    } finally {
+      if (sqlE != null) {
+        throw sqlE;
+      }
+    }
+  }
+
   @VisibleForTesting
   void dropTables(final List<byte[]> tableNamesToDelete) throws SQLException {
     SQLException sqlE = null;
@@ -4134,7 +4161,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
             try {
               GLOBAL_QUERY_SERVICES_COUNTER.increment();
               LOGGER.info("An instance of ConnectionQueryServices was created.");
-              connection = openConnection(config);
+              boolean isServerSideConnection =
+                config.getBoolean(QueryUtil.IS_SERVER_CONNECTION, false);
+              if (isServerSideConnection) {
+                Configuration clonedConfiguration = PropertiesUtil.cloneConfig(config);
+                clonedConfiguration.setClass(CUSTOM_CONTROLLER_CONF_KEY,
+                  ServerRpcControllerFactory.class, RpcControllerFactory.class);
+                connection = openConnection(clonedConfiguration);
+              } else {
+                connection = openConnection(config);
+              }
               hConnectionEstablished = true;
               boolean lastDDLTimestampValidationEnabled =
                 getProps().getBoolean(QueryServices.LAST_DDL_TIMESTAMP_VALIDATION_ENABLED,
@@ -4421,6 +4457,12 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     try {
       metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
     } catch (TableAlreadyExistsException ignore) {
+    }
+    try {
+      // check if we have old PHOENIX_INDEX_TOOL tables
+      // move data to the new tables under System, or simply create the new tables
+      IndexToolTableUtil.createNewIndexToolTables(metaConnection);
+    } catch (Exception ignore) {
     }
   }
 
@@ -4741,24 +4783,24 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         }
       }
     }
-    if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0) {
+    if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0) {
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 8,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 9,
         PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 7,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 8,
         PhoenixDatabaseMetaData.SCHEMA_VERSION + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 6,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 7,
         PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 5,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 6,
         PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 4,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 5,
         PhoenixDatabaseMetaData.INDEX_WHERE + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 3,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 4,
         PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE + " " + PVarchar.INSTANCE.getSqlTypeName());
 
       /**
@@ -4766,19 +4808,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
        * PHOENIX_TTL Column. See PHOENIX-7023
        */
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 2,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 3,
         PhoenixDatabaseMetaData.TTL + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 1,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 2,
         PhoenixDatabaseMetaData.ROW_KEY_MATCHER + " " + PVarbinary.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 1,
         PhoenixDatabaseMetaData.IS_STRICT_TTL + " " + PBoolean.INSTANCE.getSqlTypeName());
-      // Values in PHOENIX_TTL column will not be used for further release as PHOENIX_TTL column is
-      // being deprecated
-      // and will be removed in later release. To copy copyDataFromPhoenixTTLtoTTL(metaConnection)
-      // can be used but
-      // as that feature was not fully built we are not moving old value to new column
+      // Add any 5.4.0 specific upgrade logic here if needed in the future
+      // Currently no new schema changes required for 5.4.0
 
       // move TTL values stored in descriptor to SYSCAT TTL column.
       moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(metaConnection);
@@ -4926,6 +4965,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       // can work
       // with SYSTEM Namespace
       createSchemaIfNotExistsSystemNSMappingEnabled(metaConnection);
+
+      try {
+        // check if we have old PHOENIX_INDEX_TOOL tables
+        // move data to the new tables under System, or simply create the new tables
+        IndexToolTableUtil.createNewIndexToolTables(metaConnection);
+
+      } catch (Exception ignore) {
+      }
 
       clearUpgradeRequired();
       success = true;
@@ -6906,6 +6953,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     } finally {
       metricsMetadataCachingSource
         .addMetadataCacheInvalidationTotalTime(stopWatch.stop().elapsedMillis());
+    }
+  }
+
+  /*
+   * Delete any metadata related to this table in the System tables for Streams.
+   */
+  @Override
+  public void deleteAllStreamMetadataForTable(java.sql.Connection conn, String tableName)
+    throws SQLException {
+    String deleteStreamStatusQuery =
+      "DELETE FROM " + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME = ?";
+    String deleteStreamPartitionsQuery =
+      "DELETE FROM " + SYSTEM_CDC_STREAM_NAME + " WHERE TABLE_NAME = ?";
+    LOGGER.info("Deleting Stream Metadata for table {}", tableName);
+    try (PreparedStatement ps = conn.prepareStatement(deleteStreamStatusQuery)) {
+      ps.setString(1, tableName);
+      ps.executeUpdate();
+      conn.commit();
+    }
+    try (PreparedStatement ps = conn.prepareStatement(deleteStreamPartitionsQuery)) {
+      ps.setString(1, tableName);
+      ps.executeUpdate();
+      conn.commit();
     }
   }
 

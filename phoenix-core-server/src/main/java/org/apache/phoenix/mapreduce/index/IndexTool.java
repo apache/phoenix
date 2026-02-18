@@ -83,11 +83,13 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
@@ -754,7 +756,7 @@ public class IndexTool extends Configured implements Tool {
       configuration.setBooleanIfUnset(
         PhoenixConfigurationUtil.MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER, true);
 
-      PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, dataTableWithSchema);
+      PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
       PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
       PhoenixConfigurationUtil.setIndexToolSourceTable(configuration, sourceTable);
       if (startTime != null) {
@@ -969,7 +971,7 @@ public class IndexTool extends Configured implements Tool {
   public boolean isValidLastVerifyTime(Long lastVerifyTime) throws Exception {
     try (Connection conn = getConnection(configuration);
       Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
-        .getTable(IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES)) {
+        .getTable(IndexVerificationResultRepository.getResultTableNameBytes())) {
       Scan s = new Scan();
       ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
       boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(null, cqs.getProps());
@@ -1002,10 +1004,20 @@ public class IndexTool extends Configured implements Tool {
         .format(" %s is not an index table for %s for this connection", indexTable, qDataTable));
     }
     qSchemaName = SchemaUtil.normalizeIdentifier(schemaName);
+
     pIndexTable = connection.unwrap(PhoenixConnection.class)
       .getTable(SchemaUtil.getQualifiedTableName(schemaName, indexTable));
+    if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, getConf())) {
+      pIndexTable = connection.unwrap(PhoenixConnection.class)
+        .getTable(SchemaUtil.getQualifiedTableName(schemaName, indexTable)
+          .replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR));
+    }
     indexType = pIndexTable.getIndexType();
     qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
+    if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, getConf())) {
+      qIndexTable =
+        qIndexTable.replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR);
+    }
     if (IndexType.LOCAL.equals(indexType)) {
       isLocalIndexBuild = true;
       if (useSnapshot) {
