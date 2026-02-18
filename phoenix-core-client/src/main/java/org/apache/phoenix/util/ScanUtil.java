@@ -512,6 +512,7 @@ public class ScanUtil {
       // key slots would cause the flag to become true.
       lastInclusiveUpperSingleKey = range.isSingleKey() && inclusiveUpper;
       anyInclusiveUpperRangeKey |= !range.isSingleKey() && inclusiveUpper;
+      trailingSepByteFromLowerExclusiveOverflow = false;
       if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
         // A null or empty byte array is always represented as a zero byte
         byte sepByte =
