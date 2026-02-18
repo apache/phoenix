@@ -247,9 +247,9 @@ public final class PhoenixMapReduceUtil {
 
     if (et > currentTime || st >= et) {
       throw new IllegalArgumentException(String.format(
-          "%s %s: start and end times must be in the past "
-              + "and start < end. Start: %d, End: %d, Current: %d",
-          INVALID_TIME_RANGE_EXCEPTION_MESSAGE, tableName, st, et, currentTime));
+        "%s %s: start and end times must be in the past "
+          + "and start < end. Start: %d, End: %d, Current: %d",
+        INVALID_TIME_RANGE_EXCEPTION_MESSAGE, tableName, st, et, currentTime));
     }
   }
 
@@ -261,15 +261,15 @@ public final class PhoenixMapReduceUtil {
    * @throws IllegalArgumentException if endTime is before min allowed timestamp
    */
   public static void validateMaxLookbackAge(Configuration configuration, Long endTime,
-      String tableName) {
+    String tableName) {
     long maxLookBackAge = BaseScannerRegionObserverConstants.getMaxLookbackInMillis(configuration);
     if (maxLookBackAge > 0) {
       long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
       if (endTime < minTimestamp) {
         throw new IllegalArgumentException(String.format(
-            "Table %s can't look back past the configured max lookback age: %d ms. "
-                + "End time: %d, Min allowed timestamp: %d",
-            tableName, maxLookBackAge, endTime, minTimestamp));
+          "Table %s can't look back past the configured max lookback age: %d ms. "
+            + "End time: %d, Min allowed timestamp: %d",
+          tableName, maxLookBackAge, endTime, minTimestamp));
       }
     }
   }
@@ -285,18 +285,18 @@ public final class PhoenixMapReduceUtil {
    * @throws IllegalArgumentException if validation fails
    */
   public static PTable validateTableForMRJob(Connection connection, String qualifiedTableName,
-      boolean allowViews, boolean allowIndexes) throws SQLException {
+    boolean allowViews, boolean allowIndexes) throws SQLException {
     PTable pTable = connection.unwrap(PhoenixConnection.class).getTableNoCache(qualifiedTableName);
 
     if (pTable == null) {
       throw new IllegalArgumentException(
-          String.format("Table %s does not exist", qualifiedTableName));
+        String.format("Table %s does not exist", qualifiedTableName));
     } else if (!allowViews && pTable.getType() == PTableType.VIEW) {
       throw new IllegalArgumentException(
-          String.format("Cannot run MR job on VIEW table %s", qualifiedTableName));
+        String.format("Cannot run MR job on VIEW table %s", qualifiedTableName));
     } else if (!allowIndexes && pTable.getType() == PTableType.INDEX) {
       throw new IllegalArgumentException(
-          String.format("Cannot run MR job on INDEX table %s directly", qualifiedTableName));
+        String.format("Cannot run MR job on INDEX table %s directly", qualifiedTableName));
     }
 
     return pTable;
@@ -311,14 +311,14 @@ public final class PhoenixMapReduceUtil {
    * @throws RuntimeException if zkQuorum format is invalid (must have exactly 3 parts)
    */
   public static Configuration createConfigurationForZkQuorum(Configuration baseConf,
-      String zkQuorum) {
+    String zkQuorum) {
     Configuration conf = org.apache.hadoop.hbase.HBaseConfiguration.create(baseConf);
     String[] parts = zkQuorum.split(":");
 
     if (!(parts.length == 3 || parts.length == 4)) {
       throw new RuntimeException(
-          "Invalid ZooKeeper quorum format. Expected: zk_quorum:port:znode OR "
-              + "zk_quorum:port:znode:krb_principal. Got: " + zkQuorum);
+        "Invalid ZooKeeper quorum format. Expected: zk_quorum:port:znode OR "
+          + "zk_quorum:port:znode:krb_principal. Got: " + zkQuorum);
     }
 
     conf.set(HConstants.ZOOKEEPER_QUORUM, parts[0]);

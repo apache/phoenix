@@ -30,8 +30,6 @@ import org.apache.phoenix.monitoring.ConnectionQueryServicesMetric;
 import org.apache.phoenix.monitoring.ConnectionQueryServicesMetricImpl;
 import org.apache.phoenix.monitoring.MetricType;
 
-import static org.apache.phoenix.monitoring.MetricType.*;
-
 /**
  * Class for Connection Query Service Metrics.
  */

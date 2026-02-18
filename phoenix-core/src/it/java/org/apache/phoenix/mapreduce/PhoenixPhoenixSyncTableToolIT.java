@@ -48,7 +48,6 @@ import org.junit.rules.TestName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-
 @Category(NeedsOwnMiniClusterTest.class)
 public class PhoenixPhoenixSyncTableToolIT {
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixPhoenixSyncTableToolIT.class);
@@ -123,7 +122,7 @@ public class PhoenixPhoenixSyncTableToolIT {
     List<TestRow> targetRowsBefore = queryAllRows(targetConnection,
       "SELECT ID, NAME, NAME_VALUE FROM " + TEST_TABLE_NAME + " ORDER BY ID");
 
-    assertEquals(sourceRowsBefore,targetRowsBefore);
+    assertEquals(sourceRowsBefore, targetRowsBefore);
 
     Configuration conf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
     String[] args = new String[] { "--table-name", TEST_TABLE_NAME, "--target-cluster",

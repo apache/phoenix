@@ -31,7 +31,10 @@ import javax.annotation.concurrent.Immutable;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.util.*;
+import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SQLCloseable;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableMap;
 
@@ -136,7 +139,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
       } else {
         // If empty HA group is returned, fall back to single cluster.
         url = HighAvailabilityGroup.getFallbackCluster(url, info).orElseThrow(
-            () -> new SQLException("HA group can not be initialized, fallback to single cluster"));
+          () -> new SQLException("HA group can not be initialized, fallback to single cluster"));
       }
     }
     ConnectionQueryServices cqs = getConnectionQueryServices(url, augmentedInfo);

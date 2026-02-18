@@ -208,7 +208,7 @@ public final class PhoenixConfigurationUtil {
   public static final String PHOENIX_SYNC_TABLE_DRY_RUN = "phoenix.sync.table.dry.run";
 
   public static final String PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES =
-      "phoenix.sync.table.chunk.size.bytes";
+    "phoenix.sync.table.chunk.size.bytes";
 
   public static final long DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES = 1024 * 1024 * 1024; // 1GB
 
@@ -966,6 +966,6 @@ public final class PhoenixConfigurationUtil {
   public static long getPhoenixSyncTableChunkSizeBytes(Configuration conf) {
     Preconditions.checkNotNull(conf);
     return conf.getLong(PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES,
-        DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES);
+      DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES);
   }
 }

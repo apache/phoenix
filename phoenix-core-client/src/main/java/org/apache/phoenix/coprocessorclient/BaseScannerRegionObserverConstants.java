@@ -217,5 +217,5 @@ public class BaseScannerRegionObserverConstants {
   public static final byte[] SYNC_TABLE_HASH_QUALIFIER = Bytes.toBytes("HASH");
   public static final byte[] SYNC_TABLE_ROW_COUNT_QUALIFIER = Bytes.toBytes("ROW_COUNT");
   public static final byte[] SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER =
-      Bytes.toBytes("IS_PARTIAL_CHUNK");
+    Bytes.toBytes("IS_PARTIAL_CHUNK");
 }

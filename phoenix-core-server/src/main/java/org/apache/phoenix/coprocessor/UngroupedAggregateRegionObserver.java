@@ -422,7 +422,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
         @Override
         public RegionScanner run() throws Exception {
           return new PhoenixSyncTableRegionScanner(s, region, scan, env,
-              UngroupedAggregateRegionObserver.this);
+            UngroupedAggregateRegionObserver.this);
         }
       });
     }
