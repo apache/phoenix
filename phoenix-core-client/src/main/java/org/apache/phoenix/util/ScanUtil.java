@@ -461,6 +461,7 @@ public class ScanUtil {
     boolean lastInclusiveUpperSingleKey = false;
     boolean anyInclusiveUpperRangeKey = false;
     boolean lastUnboundUpper = false;
+    boolean trailingSepByteFromLowerExclusiveOverflow = false;
     // The index used for slots should be incremented by 1,
     // but the index for the field it represents in the schema
     // should be incremented by 1 + value in the current slotSpan index
@@ -565,6 +566,9 @@ public class ScanUtil {
           // have an end key specified.
           return -byteOffset;
         }
+        if (offset > 0 && key[offset - 1] == QueryConstants.SEPARATOR_BYTE) {
+          trailingSepByteFromLowerExclusiveOverflow = true;
+        }
         // We're filtering on values being non null here, but we still need the 0xFF
         // terminator, since DESC keys ignore the last byte as it's expected to be
         // the terminator. Without this, we'd ignore the separator byte that was
@@ -612,6 +616,7 @@ public class ScanUtil {
           && hasSeparatorBytes(key, field, offset)
           && ((field.getSortOrder() == SortOrder.DESC && schema.rowKeyOrderOptimizable())
             || field.getSortOrder() == SortOrder.ASC)
+          && !trailingSepByteFromLowerExclusiveOverflow
       ) {
         if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
           offset--;
