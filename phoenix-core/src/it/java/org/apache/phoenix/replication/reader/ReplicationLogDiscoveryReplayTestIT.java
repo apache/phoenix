@@ -523,9 +523,10 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
 
       // Create HAGroupStoreRecord
       long recordTime = lastSyncStateTime != null ? lastSyncStateTime : currentTime;
-      HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(
-        HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, haGroupState, recordTime,
-        HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl, 0L);
+      HAGroupStoreRecord mockRecord =
+        new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+          haGroupState, recordTime, HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl,
+          peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
 
       EnvironmentEdge edge = () -> currentTime;
       EnvironmentEdgeManager.injectEdge(edge);
@@ -583,7 +584,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl, 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
+          localUri.toString(), standbyUri.toString(), 0L);
 
       // Set current time to allow processing 3 rounds
       long currentTime = initialEndTime + (3 * totalWaitTime);
@@ -679,7 +681,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl, 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
+          localUri.toString(), standbyUri.toString(), 0L);
 
       // Set current time to allow processing 3 rounds
       long currentTime = initialEndTime + (3 * totalWaitTime);
@@ -774,7 +777,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl, 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
+          localUri.toString(), standbyUri.toString(), 0L);
 
       // Set current time to allow processing multiple rounds
       long currentTime = initialEndTime + (5 * totalWaitTime);
@@ -902,7 +906,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl, 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
+          localUri.toString(), standbyUri.toString(), 0L);
 
       // Set current time to allow processing 5 rounds
       long currentTime = initialEndTime + (5 * totalWaitTime);
@@ -1016,7 +1021,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl, 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
+          localUri.toString(), standbyUri.toString(), 0L);
 
       // Set current time to allow processing 5 rounds
       long currentTime = initialEndTime + (5 * roundTimeMills) + bufferMillis;
@@ -1142,7 +1148,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl, 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
+          localUri.toString(), standbyUri.toString(), 0L);
 
       // Set current time to allow processing enough rounds (including rewind)
       long currentTime = initialEndTime + (10 * roundTimeMills) + bufferMillis;
@@ -1298,7 +1305,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl, 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
+          localUri.toString(), standbyUri.toString(), 0L);
 
       // Set current time to NOT allow processing any rounds (not enough time has passed)
       long currentTime = initialEndTime + 1000L; // Only 1 second after
@@ -1409,7 +1417,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-          peerZkUrl, zkUrl, peerZkUrl, 0L);
+          peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
 
       // Calculate expected first round start time (minimum timestamp rounded down to nearest round
       // start)
@@ -1580,7 +1588,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-          peerZkUrl, zkUrl, peerZkUrl, 0L);
+          peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
 
       // Calculate expected first round start time (minimum timestamp rounded down to nearest round
       // start)
@@ -1777,7 +1785,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl, 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
+          localUri.toString(), standbyUri.toString(), 0L);
 
       // Set current time to allow processing 3 rounds
       long currentTime = initialEndTime + (3 * totalWaitTime);
@@ -1911,7 +1920,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-        HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl, 0L);
+        HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
+        localUri.toString(), standbyUri.toString(), 0L);
 
     try {
       // Create test rounds
@@ -2131,7 +2141,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, 0L);
+        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2169,7 +2179,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, 0L);
+        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2205,7 +2215,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, 0L);
+        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2269,11 +2279,11 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       Optional<HAGroupStoreRecord> recordBefore =
         HAGroupStoreManager.getInstance(config).getHAGroupStoreRecord(haGroupName);
       assertTrue("HA group record should exist", recordBefore.isPresent());
-      assertEquals("Initial state should be DEGRADED_STANDBY",
-        HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, recordBefore.get().getHAGroupState());
+      assertEquals("Initial state should be STANDBY",
+        HAGroupStoreRecord.HAGroupState.STANDBY, recordBefore.get().getHAGroupState());
 
       // Call triggerFailover - should handle InvalidClusterRoleTransitionException
-      // because transitioning from DEGRADED_STANDBY directly to ACTIVE_IN_SYNC is invalid
+      // because transitioning from STANDBY directly to ACTIVE_IN_SYNC is invalid
       discovery.triggerFailover();
 
       // Verify triggerFailover was called (implicitly through spy)
@@ -2310,7 +2320,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, 0L);
+        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2343,7 +2353,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, 0L);
+        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2376,7 +2386,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, 0L);
+        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2410,7 +2420,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, 0L);
+        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2442,7 +2452,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, 0L);
+        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 

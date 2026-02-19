@@ -194,7 +194,8 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
       HAGroupStoreRecord peerHAGroupStoreRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-          CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress2(), CLUSTERS.getMasterAddress1(), 0L);
+          CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress2(), CLUSTERS.getMasterAddress1(),
+          localUri.toString(), standbyUri.toString(), 0L);
       peerHAAdmin.createHAGroupStoreRecordInZooKeeper(peerHAGroupStoreRecord);
     }
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -205,14 +206,15 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
     executeGetClusterRoleRecordAndVerify(coprocessor, controller, haGroupName, expectedRecord,
       false);
 
+    // Delete the row from System Table
+    HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupName, CLUSTERS.getZkUrl1());
+
     // Delete the HAGroupStoreRecord from ZK
     try (PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(),
-      ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
+            ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
       haAdmin.deleteHAGroupStoreRecordInZooKeeper(haGroupName);
     }
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-    // Delete the row from System Table
-    HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupName, CLUSTERS.getZkUrl1());
 
     // Expect exception when getting ClusterRoleRecord because the HAGroupStoreRecord is not found
     // in ZK
@@ -224,12 +226,12 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(),
       CLUSTERS.getZkUrl1(), peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
       ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY, ClusterRoleRecord.ClusterRole.STANDBY, null);
-
     // Now Invalidate the Cache
     controller = new ServerRpcController();
     coprocessor.invalidateHAGroupStoreClient(controller,
       getInvalidateHAGroupStoreClientRequest(haGroupName), null);
     assertFalse(controller.failed());
+
 
     // Local Cluster Role will be updated to ACTIVE_TO_STANDBY as cache is invalidated
     controller = new ServerRpcController();
@@ -289,6 +291,7 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
     RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest.Builder requestBuilder =
       RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest.newBuilder();
     requestBuilder.setHaGroupName(ByteStringer.wrap(Bytes.toBytes(haGroupName)));
+    requestBuilder.setBroadcastUpdate(false);
     return requestBuilder.build();
   }
 
