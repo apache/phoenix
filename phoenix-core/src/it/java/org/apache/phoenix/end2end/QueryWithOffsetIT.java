@@ -231,6 +231,149 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
     assertEquals(5, md.getColumnCount());
   }
 
+  /**
+   * Test for PHOENIX-7524: Query with WHERE clause that filters all rows + OFFSET
+   *
+   * Scenario: WHERE clause filters out all rows, then OFFSET tries to skip rows
+   * Expected: Query should return empty result set
+   */
+  @Test
+  public void testOffsetWithWhereClauseFilteringAllRows() throws SQLException {
+    String testTableName = generateUniqueName();
+    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+
+    conn.createStatement().execute(
+      "CREATE TABLE " + testTableName + " (id INTEGER NOT NULL PRIMARY KEY, name VARCHAR)");
+
+    for (int i = 1; i <= 10; i++) {
+      conn.createStatement().executeUpdate(
+        "UPSERT INTO " + testTableName + " VALUES (" + i + ", 'name" + i + "')");
+    }
+    conn.commit();
+
+    // WHERE clause that filters ALL rows (no row has id > 100)
+    String query = "SELECT * FROM " + testTableName + " WHERE id > 100 LIMIT 5 OFFSET 1";
+    ResultSet rs = conn.createStatement().executeQuery(query);
+
+    // Should return no rows without throwing exception
+    assertFalse("Expected no rows when WHERE filters all rows", rs.next());
+    conn.close();
+  }
+
+  /**
+   * Test for PHOENIX-7524: Empty table with OFFSET
+   *
+   * Scenario: Table exists but has no rows
+   * Expected: Query should return empty result set
+   */
+  @Test
+  public void testOffsetOnEmptyTable() throws SQLException {
+    String testTableName = generateUniqueName();
+    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+
+    conn.createStatement().execute(
+      "CREATE TABLE " + testTableName + " (id INTEGER NOT NULL PRIMARY KEY, val VARCHAR)");
+    // Don't insert any rows - table is empty
+    conn.commit();
+
+    // Query empty table with OFFSET
+    String query = "SELECT * FROM " + testTableName + " LIMIT 10 OFFSET 5";
+    ResultSet rs = conn.createStatement().executeQuery(query);
+
+    assertFalse("Expected no rows from empty table", rs.next());
+    conn.close();
+  }
+
+  /**
+   * Test for PHOENIX-7524: OFFSET with LIKE pattern matching nothing
+   *
+   * Scenario: LIKE pattern that doesn't match any rows
+   * Expected: Query should return empty result set
+   */
+  @Test
+  public void testOffsetWithLikePatternMatchingNothing() throws SQLException {
+    String testTableName = generateUniqueName();
+    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+
+    conn.createStatement().execute(
+      "CREATE TABLE " + testTableName + " (name VARCHAR NOT NULL PRIMARY KEY, score INTEGER)");
+
+    conn.createStatement().executeUpdate("UPSERT INTO " + testTableName + " VALUES ('test1', 100)");
+    conn.createStatement().executeUpdate("UPSERT INTO " + testTableName + " VALUES ('test2', 200)");
+    conn.createStatement().executeUpdate("UPSERT INTO " + testTableName + " VALUES ('test3', 300)");
+    conn.commit();
+
+    // LIKE pattern that doesn't match
+    String query = "SELECT * FROM " + testTableName +
+                   " WHERE name LIKE 'prod%' LIMIT 10 OFFSET 2";
+    ResultSet rs = conn.createStatement().executeQuery(query);
+
+    assertFalse("Expected no rows with LIKE pattern matching nothing", rs.next());
+    conn.close();
+  }
+
+  /**
+   * Test for PHOENIX-7524: OFFSET on table with splits but empty regions
+   *
+   * Scenario: Pre-split table with no data in certain regions
+   * Expected: Query should return empty result set
+   */
+  @Test
+  public void testOffsetOnSplitTableWithEmptyRegions() throws SQLException {
+    String testTableName = generateUniqueName();
+    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+
+    // Create pre-split table
+    conn.createStatement().execute(
+      "CREATE TABLE " + testTableName +
+      " (pk VARCHAR NOT NULL PRIMARY KEY, data INTEGER) SPLIT ON ('m', 'z')");
+
+    // Insert data only in first region (before 'm')
+    conn.createStatement().executeUpdate("UPSERT INTO " + testTableName + " VALUES ('a', 1)");
+    conn.createStatement().executeUpdate("UPSERT INTO " + testTableName + " VALUES ('b', 2)");
+    conn.commit();
+
+    // Query range 'n' to 'y' (in middle/last region with no data)
+    String query = "SELECT * FROM " + testTableName +
+                   " WHERE pk >= 'n' AND pk < 'y' LIMIT 5 OFFSET 1";
+    ResultSet rs = conn.createStatement().executeQuery(query);
+
+    assertFalse("Expected no rows in empty region", rs.next());
+    conn.close();
+  }
+
+  /**
+   * Test for PHOENIX-7524: OFFSET exceeds rows returned by WHERE clause
+   *
+   * Scenario: WHERE clause returns SOME rows (e.g., 5 rows), but OFFSET exceeds them (e.g., 10)
+   * Expected: Query should return empty result set
+   */
+  @Test
+  public void testOffsetExceedsRowsReturnedByWhereClause() throws SQLException {
+    String testTableName = generateUniqueName();
+    Connection conn = DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
+
+    conn.createStatement().execute(
+      "CREATE TABLE " + testTableName + " (id INTEGER NOT NULL PRIMARY KEY, category VARCHAR, val INTEGER)");
+
+    for (int i = 1; i <= 20; i++) {
+      conn.createStatement().executeUpdate(
+        "UPSERT INTO " + testTableName + " VALUES (" + i + ", 'cat" + (i % 3) + "', " + (i * 100) + ")");
+    }
+    conn.commit();
+
+    // WHERE clause returns 7 rows (id <= 20 where id % 3 == 1: rows 1,4,7,10,13,16,19)
+    // But OFFSET is 10, which exceeds the 7 rows available
+    String query = "SELECT * FROM " + testTableName + 
+                   " WHERE category = 'cat1' LIMIT 5 OFFSET 10";
+    ResultSet rs = conn.createStatement().executeQuery(query);
+
+    // Should return no rows without throwing exception
+    assertFalse("Expected no rows when OFFSET exceeds filtered result count", rs.next());
+
+    conn.close();
+  }
+
   private void initTableValues(Connection conn) throws SQLException {
     for (int i = 0; i < 26; i++) {
       conn.createStatement().execute("UPSERT INTO " + tableName + " values('" + STRINGS[i] + "',"

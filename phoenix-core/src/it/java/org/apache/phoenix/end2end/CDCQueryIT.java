@@ -987,6 +987,42 @@ public class CDCQueryIT extends CDCBaseIT {
     }
   }
 
+  /**
+   * Test for PHOENIX-7524: CDC Query with OFFSET can throw IndexOutOfBoundsException
+   *
+   * Scenario: CDC query with OFFSET that exceeds available rows
+   * Expected: Query should return empty result set
+   */
+  @Test
+  public void testCDCQueryWithOffsetExceedingRows() throws Exception {
+    String schemaName = getSchemaName();
+    String tableName = getTableOrViewName(schemaName);
+    String cdcName = getCDCName();
+
+    try (Connection conn = newConnection()) {
+      createTable(conn,
+        "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 INTEGER, v2 INTEGER)",
+        encodingScheme, multitenant, tableSaltBuckets, false, null);
+      createCDC(conn, "CREATE CDC " + cdcName + " ON " + tableName, encodingScheme);
+
+      conn.createStatement().executeUpdate("UPSERT INTO " + tableName + " VALUES ('a', 1, 2)");
+      conn.commit();
+
+      // This query should return empty result, not throw exception
+      // OFFSET 1 with only 1 row means we skip the only row
+      // IMPORTANT: Using PHOENIX_ROW_TIMESTAMP() > CURRENT_TIME() without subtraction
+      // This means the WHERE clause filters out ALL rows (no row has timestamp in the future)
+      // So we're trying to OFFSET past 0 rows
+      String query =
+        "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > CURRENT_TIME() LIMIT 1 OFFSET 1";
+
+      ResultSet rs = conn.createStatement().executeQuery(query);
+
+      // Should return no rows without throwing exception
+      assertFalse("Expected no rows when OFFSET exceeds available data", rs.next());
+    }
+  }
+
   private String getSchemaName() {
     return withSchemaName
       ? caseSensitiveNames
