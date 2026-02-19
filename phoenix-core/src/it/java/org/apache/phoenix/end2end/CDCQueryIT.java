@@ -988,10 +988,8 @@ public class CDCQueryIT extends CDCBaseIT {
   }
 
   /**
-   * Test for PHOENIX-7524: CDC Query with OFFSET can throw IndexOutOfBoundsException
-   *
-   * Scenario: CDC query with OFFSET that exceeds available rows
-   * Expected: Query should return empty result set
+   * Test for PHOENIX-7524: CDC Query with OFFSET can throw IndexOutOfBoundsException Scenario: CDC
+   * query with OFFSET that exceeds available rows Expected: Query should return empty result set
    */
   @Test
   public void testCDCQueryWithOffsetExceedingRows() throws Exception {
@@ -1013,8 +1011,8 @@ public class CDCQueryIT extends CDCBaseIT {
       // IMPORTANT: Using PHOENIX_ROW_TIMESTAMP() > CURRENT_TIME() without subtraction
       // This means the WHERE clause filters out ALL rows (no row has timestamp in the future)
       // So we're trying to OFFSET past 0 rows
-      String query =
-        "SELECT * FROM " + cdcName + " WHERE PHOENIX_ROW_TIMESTAMP() > CURRENT_TIME() LIMIT 1 OFFSET 1";
+      String query = "SELECT * FROM " + cdcName
+        + " WHERE PHOENIX_ROW_TIMESTAMP() > CURRENT_TIME() LIMIT 1 OFFSET 1";
 
       ResultSet rs = conn.createStatement().executeQuery(query);
 

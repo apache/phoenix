@@ -503,8 +503,9 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                   byte[] startKey = scan.getStartRow().length > 0
                     ? scan.getStartRow()
                     : region.getRegionInfo().getStartKey();
-                  byte[] endKey =
-                    scan.getStopRow().length > 0 ? scan.getStopRow() : region.getRegionInfo().getEndKey();
+                  byte[] endKey = scan.getStopRow().length > 0
+                    ? scan.getStopRow()
+                    : region.getRegionInfo().getEndKey();
                   rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
                   if (rowKey == null) {
                     if (scan.includeStartRow()) {
@@ -515,8 +516,8 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                       rowKey = HConstants.EMPTY_END_ROW;
                     }
                   }
-                  kv = new KeyValue(rowKey, QueryConstants.OFFSET_FAMILY, QueryConstants.OFFSET_COLUMN,
-                    remainingOffset);
+                  kv = new KeyValue(rowKey, QueryConstants.OFFSET_FAMILY,
+                    QueryConstants.OFFSET_COLUMN, remainingOffset);
                 }
               }
               results.add(kv);
