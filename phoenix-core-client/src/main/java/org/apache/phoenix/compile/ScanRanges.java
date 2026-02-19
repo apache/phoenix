@@ -101,6 +101,8 @@ public class ScanRanges {
     TimeRange rowTimestampRange = getRowTimestampColumnRange(ranges, schema, rowTimestampColIndex);
     boolean isPointLookup = isPointLookup(schema, ranges, slotSpan, useSkipScan);
     if (isPointLookup) {
+      // Do this before transforming the ranges into list of key ranges with single slot
+      boolean isPointLookupWithTrailingNulls = isPointLookupWithTrailingNulls(ranges);
       // TODO: consider keeping original to use for serialization as it would be smaller?
       List<byte[]> keys = ScanRanges.getPointKeys(ranges, slotSpan, schema, nBuckets);
       List<KeyRange> keyRanges = Lists.newArrayListWithExpectedSize(keys.size());
@@ -117,7 +119,7 @@ public class ScanRanges {
       useSkipScan = keyRanges.size() > 1;
       // Treat as binary if descending because we've got a separator byte at the end
       // which is not part of the value.
-      if (keys.size() > 1 || hasTrailingDescSeparatorByte(schema)) {
+      if (keys.size() > 1 || hasTrailingDescSeparatorByte(schema) || isPointLookupWithTrailingNulls) {
         schema = SchemaUtil.VAR_BINARY_SCHEMA;
         slotSpan = ScanUtil.SINGLE_COLUMN_SLOT_SPAN;
       } else {
@@ -636,6 +638,17 @@ public class ScanRanges {
       }
     }
     return true;
+  }
+
+  private static boolean isPointLookupWithTrailingNulls(List<List<KeyRange>> ranges) {
+    int lastIndex = ranges.size() - 1;
+    List<KeyRange> lastRange = ranges.get(lastIndex);
+    for (KeyRange keyRange : lastRange) {
+      if (keyRange == KeyRange.IS_NULL_RANGE) {
+        return true;
+      }
+    }
+    return false;
   }
 
   private static boolean incrementKey(List<List<KeyRange>> slots, int[] position) {

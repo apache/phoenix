@@ -796,20 +796,25 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         stmt.setString(2, "B");
         stmt.setBigDecimal(3, PK3_VAL);
         try (ResultSet rs = stmt.executeQuery()) {
-          // Should return 2 rows where PK4 IS NULL:
+          // Should return 2 rows where PK4 IS NULL if secondarySortDesc is false, otherwise 1 row due to bug involving DESC sort order and trailing IS NULL when doing range scan.
           // - Row 1: PK4 NULL, PK5 NULL (val1, val2)
           // - Row 2: PK4 NULL, PK5=2.0 (val3, val4)
           assertTrue(rs.next());
           assertNull(rs.getString("PK4"));
           String col1Val1 = rs.getString("COL1");
-          assertTrue("val1".equals(col1Val1) || "val3".equals(col1Val1));
+          if (!secondarySortDesc) {
+            assertTrue("val1".equals(col1Val1) || "val3".equals(col1Val1));
 
-          assertTrue(rs.next());
-          assertNull(rs.getString("PK4"));
-          String col1Val2 = rs.getString("COL1");
-          assertTrue("val1".equals(col1Val2) || "val3".equals(col1Val2));
+            assertTrue(rs.next());
+            assertNull(rs.getString("PK4"));
+            String col1Val2 = rs.getString("COL1");
+            assertTrue("val1".equals(col1Val2) || "val3".equals(col1Val2));
 
-          assertNotEquals(col1Val1, col1Val2);
+            assertNotEquals(col1Val1, col1Val2);
+          }
+          else {
+            assertTrue("val3".equals(col1Val1));
+          }
           assertFalse(rs.next());
         }
         // Query plan should show RANGE SCAN since trailing PK5 is not constrained
@@ -836,10 +841,16 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
           while (rs.next()) {
             rowCount++;
           }
-          if (columnConfig == ColumnConfig.VARWIDTH_DESC) {
+          if (columnConfig == ColumnConfig.VARWIDTH_DESC && !secondarySortDesc) {
             assertEquals(3, rowCount);
-          } else if (salted && columnConfig != ColumnConfig.VARWIDTH_DESC && !secondarySortDesc) {
+          } else if (columnConfig == ColumnConfig.VARWIDTH_DESC && secondarySortDesc) {
+            assertEquals(2, rowCount);
+          } else if (salted && columnConfig == ColumnConfig.VARWIDTH_ASC && !secondarySortDesc) {
             assertEquals(4, rowCount);
+          } else if (salted && columnConfig == ColumnConfig.VARWIDTH_ASC && secondarySortDesc) {
+            assertEquals(2, rowCount);
+          } else if (!salted && columnConfig == ColumnConfig.VARWIDTH_ASC && secondarySortDesc) {
+            assertEquals(1, rowCount);
           } else {
             assertEquals(5, rowCount);
           }

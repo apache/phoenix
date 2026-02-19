@@ -484,14 +484,25 @@ public class ScanUtil {
       slotEndIndex, slotStartIndex);
   }
 
+  private static boolean doesSlotsCoverAllColumnsWithoutMultiSpan(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan) {
+    long slotSpanSum = 0;
+    for (int i = 0; i < slotSpan.length; i++) {
+      slotSpanSum += slotSpan[i];
+    }
+    return slotSpanSum == 0 && slots.size() == schema.getMaxFields();
+  }
+  
   public static int setKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan,
     int[] position, Bound bound, byte[] key, int byteOffset, int slotStartIndex, int slotEndIndex,
     int schemaStartIndex) {
     int offset = byteOffset;
     boolean lastInclusiveUpperSingleKey = false;
+    boolean allInclusiveLowerSingleKey = bound == Bound.LOWER;
     boolean anyInclusiveUpperRangeKey = false;
     boolean lastUnboundUpper = false;
-    boolean trailingSepByteFromLowerExclusiveOverflow = false;
+    boolean slotsCoverAllColumnsWithoutMultiSpan =
+      doesSlotsCoverAllColumnsWithoutMultiSpan(schema, slots, slotSpan);
+    int trailingNullCount = 0;
     // The index used for slots should be incremented by 1,
     // but the index for the field it represents in the schema
     // should be incremented by 1 + value in the current slotSpan index
@@ -521,6 +532,14 @@ public class ScanUtil {
       byte[] bytes = range.getRange(bound);
       System.arraycopy(bytes, 0, key, offset, bytes.length);
       offset += bytes.length;
+      
+      if (bytes.length == 0) {
+        trailingNullCount++;
+      }
+      else {
+        trailingNullCount = 0;
+      }
+      allInclusiveLowerSingleKey &= range.isSingleKey();
 
       /*
        * We must add a terminator to a variable length key even for the last PK column if the lower
@@ -543,7 +562,6 @@ public class ScanUtil {
       // key slots would cause the flag to become true.
       lastInclusiveUpperSingleKey = range.isSingleKey() && inclusiveUpper;
       anyInclusiveUpperRangeKey |= !range.isSingleKey() && inclusiveUpper;
-      trailingSepByteFromLowerExclusiveOverflow = false;
       if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
         // A null or empty byte array is always represented as a zero byte
         byte sepByte =
@@ -598,9 +616,6 @@ public class ScanUtil {
           // have an end key specified.
           return -byteOffset;
         }
-        if (offset > 0 && key[offset - 1] == QueryConstants.SEPARATOR_BYTE) {
-          trailingSepByteFromLowerExclusiveOverflow = true;
-        }
         // We're filtering on values being non null here, but we still need the 0xFF
         // terminator, since DESC keys ignore the last byte as it's expected to be
         // the terminator. Without this, we'd ignore the separator byte that was
@@ -646,9 +661,8 @@ public class ScanUtil {
         --i >= schemaStartIndex && offset > byteOffset
           && !(field = schema.getField(--fieldIndex)).getDataType().isFixedWidth()
           && hasSeparatorBytes(key, field, offset)
-          && ((field.getSortOrder() == SortOrder.DESC && schema.rowKeyOrderOptimizable())
+          && ((field.getSortOrder() == SortOrder.DESC && schema.rowKeyOrderOptimizable() && slotsCoverAllColumnsWithoutMultiSpan && allInclusiveLowerSingleKey && trailingNullCount-- > 0)
             || field.getSortOrder() == SortOrder.ASC)
-          && !trailingSepByteFromLowerExclusiveOverflow
       ) {
         if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
           offset--;
