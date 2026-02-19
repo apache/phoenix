@@ -248,11 +248,14 @@ public class RVCOffsetCompiler {
     // check to see if this was a single key expression
     ScanRanges scanRanges = context.getScanRanges();
 
+    // Always generate point lookup for RVC Offset
     if (!scanRanges.isPointLookup()) {
       throw new RowValueConstructorOffsetNotCoercibleException(
         "RVC Offset must be a point lookup.");
     }
     if (rowKeyColumnExpressionOutput.isTrailingNull()) {
+      // Handle trailing nulls in RVC offset by appending null byte at the end to generate immediate
+      // next key
       key = scanRanges.getScanRange().getLowerRange();
       byte[] keyCopy = new byte[key.length + 1];
       System.arraycopy(key, 0, keyCopy, 0, key.length);

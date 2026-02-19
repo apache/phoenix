@@ -102,6 +102,7 @@ public class ScanRanges {
     boolean isPointLookup = isPointLookup(schema, ranges, slotSpan, useSkipScan);
     if (isPointLookup) {
       // Do this before transforming the ranges into list of key ranges with single slot
+      // Once the list is transformed into singleton list, IS_NULL_RANGE is no longer retained.
       boolean isPointLookupWithTrailingNulls = isPointLookupWithTrailingNulls(ranges);
       // TODO: consider keeping original to use for serialization as it would be smaller?
       List<byte[]> keys = ScanRanges.getPointKeys(ranges, slotSpan, schema, nBuckets);
@@ -627,15 +628,12 @@ public class ScanRanges {
         // 1. Trailing nulls are stripped when storing the key (no trailing separator bytes)
         // 2. getPointKeys() generates the correct key without trailing null bytes
         // 3. The generated key matches exactly what's stored for rows with trailing NULL
-        // 4. Not handling legcay tables with DESC sort order and impacted via bug PHOENIX-2067
-        if (!keyRange.isSingleKey()) {
+        // 4. Not handling legcay tables impacted via bug PHOENIX-2067
+        if (
+          !keyRange.isSingleKey() || (lastIndex == i && keyRange == KeyRange.IS_NULL_RANGE
+            && !schema.rowKeyOrderOptimizable())
+        ) {
           return false;
-        } else if (i == lastIndex && keyRange == KeyRange.IS_NULL_RANGE) {
-          Field lastField = schema.getField(schema.getFieldCount() - 1);
-          SortOrder lastFieldSortOrder = lastField.getSortOrder();
-          if (lastFieldSortOrder == SortOrder.DESC && !schema.rowKeyOrderOptimizable()) {
-            return false;
-          }
         }
       }
     }
@@ -681,7 +679,7 @@ public class ScanRanges {
     do {
       length = ScanUtil.setKey(schema, ranges, slotSpan, position, Bound.LOWER, key, offset, offset,
         ranges.size(), offset);
-      // Handle case when generated single point key is empty byte array
+      // Handle case someone specify IS NULL on all PK columns.
       if (length == 0) {
         continue;
       }

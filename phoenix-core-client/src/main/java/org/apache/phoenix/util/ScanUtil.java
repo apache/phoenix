@@ -657,13 +657,15 @@ public class ScanUtil {
     // after the table has data, in which case there won't be a separator
     // byte.
     if (bound == Bound.LOWER) {
+      // Remove trailing separator bytes for DESC keys only if they are trailing nulls for point
+      // lookups and schema is rowKeyOrderOptimizable.
       while (
         --i >= schemaStartIndex && offset > byteOffset
           && !(field = schema.getField(--fieldIndex)).getDataType().isFixedWidth()
           && hasSeparatorBytes(key, field, offset)
-          && ((field.getSortOrder() == SortOrder.DESC && schema.rowKeyOrderOptimizable()
+          && (field.getSortOrder() == SortOrder.DESC && schema.rowKeyOrderOptimizable()
             && slotsCoverAllColumnsWithoutMultiSpan && allInclusiveLowerSingleKey
-            && trailingNullCount-- > 0) || field.getSortOrder() == SortOrder.ASC)
+            && trailingNullCount-- > 0 || field.getSortOrder() == SortOrder.ASC)
       ) {
         if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
           offset--;

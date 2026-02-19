@@ -45,7 +45,7 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 /**
- * Integration tests for WHERE clause optimization with nullable PK columns.
+ * Integration tests for generating point lookups with trailing nulls.
  * <p>
  * Parameterized at class level with the following parameters:
  * <ul>
@@ -152,15 +152,6 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
     return secondarySortDesc ? " DESC" : "";
   }
 
-  /**
-   * Creates a table with 5 PK columns (last one nullable) and inserts test data. Uses class-level
-   * columnConfig for PK4 and secondarySortDesc for PK5. Schema: PK1 VARCHAR, PK2 VARCHAR, PK3
-   * DECIMAL, PK4 (configurable), PK5 DECIMAL (nullable) COL1 VARCHAR, COL2 VARCHAR, COL3 VARCHAR
-   * Inserts 5 rows: Row 1: (A, B, 100.5, X, NULL, val1, val2, val3) Row 2: (A, B, 100.5, Y, NULL,
-   * val4, val5, val6) Row 3: (A, B, 100.5, X, 1.0, val7, val8, val9) Row 4: (A, B, 100.5, Z, NULL,
-   * val10, val11, val12) Row 5: (C, B, 100.5, X, NULL, val13, val14, val15)
-   * @return the generated table name
-   */
   private String createTableAndInsertTestDataForNullablePKTests() throws Exception {
     String tableName = generateUniqueName();
     String ddl =
@@ -252,17 +243,14 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
   }
 
   /**
-   * Test for single point lookup with nullable PK. Uses class-level parameters: - columnConfig for
-   * PK4 type and sort order - secondarySortDesc for PK5 sort order
+   * Test for single point lookup with IS NULL on single trailing nullable PK column. Uses
+   * class-level parameters: - columnConfig for PK4 type and sort order - secondarySortDesc for PK5
+   * sort order
    */
   @Test
   public void testSinglePointLookupWithNullablePK() throws Exception {
     String tableName = createTableAndInsertTestDataForNullablePKTests();
 
-    // Query with = for PK4 and IS NULL for PK5
-    // IS NULL on trailing nullable PK column generates POINT LOOKUP because:
-    // - Trailing nulls are stripped when storing, so key for NULL matches stored key
-    // - The generated lookup key is exactly what's stored for rows with trailing NULL
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       String selectSql = "SELECT COL1, COL2, PK4, COL3, PK5 FROM " + tableName
         + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? " + "AND PK4 = ? AND PK5 IS NULL";
@@ -310,10 +298,6 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
   public void testMultiPointLookupsWithNullablePK() throws Exception {
     String tableName = createTableAndInsertTestDataForNullablePKTests();
 
-    // Query with =ANY(?) for PK4 and IS NULL for PK5
-    // IS NULL on trailing nullable PK column generates POINT LOOKUPS because:
-    // - Trailing nulls are stripped when storing, so key for NULL matches stored key
-    // - The generated lookup key is exactly what's stored for rows with trailing NULL
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       String selectSql = "SELECT COL1, COL2, PK4, COL3, PK5 FROM " + tableName
         + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? AND PK4 = ANY(?) AND PK5 IS NULL";
@@ -346,10 +330,10 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
   }
 
   /**
-   * Test for query with index after adding nullable PK column. Uses class-level parameters: -
-   * columnConfig.isDesc() for PK3 sort order - secondarySortDesc for PK4 sort order (added via
-   * ALTER TABLE) Note: columnConfig's fixed-width vs variable-width aspect is not applicable here,
-   * so FIXED_WIDTH and VARWIDTH_ASC behave the same (both use ASC sort order).
+   * Test for querying index with trailing nulls after adding nullable PK column. Uses class-level
+   * parameters: - columnConfig.isDesc() for PK3 sort order - secondarySortDesc for PK4 sort order
+   * (added via ALTER TABLE) Note: columnConfig's fixed-width vs variable-width aspect is not
+   * applicable here, so FIXED_WIDTH and VARWIDTH_ASC behave the same (both use ASC sort order).
    */
   @Test
   public void testQueryWithIndexAfterAddingNullablePKColumn() throws Exception {
@@ -690,7 +674,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
     }
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
-      // Query 1: All PKs are NULL - should match no rows
+      // Query: All PKs are NULL - should match no rows
       String selectSql = "SELECT COL1, COL2 FROM " + tableName
         + " WHERE PK1 IS NULL AND PK2 IS NULL AND PK3 IS NULL";
       try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
@@ -832,7 +816,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
         stmt.setString(2, "B");
         stmt.setArray(3, pk3Arr);
         try (ResultSet rs = stmt.executeQuery()) {
-          // Should return 3 rows where PK4 IS NULL but returns 4 or 5 rows due to existing bug
+          // Should return 3 rows where PK4 IS NULL but returns >=1 and <=5 rows due to existing bug
           // inolving skip scan with IS NULL in where clause.
           // - Row 1: PK3=100.5, PK4 NULL, PK5 NULL (val1, val2)
           // - Row 2: PK3=100.5, PK4 NULL, PK5=2.0 (val3, val4)
@@ -977,6 +961,199 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
           assertFalse("Expected no rows since PK4 (INTEGER NOT NULL) cannot be NULL", rs.next());
         }
         assertDegenerateScanIsGenerated(stmt);
+      }
+    }
+  }
+
+  private String createTableAndInsertTestDataForMultipleTrailingNullablePKTests() throws Exception {
+    String tableName = generateUniqueName();
+    String ddl =
+      "CREATE TABLE " + tableName + " (" + "PK1 VARCHAR NOT NULL, " + "PK2 VARCHAR NOT NULL, "
+        + "PK3 DECIMAL NOT NULL, " + "PK4 " + columnConfig.getNotNullDataType() + ", "
+        + "PK5 DECIMAL, " + "PK6 VARCHAR, " + "COL1 VARCHAR, " + "COL2 VARCHAR, " + "COL3 VARCHAR, "
+        + "CONSTRAINT pk PRIMARY KEY (PK1, PK2, PK3, PK4" + columnConfig.getSortOrderClause()
+        + ", PK5" + getSecondarySortOrder() + ", PK6" + getSecondarySortOrder() + ")" + ")"
+        + getSaltClause();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (java.sql.Statement stmt = conn.createStatement()) {
+        stmt.execute(ddl);
+        conn.commit();
+      }
+    }
+
+    String upsertStmt = "UPSERT INTO " + tableName
+      + " (PK1, PK2, PK3, PK4, PK5, PK6, COL1, COL2, COL3) " + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (PreparedStatement stmt = conn.prepareStatement(upsertStmt)) {
+        // Row 1: Both PK5 and PK6 are NULL
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setBigDecimal(3, PK3_VAL);
+        stmt.setString(4, "X");
+        stmt.setNull(5, Types.DECIMAL);
+        stmt.setNull(6, Types.VARCHAR);
+        stmt.setString(7, "val1");
+        stmt.setString(8, "val2");
+        stmt.setString(9, "val3");
+        stmt.executeUpdate();
+
+        // Row 2: PK5 is NOT NULL, PK6 is NULL
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setBigDecimal(3, PK3_VAL);
+        stmt.setString(4, "X");
+        stmt.setBigDecimal(5, new BigDecimal("1.0"));
+        stmt.setNull(6, Types.VARCHAR);
+        stmt.setString(7, "val4");
+        stmt.setString(8, "val5");
+        stmt.setString(9, "val6");
+        stmt.executeUpdate();
+
+        // Row 3: PK5 is NULL, PK6 is NOT NULL
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setBigDecimal(3, PK3_VAL);
+        stmt.setString(4, "X");
+        stmt.setNull(5, Types.DECIMAL);
+        stmt.setString(6, "P");
+        stmt.setString(7, "val7");
+        stmt.setString(8, "val8");
+        stmt.setString(9, "val9");
+        stmt.executeUpdate();
+
+        // Row 4: Neither PK5 nor PK6 are NULL
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setBigDecimal(3, PK3_VAL);
+        stmt.setString(4, "X");
+        stmt.setBigDecimal(5, new BigDecimal("1.0"));
+        stmt.setString(6, "P");
+        stmt.setString(7, "val10");
+        stmt.setString(8, "val11");
+        stmt.setString(9, "val12");
+        stmt.executeUpdate();
+
+        // Row 5: Both PK5 and PK6 are NULL, different PK4
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setBigDecimal(3, PK3_VAL);
+        stmt.setString(4, "Y");
+        stmt.setNull(5, Types.DECIMAL);
+        stmt.setNull(6, Types.VARCHAR);
+        stmt.setString(7, "val13");
+        stmt.setString(8, "val14");
+        stmt.setString(9, "val15");
+        stmt.executeUpdate();
+
+        // Row 6: Neither PK5 nor PK6 are NULL, different PK4
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setBigDecimal(3, PK3_VAL);
+        stmt.setString(4, "Y");
+        stmt.setBigDecimal(5, new BigDecimal("2.0"));
+        stmt.setString(6, "Q");
+        stmt.setString(7, "val16");
+        stmt.setString(8, "val17");
+        stmt.setString(9, "val18");
+        stmt.executeUpdate();
+
+        // Row 7: Both PK5 and PK6 are NULL, different PK4
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setBigDecimal(3, PK3_VAL);
+        stmt.setString(4, "Z");
+        stmt.setNull(5, Types.DECIMAL);
+        stmt.setNull(6, Types.VARCHAR);
+        stmt.setString(7, "val19");
+        stmt.setString(8, "val20");
+        stmt.setString(9, "val21");
+        stmt.executeUpdate();
+
+        // Row 8: Both PK5 and PK6 are NULL, different PK1
+        stmt.setString(1, "C");
+        stmt.setString(2, "B");
+        stmt.setBigDecimal(3, PK3_VAL);
+        stmt.setString(4, "X");
+        stmt.setNull(5, Types.DECIMAL);
+        stmt.setNull(6, Types.VARCHAR);
+        stmt.setString(7, "val22");
+        stmt.setString(8, "val23");
+        stmt.setString(9, "val24");
+        stmt.executeUpdate();
+
+        conn.commit();
+      }
+    }
+    return tableName;
+  }
+
+  /**
+   * Test for single point lookup with multiple trailing IS NULL PK columns. Uses class-level
+   * parameters: - columnConfig for PK4 type and sort order - secondarySortDesc for both PK5 and PK6
+   * sort order (same sort order for both) Verifies that IS NULL on both trailing nullable PK
+   * columns generates a single POINT LOOKUP.
+   */
+  @Test
+  public void testSinglePointLookupWithMultipleTrailingNullablePKs() throws Exception {
+    String tableName = createTableAndInsertTestDataForMultipleTrailingNullablePKTests();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String selectSql = "SELECT COL1, COL2, PK4, COL3, PK5, PK6 FROM " + tableName
+        + " WHERE PK1 = ? AND PK2 = ? AND PK3 = ? " + "AND PK4 = ? AND PK5 IS NULL AND PK6 IS NULL";
+      try (PreparedStatement stmt = conn.prepareStatement(selectSql)) {
+        stmt.setString(1, "A");
+        stmt.setString(2, "B");
+        stmt.setBigDecimal(3, PK3_VAL);
+        stmt.setString(4, "X");
+        try (ResultSet rs = stmt.executeQuery()) {
+          // Should return 1 row: PK4='X' with both PK5 and PK6 IS NULL
+          assertTrue(rs.next());
+          assertEquals("X", rs.getString("PK4"));
+          assertEquals("val1", rs.getString("COL1"));
+          assertEquals("val2", rs.getString("COL2"));
+          assertEquals("val3", rs.getString("COL3"));
+          assertNull(rs.getBigDecimal("PK5"));
+          assertNull(rs.getString("PK6"));
+
+          // No more rows
+          assertFalse(rs.next());
+        }
+        // IS NULL on both trailing nullable PK columns generates single POINT LOOKUP
+        assertPointLookupsAreGenerated(stmt, 1);
+
+        stmt.setString(4, "Y");
+        try (ResultSet rs = stmt.executeQuery()) {
+          // Should return 1 row: PK4='Y' with both PK5 and PK6 IS NULL
+          assertTrue(rs.next());
+          assertEquals("Y", rs.getString("PK4"));
+          assertEquals("val13", rs.getString("COL1"));
+          assertEquals("val14", rs.getString("COL2"));
+          assertEquals("val15", rs.getString("COL3"));
+          assertNull(rs.getBigDecimal("PK5"));
+          assertNull(rs.getString("PK6"));
+
+          // No more rows
+          assertFalse(rs.next());
+        }
+        // IS NULL on both trailing nullable PK columns generates single POINT LOOKUP
+        assertPointLookupsAreGenerated(stmt, 1);
+
+        stmt.setString(4, "Z");
+        try (ResultSet rs = stmt.executeQuery()) {
+          // Should return 1 row: PK4='Z' with both PK5 and PK6 IS NULL
+          assertTrue(rs.next());
+          assertEquals("Z", rs.getString("PK4"));
+          assertEquals("val19", rs.getString("COL1"));
+          assertEquals("val20", rs.getString("COL2"));
+          assertEquals("val21", rs.getString("COL3"));
+          assertNull(rs.getBigDecimal("PK5"));
+          assertNull(rs.getString("PK6"));
+
+          // No more rows
+          assertFalse(rs.next());
+        }
+        // IS NULL on both trailing nullable PK columns generates single POINT LOOKUP
+        assertPointLookupsAreGenerated(stmt, 1);
       }
     }
   }
