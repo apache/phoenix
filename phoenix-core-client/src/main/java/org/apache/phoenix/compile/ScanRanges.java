@@ -630,8 +630,8 @@ public class ScanRanges {
         // 3. The generated key matches exactly what's stored for rows with trailing NULL
         // 4. Not handling legcay tables impacted via bug PHOENIX-2067
         if (
-          !keyRange.isSingleKey() || (lastIndex == i && keyRange == KeyRange.IS_NULL_RANGE
-            && !schema.rowKeyOrderOptimizable())
+          !keyRange.isSingleKey() || lastIndex == i && keyRange == KeyRange.IS_NULL_RANGE
+            && !schema.rowKeyOrderOptimizable()
         ) {
           return false;
         }
