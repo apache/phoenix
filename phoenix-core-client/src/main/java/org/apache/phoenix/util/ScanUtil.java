@@ -484,14 +484,15 @@ public class ScanUtil {
       slotEndIndex, slotStartIndex);
   }
 
-  private static boolean doesSlotsCoverAllColumnsWithoutMultiSpan(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan) {
+  private static boolean doesSlotsCoverAllColumnsWithoutMultiSpan(RowKeySchema schema,
+    List<List<KeyRange>> slots, int[] slotSpan) {
     long slotSpanSum = 0;
     for (int i = 0; i < slotSpan.length; i++) {
       slotSpanSum += slotSpan[i];
     }
     return slotSpanSum == 0 && slots.size() == schema.getMaxFields();
   }
-  
+
   public static int setKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan,
     int[] position, Bound bound, byte[] key, int byteOffset, int slotStartIndex, int slotEndIndex,
     int schemaStartIndex) {
@@ -532,11 +533,10 @@ public class ScanUtil {
       byte[] bytes = range.getRange(bound);
       System.arraycopy(bytes, 0, key, offset, bytes.length);
       offset += bytes.length;
-      
+
       if (bytes.length == 0) {
         trailingNullCount++;
-      }
-      else {
+      } else {
         trailingNullCount = 0;
       }
       allInclusiveLowerSingleKey &= range.isSingleKey();
@@ -661,8 +661,9 @@ public class ScanUtil {
         --i >= schemaStartIndex && offset > byteOffset
           && !(field = schema.getField(--fieldIndex)).getDataType().isFixedWidth()
           && hasSeparatorBytes(key, field, offset)
-          && ((field.getSortOrder() == SortOrder.DESC && schema.rowKeyOrderOptimizable() && slotsCoverAllColumnsWithoutMultiSpan && allInclusiveLowerSingleKey && trailingNullCount-- > 0)
-            || field.getSortOrder() == SortOrder.ASC)
+          && ((field.getSortOrder() == SortOrder.DESC && schema.rowKeyOrderOptimizable()
+            && slotsCoverAllColumnsWithoutMultiSpan && allInclusiveLowerSingleKey
+            && trailingNullCount-- > 0) || field.getSortOrder() == SortOrder.ASC)
       ) {
         if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
           offset--;

@@ -119,7 +119,9 @@ public class ScanRanges {
       useSkipScan = keyRanges.size() > 1;
       // Treat as binary if descending because we've got a separator byte at the end
       // which is not part of the value.
-      if (keys.size() > 1 || hasTrailingDescSeparatorByte(schema) || isPointLookupWithTrailingNulls) {
+      if (
+        keys.size() > 1 || hasTrailingDescSeparatorByte(schema) || isPointLookupWithTrailingNulls
+      ) {
         schema = SchemaUtil.VAR_BINARY_SCHEMA;
         slotSpan = ScanUtil.SINGLE_COLUMN_SLOT_SPAN;
       } else {
