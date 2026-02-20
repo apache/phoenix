@@ -122,6 +122,11 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
   private static final Option LAST_SYNC_TIME_OPT =
     new Option("lst", "last-sync-time", true, "Last sync time in milliseconds (requires --force)");
 
+  private static final Option HDFS_URL_OPT = new Option("hdf", "hdfs-url", true, "HDFS URL");
+
+  private static final Option PEER_HDFS_URL_OPT =
+    new Option("phdf", "peer-hdfs-url", true, "Peer HDFS URL");
+
   // Control flags
   private static final Option FORCE_OPT =
     new Option("F", "force", false, "Allow haGroupState and lastSyncTime changes");
@@ -263,6 +268,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       String peerZkUrl = cmdLine.getOptionValue(PEER_ZK_URL_OPT.getOpt());
       String protocolVersion = cmdLine.getOptionValue(PROTOCOL_VERSION_OPT.getOpt());
       String lastSyncTimeStr = cmdLine.getOptionValue(LAST_SYNC_TIME_OPT.getOpt());
+      String hdfsUrl = cmdLine.getOptionValue(HDFS_URL_OPT.getOpt());
+      String peerHdfsUrl = cmdLine.getOptionValue(PEER_HDFS_URL_OPT.getOpt());
 
       // Parse flags
       final boolean force = cmdLine.hasOption(FORCE_OPT.getOpt());
@@ -292,9 +299,9 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       }
 
       // Build update object
-      HAGroupStoreConfigUpdate update =
-        new HAGroupStoreConfigUpdate(haGroupName, protocolVersion, policy, clusterUrl,
-          peerClusterUrl, peerZkUrl, adminVersion, parseState(state), parseLong(lastSyncTimeStr));
+      HAGroupStoreConfigUpdate update = new HAGroupStoreConfigUpdate(haGroupName, protocolVersion,
+        policy, clusterUrl, peerClusterUrl, peerZkUrl, hdfsUrl, peerHdfsUrl, adminVersion,
+        parseState(state), parseLong(lastSyncTimeStr));
 
       // Execute update
       return performUpdate(haGroupName, update, force, dryRun);
@@ -984,6 +991,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       update.getPeerClusterUrl() != null
         ? update.getPeerClusterUrl()
         : existing.getPeerClusterUrl(),
+      update.getHdfsUrl() != null ? update.getHdfsUrl() : existing.getHdfsUrl(),
+      update.getPeerHdfsUrl() != null ? update.getPeerHdfsUrl() : existing.getPeerHdfsUrl(),
       update.getAdminVersion());
   }
 
@@ -1528,13 +1537,15 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     private final String clusterUrl;
     private final String peerClusterUrl;
     private final String peerZKUrl;
+    private final String hdfsUrl;
+    private final String peerHdfsUrl;
     private final long adminVersion;
     private final HAGroupState haGroupState;
     private final Long lastSyncTime;
 
     HAGroupStoreConfigUpdate(String haGroupName, String protocolVersion, String policy,
-      String clusterUrl, String peerClusterUrl, String peerZKUrl, long adminVersion,
-      HAGroupState haGroupState, Long lastSyncTime) {
+      String clusterUrl, String peerClusterUrl, String peerZKUrl, String hdfsUrl,
+      String peerHdfsUrl, long adminVersion, HAGroupState haGroupState, Long lastSyncTime) {
       this.haGroupName = haGroupName;
       this.protocolVersion = protocolVersion;
       this.policy = policy;
@@ -1544,6 +1555,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       this.adminVersion = adminVersion;
       this.haGroupState = haGroupState;
       this.lastSyncTime = lastSyncTime;
+      this.hdfsUrl = hdfsUrl;
+      this.peerHdfsUrl = peerHdfsUrl;
     }
 
     public String getHaGroupName() {
@@ -1580,6 +1593,14 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
 
     public Long getLastSyncTime() {
       return lastSyncTime;
+    }
+
+    public String getHdfsUrl() {
+      return hdfsUrl;
+    }
+
+    public String getPeerHdfsUrl() {
+      return peerHdfsUrl;
     }
   }
 

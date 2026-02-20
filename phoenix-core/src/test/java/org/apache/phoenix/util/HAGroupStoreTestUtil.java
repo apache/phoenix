@@ -49,7 +49,7 @@ public class HAGroupStoreTestUtil {
     ClusterRoleRecord.ClusterRole peerClusterRole, String overrideConnZkUrl) throws SQLException {
     upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZKUrl, zkUrl, peerZKUrl,
       localClusterRole, peerClusterRole, 1L, overrideConnZkUrl, HighAvailabilityPolicy.FAILOVER,
-      new Properties());
+      new Properties(), null, null);
   }
 
   public static void upsertHAGroupRecordInSystemTable(String haGroupName, String zkUrl,
@@ -58,7 +58,7 @@ public class HAGroupStoreTestUtil {
     String overrideConnZkUrl) throws SQLException {
     upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZKUrl, clusterUrl1, clusterUrl2,
       localClusterRole, peerClusterRole, 1L, overrideConnZkUrl, HighAvailabilityPolicy.FAILOVER,
-      new Properties());
+      new Properties(), null, null);
   }
 
   /**
@@ -74,8 +74,8 @@ public class HAGroupStoreTestUtil {
   public static void upsertHAGroupRecordInSystemTable(String haGroupName, String zkUrl,
     String peerZKUrl, String clusterUrl1, String clusterUrl2,
     ClusterRoleRecord.ClusterRole clusterRole1, ClusterRoleRecord.ClusterRole clusterRole2,
-    long version1, String overrideConnZkUrl, HighAvailabilityPolicy policy, Properties props)
-    throws SQLException {
+    long version1, String overrideConnZkUrl, HighAvailabilityPolicy policy, Properties props,
+    String hdfsUrl1, String hdfsUrl2) throws SQLException {
     try (
       PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(JDBC_PROTOCOL_ZK
         + JDBC_PROTOCOL_SEPARATOR + (overrideConnZkUrl != null ? overrideConnZkUrl : zkUrl), props);
@@ -101,6 +101,12 @@ public class HAGroupStoreTestUtil {
       if (clusterUrl2 != null) {
         queryBuilder.append("CLUSTER_URL_2, ");
       }
+      if (hdfsUrl1 != null) {
+        queryBuilder.append("HDFS_URL_1, ");
+      }
+      if (hdfsUrl2 != null) {
+        queryBuilder.append("HDFS_URL_2, ");
+      }
       queryBuilder.append("POLICY, VERSION) ");
       queryBuilder.append("VALUES ('" + haGroupName + "', ");
       if (zkUrl != null) {
@@ -120,6 +126,12 @@ public class HAGroupStoreTestUtil {
       }
       if (clusterUrl2 != null) {
         queryBuilder.append("'" + clusterUrl2 + "', ");
+      }
+      if (hdfsUrl1 != null) {
+        queryBuilder.append("'" + hdfsUrl1 + "', ");
+      }
+      if (hdfsUrl2 != null) {
+        queryBuilder.append("'" + hdfsUrl2 + "', ");
       }
       queryBuilder.append("'" + policy.name() + "', " + version1 + ")");
       stmt.executeUpdate(queryBuilder.toString());

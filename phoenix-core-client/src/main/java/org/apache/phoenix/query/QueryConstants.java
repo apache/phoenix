@@ -59,6 +59,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_CO
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POST_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.HA_GROUP_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.HDFS_URL_1;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.HDFS_URL_2;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
@@ -613,8 +615,10 @@ public interface QueryConstants {
       CLUSTER_ROLE_2 + " VARCHAR," + // Role for peer cluster might not be accurate, we will use
                                      // only local role for recovery if needed
       POLICY + " VARCHAR," + // There should be only one policy for an HA group
-      VERSION + " BIGINT," // Version should be incremented for Admin Updates, only for
-                           // CLUSTER_URLs and REGISTRY_TYPE
+      HDFS_URL_1 + " VARCHAR," // HDFS URL for local cluster
+      + HDFS_URL_2 + " VARCHAR," // HDFS URL for peer cluster
+      + VERSION + " BIGINT," // Version should be incremented for Admin Updates, only for
+      // CLUSTER_URLs and REGISTRY_TYPE
       + "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + HA_GROUP_NAME + "))\n"
       + HConstants.VERSIONS + "=%s,\n" + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n"
       + TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" + UPDATE_CACHE_FREQUENCY + "=" + "7200000";
