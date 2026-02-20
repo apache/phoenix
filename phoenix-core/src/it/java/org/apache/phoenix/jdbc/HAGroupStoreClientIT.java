@@ -161,7 +161,7 @@ public class HAGroupStoreClientIT extends BaseTest {
     record =
       new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
         0L, HighAvailabilityPolicy.FAILOVER.toString(), null, this.masterUrl, null,
-              localUri.toString(), standbyUri.toString(), 0L);
+        localUri.toString(), standbyUri.toString(), 0L);
     createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
     assertNull(peerPathChildrenCache.get(haGroupStoreClient));
@@ -501,8 +501,7 @@ public class HAGroupStoreClientIT extends BaseTest {
 
     // The record should be automatically rebuilt from System Table as it is not in ZK
     assertNotNull(currentRecord);
-    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
-      currentRecord.getHAGroupState());
+    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, currentRecord.getHAGroupState());
     // The record should have a timestamp
     assertNotNull(currentRecord.getLastSyncStateTimeInMs());
 
@@ -886,9 +885,10 @@ public class HAGroupStoreClientIT extends BaseTest {
     createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, localRecord);
 
     // Create HAGroupStoreRecord for peer cluster
-    HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("v1.0", haGroupName,
-      HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-      this.peerZKUrl, this.peerMasterUrl, this.masterUrl, localUri.toString(), standbyUri.toString(), 0L);
+    HAGroupStoreRecord peerRecord =
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.peerMasterUrl,
+        this.masterUrl, localUri.toString(), standbyUri.toString(), 0L);
     createOrUpdateHAGroupStoreRecordOnZookeeper(peerHaAdmin, haGroupName, peerRecord);
 
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);

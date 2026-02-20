@@ -1133,7 +1133,8 @@ public class HAGroupStoreClient implements Closeable {
 
       for (HAGroupStateListener listener : listenersToNotify) {
         try {
-          System.out.println("RGG Called Listener " + listener + " fromState " + fromState + " toState " + toState + " ClusterType " + clusterType);
+          System.out.println("RGG Called Listener " + listener + " fromState " + fromState
+            + " toState " + toState + " ClusterType " + clusterType);
           listener.onStateChange(haGroupName, fromState, toState, modifiedTime, clusterType,
             lastSyncStateTimeInMs);
         } catch (Exception e) {

@@ -211,7 +211,7 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
 
     // Delete the HAGroupStoreRecord from ZK
     try (PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(),
-            ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
+      ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
       haAdmin.deleteHAGroupStoreRecordInZooKeeper(haGroupName);
     }
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -231,7 +231,6 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
     coprocessor.invalidateHAGroupStoreClient(controller,
       getInvalidateHAGroupStoreClientRequest(haGroupName), null);
     assertFalse(controller.failed());
-
 
     // Local Cluster Role will be updated to ACTIVE_TO_STANDBY as cache is invalidated
     controller = new ServerRpcController();
@@ -291,7 +290,6 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
     RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest.Builder requestBuilder =
       RegionServerEndpointProtos.InvalidateHAGroupStoreClientRequest.newBuilder();
     requestBuilder.setHaGroupName(ByteStringer.wrap(Bytes.toBytes(haGroupName)));
-    requestBuilder.setBroadcastUpdate(false);
     return requestBuilder.build();
   }
 

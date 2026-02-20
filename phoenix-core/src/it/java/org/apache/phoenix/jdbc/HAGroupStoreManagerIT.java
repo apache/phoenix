@@ -404,17 +404,15 @@ public class HAGroupStoreManagerIT extends BaseTest {
     HAGroupStoreRecord initialRecord =
       haGroupStoreManager.getHAGroupStoreRecord(haGroupName).orElse(null);
     assertNotNull(initialRecord);
-    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
-      initialRecord.getHAGroupState());
+    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, initialRecord.getHAGroupState());
     assertNotNull(initialRecord.getLastSyncStateTimeInMs());
-    
-    assert(haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName) == 0);
+
+    assert (haGroupStoreManager.setHAGroupStatusToStoreAndForward(haGroupName) == 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
     HAGroupStoreRecord anisRecord =
-            haGroupStoreManager.getHAGroupStoreRecord(haGroupName).orElse(null);
+      haGroupStoreManager.getHAGroupStoreRecord(haGroupName).orElse(null);
     assertNotNull(anisRecord);
-    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC,
-            anisRecord.getHAGroupState());
+    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, anisRecord.getHAGroupState());
     assertNotNull(anisRecord.getLastSyncStateTimeInMs());
 
     // Setting it too soon should return wait time.
@@ -432,8 +430,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
     assertTrue(updatedRecordOpt.isPresent());
     HAGroupStoreRecord updatedRecord = updatedRecordOpt.get();
     assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, updatedRecord.getHAGroupState());
-    assertEquals(anisRecord.getLastSyncStateTimeInMs(),
-      updatedRecord.getLastSyncStateTimeInMs());
+    assertEquals(anisRecord.getLastSyncStateTimeInMs(), updatedRecord.getLastSyncStateTimeInMs());
   }
 
   @Test

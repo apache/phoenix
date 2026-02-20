@@ -2279,8 +2279,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       Optional<HAGroupStoreRecord> recordBefore =
         HAGroupStoreManager.getInstance(config).getHAGroupStoreRecord(haGroupName);
       assertTrue("HA group record should exist", recordBefore.isPresent());
-      assertEquals("Initial state should be STANDBY",
-        HAGroupStoreRecord.HAGroupState.STANDBY, recordBefore.get().getHAGroupState());
+      assertEquals("Initial state should be STANDBY", HAGroupStoreRecord.HAGroupState.STANDBY,
+        recordBefore.get().getHAGroupState());
 
       // Call triggerFailover - should handle InvalidClusterRoleTransitionException
       // because transitioning from STANDBY directly to ACTIVE_IN_SYNC is invalid

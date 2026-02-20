@@ -75,8 +75,7 @@ public class HAGroupStoreTestUtil {
     String peerZKUrl, String clusterUrl1, String clusterUrl2,
     ClusterRoleRecord.ClusterRole clusterRole1, ClusterRoleRecord.ClusterRole clusterRole2,
     long version1, String overrideConnZkUrl, HighAvailabilityPolicy policy, Properties props,
-    String hdfsUrl1, String hdfsUrl2)
-    throws SQLException {
+    String hdfsUrl1, String hdfsUrl2) throws SQLException {
     try (
       PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(JDBC_PROTOCOL_ZK
         + JDBC_PROTOCOL_SEPARATOR + (overrideConnZkUrl != null ? overrideConnZkUrl : zkUrl), props);

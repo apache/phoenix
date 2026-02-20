@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.jdbc;
 
-import static org.apache.phoenix.jdbc.HABaseIT.fallbackUri;
 import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.junit.Assert.assertEquals;
