@@ -987,6 +987,49 @@ public class CDCQueryIT extends CDCBaseIT {
     }
   }
 
+  /**
+   * Test for PHOENIX-7524: CDC Query with OFFSET can throw IndexOutOfBoundsException Scenario: CDC
+   * query with OFFSET that exceeds available rows Expected: Query should return empty result set
+   */
+  @Test
+  public void testCDCQueryWithOffsetExceedingRows() throws Exception {
+    String schemaName = getSchemaName();
+    String tableName = getTableOrViewName(schemaName);
+    String cdcName = getCDCName();
+
+    try (Connection conn = newConnection()) {
+      // Multi-tenant tables require at least 2 PK columns (tenant_id, other_pk)
+      String createTableDDL = multitenant
+        ? "CREATE TABLE " + tableName
+          + " (tenant_id VARCHAR NOT NULL, k VARCHAR NOT NULL, v1 INTEGER, v2 INTEGER "
+          + "CONSTRAINT pk PRIMARY KEY (tenant_id, k))"
+        : "CREATE TABLE " + tableName + " (k VARCHAR NOT NULL PRIMARY KEY, v1 INTEGER, v2 INTEGER)";
+
+      createTable(conn, createTableDDL, encodingScheme, multitenant, tableSaltBuckets, false, null);
+      createCDC(conn, "CREATE CDC " + cdcName + " ON " + tableName, encodingScheme);
+
+      String upsertSQL = multitenant
+        ? "UPSERT INTO " + tableName + " VALUES ('tenant1', 'a', 1, 2)"
+        : "UPSERT INTO " + tableName + " VALUES ('a', 1, 2)";
+      conn.createStatement().executeUpdate(upsertSQL);
+      conn.commit();
+
+      // This query should return empty result, not throw exception
+      // OFFSET 1 with only 1 row means we skip the only row
+      // IMPORTANT: Using PHOENIX_ROW_TIMESTAMP() > CURRENT_TIME() without subtraction
+      // This means the WHERE clause filters out ALL rows (no row has timestamp in the future)
+      // So we're trying to OFFSET past 0 rows
+      String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
+      String query = "SELECT * FROM " + cdcFullName
+        + " WHERE PHOENIX_ROW_TIMESTAMP() > CURRENT_TIME() LIMIT 1 OFFSET 1";
+
+      ResultSet rs = conn.createStatement().executeQuery(query);
+
+      // Should return no rows without throwing exception
+      assertFalse("Expected no rows when OFFSET exceeds available data", rs.next());
+    }
+  }
+
   private String getSchemaName() {
     return withSchemaName
       ? caseSensitiveNames
