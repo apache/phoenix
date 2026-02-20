@@ -37,6 +37,7 @@ import org.apache.phoenix.parse.OffsetNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.RowValueConstructorParseNode;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
@@ -247,17 +248,19 @@ public class RVCOffsetCompiler {
     // check to see if this was a single key expression
     ScanRanges scanRanges = context.getScanRanges();
 
-    // We do not generate a point lookup today in phoenix if the rowkey has a trailing null, we
-    // generate a range scan.
+    // Always generate point lookup for RVC Offset
     if (!scanRanges.isPointLookup()) {
-      // Since we use a range scan to guarantee we get only the null value and the upper bound is
-      // unset this suffices
-      // sanity check
-      if (!rowKeyColumnExpressionOutput.isTrailingNull()) {
-        throw new RowValueConstructorOffsetNotCoercibleException(
-          "RVC Offset must be a point lookup.");
-      }
-      key = scanRanges.getScanRange().getUpperRange();
+      throw new RowValueConstructorOffsetNotCoercibleException(
+        "RVC Offset must be a point lookup.");
+    }
+    if (rowKeyColumnExpressionOutput.isTrailingNull()) {
+      // Handle trailing nulls in RVC offset by appending null byte at the end to generate immediate
+      // next key
+      key = scanRanges.getScanRange().getLowerRange();
+      byte[] keyCopy = new byte[key.length + 1];
+      System.arraycopy(key, 0, keyCopy, 0, key.length);
+      keyCopy[key.length] = QueryConstants.SEPARATOR_BYTE;
+      key = keyCopy;
     } else {
       RowKeySchema.RowKeySchemaBuilder builder =
         new RowKeySchema.RowKeySchemaBuilder(columns.size());

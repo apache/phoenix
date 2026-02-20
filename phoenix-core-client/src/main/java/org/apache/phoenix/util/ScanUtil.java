@@ -484,13 +484,26 @@ public class ScanUtil {
       slotEndIndex, slotStartIndex);
   }
 
+  private static boolean doesSlotsCoverAllColumnsWithoutMultiSpan(RowKeySchema schema,
+    List<List<KeyRange>> slots, int[] slotSpan) {
+    long slotSpanSum = 0;
+    for (int i = 0; i < slotSpan.length; i++) {
+      slotSpanSum += slotSpan[i];
+    }
+    return slotSpanSum == 0 && slots.size() == schema.getMaxFields();
+  }
+
   public static int setKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan,
     int[] position, Bound bound, byte[] key, int byteOffset, int slotStartIndex, int slotEndIndex,
     int schemaStartIndex) {
     int offset = byteOffset;
     boolean lastInclusiveUpperSingleKey = false;
+    boolean allInclusiveLowerSingleKey = bound == Bound.LOWER;
     boolean anyInclusiveUpperRangeKey = false;
     boolean lastUnboundUpper = false;
+    boolean slotsCoverAllColumnsWithoutMultiSpan =
+      doesSlotsCoverAllColumnsWithoutMultiSpan(schema, slots, slotSpan);
+    int trailingNullCount = 0;
     // The index used for slots should be incremented by 1,
     // but the index for the field it represents in the schema
     // should be incremented by 1 + value in the current slotSpan index
@@ -520,6 +533,13 @@ public class ScanUtil {
       byte[] bytes = range.getRange(bound);
       System.arraycopy(bytes, 0, key, offset, bytes.length);
       offset += bytes.length;
+
+      if (bytes.length == 0) {
+        trailingNullCount++;
+      } else {
+        trailingNullCount = 0;
+      }
+      allInclusiveLowerSingleKey &= range.isSingleKey();
 
       /*
        * We must add a terminator to a variable length key even for the last PK column if the lower
@@ -637,10 +657,15 @@ public class ScanUtil {
     // after the table has data, in which case there won't be a separator
     // byte.
     if (bound == Bound.LOWER) {
+      // Remove trailing separator bytes for DESC keys only if they are trailing nulls for point
+      // lookups and schema is rowKeyOrderOptimizable.
       while (
         --i >= schemaStartIndex && offset > byteOffset
           && !(field = schema.getField(--fieldIndex)).getDataType().isFixedWidth()
-          && field.getSortOrder() == SortOrder.ASC && hasSeparatorBytes(key, field, offset)
+          && hasSeparatorBytes(key, field, offset)
+          && (field.getSortOrder() == SortOrder.DESC && schema.rowKeyOrderOptimizable()
+            && slotsCoverAllColumnsWithoutMultiSpan && allInclusiveLowerSingleKey
+            && trailingNullCount-- > 0 || field.getSortOrder() == SortOrder.ASC)
       ) {
         if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
           offset--;
