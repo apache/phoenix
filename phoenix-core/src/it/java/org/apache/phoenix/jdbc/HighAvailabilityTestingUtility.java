@@ -427,14 +427,14 @@ public class HighAvailabilityTestingUtility {
         haAdmin2.getHAGroupStoreRecordInZooKeeper(haGroupName);
 
       String policyString = policy != null ? policy.name() : HighAvailabilityPolicy.FAILOVER.name();
-      HAGroupStoreRecord record1 =
-        new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(), haGroupName,
-          role1.getDefaultHAGroupState(), 0L, policyString, getZkUrl2(), getMasterAddress1(),
-          getMasterAddress2(), hdfsUrl, peerHdfsUrl, 1L);
-      HAGroupStoreRecord record2 =
-        new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(), haGroupName,
-          role2.getDefaultHAGroupState(), 0L, policyString, getZkUrl1(), getMasterAddress2(),
-          getMasterAddress1(), hdfsUrl, peerHdfsUrl, 1L);
+      HAGroupStoreRecord record1 = new HAGroupStoreRecord(
+        currentRecord1.getLeft().getProtocolVersion(), haGroupName, role1.getDefaultHAGroupState(),
+        0L, policyString, getZkUrl2(), getMasterAddress1(), getMasterAddress2(),
+        currentRecord1.getLeft().getHdfsUrl(), currentRecord1.getLeft().getPeerHdfsUrl(), 1L);
+      HAGroupStoreRecord record2 = new HAGroupStoreRecord(
+        currentRecord2.getLeft().getProtocolVersion(), haGroupName, role2.getDefaultHAGroupState(),
+        0L, policyString, getZkUrl1(), getMasterAddress2(), getMasterAddress1(),
+        currentRecord1.getLeft().getHdfsUrl(), currentRecord1.getLeft().getPeerHdfsUrl(), 1L);
 
       refreshSystemTableInBothClusters(haGroupName, role1, role2, 1L, 1L, null,
         haGroup.getRoleRecord().getPolicy());
