@@ -1182,6 +1182,10 @@ public class ScanUtil {
     return scan.getAttribute((BaseScannerRegionObserverConstants.REBUILD_INDEXES)) != null;
   }
 
+  public static boolean isSyncTableChunkFormation(Scan scan) {
+    return scan.getAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_FORMATION) != null;
+  }
+
   public static int getClientVersion(Scan scan) {
     int clientVersion = UNKNOWN_CLIENT_VERSION;
     byte[] clientVersionBytes =
