@@ -44,7 +44,7 @@ public class SyncAndForwardModeImpl extends ReplicationModeImpl {
   void onEnter() throws IOException {
     LOG.info("HAGroup {} entered mode {}", logGroup, this);
     // create a log on the standby cluster
-    log = logGroup.createStandbyLog();
+    log = logGroup.createReplicationLog(logGroup.createStandbyShardManager());
     log.init();
     // no-op if the forwarder is already started
     logGroup.getLogForwarder().start();

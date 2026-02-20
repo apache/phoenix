@@ -55,7 +55,7 @@ public class StoreAndForwardModeImpl extends ReplicationModeImpl {
   void onEnter() throws IOException {
     LOG.info("HAGroup {} entered mode {}", logGroup, this);
     // create a log on the fallback cluster
-    log = logGroup.createFallbackLog();
+    log = logGroup.createReplicationLog(logGroup.createFallbackShardManager());
     log.init();
     // Schedule task to periodically set the HAGroupStore state to ACTIVE_NOT_IN_SYNC
     startHAGroupStoreUpdateTask();

@@ -43,7 +43,7 @@ public class SyncModeImpl extends ReplicationModeImpl {
   void onEnter() throws IOException {
     LOG.info("HAGroup {} entered mode {}", logGroup, this);
     // create a log on the standby cluster
-    log = logGroup.createStandbyLog();
+    log = logGroup.createReplicationLog(logGroup.createStandbyShardManager());
     log.init();
   }
 

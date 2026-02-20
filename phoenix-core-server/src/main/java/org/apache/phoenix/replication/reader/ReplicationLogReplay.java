@@ -122,7 +122,6 @@ public class ReplicationLogReplay {
 
   public void close() {
     LOG.info("Closing ReplicationLogReplay for haGroup: {}", haGroupName);
-    replicationLogDiscoveryReplay.getReplicationLogFileTracker().close();
     replicationLogDiscoveryReplay.close();
     // Remove the instance from cache
     INSTANCES.remove(haGroupName);

@@ -109,6 +109,7 @@ public abstract class ReplicationLogDiscovery {
   }
 
   public void close() {
+    replicationLogTracker.close();
     if (this.metrics != null) {
       this.metrics.close();
     }

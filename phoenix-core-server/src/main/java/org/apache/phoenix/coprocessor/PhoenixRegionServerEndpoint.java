@@ -30,7 +30,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.cache.ServerMetadataCacheImpl;
@@ -46,6 +48,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.reader.ReplicationLogReplayService;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -62,6 +65,7 @@ public class PhoenixRegionServerEndpoint extends
   private MetricsMetadataCachingSource metricsSource;
   protected Configuration conf;
   private ExecutorService prewarmExecutor;
+  private ServerName serverName;
 
   // regionserver level thread pool used by Uncovered Indexes to scan data table rows
   private static TaskRunner uncoveredIndexThreadPool;
@@ -69,6 +73,8 @@ public class PhoenixRegionServerEndpoint extends
   @Override
   public void start(CoprocessorEnvironment env) throws IOException {
     this.conf = env.getConfiguration();
+    RegionServerCoprocessorEnvironment e = (RegionServerCoprocessorEnvironment) (env);
+    this.serverName = e.getServerName();
     this.metricsSource =
       MetricsPhoenixCoprocessorSourceFactory.getInstance().getMetadataCachingSource();
     initUncoveredIndexThreadPool(this.conf);
@@ -87,6 +93,7 @@ public class PhoenixRegionServerEndpoint extends
 
   @Override
   public void stop(CoprocessorEnvironment env) throws IOException {
+    ReplicationLogGroup.stop();
     // Stop replication log replay
     ReplicationLogReplayService.getInstance(conf).stop();
     RegionServerCoprocessor.super.stop(env);
@@ -292,6 +299,8 @@ public class PhoenixRegionServerEndpoint extends
               iterator.remove();
               LOGGER.info("Prewarmed HAGroupStoreClient: {} ({} remaining)", haGroup,
                 pending.size());
+              // prewarm the replication log group cache
+              ReplicationLogGroup.get(conf, serverName, haGroup);
             } catch (Exception e) {
               LOGGER.debug("Failed to prewarm {}, will retry", haGroup, e);
             }
