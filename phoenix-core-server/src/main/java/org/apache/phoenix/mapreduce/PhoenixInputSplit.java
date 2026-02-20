@@ -39,6 +39,7 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
 
   private List<Scan> scans;
   private KeyRange keyRange;
+  private List<KeyRange> keyRanges; // For coalesced splits - one per region
   private String regionLocation = null;
   private long splitSize = 0;
 
@@ -64,12 +65,56 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     init();
   }
 
+  /**
+   * Constructor for coalesced splits containing multiple regions.
+   * Used by PhoenixSyncTableTool to reduce mapper count and avoid hotspotting.
+   * @param scans List of scans (one per region)
+   * @param keyRanges List of KeyRanges (one per region)
+   * @param splitSize Total size of coalesced split
+   * @param regionLocation RegionServer location for data locality
+   */
+  public PhoenixInputSplit(final List<Scan> scans, final List<KeyRange> keyRanges,
+    long splitSize, String regionLocation) {
+    Preconditions.checkNotNull(scans);
+    Preconditions.checkNotNull(keyRanges);
+    Preconditions.checkState(!scans.isEmpty());
+    Preconditions.checkState(!keyRanges.isEmpty());
+    Preconditions.checkState(scans.size() == keyRanges.size(),
+      "Number of scans must match number of keyRanges");
+    this.scans = scans;
+    this.keyRanges = keyRanges;
+    this.splitSize = splitSize;
+    this.regionLocation = regionLocation;
+    init();
+  }
+
   public List<Scan> getScans() {
     return scans;
   }
 
   public KeyRange getKeyRange() {
     return keyRange;
+  }
+
+  /**
+   * Returns all KeyRanges for coalesced splits (one per region).
+   * For non-coalesced splits, returns a single-element list.
+   * @return List of KeyRanges
+   */
+  public List<KeyRange> getKeyRanges() {
+    if (keyRanges != null && !keyRanges.isEmpty()) {
+      return keyRanges;
+    }
+    // Backward compatibility: return single KeyRange as list
+    return Lists.newArrayList(keyRange);
+  }
+
+  /**
+   * Checks if this split is coalesced (contains multiple regions).
+   * @return true if split contains multiple regions
+   */
+  public boolean isCoalesced() {
+    return keyRanges != null && keyRanges.size() > 1;
   }
 
   private void init() {
@@ -90,6 +135,18 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
       Scan scan = ProtobufUtil.toScan(protoScan);
       scans.add(scan);
     }
+
+    // Read keyRanges for coalesced splits (backward compatible)
+    int keyRangeCount = WritableUtils.readVInt(input);
+    if (keyRangeCount > 0) {
+      keyRanges = Lists.newArrayListWithExpectedSize(keyRangeCount);
+      for (int i = 0; i < keyRangeCount; i++) {
+        KeyRange kr = new KeyRange();
+        kr.readFields(input);
+        keyRanges.add(kr);
+      }
+    }
+
     init();
   }
 
@@ -105,6 +162,16 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
       byte[] protoScanBytes = protoScan.toByteArray();
       WritableUtils.writeVInt(output, protoScanBytes.length);
       output.write(protoScanBytes);
+    }
+
+    // Write keyRanges for coalesced splits (backward compatible)
+    if (keyRanges != null && !keyRanges.isEmpty()) {
+      WritableUtils.writeVInt(output, keyRanges.size());
+      for (KeyRange kr : keyRanges) {
+        kr.write(output);
+      }
+    } else {
+      WritableUtils.writeVInt(output, 0);
     }
   }
 
