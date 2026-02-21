@@ -66,6 +66,13 @@ public class SegmentInfoPlan extends ClientProcessingPlan {
   }
 
   @Override
+  public boolean isDegenerate() {
+    // return true so that optimizer can choose this plan over any index plan and return early if
+    // the table has indexes.
+    return true;
+  }
+
+  @Override
   public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
     ConnectionQueryServices services = context.getConnection().getQueryServices();
     byte[] tableName = table.getTable().getPhysicalName().getBytes();
