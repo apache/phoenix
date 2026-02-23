@@ -338,7 +338,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       props.setProperty("TenantId", tenantId);
     }
     try (Connection connection = ConnectionUtil.getInputConnection(configuration, props)) {
-      pTable = PhoenixMapReduceUtil.validateTableForMRJob(connection, qTable, false, true);
+      pTable = PhoenixMapReduceUtil.validateTableForMRJob(connection, qTable, false, false);
       return pTable.getType();
     }
   }
