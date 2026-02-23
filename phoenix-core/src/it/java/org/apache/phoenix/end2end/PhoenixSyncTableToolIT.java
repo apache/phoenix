@@ -461,11 +461,15 @@ public class PhoenixSyncTableToolIT {
   /**
    * Waits for HBase replication to complete by polling target cluster.
    */
-  private void waitForReplication(Connection targetConn, String tableName, int expectedRows) throws Exception {
+  private void waitForReplication(Connection targetConn, String tableName, int expectedRows)
+    throws Exception {
     long startTime = System.currentTimeMillis();
     String countQuery = "SELECT COUNT(*) FROM " + tableName;
 
-    while (System.currentTimeMillis() - startTime < (long) PhoenixSyncTableToolIT.REPLICATION_WAIT_TIMEOUT_MS) {
+    while (
+      System.currentTimeMillis() - startTime
+          < (long) PhoenixSyncTableToolIT.REPLICATION_WAIT_TIMEOUT_MS
+    ) {
       ResultSet rs = targetConn.createStatement().executeQuery(countQuery);
       rs.next();
       int count = rs.getInt(1);
@@ -627,8 +631,8 @@ public class PhoenixSyncTableToolIT {
   /**
    * Inserts test data with a specific timestamp for time-range testing.
    */
-  private void insertTestData(Connection conn, String tableName, int startId,
-    int endId, long timestamp) throws SQLException {
+  private void insertTestData(Connection conn, String tableName, int startId, int endId,
+    long timestamp) throws SQLException {
     String upsert =
       "UPSERT INTO " + tableName + " (ID, NAME, NAME_VALUE, UPDATED_DATE) VALUES (?, ?, ?, ?)";
     PreparedStatement stmt = conn.prepareStatement(upsert);
@@ -642,7 +646,6 @@ public class PhoenixSyncTableToolIT {
     }
     conn.commit();
   }
-
 
   /**
    * Deletes multiple rows from target cluster to create mismatches. This method accepts variable
