@@ -122,10 +122,10 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
   private static final Option LAST_SYNC_TIME_OPT =
     new Option("lst", "last-sync-time", true, "Last sync time in milliseconds (requires --force)");
 
-  private static final Option HDFS_URL_OPT = new Option("hdf", "hdfs-url", true, "HDFS URL");
+  private static final Option HDFS_URL_OPT = new Option("hdfsurl", "hdfs-url", true, "HDFS URL");
 
   private static final Option PEER_HDFS_URL_OPT =
-    new Option("phdf", "peer-hdfs-url", true, "Peer HDFS URL");
+    new Option("phdfsurl", "peer-hdfs-url", true, "Peer HDFS URL");
 
   // Control flags
   private static final Option FORCE_OPT =
