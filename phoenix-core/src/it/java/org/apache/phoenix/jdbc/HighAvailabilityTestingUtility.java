@@ -247,10 +247,11 @@ public class HighAvailabilityTestingUtility {
                   + "HAGroupStoreRecord " + haGroupName);
               }
             }
+            break;
           } catch (Exception e) {
             failures++;
           }
-        } while (failures > 0 && failures < 4);
+        } while (failures < 4);
       }
       failures = 0;
       if (standbyRecord != null) {
@@ -269,11 +270,12 @@ public class HighAvailabilityTestingUtility {
                   + "HAGroupStoreRecord " + haGroupName);
               }
             }
+            break;
           } catch (Exception e) {
             failures++;
             Thread.sleep(200);
           }
-        } while (failures > 0 && failures < 4);
+        } while (failures < 4);
       }
     }
 
