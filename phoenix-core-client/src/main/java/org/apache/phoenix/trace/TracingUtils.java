@@ -20,7 +20,7 @@ package org.apache.phoenix.trace;
 import java.nio.charset.StandardCharsets;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.htrace.Span;
+import org.apache.phoenix.trace.stub.Span;
 
 /**
  * Utilities for tracing

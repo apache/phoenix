@@ -18,7 +18,7 @@
 package org.apache.phoenix.trace;
 
 import java.sql.SQLException;
-import org.apache.htrace.TraceScope;
+import org.apache.phoenix.trace.stub.TraceScope;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.schema.tuple.Tuple;

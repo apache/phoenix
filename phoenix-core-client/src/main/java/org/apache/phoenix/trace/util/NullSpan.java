@@ -20,8 +20,8 @@ package org.apache.phoenix.trace.util;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import org.apache.htrace.Span;
-import org.apache.htrace.TimelineAnnotation;
+import org.apache.phoenix.trace.stub.Span;
+import org.apache.phoenix.trace.stub.TimelineAnnotation;
 import org.apache.phoenix.util.StringUtil;
 
 /**

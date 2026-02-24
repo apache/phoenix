@@ -20,10 +20,10 @@ package org.apache.phoenix.trace;
 import static org.junit.Assert.assertTrue;
 
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
-import org.apache.htrace.Tracer;
-import org.apache.htrace.impl.MilliSpan;
+import org.apache.phoenix.trace.stub.Span;
+import org.apache.phoenix.trace.stub.Trace;
+import org.apache.phoenix.trace.stub.Tracer;
+import org.apache.phoenix.trace.stub.MilliSpan;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
