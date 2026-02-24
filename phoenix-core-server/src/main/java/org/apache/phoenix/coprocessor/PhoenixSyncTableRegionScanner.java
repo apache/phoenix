@@ -83,7 +83,6 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
   // If target chunk was partial, and we are continuing to
   // update digest before calculating checksum
   private boolean isUsingContinuedDigest;
-  private final byte[] timestampBuffer = new byte[8];
 
   /**
    * Creates a PhoenixSyncTableRegionScanner for chunk-based hashing.
@@ -235,37 +234,27 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
    */
   private void updateDigestWithRow(byte[] rowKey, List<Cell> cells) {
     digest.update(rowKey, 0, rowKey.length);
+    byte[] timestampBuffer = new byte[8];
     for (Cell cell : cells) {
       digest.update(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength());
       digest.update(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength());
       long ts = cell.getTimestamp();
-      // Big-Endian Byte Serialization
-      timestampBuffer[0] = (byte) (ts >>> 56);
-      timestampBuffer[1] = (byte) (ts >>> 48);
-      timestampBuffer[2] = (byte) (ts >>> 40);
-      timestampBuffer[3] = (byte) (ts >>> 32);
-      timestampBuffer[4] = (byte) (ts >>> 24);
-      timestampBuffer[5] = (byte) (ts >>> 16);
-      timestampBuffer[6] = (byte) (ts >>> 8);
-      timestampBuffer[7] = (byte) ts;
+      Bytes.putLong(timestampBuffer, 0, ts);
       digest.update(timestampBuffer, 0, 8);
-
       digest.update(cell.getType().getCode());
       digest.update(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
     }
   }
 
   /**
-   * Encodes a SHA256Digest state to a byte array with length prefix for validation. This
-   * production-grade implementation adds security checks for critical deployment: - Length prefix
-   * for validation and extensibility - Prevents malicious large allocations - Enables detection of
-   * corrupted serialization
+   * Encodes a SHA256Digest state to a byte array with length prefix for validation.
+   * Format: [4-byte integer length][encoded digest state bytes]
    * @param digest The digest whose state should be encoded
-   * @return Byte array containing 4-byte length prefix + encoded state
+   * @return Byte array containing integer length prefix + encoded state
    */
   private byte[] encodeDigestState(SHA256Digest digest) {
     byte[] encoded = digest.getEncodedState();
-    ByteBuffer buffer = ByteBuffer.allocate(4 + encoded.length);
+    ByteBuffer buffer = ByteBuffer.allocate(Bytes.SIZEOF_INT + encoded.length);
     buffer.putInt(encoded.length);
     buffer.put(encoded);
     return buffer.array();
