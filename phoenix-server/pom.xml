@@ -398,8 +398,6 @@
                 <shadedPattern>${shaded.package}.org.</shadedPattern>
                 <excludes>
                   <exclude>org/apache/hadoop/**</exclude>
-                  <!-- Our non-shaded htrace and logging libraries -->
-                  <exclude>org/apache/htrace/**</exclude>
                   <exclude>org/slf4j/**</exclude>
                   <exclude>org/apache/commons/logging/**</exclude>
                   <exclude>org/apache/log4j/**</exclude>
