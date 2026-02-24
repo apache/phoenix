@@ -54,7 +54,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
- * Mapper that acts as a driver for synchronizing table between source and target clusters. The
+ * Mapper that acts as a driver for validating table data between source and target clusters. The
  * actual work of chunking and hashing is done server-side by the coprocessor. This mapper fetches
  * chunk hashes from both clusters, compares them and write to checkpoint table.
  */
@@ -385,8 +385,7 @@ public class PhoenixSyncTableMapper
   }
 
   /**
-   * Formats chunk counters as a comma-separated string (optimized for hot path). Avoids
-   * LinkedHashMap allocation by building string directly.
+   * Formats chunk counters as a comma-separated string.
    * @param sourceRows Source rows processed
    * @param targetRows Target rows processed
    * @return Formatted string: "SOURCE_ROWS_PROCESSED=123,TARGET_ROWS_PROCESSED=456"
@@ -397,8 +396,7 @@ public class PhoenixSyncTableMapper
   }
 
   /**
-   * Formats mapper counters as a comma-separated string. Avoids LinkedHashMap allocation by
-   * building string directly.
+   * Formats mapper counters as a comma-separated string.
    * @param chunksVerified   Chunks verified count
    * @param chunksMismatched Chunks mismatched count
    * @param sourceRows       Source rows processed
@@ -413,9 +411,6 @@ public class PhoenixSyncTableMapper
       SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows);
   }
 
-  /***
-   *
-   */
   private void handleVerifiedChunk(ChunkInfo sourceChunk, Context context, String counters)
     throws SQLException {
     syncTableOutputRepository.checkpointSyncTableResult(tableName, targetZkQuorum,
@@ -425,9 +420,6 @@ public class PhoenixSyncTableMapper
     context.getCounter(SyncCounters.CHUNKS_VERIFIED).increment(1);
   }
 
-  /***
-   *
-   */
   private void handleMismatchedChunk(ChunkInfo sourceChunk, Context context, String counters)
     throws SQLException {
     LOGGER.warn("Chunk mismatch detected for table: {}, with startKey: {}, endKey {}", tableName,
@@ -509,7 +501,7 @@ public class PhoenixSyncTableMapper
       if (initialChunk && !isStartRegionOfTable) {
         // initialChunk chunk, clip boundary outside of Mapper region.
         // Example: Mapper region [20, 85), first chunk [10, 30]
-        // effectiveStart = max(10, 20) = 20
+        // effectiveStart = max[10, 20] = 20
         effectiveStart =
           Bytes.compareTo(chunkStart, mapperRegionStart) > 0 ? chunkStart : mapperRegionStart;
       } else {
@@ -557,15 +549,22 @@ public class PhoenixSyncTableMapper
 
   /***
    * Checking if start key should be inclusive, this is specific to scenario when there are
-   * processed chunks within this Mapper region boundary. [---MapperRegion---------------)
-   * [--chunk1--] [--chunk2--] // With processed chunk, for this specific scenario, only we need to
-   * have first unprocessedRanges startKeyInclusive = true, for unprocessedRanges, their startkey
-   * would be false, since it would have been already covered by processed chunk
-   * [---MapperRegion---------------) [--chunk1--] [--chunk2--] // In such scenario, we don't want
-   * startKeyInclusive for any unprocessedRanges
+   * processed chunks within this Mapper region boundary.
    */
   boolean shouldStartKeyBeInclusive(byte[] mapperRegionStart,
     List<PhoenixSyncTableOutputRow> processedChunks) {
+    // Only with processed chunk like below we need to
+    // have first unprocessedRanges startKeyInclusive = true.
+    // [---MapperRegion---------------)
+    // [--chunk1--] [--chunk2--]
+    //
+    // Otherwise with processed chunk like below, we don't want startKeyInclusive = true
+    // for any of unprocessedRange
+    // [---MapperRegion---------------)
+    // [--chunk1--] [--chunk2--]
+    // OR
+    // [---MapperRegion---------------)
+    // [--chunk1--] [--chunk2--]
     if (
       mapperRegionStart == null || mapperRegionStart.length == 0 || processedChunks == null
         || processedChunks.isEmpty()

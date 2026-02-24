@@ -76,7 +76,7 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
   private byte[] chunkEndKey = null;
   private long currentChunkSize = 0L;
   private long currentChunkRowCount = 0L;
-  // We are not using jdk bundled SHA, since their digest can't be serialization/deserialization
+  // We are not using jdk bundled SHA, since their digest can't be serialized/deserialized
   // which is needed for passing around partial chunk
   private SHA256Digest digest;
   private boolean hasMoreRows = true;
@@ -229,8 +229,7 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
   /**
    * Updates the SHA-256 digest with data from a row. Hash includes: row key + cell family + cell
    * qualifier + cell timestamp + cell type + cell value. This ensures that any difference in the
-   * data will result in different hashes. Optimized to avoid cloning - reads directly from cell's
-   * backing arrays (zero-copy).
+   * data will result in different hashes.
    */
   private void updateDigestWithRow(byte[] rowKey, List<Cell> cells) {
     digest.update(rowKey, 0, rowKey.length);
@@ -247,8 +246,8 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
   }
 
   /**
-   * Encodes a SHA256Digest state to a byte array with length prefix for validation.
-   * Format: [4-byte integer length][encoded digest state bytes]
+   * Encodes a SHA256Digest state to a byte array with length prefix for validation. Format: [4-byte
+   * integer length][encoded digest state bytes]
    * @param digest The digest whose state should be encoded
    * @return Byte array containing integer length prefix + encoded state
    */
@@ -262,7 +261,7 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
 
   /**
    * Decodes a SHA256Digest state from a byte array.
-   * @param encodedState Byte array containing 4-byte length prefix + encoded state
+   * @param encodedState Byte array containing 4-byte integer length prefix + encoded state
    * @return SHA256Digest restored to the saved state
    * @throws IOException if state is invalid, corrupted, or security checks fail
    */

@@ -330,7 +330,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
 
   /**
    * Sets up the table reference and validates it exists and is suitable for sync operations.
-   * Validates that the table is not a VIEW
+   * Validates that the table is not a VIEW or INDEX
    */
   private PTableType validateAndGetTableType() throws SQLException {
     Properties props = new Properties();
