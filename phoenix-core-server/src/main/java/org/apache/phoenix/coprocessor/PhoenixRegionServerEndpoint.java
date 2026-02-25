@@ -73,7 +73,7 @@ public class PhoenixRegionServerEndpoint extends
   @Override
   public void start(CoprocessorEnvironment env) throws IOException {
     this.conf = env.getConfiguration();
-    RegionServerCoprocessorEnvironment e = (RegionServerCoprocessorEnvironment) (env);
+    RegionServerCoprocessorEnvironment e = (RegionServerCoprocessorEnvironment) env;
     this.serverName = e.getServerName();
     this.metricsSource =
       MetricsPhoenixCoprocessorSourceFactory.getInstance().getMetadataCachingSource();

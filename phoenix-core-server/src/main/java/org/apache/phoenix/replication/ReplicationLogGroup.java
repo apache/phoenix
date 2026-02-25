@@ -842,7 +842,7 @@ public class ReplicationLogGroup {
       if (e.getCause() instanceof IOException) {
         throw (IOException) (e.getCause());
       } else {
-        String msg = String.format("HAGroup %s couldn't get filesytem for URI %s", this, rootURI);
+        String msg = String.format("HAGroup %s couldn't get filesystem for URI %s", this, rootURI);
         ClientUtil.throwIOException(msg, e);
       }
     }
