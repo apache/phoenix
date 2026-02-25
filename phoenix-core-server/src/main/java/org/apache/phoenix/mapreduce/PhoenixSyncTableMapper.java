@@ -556,11 +556,11 @@ public class PhoenixSyncTableMapper
     // Only with processed chunk like below we need to
     // have first unprocessedRanges startKeyInclusive = true.
     // [---MapperRegion---------------)
-    // [--chunk1--] [--chunk2--]
+    // -----[--chunk1--] [--chunk2--]
     //
     // Otherwise with processed chunk like below, we don't want startKeyInclusive = true
     // for any of unprocessedRange
-    // [---MapperRegion---------------)
+    // ---[---MapperRegion---------------)
     // [--chunk1--] [--chunk2--]
     // OR
     // [---MapperRegion---------------)

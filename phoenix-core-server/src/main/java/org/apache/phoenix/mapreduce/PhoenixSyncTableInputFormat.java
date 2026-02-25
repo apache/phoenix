@@ -152,7 +152,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
       // No overlap b/w completedRange/splitRange.
       // completedEnd is before splitStart, increment completed pointer to catch up. For scenario
       // like below
-      // [----splitRange-----)
+      // --------------------[----splitRange-----)
       // [----completed----)
       // If completedEnd is [], it means this is for last region, this check has no meaning.
       if (
@@ -168,20 +168,20 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
         // splitEnd is before completedStart, add this splitRange to unprocessed. For scenario like
         // below
         // [----splitRange-----)
-        // [----completed----)
+        // ----------------------[----completed----)
         // If splitEnd is [], it means this is for last region, this check has no meaning.
         unprocessedSplits.add(allSplits.get(splitIdx));
         splitIdx++;
       } else {
         // Some overlap detected, check if SplitRange is fullyContained within completedRange
-        // [----splitRange-----)
+        // ---- [----splitRange-----)
         // [----completed----) // partialContained -- unprocessedSplits
         // OR
         // [----splitRange-----)
-        // [----completed----) // partialContained -- unprocessedSplits
+        // ---- [----completed----) // partialContained -- unprocessedSplits
         // OR
         // [----splitRange-----------)
-        // [----completed--) // partialContained -- unprocessedSplits
+        // ----- [----completed--) // partialContained -- unprocessedSplits
         // OR
         // [----splitRange-----)
         // [----completed----------) // fullyContained -- nothing to process
