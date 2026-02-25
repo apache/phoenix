@@ -419,14 +419,16 @@ public class ParallelPhoenixConnectionIT extends HABaseIT {
   }
 
   private void testOneClusterATSRole(ClusterRole otherRole, boolean doRefresh) throws Exception {
-    CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, otherRole, doRefresh, PARALLEL);
+    CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, otherRole, doRefresh,
+      PARALLEL);
     try (Connection conn = getParallelConnection()) {
       doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
     } catch (SQLException e) {
       fail("Expected no exception to be thrown as one cluster is "
         + "in ACTIVE_TO_STANDBY and other in " + otherRole);
     } finally {
-      CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE, ClusterRole.STANDBY, doRefresh, PARALLEL);
+      CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE, ClusterRole.STANDBY, doRefresh,
+        PARALLEL);
     }
   }
 
