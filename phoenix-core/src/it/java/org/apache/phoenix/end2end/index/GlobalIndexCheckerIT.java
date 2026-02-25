@@ -1461,17 +1461,23 @@ public class GlobalIndexCheckerIT extends BaseTest {
         + "values ('a1', 'a2', 'val1a', 'val2a', 'val3', 'val4')");
       commitWithException(conn);
       IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+      // add a valid row with same value for id1 column as the unverified row above to test that
+      // the DistinctPrefix filter is reset correctly
       conn.createStatement().execute("upsert into " + dataTableName + " "
         + "values ('a1', 'a3', 'val1a', 'val2a', 'val31', 'val4')");
+      // add more valid rows with same value for id1 column so that the DistinctPrefix filter
+      // can skip those rows
       conn.createStatement().execute("upsert into " + dataTableName + " "
         + "values ('a1', 'a4', 'val1a', 'val2b', 'val31', 'val4')");
       conn.createStatement().execute("upsert into " + dataTableName + " "
         + "values ('a1', 'a5', 'val1a', 'val2b', 'val31', 'val4')");
+      // add another valid row with a different value for id1 column
       conn.createStatement().execute("upsert into " + dataTableName + " "
         + "values ('a2', 'a1', 'val1a', 'val2a', 'val31', 'val4')");
       conn.commit();
 
       ArrayList<String> expectedValues = Lists.newArrayList("a1", "a2");
+      // condition on val1 in WHERE clause so that query will use the uncovered index
       String selectSql = "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1a'";
       verifyDistinctQueryOnIndex(conn, uncoveredIndex1, selectSql, expectedValues);
       expectedValues = Lists.newArrayList("a1");
