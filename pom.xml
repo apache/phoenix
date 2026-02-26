@@ -222,6 +222,10 @@
     <protoc.arch>${os.detected.classifier}</protoc.arch>
     <!-- Keeping the version in sync with hbase javax.el version -->
     <glassfish.el.version>3.0.1-b08</glassfish.el.version>
+    <!-- OpenTelemetry versions -->
+    <opentelemetry.version>1.34.1</opentelemetry.version>
+    <opentelemetry-semconv.version>1.23.1-alpha</opentelemetry-semconv.version>
+    <opentelemetry-javaagent.version>1.34.0</opentelemetry-javaagent.version>
     <shaded.package>org.apache.phoenix.shaded</shaded.package>
     <hbase.shaded.package>org.apache.hadoop.hbase.shaded</hbase.shaded.package>
   </properties>
@@ -1449,6 +1453,27 @@
         <artifactId>javax.el</artifactId>
         <version>${glassfish.el.version}</version>
       </dependency>
+
+      <!-- OpenTelemetry BOM for version alignment -->
+      <dependency>
+        <groupId>io.opentelemetry</groupId>
+        <artifactId>opentelemetry-bom</artifactId>
+        <version>${opentelemetry.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <!-- OpenTelemetry Semantic Conventions -->
+      <dependency>
+        <groupId>io.opentelemetry.semconv</groupId>
+        <artifactId>opentelemetry-semconv</artifactId>
+        <version>${opentelemetry-semconv.version}</version>
+      </dependency>
+      <!-- OpenTelemetry Java Agent -->
+      <dependency>
+        <groupId>io.opentelemetry.javaagent</groupId>
+        <artifactId>opentelemetry-javaagent</artifactId>
+        <version>${opentelemetry-javaagent.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
@@ -1767,6 +1792,13 @@
                     <reason>Use edu.umd.cs.findbugs.annotations</reason>
                     <bannedImports>
                       <bannedImport>com.sun.istack.**</bannedImport>
+                    </bannedImports>
+                  </RestrictImports>
+                  <RestrictImports>
+                    <includeTestCode>true</includeTestCode>
+                    <reason>HTrace is removed, use OpenTelemetry via PhoenixTracing</reason>
+                    <bannedImports>
+                      <bannedImport>org.apache.htrace.**</bannedImport>
                     </bannedImports>
                   </RestrictImports>
                 </rules>

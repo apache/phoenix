@@ -17,46 +17,60 @@
  */
 package org.apache.phoenix.trace;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.context.Scope;
 import java.sql.SQLException;
-import org.apache.phoenix.trace.stub.TraceScope;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
- * A simple iterator that closes the trace scope when the iterator is closed.
+ * A result iterator that manages an OpenTelemetry span lifecycle. The span is ended when the
+ * iterator is closed. Events are added to the span as results are iterated.
  */
 public class TracingIterator extends DelegateResultIterator {
 
-  private TraceScope scope;
-  private boolean started;
+    private final Span span;
+    private final Scope scope;
+    private boolean started;
 
-  /**
-   * @param scope    a scope with a non-null span
-   * @param iterator delegate
-   */
-  public TracingIterator(TraceScope scope, ResultIterator iterator) {
-    super(iterator);
-    this.scope = scope;
-  }
-
-  @Override
-  public void close() throws SQLException {
-    scope.close();
-    super.close();
-  }
-
-  @Override
-  public Tuple next() throws SQLException {
-    if (!started) {
-      scope.getSpan().addTimelineAnnotation("First request completed");
-      started = true;
+    /**
+     * @param span     the OpenTelemetry span to manage
+     * @param scope    the scope that makes the span current
+     * @param iterator delegate iterator
+     */
+    public TracingIterator(Span span, Scope scope, ResultIterator iterator) {
+        super(iterator);
+        this.span = span;
+        this.scope = scope;
     }
-    return super.next();
-  }
 
-  @Override
-  public String toString() {
-    return "TracingIterator [scope=" + scope + ", started=" + started + "]";
-  }
+    @Override
+    public void close() throws SQLException {
+        try {
+            span.setStatus(StatusCode.OK);
+        } finally {
+            try {
+                scope.close();
+            } finally {
+                span.end();
+            }
+        }
+        super.close();
+    }
+
+    @Override
+    public Tuple next() throws SQLException {
+        if (!started) {
+            span.addEvent("First request completed");
+            started = true;
+        }
+        return super.next();
+    }
+
+    @Override
+    public String toString() {
+        return "TracingIterator [span=" + span + ", started=" + started + "]";
+    }
 }

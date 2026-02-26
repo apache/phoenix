@@ -224,7 +224,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
-import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.ClientUtil;
@@ -781,7 +781,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
             }
           }
-        }, PhoenixContextExecutor.inContext(), Tracing.withTracing(connection, this.toString()));
+        }, PhoenixContextExecutor.inContext(), PhoenixTracing.withTracing("phoenix.statement.execute"));
     } catch (Exception e) {
       if (queryLogger.isAuditLoggingEnabled()) {
         queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));

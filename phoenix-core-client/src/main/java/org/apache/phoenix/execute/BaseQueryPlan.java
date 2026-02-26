@@ -33,7 +33,8 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.phoenix.trace.stub.TraceScope;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
@@ -73,7 +74,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.trace.TracingIterator;
-import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.LogUtil;
@@ -364,10 +365,11 @@ public abstract class BaseQueryPlan implements QueryPlan {
     }
 
     // wrap the iterator so we start/end tracing as we expect
-    if (Tracing.isTracing()) {
-      TraceScope scope = Tracing.startNewSpan(context.getConnection(),
-        "Creating basic query for " + getPlanSteps(iterator));
-      if (scope.getSpan() != null) return new TracingIterator(scope, iterator);
+    if (PhoenixTracing.isRecording()) {
+      Span span = PhoenixTracing.createSpan(
+          "phoenix.query.execute." + context.getCurrentTable().getTable().getName());
+      Scope scope = span.makeCurrent();
+      return new TracingIterator(span, scope, iterator);
     }
     return iterator;
   }
