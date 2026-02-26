@@ -49,7 +49,6 @@ import org.apache.phoenix.metrics.Metrics;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.TableNotFoundException;
-import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -117,7 +116,7 @@ public class PhoenixMetricsSink implements MetricsSink {
       try {
         // create the phoenix connection
         Properties props = new Properties();
-        props.setProperty(QueryServices.TRACING_FREQ_ATTRIB, Tracing.Frequency.NEVER.getKey());
+        props.setProperty(QueryServices.TRACING_FREQ_ATTRIB, "never");
         org.apache.hadoop.conf.Configuration conf = HBaseConfiguration.create();
         Connection conn = QueryUtil.getConnectionOnServer(props, conf);
         // enable bulk loading when we have enough data

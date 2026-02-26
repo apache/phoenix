@@ -21,7 +21,6 @@ import org.apache.commons.configuration2.SubsetConfiguration;
 import org.apache.hadoop.metrics2.AbstractMetric;
 import org.apache.hadoop.metrics2.MetricsRecord;
 import org.apache.hadoop.metrics2.MetricsSink;
-import org.apache.phoenix.trace.TracingUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -48,7 +47,7 @@ public class LoggingSink implements MetricsSink {
     LOGGER.debug("Found record:" + record.name());
     for (AbstractMetric metric : record.metrics()) {
       // just print the metric we care about
-      if (metric.name().startsWith(TracingUtils.METRIC_SOURCE_KEY)) {
+      if (metric.name().startsWith("phoenix.")) {
         LOGGER.debug("\t metric:" + metric);
       }
     }

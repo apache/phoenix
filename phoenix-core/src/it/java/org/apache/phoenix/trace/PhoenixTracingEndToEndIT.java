@@ -85,7 +85,8 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
     // add a child with some annotations
     Span child = span.child("child 1");
     child.addTimelineAnnotation("timeline annotation");
-    TracingUtils.addAnnotation(child, "test annotation", 10);
+    child.addKVAnnotation("test annotation".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+      org.apache.hadoop.hbase.util.Bytes.toBytes(Integer.toString(10)));
     child.stop();
 
     // sleep a little bit to get some time difference

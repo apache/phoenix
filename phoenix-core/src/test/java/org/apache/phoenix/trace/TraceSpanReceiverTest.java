@@ -66,7 +66,8 @@ public class TraceSpanReceiverTest {
     Span span = getSpan();
 
     // add annotation through the phoenix interfaces
-    TracingUtils.addAnnotation(span, "message", 10);
+    span.addKVAnnotation("message".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+      org.apache.hadoop.hbase.util.Bytes.toBytes(Integer.toString(10)));
 
     TraceSpanReceiver source = new TraceSpanReceiver();
     Trace.addReceiver(source);

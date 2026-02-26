@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.trace;
 
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import io.opentelemetry.api.GlobalOpenTelemetry;
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanKind;
@@ -337,6 +338,24 @@ public final class PhoenixTracing {
                 }
             }
         };
+    }
+
+    /**
+     * Parse a TRACE ON/OFF option string from the SQL grammar.
+     *
+     * @param traceOption the option string, expected to be "ON" or "OFF" (case-insensitive)
+     * @return {@code true} if tracing should be enabled, {@code false} otherwise
+     * @throws IllegalArgumentException if the option is not recognized
+     */
+    public static boolean isTraceOn(String traceOption) {
+        Preconditions.checkNotNull(traceOption, "traceOption must not be null");
+        if (traceOption.equalsIgnoreCase("ON")) {
+            return true;
+        }
+        if (traceOption.equalsIgnoreCase("OFF")) {
+            return false;
+        }
+        throw new IllegalArgumentException("Unknown tracing option: " + traceOption);
     }
 
     /**

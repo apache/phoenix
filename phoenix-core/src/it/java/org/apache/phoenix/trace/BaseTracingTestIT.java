@@ -33,8 +33,7 @@ import org.apache.phoenix.trace.stub.Trace;
 import org.apache.phoenix.trace.stub.MilliSpan;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.DelegateConnection;
-import org.apache.phoenix.trace.util.Tracing;
-import org.apache.phoenix.trace.util.Tracing.Frequency;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.After;
@@ -79,8 +78,8 @@ public abstract class BaseTracingTestIT extends ParallelStatsDisabledIT {
   }
 
   public static Connection getConnectionWithoutTracing(Properties props) throws SQLException {
-    Connection conn = getConnectionWithTracingFrequency(props, Frequency.NEVER);
-    return conn;
+    props.setProperty(QueryServices.TRACING_FREQ_ATTRIB, "never");
+    return DriverManager.getConnection(getUrl(), props);
   }
 
   public static Connection getTracingConnection() throws Exception {
@@ -96,12 +95,7 @@ public abstract class BaseTracingTestIT extends ParallelStatsDisabledIT {
     if (tenantId != null) {
       props.put(PhoenixRuntime.TENANT_ID_ATTRIB, tenantId);
     }
-    return getConnectionWithTracingFrequency(props, Tracing.Frequency.ALWAYS);
-  }
-
-  public static Connection getConnectionWithTracingFrequency(Properties props,
-    Tracing.Frequency frequency) throws SQLException {
-    Tracing.setSampling(props, frequency);
+    props.setProperty(QueryServices.TRACING_FREQ_ATTRIB, "always");
     return DriverManager.getConnection(getUrl(), props);
   }
 
