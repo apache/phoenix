@@ -25,8 +25,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Simple sink that just logs the output of all the metrics that start with
- * {@link org.apache.phoenix.trace.TracingUtils#METRIC_SOURCE_KEY}
+ * Simple sink that just logs the output of all the metrics that start with "phoenix."
  */
 public class LoggingSink implements MetricsSink {
 
