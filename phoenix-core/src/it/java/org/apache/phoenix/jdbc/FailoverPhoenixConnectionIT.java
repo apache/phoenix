@@ -62,6 +62,7 @@ import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
+import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -579,7 +580,7 @@ public class FailoverPhoenixConnectionIT extends HABaseIT {
     tableName = tableName + "Tenant";
     CLUSTERS.createTenantSpecificTable(haGroup, tableName);
 
-    clientProperties.setProperty("TenantId", "mytenant");
+    clientProperties.setProperty(PhoenixRuntime.TENANT_ID_ATTRIB, "mytenant");
     Connection tenantConn = createFailoverConnection();
     doTestBasicOperationsWithConnection(tenantConn, tableName, haGroupName);
 
@@ -592,6 +593,24 @@ public class FailoverPhoenixConnectionIT extends HABaseIT {
     // Application can always create new connections after cluster role transition
     try (Connection newTenantConn = createFailoverConnection()) {
       doTestBasicOperationsWithConnection(newTenantConn, tableName, haGroupName);
+    }
+
+    // Test creating new tenant connection with url with tenant id
+    clientProperties.remove(PhoenixRuntime.TENANT_ID_ATTRIB);
+    String jdbcUrl =
+      CLUSTERS.getJdbcHAUrl() + ":" + PhoenixRuntime.TENANT_ID_ATTRIB + "=" + "mytenant";
+    Connection tenantConn2 = DriverManager.getConnection(jdbcUrl, clientProperties);
+    doTestBasicOperationsWithConnection(tenantConn2, tableName, haGroupName);
+
+    // Normal Connection should fail
+    Connection conn3 = createFailoverConnection();
+    try {
+      doTestBasicOperationsWithConnection(conn3, tableName, haGroupName);
+      fail(
+        "Should have failed since normal connection should not be able to connect to tenant specific table");
+    } catch (TypeMismatchException e) {
+      LOG.info("Got expected exception when creating normal connection to tenant specific table",
+        e);
     }
   }
 
