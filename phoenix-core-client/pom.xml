@@ -247,15 +247,20 @@
       <artifactId>HdrHistogram</artifactId>
     </dependency>
 
-    <!-- OpenTelemetry API (versions managed by opentelemetry-bom in parent) -->
+    <!-- OpenTelemetry API (versions managed by opentelemetry-bom in parent).
+         Scope is "provided" because at runtime the OTel API classes are already on the
+         HBase classpath (HBase depends on opentelemetry-api). The Java Agent provides
+         the SDK implementation. Phoenix must NOT shade these classes. See PHOENIX-5215. -->
     <dependency>
       <groupId>io.opentelemetry</groupId>
       <artifactId>opentelemetry-api</artifactId>
+      <scope>provided</scope>
     </dependency>
     <!-- OpenTelemetry Semantic Conventions -->
     <dependency>
       <groupId>io.opentelemetry.semconv</groupId>
       <artifactId>opentelemetry-semconv</artifactId>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 

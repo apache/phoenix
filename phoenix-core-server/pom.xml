@@ -170,10 +170,12 @@
       <artifactId>jsr305</artifactId>
     </dependency>
 
-    <!-- OpenTelemetry API (SDK provided at runtime via phoenix-core-client) -->
+    <!-- OpenTelemetry API (provided by HBase classpath at runtime; SDK provided by Java Agent).
+         Must NOT be shaded. See PHOENIX-5215. -->
     <dependency>
       <groupId>io.opentelemetry</groupId>
       <artifactId>opentelemetry-api</artifactId>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 

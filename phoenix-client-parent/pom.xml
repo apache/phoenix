@@ -181,6 +181,9 @@
                   <exclude>io/skip/checksum/errors</exclude>
                   <exclude>io/sort/*</exclude>
                   <exclude>io/serializations</exclude>
+                  <!-- OpenTelemetry API must NOT be shaded so that Phoenix uses the same
+                       GlobalOpenTelemetry class as the Java Agent. See PHOENIX-5215. -->
+                  <exclude>io/opentelemetry/**</exclude>
                 </excludes>
               </relocation>
               <!-- JSRs that haven't made it to inclusion in J2SE -->
