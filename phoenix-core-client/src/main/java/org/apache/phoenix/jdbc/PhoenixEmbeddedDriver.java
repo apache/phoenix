@@ -138,7 +138,7 @@ public abstract class PhoenixEmbeddedDriver implements Driver, SQLCloseable {
         return haGroup.get().connect(augmentedInfo, haurlInfo);
       } else {
         // If empty HA group is returned, fall back to single cluster.
-        url = HighAvailabilityGroup.getFallbackCluster(url, info).orElseThrow(
+        url = HighAvailabilityGroup.getFallbackCluster(url, info, haurlInfo).orElseThrow(
           () -> new SQLException("HA group can not be initialized, fallback to single cluster"));
       }
     }

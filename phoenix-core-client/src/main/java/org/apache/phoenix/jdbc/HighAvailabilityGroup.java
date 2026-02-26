@@ -240,13 +240,6 @@ public class HighAvailabilityGroup {
    * @throws SQLException if fails to get HA information and/or invalid properties are seen
    */
   public static HAURLInfo getUrlInfo(String url, Properties properties) throws SQLException {
-    // Check if HA group name is provided in the properties if not throw an exception
-    String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
-    if (StringUtils.isEmpty(name)) {
-      throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_INVALID_PROPERTIES)
-        .setMessage(String.format("HA group name can not be empty for HA URL %s", url)).build()
-        .buildException();
-    }
     url = checkUrl(url);
     String principal = null;
     String additionalJDBCParams = null;
@@ -303,23 +296,45 @@ public class HighAvailabilityGroup {
         : additionalJDBCParams)
       : null;
 
-    HAURLInfo haurlInfo = new HAURLInfo(name, principal, additionalJDBCParams);
-    HAGroupInfo info = getHAGroupInfo(url, properties);
-    URLS.computeIfAbsent(info, haGroupInfo -> new HashSet<>()).add(haurlInfo);
-    return haurlInfo;
-  }
+    // Here additionalJDBCParams can contain more than one properties separated by ;
+    // Adding the properties from url to connection properties
+    if (additionalJDBCParams != null) {
+      String[] propsFromUrl = additionalJDBCParams.split(";");
+      for (String property : propsFromUrl) {
+        if (StringUtils.isEmpty(property)) {
+          continue;
+        }
+        String[] keyValue = property.split("=");
+        if (keyValue.length != 2) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.MALFORMED_CONNECTION_URL)
+            .setMessage(String.format("URL %s has additional JDBC props in wrong format", url))
+            .build().buildException();
+        }
+        properties.put(keyValue[0], keyValue[1]);
+      }
+    }
 
-  private static HAGroupInfo getHAGroupInfo(String url, Properties properties) throws SQLException {
+    // Check if HA group name is provided in the url if not then check in the properties if not
+    // throw an exception.
     String name = properties.getProperty(PHOENIX_HA_GROUP_ATTR);
     if (StringUtils.isEmpty(name)) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.HA_INVALID_PROPERTIES)
         .setMessage(String.format("HA group name can not be empty for HA URL %s", url)).build()
         .buildException();
     }
+
+    HAURLInfo haurlInfo = new HAURLInfo(name, principal, additionalJDBCParams);
+    HAGroupInfo info = getHAGroupInfo(url, properties, haurlInfo);
+    URLS.computeIfAbsent(info, haGroupInfo -> new HashSet<>()).add(haurlInfo);
+    return haurlInfo;
+  }
+
+  private static HAGroupInfo getHAGroupInfo(String url, Properties properties, HAURLInfo haurlInfo)
+    throws SQLException {
     url = checkUrl(url);
     url = url.substring(url.indexOf("[") + 1, url.indexOf("]"));
     String[] urls = url.split("\\|");
-    return new HAGroupInfo(name, urls[0], urls[1]);
+    return new HAGroupInfo(haurlInfo.getName(), urls[0], urls[1]);
   }
 
   /**
@@ -371,7 +386,8 @@ public class HighAvailabilityGroup {
    */
   public static Optional<HighAvailabilityGroup> get(String url, Properties properties)
     throws SQLException {
-    HAGroupInfo info = getHAGroupInfo(url, properties);
+    HAURLInfo haurlInfo = getUrlInfo(url, properties);
+    HAGroupInfo info = getHAGroupInfo(url, properties, haurlInfo);
     // create a cache for missing CRR to prevent unnecessary exceptions (cache expires in 5 minutes)
     if (MISSING_CRR_GROUPS_CACHE.getIfPresent(info) != null) {
       return Optional.empty();
@@ -419,9 +435,9 @@ public class HighAvailabilityGroup {
    *         protocol
    * @throws SQLException if fails to get HA information and/or invalid properties are seen
    */
-  static Optional<String> getFallbackCluster(String url, Properties properties)
+  static Optional<String> getFallbackCluster(String url, Properties properties, HAURLInfo haurlInfo)
     throws SQLException {
-    HAGroupInfo haGroupInfo = getHAGroupInfo(url, properties);
+    HAGroupInfo haGroupInfo = getHAGroupInfo(url, properties, haurlInfo);
 
     String fallback = properties.getProperty(PHOENIX_HA_SHOULD_FALLBACK_WHEN_MISSING_CRR_KEY,
       PHOENIX_HA_SHOULD_FALLBACK_WHEN_MISSING_CRR_DEFAULT);
