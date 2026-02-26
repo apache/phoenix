@@ -825,6 +825,9 @@ public class PhoenixConnection
         if (traceScope != null) {
           traceScope.close();
         }
+        if (traceSpan != null) {
+          traceSpan.end();
+        }
       } finally {
         services.removeConnection(this);
       }

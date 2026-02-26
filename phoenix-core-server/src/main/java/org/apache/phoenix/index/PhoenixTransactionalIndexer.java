@@ -42,7 +42,6 @@ import org.apache.phoenix.execute.PhoenixTxIndexMutationGenerator;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LeaveIndexActiveFailurePolicy;
 import org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter;
-import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.ClientUtil;
@@ -195,9 +194,12 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
       current.addEvent("Built index updates, doing preStep");
       current.setAttribute("phoenix.index.update.count", (long) context.indexUpdates.size());
     } catch (Throwable t) {
+      PhoenixTracing.setError(current, t);
       String msg = "Failed to update index with entries:" + indexUpdates;
       LOGGER.error(msg, t);
       ClientUtil.throwIOException(msg, t);
+    } finally {
+      current.end();
     }
   }
 
@@ -219,10 +221,12 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
         current.addEvent("Wrote index updates");
       }
     } catch (Throwable t) {
+      PhoenixTracing.setError(current, t);
       String msg = "Failed to write index updates:" + context.indexUpdates;
       LOGGER.error(msg, t);
       ClientUtil.throwIOException(msg, t);
     } finally {
+      current.end();
       removeBatchMutateContext(c);
     }
   }

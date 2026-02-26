@@ -369,41 +369,45 @@ public class PhoenixTracingEndToEndIT extends BaseTracingTestIT {
       ResultSet rs = statement.executeQuery("TRACE ON");
       assertTrue(rs.next());
       PhoenixConnection pconn = (PhoenixConnection) conn1;
-      long traceId = pconn.getTraceScope().getSpan().getTraceId();
-      assertEquals(traceId, rs.getLong(1));
+      // With OpenTelemetry, trace IDs are returned as longs for backward compatibility
+      long traceId = rs.getLong(1);
+      assertNotNull(pconn.getTraceSpan());
+      assertTrue(traceId != 0);
       assertEquals(traceId, rs.getLong("trace_id"));
       assertFalse(rs.next());
-      assertEquals(Sampler.ALWAYS, pconn.getSampler());
 
       rs = statement.executeQuery("TRACE OFF");
       assertTrue(rs.next());
       assertEquals(traceId, rs.getLong(1));
       assertEquals(traceId, rs.getLong("trace_id"));
       assertFalse(rs.next());
-      assertEquals(Sampler.NEVER, pconn.getSampler());
+      // After TRACE OFF, the trace span should be cleaned up
+      assertNull(pconn.getTraceSpan());
 
       rs = statement.executeQuery("TRACE OFF");
       assertFalse(rs.next());
 
       rs = statement.executeQuery("TRACE ON  WITH SAMPLING 0.5");
       rs.next();
-      assertTrue(((PhoenixConnection) conn1).getSampler() instanceof ProbabilitySampler);
+      // Sampling is now handled by the OpenTelemetry agent; just verify trace is active
+      assertNotNull(pconn.getTraceSpan());
 
       rs = statement.executeQuery("TRACE ON  WITH SAMPLING 1.0");
       assertTrue(rs.next());
-      traceId = pconn.getTraceScope().getSpan().getTraceId();
-      assertEquals(traceId, rs.getLong(1));
+      traceId = rs.getLong(1);
+      assertTrue(traceId != 0);
       assertEquals(traceId, rs.getLong("trace_id"));
       assertFalse(rs.next());
-      assertEquals(Sampler.ALWAYS, pconn.getSampler());
+      assertNotNull(pconn.getTraceSpan());
 
       rs = statement.executeQuery("TRACE ON  WITH SAMPLING 0.5");
       rs.next();
-      assertTrue(((PhoenixConnection) conn1).getSampler() instanceof ProbabilitySampler);
+      assertNotNull(pconn.getTraceSpan());
 
       rs = statement.executeQuery("TRACE ON WITH SAMPLING 0.0");
       rs.next();
-      assertEquals(Sampler.NEVER, pconn.getSampler());
+      // Even with sampling 0.0, OTel agent controls actual sampling
+      assertNotNull(pconn.getTraceSpan());
 
       rs = statement.executeQuery("TRACE OFF");
       assertFalse(rs.next());

@@ -321,19 +321,18 @@ public final class PhoenixTracing {
 
             @Override
             public void after() {
+                // Note: after() is called from CallRunner's finally block, so we don't
+                // know if the operation succeeded or failed. We don't set StatusCode.OK
+                // here because the span may represent a failed operation. If the caller
+                // needs to record errors, they should do so on Span.current() before
+                // the exception propagates.
                 try {
-                    if (span != null) {
-                        span.setStatus(StatusCode.OK);
+                    if (scope != null) {
+                        scope.close();
                     }
                 } finally {
-                    try {
-                        if (scope != null) {
-                            scope.close();
-                        }
-                    } finally {
-                        if (span != null) {
-                            span.end();
-                        }
+                    if (span != null) {
+                        span.end();
                     }
                 }
             }

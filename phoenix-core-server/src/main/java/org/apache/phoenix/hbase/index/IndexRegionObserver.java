@@ -128,7 +128,6 @@ import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
@@ -1312,6 +1311,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
       }
       current.setAttribute("phoenix.index.update.count", updateCount);
+    } finally {
+      current.end();
     }
   }
 
@@ -1879,6 +1880,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       } else {
         preWriter.write(indexUpdates, false, context.clientVersion);
       }
+    } finally {
+      current.end();
     }
   }
 

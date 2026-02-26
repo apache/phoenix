@@ -72,7 +72,6 @@ import org.apache.phoenix.hbase.index.write.RecoveryIndexWriter;
 import org.apache.phoenix.hbase.index.write.recovery.PerRegionIndexWriteCache;
 import org.apache.phoenix.hbase.index.write.recovery.StoreFailuresInCachePolicy;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.trace.TracingUtils;
 import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -487,24 +486,30 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
     }
 
     // get the current span, or just use a null-span to avoid a bunch of if statements
+    Collection<Pair<Mutation, byte[]>> indexUpdates = null;
     Span current = PhoenixTracing.createSpan("phoenix.index.build.updates");
     try (Scope ignored = current.makeCurrent()) {
       long start = EnvironmentEdgeManager.currentTimeMillis();
 
       // get the index updates for all elements in this batch
-      Collection<Pair<Mutation, byte[]>> indexUpdates =
-        this.builder.getIndexUpdate(miniBatchOp, mutations);
+      indexUpdates = this.builder.getIndexUpdate(miniBatchOp, mutations);
 
       long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
       if (duration >= slowIndexPrepareThreshold) {
         if (LOGGER.isDebugEnabled()) {
-          LOGGER.debug(getCallTooSlowMessage("indexPrepare", duration, slowIndexPrepareThreshold));
+          LOGGER.debug(getCallTooSlowMessage("preBatchMutateWithExceptions", duration,
+            slowIndexPrepareThreshold));
         }
         metricSource.incrementNumSlowIndexPrepareCalls(dataTableName);
       }
       metricSource.updateIndexPrepareTime(dataTableName, duration);
       current.addEvent("Built index updates, doing preStep");
       current.setAttribute("phoenix.index.update.count", (long) indexUpdates.size());
+    } finally {
+      current.end();
+    }
+
+    if (indexUpdates != null) {
       byte[] tableName =
         c.getEnvironment().getRegion().getTableDescriptor().getTableName().getName();
       Iterator<Pair<Mutation, byte[]>> indexUpdatesItr = indexUpdates.iterator();
@@ -616,6 +621,8 @@ public class Indexer implements RegionObserver, RegionCoprocessor {
         metricSource.incrementNumSlowIndexWriteCalls(dataTableName);
       }
       metricSource.updateIndexWriteTime(dataTableName, duration);
+    } finally {
+      current.end();
     }
   }
 

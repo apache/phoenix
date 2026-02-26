@@ -1410,7 +1410,7 @@ public class MutationState implements SQLCloseable {
     // add tracing for this operation
     Span span = PhoenixTracing.createSpan("phoenix.mutation.commit");
     try (Scope ignored = span.makeCurrent()) {
-      span.setAttribute("phoenix.mutation.tables", commitBatch.size());
+      span.setAttribute("phoenix.mutation.tables", (long) commitBatch.size());
       ImmutableBytesWritable indexMetaDataPtr = new ImmutableBytesWritable();
       for (Map.Entry<TableRef, MultiRowMutationState> entry : commitBatch.entrySet()) {
         // at this point we are going through mutations for each table
@@ -1486,6 +1486,15 @@ public class MutationState implements SQLCloseable {
           "Ignoring exception that happened during setting index verified value to verified=TRUE ",
           ex);
       }
+      span.setStatus(StatusCode.OK);
+    } catch (Throwable t) {
+      PhoenixTracing.setError(span, t);
+      if (t instanceof SQLException) {
+        throw (SQLException) t;
+      }
+      throw new SQLException(t);
+    } finally {
+      span.end();
     }
   }
 

@@ -168,7 +168,9 @@ public class Tracing {
    * @return the underlying span.
    */
   public static TraceScope startNewSpan(PhoenixConnection connection, String string) {
-    Sampler<?> sampler = connection.getSampler();
+    // Sampling is now handled by the OpenTelemetry agent at runtime.
+    // This method is retained for backward compatibility with legacy trace infrastructure.
+    Sampler<?> sampler = Sampler.NEVER;
     TraceScope scope = Trace.startSpan(string, sampler);
     addCustomAnnotationsToSpan(scope.getSpan(), connection);
     return scope;
