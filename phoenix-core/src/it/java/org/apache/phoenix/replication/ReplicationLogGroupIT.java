@@ -24,6 +24,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -123,6 +125,7 @@ public class ReplicationLogGroupIT extends HABaseIT {
         CLUSTERS.getMasterAddress2(), 0L);
     haAdmin1.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
     logGroup = getReplicationLogGroup();
+    assertNotNull(logGroup);
   }
 
   @After
@@ -140,7 +143,8 @@ public class ReplicationLogGroupIT extends HABaseIT {
   private Map<String, List<Mutation>> groupLogsByTable() throws Exception {
     LogFileAnalyzer analyzer = new LogFileAnalyzer();
     analyzer.setConf(conf1);
-    Path standByLogDir = logGroup.getStandbyShardManager().getRootDirectoryPath();
+    ReplicationShardDirectoryManager standbyShardManager = logGroup.createStandbyShardManager();
+    Path standByLogDir = standbyShardManager.getRootDirectoryPath();
     LOG.info("Analyzing log files at {}", standByLogDir);
     String[] args = { "--check", standByLogDir.toString() };
     assertEquals(0, analyzer.run(args));
@@ -383,6 +387,10 @@ public class ReplicationLogGroupIT extends HABaseIT {
     Threads.sleep(20000); // just to be sure that the kill has fully started.
     // Regions will be re-opened and the WAL will be replayed
     util.waitUntilAllRegionsAssigned(table);
+    ReplicationLogGroup newLogGroup = getReplicationLogGroup();
+    // we should get a new log group after restart
+    assertNotEquals(newLogGroup, logGroup);
+    logGroup = newLogGroup;
     try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
       .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
       Map<String, Integer> expected = Maps.newHashMap();

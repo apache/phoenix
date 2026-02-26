@@ -57,11 +57,15 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hdfs.DFSConfigKeys;
+import org.apache.phoenix.jdbc.ClusterType;
+import org.apache.phoenix.jdbc.HAGroupStateListener;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogForwarderSourceFactory;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSource;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSourceImpl;
+import org.apache.phoenix.util.ClientUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -351,6 +355,19 @@ public class ReplicationLogGroup {
     });
   }
 
+  public static ReplicationLogGroup get(String haGroupName) {
+    return INSTANCES.get(haGroupName);
+  }
+
+  /**
+   * Called when RS shuts down
+   */
+  public static void stop() {
+    for (ReplicationLogGroup logGroup : INSTANCES.values()) {
+      logGroup.close();
+    }
+  }
+
   /**
    * Get or create a ReplicationLogGroup instance for the given HA Group. Used mainly for testing
    * @param conf                Configuration object
@@ -407,20 +424,54 @@ public class ReplicationLogGroup {
    * @throws IOException if initialization fails
    */
   protected void init() throws IOException {
-    // First initialize the shard managers
-    this.standbyShardManager = createStandbyShardManager();
-    this.fallbackShardManager = createFallbackShardManager();
-    // Initialize the replication log forwarder. The log forwarder is only activated when
-    // we switch to STORE_AND_FORWARD or SYNC_AND_FORWARD mode
-    this.logForwarder = new ReplicationLogDiscoveryForwarder(this);
-    this.logForwarder.init();
+    // Initialize the replication log forwarder. The log forwarder is activated when we switch
+    // to STORE_AND_FORWARD or SYNC_AND_FORWARD mode
+    initializeLogForwarder();
     // Initialize the replication mode based on the HAGroupStore state
     initializeReplicationMode();
     // Use the override value if provided in the config, else use a derived value
     this.syncTimeoutMs = conf.getLong(REPLICATION_LOG_SYNC_TIMEOUT_KEY, calculateSyncTimeout());
     // Initialize the disruptor so that we start processing events
     initializeDisruptor();
+    setupListener();
     LOG.info("HAGroup {} started with mode={}", this, mode);
+  }
+
+  protected void setupListener() throws IOException {
+    // Set up a listener to the ACTIVE_NOT_IN_SYNC state. This is needed because whenever any
+    // RS switches to STORE_AND_FORWARD mode, other RS's in the cluster must move out of SYNC
+    // mode.
+    HAGroupStateListener activeNotInSync =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (
+          clusterType == ClusterType.LOCAL
+            && HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC.equals(toState)
+        ) {
+          LOG.info("Received ACTIVE_NOT_IN_SYNC event for {}", this);
+          // If the current mode is SYNC only then switch to SYNC_AND_FORWARD mode
+          checkAndSetModeAndNotify(SYNC, SYNC_AND_FORWARD);
+        }
+      };
+
+    // Set up a listener to the ACTIVE_IN_SYNC state. This is needed because when the RS
+    // switches back to SYNC mode, the other RS's in the cluster must move out of
+    // SYNC_AND_FORWARD mode to SYNC mode.
+    HAGroupStateListener activeInSync =
+      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
+        if (
+          clusterType == ClusterType.LOCAL
+            && HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC.equals(toState)
+        ) {
+          LOG.info("Received ACTIVE_IN_SYNC event for {}", this);
+          // Set the current mode to SYNC
+          checkAndSetModeAndNotify(SYNC_AND_FORWARD, SYNC);
+        }
+      };
+
+    haGroupStoreManager.subscribeToTargetState(haGroupName,
+      HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, ClusterType.LOCAL, activeNotInSync);
+    haGroupStoreManager.subscribeToTargetState(haGroupName,
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, ClusterType.LOCAL, activeInSync);
   }
 
   /**
@@ -469,6 +520,20 @@ public class ReplicationLogGroup {
       LOG.error(message);
       throw new IOException(message);
     }
+  }
+
+  /**
+   * Initialize the replication log forwarder. The log forwarder is activated when we switch to
+   * STORE_AND_FORWARD or SYNC_AND_FORWARD mode
+   */
+  protected void initializeLogForwarder() throws IOException {
+    ReplicationShardDirectoryManager localShardManager = createFallbackShardManager();
+    ReplicationLogTracker forwardingLogTracker =
+      new ReplicationLogTracker(conf, getHAGroupName(), localShardManager,
+        MetricsReplicationLogForwarderSourceFactory.getInstanceForTracker(getHAGroupName()));
+    forwardingLogTracker.init();
+    this.logForwarder = new ReplicationLogDiscoveryForwarder(this, forwardingLogTracker);
+    this.logForwarder.init();
   }
 
   /** Initialize the Disruptor. */
@@ -637,6 +702,7 @@ public class ReplicationLogGroup {
       if (closed) {
         return;
       }
+      LOG.info("HAGroup {} closing", this);
       // setting closed to true prevents future producers to add events to the ring buffer
       closed = true;
       // Remove from instances cache
@@ -654,6 +720,9 @@ public class ReplicationLogGroup {
       }
       // wait for the disruptor threads to finish
       shutdownDisruptorExecutor();
+      // stop the forwarder if running
+      logForwarder.stop();
+      logForwarder.close();
       metrics.close();
       LOG.info("HAGroup {} closed", this);
     }
@@ -705,6 +774,22 @@ public class ReplicationLogGroup {
     return updated;
   }
 
+  /**
+   * Helper API to check and set the replication mode and then notify the disruptor
+   */
+  boolean checkAndSetModeAndNotify(ReplicationMode expectedMode, ReplicationMode newMode) {
+    boolean ret = checkAndSetMode(expectedMode, newMode);
+    if (ret) {
+      // replication mode switched, notify the event handler
+      try {
+        sync();
+      } catch (IOException e) {
+        LOG.info("Failed to notify event handler for {}", this, e);
+      }
+    }
+    return ret;
+  }
+
   /** Get the current replication mode */
   protected ReplicationMode getMode() {
     return mode.get();
@@ -728,10 +813,6 @@ public class ReplicationLogGroup {
     return haGroupName;
   }
 
-  protected HAGroupStoreManager getHAGroupStoreManager() {
-    return haGroupStoreManager;
-  }
-
   protected Configuration getConfiguration() {
     return conf;
   }
@@ -753,7 +834,18 @@ public class ReplicationLogGroup {
   private ReplicationShardDirectoryManager createShardManager(String urlKey, String logDirName)
     throws IOException {
     URI rootURI = getLogURI(urlKey);
-    FileSystem fs = getFileSystem(rootURI);
+    FileSystem fs = null;
+    try {
+      fs = getFileSystem(rootURI);
+    } catch (IllegalArgumentException e) {
+      LOG.error("HAGroup {} couldn't get filesystem for URI {}", this, rootURI, e);
+      if (e.getCause() instanceof IOException) {
+        throw (IOException) (e.getCause());
+      } else {
+        String msg = String.format("HAGroup %s couldn't get filesystem for URI %s", this, rootURI);
+        ClientUtil.throwIOException(msg, e);
+      }
+    }
     LOG.info("HAGroup {} initialized filesystem at {}", this, rootURI);
     // root dir path is <URI>/<HAGroupName>/[in|out]
     Path rootDirPath = new Path(new Path(rootURI.getPath(), getHAGroupName()), logDirName);
@@ -776,14 +868,8 @@ public class ReplicationLogGroup {
     return createShardManager(REPLICATION_FALLBACK_HDFS_URL_KEY, FALLBACK_DIR);
   }
 
-  /** return shard manager for the standby cluster */
-  protected ReplicationShardDirectoryManager getStandbyShardManager() {
-    return standbyShardManager;
-  }
-
-  /** return shard manager for the fallback cluster */
-  protected ReplicationShardDirectoryManager getFallbackShardManager() {
-    return fallbackShardManager;
+  protected ReplicationLog createReplicationLog(ReplicationShardDirectoryManager shardManager) {
+    return new ReplicationLog(this, shardManager);
   }
 
   private URI getLogURI(String urlKey) throws IOException {
@@ -800,16 +886,6 @@ public class ReplicationLogGroup {
 
   private FileSystem getFileSystem(URI uri) throws IOException {
     return FileSystem.get(uri, conf);
-  }
-
-  /** Create the standby(synchronous) writer */
-  protected ReplicationLog createStandbyLog() throws IOException {
-    return new ReplicationLog(this, standbyShardManager);
-  }
-
-  /** Create the fallback writer */
-  protected ReplicationLog createFallbackLog() throws IOException {
-    return new ReplicationLog(this, fallbackShardManager);
   }
 
   /** Returns the log forwarder for this replication group */

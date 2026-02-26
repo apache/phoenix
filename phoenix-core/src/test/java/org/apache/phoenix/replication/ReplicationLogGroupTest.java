@@ -38,6 +38,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import java.io.IOException;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -46,7 +47,9 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.replication.ReplicationLog.RotationReason;
 import org.apache.phoenix.replication.log.LogFile;
@@ -1215,6 +1218,24 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Clean up
     g1_3.close();
+  }
+
+  /**
+   * Test that when we hit an error when initializing file system in SYNC mode we switch to
+   * STORE_AND_FORWARD mode
+   */
+  @Test
+  public void testFSInitializationError() throws IOException {
+    final String haGroupId = "testBadFSGroup";
+    Configuration testConf = HBaseConfiguration.create();
+    URI standbyUri = URI.create("hdfs://badhost:8020/bar");
+    testConf.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
+    testConf.set(ReplicationLogGroup.REPLICATION_FALLBACK_HDFS_URL_KEY, fallbackUri.toString());
+    ReplicationLogGroup badFSLogGroup =
+      new TestableLogGroup(testConf, serverName, haGroupId, haGroupStoreManager);
+    badFSLogGroup.init();
+    assertEquals(STORE_AND_FORWARD, badFSLogGroup.getMode());
+    badFSLogGroup.close();
   }
 
   @Test

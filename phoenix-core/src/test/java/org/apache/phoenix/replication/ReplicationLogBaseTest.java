@@ -138,15 +138,9 @@ public class ReplicationLogBaseTest {
     }
 
     @Override
-    protected ReplicationLog createStandbyLog() throws IOException {
-      return spy(new TestableLog(this, standbyShardManager));
+    protected ReplicationLog createReplicationLog(ReplicationShardDirectoryManager shardManager) {
+      return spy(new TestableLog(this, shardManager));
     }
-
-    @Override
-    protected ReplicationLog createFallbackLog() throws IOException {
-      return spy(new TestableLog(this, fallbackShardManager));
-    }
-
   }
 
   /**
