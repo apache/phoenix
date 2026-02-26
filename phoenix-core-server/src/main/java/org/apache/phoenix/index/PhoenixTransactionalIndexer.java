@@ -34,9 +34,8 @@ import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.trace.stub.Span;
-import org.apache.phoenix.trace.stub.Trace;
-import org.apache.phoenix.trace.stub.TraceScope;
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.execute.PhoenixTxIndexMutationGenerator;
@@ -44,7 +43,7 @@ import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LeaveIndexActiveFailurePolicy;
 import org.apache.phoenix.hbase.index.write.ParallelWriterIndexCommitter;
 import org.apache.phoenix.trace.TracingUtils;
-import org.apache.phoenix.trace.util.NullSpan;
+import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
@@ -157,11 +156,8 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
 
     Collection<Pair<Mutation, byte[]>> indexUpdates = null;
     // get the current span, or just use a null-span to avoid a bunch of if statements
-    try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
-      Span current = scope.getSpan();
-      if (current == null) {
-        current = NullSpan.INSTANCE;
-      }
+    Span current = PhoenixTracing.createSpan("phoenix.index.build.updates");
+    try (Scope ignored = current.makeCurrent()) {
 
       RegionCoprocessorEnvironment env = c.getEnvironment();
       PhoenixTransactionContext txnContext = indexMetaData.getTransactionContext();
@@ -196,8 +192,8 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
         context.indexUpdates = indexUpdates;
       }
 
-      current.addTimelineAnnotation("Built index updates, doing preStep");
-      TracingUtils.addAnnotation(current, "index update count", context.indexUpdates.size());
+      current.addEvent("Built index updates, doing preStep");
+      current.setAttribute("phoenix.index.update.count", (long) context.indexUpdates.size());
     } catch (Throwable t) {
       String msg = "Failed to update index with entries:" + indexUpdates;
       LOGGER.error(msg, t);
@@ -213,17 +209,14 @@ public class PhoenixTransactionalIndexer implements RegionObserver, RegionCoproc
       return;
     }
     // get the current span, or just use a null-span to avoid a bunch of if statements
-    try (TraceScope scope = Trace.startSpan("Starting to write index updates")) {
-      Span current = scope.getSpan();
-      if (current == null) {
-        current = NullSpan.INSTANCE;
-      }
+    Span current = PhoenixTracing.createSpan("phoenix.index.write.updates");
+    try (Scope ignored = current.makeCurrent()) {
 
       if (success) { // if miniBatchOp was successfully written, write index updates
         if (!context.indexUpdates.isEmpty()) {
           this.writer.write(context.indexUpdates, false, context.clientVersion);
         }
-        current.addTimelineAnnotation("Wrote index updates");
+        current.addEvent("Wrote index updates");
       }
     } catch (Throwable t) {
       String msg = "Failed to write index updates:" + context.indexUpdates;
