@@ -186,7 +186,7 @@ public class QueryServicesOptions {
   public static final int DEFAULT_TRACING_THREAD_POOL_SIZE = 5;
   public static final int DEFAULT_TRACING_BATCH_SIZE = 100;
   public static final int DEFAULT_TRACING_TRACE_BUFFER_SIZE = 1000;
-  public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 10;
+  public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 30;
   public static final int DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD = 0;
 
   public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and
