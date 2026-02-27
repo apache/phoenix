@@ -61,7 +61,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSource;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSourceImpl;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSourceFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -394,7 +394,10 @@ public class ReplicationLogGroup {
    */
   protected ReplicationLogGroup(Configuration conf, ServerName serverName, String haGroupName,
     HAGroupStoreManager haGroupStoreManager) {
-    this.conf = conf;
+    // conf object from coprocessor is instance of
+    // org.apache.hadoop.hbase.coprocessor.ReadOnlyConfiguration and we need to modify it when
+    // we send rpc to namenode so copying it
+    this.conf = new Configuration(conf);
     this.serverName = serverName;
     this.haGroupName = haGroupName;
     this.haGroupStoreManager = haGroupStoreManager;
@@ -717,7 +720,7 @@ public class ReplicationLogGroup {
 
   /** Create a new metrics source for monitoring operations. */
   protected MetricsReplicationLogGroupSource createMetricsSource() {
-    return new MetricsReplicationLogGroupSourceImpl(haGroupName);
+    return MetricsReplicationLogGroupSourceFactory.getInstanceForLogGroup(haGroupName);
   }
 
   /**
