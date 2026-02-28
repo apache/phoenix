@@ -41,6 +41,7 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -61,7 +62,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSource;
-import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSourceImpl;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSourceFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -394,7 +395,16 @@ public class ReplicationLogGroup {
    */
   protected ReplicationLogGroup(Configuration conf, ServerName serverName, String haGroupName,
     HAGroupStoreManager haGroupStoreManager) {
-    this.conf = conf;
+    // conf object from coprocessor is instance of
+    // org.apache.hadoop.hbase.coprocessor.ReadOnlyConfiguration and we need to modify it when
+    // we send rpc to namenode so copying it
+    // Clone configuration by iterating all entries because ReadOnlyConfiguration wraps the
+    // original config so you can't use the Configuration(other) constructor to create a clone
+    Configuration clonedConf = new Configuration();
+    for (Map.Entry<String, String> entry : conf) {
+      clonedConf.set(entry.getKey(), entry.getValue());
+    }
+    this.conf = clonedConf;
     this.serverName = serverName;
     this.haGroupName = haGroupName;
     this.haGroupStoreManager = haGroupStoreManager;
@@ -717,7 +727,7 @@ public class ReplicationLogGroup {
 
   /** Create a new metrics source for monitoring operations. */
   protected MetricsReplicationLogGroupSource createMetricsSource() {
-    return new MetricsReplicationLogGroupSourceImpl(haGroupName);
+    return MetricsReplicationLogGroupSourceFactory.getInstanceForLogGroup(haGroupName);
   }
 
   /**

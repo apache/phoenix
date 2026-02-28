@@ -33,6 +33,7 @@ import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -1262,6 +1263,34 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId4), eq(put4));
     inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId5), eq(put5));
     inOrder.verify(storeAndForwardWriter, times(1)).sync();
+  }
+
+  /**
+   * Tests that multiple instances of the same HA group don't attempt to register the same jmx
+   * metrics instance which is not allowed.
+   */
+  @Test
+  public void testMetricsCaching() throws Exception {
+    String hagroup1 = "group1";
+    // create a HA group which creates the metrics jmx instance
+    ReplicationLogGroup group1 =
+      spy(new ReplicationLogGroup(conf, serverName, hagroup1, haGroupStoreManager));
+    // HA group initialization fails so the HA group is not cached
+    doThrow(new IOException("Simulate HAGroup initialization error")).when(group1).init();
+    try {
+      group1.init();
+      fail("HAGroup initialization should have failed");
+    } catch (IOException e) {
+      // expected
+    }
+    // retry creating another instance of the same HA Group
+    ReplicationLogGroup group2 =
+      new ReplicationLogGroup(conf, serverName, hagroup1, haGroupStoreManager);
+    // this time initialization succeeds
+    group2.init();
+    // metrics instance is the same in both the instances
+    assertEquals(group1.metrics, group2.metrics);
+    group2.close();
   }
 
   // @Test
