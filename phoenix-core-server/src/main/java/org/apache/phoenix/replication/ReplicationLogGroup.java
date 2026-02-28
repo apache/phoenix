@@ -41,6 +41,7 @@ import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -397,7 +398,13 @@ public class ReplicationLogGroup {
     // conf object from coprocessor is instance of
     // org.apache.hadoop.hbase.coprocessor.ReadOnlyConfiguration and we need to modify it when
     // we send rpc to namenode so copying it
-    this.conf = new Configuration(conf);
+    // Clone configuration by iterating all entries because ReadOnlyConfiguration wraps the
+    // original config so you can't use the Configuration(other) constructor to create a clone
+    Configuration clonedConf = new Configuration();
+    for (Map.Entry<String, String> entry : conf) {
+      clonedConf.set(entry.getKey(), entry.getValue());
+    }
+    this.conf = clonedConf;
     this.serverName = serverName;
     this.haGroupName = haGroupName;
     this.haGroupStoreManager = haGroupStoreManager;
