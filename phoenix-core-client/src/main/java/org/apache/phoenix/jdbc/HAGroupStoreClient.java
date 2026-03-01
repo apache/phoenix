@@ -272,7 +272,12 @@ public class HAGroupStoreClient implements Closeable {
       pathChildrenCache.rebuild();
     }
     if (peerPathChildrenCache != null) {
-      peerPathChildrenCache.rebuild();
+      try {
+        peerPathChildrenCache.rebuild();
+      } catch (Exception e) {
+        LOGGER.error("Unexpected error occurred while rebuilding peerPathChildrenCache, continuing",
+          e);
+      }
     }
     LOGGER.info("Rebuild Complete for HAGroupStoreClient for HA group {}", haGroupName);
   }
@@ -860,6 +865,9 @@ public class HAGroupStoreClient implements Closeable {
         extractHAGroupStoreRecordOrNull(childData);
       HAGroupStoreRecord eventRecord = eventRecordAndStat.getLeft();
       Stat eventStat = eventRecordAndStat.getRight();
+      if (eventRecord != null && !Objects.equals(eventRecord.getHaGroupName(), haGroupName)) {
+        return;
+      }
       LOGGER.info(
         "HAGroupStoreClient Cache {} received event {} type {} at {} with ZKUrl {} and "
           + "PeerZKUrl {} for haGroupName {}",
@@ -909,7 +917,6 @@ public class HAGroupStoreClient implements Closeable {
       LOGGER.warn("{} HAGroupStoreClient cache is null, returning null", cacheType);
       return Pair.of(null, null);
     }
-
     String targetPath = toPath(this.haGroupName);
     // Try to get record from current cache data
     Pair<HAGroupStoreRecord, Stat> result = extractRecordAndStat(cache, targetPath, cacheType);

@@ -46,6 +46,7 @@ import org.apache.phoenix.replication.reader.ReplicationLogReplay;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.zookeeper.data.Stat;
+import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.ClassRule;
@@ -84,6 +85,11 @@ public class HAGroupStoreManagerIT extends BaseTest {
     CLUSTERS.start();
   }
 
+  @AfterClass
+  public static synchronized void cleanup() throws Exception {
+    CLUSTERS.close();
+  }
+
   @Before
   public void before() throws Exception {
     haAdmin = new PhoenixHAAdmin(config, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
@@ -92,20 +98,20 @@ public class HAGroupStoreManagerIT extends BaseTest {
 
     // Clean up existing HAGroupStoreRecords
     try {
-      List<String> haGroupNames = HAGroupStoreClient.getHAGroupNames(zkUrl);
-      for (String haGroupName : haGroupNames) {
-        haAdmin.getCurator().delete().quietly().forPath(toPath(haGroupName));
-      }
+      haAdmin.getCurator().delete().quietly().deletingChildrenIfNeeded().forPath(toPath(""));
     } catch (Exception e) {
       // Ignore cleanup errors
     }
-    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl,
-      peerZKUrl, ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
 
     standbyUri = testFolder.getRoot().toURI();
     // Set the required configuration for ReplicationLogReplay
     CLUSTERS.getHBaseCluster2().getConfiguration()
       .set(ReplicationLogReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY, standbyUri.toString());
+    HAGroupStoreRecord haGroupStoreRecord = new HAGroupStoreRecord(
+      HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, testName.getMethodName(),
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, 0, HighAvailabilityPolicy.FAILOVER.toString(),
+      this.peerZKUrl, this.zkUrl, this.peerZKUrl, localUri.toString(), standbyUri.toString(), 0L);
+    haAdmin.createHAGroupStoreRecordInZooKeeper(haGroupStoreRecord);
   }
 
   @Test
@@ -299,7 +305,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl,
         localUri.toString(), standbyUri.toString(), 0L);
 
-    haAdmin.createHAGroupStoreRecordInZooKeeper(record);
+    haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, record, -1);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Ensure we can get the record
@@ -342,7 +348,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
       HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl,
       localUri.toString(), standbyUri.toString(), 0L);
 
-    haAdmin.createHAGroupStoreRecordInZooKeeper(transitionRecord);
+    haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, transitionRecord, -1);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Mutations should not be blocked even with ACTIVE_TO_STANDBY role
@@ -364,7 +370,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
         HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl,
         localUri.toString(), standbyUri.toString(), 0L);
 
-    haAdmin.createHAGroupStoreRecordInZooKeeper(initialRecord);
+    haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, initialRecord, -1);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Set the HA group status to store and forward (ACTIVE_NOT_IN_SYNC)
@@ -641,7 +647,7 @@ public class HAGroupStoreManagerIT extends BaseTest {
     // Create separate HAAdmin instances for both clusters using try-with-resources
     // Create HAGroupStoreManager instances for both clusters using constructor
     // This will automatically setup failover management and create ZNodes from system table
-    // Cluster1 will be initialized as ACTIVE_NOT_IN_SYNC, Cluster2 as STANDBY
+    // Cluster1 will be initialized as ACTIVE_IN_SYNC, Cluster2 as STANDBY
     HAGroupStoreManager cluster1HAManager =
       new HAGroupStoreManager(CLUSTERS.getHBaseCluster1().getConfiguration());
     HAGroupStoreManager cluster2HAManager =
