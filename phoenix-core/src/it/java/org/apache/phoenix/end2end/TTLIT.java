@@ -50,7 +50,7 @@ import org.junit.runners.Parameterized;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-@Category(ParallelStatsDisabledTest.class)
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class TTLIT extends ParallelStatsDisabledIT {
 
