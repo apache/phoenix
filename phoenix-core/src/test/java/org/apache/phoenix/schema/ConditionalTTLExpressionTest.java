@@ -60,8 +60,8 @@ public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
   @BeforeClass
   public static void enableViewTTL() throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
-      conn.unwrap(PhoenixConnection.class).getQueryServices()
-        .getConfiguration().setBoolean(QueryServices.PHOENIX_VIEW_TTL_ENABLED, true);
+      conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration()
+        .setBoolean(QueryServices.PHOENIX_VIEW_TTL_ENABLED, true);
     }
   }
 

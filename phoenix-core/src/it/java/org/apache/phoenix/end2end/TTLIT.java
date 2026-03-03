@@ -27,22 +27,28 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder;
 import org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableOptions;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
@@ -55,6 +61,16 @@ public class TTLIT extends ParallelStatsDisabledIT {
   private static final int DEFAULT_TEST_TTL_VALUE_AT_GLOBAL = 400000;
   private static final int DEFAULT_TEST_TTL_VALUE_AT_TENANT = 200000;
   public static final String SKIP_ASSERT = "SKIP_ASSERT";
+
+  @BeforeClass
+  public static synchronized void doSetup() throws Exception {
+    Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+    props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+      Integer.toString(60 * 60)); // An hour
+    props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
+    props.put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(true));
+    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+  }
 
   public TTLIT(boolean isMultiTenant) {
     this.isMultiTenant = isMultiTenant;
