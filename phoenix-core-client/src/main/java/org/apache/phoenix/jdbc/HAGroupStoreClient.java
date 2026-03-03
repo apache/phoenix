@@ -24,6 +24,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_ROLE_2;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_URL_1;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_URL_2;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.HA_GROUP_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.HDFS_URL_1;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.HDFS_URL_2;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.POLICY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VERSION;
@@ -270,7 +272,12 @@ public class HAGroupStoreClient implements Closeable {
       pathChildrenCache.rebuild();
     }
     if (peerPathChildrenCache != null) {
-      peerPathChildrenCache.rebuild();
+      try {
+        peerPathChildrenCache.rebuild();
+      } catch (Exception e) {
+        LOGGER.error("Unexpected error occurred while rebuilding peerPathChildrenCache, continuing",
+          e);
+      }
     }
     LOGGER.info("Rebuild Complete for HAGroupStoreClient for HA group {}", haGroupName);
   }
@@ -358,12 +365,12 @@ public class HAGroupStoreClient implements Closeable {
       lastSyncTimeInMs =
         ((System.currentTimeMillis() - rotationTimeMs) / rotationTimeMs) * rotationTimeMs;
     }
-    HAGroupStoreRecord newHAGroupStoreRecord =
-      new HAGroupStoreRecord(currentHAGroupStoreRecord.getProtocolVersion(),
-        currentHAGroupStoreRecord.getHaGroupName(), haGroupState, lastSyncTimeInMs,
-        currentHAGroupStoreRecord.getPolicy(), currentHAGroupStoreRecord.getPeerZKUrl(),
-        currentHAGroupStoreRecord.getClusterUrl(), currentHAGroupStoreRecord.getPeerClusterUrl(),
-        currentHAGroupStoreRecord.getAdminCRRVersion());
+    HAGroupStoreRecord newHAGroupStoreRecord = new HAGroupStoreRecord(
+      currentHAGroupStoreRecord.getProtocolVersion(), currentHAGroupStoreRecord.getHaGroupName(),
+      haGroupState, lastSyncTimeInMs, currentHAGroupStoreRecord.getPolicy(),
+      currentHAGroupStoreRecord.getPeerZKUrl(), currentHAGroupStoreRecord.getClusterUrl(),
+      currentHAGroupStoreRecord.getPeerClusterUrl(), currentHAGroupStoreRecord.getHdfsUrl(),
+      currentHAGroupStoreRecord.getPeerHdfsUrl(), currentHAGroupStoreRecord.getAdminCRRVersion());
     phoenixHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, newHAGroupStoreRecord,
       currentHAGroupStoreRecordStat.getVersion());
     // If cluster role is changing, if so, we update,
@@ -379,6 +386,7 @@ public class HAGroupStoreClient implements Closeable {
         HighAvailabilityPolicy.valueOf(newHAGroupStoreRecord.getPolicy()), clusterRole,
         peerClusterRole, newHAGroupStoreRecord.getClusterUrl(),
         newHAGroupStoreRecord.getPeerClusterUrl(), this.zkUrl, newHAGroupStoreRecord.getPeerZKUrl(),
+        newHAGroupStoreRecord.getHdfsUrl(), newHAGroupStoreRecord.getPeerHdfsUrl(),
         newHAGroupStoreRecord.getAdminCRRVersion());
       updateSystemTableHAGroupRecordSilently(haGroupName, systemTableRecord);
     }
@@ -435,7 +443,8 @@ public class HAGroupStoreClient implements Closeable {
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           defaultHAGroupState, 0L, systemTableRecord.getPolicy().toString(),
           systemTableRecord.getPeerZKUrl(), systemTableRecord.getClusterUrl(),
-          systemTableRecord.getPeerClusterUrl(), systemTableRecord.getAdminCRRVersion());
+          systemTableRecord.getPeerClusterUrl(), systemTableRecord.getHdfsUrl(),
+          systemTableRecord.getPeerHdfsUrl(), systemTableRecord.getAdminCRRVersion());
       phoenixHaAdmin.createHAGroupStoreRecordInZooKeeper(newHAGroupStoreRecord);
     }
   }
@@ -452,11 +461,13 @@ public class HAGroupStoreClient implements Closeable {
     private final String zkUrl;
     private final String peerZKUrl;
     private final long adminCRRVersion;
+    private final String hdfsUrl;
+    private final String peerHdfsUrl;
 
     public SystemTableHAGroupRecord(HighAvailabilityPolicy policy,
       ClusterRoleRecord.ClusterRole clusterRole, ClusterRoleRecord.ClusterRole peerClusterRole,
-      String clusterUrl, String peerClusterUrl, String zkUrl, String peerZKUrl,
-      long adminCRRVersion) {
+      String clusterUrl, String peerClusterUrl, String zkUrl, String peerZKUrl, String hdfsUrl,
+      String peerHdfsUrl, long adminCRRVersion) {
       this.policy = policy;
       this.clusterRole = clusterRole;
       this.peerClusterRole = peerClusterRole;
@@ -465,6 +476,8 @@ public class HAGroupStoreClient implements Closeable {
       this.zkUrl = zkUrl;
       this.peerZKUrl = peerZKUrl;
       this.adminCRRVersion = adminCRRVersion;
+      this.hdfsUrl = hdfsUrl;
+      this.peerHdfsUrl = peerHdfsUrl;
     }
 
     public HighAvailabilityPolicy getPolicy() {
@@ -499,6 +512,14 @@ public class HAGroupStoreClient implements Closeable {
       return adminCRRVersion;
     }
 
+    public String getHdfsUrl() {
+      return hdfsUrl;
+    }
+
+    public String getPeerHdfsUrl() {
+      return peerHdfsUrl;
+    }
+
     @Override
     public boolean equals(Object obj) {
       if (this == obj) {
@@ -513,13 +534,14 @@ public class HAGroupStoreClient implements Closeable {
         && Objects.equals(clusterUrl, other.clusterUrl)
         && Objects.equals(peerClusterUrl, other.peerClusterUrl)
         && Objects.equals(zkUrl, other.zkUrl) && Objects.equals(peerZKUrl, other.peerZKUrl)
-        && adminCRRVersion == other.adminCRRVersion;
+        && adminCRRVersion == other.adminCRRVersion && Objects.equals(hdfsUrl, other.hdfsUrl)
+        && Objects.equals(peerHdfsUrl, other.peerHdfsUrl);
     }
 
     @Override
     public int hashCode() {
       return Objects.hash(policy, clusterRole, peerClusterRole, clusterUrl, peerClusterUrl, zkUrl,
-        peerZKUrl, adminCRRVersion);
+        peerZKUrl, adminCRRVersion, hdfsUrl, peerHdfsUrl);
     }
   }
 
@@ -542,6 +564,8 @@ public class HAGroupStoreClient implements Closeable {
         long adminCRRVersion = rs.getLong(VERSION);
         String formattedZkUrl1 = null;
         String formattedZkUrl2 = null;
+        String hdfsUrl1 = rs.getString(HDFS_URL_1);
+        String hdfsUrl2 = rs.getString(HDFS_URL_2);
         if (StringUtils.isNotBlank(zkUrl1)) {
           formattedZkUrl1 = JDBCUtil.formatUrl(zkUrl1, RegistryType.ZK);
         }
@@ -554,6 +578,8 @@ public class HAGroupStoreClient implements Closeable {
         ClusterRoleRecord.ClusterRole peerClusterRole;
         String clusterUrl;
         String peerClusterUrl;
+        String hdfsUrl;
+        String peerHdfsUrl;
 
         if (StringUtils.equals(formattedZkUrl1, formattedZkUrl)) {
           peerZKUrl = formattedZkUrl2;
@@ -563,6 +589,8 @@ public class HAGroupStoreClient implements Closeable {
             ClusterRoleRecord.ClusterRole.from(clusterRole2.getBytes(StandardCharsets.UTF_8));
           clusterUrl = clusterUrl1;
           peerClusterUrl = clusterUrl2;
+          hdfsUrl = hdfsUrl1;
+          peerHdfsUrl = hdfsUrl2;
         } else if (StringUtils.equals(formattedZkUrl2, formattedZkUrl)) {
           peerZKUrl = JDBCUtil.formatUrl(zkUrl1, RegistryType.ZK);
           clusterRole =
@@ -571,6 +599,8 @@ public class HAGroupStoreClient implements Closeable {
             ClusterRoleRecord.ClusterRole.from(clusterRole1.getBytes(StandardCharsets.UTF_8));
           clusterUrl = clusterUrl2;
           peerClusterUrl = clusterUrl1;
+          hdfsUrl = hdfsUrl2;
+          peerHdfsUrl = hdfsUrl1;
         } else {
           throw new SQLException("Current zkUrl does not match"
             + "any zkUrl in System Table for HA group: " + haGroupName);
@@ -585,7 +615,7 @@ public class HAGroupStoreClient implements Closeable {
           "Peer Cluster URL in System Table cannot be null");
 
         return new SystemTableHAGroupRecord(policy, clusterRole, peerClusterRole, clusterUrl,
-          peerClusterUrl, formattedZkUrl, peerZKUrl, adminCRRVersion);
+          peerClusterUrl, formattedZkUrl, peerZKUrl, hdfsUrl, peerHdfsUrl, adminCRRVersion);
       } else {
         throw new SQLException("HAGroupStoreRecord not found for HA group name: " + haGroupName
           + " in System Table " + SYSTEM_HA_GROUP_NAME);
@@ -728,10 +758,11 @@ public class HAGroupStoreClient implements Closeable {
         ? peerZkRecord.getClusterRole()
         : ClusterRoleRecord.ClusterRole.UNKNOWN;
       // Create SystemTableHAGroupRecord from ZK data
-      SystemTableHAGroupRecord newSystemTableRecord = new SystemTableHAGroupRecord(
-        HighAvailabilityPolicy.valueOf(zkRecord.getPolicy()), zkRecord.getClusterRole(),
-        peerClusterRole, zkRecord.getClusterUrl(), zkRecord.getPeerClusterUrl(), this.zkUrl,
-        zkRecord.getPeerZKUrl(), zkRecord.getAdminCRRVersion());
+      SystemTableHAGroupRecord newSystemTableRecord =
+        new SystemTableHAGroupRecord(HighAvailabilityPolicy.valueOf(zkRecord.getPolicy()),
+          zkRecord.getClusterRole(), peerClusterRole, zkRecord.getClusterUrl(),
+          zkRecord.getPeerClusterUrl(), this.zkUrl, zkRecord.getPeerZKUrl(), zkRecord.getHdfsUrl(),
+          zkRecord.getPeerHdfsUrl(), zkRecord.getAdminCRRVersion());
 
       // Read existing record from system table to check if update is needed
       SystemTableHAGroupRecord existingSystemTableRecord = getSystemTableHAGroupRecord(haGroupName);
@@ -834,6 +865,9 @@ public class HAGroupStoreClient implements Closeable {
         extractHAGroupStoreRecordOrNull(childData);
       HAGroupStoreRecord eventRecord = eventRecordAndStat.getLeft();
       Stat eventStat = eventRecordAndStat.getRight();
+      if (eventRecord != null && !Objects.equals(eventRecord.getHaGroupName(), haGroupName)) {
+        return;
+      }
       LOGGER.info(
         "HAGroupStoreClient Cache {} received event {} type {} at {} with ZKUrl {} and "
           + "PeerZKUrl {} for haGroupName {}",
@@ -883,7 +917,6 @@ public class HAGroupStoreClient implements Closeable {
       LOGGER.warn("{} HAGroupStoreClient cache is null, returning null", cacheType);
       return Pair.of(null, null);
     }
-
     String targetPath = toPath(this.haGroupName);
     // Try to get record from current cache data
     Pair<HAGroupStoreRecord, Stat> result = extractRecordAndStat(cache, targetPath, cacheType);

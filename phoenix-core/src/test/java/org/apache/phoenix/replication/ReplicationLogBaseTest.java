@@ -127,7 +127,8 @@ public class ReplicationLogBaseTest {
 
   private HAGroupStoreRecord initHAGroupStoreRecord() {
     return new HAGroupStoreRecord(null, haGroupName, initialState, 0,
-      HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl", "clusterUrl", "peerClusterUrl",
+      "hdfsUrl", "peerHdfsUrl", 0L);
   }
 
   static class TestableLogGroup extends ReplicationLogGroup {

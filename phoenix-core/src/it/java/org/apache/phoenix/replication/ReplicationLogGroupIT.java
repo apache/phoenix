@@ -120,7 +120,7 @@ public class ReplicationLogGroupIT extends HABaseIT {
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, 0L,
         HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
-        CLUSTERS.getMasterAddress2(), 0L);
+        CLUSTERS.getMasterAddress2(), fallbackUri.toString(), standbyUri.toString(), 0L);
     haAdmin1.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
     logGroup = getReplicationLogGroup();
   }

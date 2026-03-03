@@ -40,6 +40,8 @@ import org.slf4j.LoggerFactory;
 public class HAGroupStoreRecordTest {
   private static final Logger LOG = LoggerFactory.getLogger(HAGroupStoreRecordTest.class);
   private static final String PROTOCOL_VERSION = "1.0";
+  private static final String TEST_HDFS_URL = "hdfs://hdfsUrl";
+  private static final String TEST_PEER_HDFS_URL = "hdfs://peerHdfsUrl";
 
   @Rule
   public final TestName testName = new TestName();
@@ -60,7 +62,7 @@ public class HAGroupStoreRecordTest {
   public void testReadWriteJsonToFile() throws IOException {
     HAGroupStoreRecord record = getHAGroupStoreRecord(testName.getMethodName(), PROTOCOL_VERSION,
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL);
     String fileName = createJsonFileWithRecords(record);
     String fileContent = FileUtils.readFileToString(new File(fileName), "UTF-8");
     assertTrue(fileContent.contains(record.getHaGroupName()));
@@ -78,7 +80,7 @@ public class HAGroupStoreRecordTest {
   public void testToAndFromJson() throws IOException {
     HAGroupStoreRecord record = getHAGroupStoreRecord(testName.getMethodName(), PROTOCOL_VERSION,
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL);
     byte[] bytes = HAGroupStoreRecord.toJson(record);
     Optional<HAGroupStoreRecord> record2 = HAGroupStoreRecord.fromJson(bytes);
     assertTrue(record2.isPresent());
@@ -103,10 +105,10 @@ public class HAGroupStoreRecordTest {
     String haGroupName = testName.getMethodName();
     HAGroupStoreRecord record1 = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL);
     HAGroupStoreRecord record2 = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL);
 
     assertTrue(record1.hasSameInfo(record2)); // Same core info despite different state
     assertTrue(record1.hasSameInfo(record1)); // reflexive
@@ -118,12 +120,12 @@ public class HAGroupStoreRecordTest {
     String haGroupName = testName.getMethodName();
     HAGroupStoreRecord record = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL);
 
     // Different protocol version
     HAGroupStoreRecord recordDifferentProtocol = getHAGroupStoreRecord(haGroupName, "2.0",
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL);
     assertFalse(record.hasSameInfo(recordDifferentProtocol));
     assertFalse(recordDifferentProtocol.hasSameInfo(record));
 
@@ -131,14 +133,14 @@ public class HAGroupStoreRecordTest {
     String haGroupName2 = haGroupName + RandomStringUtils.randomAlphabetic(2);
     HAGroupStoreRecord record2 = getHAGroupStoreRecord(haGroupName2, PROTOCOL_VERSION,
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL);
     assertFalse(record.hasSameInfo(record2));
     assertFalse(record2.hasSameInfo(record));
 
     // Different HA group state
     HAGroupStoreRecord recordDifferentState = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
       HAGroupStoreRecord.HAGroupState.STANDBY, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL);
     assertFalse(record.hasSameInfo(recordDifferentState));
     assertFalse(recordDifferentState.hasSameInfo(record));
   }
@@ -149,7 +151,8 @@ public class HAGroupStoreRecordTest {
     String protocolVersion = "1.5";
     HAGroupStoreRecord.HAGroupState haGroupState = HAGroupStoreRecord.HAGroupState.STANDBY;
     HAGroupStoreRecord record = getHAGroupStoreRecord(haGroupName, protocolVersion, haGroupState,
-      HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L,
+      TEST_HDFS_URL, TEST_PEER_HDFS_URL);
 
     assertEquals(haGroupName, record.getHaGroupName());
     assertEquals(protocolVersion, record.getProtocolVersion());
@@ -163,13 +166,14 @@ public class HAGroupStoreRecordTest {
     String haGroupName = testName.getMethodName();
     HAGroupStoreRecord record1 = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL);
     HAGroupStoreRecord record2 = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL);
     HAGroupStoreRecord record3 = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,
       HAGroupStoreRecord.HAGroupState.STANDBY, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L); // Different state
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL); // Different
+                                                                                           // state
 
     // Test equals
     assertEquals(record1, record2); // symmetric
@@ -188,7 +192,7 @@ public class HAGroupStoreRecordTest {
   public void testToString() {
     HAGroupStoreRecord record = getHAGroupStoreRecord(testName.getMethodName(), PROTOCOL_VERSION,
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL);
     String toString = record.toString();
 
     // Verify all fields are present in toString
@@ -202,7 +206,7 @@ public class HAGroupStoreRecordTest {
   public void testToPrettyString() {
     HAGroupStoreRecord record = getHAGroupStoreRecord(testName.getMethodName(), PROTOCOL_VERSION,
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, HighAvailabilityPolicy.FAILOVER.toString(),
-      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L, TEST_HDFS_URL, TEST_PEER_HDFS_URL);
     LOG.info("toString(): {}", record.toString());
     LOG.info("toPrettyString:\n{}", record.toPrettyString());
     assertNotEquals(record.toString(), record.toPrettyString());
@@ -212,13 +216,15 @@ public class HAGroupStoreRecordTest {
   @Test(expected = NullPointerException.class)
   public void testConstructorWithNullHaGroupName() {
     getHAGroupStoreRecord(null, PROTOCOL_VERSION, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
-      HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L,
+      TEST_HDFS_URL, TEST_PEER_HDFS_URL);
   }
 
   @Test(expected = NullPointerException.class)
   public void testConstructorWithNullHAGroupState() {
     getHAGroupStoreRecord(testName.getMethodName(), PROTOCOL_VERSION, null,
-      HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L);
+      HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl", "clusterUrl", "peerClusterUrl", 0L,
+      TEST_HDFS_URL, TEST_PEER_HDFS_URL);
   }
 
   // Tests for HAGroupState enum
@@ -360,8 +366,9 @@ public class HAGroupStoreRecordTest {
   // Private Helper Methods
   private HAGroupStoreRecord getHAGroupStoreRecord(String haGroupName, String protocolVersion,
     HAGroupStoreRecord.HAGroupState haGroupState, String policy, String peerZKUrl,
-    String clusterUrl, String peerClusterUrl, long adminCRRVersion) {
+    String clusterUrl, String peerClusterUrl, long adminCRRVersion, String hdfsUrl,
+    String peerHdfsUrl) {
     return new HAGroupStoreRecord(protocolVersion, haGroupName, haGroupState, 0L, policy, peerZKUrl,
-      clusterUrl, peerClusterUrl, adminCRRVersion);
+      clusterUrl, peerClusterUrl, hdfsUrl, peerHdfsUrl, adminCRRVersion);
   }
 }

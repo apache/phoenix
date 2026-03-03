@@ -150,6 +150,8 @@ public class HAGroupStoreRecord {
   private final String clusterUrl;
   private final String peerClusterUrl;
   private final long adminCRRVersion;
+  private final String hdfsUrl;
+  private final String peerHdfsUrl;
 
   @JsonCreator
   public HAGroupStoreRecord(@JsonProperty("protocolVersion") String protocolVersion,
@@ -158,7 +160,8 @@ public class HAGroupStoreRecord {
     @JsonProperty("lastSyncStateTimeInMs") long lastSyncStateTimeInMs,
     @JsonProperty("policy") String policy, @JsonProperty("peerZKUrl") String peerZKUrl,
     @JsonProperty("clusterUrl") String clusterUrl,
-    @JsonProperty("peerClusterUrl") String peerClusterUrl,
+    @JsonProperty("peerClusterUrl") String peerClusterUrl, @JsonProperty("hdfsUrl") String hdfsUrl,
+    @JsonProperty("peerHdfsUrl") String peerHdfsUrl,
     @JsonProperty("adminCRRVersion") long adminCRRVersion) {
     Preconditions.checkNotNull(haGroupName, "HA group name cannot be null!");
     Preconditions.checkNotNull(haGroupState, "HA group state cannot be null!");
@@ -172,6 +175,8 @@ public class HAGroupStoreRecord {
     this.clusterUrl = clusterUrl;
     this.peerClusterUrl = peerClusterUrl;
     this.adminCRRVersion = adminCRRVersion;
+    this.hdfsUrl = hdfsUrl;
+    this.peerHdfsUrl = peerHdfsUrl;
   }
 
   public static Optional<HAGroupStoreRecord> fromJson(byte[] bytes) {
@@ -197,7 +202,8 @@ public class HAGroupStoreRecord {
       && Objects.equals(policy, other.policy) && Objects.equals(peerZKUrl, other.peerZKUrl)
       && Objects.equals(clusterUrl, other.clusterUrl)
       && Objects.equals(peerClusterUrl, other.peerClusterUrl)
-      && adminCRRVersion == other.adminCRRVersion;
+      && adminCRRVersion == other.adminCRRVersion && Objects.equals(hdfsUrl, other.hdfsUrl)
+      && Objects.equals(peerHdfsUrl, other.peerHdfsUrl);
   }
 
   public String getProtocolVersion() {
@@ -237,6 +243,14 @@ public class HAGroupStoreRecord {
     return adminCRRVersion;
   }
 
+  public String getHdfsUrl() {
+    return hdfsUrl;
+  }
+
+  public String getPeerHdfsUrl() {
+    return peerHdfsUrl;
+  }
+
   @JsonIgnore
   public ClusterRoleRecord.ClusterRole getClusterRole() {
     return haGroupState.getClusterRole();
@@ -246,7 +260,8 @@ public class HAGroupStoreRecord {
   public int hashCode() {
     return new HashCodeBuilder().append(protocolVersion).append(haGroupName).append(haGroupState)
       .append(lastSyncStateTimeInMs).append(policy).append(peerZKUrl).append(clusterUrl)
-      .append(peerClusterUrl).append(adminCRRVersion).hashCode();
+      .append(peerClusterUrl).append(adminCRRVersion).append(hdfsUrl).append(peerHdfsUrl)
+      .hashCode();
   }
 
   @Override
@@ -265,7 +280,8 @@ public class HAGroupStoreRecord {
         .append(policy, otherRecord.policy).append(peerZKUrl, otherRecord.peerZKUrl)
         .append(clusterUrl, otherRecord.clusterUrl)
         .append(peerClusterUrl, otherRecord.peerClusterUrl)
-        .append(adminCRRVersion, otherRecord.adminCRRVersion).isEquals();
+        .append(adminCRRVersion, otherRecord.adminCRRVersion).append(hdfsUrl, otherRecord.hdfsUrl)
+        .append(peerHdfsUrl, otherRecord.peerHdfsUrl).isEquals();
     }
   }
 
@@ -275,7 +291,8 @@ public class HAGroupStoreRecord {
       + haGroupName + '\'' + ", haGroupState=" + haGroupState + ", lastSyncStateTimeInMs="
       + lastSyncStateTimeInMs + ", policy='" + policy + '\'' + ", peerZKUrl='" + peerZKUrl + '\''
       + ", clusterUrl='" + clusterUrl + '\'' + ", peerClusterUrl='" + peerClusterUrl + '\''
-      + ", adminCRRVersion=" + adminCRRVersion + '}';
+      + ", adminCRRVersion=" + adminCRRVersion + ", hdfsUrl='" + hdfsUrl + '\'' + ", peerHdfsUrl='"
+      + peerHdfsUrl + '\'' + '}';
   }
 
   public String toPrettyString() {

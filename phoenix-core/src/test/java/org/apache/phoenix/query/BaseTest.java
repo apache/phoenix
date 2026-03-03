@@ -206,7 +206,6 @@ public abstract class BaseTest {
     .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
   private static final ExecutorService dropHTableService =
     Executors.newSingleThreadExecutor(factory);
-
   @ClassRule
   public static final SystemExitRule SYSTEM_EXIT_RULE = new SystemExitRule();
 

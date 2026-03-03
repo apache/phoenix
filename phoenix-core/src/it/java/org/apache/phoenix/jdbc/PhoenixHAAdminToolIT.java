@@ -419,7 +419,8 @@ public class PhoenixHAAdminToolIT extends BaseTest {
       HAGroupStoreRecord peerRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-          CLUSTERS.getZkUrl1(), CLUSTERS.getMasterAddress2(), CLUSTERS.getMasterAddress1(), 1L);
+          CLUSTERS.getZkUrl1(), CLUSTERS.getMasterAddress2(), CLUSTERS.getMasterAddress1(),
+          localUri.toString(), standbyUri.toString(), 1L);
 
       peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
 
@@ -512,12 +513,6 @@ public class PhoenixHAAdminToolIT extends BaseTest {
     // Initialize HAGroupStoreClient and move to ACTIVE_IN_SYNC state
     cluster1HAManager.getHAGroupStoreRecord(failoverHaGroupName);
     cluster2HAManager.getHAGroupStoreRecord(failoverHaGroupName);
-
-    // Wait for ZK session timeout to allow transition from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC
-    long waitTime = cluster1HAManager.setHAGroupStatusToSync(failoverHaGroupName);
-    Thread.sleep(waitTime + BUFFER_TIME_IN_MS);
-    assertEquals("Wait time should be 0", 0,
-      cluster1HAManager.setHAGroupStatusToSync(failoverHaGroupName));
 
     // Start the ReplicationLogReplay
     ReplicationLogReplay replicationLogReplay =
@@ -613,12 +608,6 @@ public class PhoenixHAAdminToolIT extends BaseTest {
     // Initialize HAGroupStoreClient and move to ACTIVE_IN_SYNC state
     cluster1HAManager.getHAGroupStoreRecord(abortFailoverHaGroupName);
     cluster2HAManager.getHAGroupStoreRecord(abortFailoverHaGroupName);
-
-    // Wait for ZK session timeout to allow transition from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC
-    long waitTime = cluster1HAManager.setHAGroupStatusToSync(abortFailoverHaGroupName);
-    Thread.sleep(waitTime + BUFFER_TIME_IN_MS);
-    assertEquals("Wait time should be 0", 0,
-      cluster1HAManager.setHAGroupStatusToSync(abortFailoverHaGroupName));
 
     // === INITIAL STATE VERIFICATION ===
     waitForHAGroupState(cluster1HAManager, abortFailoverHaGroupName,
@@ -719,12 +708,6 @@ public class PhoenixHAAdminToolIT extends BaseTest {
     // Initialize HAGroupStoreClient and move to ACTIVE_IN_SYNC state
     cluster1HAManager.getHAGroupStoreRecord(timeoutFailoverHaGroupName);
     cluster2HAManager.getHAGroupStoreRecord(timeoutFailoverHaGroupName);
-
-    // Wait for ZK session timeout to allow transition from ACTIVE_NOT_IN_SYNC to ACTIVE_IN_SYNC
-    long waitTime = cluster1HAManager.setHAGroupStatusToSync(timeoutFailoverHaGroupName);
-    Thread.sleep(waitTime);
-    assertEquals("Wait time should be 0", 0,
-      cluster1HAManager.setHAGroupStatusToSync(timeoutFailoverHaGroupName));
 
     // === INITIAL STATE VERIFICATION ===
     waitForHAGroupState(cluster1HAManager, timeoutFailoverHaGroupName,

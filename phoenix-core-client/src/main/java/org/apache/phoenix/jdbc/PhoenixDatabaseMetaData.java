@@ -465,6 +465,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final String CLUSTER_URL_2 = "CLUSTER_URL_2";
   public static final String CLUSTER_ROLE_1 = "CLUSTER_ROLE_1";
   public static final String CLUSTER_ROLE_2 = "CLUSTER_ROLE_2";
+  public static final String HDFS_URL_1 = "HDFS_URL_1";
+  public static final String HDFS_URL_2 = "HDFS_URL_2";
 
   public static final String SYSTEM_CHILD_LINK_TABLE = "CHILD_LINK";
   public static final String SYSTEM_CHILD_LINK_NAME =
