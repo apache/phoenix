@@ -48,12 +48,22 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
 public class ConditionalTTLExpressionTest extends BaseConnectionlessQueryTest {
+
+  @BeforeClass
+  public static void enableViewTTL() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.unwrap(PhoenixConnection.class).getQueryServices()
+        .getConfiguration().setBoolean(QueryServices.PHOENIX_VIEW_TTL_ENABLED, true);
+    }
+  }
 
   public static void assertConditionTTL(Connection conn, String tableName, String ttlExpr)
     throws SQLException {
