@@ -33,6 +33,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -40,7 +41,9 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PName;
@@ -50,13 +53,17 @@ import org.apache.phoenix.schema.TTLExpression;
 import org.apache.phoenix.schema.TTLExpressionFactory;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 
-@Category(ParallelStatsDisabledTest.class)
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+
+@Category(NeedsOwnMiniClusterTest.class)
 @RunWith(Parameterized.class)
 public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT {
 
@@ -80,6 +87,16 @@ public class TTLAsPhoenixTTLIT extends ParallelStatsDisabledIT {
   private String defaultTTLDDLOption;
   private TTLExpression alterTTL;
   private String alterTTLDDLOption;
+
+  @BeforeClass
+  public static synchronized void doSetup() throws Exception {
+    Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+    props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+      Integer.toString(60 * 60)); // An hour
+    props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
+    props.put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(true));
+    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+  }
 
   public TTLAsPhoenixTTLIT(boolean useExpression) {
     this.useExpression = useExpression;
