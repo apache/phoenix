@@ -105,7 +105,7 @@ public abstract class BasePermissionsIT extends BaseTest {
   private static final Set<String> PHOENIX_SYSTEM_TABLES =
     new HashSet<>(Arrays.asList("SYSTEM.CATALOG", "SYSTEM.SEQUENCE", "SYSTEM.STATS",
       "SYSTEM.FUNCTION", "SYSTEM.MUTEX", "SYSTEM.CHILD_LINK", "SYSTEM.TRANSFORM",
-      "SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM"));
+      "SYSTEM.CDC_STREAM_STATUS", "SYSTEM.CDC_STREAM", "SYSTEM.IDX_CDC_TRACKER"));
 
   private static final Set<String> PHOENIX_SYSTEM_TABLES_IDENTIFIERS =
     new HashSet<>(Arrays.asList("SYSTEM.\"CATALOG\"", "SYSTEM.\"SEQUENCE\"", "SYSTEM.\"STATS\"",
@@ -123,7 +123,7 @@ public abstract class BasePermissionsIT extends BaseTest {
   static final Set<String> PHOENIX_NAMESPACE_MAPPED_SYSTEM_TABLES =
     new HashSet<>(Arrays.asList("SYSTEM:CATALOG", "SYSTEM:SEQUENCE", "SYSTEM:STATS",
       "SYSTEM:FUNCTION", "SYSTEM:MUTEX", "SYSTEM:CHILD_LINK", "SYSTEM:TRANSFORM",
-      "SYSTEM:CDC_STREAM_STATUS", "SYSTEM:CDC_STREAM"));
+      "SYSTEM:CDC_STREAM_STATUS", "SYSTEM:CDC_STREAM", "SYSTEM:IDX_CDC_TRACKER"));
 
   // Create Multiple users so that we can use Hadoop UGI to run tasks as various users
   // Permissions can be granted or revoke by superusers and admins only

@@ -40,9 +40,11 @@ import java.util.Map;
 import java.util.Properties;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.types.PDouble;
-import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.bson.BsonArray;
 import org.bson.BsonBinary;
@@ -79,14 +81,24 @@ public class Bson5IT extends ParallelStatsDisabledIT {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     String tableName = generateUniqueName();
     String cdcName = generateUniqueName();
+    String indexName1 = "IDX1_" + tableName;
+    String indexName2 = "IDX2_" + tableName;
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
         + " CONSTRAINT pk PRIMARY KEY(PK1))";
       String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
+      String indexDdl1 = "CREATE UNCOVERED INDEX " + indexName1 + " ON " + tableName
+        + "(BSON_VALUE(COL, 'rather[3].outline.clock', 'VARCHAR')) "
+        + "WHERE BSON_VALUE(COL, 'rather[3].outline.clock', 'VARCHAR') IS NOT NULL "
+        + "CONSISTENCY = EVENTUAL";
+      String indexDdl2 = "CREATE UNCOVERED INDEX " + indexName2 + " ON " + tableName
+        + "(BSON_VALUE(COL, 'result[1].location.coordinates.longitude', 'DOUBLE')) "
+        + "WHERE BSON_VALUE(COL, 'result[1].location.coordinates.longitude', 'DOUBLE') IS NOT NULL "
+        + "CONSISTENCY = EVENTUAL";
       conn.createStatement().execute(ddl);
       conn.createStatement().execute(cdcDdl);
-      IndexToolIT.runIndexTool(false, "", tableName,
-        "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
+      conn.createStatement().execute(indexDdl1);
+      conn.createStatement().execute(indexDdl2);
       Timestamp ts1 = new Timestamp(System.currentTimeMillis());
       Thread.sleep(100);
 
@@ -117,6 +129,30 @@ public class Bson5IT extends ParallelStatsDisabledIT {
       conn.commit();
       Thread.sleep(100);
       Timestamp ts2 = new Timestamp(System.currentTimeMillis());
+
+      PreparedStatement indexPs = conn.prepareStatement("SELECT PK1, COL FROM " + tableName
+        + " WHERE BSON_VALUE(COL, 'rather[3].outline.clock', 'VARCHAR') = ?");
+      indexPs.setString(1, "personal");
+      ResultSet indexRs = indexPs.executeQuery();
+      assertFalse(indexRs.next());
+
+      Thread.sleep(11000);
+      indexRs = indexPs.executeQuery();
+      assertTrue(indexRs.next());
+      assertEquals("pk1010", indexRs.getString(1));
+      BsonDocument actualDoc = (BsonDocument) indexRs.getObject(2);
+      assertEquals(bsonDocument2, actualDoc);
+      assertFalse(indexRs.next());
+      validateExplainPlan(indexPs, indexName1, "RANGE SCAN ");
+
+      indexPs = conn.prepareStatement("SELECT PK1 FROM " + tableName
+        + " WHERE BSON_VALUE(COL, 'result[1].location.coordinates.longitude', 'DOUBLE') = ?");
+      indexPs.setDouble(1, 52.3736);
+      indexRs = indexPs.executeQuery();
+      assertTrue(indexRs.next());
+      assertEquals("pk1011", indexRs.getString(1));
+      assertFalse(indexRs.next());
+      validateExplainPlan(indexPs, indexName2, "RANGE SCAN ");
 
       testCDCAfterFirstUpsert(conn, cdcName, ts1, ts2, bsonDocument1, bsonDocument2, bsonDocument3);
 
@@ -312,14 +348,24 @@ public class Bson5IT extends ParallelStatsDisabledIT {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     String tableName = generateUniqueName();
     String cdcName = generateUniqueName();
+    String indexName1 = "IDX1_" + tableName;
+    String indexName2 = "IDX2_" + tableName;
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String ddl = "CREATE TABLE " + tableName + " (PK1 VARCHAR NOT NULL, C1 VARCHAR, COL BSON"
         + " CONSTRAINT pk PRIMARY KEY(PK1))";
       String cdcDdl = "CREATE CDC " + cdcName + " ON " + tableName;
+      String indexDdl1 = "CREATE INDEX " + indexName1 + " ON " + tableName
+        + "(BSON_VALUE(COL, 'rather[3].outline.clock', 'VARCHAR')) INCLUDE(COL) "
+        + "WHERE BSON_VALUE(COL, 'rather[3].outline.clock', 'VARCHAR') IS NOT NULL "
+        + "CONSISTENCY = EVENTUAL";
+      String indexDdl2 = "CREATE UNCOVERED INDEX " + indexName2 + " ON " + tableName
+        + "(BSON_VALUE(COL, 'result[1].location.coordinates.longitude', 'DOUBLE')) "
+        + "WHERE BSON_VALUE(COL, 'result[1].location.coordinates.longitude', 'DOUBLE') IS NOT NULL "
+        + "CONSISTENCY = EVENTUAL";
       conn.createStatement().execute(ddl);
       conn.createStatement().execute(cdcDdl);
-      IndexToolIT.runIndexTool(false, "", tableName,
-        "\"" + CDCUtil.getCDCIndexName(cdcName) + "\"");
+      conn.createStatement().execute(indexDdl1);
+      conn.createStatement().execute(indexDdl2);
       Timestamp ts1 = new Timestamp(System.currentTimeMillis());
       Thread.sleep(100);
 
@@ -351,6 +397,27 @@ public class Bson5IT extends ParallelStatsDisabledIT {
 
       Thread.sleep(100);
       Timestamp ts2 = new Timestamp(System.currentTimeMillis());
+
+      Thread.sleep(11000);
+      PreparedStatement indexPs = conn.prepareStatement("SELECT PK1, COL FROM " + tableName
+        + " WHERE BSON_VALUE(COL, 'rather[3].outline.clock', 'VARCHAR') = ?");
+      indexPs.setString(1, "personal");
+      ResultSet indexRs = indexPs.executeQuery();
+      assertTrue(indexRs.next());
+      assertEquals("pk1010", indexRs.getString(1));
+      BsonDocument actualDoc = (BsonDocument) indexRs.getObject(2);
+      assertEquals(bsonDocument2, actualDoc);
+      assertFalse(indexRs.next());
+      validateExplainPlan(indexPs, indexName1, "RANGE SCAN ");
+
+      indexPs = conn.prepareStatement("SELECT PK1 FROM " + tableName
+        + " WHERE BSON_VALUE(COL, 'result[1].location.coordinates.longitude', 'DOUBLE') = ?");
+      indexPs.setDouble(1, 52.3736);
+      indexRs = indexPs.executeQuery();
+      assertTrue(indexRs.next());
+      assertEquals("pk1011", indexRs.getString(1));
+      assertFalse(indexRs.next());
+      validateExplainPlan(indexPs, indexName2, "RANGE SCAN ");
 
       testCDCAfterFirstUpsert(conn, cdcName, ts1, ts2, bsonDocument1, bsonDocument2, bsonDocument3);
 
@@ -652,6 +719,15 @@ public class Bson5IT extends ParallelStatsDisabledIT {
 
       Assert.assertFalse(rs.next());
     }
+  }
+
+  private static void validateExplainPlan(PreparedStatement ps, String tableName, String scanType)
+    throws SQLException {
+    ExplainPlan plan = ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
+    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
+    assertEquals(tableName, explainPlanAttributes.getTableName());
+    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
+    assertEquals(scanType, explainPlanAttributes.getExplainScanType());
   }
 
 }

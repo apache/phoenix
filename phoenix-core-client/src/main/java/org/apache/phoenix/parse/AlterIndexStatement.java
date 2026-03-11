@@ -20,6 +20,7 @@ package org.apache.phoenix.parse;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.types.IndexConsistency;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
@@ -31,16 +32,23 @@ public class AlterIndexStatement extends SingleTableStatement {
   private boolean async;
   private boolean isRebuildAll;
   private ListMultimap<String, Pair<String, Object>> props;
+  private final IndexConsistency indexConsistency;
   private static final PTableType tableType = PTableType.INDEX;
 
   public AlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists,
     PIndexState indexState, boolean isRebuildAll, boolean async) {
-    this(indexTableNode, dataTableName, ifExists, indexState, isRebuildAll, async, null);
+    this(indexTableNode, dataTableName, ifExists, indexState, isRebuildAll, async, null, null);
   }
 
   public AlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists,
     PIndexState indexState, boolean isRebuildAll, boolean async,
     ListMultimap<String, Pair<String, Object>> props) {
+    this(indexTableNode, dataTableName, ifExists, indexState, isRebuildAll, async, props, null);
+  }
+
+  public AlterIndexStatement(NamedTableNode indexTableNode, String dataTableName, boolean ifExists,
+    PIndexState indexState, boolean isRebuildAll, boolean async,
+    ListMultimap<String, Pair<String, Object>> props, IndexConsistency indexConsistency) {
     super(indexTableNode, 0);
     this.dataTableName = dataTableName;
     this.ifExists = ifExists;
@@ -48,6 +56,7 @@ public class AlterIndexStatement extends SingleTableStatement {
     this.async = async;
     this.isRebuildAll = isRebuildAll;
     this.props = props == null ? ImmutableListMultimap.<String, Pair<String, Object>> of() : props;
+    this.indexConsistency = indexConsistency;
   }
 
   public String getTableName() {
@@ -81,5 +90,9 @@ public class AlterIndexStatement extends SingleTableStatement {
 
   public PTableType getTableType() {
     return tableType;
+  }
+
+  public IndexConsistency getIndexConsistency() {
+    return indexConsistency;
   }
 }
