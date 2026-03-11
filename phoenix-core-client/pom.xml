@@ -34,6 +34,11 @@
       <artifactId>phoenix-shaded-guava</artifactId>
     </dependency>
 
+    <dependency>
+      <groupId>org.apache.phoenix.thirdparty</groupId>
+      <artifactId>phoenix-shaded-protobuf</artifactId>
+    </dependency>
+
     <!-- HBase compat dependency -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
