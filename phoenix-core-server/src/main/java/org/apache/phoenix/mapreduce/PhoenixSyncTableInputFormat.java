@@ -35,6 +35,8 @@ import org.apache.phoenix.query.KeyRange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+
 /**
  * InputFormat designed for PhoenixSyncTableTool that generates splits based on HBase region
  * boundaries. Filters out already-processed mapper regions using checkpoint data, enabling
@@ -128,7 +130,8 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
    * @param completedRegions Regions already verified (from checkpoint table)
    * @return Splits that need processing
    */
-  private List<InputSplit> filterCompletedSplits(List<InputSplit> allSplits,
+  @VisibleForTesting
+  List<InputSplit> filterCompletedSplits(List<InputSplit> allSplits,
     List<KeyRange> completedRegions) {
     allSplits.sort((s1, s2) -> {
       PhoenixInputSplit ps1 = (PhoenixInputSplit) s1;

@@ -48,6 +48,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
@@ -222,7 +223,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     return jobName.toString();
   }
 
-  private CommandLine parseOptions(String[] args) throws IllegalStateException {
+  public CommandLine parseOptions(String[] args) throws IllegalStateException {
     Options options = getOptions();
     CommandLineParser parser = DefaultParser.builder().setAllowPartialMatching(false)
       .setStripLeadingAndTrailingQuotes(false).build();
@@ -296,7 +297,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       endTime = Long.valueOf(cmdLine.getOptionValue(TO_TIME_OPTION.getOpt()));
     } else {
       // Default endTime, current time - 1 hour
-      endTime = EnvironmentEdgeManager.currentTimeMillis(); // - (60 * 60 * 1000);
+      endTime = EnvironmentEdgeManager.currentTimeMillis() - (60 * 60 * 1000);
     }
 
     if (cmdLine.hasOption(CHUNK_SIZE_OPTION.getOpt())) {
@@ -338,7 +339,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       props.setProperty("TenantId", tenantId);
     }
     try (Connection connection = ConnectionUtil.getInputConnection(configuration, props)) {
-      pTable = PhoenixMapReduceUtil.validateTableForMRJob(connection, qTable, false, false);
+      pTable = PhoenixMapReduceUtil.validateTableForMRJob(connection, qTable, false, true);
       return pTable.getType();
     }
   }
@@ -419,5 +420,45 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
 
   public Job getJob() {
     return job;
+  }
+
+  @VisibleForTesting
+  public Long getStartTime() {
+    return startTime;
+  }
+
+  @VisibleForTesting
+  public Long getEndTime() {
+    return endTime;
+  }
+
+  @VisibleForTesting
+  public String getTenantId() {
+    return tenantId;
+  }
+
+  @VisibleForTesting
+  public String getSchemaName() {
+    return schemaName;
+  }
+
+  @VisibleForTesting
+  public Long getChunkSizeBytes() {
+    return chunkSizeBytes;
+  }
+
+  @VisibleForTesting
+  public boolean isDryRun() {
+    return isDryRun;
+  }
+
+  @VisibleForTesting
+  public boolean isForeground() {
+    return isForeground;
+  }
+
+  @VisibleForTesting
+  public void initializeConfiguration() {
+    configuration = HBaseConfiguration.addHbaseResources(getConf());
   }
 }

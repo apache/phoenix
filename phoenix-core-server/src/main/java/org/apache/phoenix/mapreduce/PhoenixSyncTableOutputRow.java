@@ -64,8 +64,12 @@ public class PhoenixSyncTableOutputRow {
   @Override
   @VisibleForTesting
   public boolean equals(Object o) {
-    if (this == o) return true;
-    if (o == null || getClass() != o.getClass()) return false;
+    if (this == o) {
+      return true;
+    }
+    if (o == null || getClass() != o.getClass()) {
+      return false;
+    }
     PhoenixSyncTableOutputRow that = (PhoenixSyncTableOutputRow) o;
     return Objects.equals(tableName, that.tableName)
       && Objects.equals(targetCluster, that.targetCluster) && type == that.type
@@ -76,6 +80,15 @@ public class PhoenixSyncTableOutputRow {
       && Objects.equals(executionStartTime, that.executionStartTime)
       && Objects.equals(executionEndTime, that.executionEndTime) && status == that.status
       && Objects.equals(counters, that.counters);
+  }
+
+  @Override
+  public int hashCode() {
+    int result = Objects.hash(tableName, targetCluster, type, fromTime, toTime, isDryRun,
+      isFirstRegion, executionStartTime, executionEndTime, status, counters);
+    result = 31 * result + Arrays.hashCode(startRowKey);
+    result = 31 * result + Arrays.hashCode(endRowKey);
+    return result;
   }
 
   @VisibleForTesting
@@ -246,9 +259,6 @@ public class PhoenixSyncTableOutputRow {
     }
 
     public PhoenixSyncTableOutputRow build() {
-      if (row.startRowKey == null) {
-        throw new IllegalStateException("Start row key is required");
-      }
       return row;
     }
   }
