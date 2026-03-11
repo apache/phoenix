@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.jdbc.ClusterRoleRecordGeneratorTool.PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityPolicy.PARALLEL;
@@ -72,6 +73,10 @@ public class ParallelPhoenixNullComparingResultSetIT {
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
     String haGroupName = ParallelPhoenixNullComparingResultSetIT.class.getSimpleName();
+    CLUSTERS.getHBaseCluster1().getConfiguration().setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED,
+      false);
+    CLUSTERS.getHBaseCluster2().getConfiguration().setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED,
+      false);
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
     PROPERTIES.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);

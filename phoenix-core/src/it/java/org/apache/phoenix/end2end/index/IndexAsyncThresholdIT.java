@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_STARTUP_DELAY_MS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -100,6 +101,7 @@ public class IndexAsyncThresholdIT extends BaseTest {
     Configuration conf = HBaseConfiguration.create();
     Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
     props.put(QueryServices.CLIENT_INDEX_ASYNC_THRESHOLD, Long.toString(threshold));
+    props.put(INDEX_CDC_CONSUMER_STARTUP_DELAY_MS, Integer.toString(Integer.MAX_VALUE));
     url = setUpTestCluster(conf, new ReadOnlyProps(props.entrySet().iterator()));
     driver = initAndRegisterTestDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
   }

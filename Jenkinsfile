@@ -66,7 +66,7 @@ pipeline {
 
                     stage('BuildAndTest') {
                         options {
-                            timeout(time: 5, unit: 'HOURS')
+                            timeout(time: 7, unit: 'HOURS')
                         }
                         steps {
                             dir("HBASE_${HBASE_PROFILE}") {

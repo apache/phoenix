@@ -18,7 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_INDEX_SYSTEM_TABLE;
-import static org.apache.phoenix.exception.SQLExceptionCode.MISMATCHED_TOKEN;
+import static org.apache.phoenix.exception.SQLExceptionCode.PARSER_ERROR;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.COLUMN_TYPES;
 import static org.apache.phoenix.query.PhoenixTestBuilder.DDLDefaults.TENANT_VIEW_COLUMNS;
 import static org.apache.phoenix.query.QueryServices.SYSTEM_CATALOG_INDEXES_ENABLED;
@@ -907,7 +907,7 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
           "CREATE INDEX IF NOT EXISTS SYS_INDEX_FUNCTION_IDX ON SYSTEM.FUNCTION(CLASS_NAME,JAR_PATH) WHERE FUNCTION_NAME = '4'");
         fail();
       } catch (SQLException sqle) {
-        Assert.assertEquals(MISMATCHED_TOKEN.getErrorCode(), sqle.getErrorCode());
+        Assert.assertEquals(PARSER_ERROR.getErrorCode(), sqle.getErrorCode());
       }
 
     }

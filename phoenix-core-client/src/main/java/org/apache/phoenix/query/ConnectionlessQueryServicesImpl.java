@@ -219,6 +219,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
     return setSystemDDLProperties(QueryConstants.CREATE_CDC_STREAM_METADATA);
   }
 
+  protected String getIdxCdcTrackerDDL() {
+    return setSystemDDLProperties(QueryConstants.CREATE_IDX_CDC_TRACKER_METADATA);
+  }
+
   private String setSystemDDLProperties(String ddl) {
     return String.format(ddl,
       props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB,
@@ -494,6 +498,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
         }
         try {
           metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
+        try {
+          metaConnection.createStatement().executeUpdate(getIdxCdcTrackerDDL());
         } catch (TableAlreadyExistsException ignore) {
         }
       } catch (SQLException e) {
