@@ -36,6 +36,7 @@ public class CDCChangeBuilder {
   private final boolean isChangeImageInScope;
   private final boolean isPreImageInScope;
   private final boolean isPostImageInScope;
+  private final boolean isIdxMutationsInScope;
   private final CDCTableInfo cdcDataTableInfo;
   private String changeType;
   private long lastDeletedTimestamp;
@@ -49,6 +50,7 @@ public class CDCChangeBuilder {
     isChangeImageInScope = changeScopes.contains(PTable.CDCChangeScope.CHANGE);
     isPreImageInScope = changeScopes.contains(PTable.CDCChangeScope.PRE);
     isPostImageInScope = changeScopes.contains(PTable.CDCChangeScope.POST);
+    isIdxMutationsInScope = changeScopes.contains(PTable.CDCChangeScope.IDX_MUTATIONS);
   }
 
   public void initChange(long ts) {
@@ -149,4 +151,17 @@ public class CDCChangeBuilder {
   public boolean isPreImageInScope() {
     return isPreImageInScope;
   }
+
+  public boolean isPostImageInScope() {
+    return isPostImageInScope;
+  }
+
+  public boolean isChangeImageInScope() {
+    return isChangeImageInScope;
+  }
+
+  public boolean isIdxMutationsInScope() {
+    return isIdxMutationsInScope;
+  }
+
 }

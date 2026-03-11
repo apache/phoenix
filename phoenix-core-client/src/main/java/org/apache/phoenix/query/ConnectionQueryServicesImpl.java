@@ -60,6 +60,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_STATUS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_HBASE_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_IDX_CDC_TRACKER_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_COLUMN_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_FAMILY_NAME_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_NAME;
@@ -4125,6 +4126,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     return ddl + ",TTL='" + ttlExpression + "'";
   }
 
+  protected String getIdxCdcTrackerDDL() {
+    return setSystemDDLProperties(QueryConstants.CREATE_IDX_CDC_TRACKER_METADATA);
+  }
+
   private String setSystemDDLProperties(String ddl) {
     return String.format(ddl,
       props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB,
@@ -4456,6 +4461,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     }
     try {
       metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
+    } catch (TableAlreadyExistsException ignore) {
+    }
+    try {
+      metaConnection.createStatement().executeUpdate(getIdxCdcTrackerDDL());
     } catch (TableAlreadyExistsException ignore) {
     }
     try {
@@ -4816,8 +4825,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
         MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 1,
         PhoenixDatabaseMetaData.IS_STRICT_TTL + " " + PBoolean.INSTANCE.getSqlTypeName());
-      // Add any 5.4.0 specific upgrade logic here if needed in the future
-      // Currently no new schema changes required for 5.4.0
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0, PhoenixDatabaseMetaData.INDEX_CONSISTENCY + " CHAR(1)");
 
       // move TTL values stored in descriptor to SYSCAT TTL column.
       moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(metaConnection);
@@ -5044,6 +5053,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     metaConnection = upgradeSystemMutex(metaConnection);
     metaConnection = upgradeSystemCDCStreamStatus(metaConnection);
     metaConnection = upgradeSystemCDCStream(metaConnection);
+    metaConnection = upgradeSystemIdxCdcTracker(metaConnection);
 
     // As this is where the most time will be spent during an upgrade,
     // especially when there are large number of views.
@@ -5361,6 +5371,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     throws SQLException {
     try {
       metaConnection.createStatement().executeUpdate(getCDCStreamDDL());
+    } catch (TableAlreadyExistsException ignored) {
+    }
+    return metaConnection;
+  }
+
+  private PhoenixConnection upgradeSystemIdxCdcTracker(PhoenixConnection metaConnection)
+    throws SQLException {
+    try {
+      metaConnection.createStatement().executeUpdate(getIdxCdcTrackerDDL());
     } catch (TableAlreadyExistsException ignored) {
     }
     return metaConnection;
@@ -6966,6 +6985,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       "DELETE FROM " + SYSTEM_CDC_STREAM_STATUS_NAME + " WHERE TABLE_NAME = ?";
     String deleteStreamPartitionsQuery =
       "DELETE FROM " + SYSTEM_CDC_STREAM_NAME + " WHERE TABLE_NAME = ?";
+    String deleteIdxCdcTrackerQuery =
+      "DELETE FROM " + SYSTEM_IDX_CDC_TRACKER_NAME + " WHERE TABLE_NAME = ?";
     LOGGER.info("Deleting Stream Metadata for table {}", tableName);
     try (PreparedStatement ps = conn.prepareStatement(deleteStreamStatusQuery)) {
       ps.setString(1, tableName);
@@ -6973,6 +6994,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       conn.commit();
     }
     try (PreparedStatement ps = conn.prepareStatement(deleteStreamPartitionsQuery)) {
+      ps.setString(1, tableName);
+      ps.executeUpdate();
+      conn.commit();
+    }
+    try (PreparedStatement ps = conn.prepareStatement(deleteIdxCdcTrackerQuery)) {
       ps.setString(1, tableName);
       ps.executeUpdate();
       conn.commit();

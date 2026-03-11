@@ -20,6 +20,7 @@ package org.apache.phoenix.monitoring;
 import static org.apache.phoenix.exception.SQLExceptionCode.DATA_EXCEEDS_MAX_CAPACITY;
 import static org.apache.phoenix.exception.SQLExceptionCode.GET_TABLE_REGIONS_FAIL;
 import static org.apache.phoenix.exception.SQLExceptionCode.OPERATION_TIMED_OUT;
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_MUTATION_BYTES;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_QUERY_TIME;
@@ -158,6 +159,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
   @BeforeClass
   public static void doSetup() throws Exception {
     final Configuration conf = HBaseConfiguration.create();
+    conf.set(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     setUpConfigForMiniCluster(conf);
     conf.set(QueryServices.TABLE_LEVEL_METRICS_ENABLED, String.valueOf(true));
     conf.set(QueryServices.METRIC_PUBLISHER_ENABLED, String.valueOf(true));
@@ -189,6 +191,7 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
     Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
     props.put(BaseTest.DRIVER_CLASS_NAME_ATTRIB, PhoenixMetricsTestingDriver.class.getName());
     props.put(ENABLE_SERVER_UPSERT_SELECT, "true");
+    props.put(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     initAndRegisterTestDriver(url, new ReadOnlyProps(props.entrySet().iterator()));
   }
 
