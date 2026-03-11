@@ -68,6 +68,7 @@ import org.apache.hadoop.hbase.CompareOperator;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
@@ -90,6 +91,7 @@ import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.AggregationManager;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -1680,6 +1682,24 @@ public class TestUtil {
       ConnectionFactory.createConnection(configuration);
     regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(tableName));
     return regionLocator.getAllRegionLocations();
+  }
+
+  /**
+   * Get online HRegions for a table, retrying until at least one region is available. Useful after
+   * operations where there could be a brief window during which no regions are online.
+   */
+  public static List<HRegion> getHRegionsWithRetry(HBaseTestingUtility utility, TableName tableName)
+    throws Exception {
+    MiniHBaseCluster cluster = utility.getHBaseCluster();
+    List<HRegion> regions;
+    for (int i = 0; i < 20; i++) {
+      regions = cluster.getRegions(tableName);
+      if (!regions.isEmpty()) {
+        return regions;
+      }
+      Thread.sleep(1000);
+    }
+    throw new AssertionError("No online regions found for " + tableName + " after retries");
   }
 
   public static String retainSingleQuotes(String input) {
