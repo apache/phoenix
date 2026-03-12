@@ -56,14 +56,16 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * <p>
  * Accumulates rows into chunks (based on size limits) and computes a hash of all row data (keys,
  * column families, qualifiers, timestamps, cell types, values).
+ * In case of paging timeout, return whatever is accumulated in chunk. If nothing is accumulated
+ * return dummy row either with prev result rowKey or max possible key < currentRowKey
  * <p>
- * Source scan (isTargetScan=false): Returns complete chunks bounded by region boundaries. Sets
+ * Source scan (isTargetScan=false): Returns complete chunks(if paging dint timeout) bounded by region boundaries. Sets
  * hasMoreRows=false when region is exhausted.
  * <p>
  * Target scan (isTargetScan=true): Returns partial chunks with serialized digest state when region
  * boundary is reached, allowing cross-region hash continuation.
  * <p>
- * Returns chunk metadata cells: END_KEY, HASH (or digest state), ROW_COUNT, IS_PARTIAL_CHUNK
+ * Returns chunk metadata cells: START_KEY, END_KEY, HASH (or digest state), ROW_COUNT, IS_PARTIAL_CHUNK
  */
 public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
 
@@ -79,12 +81,8 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
   private byte[] chunkEndKey = null;
   private long currentChunkSize = 0L;
   private long currentChunkRowCount = 0L;
-  // We are not using jdk bundled SHA, since their digest can't be serialized/deserialized
-  // which is needed for passing around partial chunk
   private final SHA256Digest digest;
   private boolean hasMoreRows = true;
-  // If target chunk was partial, and we are continuing to
-  // update digest before calculating checksum
   private boolean isUsingContinuedDigest;
   private byte[] previousResultRowKey = null;
   private final byte[] initStartRowKey;

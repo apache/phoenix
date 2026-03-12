@@ -40,7 +40,7 @@ public class PhoenixSyncTableOutputRepository {
   private static final Logger LOGGER =
     LoggerFactory.getLogger(PhoenixSyncTableOutputRepository.class);
   public static final String SYNC_TABLE_CHECKPOINT_TABLE_NAME = "PHOENIX_SYNC_TABLE_CHECKPOINT";
-  private static final int OUTPUT_TABLE_TTL_SECONDS = 30 * 24 * 60 * 60;
+  private static final int OUTPUT_TABLE_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
   private final Connection connection;
   private static final String UPSERT_CHECKPOINT_SQL = "UPSERT INTO "
     + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (TABLE_NAME, TARGET_CLUSTER, TYPE, FROM_TIME, TO_TIME,"
@@ -59,15 +59,15 @@ public class PhoenixSyncTableOutputRepository {
 
   public void createSyncCheckpointTableIfNotExists() throws SQLException {
     String ddl = "CREATE TABLE IF NOT EXISTS " + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (\n"
-      + "    TABLE_NAME VARCHAR NOT NULL,\n" + "    TARGET_CLUSTER VARCHAR NOT NULL,\n"
-      + "    TYPE VARCHAR(20) NOT NULL,\n" + "    FROM_TIME BIGINT NOT NULL,\n"
-      + "    TO_TIME BIGINT NOT NULL,\n" + "    START_ROW_KEY VARBINARY_ENCODED,\n"
-      + "    END_ROW_KEY VARBINARY_ENCODED,\n" + "    IS_DRY_RUN BOOLEAN, \n"
-      + "    EXECUTION_START_TIME TIMESTAMP,\n" + "    EXECUTION_END_TIME TIMESTAMP,\n"
-      + "    STATUS VARCHAR(20),\n" + "    COUNTERS VARCHAR(255), \n"
-      + "    CONSTRAINT PK PRIMARY KEY (\n" + "        TABLE_NAME,\n" + "        TARGET_CLUSTER,\n"
-      + "        TYPE ,\n" + "        FROM_TIME,\n" + "        TO_TIME,\n"
-      + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS;
+        + "    TABLE_NAME VARCHAR NOT NULL,\n" + "    TARGET_CLUSTER VARCHAR NOT NULL,\n"
+        + "    TYPE VARCHAR(20) NOT NULL,\n" + "    FROM_TIME BIGINT NOT NULL,\n"
+        + "    TO_TIME BIGINT NOT NULL,\n" + "    START_ROW_KEY VARBINARY_ENCODED,\n"
+        + "    END_ROW_KEY VARBINARY_ENCODED,\n" + "    IS_DRY_RUN BOOLEAN, \n"
+        + "    EXECUTION_START_TIME TIMESTAMP,\n" + "    EXECUTION_END_TIME TIMESTAMP,\n"
+        + "    STATUS VARCHAR(20),\n" + "    COUNTERS VARCHAR(255), \n"
+        + "    CONSTRAINT PK PRIMARY KEY (\n" + "        TABLE_NAME,\n"
+        + "        TARGET_CLUSTER,\n" + "        TYPE ,\n" + "        FROM_TIME,\n"
+        + "        TO_TIME,\n" + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS;
 
     try (Statement stmt = connection.createStatement()) {
       stmt.execute(ddl);
@@ -95,10 +95,6 @@ public class PhoenixSyncTableOutputRepository {
       throw new IllegalArgumentException("FromTime and ToTime cannot be null for checkpoint");
     }
 
-    // byte[] effectiveStartKey =
-    // (startKey == null || startKey.length == 0) ? EMPTY_START_KEY_SENTINEL : startKey;
-    // boolean isFirstRegion = startKey == null || startKey.length == 0;
-
     try (PreparedStatement ps = connection.prepareStatement(UPSERT_CHECKPOINT_SQL)) {
       ps.setString(1, tableName);
       ps.setString(2, targetCluster);
@@ -107,7 +103,6 @@ public class PhoenixSyncTableOutputRepository {
       ps.setLong(5, toTime);
       ps.setBytes(6, startKey);
       ps.setBytes(7, endKey);
-      // ps.setBoolean(9, isFirstRegion);
       ps.setBoolean(8, isDryRun);
       ps.setTimestamp(9, executionStartTime);
       ps.setTimestamp(10, executionEndTime);
@@ -117,17 +112,6 @@ public class PhoenixSyncTableOutputRepository {
       connection.commit();
     }
   }
-
-  // /**
-  // * Converts stored key back to HBase empty key if needed. For first region(empty startKey),
-  // * converts EMPTY_START_KEY_SENTINEL back to HConstants.EMPTY_ARRAY.
-  // */
-  // private byte[] toHBaseKey(byte[] storedKey, boolean isFirstRegion) {
-  // if (isFirstRegion && Arrays.equals(storedKey, EMPTY_START_KEY_SENTINEL)) {
-  // return HConstants.EMPTY_BYTE_ARRAY;
-  // }
-  // return storedKey;
-  // }
 
   /**
    * Queries for completed mapper regions. Used by PhoenixSyncTableInputFormat to filter out
@@ -156,7 +140,6 @@ public class PhoenixSyncTableOutputRepository {
       ps.setString(paramIndex, Status.MISMATCHED.name());
       try (ResultSet rs = ps.executeQuery()) {
         while (rs.next()) {
-          // boolean isFirstRegion = rs.getBoolean("IS_FIRST_REGION");
           PhoenixSyncTableOutputRow row =
             new PhoenixSyncTableOutputRow.Builder().setStartRowKey(rs.getBytes("START_ROW_KEY"))
               .setEndRowKey(rs.getBytes("END_ROW_KEY")).build();
@@ -220,11 +203,10 @@ public class PhoenixSyncTableOutputRepository {
       try (ResultSet rs = ps.executeQuery()) {
         while (rs.next()) {
           byte[] rawStartKey = rs.getBytes("START_ROW_KEY");
-          //// boolean isFirstRegion = rs.getBoolean("IS_FIRST_REGION");
-          // byte[] resolvedStartKey = this.toHBaseKey(rawStartKey, isFirstRegion);
           byte[] endRowKey = rs.getBytes("END_ROW_KEY");
-          PhoenixSyncTableOutputRow row = new PhoenixSyncTableOutputRow.Builder()
-            .setStartRowKey(rawStartKey).setEndRowKey(endRowKey).build();
+          PhoenixSyncTableOutputRow row =
+              new PhoenixSyncTableOutputRow.Builder().setStartRowKey(rawStartKey)
+                  .setEndRowKey(endRowKey).build();
           results.add(row);
         }
       }

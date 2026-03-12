@@ -25,8 +25,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.bouncycastle.crypto.digests.SHA256Digest;
 
 /**
- * Utility class for SHA-256 digest state serialization and deserialization. Used by
- * PhoenixSyncTableTool for cross-region hash continuation.
+ * Utility class for SHA-256 digest state serialization and deserialization.
+ * We are not using jdk bundled SHA, since their digest can't be serialized/deserialized
+ * which is needed for PhoenixSyncTableTool for cross-region hash continuation.
  */
 public class SHA256DigestUtil {
 
@@ -35,10 +36,6 @@ public class SHA256DigestUtil {
    * to 128 bytes as buffer.
    */
   public static final int MAX_SHA256_DIGEST_STATE_SIZE = 128;
-
-  private SHA256DigestUtil() {
-    // Utility class, no instantiation
-  }
 
   /**
    * Encodes a SHA256Digest state to a byte array with length prefix for validation. Format: [4-byte
@@ -58,7 +55,7 @@ public class SHA256DigestUtil {
    * Decodes a SHA256Digest state from a byte array.
    * @param encodedState Byte array containing 4-byte integer length prefix + encoded state
    * @return SHA256Digest restored to the saved state
-   * @throws IOException if state is invalid, corrupted, or security checks fail
+   * @throws IOException if state is invalid, corrupted
    */
   public static SHA256Digest decodeDigestState(byte[] encodedState) throws IOException {
     if (encodedState == null) {
@@ -67,7 +64,6 @@ public class SHA256DigestUtil {
 
     DataInputStream dis = new DataInputStream(new ByteArrayInputStream(encodedState));
     int stateLength = dis.readInt();
-
     // Prevent malicious large allocations
     if (stateLength > MAX_SHA256_DIGEST_STATE_SIZE) {
       throw new IllegalArgumentException(

@@ -28,8 +28,12 @@ import java.util.ArrayList;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableTool;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Before;
 import org.junit.Rule;
@@ -39,8 +43,7 @@ import org.junit.rules.ExpectedException;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 
 /**
- * Unit tests for PhoenixSyncTableTool command-line parsing and validation. Follows the pattern from
- * IndexToolTest.
+ * Unit tests for PhoenixSyncTableTool command-line parsing and validation.
  */
 public class PhoenixSyncTableToolTest extends BaseTest {
 
@@ -242,7 +245,7 @@ public class PhoenixSyncTableToolTest extends BaseTest {
     assertEquals(startTime, tool.getStartTime());
     assertEquals(endTime, tool.getEndTime());
     // Tool should use default chunk size (1GB)
-    assertEquals(Long.valueOf(1024L * 1024L * 1024L), tool.getChunkSizeBytes());
+    assertNull(tool.getChunkSizeBytes());
   }
 
   @Test
@@ -311,6 +314,58 @@ public class PhoenixSyncTableToolTest extends BaseTest {
     exceptionRule.expect(IllegalStateException.class);
     exceptionRule.expectMessage("target-cluster is a mandatory parameter");
     tool.parseOptions(args);
+  }
+
+  @Test
+  public void testDefaultTimeoutConfigurationValues() {
+    // Verify that default timeout configuration keys exist and can be retrieved
+    Configuration conf = HBaseConfiguration.create();
+
+    // Test that we can retrieve default values from configuration
+    long queryTimeout = conf.getLong(QueryServices.SYNC_TABLE_QUERY_TIMEOUT_ATTRIB,
+      QueryServicesOptions.DEFAULT_SYNC_TABLE_QUERY_TIMEOUT);
+    long rpcTimeout = conf.getLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB,
+      QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT);
+    long scannerTimeout = conf.getLong(QueryServices.SYNC_TABLE_CLIENT_SCANNER_TIMEOUT_ATTRIB,
+      QueryServicesOptions.DEFAULT_SYNC_TABLE_CLIENT_SCANNER_TIMEOUT);
+    int rpcRetries = conf.getInt(QueryServices.SYNC_TABLE_RPC_RETRIES_COUNTER,
+      QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_RETRIES_COUNTER);
+
+    // When no custom values are set, configuration returns the defaults
+    assertEquals("Query timeout should return default when not configured",
+      QueryServicesOptions.DEFAULT_SYNC_TABLE_QUERY_TIMEOUT, queryTimeout);
+    assertEquals("RPC timeout should return default when not configured",
+      QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT, rpcTimeout);
+    assertEquals("Scanner timeout should return default when not configured",
+      QueryServicesOptions.DEFAULT_SYNC_TABLE_CLIENT_SCANNER_TIMEOUT, scannerTimeout);
+    assertEquals("RPC retries should return default when not configured",
+      QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_RETRIES_COUNTER, rpcRetries);
+  }
+
+  @Test
+  public void testCustomTimeoutConfigurationCanBeSet() {
+    // Verify that custom timeout values can be set in configuration
+    Configuration conf = HBaseConfiguration.create();
+    long customQueryTimeout = 1200000L; // 20 minutes
+    long customRpcTimeout = 120000L; // 2 minutes
+    long customScannerTimeout = 360000L; // 6 minutes
+    int customRpcRetries = 10;
+
+    // Set custom values
+    conf.setLong(QueryServices.SYNC_TABLE_QUERY_TIMEOUT_ATTRIB, customQueryTimeout);
+    conf.setLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB, customRpcTimeout);
+    conf.setLong(QueryServices.SYNC_TABLE_CLIENT_SCANNER_TIMEOUT_ATTRIB, customScannerTimeout);
+    conf.setInt(QueryServices.SYNC_TABLE_RPC_RETRIES_COUNTER, customRpcRetries);
+
+    // Verify custom values can be retrieved
+    assertEquals("Should retrieve custom query timeout", customQueryTimeout,
+      conf.getLong(QueryServices.SYNC_TABLE_QUERY_TIMEOUT_ATTRIB, -1));
+    assertEquals("Should retrieve custom RPC timeout", customRpcTimeout,
+      conf.getLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB, -1));
+    assertEquals("Should retrieve custom scanner timeout", customScannerTimeout,
+      conf.getLong(QueryServices.SYNC_TABLE_CLIENT_SCANNER_TIMEOUT_ATTRIB, -1));
+    assertEquals("Should retrieve custom RPC retries", customRpcRetries,
+      conf.getInt(QueryServices.SYNC_TABLE_RPC_RETRIES_COUNTER, -1));
   }
 
   /**

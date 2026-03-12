@@ -46,7 +46,6 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -231,10 +230,10 @@ public class PhoenixSyncTableMapper
     // For every source chunk, we track whether its first chunk of Region or whether its lastChunk
     // of region
     // For every source chunk, we issue scan on target with
-    // - isFirstChunkOfRegion : target scan start boundary would be rangeStart
-    // - isLastChunkOfRegion : target scan end boundary would be rangeEnd
-    // - not isFirstChunkOfRegion: target scan start boundary would be previous source chunk endKey
-    // - not isLastChunkOfRegion: target scan end boundary would be current source chunk endKey
+    // - FirstChunkOfRegion : target scan start boundary would be rangeStart
+    // - LastChunkOfRegion : target scan end boundary would be rangeEnd
+    // - notFirstChunkOfRegion: target scan start boundary would be previous source chunk endKey
+    // - notLastChunkOfRegion: target scan end boundary would be current source chunk endKey
     // Lets understand with an example.
     // Source region boundary is [c,n) and source chunk returns [c1,d] , here `c` key is not present
     // in source
@@ -392,15 +391,10 @@ public class PhoenixSyncTableMapper
       scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_SIZE_BYTES,
         Bytes.toBytes(chunkSizeBytes));
     }
-    // Set paging attribute only if paging is enabled
-    long pageSizeMsAttr = conf.getLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
-    if (pageSizeMsAttr == -1) {
-      long syncTableRpcTimeoutMs = conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
+    long syncTableRpcTimeoutMs = conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
         QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT);
-      pageSizeMsAttr = syncTableRpcTimeoutMs / 2;
-    }
     scan.setAttribute(BaseScannerRegionObserverConstants.SERVER_PAGE_SIZE_MS,
-      Bytes.toBytes(pageSizeMsAttr));
+      Bytes.toBytes(syncTableRpcTimeoutMs/2));
     ResultScanner scanner = hTable.getScanner(scan);
     return new ChunkScannerContext(hTable, scanner);
   }

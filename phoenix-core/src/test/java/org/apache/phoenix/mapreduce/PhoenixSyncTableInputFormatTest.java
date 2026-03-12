@@ -31,8 +31,8 @@ import org.apache.phoenix.query.KeyRange;
 import org.junit.Test;
 
 /**
- * Unit tests for PhoenixSyncTableInputFormat.filterCompletedSplits method. Tests various scenarios
- * of filtering completed splits without any mocking.
+ * Unit tests for PhoenixSyncTableInputFormat. Tests various scenarios of filtering completed
+ * splits
  */
 public class PhoenixSyncTableInputFormatTest {
 
@@ -53,21 +53,6 @@ public class PhoenixSyncTableInputFormatTest {
    */
   private KeyRange createKeyRange(byte[] start, byte[] end) {
     return KeyRange.getKeyRange(start, true, end, false);
-  }
-
-  /**
-   * Helper method to convert list of splits to their string representation for debugging.
-   */
-  private String splitsToString(List<InputSplit> splits) {
-    StringBuilder sb = new StringBuilder("[");
-    for (int i = 0; i < splits.size(); i++) {
-      PhoenixInputSplit split = (PhoenixInputSplit) splits.get(i);
-      if (i > 0) sb.append(", ");
-      sb.append("[").append(Bytes.toStringBinary(split.getKeyRange().getLowerRange())).append(",")
-        .append(Bytes.toStringBinary(split.getKeyRange().getUpperRange())).append(")");
-    }
-    sb.append("]");
-    return sb.toString();
   }
 
   @Test
@@ -164,22 +149,28 @@ public class PhoenixSyncTableInputFormatTest {
 
   @Test
   public void testLastRegionWithEmptyEndRow() {
-    // Scenario: Last region with empty end row ([] representing end of table)
+    // Scenario: Last region with empty end row that partially overlaps with a middle split
     // Splits: [a,d), [d,g), [g,[])
-    // Completed: [g,[])
-    // Expected unprocessed: [a,d), [d,g)
+    // Completed: [f,[])  - fully contains [g,[]) and partially overlaps [d,g)
+    // Expected unprocessed: [a,d), [d,g) - partial overlap means split is NOT filtered
     List<InputSplit> allSplits = new ArrayList<>();
     allSplits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
     allSplits.add(createSplit(Bytes.toBytes("d"), Bytes.toBytes("g")));
     allSplits.add(createSplit(Bytes.toBytes("g"), HConstants.EMPTY_END_ROW));
 
     List<KeyRange> completedRegions = new ArrayList<>();
-    completedRegions.add(createKeyRange(Bytes.toBytes("g"), HConstants.EMPTY_END_ROW));
+    completedRegions.add(createKeyRange(Bytes.toBytes("f"), HConstants.EMPTY_END_ROW));
 
     List<InputSplit> result = inputFormat.filterCompletedSplits(allSplits, completedRegions);
 
-    assertEquals("First two splits should be unprocessed, last should be filtered", 2,
+    assertEquals("First two splits should be unprocessed (partial overlap keeps split), last should be filtered", 2,
       result.size());
+    PhoenixInputSplit first = (PhoenixInputSplit) result.get(0);
+    PhoenixInputSplit second = (PhoenixInputSplit) result.get(1);
+    assertTrue("First should be [a,d) split",
+      Bytes.equals(Bytes.toBytes("a"), first.getKeyRange().getLowerRange()));
+    assertTrue("Second should be [d,g) split",
+      Bytes.equals(Bytes.toBytes("d"), second.getKeyRange().getLowerRange()));
   }
 
   @Test

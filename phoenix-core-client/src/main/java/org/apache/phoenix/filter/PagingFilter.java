@@ -36,31 +36,32 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 /**
  * This is a top level Phoenix filter which is injected to a scan at the server side. If the scan
  * already has a filter then PagingFilter wraps it. This filter is for server pagination. It makes
- * sure that the scan does not take more than pageSizeInMs. initializes PagingFilter before
- * retrieving a row. The state of PagingFilter consists of three variables startTime, isStopped, and
- * currentCell. During this initialization, starTime is set to the current time, isStopped to false,
- * and currentCell to null. PagingFilter implements the paging state machine in three filter methods
- * that are hasFilterRow(), filterAllRemaining(), and filterRowKey(). These methods are called in
- * the following order for each row: hasFilterRow(), filterAllRemaining(), filterRowKey(), and
- * filterAllRemaining(). Please note that filterAllRemaining() is called twice (before and after
- * filterRowKey()). Sometimes, filterAllRemaining() is called multiple times back to back. In
- * hasFilterRow(), if currentCell is not null, meaning that at least one row has been scanned, and
- * it is time to page out, then PagingFilter sets isStopped to true. In filterAllRemaining(),
- * PagingFilter returns true if isStopped is true. Returning true from this method causes the HBase
- * region scanner to signal the caller (that is PagingRegionScanner in this case) that there are no
- * more rows to scan by returning false from the next() call. In that case, PagingRegionScanner
- * checks if PagingFilter is stopped. If PagingFilter is stopped, then it means the last next() call
- * paged out rather than the scan operation reached at its last row. Please note it is crucial that
- * PagingFilter returns true in the first filterAllRemaining() call for a given row. This allows to
- * the HBase region scanner to resume the scanning rows when the next() method is called even though
- * the region scanner already signaled the caller that there were no more rows to scan.
- * PagingRegionScanner leverages this behavior to resume the scan operation using the same scanner
- * instead closing the current one and starting a new scanner. If this specific HBase region scanner
- * behavior changes, it will cause server paging test failures. To fix them, the PagingRegionScanner
- * code needs to change such that PagingRegionScanner needs to create a new scanner with adjusted
- * start row to resume the scan operation after PagingFilter stops. If the scan operation has not
- * been terminated by PageFilter, HBase subsequently calls filterRowKey(). In this method,
- * PagingFilter records the last row that is scanned.
+ * sure that the scan does not take more than pageSizeInMs. PagingRegionScanner initializes
+ * PagingFilter before retrieving a row. The state of PagingFilter consists of three variables
+ * startTime, isStopped, and currentCell. During this initialization, starTime is set to the current
+ * time, isStopped to false, and currentCell to null. PagingFilter implements the paging state
+ * machine in three filter methods that are hasFilterRow(), filterAllRemaining(), and
+ * filterRowKey(). These methods are called in the following order for each row: hasFilterRow(),
+ * filterAllRemaining(), filterRowKey(), and filterAllRemaining(). Please note that
+ * filterAllRemaining() is called twice (before and after filterRowKey()). Sometimes,
+ * filterAllRemaining() is called multiple times back to back. In hasFilterRow(), if currentCell is
+ * not null, meaning that at least one row has been scanned, and it is time to page out, then
+ * PagingFilter sets isStopped to true. In filterAllRemaining(), PagingFilter returns true if
+ * isStopped is true. Returning true from this method causes the HBase region scanner to signal the
+ * caller (that is PagingRegionScanner in this case) that there are no more rows to scan by
+ * returning false from the next() call. In that case, PagingRegionScanner checks if PagingFilter is
+ * stopped. If PagingFilter is stopped, then it means the last next() call paged out rather than the
+ * scan operation reached at its last row. Please note it is crucial that PagingFilter returns true
+ * in the first filterAllRemaining() call for a given row. This allows to the HBase region scanner
+ * to resume the scanning rows when the next() method is called even though the region scanner
+ * already signaled the caller that there were no more rows to scan. PagingRegionScanner leverages
+ * this behavior to resume the scan operation using the same scanner instead closing the current one
+ * and starting a new scanner. If this specific HBase region scanner behavior changes, it will cause
+ * server paging test failures. To fix them, the PagingRegionScanner code needs to change such that
+ * PagingRegionScanner needs to create a new scanner with adjusted start row to resume the scan
+ * operation after PagingFilter stops. If the scan operation has not been terminated by PageFilter,
+ * HBase subsequently calls filterRowKey(). In this method, PagingFilter records the last row that
+ * is scanned.
  */
 public class PagingFilter extends CompatPagingFilter implements Writable {
   private long pageSizeMs;

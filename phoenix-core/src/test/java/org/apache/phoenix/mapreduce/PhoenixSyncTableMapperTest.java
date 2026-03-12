@@ -17,16 +17,26 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
+import static org.mockito.Mockito.*;
 
+import java.sql.Connection;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.hadoop.mapreduce.Mapper;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.schema.PTable;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
 
 /**
  * Unit tests for PhoenixSyncTableMapper.
@@ -36,7 +46,7 @@ public class PhoenixSyncTableMapperTest {
   private PhoenixSyncTableMapper mapper;
 
   @Before
-  public void setup() {
+  public void setup() throws Exception {
     mapper = new PhoenixSyncTableMapper();
   }
 
@@ -54,20 +64,6 @@ public class PhoenixSyncTableMapperTest {
   private void assertGap(Pair<byte[], byte[]> gap, byte[] expectedStart, byte[] expectedEnd) {
     assertArrayEquals("Gap start key mismatch", expectedStart, gap.getFirst());
     assertArrayEquals("Gap end key mismatch", expectedEnd, gap.getSecond());
-  }
-
-  /**
-   * Helper method to print ranges for debugging.
-   */
-  private String rangesToString(List<Pair<byte[], byte[]>> ranges) {
-    StringBuilder sb = new StringBuilder("[");
-    for (int i = 0; i < ranges.size(); i++) {
-      if (i > 0) sb.append(", ");
-      sb.append("[").append(Bytes.toStringBinary(ranges.get(i).getFirst())).append(",")
-        .append(Bytes.toStringBinary(ranges.get(i).getSecond())).append(")");
-    }
-    sb.append("]");
-    return sb.toString();
   }
 
   @Test
@@ -466,4 +462,61 @@ public class PhoenixSyncTableMapperTest {
     assertGap(result.get(0), new byte[] { 0x02, 0x00 }, new byte[] { 0x03, 0x00 });
     assertGap(result.get(1), new byte[] { 0x04, 0x00 }, new byte[] { 0x05, 0x00 });
   }
+
+  // Tests for shouldStartKeyBeInclusive method
+
+  @Test
+  public void testShouldStartKeyBeInclusiveWithNullMapperStart() {
+    // Null mapper region start should return true (first region)
+    assertTrue(mapper.shouldStartKeyBeInclusive(null, new ArrayList<>()));
+  }
+
+  @Test
+  public void testShouldStartKeyBeInclusiveWithEmptyMapperStart() {
+    // Empty mapper region start should return true (first region)
+    assertTrue(mapper.shouldStartKeyBeInclusive(HConstants.EMPTY_START_ROW, new ArrayList<>()));
+  }
+
+  @Test
+  public void testShouldStartKeyBeInclusiveWithNullChunks() {
+    // Null processed chunks should return true
+    assertTrue(mapper.shouldStartKeyBeInclusive(Bytes.toBytes("a"), null));
+  }
+
+  @Test
+  public void testShouldStartKeyBeInclusiveWithEmptyChunks() {
+    // Empty processed chunks should return true
+    assertTrue(mapper.shouldStartKeyBeInclusive(Bytes.toBytes("a"), new ArrayList<>()));
+  }
+
+  @Test
+  public void testShouldStartKeyBeInclusiveWhenFirstChunkAfterMapperStart() {
+    // Mapper: [a, ...)  Chunks: [c, ...]
+    // First chunk starts AFTER mapper start -> return true (gap at beginning)
+    byte[] mapperStart = Bytes.toBytes("a");
+    List<PhoenixSyncTableOutputRow> chunks = new ArrayList<>();
+    chunks.add(createChunk(Bytes.toBytes("c"), Bytes.toBytes("f")));
+    assertTrue(mapper.shouldStartKeyBeInclusive(mapperStart, chunks));
+  }
+
+  @Test
+  public void testShouldStartKeyBeInclusiveWhenFirstChunkAtMapperStart() {
+    // Mapper: [a, ...)  Chunks: [a, ...]
+    // First chunk starts AT mapper start -> return false (no gap)
+    byte[] mapperStart = Bytes.toBytes("a");
+    List<PhoenixSyncTableOutputRow> chunks = new ArrayList<>();
+    chunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("f")));
+    assertFalse(mapper.shouldStartKeyBeInclusive(mapperStart, chunks));
+  }
+
+  @Test
+  public void testShouldStartKeyBeInclusiveWhenFirstChunkBeforeMapperStart() {
+    // Mapper: [d, ...)  Chunks: [a, ...]
+    // First chunk starts BEFORE mapper start -> return false (no gap, chunk overlaps start)
+    byte[] mapperStart = Bytes.toBytes("d");
+    List<PhoenixSyncTableOutputRow> chunks = new ArrayList<>();
+    chunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("g")));
+    assertFalse(mapper.shouldStartKeyBeInclusive(mapperStart, chunks));
+  }
+
 }
