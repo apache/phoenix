@@ -367,9 +367,6 @@ public class PhoenixSyncTableToolIT {
     List<Integer> targetSplits = Arrays.asList(25, 40, 50, 65, 70, 80, 90);
     splitTableAt(targetConnection, uniqueTableName, targetSplits);
 
-    // Wait for splits to complete
-    Thread.sleep(3000);
-
     // Run sync tool again with SAME time range - should reprocess only deleted regions
     // despite the new region boundaries from splits
     Job job2 = runSyncTool(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
@@ -485,9 +482,6 @@ public class PhoenixSyncTableToolIT {
 
     // Merge adjacent regions on target (merge 6 pairs of regions)
     mergeAdjacentRegions(targetConnection, uniqueTableName, 6);
-
-    // Wait for merges to complete
-    Thread.sleep(2000);
 
     // Run sync tool again with SAME time range - should reprocess only deleted regions
     // despite the new region boundaries from merges
@@ -1007,6 +1001,74 @@ public class PhoenixSyncTableToolIT {
     // Enable server-side paging
     conf.setBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB, true);
     // Set extremely short paging timeout to force frequent paging
+    long aggressiveRpcTimeout = 50L; // 1 second RPC timeout
+    conf.setLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB, aggressiveRpcTimeout);
+    conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, aggressiveRpcTimeout);
+    // Force server-side paging to occur by setting page size to 1ms
+    conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 1);
+
+    int chunkSize = 10240;
+
+    long fromTime = 0L;
+    long toTime = System.currentTimeMillis();
+
+    // Run sync tool while splits are happening
+    Job job = runSyncToolWithChunkSize(uniqueTableName, chunkSize, conf, "--from-time",
+      String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
+
+    // Verify the job completed successfully despite paging timeouts
+    assertTrue("Sync job should complete successfully despite paging", job.isSuccessful());
+
+    SyncCountersResult counters = getSyncCounters(job);
+
+    // Validate that all 100 rows were processed on both sides
+    // Despite paging timeouts, no rows should be lost
+    validateSyncCountersExactSourceTarget(counters, 100, 100, 1, 1);
+
+    long pagingChunkCount = counters.chunksVerified;
+
+    assertTrue(
+      "Paging should create more chunks than baseline due to mid-chunk timeouts. " + "Baseline: "
+        + baselineChunkCount + ", Paging: " + pagingChunkCount,
+      pagingChunkCount > baselineChunkCount);
+
+    // Verify checkpoint entries were created
+    List<PhoenixSyncTableOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    assertFalse("Should have checkpoint entries", checkpointEntries.isEmpty());
+  }
+
+  @Test
+  public void testSyncTableValidateWithPagingTimeoutWithSplits() throws Exception {
+    // Create tables on both clusters
+    setupStandardTestWithReplication(uniqueTableName, 1, 100);
+
+    // Introduce mismatches scattered across the dataset
+    List<Integer> mismatchIds = Arrays.asList(15, 25, 35, 45, 55, 75);
+    for (int id : mismatchIds) {
+      upsertRowsOnTarget(targetConnection, uniqueTableName, new int[] { id },
+        new String[] { "MODIFIED_NAME_" + id });
+    }
+
+    // First, run without aggressive paging to establish baseline chunk count
+    Configuration baselineConf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
+    String[] baselineArgs = new String[] { "--table-name", uniqueTableName, "--target-cluster",
+      targetZkQuorum, "--run-foreground", "--chunk-size", "10240", "--to-time",
+      String.valueOf(System.currentTimeMillis()) };
+
+    PhoenixSyncTableTool baselineTool = new PhoenixSyncTableTool();
+    baselineTool.setConf(baselineConf);
+    baselineTool.run(baselineArgs);
+    Job baselineJob = baselineTool.getJob();
+    long baselineChunkCount =
+      baselineJob.getCounters().findCounter(SyncCounters.CHUNKS_VERIFIED).getValue();
+
+    // Configure paging with aggressive timeouts to force mid-chunk timeouts
+    Configuration conf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
+
+    // Enable server-side paging
+    conf.setBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB, true);
+    // Set extremely short paging timeout to force frequent paging
     long aggressiveRpcTimeout = 1000L; // 1 second RPC timeout
     conf.setLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB, aggressiveRpcTimeout);
     conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, aggressiveRpcTimeout);
@@ -1349,10 +1411,10 @@ public class PhoenixSyncTableToolIT {
 
   /**
    * Selects a percentage of chunks to delete from each mapper region. This is used to simulate
-   * partial rerun scenarios where some checkpoint entries are missing.
-   * Repository uses overlap-based boundary checking, so chunks that span across mapper boundaries
-   * may be returned by multiple mappers. We use a Set to track unique chunks by their start row key
-   * to avoid duplicates.
+   * partial rerun scenarios where some checkpoint entries are missing. Repository uses
+   * overlap-based boundary checking, so chunks that span across mapper boundaries may be returned
+   * by multiple mappers. We use a Set to track unique chunks by their start row key to avoid
+   * duplicates.
    * @param conn             Connection to use
    * @param tableName        Table name
    * @param targetCluster    Target cluster ZK quorum
@@ -1666,8 +1728,8 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * Inserts test data with a specific timestamp for time-range testing.
-   * Converts range to list and delegates to core method.
+   * Inserts test data with a specific timestamp for time-range testing. Converts range to list and
+   * delegates to core method.
    */
   private void insertTestData(Connection conn, String tableName, int startId, int endId,
     long timestamp) throws SQLException {
@@ -1679,11 +1741,11 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * Core method: Inserts test data for specific list of IDs with given timestamp.
-   * All other insertTestData overloads delegate to this method.
+   * Core method: Inserts test data for specific list of IDs with given timestamp. All other
+   * insertTestData overloads delegate to this method.
    */
-  private void insertTestData(Connection conn, String tableName, List<Integer> ids,
-    long timestamp) throws SQLException {
+  private void insertTestData(Connection conn, String tableName, List<Integer> ids, long timestamp)
+    throws SQLException {
     if (ids == null || ids.isEmpty()) {
       return;
     }
@@ -2056,8 +2118,8 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * Validates sync counters with exact source/target rows and minimum chunk thresholds.
-   * Use this when chunk counts may vary but should be at least certain values.
+   * Validates sync counters with exact source/target rows and minimum chunk thresholds. Use this
+   * when chunk counts may vary but should be at least certain values.
    */
   private void validateSyncCountersExactSourceTarget(SyncCountersResult counters,
     long expectedSourceRows, long expectedTargetRows, long minChunksVerified,
@@ -2066,13 +2128,10 @@ public class PhoenixSyncTableToolIT {
       counters.sourceRowsProcessed);
     assertEquals("Should process expected target rows", expectedTargetRows,
       counters.targetRowsProcessed);
-    assertTrue(
-      String.format("Should have at least %d verified chunks, actual: %d", minChunksVerified,
-        counters.chunksVerified),
-      counters.chunksVerified >= minChunksVerified);
-    assertTrue(
-      String.format("Should have at least %d mismatched chunks, actual: %d", minChunksMismatched,
-        counters.chunksMismatched),
+    assertTrue(String.format("Should have at least %d verified chunks, actual: %d",
+      minChunksVerified, counters.chunksVerified), counters.chunksVerified >= minChunksVerified);
+    assertTrue(String.format("Should have at least %d mismatched chunks, actual: %d",
+      minChunksMismatched, counters.chunksMismatched),
       counters.chunksMismatched >= minChunksMismatched);
   }
 

@@ -46,6 +46,7 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -391,10 +392,14 @@ public class PhoenixSyncTableMapper
       scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_SIZE_BYTES,
         Bytes.toBytes(chunkSizeBytes));
     }
-    long syncTableRpcTimeoutMs = conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
-      QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT);
+    long pageSizeMs = conf.getLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
+    if (pageSizeMs == -1) {
+      long syncTableRpcTimeoutMs = conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
+        QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT);
+      pageSizeMs = (long) (syncTableRpcTimeoutMs * 0.5);
+    }
     scan.setAttribute(BaseScannerRegionObserverConstants.SERVER_PAGE_SIZE_MS,
-      Bytes.toBytes(syncTableRpcTimeoutMs / 2));
+      Bytes.toBytes(pageSizeMs));
     ResultScanner scanner = hTable.getScanner(scan);
     return new ChunkScannerContext(hTable, scanner);
   }
@@ -698,7 +703,7 @@ public class PhoenixSyncTableMapper
         if (result == null || result.isEmpty()) {
           return null;
         }
-        // Skip dummy results from PagingFilter and continue scanning
+        // Skip dummy results and continue scanning
         if (ScanUtil.isDummy(result)) {
           LOGGER.info("Skipping dummy paging result at row {}, continuing scan",
             Bytes.toStringBinary(result.getRow()));
