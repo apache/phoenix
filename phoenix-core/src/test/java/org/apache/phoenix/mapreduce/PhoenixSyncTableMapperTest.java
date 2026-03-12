@@ -17,26 +17,18 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import static org.junit.Assert.*;
-import static org.mockito.Mockito.*;
+import static org.junit.Assert.assertArrayEquals;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.hadoop.mapreduce.Mapper;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
-import org.apache.phoenix.query.ConnectionQueryServices;
-import org.apache.phoenix.schema.PTable;
 import org.junit.Before;
 import org.junit.Test;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 
 /**
  * Unit tests for PhoenixSyncTableMapper.
@@ -491,7 +483,7 @@ public class PhoenixSyncTableMapperTest {
 
   @Test
   public void testShouldStartKeyBeInclusiveWhenFirstChunkAfterMapperStart() {
-    // Mapper: [a, ...)  Chunks: [c, ...]
+    // Mapper: [a, ...) Chunks: [c, ...]
     // First chunk starts AFTER mapper start -> return true (gap at beginning)
     byte[] mapperStart = Bytes.toBytes("a");
     List<PhoenixSyncTableOutputRow> chunks = new ArrayList<>();
@@ -501,7 +493,7 @@ public class PhoenixSyncTableMapperTest {
 
   @Test
   public void testShouldStartKeyBeInclusiveWhenFirstChunkAtMapperStart() {
-    // Mapper: [a, ...)  Chunks: [a, ...]
+    // Mapper: [a, ...) Chunks: [a, ...]
     // First chunk starts AT mapper start -> return false (no gap)
     byte[] mapperStart = Bytes.toBytes("a");
     List<PhoenixSyncTableOutputRow> chunks = new ArrayList<>();
@@ -511,7 +503,7 @@ public class PhoenixSyncTableMapperTest {
 
   @Test
   public void testShouldStartKeyBeInclusiveWhenFirstChunkBeforeMapperStart() {
-    // Mapper: [d, ...)  Chunks: [a, ...]
+    // Mapper: [d, ...) Chunks: [a, ...]
     // First chunk starts BEFORE mapper start -> return false (no gap, chunk overlaps start)
     byte[] mapperStart = Bytes.toBytes("d");
     List<PhoenixSyncTableOutputRow> chunks = new ArrayList<>();

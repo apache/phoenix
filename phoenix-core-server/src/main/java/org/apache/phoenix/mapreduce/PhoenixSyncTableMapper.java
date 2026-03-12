@@ -392,9 +392,9 @@ public class PhoenixSyncTableMapper
         Bytes.toBytes(chunkSizeBytes));
     }
     long syncTableRpcTimeoutMs = conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
-        QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT);
+      QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT);
     scan.setAttribute(BaseScannerRegionObserverConstants.SERVER_PAGE_SIZE_MS,
-      Bytes.toBytes(syncTableRpcTimeoutMs/2));
+      Bytes.toBytes(syncTableRpcTimeoutMs / 2));
     ResultScanner scanner = hTable.getScanner(scan);
     return new ChunkScannerContext(hTable, scanner);
   }

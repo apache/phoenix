@@ -31,8 +31,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.junit.Test;
 
 /**
- * Unit tests for PhoenixSyncTableInputFormat. Tests various scenarios of filtering completed
- * splits
+ * Unit tests for PhoenixSyncTableInputFormat. Tests various scenarios of filtering completed splits
  */
 public class PhoenixSyncTableInputFormatTest {
 
@@ -151,7 +150,7 @@ public class PhoenixSyncTableInputFormatTest {
   public void testLastRegionWithEmptyEndRow() {
     // Scenario: Last region with empty end row that partially overlaps with a middle split
     // Splits: [a,d), [d,g), [g,[])
-    // Completed: [f,[])  - fully contains [g,[]) and partially overlaps [d,g)
+    // Completed: [f,[]) - fully contains [g,[]) and partially overlaps [d,g)
     // Expected unprocessed: [a,d), [d,g) - partial overlap means split is NOT filtered
     List<InputSplit> allSplits = new ArrayList<>();
     allSplits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
@@ -163,8 +162,9 @@ public class PhoenixSyncTableInputFormatTest {
 
     List<InputSplit> result = inputFormat.filterCompletedSplits(allSplits, completedRegions);
 
-    assertEquals("First two splits should be unprocessed (partial overlap keeps split), last should be filtered", 2,
-      result.size());
+    assertEquals(
+      "First two splits should be unprocessed (partial overlap keeps split), last should be filtered",
+      2, result.size());
     PhoenixInputSplit first = (PhoenixInputSplit) result.get(0);
     PhoenixInputSplit second = (PhoenixInputSplit) result.get(1);
     assertTrue("First should be [a,d) split",

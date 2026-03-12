@@ -25,9 +25,9 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.bouncycastle.crypto.digests.SHA256Digest;
 
 /**
- * Utility class for SHA-256 digest state serialization and deserialization.
- * We are not using jdk bundled SHA, since their digest can't be serialized/deserialized
- * which is needed for PhoenixSyncTableTool for cross-region hash continuation.
+ * Utility class for SHA-256 digest state serialization and deserialization. We are not using jdk
+ * bundled SHA, since their digest can't be serialized/deserialized which is needed for
+ * PhoenixSyncTableTool for cross-region hash continuation.
  */
 public class SHA256DigestUtil {
 

@@ -59,15 +59,15 @@ public class PhoenixSyncTableOutputRepository {
 
   public void createSyncCheckpointTableIfNotExists() throws SQLException {
     String ddl = "CREATE TABLE IF NOT EXISTS " + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (\n"
-        + "    TABLE_NAME VARCHAR NOT NULL,\n" + "    TARGET_CLUSTER VARCHAR NOT NULL,\n"
-        + "    TYPE VARCHAR(20) NOT NULL,\n" + "    FROM_TIME BIGINT NOT NULL,\n"
-        + "    TO_TIME BIGINT NOT NULL,\n" + "    START_ROW_KEY VARBINARY_ENCODED,\n"
-        + "    END_ROW_KEY VARBINARY_ENCODED,\n" + "    IS_DRY_RUN BOOLEAN, \n"
-        + "    EXECUTION_START_TIME TIMESTAMP,\n" + "    EXECUTION_END_TIME TIMESTAMP,\n"
-        + "    STATUS VARCHAR(20),\n" + "    COUNTERS VARCHAR(255), \n"
-        + "    CONSTRAINT PK PRIMARY KEY (\n" + "        TABLE_NAME,\n"
-        + "        TARGET_CLUSTER,\n" + "        TYPE ,\n" + "        FROM_TIME,\n"
-        + "        TO_TIME,\n" + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS;
+      + "    TABLE_NAME VARCHAR NOT NULL,\n" + "    TARGET_CLUSTER VARCHAR NOT NULL,\n"
+      + "    TYPE VARCHAR(20) NOT NULL,\n" + "    FROM_TIME BIGINT NOT NULL,\n"
+      + "    TO_TIME BIGINT NOT NULL,\n" + "    START_ROW_KEY VARBINARY_ENCODED,\n"
+      + "    END_ROW_KEY VARBINARY_ENCODED,\n" + "    IS_DRY_RUN BOOLEAN, \n"
+      + "    EXECUTION_START_TIME TIMESTAMP,\n" + "    EXECUTION_END_TIME TIMESTAMP,\n"
+      + "    STATUS VARCHAR(20),\n" + "    COUNTERS VARCHAR(255), \n"
+      + "    CONSTRAINT PK PRIMARY KEY (\n" + "        TABLE_NAME,\n" + "        TARGET_CLUSTER,\n"
+      + "        TYPE ,\n" + "        FROM_TIME,\n" + "        TO_TIME,\n"
+      + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS;
 
     try (Statement stmt = connection.createStatement()) {
       stmt.execute(ddl);
@@ -204,9 +204,8 @@ public class PhoenixSyncTableOutputRepository {
         while (rs.next()) {
           byte[] rawStartKey = rs.getBytes("START_ROW_KEY");
           byte[] endRowKey = rs.getBytes("END_ROW_KEY");
-          PhoenixSyncTableOutputRow row =
-              new PhoenixSyncTableOutputRow.Builder().setStartRowKey(rawStartKey)
-                  .setEndRowKey(endRowKey).build();
+          PhoenixSyncTableOutputRow row = new PhoenixSyncTableOutputRow.Builder()
+            .setStartRowKey(rawStartKey).setEndRowKey(endRowKey).build();
           results.add(row);
         }
       }
