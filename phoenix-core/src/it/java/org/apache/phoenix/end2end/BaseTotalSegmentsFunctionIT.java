@@ -72,7 +72,16 @@ public abstract class BaseTotalSegmentsFunctionIT extends ParallelStatsDisabledI
   protected abstract String extractPrimaryKeyValue(ResultSet rs) throws SQLException;
 
   @Test
-  public void testTotalSegmentsWithSimpleTable() throws Exception {
+  public void testTotalSegmentsWithSimpleTableWithIndex() throws Exception {
+    testTotalSegmentsWithSimpleTable(true);
+  }
+
+  @Test
+  public void testTotalSegmentsWithSimpleTableWithoutIndex() throws Exception {
+    testTotalSegmentsWithSimpleTable(false);
+  }
+
+  public void testTotalSegmentsWithSimpleTable(boolean hasIndex) throws Exception {
     Properties props = PropertiesUtil.deepCopy(TestUtil.TEST_PROPERTIES);
 
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
@@ -81,6 +90,12 @@ public abstract class BaseTotalSegmentsFunctionIT extends ParallelStatsDisabledI
         + " PRIMARY KEY, " + "V1 VARCHAR" + ") SPLIT ON ('B', 'D', 'F')";
 
       conn.createStatement().execute(createSql);
+
+      if (hasIndex) {
+        String indexName = generateUniqueName();
+        conn.createStatement()
+          .execute("CREATE INDEX " + indexName + " ON " + fullTableName + " (V1)");
+      }
 
       // Get actual regions from ConnectionQueryServices
       PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);

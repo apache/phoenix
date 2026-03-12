@@ -113,16 +113,25 @@ public abstract class UncoveredIndexRegionScanner extends BaseRegionScanner {
     final Scan scan, final RegionCoprocessorEnvironment env, final Scan dataTableScan,
     final TupleProjector tupleProjector, final IndexMaintainer indexMaintainer,
     final byte[][] viewConstants, final ImmutableBytesWritable ptr, final long pageSizeMs,
-    final long queryLimit) {
+    final long queryLimit, boolean isDistinct) {
     super(innerScanner);
     final Configuration config = env.getConfiguration();
 
-    byte[] pageSizeFromScan = scan.getAttribute(INDEX_PAGE_ROWS);
-    if (pageSizeFromScan != null) {
-      pageSizeInRows = (int) Bytes.toLong(pageSizeFromScan);
+    if (isDistinct) {
+      // If the scan has a DistinctPrefix filter set the batch size to 1. This is because we don't
+      // want to skip rows without first checking if the row is valid or not and passes any
+      // additional filters evaluated after merging with the data table. Using a batch of
+      // size 1 is OK when distinct prefix filter is used since if the row is valid we will jump to
+      // the next unique prefix so ideally we should be scanning very few rows.
+      pageSizeInRows = 1;
     } else {
-      pageSizeInRows = (int) config.getLong(INDEX_PAGE_SIZE_IN_ROWS,
-        QueryServicesOptions.DEFAULT_INDEX_PAGE_SIZE_IN_ROWS);
+      byte[] pageSizeFromScan = scan.getAttribute(INDEX_PAGE_ROWS);
+      if (pageSizeFromScan != null) {
+        pageSizeInRows = (int) Bytes.toLong(pageSizeFromScan);
+      } else {
+        pageSizeInRows = (int) config.getLong(INDEX_PAGE_SIZE_IN_ROWS,
+          QueryServicesOptions.DEFAULT_INDEX_PAGE_SIZE_IN_ROWS);
+      }
     }
     if (queryLimit != -1) {
       pageSizeInRows = Long.min(pageSizeInRows, queryLimit);

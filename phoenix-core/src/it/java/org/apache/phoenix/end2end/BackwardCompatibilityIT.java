@@ -21,6 +21,7 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.ADD_DATA;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.ADD_DELETE;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.ADD_VIEW_INDEX;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_ADD;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_DISTINCT;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_DIVERGED_VIEW;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_OFFSET;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.CREATE_ORDERED_GROUP_BY;
@@ -31,6 +32,7 @@ import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ADD
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ADD_DELETE;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_CREATE_ADD;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_CREATE_DIVERGED_VIEW;
+import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_DISTINCT;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_INDEX_REBUILD_ASYNC;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_OFFSET;
 import static org.apache.phoenix.end2end.BackwardCompatibilityTestUtil.QUERY_ORDERED_GROUP_BY;
@@ -473,6 +475,13 @@ public class BackwardCompatibilityIT {
     executeQueriesWithCurrentVersion(CREATE_ORDER_BY_NON_PK, url, NONE);
     executeQueryWithClientVersion(compatibleClientVersion, QUERY_ORDER_BY_NON_PK, zkQuorum);
     assertExpectedOutput(QUERY_ORDER_BY_NON_PK);
+  }
+
+  @Test
+  public void testDistinctPrefixAddDataByNewClientReadByOldClient() throws Exception {
+    executeQueriesWithCurrentVersion(CREATE_DISTINCT, url, NONE);
+    executeQueryWithClientVersion(compatibleClientVersion, QUERY_DISTINCT, zkQuorum);
+    assertExpectedOutput(QUERY_DISTINCT);
   }
 
   private boolean isClientCompatibleForOrderedGroupByQuery() {

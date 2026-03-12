@@ -186,7 +186,7 @@ public class QueryServicesOptions {
   public static final int DEFAULT_TRACING_THREAD_POOL_SIZE = 5;
   public static final int DEFAULT_TRACING_BATCH_SIZE = 100;
   public static final int DEFAULT_TRACING_TRACE_BUFFER_SIZE = 1000;
-  public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 10;
+  public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 30;
   public static final int DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD = 0;
 
   public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and
@@ -485,7 +485,7 @@ public class QueryServicesOptions {
   public static final boolean DEFAULT_APPLY_TIME_ZONE_DISPLACMENT = false;
   public static final boolean DEFAULT_PHOENIX_TABLE_TTL_ENABLED = true;
   public static final boolean DEFAULT_PHOENIX_COMPACTION_ENABLED = true;
-  public static final boolean DEFAULT_PHOENIX_VIEW_TTL_ENABLED = true;
+  public static final boolean DEFAULT_PHOENIX_VIEW_TTL_ENABLED = false;
   public static final int DEFAULT_PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT = 100;
 
   public static final int DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN = 5;
