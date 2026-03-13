@@ -336,7 +336,7 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
         // Once we know regionLookupInMetaLen, use it to generate largest possible
         // rowkey that is lower than initStartRowKey by using
         // ByteUtil#previousKeyWithLength function, which appends "\\xFF" bytes to
-        // prev rowey upto the length provided. e.g. for the given key
+        // prev rowKey up to the length provided. e.g. for the given key
         // "\\x01\\xC1\\x06", the previous key with length 5 would be
         // "\\x01\\xC1\\x05\\xFF\\xFF" by padding 2 bytes "\\xFF".
         // The length of the largest scan start rowkey should not exceed

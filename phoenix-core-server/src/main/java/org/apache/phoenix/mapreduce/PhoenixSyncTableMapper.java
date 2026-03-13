@@ -46,7 +46,6 @@ import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.MetaDataUtil;
@@ -392,14 +391,10 @@ public class PhoenixSyncTableMapper
       scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_SIZE_BYTES,
         Bytes.toBytes(chunkSizeBytes));
     }
-    long pageSizeMs = conf.getLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
-    if (pageSizeMs == -1) {
-      long syncTableRpcTimeoutMs = conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
-        QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT);
-      pageSizeMs = (long) (syncTableRpcTimeoutMs * 0.5);
-    }
+    long syncTablePageTimeoutMs = (long) (conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
+      QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT) * 0.5);
     scan.setAttribute(BaseScannerRegionObserverConstants.SERVER_PAGE_SIZE_MS,
-      Bytes.toBytes(pageSizeMs));
+      Bytes.toBytes(syncTablePageTimeoutMs));
     ResultScanner scanner = hTable.getScanner(scan);
     return new ChunkScannerContext(hTable, scanner);
   }

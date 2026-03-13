@@ -139,8 +139,6 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     job.setJarByClass(PhoenixSyncTableTool.class);
     TableMapReduceUtil.initCredentials(job);
     TableMapReduceUtil.addDependencyJars(job);
-    Configuration conf = job.getConfiguration();
-    HBaseConfiguration.merge(conf, HBaseConfiguration.create(conf));
     configureInput(job, tableType);
     configureOutput(job);
     obtainTargetClusterTokens(job);

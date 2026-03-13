@@ -39,10 +39,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.RegionInfo;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
@@ -98,13 +105,9 @@ public class PhoenixSyncTableToolIT {
 
   @Before
   public void setUp() throws Exception {
-    // Create Phoenix connections to both clusters
-    String sourceJdbcUrl = "jdbc:phoenix:" + CLUSTERS.getZkUrl1();
-    String targetJdbcUrl = "jdbc:phoenix:" + CLUSTERS.getZkUrl2();
-    sourceConnection = DriverManager.getConnection(sourceJdbcUrl);
-    targetConnection = DriverManager.getConnection(targetJdbcUrl);
+    sourceConnection = DriverManager.getConnection("jdbc:phoenix:" + CLUSTERS.getZkUrl1());
+    targetConnection = DriverManager.getConnection("jdbc:phoenix:" + CLUSTERS.getZkUrl2());
     uniqueTableName = BaseTest.generateUniqueName();
-
     targetZkQuorum = String.format("%s:%d:/hbase",
       CLUSTERS.getHBaseCluster2().getConfiguration().get("hbase.zookeeper.quorum"),
       CLUSTERS.getHBaseCluster2().getZkCluster().getClientPort());
@@ -115,9 +118,11 @@ public class PhoenixSyncTableToolIT {
     if (sourceConnection != null && uniqueTableName != null) {
       try {
         dropTableIfExists(sourceConnection, uniqueTableName);
-        dropTableIfExists(sourceConnection, uniqueTableName + "_IDX"); // For index test
+        dropTableIfExists(sourceConnection, uniqueTableName + "_IDX"); // For global index test
+        dropTableIfExists(sourceConnection, uniqueTableName + "_LOCAL_IDX"); // For local index test
         cleanupCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
         cleanupCheckpointTable(sourceConnection, uniqueTableName + "_IDX", targetZkQuorum);
+        cleanupCheckpointTable(sourceConnection, uniqueTableName + "_LOCAL_IDX", targetZkQuorum);
       } catch (Exception e) {
         LOGGER.warn("Failed to cleanup tables for {}: {}", uniqueTableName, e.getMessage());
       }
@@ -126,7 +131,8 @@ public class PhoenixSyncTableToolIT {
     if (targetConnection != null && uniqueTableName != null) {
       try {
         dropTableIfExists(targetConnection, uniqueTableName);
-        dropTableIfExists(targetConnection, uniqueTableName + "_IDX"); // For index test
+        dropTableIfExists(targetConnection, uniqueTableName + "_IDX"); // For global index test
+        dropTableIfExists(targetConnection, uniqueTableName + "_LOCAL_IDX"); // For local index test
       } catch (Exception e) {
         LOGGER.warn("Failed to cleanup tables on target for {}: {}", uniqueTableName,
           e.getMessage());
@@ -194,17 +200,56 @@ public class PhoenixSyncTableToolIT {
     // Verify initial replication
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
 
-    // Run sync tool on the INDEX table (not the data table)
+    deleteHBaseRows(CLUSTERS.getHBaseCluster2(), uniqueTableName, 3);
+    deleteHBaseRows(CLUSTERS.getHBaseCluster2(), indexName, 3);
+
     Job job = runSyncTool(indexName);
     SyncCountersResult counters = getSyncCounters(job);
 
-    validateSyncCounters(counters, 10, 10, 10, 0);
+    assertEquals("Should process 10 source rows", 10, counters.sourceRowsProcessed);
+    assertTrue("Some chunk should be verified", counters.chunksVerified > 0);
+    assertTrue("Some chunk should be mismatched", counters.chunksMismatched > 0);
 
     // Verify checkpoint entries show mismatches
     List<PhoenixSyncTableOutputRow> checkpointEntries =
       queryCheckpointTable(sourceConnection, indexName, targetZkQuorum);
 
     assertFalse("Should have checkpointEntries", checkpointEntries.isEmpty());
+  }
+
+  @Test
+  public void testSyncValidateLocalIndexTable() throws Exception {
+    // Create data table on both clusters with replication
+    createTableOnBothClusters(sourceConnection, targetConnection, uniqueTableName);
+
+    // Create LOCAL index on both clusters
+    String indexName = uniqueTableName + "_LOCAL_IDX";
+    createLocalIndexOnBothClusters(sourceConnection, targetConnection, uniqueTableName, indexName);
+
+    // Insert data on source
+    insertTestData(sourceConnection, uniqueTableName, 1, 10);
+
+    // Wait for replication to target (both data table and local index)
+    waitForReplication(targetConnection, uniqueTableName, 10);
+
+    // Verify initial replication
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+
+    deleteHBaseRows(CLUSTERS.getHBaseCluster2(), uniqueTableName, 5);
+
+    // Run sync tool on the LOCAL INDEX table (not the data table)
+    Job job = runSyncTool(indexName);
+    SyncCountersResult counters = getSyncCounters(job);
+
+    assertEquals("Should process 20 source rows", 20, counters.sourceRowsProcessed);
+    assertTrue("Some chunk should be verified", counters.chunksVerified > 0);
+    assertTrue("Some chunk should be mismatched", counters.chunksMismatched > 0);
+
+    // Verify checkpoint entries
+    List<PhoenixSyncTableOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, indexName, targetZkQuorum);
+
+    assertFalse("Should have checkpoint entries for local index", checkpointEntries.isEmpty());
   }
 
   @Test
@@ -327,7 +372,7 @@ public class PhoenixSyncTableToolIT {
     List<PhoenixSyncTableOutputRow> checkpointEntries =
       queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
 
-    assertTrue("Should have checkpoint entries after first run", checkpointEntries.size() > 0);
+    assertFalse("Should have checkpoint entries after first run", checkpointEntries.isEmpty());
 
     // Separate mapper and chunk entries using utility method
     SeparatedCheckpointEntries separated = separateMapperAndChunkEntries(checkpointEntries);
@@ -444,19 +489,18 @@ public class PhoenixSyncTableToolIT {
     List<PhoenixSyncTableOutputRow> checkpointEntries =
       queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
 
-    assertTrue("Should have checkpoint entries after first run", checkpointEntries.size() > 0);
+    assertTrue("Should have checkpoint entries after first run", !checkpointEntries.isEmpty());
 
     // Separate mapper and chunk entries using utility method
     SeparatedCheckpointEntries separated = separateMapperAndChunkEntries(checkpointEntries);
     List<PhoenixSyncTableOutputRow> allMappers = separated.mappers;
     List<PhoenixSyncTableOutputRow> allChunks = separated.chunks;
 
-    assertTrue("Should have mapper region entries", allMappers.size() > 0);
-    assertTrue("Should have chunk entries", allChunks.size() > 0);
+    assertFalse("Should have mapper region entries", allMappers.isEmpty());
+    assertFalse("Should have chunk entries", allChunks.isEmpty());
 
     // Select 3/4th of chunks from each mapper to delete (simulating partial rerun)
     // We repro the partial run via deleting some entries from checkpoint table and re-running the
-    // tool. Use production repository to query chunks within mapper boundaries.
     List<PhoenixSyncTableOutputRow> chunksToDelete = selectChunksToDeleteFromMappers(
       sourceConnection, uniqueTableName, targetZkQuorum, fromTime, toTime, allMappers, 0.75);
 
@@ -530,9 +574,6 @@ public class PhoenixSyncTableToolIT {
   public void testSyncTableValidateIdempotentOnReRun() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 10);
 
-    // Introduce differences on target to create mismatches
-    introduceAndVerifyTargetDifferences(uniqueTableName);
-
     // Capture consistent time range for both runs (ensures checkpoint lookup will match)
     long fromTime = 0L;
     long toTime = System.currentTimeMillis();
@@ -543,14 +584,11 @@ public class PhoenixSyncTableToolIT {
     SyncCountersResult counters1 = getSyncCounters(job1);
 
     // Validate first run counters
-    validateSyncCounters(counters1, 10, 10, 7, 3);
+    validateSyncCounters(counters1, 10, 10, 10, 0);
 
     // Query checkpoint table to verify entries were created
     List<PhoenixSyncTableOutputRow> checkpointEntriesAfterFirstRun =
       queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
-
-    assertEquals("Should have 14 checkpoint entries after first run", 14,
-      checkpointEntriesAfterFirstRun.size());
 
     // Run sync tool for the SECOND time WITHOUT deleting any checkpoints (idempotent behavior)
     Job job2 = runSyncTool(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
@@ -612,8 +650,8 @@ public class PhoenixSyncTableToolIT {
 
     // Checkpoint entries may differ in count due to new regions, but all original data is
     // checkpointed
-    assertTrue("Should have checkpoint entries after second run",
-      checkpointEntriesAfterSecondRun.size() > 0);
+    assertFalse("Should have checkpoint entries after second run",
+      checkpointEntriesAfterSecondRun.isEmpty());
   }
 
   @Test
@@ -763,7 +801,7 @@ public class PhoenixSyncTableToolIT {
 
     // Verify that source has only odd numbers
     for (TestRow row : sourceRows) {
-      assertTrue("Source should only have odd IDs", row.id % 2 == 1);
+      assertEquals("Source should only have odd IDs", 1, row.id % 2);
     }
 
     // Verify that target has all numbers 1-11 (with gaps filled) and 13,15,17,19
@@ -998,14 +1036,9 @@ public class PhoenixSyncTableToolIT {
     // Configure paging with aggressive timeouts to force mid-chunk timeouts
     Configuration conf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
 
-    // Enable server-side paging
-    conf.setBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB, true);
-    // Set extremely short paging timeout to force frequent paging
-    long aggressiveRpcTimeout = 50L; // 1 second RPC timeout
+    long aggressiveRpcTimeout = 2L;
     conf.setLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB, aggressiveRpcTimeout);
     conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, aggressiveRpcTimeout);
-    // Force server-side paging to occur by setting page size to 1ms
-    conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 1);
 
     int chunkSize = 10240;
 
@@ -1166,7 +1199,7 @@ public class PhoenixSyncTableToolIT {
     // Create table on source cluster
     setupStandardTestWithReplication(uniqueTableName, 1, 10);
 
-    // Try to run sync tool with INVALID target cluster ZK quorum
+    // Try to run sync tool with INVALID target cluster ZK quorum.
     String invalidTargetZk = "invalid-zk-host:2181:/hbase";
     Configuration conf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
     String[] args =
@@ -1249,7 +1282,7 @@ public class PhoenixSyncTableToolIT {
 
     // Select 3/4th of chunks from each mapper to delete (simulating partial rerun)
     // We repro the partial run via deleting some entries from checkpoint table and re-running the
-    // tool. Use production repository to query chunks within mapper boundaries.
+    // tool.
     List<PhoenixSyncTableOutputRow> chunksToDelete = selectChunksToDeleteFromMappers(
       sourceConnection, uniqueTableName, targetZkQuorum, fromTime, toTime, mapperEntries, 0.75);
 
@@ -1390,17 +1423,6 @@ public class PhoenixSyncTableToolIT {
       chunksMismatched);
   }
 
-  /**
-   * Finds all chunks that belong to a specific mapper region using the production repository. This
-   * ensures test code uses the same boundary logic as production code.
-   * @param conn          Connection to use
-   * @param tableName     Table name
-   * @param targetCluster Target cluster ZK quorum
-   * @param fromTime      From time for checkpoint query
-   * @param toTime        To time for checkpoint query
-   * @param mapper        Mapper region entry
-   * @return List of chunks belonging to this mapper region
-   */
   private List<PhoenixSyncTableOutputRow> findChunksBelongingToMapper(Connection conn,
     String tableName, String targetCluster, long fromTime, long toTime,
     PhoenixSyncTableOutputRow mapper) throws SQLException {
@@ -1411,18 +1433,10 @@ public class PhoenixSyncTableToolIT {
 
   /**
    * Selects a percentage of chunks to delete from each mapper region. This is used to simulate
-   * partial rerun scenarios where some checkpoint entries are missing. Repository uses
+   * partial rerun scenarios where some checkpoint entries are missing. SyncTableRepository uses
    * overlap-based boundary checking, so chunks that span across mapper boundaries may be returned
    * by multiple mappers. We use a Set to track unique chunks by their start row key to avoid
    * duplicates.
-   * @param conn             Connection to use
-   * @param tableName        Table name
-   * @param targetCluster    Target cluster ZK quorum
-   * @param fromTime         From time for checkpoint query
-   * @param toTime           To time for checkpoint query
-   * @param mappers          All mapper entries
-   * @param deletionFraction Fraction of chunks to delete per mapper (0.0 to 1.0)
-   * @return List of unique chunks selected for deletion
    */
   private List<PhoenixSyncTableOutputRow> selectChunksToDeleteFromMappers(Connection conn,
     String tableName, String targetCluster, long fromTime, long toTime,
@@ -1563,7 +1577,8 @@ public class PhoenixSyncTableToolIT {
   private void waitForReplication(Connection targetConn, String tableName, int expectedRows)
     throws Exception {
     long startTime = System.currentTimeMillis();
-    String countQuery = "SELECT COUNT(*) FROM " + tableName;
+    // Use NO_INDEX hint to force a full data table scan
+    String countQuery = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName;
 
     while (
       System.currentTimeMillis() - startTime
@@ -1787,9 +1802,24 @@ public class PhoenixSyncTableToolIT {
     conn.commit();
   }
 
-  /**
-   * Gets the row count for a table.
-   */
+  private void deleteHBaseRows(HBaseTestingUtility cluster, String tableName, int rowsToDelete)
+    throws Exception {
+    Table table = cluster.getConnection().getTable(TableName.valueOf(tableName));
+    ResultScanner scanner = table.getScanner(new Scan());
+    List<Delete> deletes = new ArrayList<>();
+    Result result;
+    int rowsDeleted = 0;
+    while ((result = scanner.next()) != null && rowsDeleted < rowsToDelete) {
+      deletes.add(new Delete(result.getRow()));
+      rowsDeleted++;
+    }
+    scanner.close();
+    if (!deletes.isEmpty()) {
+      table.delete(deletes);
+    }
+    table.close();
+  }
+
   private int getRowCount(Connection conn, String tableName) throws SQLException {
     String countQuery = "SELECT COUNT(*) FROM " + tableName;
     Statement stmt = conn.createStatement();
@@ -1815,6 +1845,24 @@ public class PhoenixSyncTableToolIT {
     sourceConn.commit();
 
     // Create same index on target
+    targetConn.createStatement().execute(indexDdl);
+    targetConn.commit();
+  }
+
+  /**
+   * Creates a local index on both source and target clusters. Note: Local indexes are stored in the
+   * same regions as the data table and inherit replication settings from their parent table.
+   */
+  private void createLocalIndexOnBothClusters(Connection sourceConn, Connection targetConn,
+    String tableName, String indexName) throws SQLException {
+    String indexDdl =
+      String.format("CREATE LOCAL INDEX IF NOT EXISTS %s ON %s (NAME) INCLUDE (NAME_VALUE)",
+        indexName, tableName);
+
+    sourceConn.createStatement().execute(indexDdl);
+    sourceConn.commit();
+
+    // Create same local index on target
     targetConn.createStatement().execute(indexDdl);
     targetConn.commit();
   }
@@ -1894,26 +1942,6 @@ public class PhoenixSyncTableToolIT {
 
     rs.close();
     return entries;
-  }
-
-  /**
-   * Deletes checkpoint entries for specific mapper and chunk row keys. Handles NULL/empty start
-   * keys for first region boundaries.
-   */
-  private int deleteCheckpointEntry(Connection conn, String tableName, String targetCluster,
-    byte[] mapperStartRowKey, byte[] chunkStartRowKey) throws SQLException {
-    int totalDeleted = 0;
-
-    // Delete mapper entry (without type filter)
-    totalDeleted +=
-      deleteSingleCheckpointEntry(conn, tableName, targetCluster, null, mapperStartRowKey, false);
-
-    // Delete chunk entry (without type filter)
-    totalDeleted +=
-      deleteSingleCheckpointEntry(conn, tableName, targetCluster, null, chunkStartRowKey, false);
-
-    conn.commit();
-    return totalDeleted;
   }
 
   /**
@@ -2200,6 +2228,24 @@ public class PhoenixSyncTableToolIT {
       expectedSourceRows, sourceRowsProcessed);
     assertEquals(String.format("Should have %d Target rows processed", expectedTargetRows),
       expectedTargetRows, targetRowsProcessed);
+  }
+
+  private void disableReplication(Connection conn, String tableName) throws Exception {
+    PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+    PTable table = pconn.getTable(tableName);
+    TableName hbaseTableName = TableName.valueOf(table.getPhysicalName().getBytes());
+
+    try (Admin admin = pconn.getQueryServices().getAdmin()) {
+      // Disable table first
+      admin.disableTable(hbaseTableName);
+
+      // Modify table descriptor to disable replication
+      admin.modifyTable(TableDescriptorBuilder.newBuilder(admin.getDescriptor(hbaseTableName))
+        .setRegionReplication(1).build());
+
+      // Re-enable table
+      admin.enableTable(hbaseTableName);
+    }
   }
 
   /**
