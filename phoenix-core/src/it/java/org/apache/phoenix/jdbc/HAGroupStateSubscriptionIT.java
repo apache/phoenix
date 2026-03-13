@@ -23,7 +23,6 @@ import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.ACTIVE_IN_
 import static org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
-import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -31,7 +30,6 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
@@ -42,9 +40,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -54,15 +50,13 @@ import org.junit.rules.TestName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
 /**
  * Integration tests for HA Group State Change subscription functionality. Tests the new
  * subscription system where HAGroupStoreClient directly manages subscriptions and
  * HAGroupStoreManager acts as a passthrough.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class HAGroupStateSubscriptionIT extends BaseTest {
+public class HAGroupStateSubscriptionIT extends HABaseIT {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(HAGroupStateSubscriptionIT.class);
 
@@ -74,25 +68,22 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
   private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 2000L;
   private String zkUrl;
   private String peerZKUrl;
-  private static final String TEST_HDFS_URL = localUri.toString();
-  private static final String TEST_PEER_HDFS_URL = standbyUri.toString();
-  private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS =
-    new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
+  private String hdfsUrl1;
+  private String hdfsUrl2;
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    Map<String, String> props = Maps.newHashMapWithExpectedSize(2);
-    props.put(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, "true");
-    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     CLUSTERS.start();
   }
 
   @Before
   public void before() throws Exception {
-    haAdmin = new PhoenixHAAdmin(config, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
-    zkUrl = getLocalZkUrl(config);
+    haAdmin = new PhoenixHAAdmin(conf1, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
+    zkUrl = getLocalZkUrl(conf1);
     this.peerZKUrl = CLUSTERS.getZkUrl2();
-    peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, config, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
+    peerHaAdmin = new PhoenixHAAdmin(peerZKUrl, conf2, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
+    hdfsUrl1 = CLUSTERS.getHdfsUrl1();
+    hdfsUrl2 = CLUSTERS.getHdfsUrl2();
 
     // Clean up existing HAGroupStoreRecords
     try {
@@ -111,7 +102,8 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Insert a HAGroupStoreRecord into the system table
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(), zkUrl,
       peerZKUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
   }
 
   // ========== Multi-Cluster & Basic Subscription Tests ==========
@@ -119,7 +111,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
   @Test
   public void testDifferentTargetStatesPerCluster() throws Exception {
     String haGroupName = testName.getMethodName();
-    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(config);
+    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(conf1);
 
     // Track notifications
     AtomicInteger localNotifications = new AtomicInteger(0);
@@ -163,14 +155,14 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Trigger transition to STANDBY_TO_ACTIVE on LOCAL cluster
     HAGroupStoreRecord localRecord = new HAGroupStoreRecord("1.0", haGroupName,
       HAGroupState.STANDBY_TO_ACTIVE, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-      this.peerZKUrl, this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.peerZKUrl, this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Trigger transition to STANDBY on PEER cluster
     HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_NOT_IN_SYNC,
       0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl,
-      TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      hdfsUrl1, hdfsUrl2, 0L);
     peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -189,7 +181,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
   @Test
   public void testUnsubscribeSpecificCluster() throws Exception {
     String haGroupName = testName.getMethodName();
-    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(config);
+    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(conf1);
 
     // Track notifications
     AtomicInteger totalNotifications = new AtomicInteger(0);
@@ -223,7 +215,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // First, establish ACTIVE_IN_SYNC state on PEER cluster
     HAGroupStoreRecord peerActiveRecord = new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_IN_SYNC,
       0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl,
-      TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      hdfsUrl1, hdfsUrl2, 0L);
     peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerActiveRecord);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -234,7 +226,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Now trigger transition from ACTIVE_IN_SYNC to STANDBY on PEER → should call listener
     HAGroupStoreRecord peerStandbyRecord = new HAGroupStoreRecord("1.0", haGroupName,
       HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl,
-      this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerStandbyRecord, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -252,7 +244,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
   @Test
   public void testMultipleListenersMultipleClusters() throws Exception {
     String haGroupName = testName.getMethodName();
-    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(config);
+    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(conf1);
 
     // Track notifications from multiple listeners
     AtomicInteger listener1LocalNotifications = new AtomicInteger(0);
@@ -297,14 +289,14 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Trigger transition to DEGRADED_STANDBY on LOCAL
     HAGroupStoreRecord localRecord = new HAGroupStoreRecord("1.0", haGroupName,
       HAGroupState.DEGRADED_STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl,
-      this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Trigger transition to DEGRADED_STANDBY on PEER
     HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("1.0", haGroupName,
       HAGroupState.DEGRADED_STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl,
-      this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -321,7 +313,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
   @Test
   public void testSameListenerDifferentTargetStates() throws Exception {
     String haGroupName = testName.getMethodName();
-    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(config);
+    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(conf1);
 
     // Track which target states were reached
     AtomicInteger stateANotifications = new AtomicInteger(0);
@@ -356,14 +348,14 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Trigger target state A on LOCAL
     HAGroupStoreRecord localRecord = new HAGroupStoreRecord("1.0", haGroupName,
       HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-      this.peerZKUrl, this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.peerZKUrl, this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     // Trigger target state B on PEER
     HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("1.0", haGroupName, ACTIVE_IN_SYNC, 0L,
       HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl,
-      TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      hdfsUrl1, hdfsUrl2, 0L);
     peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -381,7 +373,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
   @Test
   public void testSubscriptionToNonExistentHAGroup() throws Exception {
     String nonExistentHAGroup = "nonExistentGroup_" + testName.getMethodName();
-    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(config);
+    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(conf1);
 
     HAGroupStateListener listener =
       (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
@@ -403,7 +395,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
   @Test
   public void testListenerExceptionIsolation() throws Exception {
     String haGroupName = testName.getMethodName();
-    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(config);
+    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(conf1);
 
     // Track notifications
     AtomicInteger goodListener1Notifications = new AtomicInteger(0);
@@ -446,7 +438,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Trigger transition to target state
     HAGroupStoreRecord transitionRecord = new HAGroupStoreRecord("1.0", haGroupName,
       ACTIVE_NOT_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl,
-      this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, transitionRecord, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -461,7 +453,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
   @Test
   public void testConcurrentMultiClusterSubscriptions() throws Exception {
     String haGroupName = testName.getMethodName();
-    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(config);
+    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(conf1);
 
     final int threadCount = 10;
     final CountDownLatch startLatch = new CountDownLatch(1);
@@ -515,7 +507,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
   @Test
   public void testHighFrequencyMultiClusterChanges() throws Exception {
     String haGroupName = testName.getMethodName();
-    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(config);
+    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(conf1);
 
     // Track notifications
     AtomicInteger localNotifications = new AtomicInteger(0);
@@ -539,7 +531,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     final int changeCount = 5;
     HAGroupStoreRecord initialPeerRecord = new HAGroupStoreRecord("1.0", haGroupName,
       HAGroupState.DEGRADED_STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl,
-      this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     peerHaAdmin.createHAGroupStoreRecordInZooKeeper(initialPeerRecord);
 
     for (int i = 0; i < changeCount; i++) {
@@ -547,14 +539,14 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
       HAGroupStoreRecord localRecord = new HAGroupStoreRecord("1.0", haGroupName,
         (i % 2 == 0) ? HAGroupState.STANDBY : HAGroupState.DEGRADED_STANDBY, 0L,
         HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl,
-        TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+        hdfsUrl1, hdfsUrl2, 0L);
       haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localRecord, -1);
 
       // Change peer cluster
       HAGroupStoreRecord peerRecord = new HAGroupStoreRecord("1.0", haGroupName,
         (i % 2 == 0) ? HAGroupState.STANDBY : HAGroupState.STANDBY_TO_ACTIVE, 0L,
         HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.zkUrl, this.peerZKUrl,
-        TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+        hdfsUrl1, hdfsUrl2, 0L);
       peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerRecord, -1);
 
       // Small delay between changes
@@ -581,7 +573,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
   @Test
   public void testSubscriptionCleanupPerCluster() throws Exception {
     String haGroupName = testName.getMethodName();
-    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(config);
+    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(conf1);
 
     // Track notifications to verify functionality
     AtomicInteger localActiveNotifications = new AtomicInteger(0);
@@ -642,7 +634,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Test initial functionality - trigger ACTIVE_IN_SYNC on LOCAL
     HAGroupStoreRecord localActiveRecord = new HAGroupStoreRecord("1.0", haGroupName,
       ACTIVE_NOT_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl,
-      this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localActiveRecord, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -653,7 +645,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Test initial functionality - trigger STANDBY_TO_ACTIVE on PEER
     HAGroupStoreRecord peerActiveRecord = new HAGroupStoreRecord("1.0", haGroupName,
       HAGroupState.STANDBY_TO_ACTIVE, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-      this.peerZKUrl, this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.peerZKUrl, this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerActiveRecord);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -676,13 +668,13 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // some other state.
     HAGroupStoreRecord localActiveRecord2 = new HAGroupStoreRecord("1.0", haGroupName,
       ACTIVE_IN_SYNC_TO_STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl,
-      this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localActiveRecord2, 1);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     HAGroupStoreRecord localActiveRecord3 = new HAGroupStoreRecord("1.0", haGroupName,
       ACTIVE_NOT_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl,
-      this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localActiveRecord3, 2);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -693,13 +685,13 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Test after partial unsubscribe - trigger STANDBY_TO_ACTIVE on PEER again
     HAGroupStoreRecord peerActiveRecord2 = new HAGroupStoreRecord("1.0", haGroupName,
       HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl,
-      this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerActiveRecord2, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     HAGroupStoreRecord peerActiveRecord3 = new HAGroupStoreRecord("1.0", haGroupName,
       HAGroupState.STANDBY_TO_ACTIVE, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-      this.peerZKUrl, this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.peerZKUrl, this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerActiveRecord3, 1);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -722,13 +714,13 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Test after complete unsubscribe - trigger ACTIVE_NOT_IN_SYNC on both clusters
     HAGroupStoreRecord localActiveRecord4 = new HAGroupStoreRecord("1.0", haGroupName,
       ACTIVE_NOT_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl,
-      this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, localActiveRecord4, 3);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
     HAGroupStoreRecord peerActiveRecord4 = new HAGroupStoreRecord("1.0", haGroupName,
       ACTIVE_NOT_IN_SYNC, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl,
-      this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     peerHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, peerActiveRecord4, 2);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
@@ -756,7 +748,7 @@ public class HAGroupStateSubscriptionIT extends BaseTest {
     // Trigger STANDBY state and verify new subscription works
     HAGroupStoreRecord standbyRecord = new HAGroupStoreRecord("1.0", haGroupName,
       HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl,
-      this.zkUrl, this.peerZKUrl, TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+      this.zkUrl, this.peerZKUrl, hdfsUrl1, hdfsUrl2, 0L);
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, standbyRecord, 4);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 

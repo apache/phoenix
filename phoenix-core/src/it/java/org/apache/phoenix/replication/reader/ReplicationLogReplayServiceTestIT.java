@@ -24,10 +24,8 @@ import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
-import java.net.URI;
 import java.sql.SQLException;
 import java.util.List;
-import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hbase.util.EnvironmentEdge;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -38,24 +36,17 @@ import org.apache.phoenix.jdbc.PhoenixHAAdmin;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 import org.mockito.Mockito;
 
 @Category(NeedsOwnMiniClusterTest.class)
 public class ReplicationLogReplayServiceTestIT extends HABaseIT {
 
-  @ClassRule
-  public static TemporaryFolder testFolder = new TemporaryFolder();
-
   private String zkUrl;
   private String peerZkUrl;
-  private FileSystem localFs;
-  private URI standbyUri;
   private PhoenixHAAdmin haAdmin;
   private PhoenixHAAdmin peerHaAdmin;
 
@@ -71,17 +62,9 @@ public class ReplicationLogReplayServiceTestIT extends HABaseIT {
   public void setUp() throws Exception {
     zkUrl = getLocalZkUrl(conf1);
     peerZkUrl = CLUSTERS.getZkUrl2();
-    localFs = FileSystem.getLocal(conf1);
-    standbyUri = testFolder.getRoot().toURI();
     haAdmin = new PhoenixHAAdmin(zkUrl, conf1, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
     peerHaAdmin = new PhoenixHAAdmin(peerZkUrl, conf2, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
     cleanupHAGroupState();
-
-    // Set the required configuration for ReplicationLogReplay
-    conf1.set(ReplicationLogReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY, standbyUri.toString());
-    // Enable replication replay service
-    conf1.setBoolean(ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED, true);
-
   }
 
   /**
@@ -96,11 +79,13 @@ public class ReplicationLogReplayServiceTestIT extends HABaseIT {
     // Insert HAGroupStoreRecords into the system table
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName1, zkUrl, peerZkUrl,
       CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName2, zkUrl, peerZkUrl,
       CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Set up consistency points for both groups
     long consistencyPoint1 = 1704153600000L; // 2024-01-02 00:00:00
@@ -142,7 +127,8 @@ public class ReplicationLogReplayServiceTestIT extends HABaseIT {
     // Insert HAGroupStoreRecord into the system table
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZkUrl,
       CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Set up consistency point for the group
     long consistencyPoint = 1704153600000L; // 2024-01-02 00:00:00

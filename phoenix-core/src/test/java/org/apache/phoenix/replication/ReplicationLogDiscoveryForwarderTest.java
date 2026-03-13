@@ -69,8 +69,7 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
   public void testLogForwardingAndTransitionBackToSyncMode() throws Exception {
     final String tableName = "TESTTBL";
     final long count = 100L;
-    int roundDurationSeconds =
-      logGroup.getFallbackShardManager().getReplicationRoundDurationSeconds();
+    int roundDurationSeconds = logGroup.getLocalShardManager().getReplicationRoundDurationSeconds();
 
     doAnswer(new Answer<Object>() {
       @Override
@@ -144,8 +143,7 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
   @Test
   public void testSyncModeUpdateWaitTime() throws Exception {
     final long[] waitTime = { 8L };
-    int roundDurationSeconds =
-      logGroup.getFallbackShardManager().getReplicationRoundDurationSeconds();
+    int roundDurationSeconds = logGroup.getLocalShardManager().getReplicationRoundDurationSeconds();
 
     doAnswer(new Answer<Object>() {
       @Override

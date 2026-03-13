@@ -20,10 +20,13 @@ package org.apache.phoenix.replication.reader;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.phoenix.jdbc.HAGroupStoreManager;
+import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.replication.ReplicationLogTracker;
 import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTrackerReplayImpl;
@@ -39,12 +42,6 @@ import org.slf4j.LoggerFactory;
 public class ReplicationLogReplay {
 
   private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogReplay.class);
-
-  /**
-   * The path on the HDFS where log files are to be read.
-   */
-  public static final String REPLICATION_LOG_REPLAY_HDFS_URL_KEY =
-    "phoenix.replication.log.replay.hdfs.url";
 
   public static final String IN_DIRECTORY_NAME = "in";
   /**
@@ -106,7 +103,16 @@ public class ReplicationLogReplay {
    */
   protected void init() throws IOException {
     LOG.info("Initializing ReplicationLogReplay for haGroup: {}", haGroupName);
-    initializeFileSystem();
+    HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
+    Optional<HAGroupStoreRecord> haRecord = haGroupStoreManager.getHAGroupStoreRecord(haGroupName);
+    if (!haRecord.isPresent()) {
+      String message = String.format(
+        "HAGroup %s got an empty group store record while initializing ReplicationLogReplay",
+        haGroupName);
+      LOG.error(message);
+      throw new IOException(message);
+    }
+    initializeFileSystem(haRecord.get().getHdfsUrl());
     Path newFilesDirectory =
       new Path(new Path(rootURI.getPath(), haGroupName), ReplicationLogReplay.IN_DIRECTORY_NAME);
     ReplicationShardDirectoryManager replicationShardDirectoryManager =
@@ -129,11 +135,7 @@ public class ReplicationLogReplay {
   }
 
   /** Initializes the filesystem and creates root log directory. */
-  private void initializeFileSystem() throws IOException {
-    String uriString = conf.get(REPLICATION_LOG_REPLAY_HDFS_URL_KEY);
-    if (uriString == null || uriString.isEmpty()) {
-      throw new IOException(REPLICATION_LOG_REPLAY_HDFS_URL_KEY + " is not configured");
-    }
+  private void initializeFileSystem(String uriString) throws IOException {
     try {
       this.rootURI = new URI(uriString);
       this.fileSystem = FileSystem.get(rootURI, conf);
@@ -145,7 +147,7 @@ public class ReplicationLogReplay {
         }
       }
     } catch (URISyntaxException e) {
-      throw new IOException(REPLICATION_LOG_REPLAY_HDFS_URL_KEY + " is not valid", e);
+      throw new IOException(uriString + " is not valid", e);
     }
   }
 

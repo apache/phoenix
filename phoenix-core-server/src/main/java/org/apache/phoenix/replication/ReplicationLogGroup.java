@@ -140,11 +140,6 @@ public class ReplicationLogGroup {
 
   private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogGroup.class);
 
-  // Configuration constants from original ReplicationLog
-  public static final String REPLICATION_STANDBY_HDFS_URL_KEY =
-    "phoenix.replication.log.standby.hdfs.url";
-  public static final String REPLICATION_FALLBACK_HDFS_URL_KEY =
-    "phoenix.replication.log.fallback.hdfs.url";
   public static final String REPLICATION_LOG_ROTATION_TIME_MS_KEY =
     "phoenix.replication.log.rotation.time.ms";
   public static final long DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS = 60 * 1000L;
@@ -185,8 +180,8 @@ public class ReplicationLogGroup {
   protected final String haGroupName;
   protected final HAGroupStoreManager haGroupStoreManager;
   protected final MetricsReplicationLogGroupSource metrics;
-  protected ReplicationShardDirectoryManager standbyShardManager;
-  protected ReplicationShardDirectoryManager fallbackShardManager;
+  protected ReplicationShardDirectoryManager peerShardManager;
+  protected ReplicationShardDirectoryManager localShardManager;
   protected ReplicationLogDiscoveryForwarder logForwarder;
   protected long syncTimeoutMs;
   protected volatile boolean closed = false;
@@ -417,15 +412,23 @@ public class ReplicationLogGroup {
    * @throws IOException if initialization fails
    */
   protected void init() throws IOException {
+    Optional<HAGroupStoreRecord> haRecord = haGroupStoreManager.getHAGroupStoreRecord(haGroupName);
+    if (!haRecord.isPresent()) {
+      String message =
+        String.format("HAGroup %s got an empty group store record while initializing mode", this);
+      LOG.error(message);
+      throw new IOException(message);
+    }
+    HAGroupStoreRecord record = haRecord.get();
     // First initialize the shard managers
-    this.standbyShardManager = createStandbyShardManager();
-    this.fallbackShardManager = createFallbackShardManager();
+    this.peerShardManager = createPeerShardManager(record);
+    this.localShardManager = createLocalShardManager(record);
     // Initialize the replication log forwarder. The log forwarder is only activated when
     // we switch to STORE_AND_FORWARD or SYNC_AND_FORWARD mode
     this.logForwarder = new ReplicationLogDiscoveryForwarder(this);
     this.logForwarder.init();
     // Initialize the replication mode based on the HAGroupStore state
-    initializeReplicationMode();
+    initializeReplicationMode(record);
     // Use the override value if provided in the config, else use a derived value
     this.syncTimeoutMs = conf.getLong(REPLICATION_LOG_SYNC_TIMEOUT_KEY, calculateSyncTimeout());
     // Initialize the disruptor so that we start processing events
@@ -455,29 +458,13 @@ public class ReplicationLogGroup {
   /**
    * Initialize the replication mode based on the HAGroupStore state
    */
-  protected void initializeReplicationMode() throws IOException {
-    Optional<HAGroupStoreRecord> haGroupStoreRecord =
-      haGroupStoreManager.getHAGroupStoreRecord(haGroupName);
-    if (haGroupStoreRecord.isPresent()) {
-      HAGroupStoreRecord record = haGroupStoreRecord.get();
-      HAGroupState haGroupState = record.getHAGroupState();
-      LOG.info("HAGroup {} initializing mode from state {}", this, haGroupState);
-      if (haGroupState.equals(HAGroupState.ACTIVE_IN_SYNC)) {
-        setMode(SYNC);
-      } else {
-        setMode(STORE_AND_FORWARD);
-      }
-      /*
-       * else if (haGroupState.equals(HAGroupState.ACTIVE_NOT_IN_SYNC)) {
-       * setMode(STORE_AND_FORWARD); } else { String message =
-       * String.format("HAGroup %s got an unexpected state %s while " + "initializing mode", this,
-       * haGroupState); LOG.error(message); throw new IOException(message); }
-       */
+  protected void initializeReplicationMode(HAGroupStoreRecord record) throws IOException {
+    HAGroupState haGroupState = record.getHAGroupState();
+    LOG.info("HAGroup {} initializing mode from state {}", this, haGroupState);
+    if (haGroupState.equals(HAGroupState.ACTIVE_IN_SYNC)) {
+      setMode(SYNC);
     } else {
-      String message = String
-        .format("HAGroup %s got an empty group store record while " + "initializing mode", this);
-      LOG.error(message);
-      throw new IOException(message);
+      setMode(STORE_AND_FORWARD);
     }
   }
 
@@ -757,55 +744,49 @@ public class ReplicationLogGroup {
 
   /**
    * Creates the top level directory on the cluster determined by the URI
-   * @param urlKey     Config property for the URI
+   * @param uri        HDFS uri
    * @param logDirName Top level directory underneath which the shards will be created
    */
-  private ReplicationShardDirectoryManager createShardManager(String urlKey, String logDirName)
+  private ReplicationShardDirectoryManager createShardManager(String uri, String logDirName)
     throws IOException {
-    URI rootURI = getLogURI(urlKey);
-    FileSystem fs = getFileSystem(rootURI);
-    LOG.info("HAGroup {} initialized filesystem at {}", this, rootURI);
-    // root dir path is <URI>/<HAGroupName>/[in|out]
-    Path rootDirPath = new Path(new Path(rootURI.getPath(), getHAGroupName()), logDirName);
-    if (!fs.exists(rootDirPath)) {
-      LOG.info("HAGroup {} creating root directory at {}", this, rootDirPath);
-      if (!fs.mkdirs(rootDirPath)) {
-        throw new IOException("Failed to create directory: " + rootDirPath);
+    try {
+      URI rootURI = new URI(uri);
+      FileSystem fs = getFileSystem(rootURI);
+      LOG.info("HAGroup {} initialized filesystem at {}", this, rootURI);
+      // root dir path is <URI>/<HAGroupName>/[in|out]
+      Path rootDirPath = new Path(new Path(rootURI.getPath(), getHAGroupName()), logDirName);
+      if (!fs.exists(rootDirPath)) {
+        LOG.info("HAGroup {} creating root directory at {}", this, rootDirPath);
+        if (!fs.mkdirs(rootDirPath)) {
+          throw new IOException("Failed to create directory: " + rootDirPath);
+        }
       }
+      return new ReplicationShardDirectoryManager(conf, fs, rootDirPath);
+    } catch (URISyntaxException e) {
+      throw new IOException("Invalid HDFS URI: " + uri, e);
     }
-    return new ReplicationShardDirectoryManager(conf, fs, rootDirPath);
   }
 
   /** create shard manager for the standby cluster */
-  protected ReplicationShardDirectoryManager createStandbyShardManager() throws IOException {
-    return createShardManager(REPLICATION_STANDBY_HDFS_URL_KEY, STANDBY_DIR);
+  protected ReplicationShardDirectoryManager createPeerShardManager(HAGroupStoreRecord record)
+    throws IOException {
+    return createShardManager(record.getPeerHdfsUrl(), STANDBY_DIR);
   }
 
   /** create shard manager for the fallback cluster */
-  protected ReplicationShardDirectoryManager createFallbackShardManager() throws IOException {
-    return createShardManager(REPLICATION_FALLBACK_HDFS_URL_KEY, FALLBACK_DIR);
+  protected ReplicationShardDirectoryManager createLocalShardManager(HAGroupStoreRecord record)
+    throws IOException {
+    return createShardManager(record.getHdfsUrl(), FALLBACK_DIR);
   }
 
   /** return shard manager for the standby cluster */
-  protected ReplicationShardDirectoryManager getStandbyShardManager() {
-    return standbyShardManager;
+  protected ReplicationShardDirectoryManager getPeerShardManager() {
+    return peerShardManager;
   }
 
   /** return shard manager for the fallback cluster */
-  protected ReplicationShardDirectoryManager getFallbackShardManager() {
-    return fallbackShardManager;
-  }
-
-  private URI getLogURI(String urlKey) throws IOException {
-    String urlString = conf.get(urlKey);
-    if (urlString == null || urlString.trim().isEmpty()) {
-      throw new IOException("HDFS URL not configured: " + urlKey);
-    }
-    try {
-      return new URI(urlString);
-    } catch (URISyntaxException e) {
-      throw new IOException("Invalid HDFS URL: " + urlString, e);
-    }
+  protected ReplicationShardDirectoryManager getLocalShardManager() {
+    return localShardManager;
   }
 
   private FileSystem getFileSystem(URI uri) throws IOException {
@@ -814,12 +795,12 @@ public class ReplicationLogGroup {
 
   /** Create the standby(synchronous) writer */
   protected ReplicationLog createStandbyLog() throws IOException {
-    return new ReplicationLog(this, standbyShardManager);
+    return new ReplicationLog(this, peerShardManager);
   }
 
   /** Create the fallback writer */
   protected ReplicationLog createFallbackLog() throws IOException {
-    return new ReplicationLog(this, fallbackShardManager);
+    return new ReplicationLog(this, localShardManager);
   }
 
   /** Returns the log forwarder for this replication group */
