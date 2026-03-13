@@ -62,7 +62,8 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
     ConcurrentMutationsExtendedIT.doSetup();
   }
 
-  @Test(timeout = 2000000)
+  // This test is heavy and it might exhaust jenkins resources
+  @Test(timeout = 1800000)
   public void testConcurrentUpsertsWithTableSplits() throws Exception {
     int nThreads = 12;
     final int batchSize = 100;
@@ -169,7 +170,8 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
     assertEquals(nRows, actualRowCount);
   }
 
-  @Test(timeout = 5000000)
+  // This test is heavy and it might exhaust jenkins resources
+  @Test(timeout = 1800000)
   public void testConcurrentUpsertsWithTableSplitsMerges() throws Exception {
     Assume.assumeFalse(uncovered);
     int nThreads = 13;

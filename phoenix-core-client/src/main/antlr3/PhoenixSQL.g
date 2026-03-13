@@ -86,6 +86,7 @@ tokens
     POST='post';
     CHANGE='change';
     IDX_MUTATIONS='idx_mutations';
+    DATA_ROW_STATE='data_row_state';
     LATEST='latest';
     ALL='all';
     INDEX='index';
@@ -608,7 +609,7 @@ cdc_change_scopes returns [Set<CDCChangeScope> ret]
     ;
 
 cdc_change_scope returns [CDCChangeScope ret]
-    :   v=(PRE | POST | CHANGE | IDX_MUTATIONS)
+    :   v=(PRE | POST | CHANGE | IDX_MUTATIONS | DATA_ROW_STATE)
         {
             ret = CDCChangeScope.valueOf(v.getText().toUpperCase());
         }
