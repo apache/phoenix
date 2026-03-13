@@ -30,9 +30,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.ConnectionUtils;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
@@ -41,6 +41,7 @@ import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
@@ -105,12 +106,26 @@ public class IndexCDCConsumer implements Runnable {
   private static final long DEFAULT_POLL_INTERVAL_MS = 1000;
 
   /**
-   * The time buffer in milliseconds subtracted from current time when querying CDC mutations. This
-   * buffer helps avoid reading mutations that are too recent.
+   * The time buffer in milliseconds subtracted from current time when querying CDC mutations to
+   * help avoid reading mutations that are too recent.
    */
   public static final String INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS =
     "phoenix.index.cdc.consumer.timestamp.buffer.ms";
-  private static final long DEFAULT_TIMESTAMP_BUFFER_MS = 1000;
+  private static final long DEFAULT_TIMESTAMP_BUFFER_MS = 25000;
+
+  /**
+   * Maximum number of retries when CDC events exist but the corresponding data table mutations are
+   * not yet visible (or permanently failed). After exceeding this limit, the consumer advances past
+   * the unprocessable events to avoid blocking indefinitely. This is only used for index mutation
+   * generation approach (serializeCDCMutations = false).
+   */
+  public static final String INDEX_CDC_CONSUMER_MAX_DATA_VISIBILITY_RETRIES =
+    "phoenix.index.cdc.consumer.max.data.visibility.retries";
+  private static final int DEFAULT_MAX_DATA_VISIBILITY_RETRIES = 15;
+
+  public static final String INDEX_CDC_CONSUMER_RETRY_PAUSE_MS =
+    "phoenix.index.cdc.consumer.retry.pause.ms";
+  private static final long DEFAULT_RETRY_PAUSE_MS = 2000;
 
   private final RegionCoprocessorEnvironment env;
   private final String dataTableName;
@@ -121,26 +136,31 @@ public class IndexCDCConsumer implements Runnable {
   private final int batchSize;
   private final long pollIntervalMs;
   private final long timestampBufferMs;
+  private final int maxDataVisibilityRetries;
   private final Configuration config;
+  private final boolean serializeCDCMutations;
   private volatile boolean stopped = false;
   private Thread consumerThread;
   private boolean hasParentPartitions = false;
   private PTable cachedDataTable;
 
   /**
-   * Creates a new IndexCDCConsumer for the given region.
-   * @param env           region coprocessor environment.
-   * @param dataTableName name of the data table.
-   * @param serverName    server name.
+   * Creates a new IndexCDCConsumer for the given region with configurable serialization mode.
+   * @param env                   region coprocessor environment.
+   * @param dataTableName         name of the data table.
+   * @param serverName            server name.
+   * @param serializeCDCMutations when true, consumes pre-serialized index mutations; when false,
+   *                              generates index mutations from data row states.
    * @throws IOException if the IndexWriter cannot be created.
    */
-  public IndexCDCConsumer(RegionCoprocessorEnvironment env, String dataTableName, String serverName)
-    throws IOException {
+  public IndexCDCConsumer(RegionCoprocessorEnvironment env, String dataTableName, String serverName,
+    boolean serializeCDCMutations) throws IOException {
     this.env = env;
     this.dataTableName = dataTableName;
     this.encodedRegionName = env.getRegion().getRegionInfo().getEncodedName();
     this.config = env.getConfiguration();
-    this.pause = config.getLong(HConstants.HBASE_CLIENT_PAUSE, 300);
+    this.serializeCDCMutations = serializeCDCMutations;
+    this.pause = config.getLong(INDEX_CDC_CONSUMER_RETRY_PAUSE_MS, DEFAULT_RETRY_PAUSE_MS);
     this.startupDelayMs =
       config.getLong(INDEX_CDC_CONSUMER_STARTUP_DELAY_MS, DEFAULT_STARTUP_DELAY_MS);
     this.batchSize = config.getInt(INDEX_CDC_CONSUMER_BATCH_SIZE, DEFAULT_CDC_BATCH_SIZE);
@@ -148,6 +168,8 @@ public class IndexCDCConsumer implements Runnable {
       config.getLong(INDEX_CDC_CONSUMER_POLL_INTERVAL_MS, DEFAULT_POLL_INTERVAL_MS);
     this.timestampBufferMs =
       config.getLong(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, DEFAULT_TIMESTAMP_BUFFER_MS);
+    this.maxDataVisibilityRetries = config.getInt(INDEX_CDC_CONSUMER_MAX_DATA_VISIBILITY_RETRIES,
+      DEFAULT_MAX_DATA_VISIBILITY_RETRIES);
     DelegateRegionCoprocessorEnvironment indexWriterEnv =
       new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
     this.indexWriter =
@@ -249,8 +271,13 @@ public class IndexCDCConsumer implements Runnable {
       while (!stopped) {
         try {
           long previousTimestamp = lastProcessedTimestamp;
-          lastProcessedTimestamp =
-            processCDCBatch(encodedRegionName, encodedRegionName, lastProcessedTimestamp, false);
+          if (serializeCDCMutations) {
+            lastProcessedTimestamp =
+              processCDCBatch(encodedRegionName, encodedRegionName, lastProcessedTimestamp, false);
+          } else {
+            lastProcessedTimestamp = processCDCBatchGenerated(encodedRegionName, encodedRegionName,
+              lastProcessedTimestamp, false);
+          }
           if (lastProcessedTimestamp == previousTimestamp) {
             sleepIfNotStopped(ConnectionUtils.getPauseTime(pause, ++retryCount));
           } else {
@@ -605,8 +632,14 @@ public class IndexCDCConsumer implements Runnable {
             currentLastProcessedTimestamp = getParentProgress(partitionId);
           }
         }
-        long newTimestamp =
-          processCDCBatch(partitionId, ownerPartitionId, currentLastProcessedTimestamp, true);
+        long newTimestamp;
+        if (serializeCDCMutations) {
+          newTimestamp =
+            processCDCBatch(partitionId, ownerPartitionId, currentLastProcessedTimestamp, true);
+        } else {
+          newTimestamp = processCDCBatchGenerated(partitionId, ownerPartitionId,
+            currentLastProcessedTimestamp, true);
+        }
         batchCount++;
         retryCount = 0;
         if (newTimestamp == currentLastProcessedTimestamp) {
@@ -697,18 +730,7 @@ public class IndexCDCConsumer implements Runnable {
       dataTableName, partitionId, ownerPartitionId, lastProcessedTimestamp);
     try (PhoenixConnection conn =
       QueryUtil.getConnectionOnServer(config).unwrap(PhoenixConnection.class)) {
-      PTable dataTable = getDataTable(conn);
-      String cdcObjectName = CDCUtil.getCDCObjectName(dataTable, false);
-      if (cdcObjectName == null) {
-        throw new SQLException("No CDC object found for table " + dataTableName);
-      }
-      String schemaName = dataTable.getSchemaName().getString();
-      if (schemaName == null || schemaName.isEmpty()) {
-        cdcObjectName = "\"" + cdcObjectName + "\"";
-      } else {
-        cdcObjectName =
-          "\"" + schemaName + "\"" + QueryConstants.NAME_SEPARATOR + "\"" + cdcObjectName + "\"";
-      }
+      String cdcObjectName = getCdcObjectName(conn);
       String cdcQuery;
       if (isParentReplay) {
         cdcQuery = String
@@ -728,15 +750,7 @@ public class IndexCDCConsumer implements Runnable {
       int retryCount = 0;
       while (hasMoreRows && batchMutations.isEmpty()) {
         try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
-          ps.setString(1, partitionId);
-          ps.setDate(2, new Date(newLastTimestamp));
-          if (isParentReplay) {
-            ps.setInt(3, batchSize);
-          } else {
-            long currentTime = EnvironmentEdgeManager.currentTimeMillis() - timestampBufferMs;
-            ps.setDate(3, new Date(currentTime));
-            ps.setInt(4, batchSize);
-          }
+          setStatementParams(partitionId, isParentReplay, newLastTimestamp, ps);
           Pair<Long, Boolean> result =
             getMutationsAndTimestamp(ps, newLastTimestamp, batchMutations);
           hasMoreRows = result.getSecond();
@@ -775,6 +789,236 @@ public class IndexCDCConsumer implements Runnable {
           PhoenixDatabaseMetaData.TRACKER_STATUS_IN_PROGRESS);
       }
       return newLastTimestamp;
+    }
+  }
+
+  private String getCdcObjectName(PhoenixConnection conn) throws SQLException {
+    PTable dataTable = getDataTable(conn);
+    String cdcObjectName = CDCUtil.getCDCObjectName(dataTable, false);
+    if (cdcObjectName == null) {
+      throw new SQLException("No CDC object found for table " + dataTableName);
+    }
+    String schemaName = dataTable.getSchemaName().getString();
+    if (schemaName == null || schemaName.isEmpty()) {
+      cdcObjectName = "\"" + cdcObjectName + "\"";
+    } else {
+      cdcObjectName =
+        "\"" + schemaName + "\"" + QueryConstants.NAME_SEPARATOR + "\"" + cdcObjectName + "\"";
+    }
+    return cdcObjectName;
+  }
+
+  /**
+   * Processes a batch of CDC events for the given partition starting from the specified timestamp
+   * by generating index mutations from data row states. This method queries the CDC index with the
+   * DATA_ROW_STATE scope, which triggers a server-side data table scan to reconstruct the
+   * before-image ({@code currentDataRowState}) and after-image ({@code nextDataRowState}) for each
+   * change.
+   * @param partitionId            the partition (region) ID to process CDC events for.
+   * @param ownerPartitionId       the owner partition ID.
+   * @param lastProcessedTimestamp the timestamp to start processing CDC events from.
+   * @param isParentReplay         true if replaying a closed parent partition.
+   * @return the new last processed timestamp after this batch, or the same timestamp if no new
+   *         records were found.
+   * @throws SQLException         if a SQL error occurs.
+   * @throws IOException          if an I/O error occurs.
+   * @throws InterruptedException if the thread is interrupted while waiting.
+   */
+  private long processCDCBatchGenerated(String partitionId, String ownerPartitionId,
+    long lastProcessedTimestamp, boolean isParentReplay)
+    throws SQLException, IOException, InterruptedException {
+    LOG.debug(
+      "Processing CDC batch (generated mode) for table {} partition {} owner {} from timestamp {}",
+      dataTableName, partitionId, ownerPartitionId, lastProcessedTimestamp);
+    try (PhoenixConnection conn =
+      QueryUtil.getConnectionOnServer(config).unwrap(PhoenixConnection.class)) {
+      String cdcObjectName = getCdcObjectName(conn);
+      String cdcQuery;
+      if (isParentReplay) {
+        cdcQuery = String
+          .format("SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
+            + "FROM %s WHERE PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
+            + "ORDER BY PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?", cdcObjectName);
+      } else {
+        cdcQuery = String
+          .format("SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
+            + "FROM %s WHERE PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
+            + "AND PHOENIX_ROW_TIMESTAMP() < ? "
+            + "ORDER BY PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?", cdcObjectName);
+      }
+
+      List<Pair<Long, IndexMutationsProtos.DataRowStates>> batchStates = new ArrayList<>();
+      long newLastTimestamp = lastProcessedTimestamp;
+      long[] lastScannedTimestamp = { lastProcessedTimestamp };
+      boolean hasMoreRows = true;
+      int retryCount = 0;
+      while (hasMoreRows && batchStates.isEmpty()) {
+        try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
+          setStatementParams(partitionId, isParentReplay, newLastTimestamp, ps);
+          Pair<Long, Boolean> result =
+            getDataRowStatesAndTimestamp(ps, newLastTimestamp, batchStates, lastScannedTimestamp);
+          hasMoreRows = result.getSecond();
+          if (hasMoreRows) {
+            if (!batchStates.isEmpty()) {
+              newLastTimestamp = result.getFirst();
+            } else if (retryCount >= maxDataVisibilityRetries) {
+              LOG.warn(
+                "Skipping CDC events for table {} partition {} from timestamp {}"
+                  + " to {} after {} retries — data table mutations may have failed",
+                dataTableName, partitionId, newLastTimestamp, lastScannedTimestamp[0], retryCount);
+              newLastTimestamp = lastScannedTimestamp[0];
+              break;
+            } else {
+              // CDC index entries are written but the data is not yet visible.
+              // Don't advance newLastTimestamp so the same events are re-fetched
+              // once the data becomes visible.
+              sleepIfNotStopped(ConnectionUtils.getPauseTime(pause, ++retryCount));
+            }
+          }
+        }
+      }
+      if (newLastTimestamp > lastProcessedTimestamp) {
+        String sameTimestampQuery = String
+          .format("SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
+            + "FROM %s WHERE PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() = ? "
+            + "ORDER BY PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC", cdcObjectName);
+        final long timestampToRefetch = newLastTimestamp;
+        batchStates.removeIf(pair -> pair.getFirst() == timestampToRefetch);
+        try (PreparedStatement ps = conn.prepareStatement(sameTimestampQuery)) {
+          ps.setString(1, partitionId);
+          ps.setDate(2, new Date(newLastTimestamp));
+          Pair<Long, Boolean> result =
+            getDataRowStatesAndTimestamp(ps, newLastTimestamp, batchStates, lastScannedTimestamp);
+          newLastTimestamp = result.getFirst();
+          if (batchStates.isEmpty()) {
+            newLastTimestamp = timestampToRefetch;
+          } else if (newLastTimestamp != timestampToRefetch) {
+            throw new IOException("Unexpected timestamp mismatch: expected " + timestampToRefetch
+              + " but got " + newLastTimestamp);
+          }
+        }
+      }
+      generateAndApplyIndexMutations(conn, batchStates, partitionId, ownerPartitionId,
+        newLastTimestamp);
+      if (newLastTimestamp > lastProcessedTimestamp) {
+        updateTrackerProgress(conn, partitionId, ownerPartitionId, newLastTimestamp,
+          PhoenixDatabaseMetaData.TRACKER_STATUS_IN_PROGRESS);
+      }
+      return newLastTimestamp;
+    }
+  }
+
+  private void setStatementParams(String partitionId, boolean isParentReplay, long newLastTimestamp,
+    PreparedStatement ps) throws SQLException {
+    ps.setString(1, partitionId);
+    ps.setDate(2, new Date(newLastTimestamp));
+    if (isParentReplay) {
+      ps.setInt(3, batchSize);
+    } else {
+      long currentTime = EnvironmentEdgeManager.currentTimeMillis() - timestampBufferMs;
+      ps.setDate(3, new Date(currentTime));
+      ps.setInt(4, batchSize);
+    }
+  }
+
+  private static Pair<Long, Boolean> getDataRowStatesAndTimestamp(PreparedStatement ps,
+    long initialLastTimestamp, List<Pair<Long, IndexMutationsProtos.DataRowStates>> batchStates,
+    long[] lastScannedTimestamp) throws SQLException, IOException {
+    boolean hasRows = false;
+    long lastTimestamp = initialLastTimestamp;
+    lastScannedTimestamp[0] = initialLastTimestamp;
+    try (ResultSet rs = ps.executeQuery()) {
+      while (rs.next()) {
+        hasRows = true;
+        long rowTimestamp = rs.getDate(1).getTime();
+        lastScannedTimestamp[0] = rowTimestamp;
+        String cdcValue = rs.getString(2);
+        if (cdcValue != null && !cdcValue.isEmpty()) {
+          byte[] protoBytes = Base64.getDecoder().decode(cdcValue);
+          IndexMutationsProtos.DataRowStates dataRowStates =
+            IndexMutationsProtos.DataRowStates.parseFrom(protoBytes);
+          if (
+            dataRowStates.hasDataRowKey()
+              && (dataRowStates.hasCurrentDataRowState() || dataRowStates.hasNextDataRowState())
+          ) {
+            batchStates.add(Pair.newPair(rowTimestamp, dataRowStates));
+            lastTimestamp = rowTimestamp;
+          }
+        }
+      }
+    }
+    return Pair.newPair(lastTimestamp, hasRows);
+  }
+
+  private void generateAndApplyIndexMutations(PhoenixConnection conn,
+    List<Pair<Long, IndexMutationsProtos.DataRowStates>> batchStates, String partitionId,
+    String ownerPartitionId, long lastProcessedTimestamp) throws SQLException, IOException {
+    if (batchStates.isEmpty()) {
+      return;
+    }
+    refreshDataTableCache(conn);
+    PTable dataTable = getDataTable(conn);
+    byte[] encodedRegionNameBytes = env.getRegion().getRegionInfo().getEncodedNameAsBytes();
+    List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables = new ArrayList<>();
+    for (PTable index : dataTable.getIndexes()) {
+      IndexConsistency consistency = index.getIndexConsistency();
+      if (consistency != null && consistency.isAsynchronous()) {
+        IndexMaintainer maintainer = index.getIndexMaintainer(dataTable, conn);
+        HTableInterfaceReference tableRef =
+          new HTableInterfaceReference(new ImmutableBytesPtr(maintainer.getIndexTableName()));
+        indexTables.add(new Pair<>(maintainer, tableRef));
+      }
+    }
+    if (indexTables.isEmpty()) {
+      return;
+    }
+    ListMultimap<HTableInterfaceReference, Mutation> indexUpdates = ArrayListMultimap.create();
+    int totalMutations = 0;
+    for (Pair<Long, IndexMutationsProtos.DataRowStates> entry : batchStates) {
+      long ts = entry.getFirst();
+      IndexMutationsProtos.DataRowStates dataRowStates = entry.getSecond();
+      byte[] dataRowKey = dataRowStates.getDataRowKey().toByteArray();
+      ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(dataRowKey);
+
+      Put currentDataRowState = null;
+      if (dataRowStates.hasCurrentDataRowState()) {
+        ClientProtos.MutationProto currentProto = ClientProtos.MutationProto
+          .parseFrom(dataRowStates.getCurrentDataRowState().toByteArray());
+        Mutation currentMutation = ProtobufUtil.toMutation(currentProto);
+        if (currentMutation instanceof Put) {
+          currentDataRowState = (Put) currentMutation;
+        }
+      }
+      Put nextDataRowState = null;
+      if (dataRowStates.hasNextDataRowState()) {
+        ClientProtos.MutationProto nextProto =
+          ClientProtos.MutationProto.parseFrom(dataRowStates.getNextDataRowState().toByteArray());
+        Mutation nextMutation = ProtobufUtil.toMutation(nextProto);
+        if (nextMutation instanceof Put) {
+          nextDataRowState = (Put) nextMutation;
+        }
+      }
+      if (currentDataRowState == null && nextDataRowState == null) {
+        continue;
+      }
+      IndexRegionObserver.generateIndexMutationsForRow(rowKeyPtr, currentDataRowState,
+        nextDataRowState, ts, encodedRegionNameBytes, QueryConstants.VERIFIED_BYTES, indexTables,
+        indexUpdates);
+      if (indexUpdates.size() >= batchSize) {
+        indexWriter.write(indexUpdates, false, MetaDataProtocol.PHOENIX_VERSION);
+        totalMutations += indexUpdates.size();
+        indexUpdates.clear();
+      }
+    }
+    if (!indexUpdates.isEmpty()) {
+      indexWriter.write(indexUpdates, false, MetaDataProtocol.PHOENIX_VERSION);
+      totalMutations += indexUpdates.size();
+    }
+    if (totalMutations > 0) {
+      LOG.debug(
+        "Applied total {} index mutations for table {} partition {} owner {} "
+          + ", last processed timestamp {}",
+        totalMutations, dataTableName, partitionId, ownerPartitionId, lastProcessedTimestamp);
     }
   }
 

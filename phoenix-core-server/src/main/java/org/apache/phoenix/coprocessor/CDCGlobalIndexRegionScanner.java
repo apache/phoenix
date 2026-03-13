@@ -21,6 +21,7 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.google.protobuf.ByteString;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Base64;
@@ -29,11 +30,13 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilder;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -61,6 +64,9 @@ import org.apache.phoenix.util.JacksonUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xerial.snappy.Snappy;
+
+import org.apache.hadoop.hbase.shaded.protobuf.ProtobufUtil;
+import org.apache.hadoop.hbase.shaded.protobuf.generated.ClientProtos;
 
 /**
  * CDC (Change Data Capture) enabled region scanner for global indexes that processes uncovered CDC
@@ -90,6 +96,7 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
   private static final Logger LOGGER = LoggerFactory.getLogger(CDCGlobalIndexRegionScanner.class);
   private CDCTableInfo cdcDataTableInfo;
   private CDCChangeBuilder changeBuilder;
+  private static final byte[] SEPARATOR = { 0 };
 
   private static final byte[] EMPTY_IDX_MUTATIONS = PVarchar.INSTANCE.toBytes(Base64.getEncoder()
     .encodeToString(IndexMutationsProtos.IndexMutations.getDefaultInstance().toByteArray()));
@@ -110,8 +117,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
   @Override
   protected Scan prepareDataTableScan(Collection<byte[]> dataRowKeys) throws IOException {
     if (
-      changeBuilder.isIdxMutationsInScope() && !changeBuilder.isChangeImageInScope()
-        && !changeBuilder.isPreImageInScope() && !changeBuilder.isPostImageInScope()
+      changeBuilder.isIdxMutationsInScope() && !changeBuilder.isDataRowStateInScope()
+        && !changeBuilder.isChangeImageInScope() && !changeBuilder.isPreImageInScope()
+        && !changeBuilder.isPostImageInScope()
     ) {
       return null;
     }
@@ -125,7 +133,11 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     // stopTimeRange = PLong.INSTANCE.getCodec().decodeLong(
     // scan.getStopRow(), 0, SortOrder.getDefault());
     // }
-    return CDCUtil.setupScanForCDC(prepareDataTableScan(dataRowKeys, true));
+    Scan dataScan = prepareDataTableScan(dataRowKeys, true);
+    if (dataScan == null) {
+      return null;
+    }
+    return CDCUtil.setupScanForCDC(dataScan);
   }
 
   protected boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {
@@ -173,59 +185,74 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                 // marker after that.
                 changeBuilder.setLastDeletedTimestamp(cell.getTimestamp());
               }
-            } else if (
-              (cell.getType() == Cell.Type.DeleteColumn || cell.getType() == Cell.Type.Put)
-                && !Arrays.equals(cellQual, emptyCQ)
-            ) {
-              if (!changeBuilder.isChangeRelevant(cell)) {
-                // We don't need to build the change image, just skip it.
-                continue;
-              }
-              // In this case, cell is the row, meaning we loop over rows..
-              if (isSingleCell) {
-                while (curColumnNum < cdcColumnInfoList.size()) {
-                  boolean hasValue = dataTableProjector.getSchema().extractValue(cell,
-                    (SingleCellColumnExpression) expressions[curColumnNum], ptr);
-                  if (hasValue) {
-                    Object cellValue = getColumnValue(ptr.get(), ptr.getOffset(), ptr.getLength(),
-                      cdcColumnInfoList.get(curColumnNum).getColumnType());
-                    changeBuilder.registerChange(cell, curColumnNum, cellValue);
+            } else
+              if (cell.getType() == Cell.Type.DeleteColumn || cell.getType() == Cell.Type.Put) {
+                boolean isEmptyCQ = Arrays.equals(cellQual, emptyCQ);
+                if (changeBuilder.isDataRowStateInScope()) {
+                  ImmutableBytesPtr colKey =
+                    new ImmutableBytesPtr(Bytes.add(cellFam, SEPARATOR, cellQual));
+                  if (cell.getType() == Cell.Type.DeleteColumn) {
+                    changeBuilder.registerRawDeleteColumn(cell, colKey);
+                  } else {
+                    changeBuilder.registerRawPut(cell, colKey);
                   }
-                  ++curColumnNum;
                 }
-                break cellLoop;
-              }
-              while (true) {
-                CDCTableInfo.CDCColumnInfo currentColumnInfo = cdcColumnInfoList.get(curColumnNum);
-                int columnComparisonResult =
-                  CDCUtil.compareCellFamilyAndQualifier(cellFam, cellQual,
-                    currentColumnInfo.getColumnFamily(), currentColumnInfo.getColumnQualifier());
-                if (columnComparisonResult > 0) {
-                  if (++curColumnNum >= cdcColumnInfoList.size()) {
-                    // Have no more column definitions, so the rest of the cells
-                    // must be for dropped columns and so can be ignored.
-                    break cellLoop;
-                  }
-                  // Continue looking for the right column definition
-                  // for this cell.
+                if (
+                  isEmptyCQ || (changeBuilder.isDataRowStateInScope()
+                    && !changeBuilder.isChangeImageInScope() && !changeBuilder.isPreImageInScope()
+                    && !changeBuilder.isPostImageInScope())
+                ) {
                   continue;
-                } else if (columnComparisonResult < 0) {
-                  // We didn't find a column definition for this cell, ignore the
-                  // current cell but continue working on the rest of the cells.
-                  continue cellLoop;
                 }
+                // In this case, cell is the row, meaning we loop over rows..
+                if (isSingleCell) {
+                  while (curColumnNum < cdcColumnInfoList.size()) {
+                    boolean hasValue = dataTableProjector.getSchema().extractValue(cell,
+                      (SingleCellColumnExpression) expressions[curColumnNum], ptr);
+                    if (hasValue) {
+                      Object cellValue = getColumnValue(ptr.get(), ptr.getOffset(), ptr.getLength(),
+                        cdcColumnInfoList.get(curColumnNum).getColumnType());
+                      changeBuilder.registerChange(cell, curColumnNum, cellValue);
+                    }
+                    ++curColumnNum;
+                  }
+                  break cellLoop;
+                }
+                while (true) {
+                  CDCTableInfo.CDCColumnInfo currentColumnInfo =
+                    cdcColumnInfoList.get(curColumnNum);
+                  int columnComparisonResult =
+                    CDCUtil.compareCellFamilyAndQualifier(cellFam, cellQual,
+                      currentColumnInfo.getColumnFamily(), currentColumnInfo.getColumnQualifier());
+                  if (columnComparisonResult > 0) {
+                    if (++curColumnNum >= cdcColumnInfoList.size()) {
+                      // Have no more column definitions, so the rest of the cells
+                      // must be for dropped columns and so can be ignored.
+                      break cellLoop;
+                    }
+                    // Continue looking for the right column definition
+                    // for this cell.
+                    continue;
+                  } else if (columnComparisonResult < 0) {
+                    // We didn't find a column definition for this cell, ignore the
+                    // current cell but continue working on the rest of the cells.
+                    continue cellLoop;
+                  }
 
-                // else, found the column definition.
-                Object cellValue = cell.getType() == Cell.Type.DeleteColumn
-                  ? null
-                  : getColumnValue(cell, cdcColumnInfoList.get(curColumnNum).getColumnType());
-                changeBuilder.registerChange(cell, curColumnNum, cellValue);
-                // Done processing the current cell, check the next cell.
-                break;
+                  // else, found the column definition.
+                  Object cellValue = cell.getType() == Cell.Type.DeleteColumn
+                    ? null
+                    : getColumnValue(cell, cdcColumnInfoList.get(curColumnNum).getColumnType());
+                  changeBuilder.registerChange(cell, curColumnNum, cellValue);
+                  // Done processing the current cell, check the next cell.
+                  break;
+                }
               }
-            }
           }
-          if (changeBuilder.isNonEmptyEvent()) {
+          if (changeBuilder.isDataRowStateInScope()) {
+            buildDataRowStateResult(dataRowKey.copyBytesIfNecessary(), indexRowKey, indexCell,
+              result);
+          } else if (changeBuilder.isNonEmptyEvent()) {
             Result cdcRow = getCDCImage(indexRowKey, indexCell);
             if (cdcRow != null && tupleProjector != null) {
               if (indexCell.getType() == Cell.Type.DeleteFamily) {
@@ -250,7 +277,12 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
             result.clear();
           }
         } else {
-          result.clear();
+          if (changeBuilder.isDataRowStateInScope()) {
+            buildDataRowStateResult(dataRowKey.copyBytesIfNecessary(), indexRowKey, indexCell,
+              result);
+          } else {
+            result.clear();
+          }
         }
 
         return true;
@@ -334,6 +366,67 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     }
     addResult(indexRowKey, indexCell, result, cdcDataCell, cdcEventBytes);
     return true;
+  }
+
+  /**
+   * Builds a DataRowStates protobuf result from the raw cell maps collected by CDCChangeBuilder
+   * during the raw cell iteration. Constructs before/after HBase Put objects representing the row
+   * state before and after the change, serializes them, and populates the result. If no valid
+   * changes were found at the change timestamp (data not yet visible), only the dataRowKey is
+   * included, the consumer needs to retry.
+   * @param dataRowKey  The data table row key bytes.
+   * @param indexRowKey The CDC index row key.
+   * @param indexCell   The index cell.
+   * @param result      The result list to populate.
+   * @throws IOException if serialization fails.
+   */
+  private void buildDataRowStateResult(byte[] dataRowKey, byte[] indexRowKey, Cell indexCell,
+    List<Cell> result) throws IOException {
+    Put currentDataRowState = null;
+    Put nextDataRowState = null;
+    Map<ImmutableBytesPtr, Cell> latestBeforeChange = changeBuilder.getRawLatestBeforeChange();
+    Map<ImmutableBytesPtr, Cell> atChange = changeBuilder.getRawAtChange();
+    Set<ImmutableBytesPtr> deletedColumnsAtChange = changeBuilder.getRawDeletedColumnsAtChange();
+    if (changeBuilder.hasValidDataRowStateChanges()) {
+      if (!latestBeforeChange.isEmpty()) {
+        currentDataRowState = new Put(dataRowKey);
+        for (Cell cell : latestBeforeChange.values()) {
+          currentDataRowState.add(cell);
+        }
+      }
+      if (!changeBuilder.isFullRowDelete()) {
+        Put nextState = new Put(dataRowKey);
+        for (Map.Entry<ImmutableBytesPtr, Cell> entry : latestBeforeChange.entrySet()) {
+          if (
+            !atChange.containsKey(entry.getKey())
+              && !deletedColumnsAtChange.contains(entry.getKey())
+          ) {
+            nextState.add(entry.getValue());
+          }
+        }
+        for (Cell cell : atChange.values()) {
+          nextState.add(cell);
+        }
+        if (!nextState.isEmpty()) {
+          nextDataRowState = nextState;
+        }
+      }
+    }
+    IndexMutationsProtos.DataRowStates.Builder builder =
+      IndexMutationsProtos.DataRowStates.newBuilder();
+    builder.setDataRowKey(ByteString.copyFrom(dataRowKey));
+    if (currentDataRowState != null) {
+      builder.setCurrentDataRowState(ByteString.copyFrom(
+        ProtobufUtil.toMutation(ClientProtos.MutationProto.MutationType.PUT, currentDataRowState)
+          .toByteArray()));
+    }
+    if (nextDataRowState != null) {
+      builder.setNextDataRowState(ByteString.copyFrom(ProtobufUtil
+        .toMutation(ClientProtos.MutationProto.MutationType.PUT, nextDataRowState).toByteArray()));
+    }
+    String base64String = Base64.getEncoder().encodeToString(builder.build().toByteArray());
+    byte[] cdcEventBytes = PVarchar.INSTANCE.toBytes(base64String);
+    addResult(indexRowKey, indexCell, result, indexCell, cdcEventBytes);
   }
 
   /**

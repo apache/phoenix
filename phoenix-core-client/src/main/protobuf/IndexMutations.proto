@@ -29,3 +29,11 @@ message IndexMutations {
   repeated bytes tables = 1;
   repeated bytes mutations = 2;
 }
+
+// Raw data row states for generating index mutations.
+// Contains the data row key and serialized MutationProto for the before and after states.
+message DataRowStates {
+  optional bytes dataRowKey = 1;
+  optional bytes currentDataRowState = 2;
+  optional bytes nextDataRowState = 3;
+}

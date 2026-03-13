@@ -178,6 +178,56 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   public static final String PHOENIX_INDEX_CDC_MUTATIONS_COMPRESS_ENABLED =
     "phoenix.index.cdc.mutations.compress.enabled";
   public static final boolean DEFAULT_PHOENIX_INDEX_CDC_MUTATIONS_COMPRESS_ENABLED = false;
+  /**
+   * Controls which approach is used for implementing eventually consistent global secondary indexes
+   * via the {@link IndexCDCConsumer}.
+   * <p>
+   * <b>Approach 1: Serialized mutations (default, value = true)</b>
+   * </p>
+   * <p>
+   * During {@code preBatchMutate}, {@link IndexRegionObserver} generates index mutations for each
+   * data table mutation and serializes them into a Protobuf {@code IndexMutations} message. This
+   * serialized payload is written as a column value in the CDC index table row alongside the CDC
+   * event. The {@link IndexCDCConsumer} later reads these pre-computed mutations from the CDC
+   * index, deserializes them, and applies them directly to the index table(s). In this approach,
+   * the consumer does not need to understand index structure or re-derive mutations — it simply
+   * replays what was already computed on the write path. The trade-off is increased CDC index row
+   * size due to the serialized mutation payload.
+   * </p>
+   * <p>
+   * <b>Approach 2: Generated mutations from data row states (value = false)</b>
+   * </p>
+   * <p>
+   * During {@code preBatchMutate}, {@link IndexRegionObserver} writes only a lightweight CDC index
+   * entry without serialized index mutations. Instead, the CDC event is created with the
+   * {@code DATA_ROW_STATE} scope. When the {@link IndexCDCConsumer} processes these events, it
+   * reads the CDC index rows which trigger a server-side scan of the data table (via
+   * {@code CDCGlobalIndexRegionScanner}) to reconstruct the before-image
+   * ({@code currentDataRowState}) and after-image ({@code nextDataRowState}) of the data row at the
+   * change timestamp. These raw row states are returned as a Protobuf {@code DataRowStates}
+   * message. The consumer then feeds these states into {@code generateIndexMutationsForRow()} — the
+   * same core utility used by {@link IndexRegionObserver#prepareIndexMutations} on the write path —
+   * to derive index mutations at consume time. This approach keeps CDC index rows small and
+   * generates mutations based on the current index definition, but requires an additional data
+   * table read per CDC event and is sensitive to data visibility timing. Make sure max lookback age
+   * is long enough to retain before and after images of the row.
+   * </p>
+   * <p>
+   * <b>When to use which approach:</b>
+   * </p>
+   * <ul>
+   * <li>Use <b>Approach 1</b> (serialize = true) when scanning each data table row at consume time
+   * could be an IO bottleneck, and slightly higher write-path latency due to index mutation
+   * serialization is acceptable.</li>
+   * <li>Use <b>Approach 2</b> (serialize = false) when uniform and predictable write latency is a
+   * strict requirement regardless of the number and type (covered or uncovered) of the eventually
+   * consistent global secondary indexes, and the additional data table point-lookup with raw scan
+   * per CDC event at consume time is not a big IO concern.</li>
+   * </ul>
+   */
+  public static final String PHOENIX_INDEX_CDC_MUTATION_SERIALIZE =
+    "phoenix.index.cdc.mutation.serialize";
+  public static final boolean DEFAULT_PHOENIX_INDEX_CDC_MUTATION_SERIALIZE = true;
 
   /**
    * Class to represent pending data table rows
@@ -433,6 +483,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private boolean shouldWALAppend = DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL;
   private boolean indexCDCConsumerEnabled = DEFAULT_PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
   private boolean compressCDCMutations = DEFAULT_PHOENIX_INDEX_CDC_MUTATIONS_COMPRESS_ENABLED;
+  private boolean serializeCDCMutations = DEFAULT_PHOENIX_INDEX_CDC_MUTATION_SERIALIZE;
   private boolean isNamespaceEnabled = false;
   private boolean useBloomFilter = false;
   private long lastTimestamp = 0;
@@ -494,6 +545,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       this.compressCDCMutations =
         env.getConfiguration().getBoolean(PHOENIX_INDEX_CDC_MUTATIONS_COMPRESS_ENABLED,
           DEFAULT_PHOENIX_INDEX_CDC_MUTATIONS_COMPRESS_ENABLED);
+      this.serializeCDCMutations = env.getConfiguration().getBoolean(
+        PHOENIX_INDEX_CDC_MUTATION_SERIALIZE, DEFAULT_PHOENIX_INDEX_CDC_MUTATION_SERIALIZE);
       this.isNamespaceEnabled =
         SchemaUtil.isNamespaceMappingEnabled(PTableType.INDEX, env.getConfiguration());
       TableDescriptor tableDescriptor = env.getRegion().getTableDescriptor();
@@ -504,7 +557,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         this.indexCDCConsumerEnabled && !this.dataTableName.startsWith("SYSTEM.")
           && !this.dataTableName.startsWith("SYSTEM:")
       ) {
-        this.indexCDCConsumer = new IndexCDCConsumer(env, this.dataTableName, serverName);
+        this.indexCDCConsumer =
+          new IndexCDCConsumer(env, this.dataTableName, serverName, this.serializeCDCMutations);
         this.indexCDCConsumer.start();
       }
     } catch (NoSuchMethodError ex) {
@@ -1208,6 +1262,76 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
   }
 
+  public static void generateIndexMutationsForRow(ImmutableBytesPtr rowKeyPtr,
+    Put currentDataRowState, Put nextDataRowState, long ts, byte[] encodedRegionName,
+    byte[] emptyColumnValue, List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables,
+    ListMultimap<HTableInterfaceReference, Mutation> indexUpdates) throws IOException {
+    for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
+      IndexMaintainer indexMaintainer = pair.getFirst();
+      HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
+      if (
+        nextDataRowState != null && indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)
+      ) {
+        ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
+        Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+          nextDataRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName);
+        if (indexPut == null) {
+          // No covered column. Just prepare an index row with the empty column
+          byte[] indexRowKey = indexMaintainer.buildRowKey(nextDataRowVG, rowKeyPtr, null, null, ts,
+            encodedRegionName);
+          indexPut = new Put(indexRowKey);
+        } else {
+          IndexUtil.removeEmptyColumn(indexPut,
+            indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+            indexMaintainer.getEmptyKeyValueQualifier());
+        }
+        byte[] finalEmptyColumnValue =
+          indexMaintainer.isUncovered() ? QueryConstants.UNVERIFIED_BYTES : emptyColumnValue;
+        indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+          indexMaintainer.getEmptyKeyValueQualifier(), ts, finalEmptyColumnValue);
+        indexUpdates.put(hTableInterfaceReference, indexPut);
+        if (!ignoreWritingDeleteColumnsToIndex) {
+          Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
+          if (deleteColumn != null) {
+            indexUpdates.put(hTableInterfaceReference, deleteColumn);
+          }
+        }
+        // Delete the current index row if the new index key is different from the
+        // current one and the index is not a CDC index
+        if (currentDataRowState != null) {
+          ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
+          byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG,
+            rowKeyPtr, null, null, ts, encodedRegionName);
+          if (
+            !indexMaintainer.isCDCIndex()
+              && Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0
+          ) {
+            Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+              IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+            indexUpdates.put(hTableInterfaceReference, del);
+          }
+        }
+      } else if (
+        currentDataRowState != null
+          && indexMaintainer.shouldPrepareIndexMutations(currentDataRowState)
+      ) {
+        if (indexMaintainer.isCDCIndex()) {
+          // CDC Index needs two a delete marker for referencing the data table
+          // delete mutation with the right index row key, that is, the index row key
+          // starting with ts
+          Put cdcDataRowState = new Put(currentDataRowState.getRow());
+          cdcDataRowState.addColumn(indexMaintainer.getDataEmptyKeyValueCF(),
+            indexMaintainer.getEmptyKeyValueQualifierForDataTable(), ts, ByteUtil.EMPTY_BYTE_ARRAY);
+          indexUpdates.put(hTableInterfaceReference, getDeleteIndexMutation(cdcDataRowState,
+            indexMaintainer, ts, rowKeyPtr, encodedRegionName));
+        } else {
+          indexUpdates.put(hTableInterfaceReference, getDeleteIndexMutation(currentDataRowState,
+            indexMaintainer, ts, rowKeyPtr, encodedRegionName));
+        }
+      }
+    }
+  }
+
   /**
    * Generate the index update for a data row from the mutation that are obtained by merging the
    * previous data row state with the pending row mutation.
@@ -1218,6 +1342,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       new ArrayList<>(maintainers.size());
     for (IndexMaintainer indexMaintainer : maintainers) {
       if (indexMaintainer.isLocalIndex()) {
+        continue;
+      }
+      if (
+        !serializeCDCMutations && indexMaintainer.getIndexConsistency() != null
+          && indexMaintainer.getIndexConsistency().isAsynchronous()
+      ) {
         continue;
       }
       HTableInterfaceReference hTableInterfaceReference =
@@ -1232,73 +1362,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       if (currentDataRowState == null && nextDataRowState == null) {
         continue;
       }
-      for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
-        IndexMaintainer indexMaintainer = pair.getFirst();
-        HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
-        if (
-          nextDataRowState != null && indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)
-        ) {
-          ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
-          Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-            nextDataRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName);
-          if (indexPut == null) {
-            // No covered column. Just prepare an index row with the empty column
-            byte[] indexRowKey = indexMaintainer.buildRowKey(nextDataRowVG, rowKeyPtr, null, null,
-              ts, encodedRegionName);
-            indexPut = new Put(indexRowKey);
-          } else {
-            IndexUtil.removeEmptyColumn(indexPut,
-              indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
-              indexMaintainer.getEmptyKeyValueQualifier());
-          }
-          indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
-            indexMaintainer.getEmptyKeyValueQualifier(), ts, QueryConstants.UNVERIFIED_BYTES);
-          context.indexUpdates.put(hTableInterfaceReference,
-            new Pair<Mutation, byte[]>(indexPut, rowKeyPtr.get()));
-          if (!ignoreWritingDeleteColumnsToIndex) {
-            Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
-            if (deleteColumn != null) {
-              context.indexUpdates.put(hTableInterfaceReference,
-                new Pair<Mutation, byte[]>(deleteColumn, rowKeyPtr.get()));
-            }
-          }
-          // Delete the current index row if the new index key is different from the
-          // current one and the index is not a CDC index
-          if (currentDataRowState != null) {
-            ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
-            byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG,
-              rowKeyPtr, null, null, ts, encodedRegionName);
-            if (
-              !indexMaintainer.isCDCIndex()
-                && Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0
-            ) {
-              Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
-                IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
-              context.indexUpdates.put(hTableInterfaceReference,
-                new Pair<Mutation, byte[]>(del, rowKeyPtr.get()));
-            }
-          }
-        } else if (
-          currentDataRowState != null
-            && indexMaintainer.shouldPrepareIndexMutations(currentDataRowState)
-        ) {
-          if (indexMaintainer.isCDCIndex()) {
-            // CDC Index needs two a delete marker for referencing the data table
-            // delete mutation with the right index row key, that is, the index row key
-            // starting with ts
-            Put cdcDataRowState = new Put(currentDataRowState.getRow());
-            cdcDataRowState.addColumn(indexMaintainer.getDataEmptyKeyValueCF(),
-              indexMaintainer.getEmptyKeyValueQualifierForDataTable(), ts,
-              ByteUtil.EMPTY_BYTE_ARRAY);
-            context.indexUpdates.put(hTableInterfaceReference,
-              new Pair<Mutation, byte[]>(getDeleteIndexMutation(cdcDataRowState, indexMaintainer,
-                ts, rowKeyPtr, encodedRegionName), rowKeyPtr.get()));
-          } else {
-            context.indexUpdates.put(hTableInterfaceReference,
-              new Pair<Mutation, byte[]>(getDeleteIndexMutation(currentDataRowState,
-                indexMaintainer, ts, rowKeyPtr, encodedRegionName), rowKeyPtr.get()));
-          }
-        }
+      ListMultimap<HTableInterfaceReference, Mutation> idxUpdates = ArrayListMultimap.create();
+      generateIndexMutationsForRow(rowKeyPtr, currentDataRowState, nextDataRowState, ts,
+        encodedRegionName, QueryConstants.UNVERIFIED_BYTES, indexTables, idxUpdates);
+      for (Map.Entry<HTableInterfaceReference, Mutation> idxUpdate : idxUpdates.entries()) {
+        context.indexUpdates.put(idxUpdate.getKey(),
+          new Pair<>(idxUpdate.getValue(), rowKeyPtr.get()));
       }
     }
   }
@@ -1326,8 +1395,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>> create();
       prepareIndexMutations(context, maintainers, batchTimestamp);
 
-      prepareEventuallyConsistentIndexMutations(context, batchTimestamp, maintainers,
-        compressCDCMutations);
+      if (serializeCDCMutations) {
+        prepareEventuallyConsistentIndexMutations(context, batchTimestamp, maintainers,
+          compressCDCMutations);
+      }
 
       context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
       int updateCount = 0;

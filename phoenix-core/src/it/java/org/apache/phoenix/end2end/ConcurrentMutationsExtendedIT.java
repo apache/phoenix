@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.end2end.IndexToolIT.verifyIndexTable;
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_BATCH_SIZE;
+import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -95,6 +96,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(2));
     props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(1));
     props.put(INDEX_CDC_CONSUMER_BATCH_SIZE, Integer.toString(4500));
+    props.put(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, Integer.toString(1000));
     props.put("hbase.coprocessor.master.classes", PhoenixMasterObserver.class.getName());
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
@@ -177,7 +179,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
     doneSignal.await(60, TimeUnit.SECONDS);
     if (eventual) {
-      Thread.sleep(15000);
+      Thread.sleep(35000);
     }
     verifyIndexTable(tableName, indexName, conn);
   }
@@ -249,7 +251,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
     doneSignal.await(60, TimeUnit.SECONDS);
     if (eventual) {
-      Thread.sleep(15000);
+      Thread.sleep(35000);
     }
     verifyIndexTable(tableName, indexName, conn);
     verifyIndexTable(tableName, singleCellindexName, conn);
@@ -374,7 +376,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     doneSignal.await(ROW_LOCK_WAIT_TIME + 5000, TimeUnit.SECONDS);
     assertNull(failedMsg[0], failedMsg[0]);
     if (eventual) {
-      Thread.sleep(15000);
+      Thread.sleep(35000);
     }
     long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
     assertEquals(1, actualRowCount);
@@ -435,7 +437,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
 
     doneSignal.await(ROW_LOCK_WAIT_TIME + 5000, TimeUnit.SECONDS);
     if (eventual) {
-      Thread.sleep(15000);
+      Thread.sleep(35000);
     }
     long actualRowCount = IndexScrutiny.scrutinizeIndex(conn, tableName, indexName);
     assertEquals(1, actualRowCount);

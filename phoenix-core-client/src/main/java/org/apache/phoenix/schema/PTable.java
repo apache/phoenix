@@ -1162,5 +1162,10 @@ public interface PTable extends PMetaDataEntity {
      * Include index mutations for eventually consistent indexes.
      */
     IDX_MUTATIONS,
+
+    /**
+     * Include raw before/after data row states as serialized Puts for index mutation generation.
+     */
+    DATA_ROW_STATE,
   }
 }
