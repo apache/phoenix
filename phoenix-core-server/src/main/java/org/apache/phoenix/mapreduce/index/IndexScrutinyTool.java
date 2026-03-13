@@ -39,7 +39,6 @@ import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
@@ -403,7 +402,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
         ? Long.parseLong(cmdLine.getOptionValue(TIMESTAMP.getOpt()))
         : EnvironmentEdgeManager.currentTimeMillis() - 60000;
 
-      validateTimestamp(configuration, ts);
+      PhoenixMapReduceUtil.validateMaxLookbackAge(configuration, ts, qDataTable);
 
       if (indexTable != null) {
         if (!IndexTool.isValidIndexTable(connection, qDataTable, indexTable, tenantId)) {
@@ -493,20 +492,6 @@ public class IndexScrutinyTool extends Configured implements Tool {
         throw new RuntimeException("Failed to close connection");
       }
     }
-  }
-
-  private void validateTimestamp(Configuration configuration, long ts) {
-    long maxLookBackAge = BaseScannerRegionObserverConstants.getMaxLookbackInMillis(configuration);
-    if (
-      maxLookBackAge != BaseScannerRegionObserverConstants.DEFAULT_PHOENIX_MAX_LOOKBACK_AGE * 1000L
-    ) {
-      long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
-      if (ts < minTimestamp) {
-        throw new IllegalArgumentException("Index scrutiny can't look back past the "
-          + "configured max lookback age: " + maxLookBackAge / 1000 + " seconds");
-      }
-    }
-
   }
 
   @VisibleForTesting
