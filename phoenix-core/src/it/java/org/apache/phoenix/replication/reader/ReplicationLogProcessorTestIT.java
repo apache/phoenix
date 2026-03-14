@@ -182,25 +182,50 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Tests error handling when attempting to create LogFileReader with an invalid/corrupted file.
+   * Tests that createLogFileReader returns empty for a zero-byte file.
    */
   @Test
-  public void testCreateLogFileReaderWithInvalidLogFile() throws IOException {
+  public void testCreateLogFileReaderWithEmptyLogFile() throws IOException {
     Path invalidFilePath = new Path(testFolder.newFile("invalid_file").toURI());
     localFs.create(invalidFilePath).close(); // Create empty file
     ReplicationLogProcessor replicationLogProcessor =
       new ReplicationLogProcessor(conf, testHAGroupName);
     try {
-      replicationLogProcessor.createLogFileReader(localFs, invalidFilePath);
-      fail("Should throw IOException for invalid file");
-    } catch (IOException e) {
-      // Should throw some kind of IOException when trying to read header
-      assertTrue("Should throw IOException", true);
+      Optional<LogFileReader> optionalLogFileReader =
+        replicationLogProcessor.createLogFileReader(localFs, invalidFilePath);
+      assertFalse("Reader should not be present for empty file", optionalLogFileReader.isPresent());
     } finally {
-      // Delete the invalid file
       localFs.delete(invalidFilePath);
       replicationLogProcessor.close();
     }
+  }
+
+  /**
+   * Tests that createLogFileReader closes the reader when init() throws IOException.
+   */
+  @Test
+  public void testCreateLogFileReaderClosesReaderOnInitFailure() throws IOException {
+    // Write garbage data so the file is non-empty but has no valid log file header
+    Path invalidFilePath = new Path(testFolder.newFile("init_failure_file").toURI());
+    org.apache.hadoop.fs.FSDataOutputStream out = localFs.create(invalidFilePath, true);
+    out.write("garbage data that is not a valid log file header".getBytes());
+    out.close();
+
+    assertTrue("File should be non-empty", localFs.getFileStatus(invalidFilePath).getLen() > 0);
+
+    ReplicationLogProcessor spyProcessor =
+      Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
+    try {
+      spyProcessor.createLogFileReader(localFs, invalidFilePath);
+      fail("Should throw IOException for file with invalid content");
+    } catch (IOException e) {
+      // Expected: init() fails because the file does not contain a valid log file header
+    } finally {
+      localFs.delete(invalidFilePath);
+      spyProcessor.close();
+    }
+
+    Mockito.verify(spyProcessor, Mockito.times(1)).closeReader(Mockito.any(LogFileReader.class));
   }
 
   /**

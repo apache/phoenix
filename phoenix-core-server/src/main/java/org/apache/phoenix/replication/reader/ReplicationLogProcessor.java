@@ -300,35 +300,45 @@ public class ReplicationLogProcessor implements Closeable {
     if (!fs.exists(filePath)) {
       throw new IOException("Log file does not exist: " + filePath);
     }
+    // Skip empty files unconditionally before any lease state inspection
+    if (fs.getFileStatus(filePath).getLen() <= 0) {
+      // Since writer appends the header in eager fashion (at time of creating the file), empty file
+      // denotes header was not appended and RS crashed just after creating the file, which implies
+      // there was surely NO data to read and we can safely return.
+      return Optional.empty();
+    }
     LogFileReader logFileReader = new LogFileReader();
     LogFileReaderContext logFileReaderContext =
       new LogFileReaderContext(conf).setFileSystem(fs).setFilePath(filePath);
-    boolean isClosed = isFileClosed(fs, filePath);
-    if (isClosed) {
-      // As file is closed, ensure that the file has a valid header and trailer
-      logFileReader.init(logFileReaderContext);
-      return Optional.of(logFileReader);
-    } else {
-      LOG.warn("Found un-closed file {}. Starting lease recovery.", filePath);
-      recoverLease(fs, filePath);
-      if (fs.getFileStatus(filePath).getLen() <= 0) {
-        // Found empty file, returning null LogReader
-        return Optional.empty();
-      }
-      try {
-        // Acquired the lease, try to create reader with validation both header and trailer
+    try {
+      boolean isClosed = isFileClosed(fs, filePath);
+      if (isClosed) {
+        // As file is closed, ensure that the file has a valid header and trailer
         logFileReader.init(logFileReaderContext);
         return Optional.of(logFileReader);
-      } catch (InvalidLogTrailerException invalidLogTrailerException) {
-        // If trailer is missing or corrupt, create reader without trailer validation
-        LOG.warn("Invalid Trailer for file {}", filePath, invalidLogTrailerException);
-        logFileReaderContext.setValidateTrailer(false);
-        logFileReader.init(logFileReaderContext);
-        return Optional.of(logFileReader);
-      } catch (IOException exception) {
-        LOG.error("Failed to initialize new LogFileReader for path {}", filePath, exception);
-        throw exception;
+      } else {
+        LOG.warn("Found un-closed file {}. Starting lease recovery.", filePath);
+        recoverLease(fs, filePath);
+        if (fs.getFileStatus(filePath).getLen() <= 0) {
+          // Found empty file, returning null LogReader
+          return Optional.empty();
+        }
+        try {
+          // Acquired the lease, try to create reader with validation both header and trailer
+          logFileReader.init(logFileReaderContext);
+          return Optional.of(logFileReader);
+        } catch (InvalidLogTrailerException invalidLogTrailerException) {
+          // If trailer is missing or corrupt, create reader without trailer validation
+          LOG.warn("Invalid Trailer for file {}", filePath, invalidLogTrailerException);
+          logFileReaderContext.setValidateTrailer(false);
+          logFileReader.init(logFileReaderContext);
+          return Optional.of(logFileReader);
+        }
       }
+    } catch (IOException exception) {
+      LOG.error("Failed to initialize new LogFileReader for path {}", filePath, exception);
+      closeReader(logFileReader);
+      throw exception;
     }
   }
 
