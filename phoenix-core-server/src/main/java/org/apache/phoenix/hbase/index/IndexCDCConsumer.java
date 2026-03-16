@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.client.ConnectionUtils;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.generated.IndexMutationsProtos;
@@ -45,9 +46,13 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.IndexConsistency;
+import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
@@ -144,6 +149,45 @@ public class IndexCDCConsumer implements Runnable {
   private boolean hasParentPartitions = false;
   private PTable cachedDataTable;
 
+  private boolean tenantInit = false;
+  private boolean isMultiTenant = false;
+  private String tenantIdColName;
+  private PDataType<?> tenantIdDataType;
+  private TenantScanInfo ownRegionScanInfo;
+
+  private final Map<String, TenantScanInfo> ancestorScanInfoCache = new HashMap<>();
+
+  private static class TenantScanInfo {
+
+    private static final TenantScanInfo EMPTY = new TenantScanInfo("", "", null, null, null);
+
+    private final String filter;
+    private final String orderBy;
+    private final Object startValue;
+    private final Object endValue;
+    private final PDataType<?> dataType;
+
+    TenantScanInfo(String filter, String orderBy, Object startValue, Object endValue,
+      PDataType<?> dataType) {
+      this.filter = filter;
+      this.orderBy = orderBy;
+      this.startValue = startValue;
+      this.endValue = endValue;
+      this.dataType = dataType;
+    }
+
+    int bindParams(PreparedStatement ps, int startIndex) throws SQLException {
+      int idx = startIndex;
+      if (startValue != null) {
+        ps.setObject(idx++, startValue, dataType.getSqlType());
+      }
+      if (endValue != null) {
+        ps.setObject(idx++, endValue, dataType.getSqlType());
+      }
+      return idx;
+    }
+  }
+
   /**
    * Creates a new IndexCDCConsumer for the given region with configurable serialization mode.
    * @param env                   region coprocessor environment.
@@ -222,6 +266,125 @@ public class IndexCDCConsumer implements Runnable {
 
   private void refreshDataTableCache(PhoenixConnection conn) throws SQLException {
     cachedDataTable = conn.getTable(dataTableName);
+  }
+
+  private void initTenantInfo(PhoenixConnection conn) throws SQLException {
+    if (tenantInit) {
+      return;
+    }
+    PTable dataTable = getDataTable(conn);
+    isMultiTenant = dataTable.isMultiTenant();
+    if (!isMultiTenant) {
+      ownRegionScanInfo = TenantScanInfo.EMPTY;
+      tenantInit = true;
+      return;
+    }
+    int tenantColIndex = dataTable.getBucketNum() != null ? 1 : 0;
+    PColumn tenantCol = dataTable.getPKColumns().get(tenantColIndex);
+    tenantIdColName = tenantCol.getName().getString();
+    tenantIdDataType = tenantCol.getDataType();
+
+    byte[] regionStartKey = env.getRegion().getRegionInfo().getStartKey();
+    byte[] regionEndKey = env.getRegion().getRegionInfo().getEndKey();
+    ownRegionScanInfo = buildTenantScanInfo(regionStartKey, regionEndKey, dataTable);
+    LOG.debug(
+      "Initialized multi-tenant scan for table {} region {}:"
+        + " tenantCol {}, startTenant {}, endTenant {}",
+      dataTableName, encodedRegionName, tenantIdColName, ownRegionScanInfo.startValue,
+      ownRegionScanInfo.endValue);
+    tenantInit = true;
+  }
+
+  private TenantScanInfo buildTenantScanInfo(byte[] startKey, byte[] endKey, PTable dataTable) {
+    Object startVal = extractTenantIdFromRegionKey(startKey, dataTable);
+    Object endVal = extractTenantIdFromRegionKey(endKey, dataTable);
+    StringBuilder sb = new StringBuilder();
+    if (startVal != null) {
+      sb.append("\"").append(tenantIdColName).append("\" >= ? AND ");
+    }
+    if (endVal != null) {
+      sb.append("\"").append(tenantIdColName).append("\" <= ? AND ");
+    }
+    String filter = sb.toString();
+    String orderBy = filter.isEmpty() ? "" : "\"" + tenantIdColName + "\" ASC,";
+    return new TenantScanInfo(filter, orderBy, startVal, endVal, tenantIdDataType);
+  }
+
+  private Object extractTenantIdFromRegionKey(byte[] regionKey, PTable dataTable) {
+    if (regionKey == null || regionKey.length == 0) {
+      return null;
+    }
+    final RowKeySchema schema = dataTable.getRowKeySchema();
+    int pkPos = dataTable.getBucketNum() != null ? 1 : 0;
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    int maxOffset = schema.iterator(regionKey, 0, regionKey.length, ptr);
+    for (int i = 0; i <= pkPos; i++) {
+      Boolean hasValue = schema.next(ptr, i, maxOffset);
+      if (!Boolean.TRUE.equals(hasValue)) {
+        return null;
+      }
+    }
+    byte[] tenantBytes = ByteUtil.copyKeyBytesIfNecessary(ptr);
+    PColumn tenantCol = dataTable.getPKColumns().get(pkPos);
+    return tenantCol.getDataType().toObject(tenantBytes, 0, tenantBytes.length,
+      tenantCol.getDataType(), tenantCol.getSortOrder(), tenantCol.getMaxLength(),
+      tenantCol.getScale());
+  }
+
+  private byte[][] lookupPartitionKeys(String partitionId) throws InterruptedException {
+    int retryCount = 0;
+    final String query = "SELECT PARTITION_START_KEY, PARTITION_END_KEY FROM "
+      + PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_NAME
+      + " WHERE TABLE_NAME = ? AND PARTITION_ID = ? LIMIT 1";
+    while (!stopped) {
+      try (
+        PhoenixConnection conn =
+          QueryUtil.getConnectionOnServer(env.getConfiguration()).unwrap(PhoenixConnection.class);
+        PreparedStatement ps = conn.prepareStatement(query)) {
+        ps.setString(1, dataTableName);
+        ps.setString(2, partitionId);
+        try (ResultSet rs = ps.executeQuery()) {
+          if (rs.next()) {
+            byte[] startKey = rs.getBytes(1);
+            byte[] endKey = rs.getBytes(2);
+            return new byte[][] { startKey == null ? new byte[0] : startKey,
+              endKey == null ? new byte[0] : endKey };
+          }
+        }
+        LOG.error("No CDC_STREAM entry found for partition {} table {}. This should not happen.",
+          partitionId, dataTableName);
+        return new byte[][] { new byte[0], new byte[0] };
+      } catch (SQLException e) {
+        long sleepTime = ConnectionUtils.getPauseTime(pause, ++retryCount);
+        LOG.warn(
+          "Error while retrieving partition keys from CDC_STREAM for partition {} table {}. "
+            + "Retry #{}, sleeping {} ms before retrying...",
+          partitionId, dataTableName, retryCount, sleepTime, e);
+        sleepIfNotStopped(sleepTime);
+      }
+    }
+    return null;
+  }
+
+  private TenantScanInfo getPartitionTenantScanInfo(String partitionId)
+    throws InterruptedException {
+    if (!isMultiTenant) {
+      return TenantScanInfo.EMPTY;
+    }
+    if (partitionId.equals(encodedRegionName)) {
+      return ownRegionScanInfo;
+    }
+    TenantScanInfo cached = ancestorScanInfoCache.get(partitionId);
+    if (cached != null) {
+      return cached;
+    }
+    byte[][] keys = lookupPartitionKeys(partitionId);
+    if (keys == null) {
+      return TenantScanInfo.EMPTY;
+    }
+    TenantScanInfo info = buildTenantScanInfo(keys[0], keys[1], cachedDataTable);
+    ancestorScanInfoCache.put(partitionId, info);
+    return info;
   }
 
   @Override
@@ -730,19 +893,23 @@ public class IndexCDCConsumer implements Runnable {
       dataTableName, partitionId, ownerPartitionId, lastProcessedTimestamp);
     try (PhoenixConnection conn =
       QueryUtil.getConnectionOnServer(config).unwrap(PhoenixConnection.class)) {
+      initTenantInfo(conn);
       String cdcObjectName = getCdcObjectName(conn);
+      TenantScanInfo scanInfo = getPartitionTenantScanInfo(partitionId);
       String cdcQuery;
       if (isParentReplay) {
-        cdcQuery = String
-          .format("SELECT /*+ CDC_INCLUDE(IDX_MUTATIONS) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
-            + "FROM %s WHERE PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
-            + "ORDER BY PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?", cdcObjectName);
+        cdcQuery = String.format(
+          "SELECT /*+ CDC_INCLUDE(IDX_MUTATIONS) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
+            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
+            + "ORDER BY %s PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?",
+          cdcObjectName, scanInfo.filter, scanInfo.orderBy);
       } else {
-        cdcQuery = String
-          .format("SELECT /*+ CDC_INCLUDE(IDX_MUTATIONS) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
-            + "FROM %s WHERE PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
+        cdcQuery = String.format(
+          "SELECT /*+ CDC_INCLUDE(IDX_MUTATIONS) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
+            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
             + "AND PHOENIX_ROW_TIMESTAMP() < ? "
-            + "ORDER BY PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?", cdcObjectName);
+            + "ORDER BY %s PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?",
+          cdcObjectName, scanInfo.filter, scanInfo.orderBy);
       }
       List<Pair<Long, IndexMutationsProtos.IndexMutations>> batchMutations = new ArrayList<>();
       long newLastTimestamp = lastProcessedTimestamp;
@@ -750,7 +917,7 @@ public class IndexCDCConsumer implements Runnable {
       int retryCount = 0;
       while (hasMoreRows && batchMutations.isEmpty()) {
         try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
-          setStatementParams(partitionId, isParentReplay, newLastTimestamp, ps);
+          setStatementParams(scanInfo, partitionId, isParentReplay, newLastTimestamp, ps);
           Pair<Long, Boolean> result =
             getMutationsAndTimestamp(ps, newLastTimestamp, batchMutations);
           hasMoreRows = result.getSecond();
@@ -765,15 +932,17 @@ public class IndexCDCConsumer implements Runnable {
       // With predefined LIMIT, there might be more rows with the same timestamp that were not
       // included in this batch.
       if (newLastTimestamp > lastProcessedTimestamp) {
-        String sameTimestampQuery = String
-          .format("SELECT /*+ CDC_INCLUDE(IDX_MUTATIONS) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
-            + "FROM %s WHERE PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() = ? "
-            + "ORDER BY PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC", cdcObjectName);
+        String sameTimestampQuery = String.format(
+          "SELECT /*+ CDC_INCLUDE(IDX_MUTATIONS) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
+            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() = ? "
+            + "ORDER BY %s PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC",
+          cdcObjectName, scanInfo.filter, scanInfo.orderBy);
         final long timestampToRefetch = newLastTimestamp;
         batchMutations.removeIf(pair -> pair.getFirst() == timestampToRefetch);
         try (PreparedStatement ps = conn.prepareStatement(sameTimestampQuery)) {
-          ps.setString(1, partitionId);
-          ps.setDate(2, new Date(newLastTimestamp));
+          int idx = scanInfo.bindParams(ps, 1);
+          ps.setString(idx++, partitionId);
+          ps.setDate(idx, new Date(newLastTimestamp));
           Pair<Long, Boolean> result =
             getMutationsAndTimestamp(ps, newLastTimestamp, batchMutations);
           newLastTimestamp = result.getFirst();
@@ -832,19 +1001,23 @@ public class IndexCDCConsumer implements Runnable {
       dataTableName, partitionId, ownerPartitionId, lastProcessedTimestamp);
     try (PhoenixConnection conn =
       QueryUtil.getConnectionOnServer(config).unwrap(PhoenixConnection.class)) {
+      initTenantInfo(conn);
       String cdcObjectName = getCdcObjectName(conn);
+      TenantScanInfo scanInfo = getPartitionTenantScanInfo(partitionId);
       String cdcQuery;
       if (isParentReplay) {
-        cdcQuery = String
-          .format("SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
-            + "FROM %s WHERE PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
-            + "ORDER BY PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?", cdcObjectName);
+        cdcQuery = String.format(
+          "SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
+            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
+            + "ORDER BY %s PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?",
+          cdcObjectName, scanInfo.filter, scanInfo.orderBy);
       } else {
-        cdcQuery = String
-          .format("SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
-            + "FROM %s WHERE PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
+        cdcQuery = String.format(
+          "SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
+            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() > ? "
             + "AND PHOENIX_ROW_TIMESTAMP() < ? "
-            + "ORDER BY PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?", cdcObjectName);
+            + "ORDER BY %s PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC LIMIT ?",
+          cdcObjectName, scanInfo.filter, scanInfo.orderBy);
       }
 
       List<Pair<Long, IndexMutationsProtos.DataRowStates>> batchStates = new ArrayList<>();
@@ -854,7 +1027,7 @@ public class IndexCDCConsumer implements Runnable {
       int retryCount = 0;
       while (hasMoreRows && batchStates.isEmpty()) {
         try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
-          setStatementParams(partitionId, isParentReplay, newLastTimestamp, ps);
+          setStatementParams(scanInfo, partitionId, isParentReplay, newLastTimestamp, ps);
           Pair<Long, Boolean> result =
             getDataRowStatesAndTimestamp(ps, newLastTimestamp, batchStates, lastScannedTimestamp);
           hasMoreRows = result.getSecond();
@@ -878,15 +1051,17 @@ public class IndexCDCConsumer implements Runnable {
         }
       }
       if (newLastTimestamp > lastProcessedTimestamp) {
-        String sameTimestampQuery = String
-          .format("SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
-            + "FROM %s WHERE PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() = ? "
-            + "ORDER BY PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC", cdcObjectName);
+        String sameTimestampQuery = String.format(
+          "SELECT /*+ CDC_INCLUDE(DATA_ROW_STATE) */ PHOENIX_ROW_TIMESTAMP(), \"CDC JSON\" "
+            + "FROM %s WHERE %s PARTITION_ID() = ? AND PHOENIX_ROW_TIMESTAMP() = ? "
+            + "ORDER BY %s PARTITION_ID() ASC, PHOENIX_ROW_TIMESTAMP() ASC",
+          cdcObjectName, scanInfo.filter, scanInfo.orderBy);
         final long timestampToRefetch = newLastTimestamp;
         batchStates.removeIf(pair -> pair.getFirst() == timestampToRefetch);
         try (PreparedStatement ps = conn.prepareStatement(sameTimestampQuery)) {
-          ps.setString(1, partitionId);
-          ps.setDate(2, new Date(newLastTimestamp));
+          int idx = scanInfo.bindParams(ps, 1);
+          ps.setString(idx++, partitionId);
+          ps.setDate(idx, new Date(newLastTimestamp));
           Pair<Long, Boolean> result =
             getDataRowStatesAndTimestamp(ps, newLastTimestamp, batchStates, lastScannedTimestamp);
           newLastTimestamp = result.getFirst();
@@ -908,16 +1083,17 @@ public class IndexCDCConsumer implements Runnable {
     }
   }
 
-  private void setStatementParams(String partitionId, boolean isParentReplay, long newLastTimestamp,
-    PreparedStatement ps) throws SQLException {
-    ps.setString(1, partitionId);
-    ps.setDate(2, new Date(newLastTimestamp));
+  private void setStatementParams(TenantScanInfo scanInfo, String partitionId,
+    boolean isParentReplay, long newLastTimestamp, PreparedStatement ps) throws SQLException {
+    int idx = scanInfo.bindParams(ps, 1);
+    ps.setString(idx++, partitionId);
+    ps.setDate(idx++, new Date(newLastTimestamp));
     if (isParentReplay) {
-      ps.setInt(3, batchSize);
+      ps.setInt(idx, batchSize);
     } else {
       long currentTime = EnvironmentEdgeManager.currentTimeMillis() - timestampBufferMs;
-      ps.setDate(3, new Date(currentTime));
-      ps.setInt(4, batchSize);
+      ps.setDate(idx++, new Date(currentTime));
+      ps.setInt(idx, batchSize);
     }
   }
 
