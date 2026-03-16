@@ -97,7 +97,7 @@ public class IndexCDCConsumer implements Runnable {
 
   public static final String INDEX_CDC_CONSUMER_BATCH_SIZE =
     "phoenix.index.cdc.consumer.batch.size";
-  private static final int DEFAULT_CDC_BATCH_SIZE = 1000;
+  private static final int DEFAULT_CDC_BATCH_SIZE = 100;
 
   public static final String INDEX_CDC_CONSUMER_STARTUP_DELAY_MS =
     "phoenix.index.cdc.consumer.startup.delay.ms";
@@ -116,7 +116,7 @@ public class IndexCDCConsumer implements Runnable {
    */
   public static final String INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS =
     "phoenix.index.cdc.consumer.timestamp.buffer.ms";
-  private static final long DEFAULT_TIMESTAMP_BUFFER_MS = 25000;
+  private static final long DEFAULT_TIMESTAMP_BUFFER_MS = 10000;
 
   /**
    * Maximum number of retries when CDC events exist but the corresponding data table mutations are

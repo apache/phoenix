@@ -1200,6 +1200,10 @@ public class MetaDataClient {
           continue;
         }
 
+        if (tableType == PTableType.INDEX && "CONSISTENCY".equalsIgnoreCase(prop.getFirst())) {
+          continue;
+        }
+
         // HTableDescriptor property or Phoenix Table Property
         if (defaultDescriptor.getValue(Bytes.toBytes(prop.getFirst())) == null) {
           // See PHOENIX-4891
