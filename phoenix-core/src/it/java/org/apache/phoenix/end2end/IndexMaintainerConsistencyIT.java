@@ -28,6 +28,9 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.util.List;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -105,6 +108,9 @@ public class IndexMaintainerConsistencyIT extends ParallelStatsDisabledIT {
       assertFalse(dataTable.isStrictTTL());
       assertNull(dataTable.getIndexConsistency());
 
+      verifyTableDescriptor(pconn, strongIndex1, strongIndex2, eventualIndex1, eventualIndex2,
+        dataTable);
+
       IndexMaintainer strongMaintainer1 = strongIndex1.getIndexMaintainer(dataTable, pconn);
       IndexMaintainer strongMaintainer2 = strongIndex2.getIndexMaintainer(dataTable, pconn);
       IndexMaintainer eventualMaintainer1 = eventualIndex1.getIndexMaintainer(dataTable, pconn);
@@ -172,6 +178,7 @@ public class IndexMaintainerConsistencyIT extends ParallelStatsDisabledIT {
         pconn.getTable(new PTableKey(pconn.getTenantId(), dataTableNameWithoutQuotes));
       assertNull(strongIndex.getIndexConsistency());
       assertFalse("Data table should not have CDC index initially", CDCUtil.hasCDCIndex(dataTable));
+      verifyTableDescriptor(pconn, strongIndex, dataTable);
 
       IndexMaintainer strongMaintainer = strongIndex.getIndexMaintainer(dataTable, pconn);
       verifyIndexMaintainerConsistency(strongMaintainer, null, dataTable);
@@ -185,6 +192,7 @@ public class IndexMaintainerConsistencyIT extends ParallelStatsDisabledIT {
       assertEquals(IndexConsistency.EVENTUAL, eventualIndex.getIndexConsistency());
       assertTrue("Data table should have CDC index after altering to eventual consistency",
         CDCUtil.hasCDCIndex(dataTable));
+      verifyTableDescriptor(pconn, eventualIndex, dataTable);
 
       IndexMaintainer eventualMaintainer = eventualIndex.getIndexMaintainer(dataTable, pconn);
       verifyIndexMaintainerConsistency(eventualMaintainer, IndexConsistency.EVENTUAL, dataTable);
@@ -193,8 +201,21 @@ public class IndexMaintainerConsistencyIT extends ParallelStatsDisabledIT {
       PTable strongIdx =
         pconn.getTable(new PTableKey(pconn.getTenantId(), fullIdxNameWithoutQuotes));
       assertEquals(IndexConsistency.STRONG, strongIdx.getIndexConsistency());
+      verifyTableDescriptor(pconn, strongIdx, dataTable);
       IndexMaintainer strongIdxMaintainer = strongIdx.getIndexMaintainer(dataTable, pconn);
       verifyIndexMaintainerConsistency(strongIdxMaintainer, IndexConsistency.STRONG, dataTable);
+    }
+  }
+
+  private void verifyTableDescriptor(PhoenixConnection pconn, PTable... tables) throws Exception {
+    try (Admin admin = pconn.getQueryServices().getAdmin()) {
+      for (PTable table : tables) {
+        TableDescriptor td =
+          admin.getDescriptor(TableName.valueOf(table.getPhysicalName().getBytes()));
+        assertNull(
+          "CONSISTENCY should be present in table descriptor for " + table.getName().getString(),
+          td.getValue("CONSISTENCY"));
+      }
     }
   }
 

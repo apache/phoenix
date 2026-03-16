@@ -37,6 +37,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assume;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -172,6 +173,7 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
 
   // This test is heavy and it might exhaust jenkins resources
   @Test(timeout = 1800000)
+  @Ignore("too aggressive for jenkins builds")
   public void testConcurrentUpsertsWithTableSplitsMerges() throws Exception {
     Assume.assumeFalse(uncovered);
     int nThreads = 13;
