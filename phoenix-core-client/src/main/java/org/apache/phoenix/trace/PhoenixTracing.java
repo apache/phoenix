@@ -31,51 +31,11 @@ import java.util.function.Supplier;
 import org.apache.phoenix.call.CallWrapper;
 
 /**
- * Central tracing facade for Apache Phoenix using OpenTelemetry.
- * <p>
- * This class follows the same pattern as HBase's {@code TraceUtil} (HBASE-22120). It provides a
- * thin facade over the OpenTelemetry API for creating and managing spans throughout Phoenix.
- * <p>
- * All methods are safe to call even when no OpenTelemetry SDK is configured (e.g., when the Java
- * Agent is not attached). In that case, all calls are no-ops with zero overhead, because the
- * OpenTelemetry API returns no-op implementations by default.
- * <p>
- * <b>Architecture:</b>
- * <ul>
- * <li>Compile-time: Phoenix depends only on {@code opentelemetry-api} (no SDK bundled)</li>
- * <li>Runtime: The OpenTelemetry Java Agent provides the SDK implementation. Since Phoenix runs
- * inside HBase's JVM (as coprocessors), it uses HBase's agent (shipped in
- * {@code lib/trace/}).</li>
- * <li>Backend: Operators configure the export destination (Jaeger, Tempo, Zipkin, etc.) via
- * environment variables.</li>
- * </ul>
- * <p>
- * <b>Usage examples:</b>
+ * Central tracing facade for Apache Phoenix using OpenTelemetry, following the same pattern as
+ * HBase's {@code TraceUtil} (HBASE-22120). All methods are no-ops with zero overhead when no
+ * OpenTelemetry SDK is configured.
  *
- * <pre>
- * // Simple span creation with try-with-resources
- * Span span = PhoenixTracing.createSpan("phoenix.query.compile");
- * try (Scope ignored = span.makeCurrent()) {
- *     // do work
- *     span.setStatus(StatusCode.OK);
- * } catch (Exception e) {
- *     PhoenixTracing.setError(span, e);
- *     throw e;
- * } finally {
- *     span.end();
- * }
- *
- * // Using the trace() convenience method
- * PhoenixTracing.trace(() -&gt; {
- *     compileQuery(sql);
- * }, "phoenix.query.compile");
- *
- * // Wrapping a callable for thread pool execution
- * Callable&lt;Result&gt; wrapped = PhoenixTracing.wrap(myCallable);
- * executor.submit(wrapped);
- * </pre>
- *
- * @see <a href="https://issues.apache.org/jira/browse/HBASE-22120">HBASE-22120</a>
+ * @see <a href="https://issues.apache.org/jira/browse/PHOENIX-5215">PHOENIX-5215</a>
  */
 public final class PhoenixTracing {
 
