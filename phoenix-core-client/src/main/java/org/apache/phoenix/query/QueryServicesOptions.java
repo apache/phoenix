@@ -256,7 +256,7 @@ public class QueryServicesOptions {
 
   // 30 min scan timeout * 5 tries, with 2100ms total pause time between retries
   public static final long DEFAULT_SYNC_TABLE_QUERY_TIMEOUT = (5 * 30000 * 60) + 2100;
-  public static final long DEFAULT_SYNC_TABLE_RPC_TIMEOUT = 10000 * 60; // 10 mins
+  public static final long DEFAULT_SYNC_TABLE_RPC_TIMEOUT = 30000 * 60; // 30 mins
   public static final long DEFAULT_SYNC_TABLE_CLIENT_SCANNER_TIMEOUT = 30000 * 60; // 30 mins
   public static final int DEFAULT_SYNC_TABLE_RPC_RETRIES_COUNTER = 5; // 5 total tries at rpc level
 

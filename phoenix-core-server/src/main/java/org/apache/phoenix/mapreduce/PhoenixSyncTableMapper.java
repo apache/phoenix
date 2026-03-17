@@ -71,7 +71,7 @@ public class PhoenixSyncTableMapper
     CHUNKS_VERIFIED,
     CHUNKS_MISMATCHED,
     SOURCE_ROWS_PROCESSED,
-    TARGET_ROWS_PROCESSED,
+    TARGET_ROWS_PROCESSED
   }
 
   private String tableName;
@@ -269,14 +269,11 @@ public class PhoenixSyncTableMapper
           previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey,
           isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey, isTargetStartKeyInclusive,
           !isLastChunkOfRegion);
-
         context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).increment(sourceChunk.rowCount);
         context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).increment(targetChunk.rowCount);
         boolean matched = MessageDigest.isEqual(sourceChunk.hash, targetChunk.hash);
         if (LOGGER.isDebugEnabled()) {
-          byte[] targetStartKey = targetChunk.startKey;
-          byte[] targetEndKey = targetChunk.endKey;
-          LOGGER.info(
+          LOGGER.debug(
             "isSourceStartKeyInclusive: {}, isTargetStartKeyInclusive: {},"
               + "isTargetEndKeyInclusive: {}, isFirstChunkOfRegion: {}, isLastChunkOfRegion: {}."
               + "Chunk comparison source {}, {}. Key range passed to target chunk: {}, {}."
@@ -284,7 +281,9 @@ public class PhoenixSyncTableMapper
             isSourceStartKeyInclusive, isTargetStartKeyInclusive, !isLastChunkOfRegion,
             previousSourceChunk == null, isLastChunkOfRegion,
             Bytes.toStringBinary(sourceChunk.startKey), Bytes.toStringBinary(sourceChunk.endKey),
-            Bytes.toStringBinary(targetStartKey), Bytes.toStringBinary(targetEndKey),
+            Bytes.toStringBinary(
+              previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey),
+            Bytes.toStringBinary(isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey),
             Bytes.toStringBinary(targetChunk.startKey), Bytes.toStringBinary(targetChunk.endKey),
             sourceChunk.rowCount, targetChunk.rowCount, matched);
         }

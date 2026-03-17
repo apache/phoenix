@@ -366,6 +366,27 @@ public class PhoenixSyncTableToolTest extends BaseTest {
       conf.getInt(QueryServices.SYNC_TABLE_RPC_RETRIES_COUNTER, -1));
   }
 
+  @Test
+  public void testParseOptionsWithNegativeChunkSize() throws Exception {
+    Long startTime = 1L;
+    Long endTime = 10L;
+    Long negativeChunkSize = -1048576L;
+    String[] args = getArgValues(schema, tableName, targetCluster, tenantId, startTime, endTime,
+      negativeChunkSize, false, false);
+    CommandLine cmdLine = tool.parseOptions(args);
+    exceptionRule.expect(IllegalArgumentException.class);
+    exceptionRule.expectMessage("Chunk size must be a positive value");
+    tool.populateSyncTableToolAttributes(cmdLine);
+  }
+
+  @Test
+  public void testParseOptionsWithBothMandatoryOptionsMissing() throws Exception {
+    String[] args = new String[] {};
+    exceptionRule.expect(IllegalStateException.class);
+    exceptionRule.expectMessage("table-name is a mandatory parameter");
+    tool.parseOptions(args);
+  }
+
   /**
    * Creates argument array for PhoenixSyncTableTool
    */

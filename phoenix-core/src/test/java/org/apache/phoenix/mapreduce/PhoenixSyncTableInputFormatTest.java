@@ -18,6 +18,7 @@
 package org.apache.phoenix.mapreduce;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
@@ -27,6 +28,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.phoenix.query.KeyRange;
 import org.junit.Test;
 
@@ -268,5 +270,14 @@ public class PhoenixSyncTableInputFormatTest {
     assertTrue("First should be [d,g)",
       Bytes.compareTo(split1.getKeyRange().getLowerRange(), split2.getKeyRange().getLowerRange())
           < 0);
+  }
+
+  @SuppressWarnings("rawtypes")
+  @Test
+  public void testCreateRecordReaderReturnsNoOpReader() {
+    RecordReader reader = inputFormat.createRecordReader(null, null);
+    assertNotNull("createRecordReader should never return null", reader);
+    assertTrue("Should return a PhoenixNoOpSingleRecordReader",
+      reader instanceof PhoenixNoOpSingleRecordReader);
   }
 }

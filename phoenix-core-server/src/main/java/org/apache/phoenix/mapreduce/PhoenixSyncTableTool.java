@@ -44,6 +44,7 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixMRJobUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -134,6 +135,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   private Job configureAndCreatePhoenixSyncTableJob(PTableType tableType) throws Exception {
     configureTimeoutsAndRetries(configuration);
     setPhoenixSyncTableToolConfiguration(configuration);
+    PhoenixMRJobUtil.updateCapacityQueueInfo(configuration);
     Job job = Job.getInstance(configuration, getJobName());
     job.setMapperClass(PhoenixSyncTableMapper.class);
     job.setJarByClass(PhoenixSyncTableTool.class);
@@ -300,6 +302,10 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
 
     if (cmdLine.hasOption(CHUNK_SIZE_OPTION.getOpt())) {
       chunkSizeBytes = Long.valueOf(cmdLine.getOptionValue(CHUNK_SIZE_OPTION.getOpt()));
+      if (chunkSizeBytes <= 0) {
+        throw new IllegalArgumentException(
+          "Chunk size must be a positive value, got: " + chunkSizeBytes);
+      }
     }
     if (cmdLine.hasOption(TENANT_ID_OPTION.getOpt())) {
       tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());

@@ -166,6 +166,8 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
 
           if (!rowCells.isEmpty() && ScanUtil.isDummy(rowCells)) {
             if (chunkStartKey == null) {
+              LOGGER.warn("Paging timed out while fetching first row of chunk, initStartRowKey: {}",
+                Bytes.toStringBinary(initStartRowKey));
               updateDummyWithPrevRowKey(results, initStartRowKey, includeInitStartRowKey, scan);
               return true;
             } else {
