@@ -216,8 +216,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
 
     TableMapReduceUtil.addDependencyJars(job);
     TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(), PhoenixConnection.class,
-      Chronology.class, CharStream.class, Gauge.class,
-      MetricRegistriesImpl.class);
+      Chronology.class, CharStream.class, Gauge.class, MetricRegistriesImpl.class);
 
     LOGGER.info("UpdateStatisticsTool running for: " + tableName + " on snapshot: " + snapshotName
       + " with restore dir: " + restoreDir);

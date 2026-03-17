@@ -27,6 +27,8 @@ import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRI
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.RETURN_RESULT;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
@@ -79,8 +81,6 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.wal.WALKey;
 import org.apache.hadoop.io.WritableUtils;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.context.Scope;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
@@ -1870,11 +1870,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     // get the current span, or just use a null-span to avoid a bunch of if statements
-    Span current = PhoenixTracing.createSpan(
-        "phoenix.index.write." + (post ? "post" : "pre"));
+    Span current = PhoenixTracing.createSpan("phoenix.index.write." + (post ? "post" : "pre"));
     try (Scope ignored = current.makeCurrent()) {
-      current.addEvent(
-        "Actually doing " + (post ? "post" : "pre") + " index update for first time");
+      current
+        .addEvent("Actually doing " + (post ? "post" : "pre") + " index update for first time");
       if (post) {
         postWriter.write(indexUpdates, false, context.clientVersion);
       } else {

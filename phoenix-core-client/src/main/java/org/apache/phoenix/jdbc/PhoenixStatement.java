@@ -781,7 +781,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
             }
           }
-        }, PhoenixContextExecutor.inContext(), PhoenixTracing.withTracing("phoenix.statement.execute"));
+        }, PhoenixContextExecutor.inContext(),
+          PhoenixTracing.withTracing("phoenix.statement.execute"));
     } catch (Exception e) {
       if (queryLogger.isAuditLoggingEnabled()) {
         queryLogger.log(QueryLogInfo.TABLE_NAME_I, getTargetForAudit(stmt));

@@ -41,6 +41,9 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SERVER_SIDE_
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.context.Scope;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.sql.Timestamp;
@@ -68,9 +71,6 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.api.trace.StatusCode;
-import io.opentelemetry.context.Scope;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
@@ -1514,8 +1514,7 @@ public class MutationState implements SQLCloseable {
       // create a span per target table
       // TODO maybe we can be smarter about the table name to string here?
       Span child =
-        PhoenixTracing.createSpan(
-            "phoenix.mutation.batch.write." + Bytes.toString(htableName));
+        PhoenixTracing.createSpan("phoenix.mutation.batch.write." + Bytes.toString(htableName));
 
       int retryCount = 0;
       boolean shouldRetry = false;

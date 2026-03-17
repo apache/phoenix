@@ -17,16 +17,16 @@
  */
 package org.apache.phoenix.hbase.index;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantLock;
 import org.apache.hadoop.hbase.exceptions.TimeoutIOException;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.context.Scope;
-import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
+import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

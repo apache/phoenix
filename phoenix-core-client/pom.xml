@@ -256,10 +256,11 @@
       <artifactId>opentelemetry-api</artifactId>
       <scope>provided</scope>
     </dependency>
-    <!-- OpenTelemetry Semantic Conventions -->
+    <!-- OpenTelemetry Context (transitive from opentelemetry-api, but declared
+         explicitly to satisfy dependency analysis). -->
     <dependency>
-      <groupId>io.opentelemetry.semconv</groupId>
-      <artifactId>opentelemetry-semconv</artifactId>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-context</artifactId>
       <scope>provided</scope>
     </dependency>
   </dependencies>

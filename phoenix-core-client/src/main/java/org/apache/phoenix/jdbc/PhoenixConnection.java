@@ -26,6 +26,8 @@ import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -65,8 +67,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
-import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.context.Scope;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.FailoverSQLException;
@@ -474,7 +474,6 @@ public class PhoenixConnection
   public int getChildConnectionsCount() {
     return childConnections.size();
   }
-
 
   public Map<String, String> getCustomTracingAnnotations() {
     return customTracingAnnotations;

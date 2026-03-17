@@ -31,46 +31,46 @@ import org.apache.phoenix.schema.tuple.Tuple;
  */
 public class TracingIterator extends DelegateResultIterator {
 
-    private final Span span;
-    private final Scope scope;
-    private boolean started;
+  private final Span span;
+  private final Scope scope;
+  private boolean started;
 
-    /**
-     * @param span     the OpenTelemetry span to manage
-     * @param scope    the scope that makes the span current
-     * @param iterator delegate iterator
-     */
-    public TracingIterator(Span span, Scope scope, ResultIterator iterator) {
-        super(iterator);
-        this.span = span;
-        this.scope = scope;
-    }
+  /**
+   * @param span     the OpenTelemetry span to manage
+   * @param scope    the scope that makes the span current
+   * @param iterator delegate iterator
+   */
+  public TracingIterator(Span span, Scope scope, ResultIterator iterator) {
+    super(iterator);
+    this.span = span;
+    this.scope = scope;
+  }
 
-    @Override
-    public void close() throws SQLException {
-        try {
-            span.setStatus(StatusCode.OK);
-        } finally {
-            try {
-                scope.close();
-            } finally {
-                span.end();
-            }
-        }
-        super.close();
+  @Override
+  public void close() throws SQLException {
+    try {
+      span.setStatus(StatusCode.OK);
+    } finally {
+      try {
+        scope.close();
+      } finally {
+        span.end();
+      }
     }
+    super.close();
+  }
 
-    @Override
-    public Tuple next() throws SQLException {
-        if (!started) {
-            span.addEvent("First request completed");
-            started = true;
-        }
-        return super.next();
+  @Override
+  public Tuple next() throws SQLException {
+    if (!started) {
+      span.addEvent("First request completed");
+      started = true;
     }
+    return super.next();
+  }
 
-    @Override
-    public String toString() {
-        return "TracingIterator [span=" + span + ", started=" + started + "]";
-    }
+  @Override
+  public String toString() {
+    return "TracingIterator [span=" + span + ", started=" + started + "]";
+  }
 }
