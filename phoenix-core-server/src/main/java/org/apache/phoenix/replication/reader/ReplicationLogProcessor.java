@@ -238,7 +238,7 @@ public class ReplicationLogProcessor implements Closeable {
 
       if (!logFileReaderOptional.isPresent()) {
         // This is an empty file, assume processed successfully and return
-        LOG.warn("Found empty file to process {}", filePath);
+        LOG.info("Ignoring zero length replication log file {}", filePath);
         return;
       }
 
@@ -307,24 +307,25 @@ public class ReplicationLogProcessor implements Closeable {
       // Ensure to recover lease first, in case file was un-closed. If it was already closed,
       // recoverLease would return true immediately.
       recoverLease(fs, filePath);
-      if (fs.getFileStatus(filePath).getLen() <= 0) {
+      if (fs.getFileStatus(filePath).getLen() > 0) {
+        try {
+          // Acquired the lease, try to create reader with validation both header and trailer
+          logFileReader.init(logFileReaderContext);
+          return Optional.of(logFileReader);
+        } catch (InvalidLogTrailerException invalidLogTrailerException) {
+          // If trailer is missing or corrupt, create reader without trailer validation
+          LOG.warn("Invalid Trailer for file {}", filePath, invalidLogTrailerException);
+          logFileReaderContext.setValidateTrailer(false);
+          logFileReader.init(logFileReaderContext);
+          return Optional.of(logFileReader);
+        }
+      } else {
         // Ignore the file and returning empty LogReader.
-        LOG.info("Ignoring zero length replication log file {}", filePath);
         return Optional.empty();
-      }
-      try {
-        // Acquired the lease, try to create reader with validation both header and trailer
-        logFileReader.init(logFileReaderContext);
-        return Optional.of(logFileReader);
-      } catch (InvalidLogTrailerException invalidLogTrailerException) {
-        // If trailer is missing or corrupt, create reader without trailer validation
-        LOG.warn("Invalid Trailer for file {}", filePath, invalidLogTrailerException);
-        logFileReaderContext.setValidateTrailer(false);
-        logFileReader.init(logFileReaderContext);
-        return Optional.of(logFileReader);
       }
     } catch (IOException exception) {
       LOG.error("Failed to initialize new LogFileReader for path {}", filePath, exception);
+      // close the reader to avoid leaking socket connection
       closeReader(logFileReader);
       throw exception;
     }
