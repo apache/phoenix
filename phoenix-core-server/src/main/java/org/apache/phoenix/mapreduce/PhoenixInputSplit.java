@@ -39,7 +39,7 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
 
   private List<Scan> scans;
   private KeyRange keyRange;
-  private List<KeyRange> keyRanges; // For coalesced splits - one per region
+  private List<KeyRange> keyRanges;
   private String regionLocation = null;
   private long splitSize = 0;
 
@@ -105,7 +105,6 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     if (keyRanges != null && !keyRanges.isEmpty()) {
       return keyRanges;
     }
-    // Backward compatibility: return single KeyRange as list
     return Lists.newArrayList(keyRange);
   }
 
@@ -135,14 +134,11 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
       Scan scan = ProtobufUtil.toScan(protoScan);
       scans.add(scan);
     }
-
-    // Read keyRanges for coalesced splits (backward compatible)
     int keyRangeCount = WritableUtils.readVInt(input);
     if (keyRangeCount > 0) {
       keyRanges = Lists.newArrayListWithExpectedSize(keyRangeCount);
       for (int i = 0; i < keyRangeCount; i++) {
-        KeyRange kr = new KeyRange();
-        kr.readFields(input);
+        KeyRange kr = KeyRange.read(input);
         keyRanges.add(kr);
       }
     }
@@ -163,8 +159,6 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
       WritableUtils.writeVInt(output, protoScanBytes.length);
       output.write(protoScanBytes);
     }
-
-    // Write keyRanges for coalesced splits (backward compatible)
     if (keyRanges != null && !keyRanges.isEmpty()) {
       WritableUtils.writeVInt(output, keyRanges.size());
       for (KeyRange kr : keyRanges) {

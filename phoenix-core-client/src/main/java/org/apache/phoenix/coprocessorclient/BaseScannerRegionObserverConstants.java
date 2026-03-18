@@ -213,7 +213,7 @@ public class BaseScannerRegionObserverConstants {
    * mapper). The coprocessor returns chunk metadata as HBase cells with these qualifiers, and the
    * mapper parses them to extract chunk information.
    */
-  public static final byte[] SYNC_TABLE_END_KEY_QUALIFIER = Bytes.toBytes("END_KEY");
+  public static final byte[] SYNC_TABLE_START_KEY_QUALIFIER = Bytes.toBytes("START_KEY");
   public static final byte[] SYNC_TABLE_HASH_QUALIFIER = Bytes.toBytes("HASH");
   public static final byte[] SYNC_TABLE_ROW_COUNT_QUALIFIER = Bytes.toBytes("ROW_COUNT");
   public static final byte[] SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER =

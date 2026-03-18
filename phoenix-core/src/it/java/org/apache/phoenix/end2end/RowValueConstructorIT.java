@@ -2496,6 +2496,17 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
     assertEquals(f, rs.getLong("f"));
   }
 
+  private void assertRowBytes(ResultSet rs, byte[] a, long b, byte[] c, int d, byte[] e, long f)
+    throws SQLException {
+    assertTrue(rs.next());
+    assertArrayEquals(a, rs.getBytes("a"));
+    assertEquals(b, rs.getLong("b"));
+    assertArrayEquals(c, rs.getBytes("c"));
+    assertEquals(d, rs.getInt("d"));
+    assertArrayEquals(e, rs.getBytes("e"));
+    assertEquals(f, rs.getLong("f"));
+  }
+
   private StringBuilder generateQueryToTest(int numItemsInClause, String fullViewName) {
     StringBuilder querySb =
       new StringBuilder("SELECT OBJECT_ID,OBJECT_DATA2,OBJECT_DATA FROM " + fullViewName);
@@ -2670,6 +2681,352 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
       assertEquals("isk07", results.get(3));
       assertEquals("isk06", results.get(4));
     }
+  }
+
+  @Test
+  public void testRVCWithAlternatingFixedVarBinaryEncodedPK() throws Exception {
+    Connection conn = nextConnection(getUrl());
+    String tableName = generateUniqueName();
+
+    String ddl = "CREATE TABLE " + tableName + " (" + "a VARBINARY_ENCODED NOT NULL, "
+      + "b BIGINT NOT NULL, " + "c VARBINARY_ENCODED NOT NULL, " + "d INTEGER NOT NULL, "
+      + "e VARBINARY_ENCODED NOT NULL, " + "f BIGINT NOT NULL, " + "val VARCHAR, "
+      + "CONSTRAINT pk PRIMARY KEY (a, b, c, d, e, f))";
+    conn.createStatement().execute(ddl);
+
+    conn = nextConnection(getUrl());
+    PreparedStatement stmt = conn.prepareStatement(
+      "UPSERT INTO " + tableName + " (a, b, c, d, e, f, val) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    for (int i = 0; i < 5000; i++) {
+      stmt.setBytes(1, new byte[] { 0x00, 0x0A, (byte) (i % 5) });
+      stmt.setLong(2, i);
+      stmt.setBytes(3, new byte[] { 0x0C, (byte) (i % 7) });
+      stmt.setInt(4, i % 100);
+      stmt.setBytes(5, new byte[] { 0x00, 0x0E, (byte) (i % 3) });
+      stmt.setLong(6, i);
+      stmt.setString(7, "val_" + i);
+      stmt.execute();
+      if (i % 1000 == 0) {
+        conn.commit();
+      }
+    }
+    conn.commit();
+
+    byte[] a0 = { 0x00, 0x0A, 0 };
+    byte[] c5 = { 0x0C, 5 };
+    byte[] c3 = { 0x0C, 3 };
+    byte[] c1 = { 0x0C, 1 };
+    byte[] c6 = { 0x0C, 6 };
+    byte[] c4 = { 0x0C, 4 };
+    byte[] e0 = { 0x00, 0x0E, 0 };
+    byte[] e1 = { 0x00, 0x0E, 1 };
+    byte[] e2 = { 0x00, 0x0E, 2 };
+
+    conn = nextConnection(getUrl());
+    PreparedStatement q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b >= 2490 AND b <= 2510 ORDER BY a, b, c, d, e, f");
+    q.setBytes(1, a0);
+    ResultSet rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2490, c5, 90, e0, 2490);
+    assertRowBytes(rs, a0, 2495, c3, 95, e2, 2495);
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2510, c4, 10, e2, 2510);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b <= 2510 AND (b > 2495 OR (b = 2495 AND c > ?))"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setBytes(2, c3);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2510, c4, 10, e2, 2510);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b <= 2510 AND (b, c) > (?, ?)" + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2495);
+    q.setBytes(3, c3);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2510, c4, 10, e2, 2510);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b <= 2510 AND (b, c, d) > (?, ?, ?)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2500);
+    q.setBytes(3, c1);
+    q.setInt(4, 0);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2510, c4, 10, e2, 2510);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b <= 2510 AND (b, c, d, e) > (?, ?, ?, ?)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2500);
+    q.setBytes(3, c1);
+    q.setInt(4, 0);
+    q.setBytes(5, e1);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2510, c4, 10, e2, 2510);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND (b, c) <= (?, ?) AND (b, c, d) > (?, ?, ?)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2505);
+    q.setBytes(3, c6);
+    q.setLong(4, 2495);
+    q.setBytes(5, c3);
+    q.setInt(6, 95);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND (b, c, d) <= (?, ?, ?) AND (b, c, d, e, f) > (?, ?, ?, ?, ?)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2505);
+    q.setBytes(3, c6);
+    q.setInt(4, 5);
+    q.setLong(5, 2495);
+    q.setBytes(6, c3);
+    q.setInt(7, 95);
+    q.setBytes(8, e2);
+    q.setLong(9, 2495);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b >= 2495 AND (b, c, d) < (?, ?, ?)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2510);
+    q.setBytes(3, c4);
+    q.setInt(4, 10);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2495, c3, 95, e2, 2495);
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement(
+      "SELECT a, b, c, d, e, f FROM " + tableName + " WHERE a = ? AND b <= 2510 AND (b, c) > (?, ?)"
+        + " ORDER BY a ASC, b DESC, c DESC, d DESC, e DESC, f DESC LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2495);
+    q.setBytes(3, c3);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2510, c4, 10, e2, 2510);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND (b, c) <= (?, ?) AND (b, c, d) > (?, ?, ?)"
+      + " ORDER BY a ASC, b DESC, c DESC, d DESC, e DESC, f DESC LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2505);
+    q.setBytes(3, c6);
+    q.setLong(4, 2495);
+    q.setBytes(5, c3);
+    q.setInt(6, 95);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b >= 2495 AND (b, c, d) < (?, ?, ?)"
+      + " ORDER BY a ASC, b DESC, c DESC, d DESC, e DESC, f DESC LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2510);
+    q.setBytes(3, c4);
+    q.setInt(4, 10);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2495, c3, 95, e2, 2495);
+    assertFalse(rs.next());
+  }
+
+  @Test
+  public void testRVCWithUncoveredIndex1() throws Exception {
+    Connection conn = nextConnection(getUrl());
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+
+    String ddl = "CREATE TABLE " + tableName + " (HK VARBINARY_ENCODED NOT NULL,"
+      + "  SK VARBINARY_ENCODED NOT NULL," + "  GSI_HK VARBINARY_ENCODED,"
+      + "  GSI_SK VARBINARY_ENCODED," + "  DATA VARCHAR," + "  CONSTRAINT pk PRIMARY KEY(HK, SK))";
+    conn.createStatement().execute(ddl);
+
+    conn = nextConnection(getUrl());
+    conn.createStatement()
+      .execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (GSI_HK, GSI_SK)");
+
+    conn = nextConnection(getUrl());
+    PreparedStatement upsert = conn.prepareStatement(
+      "UPSERT INTO " + tableName + " (HK, SK, GSI_HK, GSI_SK, DATA) VALUES (?, ?, ?, ?, ?)");
+
+    byte[] gsiHk = new byte[] { 0x00, 0x00, 0x00, 0x0A };
+    byte[] gsiSk = "1".getBytes();
+
+    byte[] hk1 = new byte[] { 0x0B, 0x01 };
+    byte[] sk1 = "1".getBytes();
+    upsert.setBytes(1, hk1);
+    upsert.setBytes(2, sk1);
+    upsert.setBytes(3, gsiHk);
+    upsert.setBytes(4, gsiSk);
+    upsert.setString(5, "row1-should-be-excluded");
+    upsert.execute();
+
+    byte[] hk2 = new byte[] { 0x0B, 0x01 };
+    byte[] sk2 = "2".getBytes();
+    upsert.setBytes(1, hk2);
+    upsert.setBytes(2, sk2);
+    upsert.setBytes(3, gsiHk);
+    upsert.setBytes(4, gsiSk);
+    upsert.setString(5, "row2-include");
+    upsert.execute();
+
+    byte[] hk3 = new byte[] { 0x0B, 0x02 };
+    byte[] sk3 = "1".getBytes();
+    upsert.setBytes(1, hk3);
+    upsert.setBytes(2, sk3);
+    upsert.setBytes(3, gsiHk);
+    upsert.setBytes(4, gsiSk);
+    upsert.setString(5, "row3-include");
+    upsert.execute();
+
+    conn.commit();
+
+    conn = nextConnection(getUrl());
+    String query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ "
+      + "HK, SK, DATA FROM " + tableName + " WHERE GSI_HK = ?" + " AND GSI_SK = ?"
+      + " AND (GSI_SK, HK, SK) > (?, ?, ?)" + " ORDER BY GSI_SK, HK, SK";
+
+    PreparedStatement stmt = conn.prepareStatement(query);
+    stmt.setBytes(1, gsiHk);
+    stmt.setBytes(2, gsiSk);
+    stmt.setBytes(3, gsiSk);
+    stmt.setBytes(4, hk1);
+    stmt.setBytes(5, sk1);
+    ResultSet rs = stmt.executeQuery();
+
+    assertTrue("Expected row2 to be returned", rs.next());
+    assertArrayEquals(hk2, rs.getBytes("HK"));
+    assertArrayEquals(sk2, rs.getBytes("SK"));
+    assertEquals("row2-include", rs.getString("DATA"));
+
+    assertTrue("Expected row3 to be returned", rs.next());
+    assertArrayEquals(hk3, rs.getBytes("HK"));
+    assertArrayEquals(sk3, rs.getBytes("SK"));
+    assertEquals("row3-include", rs.getString("DATA"));
+
+    assertFalse("Expected only 2 rows but got more", rs.next());
+  }
+
+  @Test
+  public void testRVCWithUncoveredIndex2() throws Exception {
+    Connection conn = nextConnection(getUrl());
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+
+    String ddl = "CREATE TABLE " + tableName + " (HK VARCHAR NOT NULL," + "  SK VARCHAR NOT NULL,"
+      + "  GSI_HK VARCHAR," + "  GSI_SK VARCHAR," + "  DATA VARCHAR,"
+      + "  CONSTRAINT pk PRIMARY KEY(HK, SK))";
+    conn.createStatement().execute(ddl);
+
+    conn = nextConnection(getUrl());
+    conn.createStatement()
+      .execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (GSI_HK, GSI_SK)");
+
+    conn = nextConnection(getUrl());
+    PreparedStatement upsert = conn.prepareStatement(
+      "UPSERT INTO " + tableName + " (HK, SK, GSI_HK, GSI_SK, DATA) VALUES (?, ?, ?, ?, ?)");
+
+    String gsiHk = "gsi_hk_1";
+    String gsiSk = "gsi_sk_1";
+
+    String hk1 = "hk_bb";
+    String sk1 = "sk_1";
+    upsert.setString(1, hk1);
+    upsert.setString(2, sk1);
+    upsert.setString(3, gsiHk);
+    upsert.setString(4, gsiSk);
+    upsert.setString(5, "row1-should-be-excluded");
+    upsert.execute();
+
+    String hk2 = "hk_bb";
+    String sk2 = "sk_2";
+    upsert.setString(1, hk2);
+    upsert.setString(2, sk2);
+    upsert.setString(3, gsiHk);
+    upsert.setString(4, gsiSk);
+    upsert.setString(5, "row2-include");
+    upsert.execute();
+
+    String hk3 = "hk_cc";
+    String sk3 = "sk_1";
+    upsert.setString(1, hk3);
+    upsert.setString(2, sk3);
+    upsert.setString(3, gsiHk);
+    upsert.setString(4, gsiSk);
+    upsert.setString(5, "row3-include");
+    upsert.execute();
+
+    conn.commit();
+
+    conn = nextConnection(getUrl());
+    String query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ "
+      + "HK, SK, DATA FROM " + tableName + " WHERE GSI_HK = ?" + " AND GSI_SK = ?"
+      + " AND (GSI_SK, HK, SK) > (?, ?, ?)" + " ORDER BY GSI_SK, HK, SK";
+
+    PreparedStatement stmt = conn.prepareStatement(query);
+    stmt.setString(1, gsiHk);
+    stmt.setString(2, gsiSk);
+    stmt.setString(3, gsiSk);
+    stmt.setString(4, hk1);
+    stmt.setString(5, sk1);
+    ResultSet rs = stmt.executeQuery();
+
+    assertTrue("Expected row2 to be returned", rs.next());
+    assertEquals(hk2, rs.getString("HK"));
+    assertEquals(sk2, rs.getString("SK"));
+    assertEquals("row2-include", rs.getString("DATA"));
+
+    assertTrue("Expected row3 to be returned", rs.next());
+    assertEquals(hk3, rs.getString("HK"));
+    assertEquals(sk3, rs.getString("SK"));
+    assertEquals("row3-include", rs.getString("DATA"));
+
+    assertFalse("Expected only 2 rows but got more", rs.next());
   }
 
 }

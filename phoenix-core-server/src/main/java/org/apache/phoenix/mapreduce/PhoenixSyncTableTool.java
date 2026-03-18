@@ -44,10 +44,12 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.PhoenixMRJobUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLine;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.CommandLineParser;
 import org.apache.phoenix.thirdparty.org.apache.commons.cli.DefaultParser;
@@ -133,13 +135,12 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   private Job configureAndCreatePhoenixSyncTableJob(PTableType tableType) throws Exception {
     configureTimeoutsAndRetries(configuration);
     setPhoenixSyncTableToolConfiguration(configuration);
+    PhoenixMRJobUtil.updateCapacityQueueInfo(configuration);
     Job job = Job.getInstance(configuration, getJobName());
     job.setMapperClass(PhoenixSyncTableMapper.class);
     job.setJarByClass(PhoenixSyncTableTool.class);
     TableMapReduceUtil.initCredentials(job);
     TableMapReduceUtil.addDependencyJars(job);
-    Configuration conf = job.getConfiguration();
-    HBaseConfiguration.merge(conf, HBaseConfiguration.create(conf));
     configureInput(job, tableType);
     configureOutput(job);
     obtainTargetClusterTokens(job);
@@ -222,7 +223,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     return jobName.toString();
   }
 
-  private CommandLine parseOptions(String[] args) throws IllegalStateException {
+  public CommandLine parseOptions(String[] args) throws IllegalStateException {
     Options options = getOptions();
     CommandLineParser parser = DefaultParser.builder().setAllowPartialMatching(false)
       .setStripLeadingAndTrailingQuotes(false).build();
@@ -296,11 +297,15 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       endTime = Long.valueOf(cmdLine.getOptionValue(TO_TIME_OPTION.getOpt()));
     } else {
       // Default endTime, current time - 1 hour
-      endTime = EnvironmentEdgeManager.currentTimeMillis(); // - (60 * 60 * 1000);
+      endTime = EnvironmentEdgeManager.currentTimeMillis() - (60 * 60 * 1000);
     }
 
     if (cmdLine.hasOption(CHUNK_SIZE_OPTION.getOpt())) {
       chunkSizeBytes = Long.valueOf(cmdLine.getOptionValue(CHUNK_SIZE_OPTION.getOpt()));
+      if (chunkSizeBytes <= 0) {
+        throw new IllegalArgumentException(
+          "Chunk size must be a positive value, got: " + chunkSizeBytes);
+      }
     }
     if (cmdLine.hasOption(TENANT_ID_OPTION.getOpt())) {
       tenantId = cmdLine.getOptionValue(TENANT_ID_OPTION.getOpt());
@@ -330,7 +335,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
 
   /**
    * Sets up the table reference and validates it exists and is suitable for sync operations.
-   * Validates that the table is not a VIEW
+   * Validates that the table is not a VIEW or INDEX
    */
   private PTableType validateAndGetTableType() throws SQLException {
     Properties props = new Properties();
@@ -419,5 +424,45 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
 
   public Job getJob() {
     return job;
+  }
+
+  @VisibleForTesting
+  public Long getStartTime() {
+    return startTime;
+  }
+
+  @VisibleForTesting
+  public Long getEndTime() {
+    return endTime;
+  }
+
+  @VisibleForTesting
+  public String getTenantId() {
+    return tenantId;
+  }
+
+  @VisibleForTesting
+  public String getSchemaName() {
+    return schemaName;
+  }
+
+  @VisibleForTesting
+  public Long getChunkSizeBytes() {
+    return chunkSizeBytes;
+  }
+
+  @VisibleForTesting
+  public boolean isDryRun() {
+    return isDryRun;
+  }
+
+  @VisibleForTesting
+  public boolean isForeground() {
+    return isForeground;
+  }
+
+  @VisibleForTesting
+  public void initializeConfiguration() {
+    configuration = HBaseConfiguration.addHbaseResources(getConf());
   }
 }
