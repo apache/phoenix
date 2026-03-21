@@ -217,17 +217,6 @@ public final class PhoenixConfigurationUtil {
 
   public static final boolean DEFAULT_PHOENIX_SYNC_TABLE_ENABLE_SPLIT_COALESCING = true;
 
-  public static final String PHOENIX_SYNC_TABLE_MAX_REGIONS_PER_SPLIT =
-    "phoenix.sync.table.max.regions.per.split";
-
-  public static final int DEFAULT_PHOENIX_SYNC_TABLE_MAX_REGIONS_PER_SPLIT = 10;
-
-  public static final String PHOENIX_SYNC_TABLE_MAX_SIZE_PER_SPLIT_BYTES =
-    "phoenix.sync.table.max.size.per.split.bytes";
-
-  public static final long DEFAULT_PHOENIX_SYNC_TABLE_MAX_SIZE_PER_SPLIT_BYTES =
-    100L * 1024 * 1024 * 1024; // 100GB
-
   /**
    * Determines type of Phoenix Map Reduce job. 1. QUERY allows running arbitrary queries without
    * aggregates 2. UPDATE_STATS collects statistics for the table
