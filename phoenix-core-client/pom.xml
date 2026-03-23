@@ -195,10 +195,6 @@
       <artifactId>protobuf-java</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.htrace</groupId>
-      <artifactId>htrace-core</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.slf4j</groupId>
       <artifactId>slf4j-api</artifactId>
     </dependency>
@@ -249,6 +245,23 @@
     <dependency>
       <groupId>org.hdrhistogram</groupId>
       <artifactId>HdrHistogram</artifactId>
+    </dependency>
+
+    <!-- OpenTelemetry API (versions managed by opentelemetry-bom in parent).
+         Scope is "provided" because at runtime the OTel API classes are already on the
+         HBase classpath (HBase depends on opentelemetry-api). The Java Agent provides
+         the SDK implementation. Phoenix must NOT shade these classes. See PHOENIX-5215. -->
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <!-- OpenTelemetry Context (transitive from opentelemetry-api, but declared
+         explicitly to satisfy dependency analysis). -->
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-context</artifactId>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 

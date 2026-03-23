@@ -27,6 +27,8 @@ import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.ATOMIC_OP_ATTRI
 import static org.apache.phoenix.index.PhoenixIndexBuilderHelper.RETURN_RESULT;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
@@ -79,9 +81,6 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.wal.WALEdit;
 import org.apache.hadoop.hbase.wal.WALKey;
 import org.apache.hadoop.io.WritableUtils;
-import org.apache.htrace.Span;
-import org.apache.htrace.Trace;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
@@ -129,8 +128,7 @@ import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.trace.TracingUtils;
-import org.apache.phoenix.trace.util.NullSpan;
+import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -1276,12 +1274,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     PhoenixIndexMetaData indexMetaData) throws Throwable {
     List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
     // get the current span, or just use a null-span to avoid a bunch of if statements
-    try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
-      Span current = scope.getSpan();
-      if (current == null) {
-        current = NullSpan.INSTANCE;
-      }
-      current.addTimelineAnnotation("Built index updates, doing preStep");
+    Span current = PhoenixTracing.createSpan("phoenix.index.build.updates");
+    try (Scope ignored = current.makeCurrent()) {
+      current.addEvent("Built index updates, doing preStep");
       // The rest of this method is for handling global index updates
       context.indexUpdates =
         ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>> create();
@@ -1315,7 +1310,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           }
         }
       }
-      TracingUtils.addAnnotation(current, "index update count", updateCount);
+      current.setAttribute("phoenix.index.update.count", updateCount);
+    } finally {
+      current.end();
     }
   }
 
@@ -1873,19 +1870,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     // get the current span, or just use a null-span to avoid a bunch of if statements
-    try (TraceScope scope =
-      Trace.startSpan("Completing " + (post ? "post" : "pre") + " index writes")) {
-      Span current = scope.getSpan();
-      if (current == null) {
-        current = NullSpan.INSTANCE;
-      }
-      current.addTimelineAnnotation(
-        "Actually doing " + (post ? "post" : "pre") + " index update for first time");
+    Span current = PhoenixTracing.createSpan("phoenix.index.write." + (post ? "post" : "pre"));
+    try (Scope ignored = current.makeCurrent()) {
+      current
+        .addEvent("Actually doing " + (post ? "post" : "pre") + " index update for first time");
       if (post) {
         postWriter.write(indexUpdates, false, context.clientVersion);
       } else {
         preWriter.write(indexUpdates, false, context.clientVersion);
       }
+    } finally {
+      current.end();
     }
   }
 

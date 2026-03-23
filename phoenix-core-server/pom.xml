@@ -126,10 +126,6 @@
       <artifactId>findbugs-annotations</artifactId>
     </dependency>
     <dependency>
-      <groupId>org.apache.htrace</groupId>
-      <artifactId>htrace-core</artifactId>
-    </dependency>
-    <dependency>
       <groupId>com.google.protobuf</groupId>
       <artifactId>protobuf-java</artifactId>
     </dependency>
@@ -172,6 +168,21 @@
     <dependency>
       <groupId>com.google.code.findbugs</groupId>
       <artifactId>jsr305</artifactId>
+    </dependency>
+
+    <!-- OpenTelemetry API (provided by HBase classpath at runtime; SDK provided by Java Agent).
+         Must NOT be shaded. See PHOENIX-5215. -->
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-api</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <!-- OpenTelemetry Context (transitive from opentelemetry-api, but declared
+         explicitly to satisfy dependency analysis). -->
+    <dependency>
+      <groupId>io.opentelemetry</groupId>
+      <artifactId>opentelemetry-context</artifactId>
+      <scope>provided</scope>
     </dependency>
   </dependencies>
 
