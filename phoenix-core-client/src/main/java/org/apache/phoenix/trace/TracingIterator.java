@@ -17,39 +17,53 @@
  */
 package org.apache.phoenix.trace;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.StatusCode;
+import io.opentelemetry.context.Scope;
 import java.sql.SQLException;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
- * A simple iterator that closes the trace scope when the iterator is closed.
+ * A result iterator that manages an OpenTelemetry span lifecycle. The span is ended when the
+ * iterator is closed. Events are added to the span as results are iterated.
  */
 public class TracingIterator extends DelegateResultIterator {
 
-  private TraceScope scope;
+  private final Span span;
+  private final Scope scope;
   private boolean started;
 
   /**
-   * @param scope    a scope with a non-null span
-   * @param iterator delegate
+   * @param span     the OpenTelemetry span to manage
+   * @param scope    the scope that makes the span current
+   * @param iterator delegate iterator
    */
-  public TracingIterator(TraceScope scope, ResultIterator iterator) {
+  public TracingIterator(Span span, Scope scope, ResultIterator iterator) {
     super(iterator);
+    this.span = span;
     this.scope = scope;
   }
 
   @Override
   public void close() throws SQLException {
-    scope.close();
+    try {
+      span.setStatus(StatusCode.OK);
+    } finally {
+      try {
+        scope.close();
+      } finally {
+        span.end();
+      }
+    }
     super.close();
   }
 
   @Override
   public Tuple next() throws SQLException {
     if (!started) {
-      scope.getSpan().addTimelineAnnotation("First request completed");
+      span.addEvent("First request completed");
       started = true;
     }
     return super.next();
@@ -57,6 +71,6 @@ public class TracingIterator extends DelegateResultIterator {
 
   @Override
   public String toString() {
-    return "TracingIterator [scope=" + scope + ", started=" + started + "]";
+    return "TracingIterator [span=" + span + ", started=" + started + "]";
   }
 }
