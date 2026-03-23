@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.compile;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.api.trace.SpanContext;
+import io.opentelemetry.context.Scope;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -28,8 +31,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.htrace.Sampler;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -61,7 +62,7 @@ import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PLong;
-import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
@@ -124,7 +125,7 @@ public class TraceQueryPlan implements QueryPlan {
   @Override
   public ResultIterator iterator(ParallelScanGrouper scanGrouper) throws SQLException {
     final PhoenixConnection conn = stmt.getConnection();
-    if (conn.getTraceScope() == null && !traceStatement.isTraceOn()) {
+    if (conn.getTraceSpan() == null && !traceStatement.isTraceOn()) {
       return ResultIterator.EMPTY_ITERATOR;
     }
     return new TraceQueryResultIterator(conn);
@@ -254,30 +255,33 @@ public class TraceQueryPlan implements QueryPlan {
 
     @Override
     public Tuple next() throws SQLException {
-      if (!first) return null;
-      TraceScope traceScope = conn.getTraceScope();
+      if (!first) {
+        return null;
+      }
+      Span traceSpan = conn.getTraceSpan();
       if (traceStatement.isTraceOn()) {
-        conn.setSampler(Tracing.getConfiguredSampler(traceStatement));
-        if (conn.getSampler() == Sampler.NEVER) {
-          closeTraceScope(conn);
-        }
-        if (traceScope == null && !conn.getSampler().equals(Sampler.NEVER)) {
-          traceScope = Tracing.startNewSpan(conn, "Enabling trace");
-          if (traceScope.getSpan() != null) {
-            conn.setTraceScope(traceScope);
-          } else {
-            closeTraceScope(conn);
-          }
+        // TRACE ON: create a new span if one doesn't exist
+        if (traceSpan == null) {
+          traceSpan = PhoenixTracing.createSpan("phoenix.trace.session");
+          Scope scope = traceSpan.makeCurrent();
+          conn.setTraceSpan(traceSpan);
+          conn.setTraceScope(scope);
         }
       } else {
-        closeTraceScope(conn);
-        conn.setSampler(Sampler.NEVER);
+        // TRACE OFF: close the existing span
+        closeTrace(conn);
       }
-      if (traceScope == null || traceScope.getSpan() == null) return null;
+      if (traceSpan == null || !traceSpan.getSpanContext().isValid()) {
+        return null;
+      }
       first = false;
+      // Return the trace ID to the client
+      // OTel trace IDs are hex strings; convert to a long for backward compatibility
+      SpanContext spanContext = traceSpan.getSpanContext();
+      long traceIdLong = parseTraceIdAsLong(spanContext.getTraceId());
       ImmutableBytesWritable ptr = new ImmutableBytesWritable();
       ParseNodeFactory factory = new ParseNodeFactory();
-      LiteralParseNode literal = factory.literal(traceScope.getSpan().getTraceId());
+      LiteralParseNode literal = factory.literal(traceIdLong);
       LiteralExpression expression =
         LiteralExpression.newConstant(literal.getValue(), PLong.INSTANCE, Determinism.ALWAYS);
       expression.evaluate(null, ptr);
@@ -290,10 +294,30 @@ public class TraceQueryPlan implements QueryPlan {
       return new ResultTuple(Result.create(cells));
     }
 
-    private void closeTraceScope(final PhoenixConnection conn) {
-      if (conn.getTraceScope() != null) {
-        conn.getTraceScope().close();
+    /**
+     * Parse the first 16 hex characters of an OTel trace ID as a long. OTel trace IDs are
+     * 32-character hex strings (128 bits). We take the lower 64 bits for backward compatibility
+     * with the old HTrace long trace IDs.
+     */
+    private long parseTraceIdAsLong(String traceId) {
+      if (traceId == null || traceId.length() < 16) {
+        return 0L;
+      }
+      // Take the last 16 hex chars (lower 64 bits)
+      String lower64 = traceId.substring(traceId.length() - 16);
+      return Long.parseUnsignedLong(lower64, 16);
+    }
+
+    private void closeTrace(PhoenixConnection conn) {
+      Scope scope = conn.getTraceScope();
+      Span span = conn.getTraceSpan();
+      if (scope != null) {
+        scope.close();
         conn.setTraceScope(null);
+      }
+      if (span != null) {
+        span.end();
+        conn.setTraceSpan(null);
       }
     }
 
