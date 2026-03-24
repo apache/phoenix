@@ -313,13 +313,15 @@ public class ReplicationLogProcessor implements Closeable {
           logFileReader.init(logFileReaderContext);
           return Optional.of(logFileReader);
         } catch (InvalidLogTrailerException invalidLogTrailerException) {
-          // If trailer is missing or corrupt, create reader without trailer validation
+          // If trailer is missing or corrupt, create a new reader without trailer validation.
+          // We must create a new instance because close() sets the closed flag, making
+          // the old instance unusable for reading.
           LOG.warn("Invalid Trailer for file {}", filePath, invalidLogTrailerException);
-          // close the reader first to avoid leaking socket connection
-          logFileReader.close();
+          closeReader(logFileReader);
           logFileReaderContext.setValidateTrailer(false);
-          logFileReader.init(logFileReaderContext);
-          return Optional.of(logFileReader);
+          LogFileReader newLogFileReader = new LogFileReader();
+          newLogFileReader.init(logFileReaderContext);
+          return Optional.of(newLogFileReader);
         }
       } else {
         // Ignore the file and returning empty LogReader.

@@ -69,6 +69,7 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
 import org.apache.phoenix.replication.log.LogFileTestUtil;
@@ -201,31 +202,52 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Tests that createLogFileReader closes the reader when init() throws IOException.
+   * Tests that createLogFileReader handles InvalidLogTrailerException by closing the old reader
+   * and returning a new usable reader. Simulates a writer crash after sync but before close,
+   * resulting in a file with valid header and data but no trailer.
    */
   @Test
-  public void testCreateLogFileReaderClosesReaderOnInitFailure() throws IOException {
-    // Write garbage data so the file is non-empty but has no valid log file header
-    Path invalidFilePath = new Path(testFolder.newFile("init_failure_file").toURI());
-    org.apache.hadoop.fs.FSDataOutputStream out = localFs.create(invalidFilePath, true);
-    out.write("garbage data that is not a valid log file header".getBytes());
-    out.close();
+  public void testCreateLogFileReaderWithMissingTrailer() throws IOException {
+    Path filePath = new Path(testFolder.newFile("missing_trailer_file").toURI());
+    String tableName = "T_" + generateUniqueName();
 
-    assertTrue("File should be non-empty", localFs.getFileStatus(invalidFilePath).getLen() > 0);
+    LogFileWriter writer = initLogFileWriter(filePath);
+    Mutation put = LogFileTestUtil.newPut("testRow", 1, 1);
+    writer.append(tableName, 1, put);
+    writer.sync();
+    // Do NOT call writer.close() -- skips trailer, simulates a writer crash after sync
+
+    assertTrue("File should exist", localFs.exists(filePath));
+    assertTrue("File should be non-empty", localFs.getFileStatus(filePath).getLen() > 0);
 
     ReplicationLogProcessor spyProcessor =
       Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
     try {
-      spyProcessor.createLogFileReader(localFs, invalidFilePath);
-      fail("Should throw IOException for file with invalid content");
-    } catch (IOException e) {
-      // Expected: init() fails because the file does not contain a valid log file header
+      Optional<LogFileReader> optionalReader =
+        spyProcessor.createLogFileReader(localFs, filePath);
+      assertTrue("Reader should be present for file with missing trailer",
+        optionalReader.isPresent());
+
+      // Verify the old reader was closed during InvalidLogTrailerException handling
+      Mockito.verify(spyProcessor, Mockito.times(1))
+        .closeReader(Mockito.any(LogFileReader.class));
+
+      // Verify the returned reader is functional (not stuck with closed=true)
+      LogFileReader reader = optionalReader.get();
+      Iterator<LogFile.Record> iterator = reader.iterator();
+      assertTrue("Reader should be able to read records", iterator.hasNext());
+
+      LogFile.Record record = iterator.next();
+      assertNotNull("Record should not be null", record);
+      assertEquals("Table name should match", tableName, record.getHBaseTableName());
+
+      assertFalse("Should have no more records after the single appended record",
+        iterator.hasNext());
+      reader.close();
     } finally {
-      localFs.delete(invalidFilePath);
+      localFs.delete(filePath);
       spyProcessor.close();
     }
-
-    Mockito.verify(spyProcessor, Mockito.times(1)).closeReader(Mockito.any(LogFileReader.class));
   }
 
   /**
