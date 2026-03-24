@@ -202,9 +202,9 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Tests that createLogFileReader handles InvalidLogTrailerException by closing the old reader
-   * and returning a new usable reader. Simulates a writer crash after sync but before close,
-   * resulting in a file with valid header and data but no trailer.
+   * Tests that createLogFileReader handles InvalidLogTrailerException by closing the old reader and
+   * returning a new usable reader. Simulates a writer crash after sync but before close, resulting
+   * in a file with valid header and data but no trailer.
    */
   @Test
   public void testCreateLogFileReaderWithMissingTrailer() throws IOException {
@@ -223,14 +223,12 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
     ReplicationLogProcessor spyProcessor =
       Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
     try {
-      Optional<LogFileReader> optionalReader =
-        spyProcessor.createLogFileReader(localFs, filePath);
+      Optional<LogFileReader> optionalReader = spyProcessor.createLogFileReader(localFs, filePath);
       assertTrue("Reader should be present for file with missing trailer",
         optionalReader.isPresent());
 
       // Verify the old reader was closed during InvalidLogTrailerException handling
-      Mockito.verify(spyProcessor, Mockito.times(1))
-        .closeReader(Mockito.any(LogFileReader.class));
+      Mockito.verify(spyProcessor, Mockito.times(1)).closeReader(Mockito.any(LogFileReader.class));
 
       // Verify the returned reader is functional (not stuck with closed=true)
       LogFileReader reader = optionalReader.get();
