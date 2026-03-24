@@ -1941,6 +1941,8 @@
             <exclude>dev/artifacts/**</exclude>
             <!-- GitHub templates -->
             <exclude>.github/PULL_REQUEST_TEMPLATE</exclude>
+            <!-- Maven generated files -->
+            <exclude>**/target/javadoc-bundle-options/**</exclude>
           </excludes>
         </configuration>
       </plugin>
