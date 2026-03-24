@@ -1915,6 +1915,8 @@
             <!-- tmp files -->
             <exclude>dev/work/**</exclude>
             <exclude>dev/artifacts/**</exclude>
+            <!-- Maven generated files -->
+            <exclude>**/target/javadoc-bundle-options/**</exclude>
           </excludes>
         </configuration>
       </plugin>
