@@ -28,6 +28,8 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Supplier;
 import org.apache.phoenix.call.CallWrapper;
+import org.apache.phoenix.job.JobManager.JobCallable;
+import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
@@ -227,14 +229,51 @@ public final class PhoenixTracing {
    * Wrap a {@link Callable} with the current OpenTelemetry context. This ensures that the trace
    * context is propagated when the callable is executed in a different thread (e.g., in a thread
    * pool for parallel scans).
+   * <p>
+   * If the callable implements {@link JobCallable}, the returned wrapper also implements
+   * {@link JobCallable} so that {@link org.apache.phoenix.job.JobManager.JobFutureTask} can extract
+   * the job ID and {@link TaskExecutionMetricsHolder} for request-level metrics collection.
    *
    * <pre>
    * Callable&lt;Result&gt; wrapped = PhoenixTracing.wrap(myCallable);
    * executor.submit(wrapped); // trace context is preserved
    * </pre>
    */
+  @SuppressWarnings("unchecked")
   public static <V> Callable<V> wrap(Callable<V> callable) {
+    if (callable instanceof JobCallable) {
+      return wrapJobCallable((JobCallable<V>) callable);
+    }
     return Context.current().wrap(callable);
+  }
+
+  /**
+   * Wrap a {@link JobCallable} with the current OpenTelemetry context while preserving the
+   * {@link JobCallable} interface. This is critical because
+   * {@link org.apache.phoenix.job.JobManager.JobFutureTask} uses {@code instanceof JobCallable} to
+   * extract the {@link TaskExecutionMetricsHolder} for request-level metrics (e.g.,
+   * {@code TASK_EXECUTED_COUNTER}, {@code TASK_EXECUTION_TIME}).
+   */
+  private static <V> JobCallable<V> wrapJobCallable(JobCallable<V> callable) {
+    Context context = Context.current();
+    return new JobCallable<V>() {
+      @Override
+      public V call() throws Exception {
+        try (Scope ignored = context.makeCurrent()) {
+          return callable.call();
+        }
+      }
+
+      @Override
+      public Object getJobId() {
+        return callable.getJobId();
+      }
+
+      @Override
+      public TaskExecutionMetricsHolder getTaskExecutionMetric() {
+        return callable.getTaskExecutionMetric();
+      }
+    };
   }
 
   /**
