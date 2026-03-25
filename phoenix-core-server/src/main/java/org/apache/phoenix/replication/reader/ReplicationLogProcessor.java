@@ -319,9 +319,9 @@ public class ReplicationLogProcessor implements Closeable {
           LOG.warn("Invalid Trailer for file {}", filePath, invalidLogTrailerException);
           closeReader(logFileReader);
           logFileReaderContext.setValidateTrailer(false);
-          LogFileReader newLogFileReader = new LogFileReader();
-          newLogFileReader.init(logFileReaderContext);
-          return Optional.of(newLogFileReader);
+          logFileReader = new LogFileReader();
+          logFileReader.init(logFileReaderContext);
+          return Optional.of(logFileReader);
         }
       } else {
         // Ignore the file and returning empty LogReader.

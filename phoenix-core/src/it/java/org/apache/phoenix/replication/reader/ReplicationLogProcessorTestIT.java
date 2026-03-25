@@ -249,6 +249,53 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
   }
 
   /**
+   * Tests that when the first init() throws InvalidLogTrailerException and the second init()
+   * (without trailer validation) throws IOException, closeReader is called for both reader
+   * instances and the IOException propagates to the caller.
+   */
+  @Test
+  public void testCreateLogFileReaderWithTrailerExceptionThenIOException() throws IOException {
+    // Create a file with valid header + data but no trailer to trigger InvalidLogTrailerException
+    Path filePath = new Path(testFolder.newFile("trailer_then_io_failure").toURI());
+    String tableName = "T_" + generateUniqueName();
+
+    LogFileWriter writer = initLogFileWriter(filePath);
+    Mutation put = LogFileTestUtil.newPut("testRow", 1, 1);
+    writer.append(tableName, 1, put);
+    writer.sync();
+    // Do NOT call writer.close() -- skips trailer
+
+    assertTrue("File should be non-empty", localFs.getFileStatus(filePath).getLen() > 0);
+
+    ReplicationLogProcessor spyProcessor =
+      Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
+
+    // After closeReader is called for the first reader (InvalidLogTrailerException),
+    // corrupt the file with garbage so the second init() fails with IOException
+    Mockito.doAnswer(invocation -> {
+      invocation.callRealMethod();
+      org.apache.hadoop.fs.FSDataOutputStream out = localFs.create(filePath, true);
+      out.write("garbage data that is not a valid log file header".getBytes());
+      out.close();
+      return null;
+    }).doCallRealMethod().when(spyProcessor).closeReader(Mockito.any(LogFileReader.class));
+
+    try {
+      spyProcessor.createLogFileReader(localFs, filePath);
+      fail("Should throw IOException when second init() fails");
+    } catch (IOException e) {
+      // Expected: second init() fails because the file content is now corrupted
+    } finally {
+      localFs.delete(filePath);
+      spyProcessor.close();
+    }
+
+    // closeReader called twice: once for old reader (InvalidLogTrailerException),
+    // once for new reader (IOException from outer catch)
+    Mockito.verify(spyProcessor, Mockito.times(2)).closeReader(Mockito.any(LogFileReader.class));
+  }
+
+  /**
    * Tests the closeReader method with both null and valid LogFileReader instances.
    */
   @Test
