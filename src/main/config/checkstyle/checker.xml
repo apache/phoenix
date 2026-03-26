@@ -135,7 +135,7 @@ limitations under the License.
       <property name="groups" value="*,org.apache.phoenix.thirdparty,org.apache.phoenix.shaded,org.apache.hbase.thirdparty,org.apache.hadoop.hbase.shaded"/>
       <property name="ordered" value="true"/>
       <property name="separated" value="true"/>
-      <property name="option" value="bottom"/>
+      <property name="option" value="top"/>
     </module>
 
     <!-- Checks for Javadoc comments (tree walker).       -->
