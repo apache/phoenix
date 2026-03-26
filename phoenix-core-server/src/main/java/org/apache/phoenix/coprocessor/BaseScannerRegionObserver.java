@@ -226,9 +226,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
             try {
               delegate.close();
             } finally {
-              if (child != null) {
-                child.end();
-              }
+              child.end();
             }
           }
         };
@@ -239,7 +237,7 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
         ClientUtil.throwIOException(c.getEnvironment().getRegionInfo().getRegionNameAsString(), t);
       } finally {
         try {
-          if (!success && child != null) {
+          if (!success) {
             child.end();
           }
         } finally {

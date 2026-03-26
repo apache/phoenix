@@ -100,7 +100,9 @@ public class LockManager {
         if (!success) {
           span.addEvent("Failed to get row lock");
         }
-        if (scope != null) scope.close();
+        if (scope != null) {
+          scope.close();
+        }
         span.end();
       }
     }

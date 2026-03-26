@@ -1675,6 +1675,8 @@ public class MutationState implements SQLCloseable {
               PhoenixKeyValueUtil.getEstimatedRowMutationSizeWithBatch(this.mutationsMap);
           }
           areAllBatchesSuccessful = true;
+        } catch (RuntimeException e) {
+          throw e;
         } catch (Exception e) {
           long serverTimestamp = ClientUtil.parseServerTimestamp(e);
           SQLException inferredE = ClientUtil.parseServerExceptionOrNull(e);
