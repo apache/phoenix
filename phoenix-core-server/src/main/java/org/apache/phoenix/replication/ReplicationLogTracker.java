@@ -203,15 +203,15 @@ public class ReplicationLogTracker {
   }
 
   /**
-   * Retrieves all valid log files in the in-progress directory that are older than the specified
-   * timestamp.
-   * @param timestampThreshold - The timestamp threshold in milliseconds. Files with timestamps less
-   *                           than this value will be returned.
-   * @return List of valid log file paths in the in-progress directory that are older than the
+   * Retrieves all valid log files in the in-progress directory whose rename timestamp is older than
+   * the specified threshold. Files without a rename timestamp are skipped.
+   * @param renameTimestampThreshold - The timestamp threshold in milliseconds. Files with rename
+   *                                 timestamps less than this value will be returned.
+   * @return List of valid log file paths in the in-progress directory that were renamed before the
    *         threshold, empty list if directory doesn't exist or no files match
    * @throws IOException if there's an error accessing the file system
    */
-  public List<Path> getOlderInProgressFiles(long timestampThreshold) throws IOException {
+  public List<Path> getOlderInProgressFiles(long renameTimestampThreshold) throws IOException {
     if (!fileSystem.exists(getInProgressDirPath())) {
       return Collections.emptyList();
     }
@@ -221,20 +221,19 @@ public class ReplicationLogTracker {
 
     for (FileStatus status : fileStatuses) {
       if (status.isFile() && isValidLogFile(status.getPath())) {
-        try {
-          long fileTimestamp = getFileTimestamp(status.getPath());
-          if (fileTimestamp < timestampThreshold) {
-            olderInProgressFiles.add(status.getPath());
-          }
-        } catch (NumberFormatException e) {
-          LOG.warn("Failed to extract timestamp from file {}, skipping",
-            status.getPath().getName());
+        Optional<Long> renameTimestamp = getRenameTimestamp(status.getPath());
+        if (!renameTimestamp.isPresent()) {
+          LOG.warn("File {} has no rename timestamp, skipping", status.getPath().getName());
+          continue;
+        }
+        if (renameTimestamp.get() < renameTimestampThreshold) {
+          olderInProgressFiles.add(status.getPath());
         }
       }
     }
 
-    LOG.debug("Found {} in-progress files older than timestamp {}", olderInProgressFiles.size(),
-      timestampThreshold);
+    LOG.debug("Found {} in-progress files renamed before timestamp {}", olderInProgressFiles.size(),
+      renameTimestampThreshold);
     return olderInProgressFiles;
   }
 
@@ -364,26 +363,20 @@ public class ReplicationLogTracker {
 
       // Check if file is already in in-progress directory
       if (file.getParent().toUri().getPath().equals(getInProgressDirPath().toString())) {
-        // File is already in in-progress directory, replace UUID with a new one
+        // File is already in in-progress directory, replace UUID and rename timestamp
         // keep the directory same as in progress
+        // Format: <ts>_<server>_<UUID>_<renameTs>.plog → extract prefix (first 2 parts)
         String[] parts = fileName.split("_");
-        // Remove the last part (UUID) and add new UUID
-        StringBuilder newNameBuilder = new StringBuilder();
-        for (int i = 0; i < parts.length - 1; i++) {
-          if (i > 0) {
-            newNameBuilder.append("_");
-          }
-          newNameBuilder.append(parts[i]);
-        }
-        String extension = fileName.substring(fileName.lastIndexOf("."));
-        newNameBuilder.append("_").append(UUID.randomUUID()).append(extension);
-        newFileName = newNameBuilder.toString();
+        String prefix = parts[0] + "_" + parts[1];
+        newFileName = prefix + "_" + UUID.randomUUID() + "_"
+          + EnvironmentEdgeManager.currentTimeMillis() + ".plog";
         targetDirectory = file.getParent();
       } else {
-        // File is not in in-progress directory, add UUID and move to IN_PROGRESS directory
+        // File is not in in-progress directory, add UUID + rename timestamp and move to
+        // IN_PROGRESS directory
         String baseName = fileName.substring(0, fileName.lastIndexOf("."));
-        String extension = fileName.substring(fileName.lastIndexOf("."));
-        newFileName = baseName + "_" + UUID.randomUUID() + extension;
+        newFileName = baseName + "_" + UUID.randomUUID() + "_"
+          + EnvironmentEdgeManager.currentTimeMillis() + ".plog";
         targetDirectory = getInProgressDirPath();
       }
 
@@ -427,42 +420,55 @@ public class ReplicationLogTracker {
   }
 
   /**
-   * Extracts the UUID from a log file name. Assumes UUID is the last part of the filename before
-   * the extension.
+   * Extracts the UUID from an in-progress file name. Format: <ts>_<server>_<UUID>_<renameTs>.plog →
+   * UUID is the third underscore-separated part.
    * @param file - The file path to extract UUID from.
-   * @return Optional of UUID if file was in progress, else Optional.empty()
+   * @return Optional of UUID if file is in-progress format, else Optional.empty()
    */
   protected Optional<String> getFileUUID(Path file) throws NumberFormatException {
     String[] parts = file.getName().split("_");
-    if (parts.length < 3) {
+    if (parts.length < 4) {
       return Optional.empty();
     }
-    return Optional.of(parts[parts.length - 1].split("\\.")[0]);
+    return Optional.of(parts[2]);
   }
 
   /**
-   * Extracts everything except the UUID (last part) from a file path. For example, from
-   * "1704153600000_rs1_12345678-1234-1234-1234-123456789abc.plog" This method will return
-   * "1704153600000_rs1"
+   * Extracts the rename timestamp from an in-progress file name. Format:
+   * <ts>_<server>_<UUID>_<renameTs>.plog → renameTs is the last underscore-separated part (before
+   * extension).
+   * @param file - The file path to extract rename timestamp from.
+   * @return Optional of rename timestamp, or empty if not present or invalid
+   */
+  public Optional<Long> getRenameTimestamp(Path file) {
+    String[] parts = file.getName().split("_");
+    if (parts.length < 4) {
+      return Optional.empty();
+    }
+    try {
+      String lastPart = parts[parts.length - 1];
+      String withoutExtension = lastPart.substring(0, lastPart.lastIndexOf("."));
+      return Optional.of(Long.parseLong(withoutExtension));
+    } catch (NumberFormatException e) {
+      LOG.warn("Failed to parse rename timestamp from file {}", file.getName());
+      return Optional.empty();
+    }
+  }
+
+  /**
+   * Extracts the stable prefix from a file path. The prefix is the first two underscore-separated
+   * parts (<timestamp>_<servername>), which remain stable across renames. For example,
+   * "1704153600000_rs1_uuid_renameTs.plog" returns "1704153600000_rs1" and "1704153600000_rs1.plog"
+   * also returns "1704153600000_rs1".
    * @param file - The file path to extract prefix from.
    */
   protected String getFilePrefix(Path file) {
-    String fileName = file.getName();
-    String[] parts = fileName.split("_");
-    if (parts.length < 3) {
-      return fileName.split("\\.")[0]; // Return full filename if no underscore found
+    String[] parts = file.getName().split("_");
+    if (parts.length < 2) {
+      return file.getName().split("\\.")[0];
     }
-
-    // Return everything except the last part (UUID)
-    StringBuilder prefix = new StringBuilder();
-    for (int i = 0; i < parts.length - 1; i++) {
-      if (i > 0) {
-        prefix.append("_");
-      }
-      prefix.append(parts[i]);
-    }
-
-    return prefix.toString();
+    String secondPart = parts[1].contains(".") ? parts[1].split("\\.")[0] : parts[1];
+    return parts[0] + "_" + secondPart;
   }
 
   /**

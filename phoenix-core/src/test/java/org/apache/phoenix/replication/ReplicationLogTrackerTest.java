@@ -19,6 +19,7 @@ package org.apache.phoenix.replication;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doThrow;
@@ -668,10 +669,13 @@ public class ReplicationLogTrackerTest {
     FileStatus[] files = localFs.listStatus(inProgressDir);
     assertEquals("Should have exactly one file in in-progress directory", 1, files.length);
 
-    // Verify the new file has UUID format and is in in-progress directory
+    // Verify the new file has UUID and rename timestamp format:
+    // <ts>_<server>_<UUID>_<renameTs>.plog
     String newFileName = files[0].getPath().getName();
-    assertTrue("New file should have UUID suffix", newFileName.matches(
-      "1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\.plog"));
+    assertTrue("New file should have UUID and rename timestamp",
+      newFileName
+        .matches("1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
+          + "_[0-9]+\\.plog"));
 
     // Assert that renamed file is in in-progress directory
     Path renamedFile = files[0].getPath();
@@ -683,6 +687,11 @@ public class ReplicationLogTrackerTest {
     String originalPrefix = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
     assertTrue("Renamed file should have same prefix as original file",
       newFileName.startsWith(originalPrefix + "_"));
+
+    // Verify rename timestamp is present and valid
+    Optional<Long> renameTimestamp = tracker.getRenameTimestamp(renamedFile);
+    assertTrue("Rename timestamp should be present", renameTimestamp.isPresent());
+    assertTrue("Rename timestamp should be a valid recent timestamp", renameTimestamp.get() > 0);
   }
 
   @Test
@@ -690,10 +699,12 @@ public class ReplicationLogTrackerTest {
     // Initialize tracker
     tracker.init();
 
-    // Create a file in in-progress directory with existing UUID
+    // Create a file in in-progress directory with existing UUID and rename timestamp
     Path inProgressDir = tracker.getInProgressDirPath();
     String existingUUID = "12345678-1234-1234-1234-123456789abc";
-    Path originalFile = new Path(inProgressDir, "1704153600000_rs1_" + existingUUID + ".plog");
+    long existingRenameTimestamp = 1704153660000L;
+    Path originalFile = new Path(inProgressDir,
+      "1704153600000_rs1_" + existingUUID + "_" + existingRenameTimestamp + ".plog");
     localFs.create(originalFile, true).close();
 
     // Verify original file exists
@@ -718,21 +729,29 @@ public class ReplicationLogTrackerTest {
     // Verify original file no longer exists
     assertFalse("Original file should no longer exist", localFs.exists(originalFile));
 
-    // Verify new file exists in same directory with new UUID
+    // Verify new file exists in same directory with new UUID and new rename timestamp
     FileStatus[] files = localFs.listStatus(inProgressDir);
     assertEquals("Should have exactly one file in in-progress directory", 1, files.length);
 
-    // Verify the new file has different UUID
+    // Verify the new file has different UUID and a rename timestamp:
+    // <ts>_<server>_<UUID>_<renameTs>.plog
     String newFileName = files[0].getPath().getName();
-    assertTrue("New file should have UUID suffix", newFileName.matches(
-      "1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}\\.plog"));
+    assertTrue("New file should have UUID and rename timestamp",
+      newFileName
+        .matches("1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
+          + "_[0-9]+\\.plog"));
     assertFalse("New file should have different UUID", newFileName.contains(existingUUID));
 
-    // Assert that renamed file has same prefix as original file
-    String originalFileName = originalFile.getName();
-    String originalPrefix = originalFileName.substring(0, originalFileName.lastIndexOf('_'));
+    // Assert that renamed file has same prefix (ts_server) as original file
+    String expectedPrefix = "1704153600000_rs1";
     assertTrue("Renamed file should have same prefix as original file",
-      newFileName.startsWith(originalPrefix + "_"));
+      newFileName.startsWith(expectedPrefix + "_"));
+
+    // Verify rename timestamp is present and different from the original
+    Optional<Long> renameTimestamp = tracker.getRenameTimestamp(files[0].getPath());
+    assertTrue("Rename timestamp should be present", renameTimestamp.isPresent());
+    assertNotEquals("Rename timestamp should be different from original", existingRenameTimestamp,
+      renameTimestamp.get().longValue());
   }
 
   @Test
@@ -1090,9 +1109,9 @@ public class ReplicationLogTrackerTest {
     Optional<String> newFileUUID = tracker.getFileUUID(newFile);
     assertFalse("New file without UUID should return empty Optional", newFileUUID.isPresent());
 
-    // 2. For in-progress file - with UUID
+    // 2. For in-progress file - with UUID and rename timestamp
     Path inProgressFile = new Path(tracker.getInProgressDirPath(),
-      "1704153600000_rs1_12345678-1234-1234-1234-123456789abc.plog");
+      "1704153600000_rs1_12345678-1234-1234-1234-123456789abc_1704153660000.plog");
     Optional<String> inProgressFileUUID = tracker.getFileUUID(inProgressFile);
     assertTrue("In-progress file with UUID should return present Optional",
       inProgressFileUUID.isPresent());
@@ -1101,12 +1120,19 @@ public class ReplicationLogTrackerTest {
 
     // Test with different UUID
     Path anotherInProgressFile = new Path(tracker.getInProgressDirPath(),
-      "1704153600000_rs1_87654321-4321-4321-4321-cba987654321.plog");
+      "1704153600000_rs1_87654321-4321-4321-4321-cba987654321_1704153660000.plog");
     Optional<String> anotherUUID = tracker.getFileUUID(anotherInProgressFile);
     assertTrue("Another in-progress file with UUID should return present Optional",
       anotherUUID.isPresent());
     assertEquals("Another in-progress file UUID should be extracted correctly",
       "87654321-4321-4321-4321-cba987654321", anotherUUID.get());
+
+    // 3. Old format without rename timestamp (3 parts) should return empty
+    Path oldFormatFile = new Path(tracker.getInProgressDirPath(),
+      "1704153600000_rs1_12345678-1234-1234-1234-123456789abc.plog");
+    Optional<String> oldFormatUUID = tracker.getFileUUID(oldFormatFile);
+    assertFalse("Old format file without rename timestamp should return empty",
+      oldFormatUUID.isPresent());
   }
 
   @Test
@@ -1117,31 +1143,36 @@ public class ReplicationLogTrackerTest {
     // Get the in-progress directory path
     Path inProgressDir = tracker.getInProgressDirPath();
 
-    // Create files with different timestamps
-    long baseTimestamp = 1704153600000L; // 2024-01-02 00:00:00
-    long thresholdTimestamp = baseTimestamp + TimeUnit.HOURS.toMillis(1); // 1 hour later
+    // Create files with different rename timestamps
+    long baseRenameTimestamp = 1704153600000L; // 2024-01-02 00:00:00
+    long thresholdTimestamp = baseRenameTimestamp + TimeUnit.HOURS.toMillis(1); // 1 hour later
+    String uuid = "12345678-1234-1234-1234-123456789abc";
 
-    // Files older than threshold (should be returned)
+    // Files with rename timestamps older than threshold (should be returned)
+    long oldRename1 = baseRenameTimestamp + TimeUnit.MINUTES.toMillis(30);
+    long oldRename2 = baseRenameTimestamp + TimeUnit.MINUTES.toMillis(45);
     Path oldFile1 =
-      new Path(inProgressDir, (baseTimestamp + TimeUnit.MINUTES.toMillis(30)) + "_rs1.plog");
+      new Path(inProgressDir, "1704153600000_rs1_" + uuid + "_" + oldRename1 + ".plog");
     Path oldFile2 =
-      new Path(inProgressDir, (baseTimestamp + TimeUnit.MINUTES.toMillis(45)) + "_rs2.plog");
+      new Path(inProgressDir, "1704153600000_rs2_" + uuid + "_" + oldRename2 + ".plog");
 
-    // Files newer than threshold (should not be returned)
+    // Files with rename timestamps newer than threshold (should not be returned)
+    long newRename1 = baseRenameTimestamp + TimeUnit.HOURS.toMillis(2);
+    long newRename2 = baseRenameTimestamp + TimeUnit.HOURS.toMillis(3);
     Path newFile1 =
-      new Path(inProgressDir, (baseTimestamp + TimeUnit.HOURS.toMillis(2)) + "_rs3.plog");
+      new Path(inProgressDir, "1704153600000_rs3_" + uuid + "_" + newRename1 + ".plog");
     Path newFile2 =
-      new Path(inProgressDir, (baseTimestamp + TimeUnit.HOURS.toMillis(3)) + "_rs4.plog");
+      new Path(inProgressDir, "1704153600000_rs4_" + uuid + "_" + newRename2 + ".plog");
 
-    // Invalid files (should be skipped)
-    Path invalidFile = new Path(inProgressDir, "invalid_timestamp_rs5.plog");
+    // Files without rename timestamp (should be skipped)
+    Path noRenameFile = new Path(inProgressDir, "1704153600000_rs5_" + uuid + ".plog");
 
     // Create all files
     localFs.create(oldFile1, true).close();
     localFs.create(oldFile2, true).close();
     localFs.create(newFile1, true).close();
     localFs.create(newFile2, true).close();
-    localFs.create(invalidFile, true).close();
+    localFs.create(noRenameFile, true).close();
 
     // Call getOlderInProgressFiles
     List<Path> result = tracker.getOlderInProgressFiles(thresholdTimestamp);
@@ -1159,7 +1190,8 @@ public class ReplicationLogTrackerTest {
     assertTrue("Should contain oldFile2", resultFilenames.contains(oldFile2.getName()));
     assertFalse("Should not contain newFile1", resultFilenames.contains(newFile1.getName()));
     assertFalse("Should not contain newFile2", resultFilenames.contains(newFile2.getName()));
-    assertFalse("Should not contain invalidFile", resultFilenames.contains(invalidFile.getName()));
+    assertFalse("Should not contain noRenameFile",
+      resultFilenames.contains(noRenameFile.getName()));
   }
 
   @Test
@@ -1169,15 +1201,18 @@ public class ReplicationLogTrackerTest {
 
     // Get the in-progress directory path
     Path inProgressDir = tracker.getInProgressDirPath();
+    String uuid = "12345678-1234-1234-1234-123456789abc";
 
-    // Create files all newer than threshold
+    // Create files with rename timestamps all newer than threshold
     long baseTimestamp = 1704153600000L;
     long thresholdTimestamp = baseTimestamp + TimeUnit.HOURS.toMillis(1);
 
+    long newRename1 = baseTimestamp + TimeUnit.HOURS.toMillis(2);
+    long newRename2 = baseTimestamp + TimeUnit.HOURS.toMillis(3);
     Path newFile1 =
-      new Path(inProgressDir, (baseTimestamp + TimeUnit.HOURS.toMillis(2)) + "_rs1.plog");
+      new Path(inProgressDir, "1704153600000_rs1_" + uuid + "_" + newRename1 + ".plog");
     Path newFile2 =
-      new Path(inProgressDir, (baseTimestamp + TimeUnit.HOURS.toMillis(3)) + "_rs2.plog");
+      new Path(inProgressDir, "1704153600000_rs2_" + uuid + "_" + newRename2 + ".plog");
 
     localFs.create(newFile1, true).close();
     localFs.create(newFile2, true).close();
@@ -1236,22 +1271,27 @@ public class ReplicationLogTrackerTest {
 
     // Get the in-progress directory path
     Path inProgressDir = tracker.getInProgressDirPath();
+    String uuid = "12345678-1234-1234-1234-123456789abc";
 
     long baseTimestamp = 1704153600000L;
     long thresholdTimestamp = baseTimestamp + TimeUnit.HOURS.toMillis(1);
 
-    // Valid old file (should be returned)
+    // Valid old file with rename timestamp (should be returned)
+    long oldRename = baseTimestamp + TimeUnit.MINUTES.toMillis(30);
     Path validOldFile =
-      new Path(inProgressDir, (baseTimestamp + TimeUnit.MINUTES.toMillis(30)) + "_rs1.plog");
+      new Path(inProgressDir, "1704153600000_rs1_" + uuid + "_" + oldRename + ".plog");
 
-    // Invalid files (should be skipped)
-    Path invalidFile1 = new Path(inProgressDir, "invalid_timestamp_rs2.plog");
-    Path invalidFile2 = new Path(inProgressDir, "not_a_timestamp_rs3.plog");
-    Path invalidFile3 = new Path(inProgressDir, "1704153600000_rs4.txt"); // wrong extension
+    // Files without rename timestamp (should be skipped - only 3 parts)
+    Path noRenameFile = new Path(inProgressDir, "1704153600000_rs2_" + uuid + ".plog");
+    // File with non-numeric rename timestamp (should be skipped)
+    Path invalidRenameFile =
+      new Path(inProgressDir, "1704153600000_rs3_" + uuid + "_notanumber.plog");
+    // Wrong extension (should be skipped by isValidLogFile)
+    Path invalidFile3 = new Path(inProgressDir, "1704153600000_rs4.txt");
 
     localFs.create(validOldFile, true).close();
-    localFs.create(invalidFile1, true).close();
-    localFs.create(invalidFile2, true).close();
+    localFs.create(noRenameFile, true).close();
+    localFs.create(invalidRenameFile, true).close();
     localFs.create(invalidFile3, true).close();
 
     // Call getOlderInProgressFiles
@@ -1264,10 +1304,10 @@ public class ReplicationLogTrackerTest {
     Set<String> resultFilenames = result.stream().map(Path::getName).collect(Collectors.toSet());
 
     assertTrue("Should contain validOldFile", resultFilenames.contains(validOldFile.getName()));
-    assertFalse("Should not contain invalidFile1",
-      resultFilenames.contains(invalidFile1.getName()));
-    assertFalse("Should not contain invalidFile2",
-      resultFilenames.contains(invalidFile2.getName()));
+    assertFalse("Should not contain noRenameFile",
+      resultFilenames.contains(noRenameFile.getName()));
+    assertFalse("Should not contain invalidRenameFile",
+      resultFilenames.contains(invalidRenameFile.getName()));
     assertFalse("Should not contain invalidFile3",
       resultFilenames.contains(invalidFile3.getName()));
   }
@@ -1279,16 +1319,18 @@ public class ReplicationLogTrackerTest {
 
     // Get the in-progress directory path
     Path inProgressDir = tracker.getInProgressDirPath();
+    String uuid = "12345678-1234-1234-1234-123456789abc";
 
     long baseTimestamp = 1704153600000L;
     long thresholdTimestamp = baseTimestamp + TimeUnit.HOURS.toMillis(1);
 
-    // File with timestamp exactly at threshold (should NOT be returned - we want older than
-    // threshold)
-    Path fileAtThreshold = new Path(inProgressDir, thresholdTimestamp + "_rs1.plog");
+    // File with rename timestamp exactly at threshold (should NOT be returned)
+    Path fileAtThreshold =
+      new Path(inProgressDir, "1704153600000_rs1_" + uuid + "_" + thresholdTimestamp + ".plog");
 
-    // File with timestamp just before threshold (should be returned)
-    Path fileJustBeforeThreshold = new Path(inProgressDir, (thresholdTimestamp - 1) + "_rs2.plog");
+    // File with rename timestamp just before threshold (should be returned)
+    Path fileJustBeforeThreshold = new Path(inProgressDir,
+      "1704153600000_rs2_" + uuid + "_" + (thresholdTimestamp - 1) + ".plog");
 
     localFs.create(fileAtThreshold, true).close();
     localFs.create(fileJustBeforeThreshold, true).close();
@@ -1315,30 +1357,36 @@ public class ReplicationLogTrackerTest {
 
     // Get the in-progress directory path
     Path inProgressDir = tracker.getInProgressDirPath();
+    String uuid = "12345678-1234-1234-1234-123456789abc";
 
     long baseTimestamp = 1704153600000L;
     long thresholdTimestamp = baseTimestamp + TimeUnit.HOURS.toMillis(1);
 
-    // Valid old files (should be returned)
+    // Valid old files with rename timestamps before threshold (should be returned)
+    long oldRename1 = baseTimestamp + TimeUnit.MINUTES.toMillis(30);
+    long oldRename2 = baseTimestamp + TimeUnit.MINUTES.toMillis(45);
     Path oldFile1 =
-      new Path(inProgressDir, (baseTimestamp + TimeUnit.MINUTES.toMillis(30)) + "_rs1.plog");
+      new Path(inProgressDir, "1704153600000_rs1_" + uuid + "_" + oldRename1 + ".plog");
     Path oldFile2 =
-      new Path(inProgressDir, (baseTimestamp + TimeUnit.MINUTES.toMillis(45)) + "_rs2.plog");
+      new Path(inProgressDir, "1704153600000_rs2_" + uuid + "_" + oldRename2 + ".plog");
 
-    // Valid new files (should not be returned)
+    // Valid file with rename timestamp after threshold (should not be returned)
+    long newRename1 = baseTimestamp + TimeUnit.HOURS.toMillis(2);
     Path newFile1 =
-      new Path(inProgressDir, (baseTimestamp + TimeUnit.HOURS.toMillis(2)) + "_rs3.plog");
+      new Path(inProgressDir, "1704153600000_rs3_" + uuid + "_" + newRename1 + ".plog");
 
-    // Invalid files (should be skipped)
-    Path invalidFile1 = new Path(inProgressDir, "invalid_timestamp_rs4.plog");
-    Path invalidFile2 = new Path(inProgressDir, "1704153600000_rs5.txt"); // wrong extension
-    Path invalidFile3 = new Path(inProgressDir, "not_a_number_rs6.plog");
+    // Files without rename timestamp (should be skipped - only 3 parts)
+    Path noRenameFile = new Path(inProgressDir, "1704153600000_rs4_" + uuid + ".plog");
+    // Wrong extension (should be skipped by isValidLogFile)
+    Path invalidFile2 = new Path(inProgressDir, "1704153600000_rs5.txt");
+    // Non-numeric rename timestamp (should be skipped)
+    Path invalidFile3 = new Path(inProgressDir, "1704153600000_rs6_" + uuid + "_notanumber.plog");
 
     // Create all files
     localFs.create(oldFile1, true).close();
     localFs.create(oldFile2, true).close();
     localFs.create(newFile1, true).close();
-    localFs.create(invalidFile1, true).close();
+    localFs.create(noRenameFile, true).close();
     localFs.create(invalidFile2, true).close();
     localFs.create(invalidFile3, true).close();
 
@@ -1354,8 +1402,8 @@ public class ReplicationLogTrackerTest {
     assertTrue("Should contain oldFile1", resultFilenames.contains(oldFile1.getName()));
     assertTrue("Should contain oldFile2", resultFilenames.contains(oldFile2.getName()));
     assertFalse("Should not contain newFile1", resultFilenames.contains(newFile1.getName()));
-    assertFalse("Should not contain invalidFile1",
-      resultFilenames.contains(invalidFile1.getName()));
+    assertFalse("Should not contain noRenameFile",
+      resultFilenames.contains(noRenameFile.getName()));
     assertFalse("Should not contain invalidFile2",
       resultFilenames.contains(invalidFile2.getName()));
     assertFalse("Should not contain invalidFile3",

@@ -18,7 +18,9 @@
 package org.apache.phoenix.replication;
 
 import java.io.IOException;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -82,6 +84,25 @@ public abstract class ReplicationLogDiscovery {
    * Default buffer percentage for waiting time between processing rounds
    */
   protected static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
+
+  /**
+   * Configuration key for maximum number of retries per in-progress file within a single processing
+   * round. Files that fail this many times are skipped for the rest of the round.
+   */
+  public static final String REPLICATION_IN_PROGRESS_FILE_MAX_RETRIES_KEY =
+    "phoenix.replication.in.progress.file.max.retries";
+
+  public static final int DEFAULT_IN_PROGRESS_FILE_MAX_RETRIES = 1;
+
+  /**
+   * Configuration key for the minimum age (in seconds) of an in-progress file's rename timestamp
+   * before it becomes eligible for processing. This prevents a file recently marked in-progress by
+   * one region server from being immediately picked up by another.
+   */
+  public static final String REPLICATION_IN_PROGRESS_FILE_MIN_AGE_SECONDS_KEY =
+    "phoenix.replication.in.progress.file.min.age.seconds";
+
+  public static final int DEFAULT_IN_PROGRESS_FILE_MIN_AGE_SECONDS = 60;
 
   protected final Configuration conf;
   protected final String haGroupName;
@@ -283,8 +304,9 @@ public abstract class ReplicationLogDiscovery {
   }
 
   /**
-   * Processes all files (older than 1 round time) in the in-progress directory. Continuously
-   * processes files until no in-progress files remain.
+   * Processes all files in the in-progress directory whose rename timestamp is older than the
+   * configured minimum age. Continuously processes files until no eligible in-progress files
+   * remain.
    * @throws IOException if there's an error during file processing
    */
   protected void processInProgressDirectory() throws IOException {
@@ -293,16 +315,31 @@ public abstract class ReplicationLogDiscovery {
     // Increase the count for number of times in progress directory is processed
     getMetrics().incrementNumInProgressDirectoryProcessed();
     long startTime = EnvironmentEdgeManager.currentTime();
-    long oldestTimestampToProcess =
-      replicationLogTracker.getReplicationShardDirectoryManager().getNearestRoundStartTimestamp(
-        EnvironmentEdgeManager.currentTime()) - getReplayIntervalSeconds() * 1000L;
-    List<Path> files = replicationLogTracker.getOlderInProgressFiles(oldestTimestampToProcess);
-    LOG.info("Number of {} files with oldestTimestampToProcess {} is {} for haGroup: {}",
-      replicationLogTracker.getInProgressLogSubDirectoryName(), oldestTimestampToProcess,
+    long renameTimestampThreshold =
+      EnvironmentEdgeManager.currentTime() - getInProgressFileMinAgeSeconds() * 1000L;
+    int maxRetries = getInProgressFileMaxRetries();
+    Map<String, Integer> failureCount = new HashMap<>();
+    List<Path> files = replicationLogTracker.getOlderInProgressFiles(renameTimestampThreshold);
+    LOG.info("Number of {} files with renameTimestampThreshold {} is {} for haGroup: {}",
+      replicationLogTracker.getInProgressLogSubDirectoryName(), renameTimestampThreshold,
       files.size(), haGroupName);
     while (!files.isEmpty()) {
-      processOneRandomFile(files);
-      files = replicationLogTracker.getOlderInProgressFiles(oldestTimestampToProcess);
+      Optional<Path> failedFile = processOneRandomFile(files);
+      if (failedFile.isPresent()) {
+        String prefix = replicationLogTracker.getFilePrefix(failedFile.get());
+        int count = failureCount.merge(prefix, 1, Integer::sum);
+        if (count >= maxRetries) {
+          LOG.warn(
+            "File {} (prefix: {}) has failed {} time(s), reached max retries ({}). "
+              + "Skipping for the rest of this round for haGroup: {}",
+            failedFile.get(), prefix, count, maxRetries, haGroupName);
+        }
+      }
+      renameTimestampThreshold =
+        EnvironmentEdgeManager.currentTime() - getInProgressFileMinAgeSeconds() * 1000L;
+      files = replicationLogTracker.getOlderInProgressFiles(renameTimestampThreshold);
+      files.removeIf(
+        f -> failureCount.getOrDefault(replicationLogTracker.getFilePrefix(f), 0) >= maxRetries);
     }
     long duration = EnvironmentEdgeManager.currentTime() - startTime;
     LOG.info("Finished in-progress files processing in {}ms for haGroup: {}", duration,
@@ -314,8 +351,9 @@ public abstract class ReplicationLogDiscovery {
    * Processes a single random file from the provided list. Marks the file as in-progress, processes
    * it, and marks it as completed or failed.
    * @param files - List of files from which to select and process one randomly
+   * @return the original path of the file that failed, or empty if processing succeeded
    */
-  private void processOneRandomFile(final List<Path> files) throws IOException {
+  private Optional<Path> processOneRandomFile(final List<Path> files) throws IOException {
     // Pick a random file and process it
     Path file = files.get(ThreadLocalRandom.current().nextInt(files.size()));
     Optional<Path> optionalInProgressFilePath = Optional.empty();
@@ -331,7 +369,9 @@ public abstract class ReplicationLogDiscovery {
       // Not throwing this exception because next time another random file will be retried.
       // If it's persistent failure for in_progress directory,
       // cluster state should to be DEGRADED_STANDBY_FOR_READER.
+      return Optional.of(file);
     }
+    return Optional.empty();
   }
 
   /**
@@ -467,6 +507,16 @@ public abstract class ReplicationLogDiscovery {
    */
   public double getWaitingBufferPercentage() {
     return DEFAULT_WAITING_BUFFER_PERCENTAGE;
+  }
+
+  public int getInProgressFileMaxRetries() {
+    return conf.getInt(REPLICATION_IN_PROGRESS_FILE_MAX_RETRIES_KEY,
+      DEFAULT_IN_PROGRESS_FILE_MAX_RETRIES);
+  }
+
+  public int getInProgressFileMinAgeSeconds() {
+    return conf.getInt(REPLICATION_IN_PROGRESS_FILE_MIN_AGE_SECONDS_KEY,
+      DEFAULT_IN_PROGRESS_FILE_MIN_AGE_SECONDS);
   }
 
   public ReplicationLogTracker getReplicationLogFileTracker() {
