@@ -209,7 +209,7 @@ public class BaseScannerRegionObserverConstants {
 
   /**
    * PhoenixSyncTableTool chunk metadata cell qualifiers. These define the wire protocol between
-   * hoenixSyncTableRegionScanner (server-side coprocessor) and PhoenixSyncTableMapper (client-side
+   * PhoenixSyncTableRegionScanner (server-side coprocessor) and PhoenixSyncTableMapper (client-side
    * mapper). The coprocessor returns chunk metadata as HBase cells with these qualifiers, and the
    * mapper parses them to extract chunk information.
    */

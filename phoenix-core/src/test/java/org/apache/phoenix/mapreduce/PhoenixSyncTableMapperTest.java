@@ -26,7 +26,7 @@ import java.util.ArrayList;
 import java.util.List;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.query.KeyRange;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -43,19 +43,19 @@ public class PhoenixSyncTableMapperTest {
   }
 
   /**
-   * Helper method to create a PhoenixSyncTableOutputRow with start and end keys.
+   * Helper method to create a PhoenixSyncTableCheckpointOutputRow with start and end keys.
    */
-  private PhoenixSyncTableOutputRow createChunk(byte[] startKey, byte[] endKey) {
-    return new PhoenixSyncTableOutputRow.Builder().setStartRowKey(startKey).setEndRowKey(endKey)
-      .build();
+  private PhoenixSyncTableCheckpointOutputRow createChunk(byte[] startKey, byte[] endKey) {
+    return new PhoenixSyncTableCheckpointOutputRow.Builder().setStartRowKey(startKey)
+      .setEndRowKey(endKey).build();
   }
 
   /**
    * Helper method to verify a gap/range matches expected values.
    */
-  private void assertGap(Pair<byte[], byte[]> gap, byte[] expectedStart, byte[] expectedEnd) {
-    assertArrayEquals("Gap start key mismatch", expectedStart, gap.getFirst());
-    assertArrayEquals("Gap end key mismatch", expectedEnd, gap.getSecond());
+  private void assertGap(KeyRange gap, byte[] expectedStart, byte[] expectedEnd) {
+    assertArrayEquals("Gap start key mismatch", expectedStart, gap.getLowerRange());
+    assertArrayEquals("Gap end key mismatch", expectedEnd, gap.getUpperRange());
   }
 
   @Test
@@ -64,8 +64,7 @@ public class PhoenixSyncTableMapperTest {
     byte[] regionStart = Bytes.toBytes("a");
     byte[] regionEnd = Bytes.toBytes("z");
 
-    List<Pair<byte[], byte[]>> result =
-      mapper.calculateUnprocessedRanges(regionStart, regionEnd, null);
+    List<KeyRange> result = mapper.calculateUnprocessedRanges(regionStart, regionEnd, null);
 
     assertEquals("Should have 1 unprocessed range when no chunks processed", 1, result.size());
     assertGap(result.get(0), regionStart, regionEnd);
@@ -76,9 +75,9 @@ public class PhoenixSyncTableMapperTest {
     // Scenario: Empty processed chunks list, entire region should be unprocessed
     byte[] regionStart = Bytes.toBytes("a");
     byte[] regionEnd = Bytes.toBytes("z");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 1 unprocessed range when chunks list is empty", 1, result.size());
@@ -93,12 +92,12 @@ public class PhoenixSyncTableMapperTest {
     // Expected: No unprocessed ranges
     byte[] regionStart = Bytes.toBytes("a");
     byte[] regionEnd = Bytes.toBytes("z");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("d")));
     processedChunks.add(createChunk(Bytes.toBytes("d"), Bytes.toBytes("g")));
     processedChunks.add(createChunk(Bytes.toBytes("g"), Bytes.toBytes("z")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have no unprocessed ranges when region fully covered", 0, result.size());
@@ -112,10 +111,10 @@ public class PhoenixSyncTableMapperTest {
     // Expected: [a, e)
     byte[] regionStart = Bytes.toBytes("a");
     byte[] regionEnd = Bytes.toBytes("z");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("e"), Bytes.toBytes("z")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 1 unprocessed range at start", 1, result.size());
@@ -130,10 +129,10 @@ public class PhoenixSyncTableMapperTest {
     // Expected: [e, z)
     byte[] regionStart = Bytes.toBytes("a");
     byte[] regionEnd = Bytes.toBytes("z");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("e")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 1 unprocessed range at end", 1, result.size());
@@ -148,11 +147,11 @@ public class PhoenixSyncTableMapperTest {
     // Expected: [d, g)
     byte[] regionStart = Bytes.toBytes("a");
     byte[] regionEnd = Bytes.toBytes("z");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("d")));
     processedChunks.add(createChunk(Bytes.toBytes("g"), Bytes.toBytes("z")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 1 unprocessed range in middle", 1, result.size());
@@ -167,12 +166,12 @@ public class PhoenixSyncTableMapperTest {
     // Expected: [a, b), [d, f), [h, j), [l, z)
     byte[] regionStart = Bytes.toBytes("a");
     byte[] regionEnd = Bytes.toBytes("z");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("b"), Bytes.toBytes("d")));
     processedChunks.add(createChunk(Bytes.toBytes("f"), Bytes.toBytes("h")));
     processedChunks.add(createChunk(Bytes.toBytes("j"), Bytes.toBytes("l")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 4 unprocessed ranges", 4, result.size());
@@ -190,11 +189,11 @@ public class PhoenixSyncTableMapperTest {
     // Expected: No gaps (chunk clipped to [d, g])
     byte[] regionStart = Bytes.toBytes("d");
     byte[] regionEnd = Bytes.toBytes("z");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("g")));
     processedChunks.add(createChunk(Bytes.toBytes("g"), Bytes.toBytes("z")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have no unprocessed ranges after clipping", 0, result.size());
@@ -208,11 +207,11 @@ public class PhoenixSyncTableMapperTest {
     // Expected: No gaps (last chunk clipped to [g, m))
     byte[] regionStart = Bytes.toBytes("a");
     byte[] regionEnd = Bytes.toBytes("m");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("g")));
     processedChunks.add(createChunk(Bytes.toBytes("g"), Bytes.toBytes("z")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have no unprocessed ranges after clipping", 0, result.size());
@@ -226,10 +225,10 @@ public class PhoenixSyncTableMapperTest {
     // Expected: No gaps (chunk covers entire region)
     byte[] regionStart = Bytes.toBytes("d");
     byte[] regionEnd = Bytes.toBytes("m");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("z")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have no unprocessed ranges when chunk covers entire region", 0,
@@ -244,10 +243,10 @@ public class PhoenixSyncTableMapperTest {
     // Expected: [[], a) gap at start, no gap at end since chunk ends at region boundary
     byte[] regionStart = HConstants.EMPTY_START_ROW;
     byte[] regionEnd = Bytes.toBytes("d");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("d")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 1 unprocessed range at start", 1, result.size());
@@ -262,10 +261,10 @@ public class PhoenixSyncTableMapperTest {
     // Expected: [[], b)
     byte[] regionStart = HConstants.EMPTY_START_ROW;
     byte[] regionEnd = Bytes.toBytes("d");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("b"), Bytes.toBytes("d")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 1 unprocessed range at start of first region", 1, result.size());
@@ -280,10 +279,10 @@ public class PhoenixSyncTableMapperTest {
     // Expected: [z, [])
     byte[] regionStart = Bytes.toBytes("v");
     byte[] regionEnd = HConstants.EMPTY_END_ROW;
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("v"), Bytes.toBytes("z")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 1 unprocessed range at end of last region", 1, result.size());
@@ -298,11 +297,11 @@ public class PhoenixSyncTableMapperTest {
     // Expected: No gaps (but will add [[], []) due to isEndRegionOfTable logic)
     byte[] regionStart = Bytes.toBytes("v");
     byte[] regionEnd = HConstants.EMPTY_END_ROW;
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("v"), Bytes.toBytes("x")));
     processedChunks.add(createChunk(Bytes.toBytes("x"), HConstants.EMPTY_END_ROW));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     // Due to isEndRegionOfTable check, we always add remaining range
@@ -318,10 +317,10 @@ public class PhoenixSyncTableMapperTest {
     // Expected: [[], a), [m, [])
     byte[] regionStart = HConstants.EMPTY_START_ROW;
     byte[] regionEnd = HConstants.EMPTY_END_ROW;
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("m")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 2 unprocessed ranges for single region table", 2, result.size());
@@ -337,10 +336,10 @@ public class PhoenixSyncTableMapperTest {
     // Expected: [a, e), [m, z)
     byte[] regionStart = Bytes.toBytes("a");
     byte[] regionEnd = Bytes.toBytes("z");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("e"), Bytes.toBytes("m")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 2 unprocessed ranges", 2, result.size());
@@ -356,13 +355,13 @@ public class PhoenixSyncTableMapperTest {
     // Expected: No gaps
     byte[] regionStart = Bytes.toBytes("a");
     byte[] regionEnd = Bytes.toBytes("z");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("c")));
     processedChunks.add(createChunk(Bytes.toBytes("c"), Bytes.toBytes("f")));
     processedChunks.add(createChunk(Bytes.toBytes("f"), Bytes.toBytes("j")));
     processedChunks.add(createChunk(Bytes.toBytes("j"), Bytes.toBytes("z")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have no unprocessed ranges for perfectly adjacent chunks", 0,
@@ -377,13 +376,13 @@ public class PhoenixSyncTableMapperTest {
     // Expected: [b, c), [d, e), [f, g), [h, z)
     byte[] regionStart = Bytes.toBytes("a");
     byte[] regionEnd = Bytes.toBytes("z");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("b")));
     processedChunks.add(createChunk(Bytes.toBytes("c"), Bytes.toBytes("d")));
     processedChunks.add(createChunk(Bytes.toBytes("e"), Bytes.toBytes("f")));
     processedChunks.add(createChunk(Bytes.toBytes("g"), Bytes.toBytes("h")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 4 unprocessed ranges", 4, result.size());
@@ -401,10 +400,10 @@ public class PhoenixSyncTableMapperTest {
     // Expected: No gaps
     byte[] regionStart = Bytes.toBytes("a");
     byte[] regionEnd = Bytes.toBytes("z");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("z")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have no unprocessed ranges when chunk matches region", 0, result.size());
@@ -422,12 +421,12 @@ public class PhoenixSyncTableMapperTest {
     // Expected: [g, j), [m, s)
     byte[] regionStart = Bytes.toBytes("d");
     byte[] regionEnd = Bytes.toBytes("r");
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("g")));
     processedChunks.add(createChunk(Bytes.toBytes("j"), Bytes.toBytes("m")));
     processedChunks.add(createChunk(Bytes.toBytes("s"), Bytes.toBytes("v")));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 2 unprocessed ranges after region boundary change", 2, result.size());
@@ -443,11 +442,11 @@ public class PhoenixSyncTableMapperTest {
     // Expected: [\x02\x00, \x03\x00), [\x04\x00, \x05\x00)
     byte[] regionStart = new byte[] { 0x01, 0x00 };
     byte[] regionEnd = new byte[] { 0x05, 0x00 };
-    List<PhoenixSyncTableOutputRow> processedChunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks = new ArrayList<>();
     processedChunks.add(createChunk(new byte[] { 0x01, 0x00 }, new byte[] { 0x02, 0x00 }));
     processedChunks.add(createChunk(new byte[] { 0x03, 0x00 }, new byte[] { 0x04, 0x00 }));
 
-    List<Pair<byte[], byte[]>> result =
+    List<KeyRange> result =
       mapper.calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     assertEquals("Should have 2 unprocessed ranges with multi-byte keys", 2, result.size());
@@ -486,7 +485,7 @@ public class PhoenixSyncTableMapperTest {
     // Mapper: [a, ...) Chunks: [c, ...]
     // First chunk starts AFTER mapper start -> return true (gap at beginning)
     byte[] mapperStart = Bytes.toBytes("a");
-    List<PhoenixSyncTableOutputRow> chunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> chunks = new ArrayList<>();
     chunks.add(createChunk(Bytes.toBytes("c"), Bytes.toBytes("f")));
     assertTrue(mapper.shouldStartKeyBeInclusive(mapperStart, chunks));
   }
@@ -496,7 +495,7 @@ public class PhoenixSyncTableMapperTest {
     // Mapper: [a, ...) Chunks: [a, ...]
     // First chunk starts AT mapper start -> return false (no gap)
     byte[] mapperStart = Bytes.toBytes("a");
-    List<PhoenixSyncTableOutputRow> chunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> chunks = new ArrayList<>();
     chunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("f")));
     assertFalse(mapper.shouldStartKeyBeInclusive(mapperStart, chunks));
   }
@@ -506,7 +505,7 @@ public class PhoenixSyncTableMapperTest {
     // Mapper: [d, ...) Chunks: [a, ...]
     // First chunk starts BEFORE mapper start -> return false (no gap, chunk overlaps start)
     byte[] mapperStart = Bytes.toBytes("d");
-    List<PhoenixSyncTableOutputRow> chunks = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> chunks = new ArrayList<>();
     chunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("g")));
     assertFalse(mapper.shouldStartKeyBeInclusive(mapperStart, chunks));
   }

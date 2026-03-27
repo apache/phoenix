@@ -28,11 +28,11 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
 /**
  * Data model class representing required row in the PHOENIX_SYNC_TABLE_CHECKPOINT table
  */
-public class PhoenixSyncTableOutputRow {
+public class PhoenixSyncTableCheckpointOutputRow {
 
   public enum Type {
     CHUNK,
-    MAPPER_REGION
+    REGION
   }
 
   public enum Status {
@@ -45,10 +45,10 @@ public class PhoenixSyncTableOutputRow {
   private Type type;
   private Long fromTime;
   private Long toTime;
+  private String tenantId;
   private Boolean isDryRun;
   private byte[] startRowKey;
   private byte[] endRowKey;
-  private Boolean isFirstRegion;
   private Timestamp executionStartTime;
   private Timestamp executionEndTime;
   private Status status;
@@ -62,7 +62,6 @@ public class PhoenixSyncTableOutputRow {
   }
 
   @Override
-  @VisibleForTesting
   public boolean equals(Object o) {
     if (this == o) {
       return true;
@@ -70,13 +69,12 @@ public class PhoenixSyncTableOutputRow {
     if (o == null || getClass() != o.getClass()) {
       return false;
     }
-    PhoenixSyncTableOutputRow that = (PhoenixSyncTableOutputRow) o;
+    PhoenixSyncTableCheckpointOutputRow that = (PhoenixSyncTableCheckpointOutputRow) o;
     return Objects.equals(tableName, that.tableName)
       && Objects.equals(targetCluster, that.targetCluster) && type == that.type
       && Objects.equals(fromTime, that.fromTime) && Objects.equals(toTime, that.toTime)
-      && Objects.equals(isDryRun, that.isDryRun) && Arrays.equals(startRowKey, that.startRowKey)
-      && Arrays.equals(endRowKey, that.endRowKey)
-      && Objects.equals(isFirstRegion, that.isFirstRegion)
+      && Objects.equals(tenantId, that.tenantId) && Objects.equals(isDryRun, that.isDryRun)
+      && Arrays.equals(startRowKey, that.startRowKey) && Arrays.equals(endRowKey, that.endRowKey)
       && Objects.equals(executionStartTime, that.executionStartTime)
       && Objects.equals(executionEndTime, that.executionEndTime) && status == that.status
       && Objects.equals(counters, that.counters);
@@ -84,36 +82,39 @@ public class PhoenixSyncTableOutputRow {
 
   @Override
   public int hashCode() {
-    int result = Objects.hash(tableName, targetCluster, type, fromTime, toTime, isDryRun,
-      isFirstRegion, executionStartTime, executionEndTime, status, counters);
+    int result = Objects.hash(tableName, targetCluster, type, fromTime, toTime, tenantId, isDryRun,
+      executionStartTime, executionEndTime, status, counters);
     result = 31 * result + Arrays.hashCode(startRowKey);
     result = 31 * result + Arrays.hashCode(endRowKey);
     return result;
   }
 
-  @VisibleForTesting
   public String getTableName() {
     return tableName;
   }
 
-  @VisibleForTesting
   public String getTargetCluster() {
     return targetCluster;
   }
 
-  @VisibleForTesting
   public Type getType() {
     return type;
   }
 
-  @VisibleForTesting
   public Long getFromTime() {
     return fromTime;
   }
 
-  @VisibleForTesting
   public Long getToTime() {
     return toTime;
+  }
+
+  public String getTenantId() {
+    return tenantId;
+  }
+
+  public Boolean getIsDryRun() {
+    return isDryRun;
   }
 
   public byte[] getStartRowKey() {
@@ -124,22 +125,18 @@ public class PhoenixSyncTableOutputRow {
     return endRowKey != null ? Arrays.copyOf(endRowKey, endRowKey.length) : null;
   }
 
-  @VisibleForTesting
   public Timestamp getExecutionStartTime() {
     return executionStartTime;
   }
 
-  @VisibleForTesting
   public Timestamp getExecutionEndTime() {
     return executionEndTime;
   }
 
-  @VisibleForTesting
   public Status getStatus() {
     return status;
   }
 
-  @VisibleForTesting
   public String getCounters() {
     return counters;
   }
@@ -154,7 +151,6 @@ public class PhoenixSyncTableOutputRow {
     return parseCounterValue(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name());
   }
 
-  @VisibleForTesting
   private long parseCounterValue(String counterName) {
     if (counters == null || counters.isEmpty()) {
       return 0;
@@ -171,46 +167,45 @@ public class PhoenixSyncTableOutputRow {
   }
 
   /**
-   * Builder for PhoenixSyncTableOutputRow
+   * Builder for PhoenixSyncTableCheckpointOutputRow
    */
   public static class Builder {
-    private final PhoenixSyncTableOutputRow row;
+    private final PhoenixSyncTableCheckpointOutputRow row;
 
     public Builder() {
-      this.row = new PhoenixSyncTableOutputRow();
+      this.row = new PhoenixSyncTableCheckpointOutputRow();
     }
 
-    @VisibleForTesting
     public Builder setTableName(String tableName) {
       row.tableName = tableName;
       return this;
     }
 
-    @VisibleForTesting
     public Builder setTargetCluster(String targetCluster) {
       row.targetCluster = targetCluster;
       return this;
     }
 
-    @VisibleForTesting
     public Builder setType(Type type) {
       row.type = type;
       return this;
     }
 
-    @VisibleForTesting
     public Builder setFromTime(Long fromTime) {
       row.fromTime = fromTime;
       return this;
     }
 
-    @VisibleForTesting
     public Builder setToTime(Long toTime) {
       row.toTime = toTime;
       return this;
     }
 
-    @VisibleForTesting
+    public Builder setTenantId(String tenantId) {
+      row.tenantId = tenantId;
+      return this;
+    }
+
     public Builder setIsDryRun(Boolean isDryRun) {
       row.isDryRun = isDryRun;
       return this;
@@ -228,37 +223,27 @@ public class PhoenixSyncTableOutputRow {
       return this;
     }
 
-    @VisibleForTesting
-    public Builder setIsFirstRegion(Boolean isFirstRegion) {
-      row.isFirstRegion = isFirstRegion;
-      return this;
-    }
-
-    @VisibleForTesting
     public Builder setExecutionStartTime(Timestamp executionStartTime) {
       row.executionStartTime = executionStartTime;
       return this;
     }
 
-    @VisibleForTesting
     public Builder setExecutionEndTime(Timestamp executionEndTime) {
       row.executionEndTime = executionEndTime;
       return this;
     }
 
-    @VisibleForTesting
     public Builder setStatus(Status status) {
       row.status = status;
       return this;
     }
 
-    @VisibleForTesting
     public Builder setCounters(String counters) {
       row.counters = counters;
       return this;
     }
 
-    public PhoenixSyncTableOutputRow build() {
+    public PhoenixSyncTableCheckpointOutputRow build() {
       return row;
     }
   }

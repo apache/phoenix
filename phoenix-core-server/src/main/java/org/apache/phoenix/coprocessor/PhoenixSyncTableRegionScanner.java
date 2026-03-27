@@ -17,21 +17,18 @@
  */
 package org.apache.phoenix.coprocessor;
 
-import static org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES;
+import static org.apache.phoenix.mapreduce.PhoenixSyncTableTool.DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES;
 import static org.apache.phoenix.query.QueryConstants.AGG_TIMESTAMP;
 import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.schema.types.PDataType.FALSE_BYTES;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
-import static org.apache.phoenix.util.ScanUtil.getDummyResult;
 
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.PrivateCellUtil;
-import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
@@ -40,15 +37,11 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.regionserver.ScannerContext;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.SHA256DigestUtil;
-import org.apache.phoenix.util.ScanUtil;
 import org.bouncycastle.crypto.digests.SHA256Digest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
  * Server-side coprocessor that performs chunk formation and SHA-256 hashing for
@@ -59,11 +52,11 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * whatever is accumulated in chunk. If nothing is accumulated return dummy row either with prev
  * result rowKey or max possible key < currentRowKey
  * <p>
- * Source scan (isTargetScan=false): Returns complete chunks(if paging dint timeout) bounded by
- * region boundaries. Sets hasMoreRows=false when region is exhausted.
+ * Source scan (isTargetClusterScan=false): Returns complete chunks(if paging dint timeout) bounded
+ * by region boundaries. Sets hasMoreRows=false when region is exhausted.
  * <p>
- * Target scan (isTargetScan=true): Returns partial chunks with serialized digest state when region
- * boundary is reached, allowing cross-region hash continuation.
+ * Target scan (isTargetClusterScan=true): Returns partial chunks with serialized digest state when
+ * region boundary is reached, allowing cross-region hash continuation.
  * <p>
  * Returns chunk metadata cells: START_KEY, END_KEY, HASH (or digest state), ROW_COUNT,
  * IS_PARTIAL_CHUNK
@@ -77,18 +70,10 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
   private final RegionCoprocessorEnvironment env;
   private final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver;
   private final long chunkSizeBytes;
-  private boolean isTargetScan = false;
-  private byte[] chunkStartKey = null;
-  private byte[] chunkEndKey = null;
-  private long currentChunkSize = 0L;
-  private long currentChunkRowCount = 0L;
-  private final SHA256Digest digest;
+  private boolean isTargetClusterScan = false;
   private boolean hasMoreRows = true;
-  private boolean isUsingContinuedDigest;
-  private byte[] previousResultRowKey = null;
-  private final byte[] initStartRowKey;
-  private final boolean includeInitStartRowKey;
   private final long pageSizeMs;
+  private Chunk currentChunk;
 
   /**
    * Creates a PhoenixSyncTableRegionScanner for chunk-based hashing.
@@ -97,9 +82,8 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
    * @param scan                             The scan request
    * @param env                              The coprocessor environment
    * @param ungroupedAggregateRegionObserver Parent observer for region state checks
-   * @throws IllegalStateException if digest state restoration fails
+   * @param pageSizeMs                       Paging timeout in milliseconds
    */
-  @VisibleForTesting
   public PhoenixSyncTableRegionScanner(final RegionScanner innerScanner, final Region region,
     final Scan scan, final RegionCoprocessorEnvironment env,
     final UngroupedAggregateRegionObserver ungroupedAggregateRegionObserver, long pageSizeMs) {
@@ -111,28 +95,11 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
     byte[] chunkSizeAttr =
       scan.getAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_SIZE_BYTES);
     if (chunkSizeAttr == null) { // Since we don't set chunk size scan attr for target cluster scan
-      this.isTargetScan = true;
+      this.isTargetClusterScan = true;
     }
     this.chunkSizeBytes = chunkSizeAttr != null
       ? Bytes.toLong(chunkSizeAttr)
       : DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES;
-
-    // Check if we should continue from a previous digest state (cross-region continuation)
-    byte[] continuedDigestStateAttr =
-      scan.getAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CONTINUED_DIGEST_STATE);
-    if (continuedDigestStateAttr != null) {
-      try {
-        this.digest = SHA256DigestUtil.decodeDigestState(continuedDigestStateAttr);
-        this.isUsingContinuedDigest = true;
-      } catch (IOException e) {
-        throw new IllegalStateException("Failed to restore continued digest state", e);
-      }
-    } else {
-      this.digest = new SHA256Digest();
-      this.isUsingContinuedDigest = false;
-    }
-    this.initStartRowKey = scan.getStartRow();
-    this.includeInitStartRowKey = scan.includeStartRow();
     this.pageSizeMs = pageSizeMs;
   }
 
@@ -153,7 +120,7 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
   public boolean next(List<Cell> results, ScannerContext scannerContext) throws IOException {
     region.startRegionOperation();
     try {
-      resetChunkState();
+      currentChunk = createNewChunk();
       RegionScanner localScanner = delegate;
       synchronized (localScanner) {
         List<Cell> rowCells = new ArrayList<>();
@@ -164,54 +131,48 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
             ? localScanner.nextRaw(rowCells)
             : localScanner.nextRaw(rowCells, scannerContext);
 
-          if (!rowCells.isEmpty() && ScanUtil.isDummy(rowCells)) {
-            if (chunkStartKey == null) {
-              LOGGER.warn("Paging timed out while fetching first row of chunk, initStartRowKey: {}",
-                Bytes.toStringBinary(initStartRowKey));
-              updateDummyWithPrevRowKey(results, initStartRowKey, includeInitStartRowKey, scan);
-              return true;
-            } else {
-              break;
-            }
-          }
-
           if (rowCells.isEmpty()) {
             break;
           }
 
           byte[] rowKey = CellUtil.cloneRow(rowCells.get(0));
-          long rowSize = calculateRowSize(rowCells);
-          addRowToChunk(rowKey, rowCells, rowSize);
-          if (!isTargetScan && willExceedChunkLimits(rowSize)) {
+          currentChunk.addRow(rowKey, rowCells);
+          if (!isTargetClusterScan && currentChunk.exceedsSize(chunkSizeBytes)) {
             break;
           }
+
           if (
             hasMoreRows && (PhoenixScannerContext.isReturnImmediately(scannerContext)
               || PhoenixScannerContext.isTimedOut(scannerContext, pageSizeMs))
           ) {
             LOGGER.info("Paging timeout after {} rows ({} bytes) in region {}, chunk [{}:{}]",
-              currentChunkRowCount, currentChunkSize,
-              region.getRegionInfo().getRegionNameAsString(), Bytes.toStringBinary(chunkStartKey),
-              Bytes.toStringBinary(chunkEndKey));
+              currentChunk.getRowCount(), currentChunk.getSize(),
+              region.getRegionInfo().getRegionNameAsString(),
+              Bytes.toStringBinary(currentChunk.getStartKey()),
+              Bytes.toStringBinary(currentChunk.getEndKey()));
             PhoenixScannerContext.setReturnImmediately(scannerContext);
             break;
           }
         }
       }
-      if (chunkStartKey == null) {
+
+      if (currentChunk.isEmpty()) {
         return false;
       }
-
-      buildChunkMetadataResult(results, isTargetScan);
-      previousResultRowKey = chunkEndKey;
+      buildChunkMetadataResult(results, currentChunk, isTargetClusterScan);
       return hasMoreRows;
     } catch (Throwable t) {
       LOGGER.error(
         "Exception during chunk scanning in region {} table {} at chunk startKey: {}, endKey: {})",
         region.getRegionInfo().getRegionNameAsString(),
         region.getRegionInfo().getTable().getNameAsString(),
-        chunkStartKey != null ? Bytes.toStringBinary(chunkStartKey) : "null",
-        chunkEndKey != null ? Bytes.toStringBinary(chunkEndKey) : "null", t);
+        currentChunk != null && !currentChunk.isEmpty()
+          ? Bytes.toStringBinary(currentChunk.getStartKey())
+          : "null",
+        currentChunk != null && !currentChunk.isEmpty()
+          ? Bytes.toStringBinary(currentChunk.getEndKey())
+          : "null",
+        t);
       throw t;
     } finally {
       region.closeRegionOperation();
@@ -219,64 +180,22 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
   }
 
   /**
-   * Resets chunk state for a new chunk. Note: If this scanner was initialized with continued digest
-   * state, the first call to this method will NOT reset the digest, allowing us to continue hashing
-   * from the previous region's state.
+   * Creates a new chunk, with continued digest for first chunk if applicable. Only the very first
+   * chunk (when previousResultRowKey is null) can have a continued digest. All subsequent chunks
+   * get a fresh digest.
    */
-  private void resetChunkState() {
-    chunkStartKey = null;
-    chunkEndKey = null;
-    currentChunkSize = 0;
-    currentChunkRowCount = 0;
-    if (!isUsingContinuedDigest) {
-      digest.reset();
+  private Chunk createNewChunk() {
+    byte[] continuedDigestStateAttr =
+      scan.getAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CONTINUED_DIGEST_STATE);
+    if (continuedDigestStateAttr != null) {
+      try {
+        SHA256Digest continuedDigest = SHA256DigestUtil.decodeDigestState(continuedDigestStateAttr);
+        return new Chunk(continuedDigest);
+      } catch (IOException e) {
+        throw new IllegalStateException("Failed to restore continued digest state", e);
+      }
     }
-    isUsingContinuedDigest = false;
-  }
-
-  private long calculateRowSize(List<Cell> cells) {
-    long size = 0;
-    for (Cell cell : cells) {
-      size += PrivateCellUtil.estimatedSerializedSizeOf(cell);
-    }
-    return size;
-  }
-
-  private boolean willExceedChunkLimits(long rowSize) {
-    return currentChunkSize + rowSize > chunkSizeBytes;
-  }
-
-  /**
-   * Adds a row to the current chunk and updates digest
-   */
-  private void addRowToChunk(byte[] rowKey, List<Cell> cells, long rowSize) {
-    // Set chunk start key on first row
-    if (chunkStartKey == null) {
-      chunkStartKey = rowKey;
-    }
-    chunkEndKey = rowKey;
-    currentChunkSize += rowSize;
-    currentChunkRowCount++;
-    updateDigestWithRow(rowKey, cells);
-  }
-
-  /**
-   * Updates the SHA-256 digest with data from a row. Hash includes: row key + cell family + cell
-   * qualifier + cell timestamp + cell type + cell value. This ensures that any difference in the
-   * data will result in different hashes.
-   */
-  private void updateDigestWithRow(byte[] rowKey, List<Cell> cells) {
-    digest.update(rowKey, 0, rowKey.length);
-    byte[] timestampBuffer = new byte[8];
-    for (Cell cell : cells) {
-      digest.update(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength());
-      digest.update(cell.getQualifierArray(), cell.getQualifierOffset(), cell.getQualifierLength());
-      long ts = cell.getTimestamp();
-      Bytes.putLong(timestampBuffer, 0, ts);
-      digest.update(timestampBuffer, 0, 8);
-      digest.update(cell.getType().getCode());
-      digest.update(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-    }
+    return new Chunk(null);
   }
 
   /**
@@ -284,22 +203,25 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
    * "row"[rowKey=chunkEndKey] with multiple cells containing chunk metadata[chunkStartKey,
    * hash/digest, rowCount, isPartialChunk]. For complete chunks: includes final SHA-256 hash (32
    * bytes) For partial chunks: includes serialized MessageDigest state for continuation
-   * @param results        Output list to populate with chunk metadata cells
-   * @param isPartialChunk true if this is a partial chunk (region boundary reached before
-   *                       completion)
+   * @param results             Output list to populate with chunk metadata cells
+   * @param chunk               The chunk to build metadata for
+   * @param isTargetClusterScan Whether this is a target cluster scan (partial chunk)
    */
-  private void buildChunkMetadataResult(List<Cell> results, boolean isPartialChunk)
-    throws IOException {
-    byte[] resultRowKey = this.chunkEndKey;
+  static void buildChunkMetadataResult(List<Cell> results, Chunk chunk,
+    boolean isTargetClusterScan) {
+    byte[] resultRowKey = chunk.getEndKey();
+    // If we are scanning target cluster, we always return partial chunk digest
+    // and compute final checksum in Mapper itself when scanner.next() returns null
+    boolean isPartialChunk = isTargetClusterScan;
     results.add(PhoenixKeyValueUtil.newKeyValue(resultRowKey, CHUNK_METADATA_FAMILY,
       BaseScannerRegionObserverConstants.SYNC_TABLE_START_KEY_QUALIFIER, AGG_TIMESTAMP,
-      chunkStartKey));
+      chunk.getStartKey()));
     results.add(PhoenixKeyValueUtil.newKeyValue(resultRowKey, CHUNK_METADATA_FAMILY,
       BaseScannerRegionObserverConstants.SYNC_TABLE_ROW_COUNT_QUALIFIER, AGG_TIMESTAMP,
-      Bytes.toBytes(currentChunkRowCount)));
+      Bytes.toBytes(chunk.getRowCount())));
     if (isPartialChunk) {
-      // Partial chunk digest
-      byte[] digestState = SHA256DigestUtil.encodeDigestState(digest);
+      // Partial chunk - return serialized digest state
+      byte[] digestState = chunk.getDigestState();
       results.add(PhoenixKeyValueUtil.newKeyValue(resultRowKey, CHUNK_METADATA_FAMILY,
         BaseScannerRegionObserverConstants.SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER, AGG_TIMESTAMP,
         TRUE_BYTES));
@@ -307,68 +229,12 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
         BaseScannerRegionObserverConstants.SYNC_TABLE_HASH_QUALIFIER, AGG_TIMESTAMP, digestState));
     } else {
       // Complete chunk - finalize and return hash
-      byte[] hash = SHA256DigestUtil.finalizeDigestToChecksum(digest);
+      byte[] hash = chunk.finalizeHash();
       results.add(PhoenixKeyValueUtil.newKeyValue(resultRowKey, CHUNK_METADATA_FAMILY,
         BaseScannerRegionObserverConstants.SYNC_TABLE_HASH_QUALIFIER, AGG_TIMESTAMP, hash));
       results.add(PhoenixKeyValueUtil.newKeyValue(resultRowKey, CHUNK_METADATA_FAMILY,
         BaseScannerRegionObserverConstants.SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER, AGG_TIMESTAMP,
         FALSE_BYTES));
-    }
-  }
-
-  /**
-   * Add dummy cell to the result list based on either the previous rowKey returned to the client or
-   * the start rowKey and start rowKey include params.
-   * @param result                 result to add the dummy cell to.
-   * @param initStartRowKey        scan start rowKey.
-   * @param includeInitStartRowKey scan start rowKey included.
-   * @param scan                   scan object.
-   */
-  private void updateDummyWithPrevRowKey(List<Cell> result, byte[] initStartRowKey,
-    boolean includeInitStartRowKey, Scan scan) {
-    result.clear();
-    if (previousResultRowKey != null) {
-      getDummyResult(previousResultRowKey, result);
-    } else {
-      if (includeInitStartRowKey && initStartRowKey.length > 0) {
-        byte[] prevKey;
-        // In order to generate largest possible rowkey that is less than
-        // initStartRowKey, we need to check size of the region name that can be
-        // used by hbase client for meta lookup, in case meta cache is expired at client.
-        // Once we know regionLookupInMetaLen, use it to generate largest possible
-        // rowkey that is lower than initStartRowKey by using
-        // ByteUtil#previousKeyWithLength function, which appends "\\xFF" bytes to
-        // prev rowKey up to the length provided. e.g. for the given key
-        // "\\x01\\xC1\\x06", the previous key with length 5 would be
-        // "\\x01\\xC1\\x05\\xFF\\xFF" by padding 2 bytes "\\xFF".
-        // The length of the largest scan start rowkey should not exceed
-        // HConstants#MAX_ROW_LENGTH.
-        int regionLookupInMetaLen =
-          RegionInfo.createRegionName(region.getTableDescriptor().getTableName(), new byte[1],
-            HConstants.NINES, false).length;
-        if (
-          Bytes.compareTo(initStartRowKey, initStartRowKey.length - 1, 1, ByteUtil.ZERO_BYTE, 0, 1)
-              == 0
-        ) {
-          // If initStartRowKey has last byte as "\\x00", we can discard the last
-          // byte and send the key as dummy rowKey.
-          prevKey = new byte[initStartRowKey.length - 1];
-          System.arraycopy(initStartRowKey, 0, prevKey, 0, prevKey.length);
-        } else
-          if (initStartRowKey.length < (HConstants.MAX_ROW_LENGTH - 1 - regionLookupInMetaLen)) {
-            prevKey =
-              ByteUtil.previousKeyWithLength(
-                ByteUtil.concat(initStartRowKey,
-                  new byte[HConstants.MAX_ROW_LENGTH - initStartRowKey.length - 1
-                    - regionLookupInMetaLen]),
-                HConstants.MAX_ROW_LENGTH - 1 - regionLookupInMetaLen);
-          } else {
-            prevKey = initStartRowKey;
-          }
-        getDummyResult(prevKey, result);
-      } else {
-        getDummyResult(initStartRowKey, result);
-      }
     }
   }
 
@@ -378,6 +244,108 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
       super.close();
     } catch (Exception e) {
       LOGGER.error("Error closing PhoenixSyncTableRegionScanner", e);
+    }
+  }
+
+  /**
+   * Encapsulates a chunk of rows being accumulated for sync verification. Manages chunk boundaries,
+   * size tracking, row counting, and SHA-256 digest computation.
+   */
+  static class Chunk {
+    private byte[] startKey;
+    private byte[] endKey;
+    private long size;
+    private long rowCount;
+    private final SHA256Digest digest;
+
+    /**
+     * Creates a new chunk with optional continued digest state.
+     * @param continuedDigest If not null, continues hashing from previous chunk's state (used for
+     *                        target scans spanning multiple regions)
+     */
+    Chunk(SHA256Digest continuedDigest) {
+      this.digest = continuedDigest != null ? continuedDigest : new SHA256Digest();
+      this.size = 0;
+      this.rowCount = 0;
+    }
+
+    /**
+     * Adds a row to this chunk, updating size, count, and digest.
+     */
+    void addRow(byte[] rowKey, List<Cell> cells) {
+      if (startKey == null) {
+        startKey = rowKey;
+      }
+      endKey = rowKey;
+      size += calculateRowSize(cells);
+      rowCount++;
+      updateDigest(rowKey, cells);
+    }
+
+    private long calculateRowSize(List<Cell> cells) {
+      long rowSize = 0;
+      for (Cell cell : cells) {
+        rowSize += PrivateCellUtil.estimatedSerializedSizeOf(cell);
+      }
+      return rowSize;
+    }
+
+    /**
+     * Updates the SHA-256 digest with data from a row. Hash includes: row key + cell family + cell
+     * qualifier + cell timestamp + cell type + cell value. This ensures that any difference in the
+     * data will result in different hashes.
+     */
+    private void updateDigest(byte[] rowKey, List<Cell> cells) {
+      digest.update(rowKey, 0, rowKey.length);
+      byte[] timestampBuffer = new byte[8];
+      for (Cell cell : cells) {
+        digest.update(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength());
+        digest.update(cell.getQualifierArray(), cell.getQualifierOffset(),
+          cell.getQualifierLength());
+        long ts = cell.getTimestamp();
+        Bytes.putLong(timestampBuffer, 0, ts);
+        digest.update(timestampBuffer, 0, 8);
+        digest.update(cell.getType().getCode());
+        digest.update(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
+      }
+    }
+
+    /**
+     * Finalizes the digest and returns the SHA-256 checksum. For complete chunks only.
+     */
+    byte[] finalizeHash() {
+      return SHA256DigestUtil.finalizeDigestToChecksum(digest);
+    }
+
+    /**
+     * Returns the serialized digest state for cross-region continuation. For partial chunks only
+     */
+    byte[] getDigestState() {
+      return SHA256DigestUtil.encodeDigestState(digest);
+    }
+
+    boolean isEmpty() {
+      return startKey == null;
+    }
+
+    boolean exceedsSize(long limit) {
+      return size > limit;
+    }
+
+    byte[] getStartKey() {
+      return startKey;
+    }
+
+    byte[] getEndKey() {
+      return endKey;
+    }
+
+    long getSize() {
+      return size;
+    }
+
+    long getRowCount() {
+      return rowCount;
     }
   }
 }

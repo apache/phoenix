@@ -22,11 +22,9 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
-import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
@@ -254,27 +252,6 @@ public final class PhoenixMapReduceUtil {
   }
 
   /**
-   * Validates that the end time doesn't exceed the max lookback age configured in Phoenix.
-   * @param configuration Hadoop configuration
-   * @param endTime       End timestamp in millis
-   * @param tableName     Table name for error messages
-   * @throws IllegalArgumentException if endTime is before min allowed timestamp
-   */
-  public static void validateMaxLookbackAge(Configuration configuration, Long endTime,
-    String tableName) {
-    long maxLookBackAge = BaseScannerRegionObserverConstants.getMaxLookbackInMillis(configuration);
-    if (maxLookBackAge > 0) {
-      long minTimestamp = EnvironmentEdgeManager.currentTimeMillis() - maxLookBackAge;
-      if (endTime < minTimestamp) {
-        throw new IllegalArgumentException(String.format(
-          "Table %s can't look back past the configured max lookback age: %d ms. "
-            + "End time: %d, Min allowed timestamp: %d",
-          tableName, maxLookBackAge, endTime, minTimestamp));
-      }
-    }
-  }
-
-  /**
    * Validates that a table is suitable for MR operations. Checks table existence, type, and state.
    * @param connection         Phoenix connection
    * @param qualifiedTableName Qualified table name
@@ -300,33 +277,5 @@ public final class PhoenixMapReduceUtil {
     }
 
     return pTable;
-  }
-
-  /**
-   * Configures a Configuration object with ZooKeeper settings from a ZK quorum string.
-   * @param baseConf Base configuration to create from (typically job configuration)
-   * @param zkQuorum ZooKeeper quorum string in format: "zk_quorum:port:znode" Example:
-   *                 "zk1,zk2,zk3:2181:/hbase"
-   * @return New Configuration with ZK settings applied
-   * @throws RuntimeException if zkQuorum format is invalid (must have exactly 3 parts)
-   */
-  public static Configuration createConfigurationForZkQuorum(Configuration baseConf,
-    String zkQuorum) {
-    Configuration conf = org.apache.hadoop.hbase.HBaseConfiguration.create(baseConf);
-    String[] parts = zkQuorum.split(":");
-
-    if (!(parts.length == 3 || parts.length == 4)) {
-      throw new RuntimeException(
-        "Invalid ZooKeeper quorum format. Expected: zk_quorum:port:znode OR "
-          + "zk_quorum:port:znode:krb_principal. Got: " + zkQuorum);
-    }
-
-    conf.set(HConstants.ZOOKEEPER_QUORUM, parts[0]);
-    conf.set(HConstants.ZOOKEEPER_CLIENT_PORT, parts[1]);
-    conf.set(HConstants.ZOOKEEPER_ZNODE_PARENT, parts[2]);
-    if (parts.length == 4) {
-      conf.set(HConstants.ZK_CLIENT_KERBEROS_PRINCIPAL, parts[3]);
-    }
-    return conf;
   }
 }

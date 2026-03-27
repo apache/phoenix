@@ -35,8 +35,6 @@ import org.apache.phoenix.query.KeyRange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-
 /**
  * InputFormat designed for PhoenixSyncTableTool that generates splits based on HBase region
  * boundaries. Filters out already-processed mapper regions using checkpoint data, enabling
@@ -75,10 +73,10 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
   @Override
   public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
     Configuration conf = context.getConfiguration();
-    String tableName = PhoenixConfigurationUtil.getPhoenixSyncTableName(conf);
-    String targetZkQuorum = PhoenixConfigurationUtil.getPhoenixSyncTableTargetZkQuorum(conf);
-    Long fromTime = PhoenixConfigurationUtil.getPhoenixSyncTableFromTime(conf);
-    Long toTime = PhoenixConfigurationUtil.getPhoenixSyncTableToTime(conf);
+    String tableName = PhoenixSyncTableTool.getPhoenixSyncTableName(conf);
+    String targetZkQuorum = PhoenixSyncTableTool.getPhoenixSyncTableTargetZkQuorum(conf);
+    Long fromTime = PhoenixSyncTableTool.getPhoenixSyncTableFromTime(conf);
+    Long toTime = PhoenixSyncTableTool.getPhoenixSyncTableToTime(conf);
     List<InputSplit> allSplits = super.getSplits(context);
     if (allSplits == null || allSplits.isEmpty()) {
       throw new IOException(String.format(
@@ -111,12 +109,13 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
    */
   private List<KeyRange> queryCompletedMapperRegions(Configuration conf, String tableName,
     String targetZkQuorum, Long fromTime, Long toTime) throws SQLException {
+    String tenantId = PhoenixConfigurationUtil.getTenantId(conf);
     List<KeyRange> completedRegions = new ArrayList<>();
     try (Connection conn = ConnectionUtil.getInputConnection(conf)) {
       PhoenixSyncTableOutputRepository repository = new PhoenixSyncTableOutputRepository(conn);
-      List<PhoenixSyncTableOutputRow> completedRows =
-        repository.getProcessedMapperRegions(tableName, targetZkQuorum, fromTime, toTime);
-      for (PhoenixSyncTableOutputRow row : completedRows) {
+      List<PhoenixSyncTableCheckpointOutputRow> completedRows =
+        repository.getProcessedMapperRegions(tableName, targetZkQuorum, fromTime, toTime, tenantId);
+      for (PhoenixSyncTableCheckpointOutputRow row : completedRows) {
         KeyRange keyRange = KeyRange.getKeyRange(row.getStartRowKey(), row.getEndRowKey());
         completedRegions.add(keyRange);
       }
@@ -130,7 +129,6 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
    * @param completedRegions Regions already verified (from checkpoint table)
    * @return Splits that need processing
    */
-  @VisibleForTesting
   List<InputSplit> filterCompletedSplits(List<InputSplit> allSplits,
     List<KeyRange> completedRegions) {
     allSplits.sort((s1, s2) -> {
@@ -147,6 +145,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
       PhoenixInputSplit split = (PhoenixInputSplit) allSplits.get(splitIdx);
       KeyRange splitRange = split.getKeyRange();
       KeyRange completedRange = completedRegions.get(completedIdx);
+      // Both splitRange and completedRange start key would be inclusive and end key exclusive
       byte[] splitStart = splitRange.getLowerRange();
       byte[] splitEnd = splitRange.getUpperRange();
       byte[] completedStart = completedRange.getLowerRange();

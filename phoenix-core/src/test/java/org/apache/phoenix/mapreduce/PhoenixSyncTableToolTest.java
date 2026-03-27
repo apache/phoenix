@@ -15,20 +15,15 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.mapreduce.bulkload;
+package org.apache.phoenix.mapreduce;
 
 import static org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil.INVALID_TIME_RANGE_EXCEPTION_MESSAGE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
 
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.phoenix.mapreduce.PhoenixSyncTableTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -387,13 +382,145 @@ public class PhoenixSyncTableToolTest extends BaseTest {
     tool.parseOptions(args);
   }
 
+  @Test
+  public void testParseOptionsEnableRawScanEnabled() throws Exception {
+    Long startTime = 1L;
+    Long endTime = 10L;
+    String[] args = getArgValues(schema, tableName, targetCluster, tenantId, startTime, endTime,
+      null, false, false, true, false);
+    CommandLine cmdLine = tool.parseOptions(args);
+    tool.populateSyncTableToolAttributes(cmdLine);
+    assertEquals(startTime, tool.getStartTime());
+    assertEquals(endTime, tool.getEndTime());
+    assertTrue("Raw scan should be enabled when flag is present", tool.isRawScan());
+  }
+
+  @Test
+  public void testParseOptionsEnableRawScanDisabled() throws Exception {
+    Long startTime = 1L;
+    Long endTime = 10L;
+    String[] args = getArgValues(schema, tableName, targetCluster, tenantId, startTime, endTime,
+      null, false, false, false, false);
+    CommandLine cmdLine = tool.parseOptions(args);
+    tool.populateSyncTableToolAttributes(cmdLine);
+    assertEquals(startTime, tool.getStartTime());
+    assertEquals(endTime, tool.getEndTime());
+    assertFalse("Raw scan should be disabled by default when flag is absent", tool.isRawScan());
+  }
+
+  @Test
+  public void testParseOptionsEnableReadAllVersionsEnabled() throws Exception {
+    Long startTime = 1L;
+    Long endTime = 10L;
+    String[] args = getArgValues(schema, tableName, targetCluster, tenantId, startTime, endTime,
+      null, false, false, false, true);
+    CommandLine cmdLine = tool.parseOptions(args);
+    tool.populateSyncTableToolAttributes(cmdLine);
+    assertEquals(startTime, tool.getStartTime());
+    assertEquals(endTime, tool.getEndTime());
+    assertTrue("Read all versions should be enabled when flag is present",
+      tool.isReadAllVersions());
+  }
+
+  @Test
+  public void testParseOptionsEnableReadAllVersionsDisabled() throws Exception {
+    Long startTime = 1L;
+    Long endTime = 10L;
+    String[] args = getArgValues(schema, tableName, targetCluster, tenantId, startTime, endTime,
+      null, false, false, false, false);
+    CommandLine cmdLine = tool.parseOptions(args);
+    tool.populateSyncTableToolAttributes(cmdLine);
+    assertEquals(startTime, tool.getStartTime());
+    assertEquals(endTime, tool.getEndTime());
+    assertFalse("Read all versions should be disabled by default when flag is absent",
+      tool.isReadAllVersions());
+  }
+
+  @Test
+  public void testSyncTableConfiguration() {
+    final Configuration conf = new Configuration();
+
+    // Test table name
+    String testTableName = "TEST_SYNC_TABLE";
+    PhoenixSyncTableTool.setPhoenixSyncTableName(conf, testTableName);
+    assertEquals("Should retrieve set table name", testTableName,
+      PhoenixSyncTableTool.getPhoenixSyncTableName(conf));
+
+    // Test target ZK quorum
+    String testZkQuorum = "testhost1:2181,testhost2:2181:/hbase";
+    PhoenixSyncTableTool.setPhoenixSyncTableTargetZkQuorum(conf, testZkQuorum);
+    assertEquals("Should retrieve set target ZK quorum", testZkQuorum,
+      PhoenixSyncTableTool.getPhoenixSyncTableTargetZkQuorum(conf));
+
+    // Test from time
+    Long testFromTime = 1000000L;
+    PhoenixSyncTableTool.setPhoenixSyncTableFromTime(conf, testFromTime);
+    assertEquals("Should retrieve set from time", testFromTime,
+      PhoenixSyncTableTool.getPhoenixSyncTableFromTime(conf));
+
+    // Test to time
+    long testToTime = 2000000L;
+    PhoenixSyncTableTool.setPhoenixSyncTableToTime(conf, testToTime);
+    assertEquals("Should retrieve set to time", testToTime,
+      PhoenixSyncTableTool.getPhoenixSyncTableToTime(conf));
+
+    // Test dry run flag
+    PhoenixSyncTableTool.setPhoenixSyncTableDryRun(conf, true);
+    assertTrue("Should retrieve dry run as true",
+      PhoenixSyncTableTool.getPhoenixSyncTableDryRun(conf));
+
+    PhoenixSyncTableTool.setPhoenixSyncTableDryRun(conf, false);
+    assertFalse("Should retrieve dry run as false",
+      PhoenixSyncTableTool.getPhoenixSyncTableDryRun(conf));
+
+    // Test chunk size bytes
+    Long testChunkSize = 5000000L; // 5MB
+    PhoenixSyncTableTool.setPhoenixSyncTableChunkSizeBytes(conf, testChunkSize);
+    assertEquals("Should retrieve set chunk size", testChunkSize.longValue(),
+      PhoenixSyncTableTool.getPhoenixSyncTableChunkSizeBytes(conf));
+
+    // Test default chunk size (1GB)
+    final Configuration freshConf = new Configuration();
+    long defaultChunkSize = 1024L * 1024L * 1024L; // 1GB
+    assertEquals("Should return default chunk size when not set", defaultChunkSize,
+      PhoenixSyncTableTool.getPhoenixSyncTableChunkSizeBytes(freshConf));
+
+    // Test raw scan flag
+    PhoenixSyncTableTool.setPhoenixSyncTableRawScan(conf, true);
+    assertTrue("Should retrieve raw scan as true",
+      PhoenixSyncTableTool.getPhoenixSyncTableRawScan(conf));
+
+    PhoenixSyncTableTool.setPhoenixSyncTableRawScan(conf, false);
+    assertFalse("Should retrieve raw scan as false",
+      PhoenixSyncTableTool.getPhoenixSyncTableRawScan(conf));
+
+    // Test default raw scan (should be false - disabled by default)
+    final Configuration rawScanConf = new Configuration();
+    assertFalse("Should return default raw scan as false when not set",
+      PhoenixSyncTableTool.getPhoenixSyncTableRawScan(rawScanConf));
+
+    // Test read all versions flag
+    PhoenixSyncTableTool.setPhoenixSyncTableReadAllVersions(conf, true);
+    assertTrue("Should retrieve read all versions as true",
+      PhoenixSyncTableTool.getPhoenixSyncTableReadAllVersions(conf));
+
+    PhoenixSyncTableTool.setPhoenixSyncTableReadAllVersions(conf, false);
+    assertFalse("Should retrieve read all versions as false",
+      PhoenixSyncTableTool.getPhoenixSyncTableReadAllVersions(conf));
+
+    // Test default read all versions (should be false - disabled by default)
+    final Configuration readAllVersionsConf = new Configuration();
+    assertFalse("Should return default read all versions as false when not set",
+      PhoenixSyncTableTool.getPhoenixSyncTableReadAllVersions(readAllVersionsConf));
+  }
+
   /**
    * Creates argument array for PhoenixSyncTableTool
    */
   private static String[] getArgValues(String schema, String tableName, String targetCluster,
     String tenantId, Long startTime, Long endTime) {
     return getArgValues(schema, tableName, targetCluster, tenantId, startTime, endTime, null, false,
-      false);
+      false, false, false);
   }
 
   /**
@@ -402,6 +529,16 @@ public class PhoenixSyncTableToolTest extends BaseTest {
   private static String[] getArgValues(String schema, String tableName, String targetCluster,
     String tenantId, Long startTime, Long endTime, Long chunkSize, boolean dryRun,
     boolean runForeground) {
+    return getArgValues(schema, tableName, targetCluster, tenantId, startTime, endTime, chunkSize,
+      dryRun, runForeground, false, false);
+  }
+
+  /**
+   * Creates argument array with all optional parameters including raw scan and read all versions
+   */
+  private static String[] getArgValues(String schema, String tableName, String targetCluster,
+    String tenantId, Long startTime, Long endTime, Long chunkSize, boolean dryRun,
+    boolean runForeground, boolean enableRawScan, boolean enableReadAllVersions) {
     List<String> args = new ArrayList<>();
 
     if (schema != null) {
@@ -441,6 +578,14 @@ public class PhoenixSyncTableToolTest extends BaseTest {
 
     if (runForeground) {
       args.add("--run-foreground");
+    }
+
+    if (enableRawScan) {
+      args.add("--raw-scan");
+    }
+
+    if (enableReadAllVersions) {
+      args.add("--read-all-versions");
     }
 
     return args.toArray(new String[0]);
