@@ -19,7 +19,6 @@ package org.apache.phoenix.replication;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.doThrow;
@@ -42,6 +41,8 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTracker;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTrackerReplayImpl;
 import org.apache.phoenix.replication.reader.ReplicationLogReplay;
+import org.apache.phoenix.util.EnvironmentEdge;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -632,66 +633,80 @@ public class ReplicationLogTrackerTest {
     // Initialize tracker
     tracker.init();
 
-    // Create a file in a shard directory (without UUID)
-    ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
-    List<Path> allShardPaths = shardManager.getAllShardPaths();
-    Path shardPath = allShardPaths.get(0);
-    localFs.mkdirs(shardPath);
+    // Inject a fixed time so we can verify the exact rename timestamp
+    long fixedTime = 1704153700000L;
+    EnvironmentEdgeManager.injectEdge(new EnvironmentEdge() {
+      @Override
+      public long currentTime() {
+        return fixedTime;
+      }
+    });
 
-    // Create original file without UUID
-    Path originalFile = new Path(shardPath, "1704153600000_rs1.plog");
-    localFs.create(originalFile, true).close();
+    try {
+      // Create a file in a shard directory (without UUID)
+      ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
+      List<Path> allShardPaths = shardManager.getAllShardPaths();
+      Path shardPath = allShardPaths.get(0);
+      localFs.mkdirs(shardPath);
 
-    // Verify original file exists
-    assertTrue("Original file should exist", localFs.exists(originalFile));
+      // Create original file without UUID
+      Path originalFile = new Path(shardPath, "1704153600000_rs1.plog");
+      localFs.create(originalFile, true).close();
 
-    // Call markInProgress
-    Optional<Path> result = tracker.markInProgress(originalFile);
+      // Verify original file exists
+      assertTrue("Original file should exist", localFs.exists(originalFile));
 
-    // Verify file system operation counts
-    // markInProgress involves moving file from shard directory to in-progress directory
-    // It should call exists() for only in progress directory (during init), rename() to move file
-    Mockito.verify(mockFs, times(1)).exists(Mockito.any(Path.class));
-    Mockito.verify(mockFs, times(1)).exists(Mockito.eq(tracker.getInProgressDirPath()));
-    Mockito.verify(mockFs, times(1)).rename(Mockito.any(Path.class), Mockito.any(Path.class));
-    Mockito.verify(mockFs, times(1)).rename(Mockito.eq(originalFile), Mockito.any(Path.class));
-    // Ensure no listStatus() is called
-    Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
+      // Call markInProgress
+      Optional<Path> result = tracker.markInProgress(originalFile);
 
-    // Verify operation was successful
-    assertTrue("markInProgress should be successful", result.isPresent());
+      // Verify file system operation counts
+      // markInProgress involves moving file from shard directory to in-progress directory
+      // It should call exists() for only in progress directory (during init), rename() to move file
+      Mockito.verify(mockFs, times(1)).exists(Mockito.any(Path.class));
+      Mockito.verify(mockFs, times(1)).exists(Mockito.eq(tracker.getInProgressDirPath()));
+      Mockito.verify(mockFs, times(1)).rename(Mockito.any(Path.class), Mockito.any(Path.class));
+      Mockito.verify(mockFs, times(1)).rename(Mockito.eq(originalFile), Mockito.any(Path.class));
+      // Ensure no listStatus() is called
+      Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
 
-    // Verify original file no longer exists
-    assertFalse("Original file should no longer exist", localFs.exists(originalFile));
+      // Verify operation was successful
+      assertTrue("markInProgress should be successful", result.isPresent());
 
-    // Verify file was moved to in-progress directory with UUID
-    Path inProgressDir = tracker.getInProgressDirPath();
-    FileStatus[] files = localFs.listStatus(inProgressDir);
-    assertEquals("Should have exactly one file in in-progress directory", 1, files.length);
+      // Verify original file no longer exists
+      assertFalse("Original file should no longer exist", localFs.exists(originalFile));
 
-    // Verify the new file has UUID and rename timestamp format:
-    // <ts>_<server>_<UUID>_<renameTs>.plog
-    String newFileName = files[0].getPath().getName();
-    assertTrue("New file should have UUID and rename timestamp",
-      newFileName
-        .matches("1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
-          + "_[0-9]+\\.plog"));
+      // Verify file was moved to in-progress directory with UUID
+      Path inProgressDir = tracker.getInProgressDirPath();
+      FileStatus[] files = localFs.listStatus(inProgressDir);
+      assertEquals("Should have exactly one file in in-progress directory", 1, files.length);
 
-    // Assert that renamed file is in in-progress directory
-    Path renamedFile = files[0].getPath();
-    assertTrue("Renamed file should be in in-progress directory",
-      renamedFile.getParent().toUri().getPath().equals(tracker.getInProgressDirPath().toString()));
+      // Verify the new file has UUID and rename timestamp format:
+      // <ts>_<server>_<UUID>_<renameTs>.plog
+      String newFileName = files[0].getPath().getName();
+      assertTrue("New file should have UUID and rename timestamp",
+        newFileName
+          .matches("1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
+            + "_[0-9]+\\.plog"));
 
-    // Assert that renamed file has same prefix as original file
-    String originalFileName = originalFile.getName();
-    String originalPrefix = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
-    assertTrue("Renamed file should have same prefix as original file",
-      newFileName.startsWith(originalPrefix + "_"));
+      // Assert that renamed file is in in-progress directory
+      Path renamedFile = files[0].getPath();
+      assertTrue("Renamed file should be in in-progress directory", renamedFile.getParent().toUri()
+        .getPath().equals(tracker.getInProgressDirPath().toString()));
 
-    // Verify rename timestamp is present and valid
-    Optional<Long> renameTimestamp = tracker.getRenameTimestamp(renamedFile);
-    assertTrue("Rename timestamp should be present", renameTimestamp.isPresent());
-    assertTrue("Rename timestamp should be a valid recent timestamp", renameTimestamp.get() > 0);
+      // Assert that renamed file has same prefix as original file
+      String originalFileName = originalFile.getName();
+      String originalPrefix = originalFileName.substring(0, originalFileName.lastIndexOf('.'));
+      assertTrue("Renamed file should have same prefix as original file",
+        newFileName.startsWith(originalPrefix + "_"));
+
+      // Verify rename timestamp matches the injected current time exactly
+      Optional<Long> renameTimestamp = tracker.getRenameTimestamp(renamedFile);
+      assertTrue("Rename timestamp should be present", renameTimestamp.isPresent());
+      assertEquals("Rename timestamp should match the current time", fixedTime,
+        renameTimestamp.get().longValue());
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
   }
 
   @Test
@@ -699,59 +714,74 @@ public class ReplicationLogTrackerTest {
     // Initialize tracker
     tracker.init();
 
-    // Create a file in in-progress directory with existing UUID and rename timestamp
-    Path inProgressDir = tracker.getInProgressDirPath();
-    String existingUUID = "12345678-1234-1234-1234-123456789abc";
+    // Inject a fixed time that is newer than the existing rename timestamp
     long existingRenameTimestamp = 1704153660000L;
-    Path originalFile = new Path(inProgressDir,
-      "1704153600000_rs1_" + existingUUID + "_" + existingRenameTimestamp + ".plog");
-    localFs.create(originalFile, true).close();
+    long fixedTime = 1704153800000L;
+    EnvironmentEdgeManager.injectEdge(new EnvironmentEdge() {
+      @Override
+      public long currentTime() {
+        return fixedTime;
+      }
+    });
 
-    // Verify original file exists
-    assertTrue("Original file should exist", localFs.exists(originalFile));
+    try {
+      // Create a file in in-progress directory with existing UUID and rename timestamp
+      Path inProgressDir = tracker.getInProgressDirPath();
+      String existingUUID = "12345678-1234-1234-1234-123456789abc";
+      Path originalFile = new Path(inProgressDir,
+        "1704153600000_rs1_" + existingUUID + "_" + existingRenameTimestamp + ".plog");
+      localFs.create(originalFile, true).close();
 
-    // Call markInProgress
-    Optional<Path> result = tracker.markInProgress(originalFile);
+      // Verify original file exists
+      assertTrue("Original file should exist", localFs.exists(originalFile));
 
-    // Verify file system operation counts
-    // markInProgress involves re-naming file int the in-progress directory
-    // It should call exists() for only in progress directory (during init), rename() to move file
-    Mockito.verify(mockFs, times(1)).exists(Mockito.any(Path.class));
-    Mockito.verify(mockFs, times(1)).exists(Mockito.eq(tracker.getInProgressDirPath()));
-    Mockito.verify(mockFs, times(1)).rename(Mockito.any(Path.class), Mockito.any(Path.class));
-    Mockito.verify(mockFs, times(1)).rename(Mockito.eq(originalFile), Mockito.any(Path.class));
-    // Ensure no listStatus() is called
-    Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
+      // Call markInProgress
+      Optional<Path> result = tracker.markInProgress(originalFile);
 
-    // Verify operation was successful
-    assertTrue("markInProgress should be successful", result.isPresent());
+      // Verify file system operation counts
+      // markInProgress involves re-naming file in the in-progress directory
+      // It should call exists() for only in progress directory (during init), rename() to move file
+      Mockito.verify(mockFs, times(1)).exists(Mockito.any(Path.class));
+      Mockito.verify(mockFs, times(1)).exists(Mockito.eq(tracker.getInProgressDirPath()));
+      Mockito.verify(mockFs, times(1)).rename(Mockito.any(Path.class), Mockito.any(Path.class));
+      Mockito.verify(mockFs, times(1)).rename(Mockito.eq(originalFile), Mockito.any(Path.class));
+      // Ensure no listStatus() is called
+      Mockito.verify(mockFs, times(0)).listStatus(Mockito.any(Path.class));
 
-    // Verify original file no longer exists
-    assertFalse("Original file should no longer exist", localFs.exists(originalFile));
+      // Verify operation was successful
+      assertTrue("markInProgress should be successful", result.isPresent());
 
-    // Verify new file exists in same directory with new UUID and new rename timestamp
-    FileStatus[] files = localFs.listStatus(inProgressDir);
-    assertEquals("Should have exactly one file in in-progress directory", 1, files.length);
+      // Verify original file no longer exists
+      assertFalse("Original file should no longer exist", localFs.exists(originalFile));
 
-    // Verify the new file has different UUID and a rename timestamp:
-    // <ts>_<server>_<UUID>_<renameTs>.plog
-    String newFileName = files[0].getPath().getName();
-    assertTrue("New file should have UUID and rename timestamp",
-      newFileName
-        .matches("1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
-          + "_[0-9]+\\.plog"));
-    assertFalse("New file should have different UUID", newFileName.contains(existingUUID));
+      // Verify new file exists in same directory with new UUID and new rename timestamp
+      FileStatus[] files = localFs.listStatus(inProgressDir);
+      assertEquals("Should have exactly one file in in-progress directory", 1, files.length);
 
-    // Assert that renamed file has same prefix (ts_server) as original file
-    String expectedPrefix = "1704153600000_rs1";
-    assertTrue("Renamed file should have same prefix as original file",
-      newFileName.startsWith(expectedPrefix + "_"));
+      // Verify the new file has different UUID and a rename timestamp:
+      // <ts>_<server>_<UUID>_<renameTs>.plog
+      String newFileName = files[0].getPath().getName();
+      assertTrue("New file should have UUID and rename timestamp",
+        newFileName
+          .matches("1704153600000_rs1_[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}"
+            + "_[0-9]+\\.plog"));
+      assertFalse("New file should have different UUID", newFileName.contains(existingUUID));
 
-    // Verify rename timestamp is present and different from the original
-    Optional<Long> renameTimestamp = tracker.getRenameTimestamp(files[0].getPath());
-    assertTrue("Rename timestamp should be present", renameTimestamp.isPresent());
-    assertNotEquals("Rename timestamp should be different from original", existingRenameTimestamp,
-      renameTimestamp.get().longValue());
+      // Assert that renamed file has same prefix (ts_server) as original file
+      String expectedPrefix = "1704153600000_rs1";
+      assertTrue("Renamed file should have same prefix as original file",
+        newFileName.startsWith(expectedPrefix + "_"));
+
+      // Verify rename timestamp is updated to the current (injected) time, not the old one
+      Optional<Long> renameTimestamp = tracker.getRenameTimestamp(files[0].getPath());
+      assertTrue("Rename timestamp should be present", renameTimestamp.isPresent());
+      assertEquals("Rename timestamp should match the current time (not the old value)", fixedTime,
+        renameTimestamp.get().longValue());
+      assertTrue("Rename timestamp should be newer than the original",
+        renameTimestamp.get() > existingRenameTimestamp);
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
   }
 
   @Test

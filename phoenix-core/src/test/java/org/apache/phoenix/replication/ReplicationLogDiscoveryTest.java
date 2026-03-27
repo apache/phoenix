@@ -36,7 +36,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
@@ -771,107 +773,135 @@ public class ReplicationLogDiscoveryTest {
    */
   @Test
   public void testProcessInProgressDirectory() throws IOException {
-    // 1. Create in-progress files for different timestamps
-    long timestamp0004 = 1704153600000L + (4 * 1000L); // 00:00:04
-    List<Path> inProgressFiles0004 = createInProgressFiles(timestamp0004, 3);
+    // Inject an advancing clock so we can verify rename timestamps are recent
+    long initialTime = 1704153800000L;
+    long originalRenameTimestamp = 1704153604000L;
+    AtomicLong clock = new AtomicLong(initialTime);
+    EnvironmentEdge edge = clock::getAndIncrement;
+    EnvironmentEdgeManager.injectEdge(edge);
 
-    long timestamp0102 = 1704153660000L + (2 * 1000L); // 00:01:02
-    List<Path> inProgressFiles0102 = createInProgressFiles(timestamp0102, 2);
+    try {
+      // 1. Create in-progress files for different timestamps with old rename timestamps
+      long timestamp0004 = 1704153600000L + (4 * 1000L); // 00:00:04
+      List<Path> inProgressFiles0004 =
+        createInProgressFiles(timestamp0004, 3, originalRenameTimestamp);
 
-    long timestamp0206 = 1704153720000L + (6 * 1000L); // 00:02:06
-    List<Path> inProgressFiles0206 = createInProgressFiles(timestamp0206, 2);
+      long timestamp0102 = 1704153660000L + (2 * 1000L); // 00:01:02
+      List<Path> inProgressFiles0102 =
+        createInProgressFiles(timestamp0102, 2, originalRenameTimestamp);
 
-    // 2. Create some new files to ensure they are NOT processed
-    ReplicationRound replicationRound = new ReplicationRound(1704153600000L, 1704153660000L); // 00:00:00
-                                                                                              // -
-                                                                                              // 00:01:00
-    List<Path> newFilesForRound = createNewFilesForRound(replicationRound, 3);
+      long timestamp0206 = 1704153720000L + (6 * 1000L); // 00:02:06
+      List<Path> inProgressFiles0206 =
+        createInProgressFiles(timestamp0206, 2, originalRenameTimestamp);
 
-    // Process in-progress directory
-    discovery.processInProgressDirectory();
+      // 2. Create some new files to ensure they are NOT processed
+      ReplicationRound replicationRound = new ReplicationRound(1704153600000L, 1704153660000L); // 00:00:00
+                                                                                                // -
+                                                                                                // 00:01:00
+      List<Path> newFilesForRound = createNewFilesForRound(replicationRound, 3);
 
-    // 3. Ensure all in-progress files (7 total) are processed
-    List<Path> processedFiles = discovery.getProcessedFiles();
-    assertEquals("Invalid number of files processed", 7, processedFiles.size());
+      // Process in-progress directory
+      discovery.processInProgressDirectory();
 
-    // Create set of expected files that should be processed (by prefix, since UUIDs are updated
-    // during markInProgress)
-    Set<String> expectedProcessedFilePrefixes = new HashSet<>();
-    for (Path file : inProgressFiles0004) {
-      String fileName = file.getName();
-      String prefix = extractPrefix(fileName);
-      expectedProcessedFilePrefixes.add(prefix);
-    }
-    for (Path file : inProgressFiles0102) {
-      String fileName = file.getName();
-      String prefix = extractPrefix(fileName);
-      expectedProcessedFilePrefixes.add(prefix);
-    }
-    for (Path file : inProgressFiles0206) {
-      String fileName = file.getName();
-      String prefix = extractPrefix(fileName);
-      expectedProcessedFilePrefixes.add(prefix);
-    }
+      // 3. Ensure all in-progress files (7 total) are processed
+      List<Path> processedFiles = discovery.getProcessedFiles();
+      assertEquals("Invalid number of files processed", 7, processedFiles.size());
 
-    // Create set of actually processed file paths (extract prefixes)
-    Set<String> actualProcessedFilePrefixes = new HashSet<>();
-    for (Path file : processedFiles) {
-      String fileName = file.getName();
-      String prefix = extractPrefix(fileName);
-      actualProcessedFilePrefixes.add(prefix);
-    }
+      // Create set of expected files that should be processed (by prefix, since UUIDs are updated
+      // during markInProgress)
+      Set<String> expectedProcessedFilePrefixes = new HashSet<>();
+      for (Path file : inProgressFiles0004) {
+        String fileName = file.getName();
+        String prefix = extractPrefix(fileName);
+        expectedProcessedFilePrefixes.add(prefix);
+      }
+      for (Path file : inProgressFiles0102) {
+        String fileName = file.getName();
+        String prefix = extractPrefix(fileName);
+        expectedProcessedFilePrefixes.add(prefix);
+      }
+      for (Path file : inProgressFiles0206) {
+        String fileName = file.getName();
+        String prefix = extractPrefix(fileName);
+        expectedProcessedFilePrefixes.add(prefix);
+      }
 
-    // Validate that sets are equal
-    assertEquals("Expected and actual processed files should match", expectedProcessedFilePrefixes,
-      actualProcessedFilePrefixes);
+      // Create set of actually processed file paths (extract prefixes)
+      Set<String> actualProcessedFilePrefixes = new HashSet<>();
+      for (Path file : processedFiles) {
+        String fileName = file.getName();
+        String prefix = extractPrefix(fileName);
+        actualProcessedFilePrefixes.add(prefix);
+      }
 
-    // Verify that markInProgress was called 7 times
-    Mockito.verify(fileTracker, Mockito.times(7)).markInProgress(Mockito.any(Path.class));
+      // Validate that sets are equal
+      assertEquals("Expected and actual processed files should match",
+        expectedProcessedFilePrefixes, actualProcessedFilePrefixes);
 
-    // Verify that markInProgress was called for each expected file
-    for (Path expectedFile : inProgressFiles0004) {
-      String expectedPrefix = extractPrefix(expectedFile.getName());
-      Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
-        Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
-    }
-    for (Path expectedFile : inProgressFiles0102) {
-      String expectedPrefix = extractPrefix(expectedFile.getName());
-      Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
-        Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
-    }
-    for (Path expectedFile : inProgressFiles0206) {
-      String expectedPrefix = extractPrefix(expectedFile.getName());
-      Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
-        Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
-    }
+      // Verify that markInProgress was called 7 times
+      Mockito.verify(fileTracker, Mockito.times(7)).markInProgress(Mockito.any(Path.class));
 
-    // Verify that markCompleted was called for each processed file
-    Mockito.verify(fileTracker, Mockito.times(7)).markCompleted(Mockito.any(Path.class));
+      // Verify that markInProgress was called for each expected file
+      for (Path expectedFile : inProgressFiles0004) {
+        String expectedPrefix = extractPrefix(expectedFile.getName());
+        Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+          Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+      }
+      for (Path expectedFile : inProgressFiles0102) {
+        String expectedPrefix = extractPrefix(expectedFile.getName());
+        Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+          Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+      }
+      for (Path expectedFile : inProgressFiles0206) {
+        String expectedPrefix = extractPrefix(expectedFile.getName());
+        Mockito.verify(fileTracker, Mockito.times(1)).markInProgress(
+          Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+      }
 
-    // Verify that markCompleted was called for each processed file with correct paths
-    for (Path expectedFile : inProgressFiles0004) {
-      String expectedPrefix = extractPrefix(expectedFile.getName());
-      Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-        Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
-    }
-    for (Path expectedFile : inProgressFiles0102) {
-      String expectedPrefix = extractPrefix(expectedFile.getName());
-      Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-        Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
-    }
-    for (Path expectedFile : inProgressFiles0206) {
-      String expectedPrefix = extractPrefix(expectedFile.getName());
-      Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-        Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
-    }
+      // Verify that markCompleted was called for each processed file
+      Mockito.verify(fileTracker, Mockito.times(7)).markCompleted(Mockito.any(Path.class));
 
-    // Validate that new files were NOT processed (processInProgressDirectory only processes
-    // in-progress files)
-    for (Path unexpectedFile : newFilesForRound) {
-      String unexpectedPrefix =
-        unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("."));
-      assertFalse("Should NOT have processed new file: " + unexpectedFile.getName(),
-        actualProcessedFilePrefixes.contains(unexpectedPrefix));
+      // Verify that markCompleted was called for each processed file with correct paths
+      for (Path expectedFile : inProgressFiles0004) {
+        String expectedPrefix = extractPrefix(expectedFile.getName());
+        Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
+          Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+      }
+      for (Path expectedFile : inProgressFiles0102) {
+        String expectedPrefix = extractPrefix(expectedFile.getName());
+        Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
+          Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+      }
+      for (Path expectedFile : inProgressFiles0206) {
+        String expectedPrefix = extractPrefix(expectedFile.getName());
+        Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
+          Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+      }
+
+      // Validate that new files were NOT processed (processInProgressDirectory only processes
+      // in-progress files)
+      for (Path unexpectedFile : newFilesForRound) {
+        String unexpectedPrefix =
+          unexpectedFile.getName().substring(0, unexpectedFile.getName().lastIndexOf("."));
+        assertFalse("Should NOT have processed new file: " + unexpectedFile.getName(),
+          actualProcessedFilePrefixes.contains(unexpectedPrefix));
+      }
+
+      // Verify that all processed files had rename timestamps updated to recent values
+      // (not the original old rename timestamp)
+      for (Path processedFile : processedFiles) {
+        Optional<Long> renameTs = fileTracker.getRenameTimestamp(processedFile);
+        assertTrue("Processed file should have a rename timestamp: " + processedFile.getName(),
+          renameTs.isPresent());
+        assertTrue("Processed file's rename timestamp should be recent (>= initialTime), but was "
+          + renameTs.get() + " for " + processedFile.getName(), renameTs.get() >= initialTime);
+        assertTrue(
+          "Processed file's rename timestamp should be newer than the original ("
+            + originalRenameTimestamp + "), but was " + renameTs.get(),
+          renameTs.get() > originalRenameTimestamp);
+      }
+    } finally {
+      EnvironmentEdgeManager.reset();
     }
   }
 
@@ -1070,76 +1100,122 @@ public class ReplicationLogDiscoveryTest {
   @Test
   public void testProcessInProgressDirectoryFailedFilesSucceedOnNextRound() throws IOException {
     // Use default maxRetries=1
-    // Create in-progress files
-    long timestamp0004 = 1704153600000L + (4 * 1000L); // 00:00:04
-    List<Path> inProgressFiles = createInProgressFiles(timestamp0004, 3);
+    // Inject an advancing clock so we can verify rename timestamps
+    long initialTime = 1704153800000L;
+    long originalRenameTimestamp = 1704153604000L;
+    AtomicLong clock = new AtomicLong(initialTime);
+    EnvironmentEdge edge = clock::getAndIncrement;
+    EnvironmentEdgeManager.injectEdge(edge);
 
-    // Extract prefixes for verification
-    String file0Prefix = extractPrefix(inProgressFiles.get(0).getName());
-    String file1Prefix = extractPrefix(inProgressFiles.get(1).getName());
-    String file2Prefix = extractPrefix(inProgressFiles.get(2).getName());
+    try {
+      // Create in-progress files with old rename timestamps
+      long timestamp0004 = 1704153600000L + (4 * 1000L); // 00:00:04
+      List<Path> inProgressFiles = createInProgressFiles(timestamp0004, 3, originalRenameTimestamp);
 
-    // Mock processFile to fail for file 1 only on the first call, succeed on subsequent calls
-    Mockito.doThrow(new IOException("Transient failure for file 1")).doCallRealMethod()
-      .when(discovery)
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+      // Extract prefixes for verification
+      String file0Prefix = extractPrefix(inProgressFiles.get(0).getName());
+      String file1Prefix = extractPrefix(inProgressFiles.get(1).getName());
+      String file2Prefix = extractPrefix(inProgressFiles.get(2).getName());
 
-    // --- First invocation: file 1 fails, files 0 and 2 succeed ---
-    discovery.processInProgressDirectory();
+      // Verify original rename timestamp
+      for (Path file : inProgressFiles) {
+        Optional<Long> ts = fileTracker.getRenameTimestamp(file);
+        assertTrue("Original file should have rename timestamp", ts.isPresent());
+        assertEquals("Original rename timestamp should match creation value",
+          originalRenameTimestamp, ts.get().longValue());
+      }
 
-    // Verify markInProgress called once per file (3 total, no retries)
-    Mockito.verify(fileTracker, Mockito.times(1))
-      .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
-    Mockito.verify(fileTracker, Mockito.times(1))
-      .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
-    Mockito.verify(fileTracker, Mockito.times(1))
-      .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
+      // Mock processFile to fail for file 1 only on the first call, succeed on subsequent calls
+      Mockito.doThrow(new IOException("Transient failure for file 1")).doCallRealMethod()
+        .when(discovery)
+        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
 
-    // Verify processFile called once per file
-    Mockito.verify(discovery, Mockito.times(1))
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
-    Mockito.verify(discovery, Mockito.times(1))
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
-    Mockito.verify(discovery, Mockito.times(1))
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
+      // --- First invocation: file 1 fails, files 0 and 2 succeed ---
+      discovery.processInProgressDirectory();
 
-    // Verify markCompleted called for files 0 and 2 (successful)
-    Mockito.verify(fileTracker, Mockito.times(1))
-      .markCompleted(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
-    Mockito.verify(fileTracker, Mockito.times(1))
-      .markCompleted(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
+      // Verify markInProgress called once per file (3 total, no retries)
+      Mockito.verify(fileTracker, Mockito.times(1))
+        .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
+      Mockito.verify(fileTracker, Mockito.times(1))
+        .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+      Mockito.verify(fileTracker, Mockito.times(1))
+        .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
 
-    // Verify markFailed called only for file 1
-    Mockito.verify(fileTracker, Mockito.times(1))
-      .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
-    Mockito.verify(fileTracker, Mockito.never())
-      .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
-    Mockito.verify(fileTracker, Mockito.never())
-      .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
+      // Verify processFile called once per file
+      Mockito.verify(discovery, Mockito.times(1))
+        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
+      Mockito.verify(discovery, Mockito.times(1))
+        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+      Mockito.verify(discovery, Mockito.times(1))
+        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
 
-    // --- Second invocation: file 1 should be retried and succeed ---
-    Mockito.clearInvocations(fileTracker, discovery);
+      // Verify markCompleted called for files 0 and 2 (successful)
+      Mockito.verify(fileTracker, Mockito.times(1))
+        .markCompleted(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
+      Mockito.verify(fileTracker, Mockito.times(1))
+        .markCompleted(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
 
-    discovery.processInProgressDirectory();
+      // Verify markFailed called only for file 1
+      Mockito.verify(fileTracker, Mockito.times(1))
+        .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+      Mockito.verify(fileTracker, Mockito.never())
+        .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
+      Mockito.verify(fileTracker, Mockito.never())
+        .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
 
-    // Verify only file 1 was picked up (files 0 and 2 already completed)
-    Mockito.verify(fileTracker, Mockito.times(1))
-      .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
-    Mockito.verify(fileTracker, Mockito.never())
-      .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
-    Mockito.verify(fileTracker, Mockito.never())
-      .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
+      // After first round: file 1 should still be in in-progress with an UPDATED rename timestamp
+      // (not the original old one)
+      Path inProgressDir = fileTracker.getInProgressDirPath();
+      FileStatus[] remainingFiles = localFs.listStatus(inProgressDir);
+      assertEquals("Only file 1 should remain in in-progress after first round", 1,
+        remainingFiles.length);
+      Path failedFilePath = remainingFiles[0].getPath();
+      assertEquals("Remaining file should have file 1's prefix", file1Prefix,
+        extractPrefix(failedFilePath.getName()));
+      Optional<Long> updatedRenameTs = fileTracker.getRenameTimestamp(failedFilePath);
+      assertTrue("Failed file should have a rename timestamp", updatedRenameTs.isPresent());
+      assertTrue("Failed file's rename timestamp should be newer than the original",
+        updatedRenameTs.get() > originalRenameTimestamp);
+      assertTrue("Failed file's rename timestamp should be recent (>= initialTime)",
+        updatedRenameTs.get() >= initialTime);
+      long firstRoundRenameTs = updatedRenameTs.get();
 
-    // Verify processFile called only for file 1 and it succeeded
-    Mockito.verify(discovery, Mockito.times(1))
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+      // --- Second invocation: file 1 should be retried and succeed ---
+      Mockito.clearInvocations(fileTracker, discovery);
 
-    // Verify markCompleted called for file 1
-    Mockito.verify(fileTracker, Mockito.times(1))
-      .markCompleted(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+      discovery.processInProgressDirectory();
 
-    // Verify markFailed was not called in the second round
-    Mockito.verify(fileTracker, Mockito.never()).markFailed(Mockito.any(Path.class));
+      // Verify only file 1 was picked up (files 0 and 2 already completed)
+      Mockito.verify(fileTracker, Mockito.times(1))
+        .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+      Mockito.verify(fileTracker, Mockito.never())
+        .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
+      Mockito.verify(fileTracker, Mockito.never())
+        .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
+
+      // Verify processFile called only for file 1 and it succeeded
+      Mockito.verify(discovery, Mockito.times(1)).processFile(Mockito.argThat(path -> {
+        if (!extractPrefix(path.getName()).equals(file1Prefix)) {
+          return false;
+        }
+        // Verify the path passed to processFile has a rename timestamp newer than
+        // the first round's rename timestamp
+        Optional<Long> ts = fileTracker.getRenameTimestamp(path);
+        assertTrue("processFile path should have rename timestamp", ts.isPresent());
+        assertTrue("Second round rename timestamp should be newer than first round's",
+          ts.get() > firstRoundRenameTs);
+        return true;
+      }));
+
+      // Verify markCompleted called for file 1
+      Mockito.verify(fileTracker, Mockito.times(1))
+        .markCompleted(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+
+      // Verify markFailed was not called in the second round
+      Mockito.verify(fileTracker, Mockito.never()).markFailed(Mockito.any(Path.class));
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
   }
 
   /**

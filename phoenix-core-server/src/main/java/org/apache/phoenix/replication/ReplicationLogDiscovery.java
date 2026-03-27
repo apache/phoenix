@@ -367,8 +367,6 @@ public abstract class ReplicationLogDiscovery {
       LOG.error("Failed to process the file {}", file, exception);
       optionalInProgressFilePath.ifPresent(replicationLogTracker::markFailed);
       // Not throwing this exception because next time another random file will be retried.
-      // If it's persistent failure for in_progress directory,
-      // cluster state should to be DEGRADED_STANDBY_FOR_READER.
       return Optional.of(file);
     }
     return Optional.empty();
