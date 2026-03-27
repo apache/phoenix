@@ -245,15 +245,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       this.rowKey = rowKey;
     }
 
-    public boolean add(BatchMutateContext context) {
+    public BatchMutateContext addAndGetPrevCtx(BatchMutateContext context) {
       synchronized (this) {
         if (usable) {
+          BatchMutateContext previousContext = lastContext;
           count++;
           lastContext = context;
-          return true;
+          return previousContext;
         }
       }
-      return false;
+      return null;
     }
 
     public void remove() {
@@ -270,9 +271,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return count;
     }
 
-    public BatchMutateContext getLastContext() {
-      return lastContext;
-    }
   }
 
   private static boolean ignoreIndexRebuildForTesting = false;
@@ -1175,8 +1173,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         keys.add(PVarbinary.INSTANCE.getKeyRange(rowKeyPtr.get(), SortOrder.ASC));
       } else {
         // There is a pending row for this row key. We need to retrieve the row from memory
-        BatchMutateContext lastContext = existingPendingRow.getLastContext();
-        if (existingPendingRow.add(context)) {
+        BatchMutateContext lastContext = existingPendingRow.addAndGetPrevCtx(context);
+        if (lastContext != null) {
           BatchMutatePhase phase = lastContext.getCurrentPhase();
           Preconditions.checkArgument(phase != BatchMutatePhase.POST,
             "the phase of the last batch cannot be POST");
@@ -1720,7 +1718,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         CountDownLatch countDownLatch = lastContext.getCountDownLatch();
         if (countDownLatch == null) {
           // phase changed from PRE to either FAILED or POST
-          if (phase == BatchMutatePhase.FAILED) {
+          if (lastContext.getCurrentPhase() == BatchMutatePhase.FAILED) {
             context.currentPhase = BatchMutatePhase.FAILED;
             break;
           }
