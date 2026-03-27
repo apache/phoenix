@@ -29,6 +29,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.ConnectionUtils;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -207,7 +208,9 @@ public class IndexCDCConsumer implements Runnable {
     this.pause = config.getLong(INDEX_CDC_CONSUMER_RETRY_PAUSE_MS, DEFAULT_RETRY_PAUSE_MS);
     this.startupDelayMs =
       config.getLong(INDEX_CDC_CONSUMER_STARTUP_DELAY_MS, DEFAULT_STARTUP_DELAY_MS);
-    this.batchSize = config.getInt(INDEX_CDC_CONSUMER_BATCH_SIZE, DEFAULT_CDC_BATCH_SIZE);
+    int baseBatchSize = config.getInt(INDEX_CDC_CONSUMER_BATCH_SIZE, DEFAULT_CDC_BATCH_SIZE);
+    int jitter = ThreadLocalRandom.current().nextInt(baseBatchSize / 5 + 1);
+    this.batchSize = baseBatchSize + jitter;
     this.pollIntervalMs =
       config.getLong(INDEX_CDC_CONSUMER_POLL_INTERVAL_MS, DEFAULT_POLL_INTERVAL_MS);
     this.timestampBufferMs =
@@ -781,7 +784,7 @@ public class IndexCDCConsumer implements Runnable {
     int batchCount = 0;
     while (!stopped) {
       try {
-        if (batchCount > 0 && batchCount % 5 == 0) {
+        if (batchCount > 0 && batchCount % 2 == 0) {
           if (isPartitionCompleted(partitionId)) {
             return;
           }
