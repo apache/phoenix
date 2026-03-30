@@ -28,8 +28,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTracker;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -266,7 +266,7 @@ public class ReplicationLogTracker {
    * @return true if file was successfully deleted, false otherwise
    */
   protected boolean markCompleted(final Path file) {
-    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    long startTime = EnvironmentEdgeManager.currentTime();
     // Increment the metrics count
     getMetrics().incrementMarkFileCompletedRequestCount();
 
@@ -281,7 +281,7 @@ public class ReplicationLogTracker {
       try {
         if (fileSystem.delete(fileToDelete, false)) {
           LOG.info("Successfully deleted completed file: {}", fileToDelete);
-          long endTime = EnvironmentEdgeManager.currentTimeMillis();
+          long endTime = EnvironmentEdgeManager.currentTime();
           getMetrics().updateMarkFileCompletedTime(endTime - startTime);
           return true;
         } else {
@@ -322,13 +322,13 @@ public class ReplicationLogTracker {
           } else if (matchingFiles.size() > 1) {
             LOG.warn("Multiple matching in-progress files found for prefix {}: {}", filePrefix,
               matchingFiles.size());
-            long endTime = EnvironmentEdgeManager.currentTimeMillis();
+            long endTime = EnvironmentEdgeManager.currentTime();
             getMetrics().updateMarkFileCompletedTime(endTime - startTime);
             return false;
           } else {
             LOG.warn("No matching in-progress file found for prefix: {}. File must " + "have "
               + "been deleted by some other process.", filePrefix);
-            long endTime = EnvironmentEdgeManager.currentTimeMillis();
+            long endTime = EnvironmentEdgeManager.currentTime();
             getMetrics().updateMarkFileCompletedTime(endTime - startTime);
             return true;
           }
@@ -340,7 +340,7 @@ public class ReplicationLogTracker {
       }
     }
 
-    long endTime = EnvironmentEdgeManager.currentTimeMillis();
+    long endTime = EnvironmentEdgeManager.currentTime();
     getMetrics().updateMarkFileCompletedTime(endTime - startTime);
 
     LOG.error("Failed to delete file after {} attempts: {}", maxRetries + 1, fileToDelete);
@@ -354,7 +354,7 @@ public class ReplicationLogTracker {
    * @return Optional value of renamed path if file rename was successful, else Optional.empty()
    */
   protected Optional<Path> markInProgress(final Path file) {
-    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    long startTime = EnvironmentEdgeManager.currentTime();
     try {
 
       final String fileName = file.getName();
@@ -368,15 +368,15 @@ public class ReplicationLogTracker {
         // Format: <ts>_<server>_<UUID>_<renameTs>.plog → extract prefix (first 2 parts)
         String[] parts = fileName.split("_");
         String prefix = parts[0] + "_" + parts[1];
-        newFileName = prefix + "_" + UUID.randomUUID() + "_"
-          + EnvironmentEdgeManager.currentTimeMillis() + ".plog";
+        newFileName =
+          prefix + "_" + UUID.randomUUID() + "_" + EnvironmentEdgeManager.currentTime() + ".plog";
         targetDirectory = file.getParent();
       } else {
         // File is not in in-progress directory, add UUID + rename timestamp and move to
         // IN_PROGRESS directory
         String baseName = fileName.substring(0, fileName.lastIndexOf("."));
-        newFileName = baseName + "_" + UUID.randomUUID() + "_"
-          + EnvironmentEdgeManager.currentTimeMillis() + ".plog";
+        newFileName =
+          baseName + "_" + UUID.randomUUID() + "_" + EnvironmentEdgeManager.currentTime() + ".plog";
         targetDirectory = getInProgressDirPath();
       }
 
@@ -394,7 +394,7 @@ public class ReplicationLogTracker {
     } finally {
       // Update the metrics
       getMetrics().incrementMarkFileInProgressRequestCount();
-      long endTime = EnvironmentEdgeManager.currentTimeMillis();
+      long endTime = EnvironmentEdgeManager.currentTime();
       getMetrics().updateMarkFileInProgressTime(endTime - startTime);
     }
   }

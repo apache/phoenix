@@ -38,11 +38,11 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.util.EnvironmentEdge;
+import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTracker;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogTrackerReplayImpl;
 import org.apache.phoenix.replication.reader.ReplicationLogReplay;
-import org.apache.phoenix.util.EnvironmentEdge;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -635,12 +635,8 @@ public class ReplicationLogTrackerTest {
 
     // Inject a fixed time so we can verify the exact rename timestamp
     long fixedTime = 1704153700000L;
-    EnvironmentEdgeManager.injectEdge(new EnvironmentEdge() {
-      @Override
-      public long currentTime() {
-        return fixedTime;
-      }
-    });
+    EnvironmentEdge edge = () -> fixedTime;
+    EnvironmentEdgeManager.injectEdge(edge);
 
     try {
       // Create a file in a shard directory (without UUID)
@@ -717,12 +713,8 @@ public class ReplicationLogTrackerTest {
     // Inject a fixed time that is newer than the existing rename timestamp
     long existingRenameTimestamp = 1704153660000L;
     long fixedTime = 1704153800000L;
-    EnvironmentEdgeManager.injectEdge(new EnvironmentEdge() {
-      @Override
-      public long currentTime() {
-        return fixedTime;
-      }
-    });
+    EnvironmentEdge edge = () -> fixedTime;
+    EnvironmentEdgeManager.injectEdge(edge);
 
     try {
       // Create a file in in-progress directory with existing UUID and rename timestamp
