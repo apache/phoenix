@@ -201,10 +201,20 @@ public class BaseScannerRegionObserverConstants {
   public static final String SCANNER_OPENED_TRACE_INFO = "Scanner opened on server";
 
   /**
-   * PhoenixSyncTableTool scan attributes for server-side chunk formation and checksum
+   * The scan attribute to enable server-side chunk formation and checksum computation for
+   * PhoenixSyncTableTool.
    */
   public static final String SYNC_TABLE_CHUNK_FORMATION = "_SyncTableChunkFormation";
+
+  /**
+   * The scan attribute to provide the target chunk size in bytes for PhoenixSyncTableTool.
+   */
   public static final String SYNC_TABLE_CHUNK_SIZE_BYTES = "_SyncTableChunkSizeBytes";
+
+  /**
+   * The scan attribute to provide the MessageDigest state for cross-region hash continuation in
+   * PhoenixSyncTableTool.
+   */
   public static final String SYNC_TABLE_CONTINUED_DIGEST_STATE = "_SyncTableContinuedDigestState";
 
   /**

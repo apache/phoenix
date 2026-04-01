@@ -114,7 +114,7 @@ public class PhoenixSyncTableMapper
       connectToTargetCluster();
       globalConnection = createGlobalConnection(conf);
       syncTableOutputRepository = new PhoenixSyncTableOutputRepository(globalConnection);
-    } catch (SQLException | IOException e) {
+    } catch (Exception e) {
       tryClosingResources();
       throw new RuntimeException(
         String.format("Failed to setup PhoenixSyncTableMapper for table: %s", tableName), e);
@@ -175,16 +175,15 @@ public class PhoenixSyncTableMapper
         isStartKeyInclusive = false;
       }
 
-      long mismatchedChunk = context.getCounter(SyncCounters.CHUNKS_MISMATCHED).getValue();
-      long verifiedChunk = context.getCounter(SyncCounters.CHUNKS_VERIFIED).getValue();
+      long chunksMismatched = context.getCounter(SyncCounters.CHUNKS_MISMATCHED).getValue();
+      long chunksVerified = context.getCounter(SyncCounters.CHUNKS_VERIFIED).getValue();
       long sourceRowsProcessed = context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
       long targetRowsProcessed = context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).getValue();
       Timestamp mapperEndTime = new Timestamp(System.currentTimeMillis());
-      String counters = formatMapperCounters(verifiedChunk, mismatchedChunk, sourceRowsProcessed,
-        targetRowsProcessed);
-
+      String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
+        .formatMapper(chunksVerified, chunksMismatched, sourceRowsProcessed, targetRowsProcessed);
       if (sourceRowsProcessed > 0) {
-        if (mismatchedChunk == 0) {
+        if (chunksMismatched == 0) {
           context.getCounter(SyncCounters.MAPPERS_VERIFIED).increment(1);
           syncTableOutputRepository
             .checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
@@ -197,12 +196,12 @@ public class PhoenixSyncTableMapper
               .setCounters(counters).build());
           LOGGER.info(
             "PhoenixSyncTable mapper completed with verified: {} verified chunks, {} mismatched chunks",
-            verifiedChunk, mismatchedChunk);
+            chunksVerified, chunksMismatched);
         } else {
           context.getCounter(SyncCounters.MAPPERS_MISMATCHED).increment(1);
           LOGGER.warn(
             "PhoenixSyncTable mapper completed with mismatch: {} verified chunks, {} mismatched chunks",
-            verifiedChunk, mismatchedChunk);
+            chunksVerified, chunksMismatched);
           syncTableOutputRepository
             .checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
               .setTableName(tableName).setTargetCluster(targetZkQuorum)
@@ -301,7 +300,8 @@ public class PhoenixSyncTableMapper
             sourceChunk.rowCount, targetChunk.rowCount, matched);
         }
         sourceChunk.executionEndTime = new Timestamp(System.currentTimeMillis());
-        String counters = formatChunkCounters(sourceChunk.rowCount, targetChunk.rowCount);
+        String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
+          .formatChunk(sourceChunk.rowCount, targetChunk.rowCount);
         if (matched) {
           handleVerifiedChunk(sourceChunk, context, counters);
         } else {
@@ -443,33 +443,6 @@ public class PhoenixSyncTableMapper
     return info;
   }
 
-  /**
-   * Formats chunk counters as a comma-separated string.
-   * @param sourceRows Source rows processed
-   * @param targetRows Target rows processed
-   * @return Formatted string: "SOURCE_ROWS_PROCESSED=123,TARGET_ROWS_PROCESSED=456"
-   */
-  private String formatChunkCounters(long sourceRows, long targetRows) {
-    return String.format("%s=%d,%s=%d", SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRows,
-      SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows);
-  }
-
-  /**
-   * Formats mapper counters as a comma-separated string.
-   * @param chunksVerified   Chunks verified count
-   * @param chunksMismatched Chunks mismatched count
-   * @param sourceRows       Source rows processed
-   * @param targetRows       Target rows processed
-   * @return Formatted string with all mapper counters
-   */
-  private String formatMapperCounters(long chunksVerified, long chunksMismatched, long sourceRows,
-    long targetRows) {
-    return String.format("%s=%d,%s=%d,%s=%d,%s=%d", SyncCounters.CHUNKS_VERIFIED.name(),
-      chunksVerified, SyncCounters.CHUNKS_MISMATCHED.name(), chunksMismatched,
-      SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRows,
-      SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows);
-  }
-
   private void handleVerifiedChunk(ChunkInfo sourceChunk, Context context, String counters)
     throws SQLException {
     syncTableOutputRepository.checkpointSyncTableResult(
@@ -547,70 +520,55 @@ public class PhoenixSyncTableMapper
     }
 
     // Since chunk keys are always inclusive(start/endKey) it would never be null/empty.
-    // But Mapper region boundary can be empty i.e [] for start/end region of table.
-    // We would be doing byte comparison as part of identifying gaps and empty bytes
-    // needs to be considered as special case as comparison won't work on them.
-    boolean isStartRegionOfTable = mapperRegionStart == null || mapperRegionStart.length == 0;
+    // But Mapper region boundary are exclusive and can be empty i.e [] for start/end region of
+    // table.
+    // We would be doing byte comparison of chunk with region boundary as part of identifying gaps
+    // and empty bytes(specially end of region) needs to be considered as special case as comparison
+    // won't work on them.
     boolean isEndRegionOfTable = mapperRegionEnd == null || mapperRegionEnd.length == 0;
 
     // Track our scanning position through the mapper region as we iterate through chunks
     byte[] scanPos = mapperRegionStart;
 
-    // With entire Mapper region boundary, we iterate over each chunk and if any gap/hole identified
+    // With Mapper region boundary, we iterate over each chunk and if any gap/hole identified
     // in Mapper region range which is not covered by processed chunk, we add it to gaps list.
-    // Since chunks are sorted and non-overlapping, only first/last chunks
-    // need boundary clipping. All middle chunks are guaranteed to be within region boundaries.
-    for (int i = 0; i < processedChunks.size(); i++) {
-      PhoenixSyncTableCheckpointOutputRow chunk = processedChunks.get(i);
+    for (PhoenixSyncTableCheckpointOutputRow chunk : processedChunks) {
       byte[] chunkStart = chunk.getStartRowKey();
       byte[] chunkEnd = chunk.getEndRowKey();
-      boolean initialChunk = i == 0;
-      boolean lastChunk = i == processedChunks.size() - 1;
 
-      // Determine effective start boundary for this chunk
-      // Only the first chunk might start before mapperRegionStart and need clipping
-      byte[] effectiveStart;
-      if (initialChunk && !isStartRegionOfTable) {
-        // initialChunk chunk, clip boundary outside of Mapper region.
-        // Example: Mapper region [20, 85), first chunk [10, 30]
-        // effectiveStart = max[10, 20] = 20
-        // ---[20---MapperRegion---------------85)
-        // [10---chunk1---30]-------
-        effectiveStart =
-          Bytes.compareTo(chunkStart, mapperRegionStart) > 0 ? chunkStart : mapperRegionStart;
-      } else {
-        // isFirstRegionOfTable -> Mapper region [,80) effectiveStart = chunkStart
-        // Not an initial chunks: chunk start guaranteed to be within region boundaries, no clipping
-        // needed
-        effectiveStart = chunkStart;
+      // Clip start: max(chunkStart, mapperRegionStart)
+      // Clip any chunk boundary which is outside of mapperRegionStart
+      // Technically, clipping will only be applied for first chunk i.e
+      // -----[---Mapper---]
+      // --[chunk]
+      byte[] effectiveStart =
+        Bytes.compareTo(chunkStart, mapperRegionStart) > 0 ? chunkStart : mapperRegionStart;
+
+      // Clip end: min(chunkEnd, mapperRegionEnd) : Skip clipping for end-of-table since []
+      // semantically means infinity
+      // Clip any chunk boundary which is outside of mapperRegionEnd
+      // Technically, clipping will only be applied for last chunk i.e
+      // ---[---Mapper---]
+      // --------------[chunk]
+      byte[] effectiveEnd = chunkEnd;
+      if (!isEndRegionOfTable && Bytes.compareTo(chunkEnd, mapperRegionEnd) > 0) {
+        effectiveEnd = mapperRegionEnd;
       }
 
-      // Determine effective end boundary for this chunk
-      // Only the last chunk might extend beyond mapperRegionEnd and need clipping
-      byte[] effectiveEnd;
-      if (lastChunk && !isEndRegionOfTable) {
-        // last Chunk, clip boundary outside of Mapper region.
-        // Example: Mapper region [20, 85), last chunk [70, 90]
-        // effectiveEnd = min(90, 85) = 85
-        // ---[20---MapperRegion---------------85)
-        // ------------------------------[70---chunk1---90]-------
-        effectiveEnd = Bytes.compareTo(chunkEnd, mapperRegionEnd) < 0 ? chunkEnd : mapperRegionEnd;
-      } else {
-        // isLastRegionOfTable -> Mapper region [80,) effectiveEnd = chunkEnd
-        // Not last chunk: chunk end is guaranteed to be within region boundaries, no clipping
-        // needed
-        effectiveEnd = chunkEnd;
-      }
-
-      // Check for gap BEFORE this chunk
-      // If there's space between our current position and where this chunk starts, that's a gap
-      // that needs processing
-      // Example: scanPos=30 (processed till this key), effectiveStart=70 (chunk start key)
-      // Gap detected: [30, 70) needs processing
+      // If scanPos is behind effectiveStart, there's an unprocessed gap:
+      // --[---Mapper Region------------------------------)
+      // ----[--chunk--]-----------[--chunk2--------]---[--chunk3]
+      // --------------|scanPos----|effectiveStart
+      // --------------|<---gap--->| // Add this gap
+      // Start and end key of gap would be considered exclusive while processing this range
       if (Bytes.compareTo(scanPos, effectiveStart) < 0) {
         gaps.add(KeyRange.getKeyRange(scanPos, effectiveStart));
       }
-      // We've now "processed" up to this key
+
+      // Advance scanPos past this processed chunk to look for the next gap:
+      // --[---Mapper Region------------------------------)
+      // ----[--chunk--]-----------[--chunk2--------]---[--chunk3]
+      // -------------------------------------------|scanPos
       scanPos = effectiveEnd;
     }
 

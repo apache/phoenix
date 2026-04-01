@@ -143,27 +143,91 @@ public class PhoenixSyncTableCheckpointOutputRow {
 
   @VisibleForTesting
   public long getSourceRowsProcessed() {
-    return parseCounterValue(PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name());
+    return CounterFormatter.parseSourceRows(counters);
   }
 
   @VisibleForTesting
   public long getTargetRowsProcessed() {
-    return parseCounterValue(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name());
+    return CounterFormatter.parseTargetRows(counters);
   }
 
-  private long parseCounterValue(String counterName) {
-    if (counters == null || counters.isEmpty()) {
-      return 0;
+  /**
+   * Utility class for formatting and parsing counter strings. Encapsulates the counter format
+   * contract to ensure consistency between formatting (in mapper) and parsing (in tests).
+   */
+  public static class CounterFormatter {
+    private static final String FORMAT_CHUNK = "%s=%d,%s=%d";
+    private static final String FORMAT_MAPPER = "%s=%d,%s=%d,%s=%d,%s=%d";
+
+    /**
+     * Formats chunk counters as comma-separated key=value pairs.
+     * @param sourceRows Source rows processed
+     * @param targetRows Target rows processed
+     * @return Formatted string: "SOURCE_ROWS_PROCESSED=123,TARGET_ROWS_PROCESSED=456"
+     */
+    public static String formatChunk(long sourceRows, long targetRows) {
+      return String.format(FORMAT_CHUNK,
+        PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRows,
+        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows);
     }
 
-    String[] pairs = counters.split(",");
-    for (String pair : pairs) {
-      String[] keyValue = pair.split("=");
-      if (keyValue.length == 2 && keyValue[0].trim().equals(counterName)) {
-        return Long.parseLong(keyValue[1].trim());
-      }
+    /**
+     * Formats mapper counters as comma-separated key=value pairs.
+     * @param chunksVerified   Chunks verified count
+     * @param chunksMismatched Chunks mismatched count
+     * @param sourceRows       Source rows processed
+     * @param targetRows       Target rows processed
+     * @return Formatted string with all mapper counters
+     */
+    public static String formatMapper(long chunksVerified, long chunksMismatched, long sourceRows,
+      long targetRows) {
+      return String.format(FORMAT_MAPPER,
+        PhoenixSyncTableMapper.SyncCounters.CHUNKS_VERIFIED.name(), chunksVerified,
+        PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED.name(), chunksMismatched,
+        PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRows,
+        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows);
     }
-    return 0;
+
+    /**
+     * Parses SOURCE_ROWS_PROCESSED value from counter string.
+     * @param counters Counter string in format "KEY1=val1,KEY2=val2,..."
+     * @return Source rows processed, or 0 if not found
+     */
+    public static long parseSourceRows(String counters) {
+      return parseCounterValue(counters,
+        PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name());
+    }
+
+    /**
+     * Parses TARGET_ROWS_PROCESSED value from counter string.
+     * @param counters Counter string in format "KEY1=val1,KEY2=val2,..."
+     * @return Target rows processed, or 0 if not found
+     */
+    public static long parseTargetRows(String counters) {
+      return parseCounterValue(counters,
+        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name());
+    }
+
+    /**
+     * Parses a specific counter value from the comma-separated counter string.
+     * @param counters    Counter string in format "KEY1=val1,KEY2=val2,..."
+     * @param counterName Name of the counter to extract
+     * @return Counter value, or 0 if not found
+     */
+    private static long parseCounterValue(String counters, String counterName) {
+      if (counters == null || counters.isEmpty()) {
+        return 0;
+      }
+
+      String[] pairs = counters.split(",");
+      for (String pair : pairs) {
+        String[] keyValue = pair.split("=");
+        if (keyValue.length == 2 && keyValue[0].trim().equals(counterName)) {
+          return Long.parseLong(keyValue[1].trim());
+        }
+      }
+      return 0;
+    }
   }
 
   /**

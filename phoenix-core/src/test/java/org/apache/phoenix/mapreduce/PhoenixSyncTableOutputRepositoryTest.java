@@ -274,8 +274,8 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
         .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(startKey)
         .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
         .build());
-      fail("Should throw IllegalArgumentException for null type");
-    } catch (IllegalArgumentException e) {
+      fail("Should throw NullPointerException for null type");
+    } catch (NullPointerException e) {
       assertTrue(e.getMessage().contains("Type cannot be null"));
     }
   }
@@ -292,9 +292,9 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
         .setFromTime(null).setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey)
         .setEndRowKey(startKey).setStatus(Status.VERIFIED).setExecutionStartTime(timestamp)
         .setExecutionEndTime(timestamp).build());
-      fail("Should throw IllegalArgumentException for null fromTime");
-    } catch (IllegalArgumentException e) {
-      assertTrue(e.getMessage().contains("FromTime and ToTime cannot be null"));
+      fail("Should throw NullPointerException for null fromTime");
+    } catch (NullPointerException e) {
+      assertTrue(e.getMessage().contains("FromTime cannot be null"));
     }
   }
 

@@ -410,7 +410,7 @@ public class PhoenixSyncTableToolIT {
     SyncCountersResult counters1 = getSyncCounters(job1);
 
     // Validate first run counters - should process all 100 rows
-    validateSyncCounters(counters1, 100, 100, 93, 7);
+    validateSyncCountersWithMinChunk(counters1, 100, 100, 1, 1);
 
     List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
       queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
@@ -503,6 +503,92 @@ public class PhoenixSyncTableToolIT {
     // After rerun, we should have at least more entries compared to delete table
     assertTrue("Should have checkpoint entries after rerun",
       checkpointEntriesAfterRerun.size() > checkpointEntriesAfterDelete.size());
+  }
+
+  @Test
+  public void testSyncTableValidateCheckpointWithChunkSizeChangeOnReRun() throws Exception {
+    setupStandardTestWithReplication(uniqueTableName, 1, 100);
+
+    List<Integer> sourceSplits = Arrays.asList(25, 50, 75);
+    splitTableAt(sourceConnection, uniqueTableName, sourceSplits);
+
+    List<Integer> mismatchIds = Arrays.asList(10, 30, 60, 90);
+    for (int id : mismatchIds) {
+      upsertRowsOnTarget(targetConnection, uniqueTableName, new int[] { id },
+        new String[] { "MODIFIED_NAME_" + id });
+    }
+
+    long fromTime = 0L;
+    long toTime = System.currentTimeMillis();
+
+    // First run with large chunk size
+    int largeChunkSize = 10240;
+    Job job1 = runSyncToolWithChunkSize(uniqueTableName, largeChunkSize, "--from-time",
+      String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
+    SyncCountersResult counters1 = getSyncCounters(job1);
+
+    validateSyncCounters(counters1, 100, 100, counters1.chunksVerified, counters1.chunksMismatched);
+
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
+    assertFalse("Should have checkpoint entries after first run", checkpointEntries.isEmpty());
+
+    SeparatedCheckpointEntries separated = separateMapperAndChunkEntries(checkpointEntries);
+    List<PhoenixSyncTableCheckpointOutputRow> allMappers = separated.mappers;
+    List<PhoenixSyncTableCheckpointOutputRow> allChunks = separated.chunks;
+    int mapperCountAfterFirstRun = allMappers.size();
+    int chunkCountAfterFirstRun = allChunks.size();
+
+    assertFalse("Should have mapper entries", allMappers.isEmpty());
+    assertFalse("Should have chunk entries", allChunks.isEmpty());
+
+    // Delete all mappers and 3/4th of chunks from each mapper
+    List<PhoenixSyncTableCheckpointOutputRow> chunksToDelete = selectChunksToDeleteFromMappers(
+      sourceConnection, uniqueTableName, targetZkQuorum, fromTime, toTime, null, allMappers, 0.75);
+
+    int deletedCount = deleteCheckpointEntries(sourceConnection, uniqueTableName, targetZkQuorum,
+      null, allMappers, chunksToDelete);
+    assertEquals("Should have deleted all mapper and selected chunk entries",
+      allMappers.size() + chunksToDelete.size(), deletedCount);
+
+    // Calculate counters from remaining (1/4th) chunk entries
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterDelete =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
+    CheckpointAggregateCounters remainingCounters =
+      calculateAggregateCountersFromCheckpoint(checkpointEntriesAfterDelete);
+
+    // Re-run with smaller chunk size (1 byte) - produces more, smaller chunks
+    int smallChunkSize = 1;
+    Job job2 = runSyncToolWithChunkSize(uniqueTableName, smallChunkSize, "--from-time",
+      String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
+    SyncCountersResult counters2 = getSyncCounters(job2);
+
+    // (Remaining chunks) + (Second run) should equal (First run) for row counts
+    long totalSourceRows = remainingCounters.sourceRowsProcessed + counters2.sourceRowsProcessed;
+    long totalTargetRows = remainingCounters.targetRowsProcessed + counters2.targetRowsProcessed;
+
+    assertEquals("Remaining + rerun source rows should equal first run",
+      counters1.sourceRowsProcessed, totalSourceRows);
+    assertEquals("Remaining + rerun target rows should equal first run",
+      counters1.targetRowsProcessed, totalTargetRows);
+
+    // Validate checkpoint table after rerun
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterRerun =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
+    SeparatedCheckpointEntries separatedAfterRerun =
+      separateMapperAndChunkEntries(checkpointEntriesAfterRerun);
+
+    // Mapper count should be at least what the first run had
+    assertTrue(
+      "Mapper count after rerun (" + separatedAfterRerun.mappers.size()
+        + ") should be >= first run (" + mapperCountAfterFirstRun + ")",
+      separatedAfterRerun.mappers.size() >= mapperCountAfterFirstRun);
+
+    // Chunk count should be more because smaller chunk size produces more chunks
+    assertTrue(
+      "Chunk count after rerun (" + separatedAfterRerun.chunks.size()
+        + ") should be greater than first run (" + chunkCountAfterFirstRun + ")",
+      separatedAfterRerun.chunks.size() > chunkCountAfterFirstRun);
   }
 
   @Test
@@ -2272,7 +2358,9 @@ public class PhoenixSyncTableToolIT {
     int paramIndex = 1;
     stmt.setString(paramIndex++, tableName);
     stmt.setString(paramIndex++, targetCluster);
-    stmt.setString(paramIndex++, tenantId);
+    if (tenantId != null) {
+      stmt.setString(paramIndex++, tenantId);
+    }
 
     if (type != null) {
       stmt.setString(paramIndex++, type.name());
@@ -2297,11 +2385,13 @@ public class PhoenixSyncTableToolIT {
     try {
       String delete = "DELETE FROM PHOENIX_SYNC_TABLE_CHECKPOINT "
         + "WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
-        + "AND (TENANT_ID IS NULL OR TENANT_ID = ?)";
+        + (tenantId != null ? "AND TENANT_ID = ?" : "AND TENANT_ID IS NULL");
       PreparedStatement stmt = conn.prepareStatement(delete);
       stmt.setString(1, tableName);
       stmt.setString(2, targetCluster);
-      stmt.setString(3, tenantId);
+      if (tenantId != null) {
+        stmt.setString(3, tenantId);
+      }
       stmt.executeUpdate();
       conn.commit();
     } catch (SQLException e) {

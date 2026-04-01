@@ -28,6 +28,8 @@ import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Type;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+
 /**
  * Repository for managing the PHOENIX_SYNC_TABLE_CHECKPOINT table. This table stores checkpoint
  * information for the PhoenixSyncTableTool, enabling: 1. Mapper Level checkpointing (skip completed
@@ -71,7 +73,7 @@ public class PhoenixSyncTableOutputRepository {
     try (Statement stmt = connection.createStatement()) {
       stmt.execute(ddl);
       connection.commit();
-      LOGGER.info("Successfully created or verified existence of {} table",
+      LOGGER.info("Initialization of checkpoint table {} complete",
         SYNC_TABLE_CHECKPOINT_TABLE_NAME);
     }
   }
@@ -80,18 +82,13 @@ public class PhoenixSyncTableOutputRepository {
     throws SQLException {
 
     // Validate required parameters
-    if (row.getTableName() == null || row.getTableName().isEmpty()) {
-      throw new IllegalArgumentException("TableName cannot be null or empty for checkpoint");
-    }
-    if (row.getTargetCluster() == null || row.getTargetCluster().isEmpty()) {
-      throw new IllegalArgumentException("TargetCluster cannot be null or empty for checkpoint");
-    }
-    if (row.getType() == null) {
-      throw new IllegalArgumentException("Type cannot be null for checkpoint");
-    }
-    if (row.getFromTime() == null || row.getToTime() == null) {
-      throw new IllegalArgumentException("FromTime and ToTime cannot be null for checkpoint");
-    }
+    Preconditions.checkArgument(row.getTableName() != null && !row.getTableName().isEmpty(),
+      "TableName cannot be null or empty for checkpoint");
+    Preconditions.checkArgument(row.getTargetCluster() != null && !row.getTargetCluster().isEmpty(),
+      "TargetCluster cannot be null or empty for checkpoint");
+    Preconditions.checkNotNull(row.getType(), "Type cannot be null for checkpoint");
+    Preconditions.checkNotNull(row.getFromTime(), "FromTime cannot be null for checkpoint");
+    Preconditions.checkNotNull(row.getToTime(), "ToTime cannot be null for checkpoint");
 
     try (PreparedStatement ps = connection.prepareStatement(UPSERT_CHECKPOINT_SQL)) {
       ps.setString(1, row.getTableName());

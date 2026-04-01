@@ -261,7 +261,7 @@ public final class PhoenixMapReduceUtil {
    * @throws SQLException             if connection fails
    * @throws IllegalArgumentException if validation fails
    */
-  public static PTable validateTableForMRJob(Connection connection, String qualifiedTableName,
+  public static PTable getPTableWithValidation(Connection connection, String qualifiedTableName,
     boolean allowViews, boolean allowIndexes) throws SQLException {
     PTable pTable = connection.unwrap(PhoenixConnection.class).getTableNoCache(qualifiedTableName);
 

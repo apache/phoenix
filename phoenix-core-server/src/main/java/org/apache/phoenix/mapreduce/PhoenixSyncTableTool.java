@@ -265,7 +265,6 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
         Arrays.toString(args), e.getMessage(), e);
       printHelpAndExit("Error parsing command line options: " + e.getMessage(), options);
     }
-
     if (cmdLine.hasOption(HELP_OPTION.getOpt())) {
       printHelpAndExit(options, 0);
     }
@@ -374,7 +373,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       props.setProperty("TenantId", tenantId);
     }
     try (Connection connection = ConnectionUtil.getInputConnection(configuration, props)) {
-      PTable pTable = PhoenixMapReduceUtil.validateTableForMRJob(connection, qTable, false, true);
+      PTable pTable = PhoenixMapReduceUtil.getPTableWithValidation(connection, qTable, false, true);
       return pTable.getType();
     }
   }

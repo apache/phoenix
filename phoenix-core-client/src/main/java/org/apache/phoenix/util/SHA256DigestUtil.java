@@ -17,11 +17,7 @@
  */
 package org.apache.phoenix.util;
 
-import java.io.ByteArrayInputStream;
-import java.io.DataInputStream;
 import java.io.IOException;
-import java.nio.ByteBuffer;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.bouncycastle.crypto.digests.SHA256Digest;
 
 /**
@@ -32,53 +28,49 @@ import org.bouncycastle.crypto.digests.SHA256Digest;
 public class SHA256DigestUtil {
 
   /**
-   * Maximum allowed size for encoded SHA-256 digest state. SHA-256 state is ~96 bytes, we allow up
-   * to 128 bytes as buffer.
+   * Maximum allowed size for encoded SHA-256 digest state. BouncyCastle's SHA256Digest encoded
+   * state ranges from 53 to 113 bytes (52 base + 0-60 buffered words + 1 purpose byte). We allow up
+   * to 128 bytes as headroom.
    */
   public static final int MAX_SHA256_DIGEST_STATE_SIZE = 128;
 
   /**
-   * Encodes a SHA256Digest state to a byte array with length prefix for validation. Format: [4-byte
-   * integer length][encoded digest state bytes]
+   * Encodes a SHA256Digest state to a byte array.
    * @param digest The digest whose state should be encoded
-   * @return Byte array containing integer length prefix + encoded state
+   * @return Byte array containing the raw BouncyCastle encoded state
    */
   public static byte[] encodeDigestState(SHA256Digest digest) {
     byte[] encoded = digest.getEncodedState();
-    ByteBuffer buffer = ByteBuffer.allocate(Bytes.SIZEOF_INT + encoded.length);
-    buffer.putInt(encoded.length);
-    buffer.put(encoded);
-    return buffer.array();
+    if (encoded.length > MAX_SHA256_DIGEST_STATE_SIZE) {
+      throw new IllegalArgumentException(
+        String.format("SHA256 encoded state too large: %d, expected <= %d", encoded.length,
+          MAX_SHA256_DIGEST_STATE_SIZE));
+    }
+    return encoded;
   }
 
   /**
    * Decodes a SHA256Digest state from a byte array.
-   * @param encodedState Byte array containing 4-byte integer length prefix + encoded state
+   * @param encodedState Byte array containing BouncyCastle encoded digest state
    * @return SHA256Digest restored to the saved state
    * @throws IOException if state is invalid, corrupted
    */
   public static SHA256Digest decodeDigestState(byte[] encodedState) throws IOException {
-    if (encodedState == null) {
-      throw new IllegalArgumentException("Invalid encoded digest state: encodedState is null");
-    }
-
-    DataInputStream dis = new DataInputStream(new ByteArrayInputStream(encodedState));
-    int stateLength = dis.readInt();
-    // Prevent malicious large allocations
-    if (stateLength > MAX_SHA256_DIGEST_STATE_SIZE) {
+    if (encodedState == null || encodedState.length == 0) {
       throw new IllegalArgumentException(
-        String.format("Invalid SHA256 state length: %d, expected <= %d", stateLength,
+        "Invalid encoded digest state: encodedState is null or empty");
+    }
+    if (encodedState.length > MAX_SHA256_DIGEST_STATE_SIZE) {
+      throw new IllegalArgumentException(
+        String.format("Invalid SHA256 state length: %d, expected <= %d", encodedState.length,
           MAX_SHA256_DIGEST_STATE_SIZE));
     }
-
-    byte[] state = new byte[stateLength];
-    dis.readFully(state);
-    return new SHA256Digest(state);
+    return new SHA256Digest(encodedState);
   }
 
   /**
    * Decodes a digest state and finalizes it to produce the SHA-256 checksum.
-   * @param encodedState Serialized digest state (format: [4-byte length][state bytes])
+   * @param encodedState Serialized BouncyCastle digest state
    * @return 32-byte SHA-256 hash
    * @throws IOException if state decoding fails
    */

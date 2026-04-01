@@ -25,10 +25,12 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
+import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.KeyRange;
@@ -41,7 +43,7 @@ import org.slf4j.LoggerFactory;
  * resumable sync jobs. Uses {@link PhoenixNoOpSingleRecordReader} to invoke the mapper once per
  * split (region).
  */
-public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
+public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixSyncTableInputFormat.class);
 
@@ -60,9 +62,9 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
    * @param split Input Split
    * @return A PhoenixNoOpSingleRecordReader instance
    */
-  @SuppressWarnings("rawtypes")
   @Override
-  public RecordReader createRecordReader(InputSplit split, TaskAttemptContext context) {
+  public RecordReader<NullWritable, DBWritable> createRecordReader(InputSplit split,
+    TaskAttemptContext context) {
     return new PhoenixNoOpSingleRecordReader();
   }
 
