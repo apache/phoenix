@@ -133,6 +133,10 @@ public class IndexCDCConsumer implements Runnable {
     "phoenix.index.cdc.consumer.retry.pause.ms";
   private static final long DEFAULT_RETRY_PAUSE_MS = 2000;
 
+  public static final String INDEX_CDC_CONSUMER_PARENT_PROGRESS_PAUSE_MS =
+    "phoenix.index.cdc.consumer.parent.progress.pause.ms";
+  private static final long DEFAULT_PARENT_PROGRESS_PAUSE_MS = 15000;
+
   private final RegionCoprocessorEnvironment env;
   private final String dataTableName;
   private final String encodedRegionName;
@@ -143,6 +147,7 @@ public class IndexCDCConsumer implements Runnable {
   private final long pollIntervalMs;
   private final long timestampBufferMs;
   private final int maxDataVisibilityRetries;
+  private final long parentProgressPauseMs;
   private final Configuration config;
   private final boolean serializeCDCMutations;
   private volatile boolean stopped = false;
@@ -217,6 +222,8 @@ public class IndexCDCConsumer implements Runnable {
       config.getLong(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, DEFAULT_TIMESTAMP_BUFFER_MS);
     this.maxDataVisibilityRetries = config.getInt(INDEX_CDC_CONSUMER_MAX_DATA_VISIBILITY_RETRIES,
       DEFAULT_MAX_DATA_VISIBILITY_RETRIES);
+    this.parentProgressPauseMs =
+      config.getLong(INDEX_CDC_CONSUMER_PARENT_PROGRESS_PAUSE_MS, DEFAULT_PARENT_PROGRESS_PAUSE_MS);
     DelegateRegionCoprocessorEnvironment indexWriterEnv =
       new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
     this.indexWriter =
@@ -244,7 +251,6 @@ public class IndexCDCConsumer implements Runnable {
     if (indexWriter != null) {
       indexWriter.stop("IndexCDCConsumer stopped for " + dataTableName);
     }
-    LOG.info("Stopped IndexCDCConsumer for table {} region {}", dataTableName, encodedRegionName);
   }
 
   /**
@@ -404,7 +410,14 @@ public class IndexCDCConsumer implements Runnable {
           dataTableName);
         return;
       }
-      LOG.info("IndexCDCConsumer started for table {} region {}", dataTableName, encodedRegionName);
+      LOG.info(
+        "IndexCDCConsumer started for table {} region {}"
+          + " [batchSize: {}, pollIntervalMs: {}, timestampBufferMs: {}, startupDelayMs: {},"
+          + " pause: {}, maxDataVisibilityRetries: {}, parentProgressPauseMs: {},"
+          + " serializeCDCMutations: {}]",
+        dataTableName, encodedRegionName, batchSize, pollIntervalMs, timestampBufferMs,
+        startupDelayMs, pause, maxDataVisibilityRetries, parentProgressPauseMs,
+        serializeCDCMutations);
       if (!waitForCDCStreamEntry()) {
         LOG.error(
           "IndexCDCConsumer stopped while waiting for CDC_STREAM entry for table {} region {}",
@@ -784,14 +797,13 @@ public class IndexCDCConsumer implements Runnable {
     int batchCount = 0;
     while (!stopped) {
       try {
-        if (batchCount > 0 && batchCount % 2 == 0) {
+        if (batchCount > 0) {
           if (isPartitionCompleted(partitionId)) {
             return;
           }
           long otherProgress = getParentProgress(partitionId);
           if (otherProgress > currentLastProcessedTimestamp) {
-            // other owner has already made some progress, pause for a while before resuming
-            sleepIfNotStopped(10000);
+            sleepIfNotStopped(parentProgressPauseMs);
             if (isPartitionCompleted(partitionId)) {
               return;
             }

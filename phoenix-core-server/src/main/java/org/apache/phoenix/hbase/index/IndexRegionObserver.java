@@ -182,7 +182,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * Controls which approach is used for implementing eventually consistent global secondary indexes
    * via the {@link IndexCDCConsumer}.
    * <p>
-   * <b>Approach 1: Serialized mutations (default, value = true)</b>
+   * <b>Approach 1: Serialized mutations (value = true)</b>
    * </p>
    * <p>
    * During {@code preBatchMutate}, {@link IndexRegionObserver} generates index mutations for each
@@ -192,10 +192,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * index, deserializes them, and applies them directly to the index table(s). In this approach,
    * the consumer does not need to understand index structure or re-derive mutations — it simply
    * replays what was already computed on the write path. The trade-off is increased CDC index row
-   * size due to the serialized mutation payload.
+   * size due to the serialized mutation payload, and additional write IO on the CDC index table.
    * </p>
    * <p>
-   * <b>Approach 2: Generated mutations from data row states (value = false)</b>
+   * <b>Approach 2: Generated mutations from data row states (default, value = false)</b>
    * </p>
    * <p>
    * During {@code preBatchMutate}, {@link IndexRegionObserver} writes only a lightweight CDC index
@@ -207,27 +207,29 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * change timestamp. These raw row states are returned as a Protobuf {@code DataRowStates}
    * message. The consumer then feeds these states into {@code generateIndexMutationsForRow()} — the
    * same core utility used by {@link IndexRegionObserver#prepareIndexMutations} on the write path —
-   * to derive index mutations at consume time. This approach keeps CDC index rows small and
-   * generates mutations based on the current index definition, but requires an additional data
-   * table read per CDC event and is sensitive to data visibility timing. Make sure max lookback age
-   * is long enough to retain before and after images of the row.
+   * to derive index mutations at consume time. This approach keeps CDC index rows small, avoids
+   * additional write IO, and generates mutations based on the current index definition, but
+   * requires an additional data table read per CDC event and is sensitive to data visibility
+   * timing. Make sure max lookback age is long enough to retain before and after images of the row.
    * </p>
    * <p>
    * <b>When to use which approach:</b>
    * </p>
    * <ul>
-   * <li>Use <b>Approach 1</b> (serialize = true) when scanning each data table row at consume time
-   * could be an IO bottleneck, and slightly higher write-path latency due to index mutation
-   * serialization is acceptable.</li>
-   * <li>Use <b>Approach 2</b> (serialize = false) when uniform and predictable write latency is a
-   * strict requirement regardless of the number and type (covered or uncovered) of the eventually
-   * consistent global secondary indexes, and the additional data table point-lookup with raw scan
-   * per CDC event at consume time is not a big IO concern.</li>
+   * <li>Use <b>Approach 2</b> (serialize = false, default) to minimize write IO: no serialized
+   * mutations are written to the CDC index, keeping CDC index rows small and write latency uniform.
+   * The trade-off is higher read IO at consume time — the consumer performs an additional data
+   * table point-lookup with a raw scan per CDC event to reconstruct row states.</li>
+   * <li>Use <b>Approach 1</b> (serialize = true) to minimize read IO: the consumer reads
+   * pre-computed mutations from the CDC index and applies them directly, with no data table scan
+   * required at consume time. The trade-off is higher write IO — serialized index mutations are
+   * written alongside each CDC index entry, increasing CDC index row size and write-path latency.
+   * Although CDC index is expected to have TTL same as the data table max lookback age.</li>
    * </ul>
    */
   public static final String PHOENIX_INDEX_CDC_MUTATION_SERIALIZE =
     "phoenix.index.cdc.mutation.serialize";
-  public static final boolean DEFAULT_PHOENIX_INDEX_CDC_MUTATION_SERIALIZE = true;
+  public static final boolean DEFAULT_PHOENIX_INDEX_CDC_MUTATION_SERIALIZE = false;
 
   /**
    * Class to represent pending data table rows
