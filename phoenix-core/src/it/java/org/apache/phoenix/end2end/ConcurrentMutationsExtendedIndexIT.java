@@ -252,6 +252,107 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
     verifyRandomIndexes(allIndexes, schemaName, tableName, conn, nRows);
   }
 
+  @Test(timeout = 1800000)
+  public void testConcurrentMutationsWithNonIndexedColumnUpdates() throws Exception {
+    Assume.assumeFalse(uncovered);
+    final int nThreads = 3;
+    final int batchSize = 100;
+    final int nRows = 500;
+    final int nIndexValues = 23;
+    final String tableName = generateUniqueName();
+    final String coveredIndexName = generateUniqueName();
+    final String uncoveredIndexName = generateUniqueName();
+    Connection conn = DriverManager.getConnection(getUrl());
+
+    conn.createStatement()
+      .execute("CREATE TABLE " + tableName + "(k1 INTEGER NOT NULL, k2 INTEGER NOT NULL, "
+        + "v1 INTEGER, v2 INTEGER, v3 INTEGER, v4 INTEGER, v5 INTEGER, v6 INTEGER, v7 INTEGER, "
+        + "CONSTRAINT pk PRIMARY KEY (k1,k2))");
+
+    conn.createStatement().execute("CREATE INDEX " + coveredIndexName + " ON " + tableName
+      + "(v1) INCLUDE(v2)" + (eventual ? " CONSISTENCY = EVENTUAL" : ""));
+
+    conn.createStatement().execute("CREATE UNCOVERED INDEX " + uncoveredIndexName + " ON "
+      + tableName + "(v3)" + (eventual ? " CONSISTENCY = EVENTUAL" : ""));
+
+    runMutationPhase(tableName, nThreads, 13334, batchSize, nRows, nIndexValues, true);
+    Thread.sleep(5000);
+
+    runMutationPhase(tableName, nThreads, 15000, batchSize, nRows, nIndexValues, false);
+    Thread.sleep(5000);
+
+    runMutationPhase(tableName, nThreads, 15000, batchSize, nRows, nIndexValues, true);
+    Thread.sleep(15000);
+
+    if (eventual) {
+      boolean verified = false;
+      for (int attempt = 0; attempt < 40 && !verified; attempt++) {
+        Thread.sleep(10000);
+        try {
+          long coveredCount = verifyIndexTable(tableName, coveredIndexName, conn, false);
+          assertEquals(nRows, coveredCount);
+          long uncoveredCount = verifyIndexTable(tableName, uncoveredIndexName, conn, false);
+          assertEquals(nRows, uncoveredCount);
+          verified = true;
+        } catch (AssertionError e) {
+          LOGGER.info("Verification attempt {} failed: {}", attempt, e.getMessage());
+          dumpTableRows(conn, "SYSTEM.CDC_STREAM");
+          dumpTableRows(conn, "SYSTEM.IDX_CDC_TRACKER");
+        }
+      }
+      assertTrue("Index verification failed after retries", verified);
+    } else {
+      long coveredCount = verifyIndexTable(tableName, coveredIndexName, conn);
+      assertEquals(nRows, coveredCount);
+      long uncoveredCount = verifyIndexTable(tableName, uncoveredIndexName, conn);
+      assertEquals(nRows, uncoveredCount);
+    }
+  }
+
+  private void runMutationPhase(String tableName, int nThreads, int mutationsPerThread,
+    int batchSize, int nRows, int nIndexValues, boolean includeIndexedColumns) throws Exception {
+    CountDownLatch doneSignal = new CountDownLatch(nThreads);
+    for (int t = 0; t < nThreads; t++) {
+      new Thread(() -> {
+        try {
+          Connection c = DriverManager.getConnection(getUrl());
+          ThreadLocalRandom rand = ThreadLocalRandom.current();
+          for (int j = 0; j < mutationsPerThread; j++) {
+            if (includeIndexedColumns) {
+              c.createStatement()
+                .execute("UPSERT INTO " + tableName + " VALUES (" + (j % nRows) + ", 0, "
+                  + randVal(rand, nIndexValues) + ", " + randVal(rand) + ", "
+                  + randVal(rand, nIndexValues) + ", " + randVal(rand) + ", " + randVal(rand) + ", "
+                  + randVal(rand) + ", " + randVal(rand) + ")");
+            } else {
+              c.createStatement()
+                .execute("UPSERT INTO " + tableName + " (k1, k2, v4, v5, v6, v7) VALUES ("
+                  + (j % nRows) + ", 0, " + randVal(rand) + ", " + randVal(rand) + ", "
+                  + randVal(rand) + ", " + randVal(rand) + ")");
+            }
+            if ((j % batchSize) == 0) {
+              c.commit();
+            }
+          }
+          c.commit();
+        } catch (SQLException e) {
+          LOGGER.warn("Mutation phase exception: {}", e.getMessage());
+        } finally {
+          doneSignal.countDown();
+        }
+      }).start();
+    }
+    assertTrue("Mutation phase timed out", doneSignal.await(350, TimeUnit.SECONDS));
+  }
+
+  private static String randVal(ThreadLocalRandom rand) {
+    return rand.nextBoolean() ? "null" : Integer.toString(rand.nextInt());
+  }
+
+  private static String randVal(ThreadLocalRandom rand, int bound) {
+    return rand.nextBoolean() ? "null" : Integer.toString(rand.nextInt() % bound);
+  }
+
   private void dumpTableRows(Connection conn, String tableName) throws SQLException {
     LOGGER.info("Dumping {} table:", tableName);
     try (ResultSet rs = conn.createStatement().executeQuery("SELECT * FROM " + tableName)) {

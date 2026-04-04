@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.end2end.IndexToolIT.verifyIndexTable;
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_BATCH_SIZE;
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS;
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_MUTATION_SERIALIZE;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -98,6 +99,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     props.put(INDEX_CDC_CONSUMER_BATCH_SIZE, Integer.toString(4500));
     props.put(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, Integer.toString(1000));
     props.put("hbase.coprocessor.master.classes", PhoenixMasterObserver.class.getName());
+    props.put(PHOENIX_INDEX_CDC_MUTATION_SERIALIZE, Boolean.TRUE.toString());
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 
