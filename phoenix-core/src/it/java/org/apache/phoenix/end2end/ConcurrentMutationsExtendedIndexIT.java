@@ -18,6 +18,9 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.end2end.IndexToolIT.verifyIndexTable;
+import static org.apache.phoenix.hbase.index.metrics.MetricsIndexCDCConsumerSource.CDC_BATCH_COUNT;
+import static org.apache.phoenix.hbase.index.metrics.MetricsIndexCDCConsumerSource.CDC_BATCH_PROCESS_TIME;
+import static org.apache.phoenix.hbase.index.metrics.MetricsIndexCDCConsumerSource.CDC_MUTATION_COUNT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -29,10 +32,14 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexCDCConsumerSourceImpl;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assume;
@@ -66,6 +73,7 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
   // This test is heavy and it might exhaust jenkins resources
   @Test(timeout = 1800000)
   public void testConcurrentUpsertsWithTableSplits() throws Exception {
+    Map<String, Long> metricsBefore = getCdcMetricValues();
     int nThreads = 12;
     final int batchSize = 100;
     final int nRows = 777;
@@ -131,6 +139,7 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
     List<String> allIndexes =
       new ArrayList<>(Arrays.asList(indexName1, indexName2, indexName3, indexName4, indexName5));
     verifyRandomIndexes(allIndexes, schemaName, tableName, conn, nRows);
+    assertCdcMetrics(metricsBefore);
   }
 
   private void verifyRandomIndexes(List<String> allIndexes, String schemaName, String tableName,
@@ -176,6 +185,7 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
   @Ignore("too aggressive for jenkins builds")
   public void testConcurrentUpsertsWithTableSplitsMerges() throws Exception {
     Assume.assumeFalse(uncovered);
+    Map<String, Long> metricsBefore = getCdcMetricValues();
     int nThreads = 13;
     final int batchSize = 100;
     final int nRows = 1451;
@@ -250,11 +260,13 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
     List<String> allIndexes = new ArrayList<>(
       Arrays.asList(indexName1, indexName2, indexName3, indexName4, indexName5, indexName6));
     verifyRandomIndexes(allIndexes, schemaName, tableName, conn, nRows);
+    assertCdcMetrics(metricsBefore);
   }
 
   @Test(timeout = 1800000)
   public void testConcurrentMutationsWithNonIndexedColumnUpdates() throws Exception {
     Assume.assumeFalse(uncovered);
+    Map<String, Long> metricsBefore = getCdcMetricValues();
     final int nThreads = 3;
     final int batchSize = 100;
     final int nRows = 500;
@@ -275,6 +287,9 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
     conn.createStatement().execute("CREATE UNCOVERED INDEX " + uncoveredIndexName + " ON "
       + tableName + "(v3)" + (eventual ? " CONSISTENCY = EVENTUAL" : ""));
 
+    runMutationPhase(tableName, nThreads, 15000, batchSize, nRows, nIndexValues, false);
+    Thread.sleep(5000);
+
     runMutationPhase(tableName, nThreads, 13334, batchSize, nRows, nIndexValues, true);
     Thread.sleep(5000);
 
@@ -282,7 +297,7 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
     Thread.sleep(5000);
 
     runMutationPhase(tableName, nThreads, 15000, batchSize, nRows, nIndexValues, true);
-    Thread.sleep(15000);
+    Thread.sleep(20000);
 
     if (eventual) {
       boolean verified = false;
@@ -307,6 +322,7 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
       long uncoveredCount = verifyIndexTable(tableName, uncoveredIndexName, conn);
       assertEquals(nRows, uncoveredCount);
     }
+    assertCdcMetrics(metricsBefore);
   }
 
   private void runMutationPhase(String tableName, int nThreads, int mutationsPerThread,
@@ -351,6 +367,43 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
 
   private static String randVal(ThreadLocalRandom rand, int bound) {
     return rand.nextBoolean() ? "null" : Integer.toString(rand.nextInt() % bound);
+  }
+
+  private Map<String, Long> getCdcMetricValues() {
+    MetricsIndexCDCConsumerSourceImpl source =
+      (MetricsIndexCDCConsumerSourceImpl) MetricsIndexerSourceFactory.getInstance()
+        .getIndexCDCConsumerSource();
+    Map<String, Long> values = new HashMap<>();
+    values.put(CDC_BATCH_COUNT, source.getMetricsRegistry().getCounter(CDC_BATCH_COUNT, 0).value());
+    values.put(CDC_MUTATION_COUNT,
+      source.getMetricsRegistry().getCounter(CDC_MUTATION_COUNT, 0).value());
+    values.put(CDC_BATCH_PROCESS_TIME,
+      source.getMetricsRegistry().getHistogram(CDC_BATCH_PROCESS_TIME).getCount());
+    return values;
+  }
+
+  private void assertCdcMetrics(Map<String, Long> before) {
+    Map<String, Long> after = getCdcMetricValues();
+    long batchDelta = after.get(CDC_BATCH_COUNT) - before.get(CDC_BATCH_COUNT);
+    long mutationDelta = after.get(CDC_MUTATION_COUNT) - before.get(CDC_MUTATION_COUNT);
+    long histogramDelta = after.get(CDC_BATCH_PROCESS_TIME) - before.get(CDC_BATCH_PROCESS_TIME);
+    LOGGER.info(
+      "CDC metrics — before: {}, after: {}, delta — batchCount: {}, "
+        + "mutationCount: {}, batchProcessTime samples: {}",
+      before, after, batchDelta, mutationDelta, histogramDelta);
+    if (eventual) {
+      assertTrue("Expected cdcBatchCount to increase by at least 1, got " + batchDelta,
+        batchDelta >= 1);
+      assertTrue("Expected cdcMutationCount to increase by at least 1000, got " + mutationDelta,
+        mutationDelta >= 1000);
+      assertTrue("Expected cdcBatchProcessTime histogram samples to increase by at least 1, got "
+        + histogramDelta, histogramDelta >= 1);
+    } else {
+      assertEquals("Expected no CDC batch processing for synchronous indexes", 0, batchDelta);
+      assertEquals("Expected no CDC mutations for synchronous indexes", 0, mutationDelta);
+      assertEquals("Expected no CDC batch process time samples for synchronous indexes", 0,
+        histogramDelta);
+    }
   }
 
   private void dumpTableRows(Connection conn, String tableName) throws SQLException {
