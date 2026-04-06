@@ -1355,6 +1355,15 @@ public class CompactionScanner implements InternalScanner {
           matchedType = GLOBAL_VIEWS;
           tableTTLInfo = tableRowKeyMatcher.match(rowKey, offset, GLOBAL_VIEWS);
           if (tableTTLInfo == null) {
+            // Global views with WHERE on the tenant-id column produce a ROW_KEY_MATCHER
+            // that includes the tenant-id prefix. Retry from offset 0 (or past salt byte)
+            // to match these views.
+            int tenantInclusiveOffset = pkPositions.get(this.isSalted ? 1 : 0);
+            if (tenantInclusiveOffset != offset) {
+              tableTTLInfo = tableRowKeyMatcher.match(rowKey, tenantInclusiveOffset, GLOBAL_VIEWS);
+            }
+          }
+          if (tableTTLInfo == null) {
             // search returned no results, determine the new pkPosition(offset) to use
             // Search using the new offset
             pkPosition = this.isSalted ? 1 : 0;
