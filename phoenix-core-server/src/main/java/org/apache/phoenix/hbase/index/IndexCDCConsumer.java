@@ -40,6 +40,8 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.generated.IndexMutationsProtos;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexCDCConsumerSource;
+import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
@@ -150,6 +152,7 @@ public class IndexCDCConsumer implements Runnable {
   private final long parentProgressPauseMs;
   private final Configuration config;
   private final boolean serializeCDCMutations;
+  private final MetricsIndexCDCConsumerSource metricSource;
   private volatile boolean stopped = false;
   private Thread consumerThread;
   private boolean hasParentPartitions = false;
@@ -224,6 +227,7 @@ public class IndexCDCConsumer implements Runnable {
       DEFAULT_MAX_DATA_VISIBILITY_RETRIES);
     this.parentProgressPauseMs =
       config.getLong(INDEX_CDC_CONSUMER_PARENT_PROGRESS_PAUSE_MS, DEFAULT_PARENT_PROGRESS_PAUSE_MS);
+    this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexCDCConsumerSource();
     DelegateRegionCoprocessorEnvironment indexWriterEnv =
       new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
     this.indexWriter =
@@ -467,6 +471,7 @@ public class IndexCDCConsumer implements Runnable {
           if (e instanceof InterruptedException) {
             throw (InterruptedException) e;
           }
+          metricSource.incrementCdcBatchFailureCount(dataTableName);
           long sleepTime = ConnectionUtils.getPauseTime(pause, ++retryCount);
           LOG.error(
             "Error processing CDC mutations for table {} region {}. "
@@ -838,6 +843,7 @@ public class IndexCDCConsumer implements Runnable {
         }
         currentLastProcessedTimestamp = newTimestamp;
       } catch (SQLException | IOException e) {
+        metricSource.incrementCdcBatchFailureCount(dataTableName);
         long sleepTime = ConnectionUtils.getPauseTime(pause, ++retryCount);
         LOG.warn(
           "Error processing CDC batch for partition {} owner {} table {} "
@@ -904,6 +910,7 @@ public class IndexCDCConsumer implements Runnable {
   private long processCDCBatch(String partitionId, String ownerPartitionId,
     long lastProcessedTimestamp, boolean isParentReplay)
     throws SQLException, IOException, InterruptedException {
+    long batchStartTime = EnvironmentEdgeManager.currentTimeMillis();
     LOG.debug("Processing CDC batch for table {} partition {} owner {} from timestamp {}",
       dataTableName, partitionId, ownerPartitionId, lastProcessedTimestamp);
     try (PhoenixConnection conn =
@@ -969,6 +976,9 @@ public class IndexCDCConsumer implements Runnable {
       }
       executeIndexMutations(partitionId, batchMutations, ownerPartitionId, newLastTimestamp);
       if (!batchMutations.isEmpty()) {
+        metricSource.updateCdcBatchProcessTime(dataTableName,
+          EnvironmentEdgeManager.currentTimeMillis() - batchStartTime);
+        metricSource.incrementCdcBatchCount(dataTableName);
         updateTrackerProgress(conn, partitionId, ownerPartitionId, newLastTimestamp,
           PhoenixDatabaseMetaData.TRACKER_STATUS_IN_PROGRESS);
       }
@@ -1011,6 +1021,7 @@ public class IndexCDCConsumer implements Runnable {
   private long processCDCBatchGenerated(String partitionId, String ownerPartitionId,
     long lastProcessedTimestamp, boolean isParentReplay)
     throws SQLException, IOException, InterruptedException {
+    long batchStartTime = EnvironmentEdgeManager.currentTimeMillis();
     LOG.debug(
       "Processing CDC batch (generated mode) for table {} partition {} owner {} from timestamp {}",
       dataTableName, partitionId, ownerPartitionId, lastProcessedTimestamp);
@@ -1090,6 +1101,11 @@ public class IndexCDCConsumer implements Runnable {
       }
       generateAndApplyIndexMutations(conn, batchStates, partitionId, ownerPartitionId,
         newLastTimestamp);
+      if (!batchStates.isEmpty()) {
+        metricSource.updateCdcBatchProcessTime(dataTableName,
+          EnvironmentEdgeManager.currentTimeMillis() - batchStartTime);
+        metricSource.incrementCdcBatchCount(dataTableName);
+      }
       if (newLastTimestamp > lastProcessedTimestamp) {
         updateTrackerProgress(conn, partitionId, ownerPartitionId, newLastTimestamp,
           PhoenixDatabaseMetaData.TRACKER_STATUS_IN_PROGRESS);
@@ -1165,6 +1181,7 @@ public class IndexCDCConsumer implements Runnable {
     }
     ListMultimap<HTableInterfaceReference, Mutation> indexUpdates = ArrayListMultimap.create();
     int totalMutations = 0;
+    long generateStartTime = EnvironmentEdgeManager.currentTimeMillis();
     for (Pair<Long, IndexMutationsProtos.DataRowStates> entry : batchStates) {
       long ts = entry.getFirst();
       IndexMutationsProtos.DataRowStates dataRowStates = entry.getSecond();
@@ -1196,16 +1213,28 @@ public class IndexCDCConsumer implements Runnable {
         nextDataRowState, ts, encodedRegionNameBytes, QueryConstants.VERIFIED_BYTES, indexTables,
         indexUpdates);
       if (indexUpdates.size() >= batchSize) {
+        metricSource.updateCdcMutationGenerateTime(dataTableName,
+          EnvironmentEdgeManager.currentTimeMillis() - generateStartTime);
+        long applyStartTime = EnvironmentEdgeManager.currentTimeMillis();
         indexWriter.write(indexUpdates, false, MetaDataProtocol.PHOENIX_VERSION);
+        metricSource.updateCdcMutationApplyTime(dataTableName,
+          EnvironmentEdgeManager.currentTimeMillis() - applyStartTime);
         totalMutations += indexUpdates.size();
         indexUpdates.clear();
+        generateStartTime = EnvironmentEdgeManager.currentTimeMillis();
       }
     }
     if (!indexUpdates.isEmpty()) {
+      metricSource.updateCdcMutationGenerateTime(dataTableName,
+        EnvironmentEdgeManager.currentTimeMillis() - generateStartTime);
+      long applyStartTime = EnvironmentEdgeManager.currentTimeMillis();
       indexWriter.write(indexUpdates, false, MetaDataProtocol.PHOENIX_VERSION);
+      metricSource.updateCdcMutationApplyTime(dataTableName,
+        EnvironmentEdgeManager.currentTimeMillis() - applyStartTime);
       totalMutations += indexUpdates.size();
     }
     if (totalMutations > 0) {
+      metricSource.incrementCdcMutationCount(dataTableName, totalMutations);
       LOG.debug(
         "Applied total {} index mutations for table {} partition {} owner {} "
           + ", last processed timestamp {}",
@@ -1239,16 +1268,23 @@ public class IndexCDCConsumer implements Runnable {
           indexUpdates.put(tableRef, mutation);
         }
         if (indexUpdates.size() >= batchSize) {
+          long applyStartTime = EnvironmentEdgeManager.currentTimeMillis();
           indexWriter.write(indexUpdates, false, MetaDataProtocol.PHOENIX_VERSION);
+          metricSource.updateCdcMutationApplyTime(dataTableName,
+            EnvironmentEdgeManager.currentTimeMillis() - applyStartTime);
           totalMutations += indexUpdates.size();
           indexUpdates.clear();
         }
       }
       if (!indexUpdates.isEmpty()) {
+        long applyStartTime = EnvironmentEdgeManager.currentTimeMillis();
         indexWriter.write(indexUpdates, false, MetaDataProtocol.PHOENIX_VERSION);
+        metricSource.updateCdcMutationApplyTime(dataTableName,
+          EnvironmentEdgeManager.currentTimeMillis() - applyStartTime);
         totalMutations += indexUpdates.size();
       }
       if (totalMutations > 0) {
+        metricSource.incrementCdcMutationCount(dataTableName, totalMutations);
         LOG.debug(
           "Applied total {} index mutations for table {} partition {} owner {} "
             + ", last processed timestamp {}",
