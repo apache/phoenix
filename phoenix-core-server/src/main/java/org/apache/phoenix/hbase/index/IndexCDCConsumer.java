@@ -808,11 +808,16 @@ public class IndexCDCConsumer implements Runnable {
           }
           long otherProgress = getParentProgress(partitionId);
           if (otherProgress > currentLastProcessedTimestamp) {
-            sleepIfNotStopped(parentProgressPauseMs);
-            if (isPartitionCompleted(partitionId)) {
-              return;
-            }
-            currentLastProcessedTimestamp = getParentProgress(partitionId);
+            long previousOtherProgress;
+            do {
+              previousOtherProgress = otherProgress;
+              sleepIfNotStopped(parentProgressPauseMs);
+              if (isPartitionCompleted(partitionId)) {
+                return;
+              }
+              otherProgress = getParentProgress(partitionId);
+            } while (!stopped && otherProgress > previousOtherProgress);
+            currentLastProcessedTimestamp = otherProgress;
           }
         }
         long newTimestamp;
