@@ -397,8 +397,8 @@ public class HAGroupStoreClientIT extends BaseTest {
 
   /**
    * Verifies that events received via PathChildrenCacheListener preserve the ordering of
-   * multi-threaded updates written to ZK. PathChildrenCache may coalesce rapid updates to the
-   * same node, so fewer events than updates may arrive, but those received must be in order.
+   * multi-threaded updates written to ZK. PathChildrenCache may coalesce rapid updates to the same
+   * node, so fewer events than updates may arrive, but those received must be in order.
    */
   @Test
   public void testHAGroupStoreClientWithMultiThreadedUpdates() throws Exception {
@@ -419,8 +419,7 @@ public class HAGroupStoreClientIT extends BaseTest {
         int version = (int) crr.getVersion();
         int prev = lastReceivedVersion.getAndSet(version);
         if (version <= prev) {
-          orderingErrors.add("Event version " + version
-            + " received after version " + prev);
+          orderingErrors.add("Event version " + version + " received after version " + prev);
         }
         crrEventVersions.add(version);
         if (version == threadCount) {
@@ -458,17 +457,15 @@ public class HAGroupStoreClientIT extends BaseTest {
     }
 
     // Wait for all updates to complete and the final event to be received.
-    assertTrue("Update Latch value is " + updateLatch.getCount(),
-      updateLatch.await(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS * threadCount,
-        TimeUnit.MILLISECONDS));
+    assertTrue("Update Latch value is " + updateLatch.getCount(), updateLatch
+      .await(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS * threadCount, TimeUnit.MILLISECONDS));
     assertTrue("Unexpected exceptions in update threads: " + exceptions, exceptions.isEmpty());
-    assertTrue("Final event (version " + threadCount + ") was not received",
-      finalEventLatch.await(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS * threadCount,
-        TimeUnit.MILLISECONDS));
+    assertTrue("Final event (version " + threadCount + ") was not received", finalEventLatch
+      .await(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS * threadCount, TimeUnit.MILLISECONDS));
 
     // Verify events were received in strictly ascending version order.
-    assertTrue("Events received out of order: " + orderingErrors
-      + ", versions received: " + crrEventVersions, orderingErrors.isEmpty());
+    assertTrue("Events received out of order: " + orderingErrors + ", versions received: "
+      + crrEventVersions, orderingErrors.isEmpty());
 
     executor.shutdown();
     storeClient.close();
