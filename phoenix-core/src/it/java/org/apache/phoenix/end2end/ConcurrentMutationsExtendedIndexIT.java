@@ -136,6 +136,7 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
     splitThread.join(10000);
     LOGGER.info(
       "Total upsert time in ms : " + (EnvironmentEdgeManager.currentTimeMillis() - startTime));
+    Thread.sleep(20000);
     List<String> allIndexes =
       new ArrayList<>(Arrays.asList(indexName1, indexName2, indexName3, indexName4, indexName5));
     verifyRandomIndexes(allIndexes, schemaName, tableName, conn, nRows);
@@ -257,6 +258,7 @@ public abstract class ConcurrentMutationsExtendedIndexIT extends ParallelStatsDi
     assertTrue("Ran out of time", doneSignal.await(1500, TimeUnit.SECONDS));
     LOGGER.info(
       "Total upsert time in ms : " + (EnvironmentEdgeManager.currentTimeMillis() - startTime));
+    Thread.sleep(20000);
     List<String> allIndexes = new ArrayList<>(
       Arrays.asList(indexName1, indexName2, indexName3, indexName4, indexName5, indexName6));
     verifyRandomIndexes(allIndexes, schemaName, tableName, conn, nRows);
