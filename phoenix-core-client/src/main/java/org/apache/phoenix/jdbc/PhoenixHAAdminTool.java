@@ -881,7 +881,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       System.out.println();
 
       if (dryRun) {
-        System.out.println("\n\u2713 Dry-run completed. No changes applied.");
+        System.out.println("\n\u2713 Dry-run completed. No changes were applied.");
         return RET_SUCCESS;
       }
 
