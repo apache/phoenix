@@ -74,6 +74,7 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
@@ -82,6 +83,7 @@ import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ViewUtil;
 import org.slf4j.Logger;
@@ -234,6 +236,14 @@ public class CreateTableCompiler {
       } else if (where != null && viewTypeToBe == ViewType.UPDATABLE) {
         rowKeyMatcher =
           WhereOptimizer.getRowKeyMatcher(context, create.getTableName(), parentToBe, where);
+      }
+      if (rowKeyMatcher.length == 0 && parentToBe.isMultiTenant()) {
+        PName tenantId = connection.getTenantId();
+        if (tenantId != null) {
+          RowKeySchema schema = parentToBe.getRowKeySchema();
+          boolean isSalted = parentToBe.getBucketNum() != null;
+          rowKeyMatcher = ScanUtil.getTenantIdBytes(schema, isSalted, tenantId, true, false);
+        }
       }
       verifyIfAnyParentHasIndexesAndViewExtendsPk(parentToBe, columnDefs, pkConstraint);
     }

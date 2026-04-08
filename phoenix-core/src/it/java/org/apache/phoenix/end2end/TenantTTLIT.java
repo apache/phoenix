@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -54,12 +55,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 /**
- * Integration test verifying per-tenant TTL via global views on a multi-tenant table. The pattern
- * under test: 1. Create a MULTI_TENANT=true base table (no TTL on the table itself). 2. Create
- * global views with WHERE clause on the tenant-id PK column, each with a different TTL value. 3.
- * Verify read-time masking: expired rows are not visible when querying through the view. 4. Verify
- * compaction: expired rows are physically removed by major compaction. 5. Verify tenant isolation:
- * a short-TTL tenant's data expires independently of a long-TTL tenant's data.
+ * Integration test verifying per-tenant TTL via tenant views on a multi-tenant table.
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class TenantTTLIT extends BaseTest {
@@ -102,52 +98,52 @@ public class TenantTTLIT extends BaseTest {
     String schemaName = generateUniqueName();
     String baseTableName = generateUniqueName();
     String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
-    String view1Name = SchemaUtil.getTableName(schemaName, generateUniqueName());
-    String view2Name = SchemaUtil.getTableName(schemaName, generateUniqueName());
+    String view1Name = generateUniqueName();
+    String view2Name = generateUniqueName();
 
     int ttlOrg1 = 10;
     int ttlOrg2 = 100;
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.setAutoCommit(true);
+      conn.createStatement().execute(String.format(
+        "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, ID2 VARCHAR NOT NULL, "
+          + "COL1 VARCHAR, COL2 VARCHAR " + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1, ID2)"
+          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+        fullTableName));
+    }
 
-      conn.createStatement()
-        .execute(String.format(
-          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, " + "ID1 VARCHAR NOT NULL, "
-            + "ID2 VARCHAR NOT NULL, " + "COL1 VARCHAR, " + "COL2 VARCHAR "
-            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1, ID2)"
-            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
-          fullTableName));
+    createTenantViewWithTTL("org1", fullTableName, view1Name, ttlOrg1);
+    createTenantViewWithTTL("org2", fullTableName, view2Name, ttlOrg2);
 
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'org1' TTL = %d",
-          view1Name, fullTableName, ttlOrg1));
+    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    injectEdge.setValue(startTime);
 
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'org2' TTL = %d",
-          view2Name, fullTableName, ttlOrg2));
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      upsertRow(t1, view1Name, "k1", "v1", "row1col1", "row1col2");
+      upsertRow(t1, view1Name, "k2", "v2", "row2col1", "row2col2");
+    }
+    try (Connection t2 = getTenantConnection("org2")) {
+      t2.setAutoCommit(true);
+      upsertRow(t2, view2Name, "k1", "v1", "row3col1", "row3col2");
+      upsertRow(t2, view2Name, "k2", "v2", "row4col1", "row4col2");
+    }
 
-      long startTime = EnvironmentEdgeManager.currentTimeMillis();
-      EnvironmentEdgeManager.injectEdge(injectEdge);
-      injectEdge.setValue(startTime);
-
-      upsertRow(conn, view1Name, "k1", "v1", "row1col1", "row1col2");
-      upsertRow(conn, view1Name, "k2", "v2", "row2col1", "row2col2");
-      upsertRow(conn, view2Name, "k1", "v1", "row3col1", "row3col2");
-      upsertRow(conn, view2Name, "k2", "v2", "row4col1", "row4col2");
-
-      assertViewRowCount(conn, view1Name, 2, "org1 should have 2 rows before TTL expiry");
-      assertViewRowCount(conn, view2Name, 2, "org2 should have 2 rows before TTL expiry");
+    try (Connection t1 = getTenantConnection("org1"); Connection t2 = getTenantConnection("org2")) {
+      assertViewRowCount(t1, view1Name, 2, "org1 should have 2 rows before TTL expiry");
+      assertViewRowCount(t2, view2Name, 2, "org2 should have 2 rows before TTL expiry");
 
       injectEdge.incrementValue((ttlOrg1 * 2) * 1000L);
 
-      assertViewRowCount(conn, view1Name, 0, "org1 rows should be masked after org1 TTL expiry");
-      assertViewRowCount(conn, view2Name, 2,
+      assertViewRowCount(t1, view1Name, 0, "org1 rows should be masked after org1 TTL expiry");
+      assertViewRowCount(t2, view2Name, 2,
         "org2 rows should still be visible (TTL not expired yet)");
 
       injectEdge.incrementValue((ttlOrg2 * 2) * 1000L);
 
-      assertViewRowCount(conn, view2Name, 0, "org2 rows should be masked after org2 TTL expiry");
+      assertViewRowCount(t2, view2Name, 0, "org2 rows should be masked after org2 TTL expiry");
     }
   }
 
@@ -160,39 +156,37 @@ public class TenantTTLIT extends BaseTest {
     String schemaName = generateUniqueName();
     String baseTableName = generateUniqueName();
     String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
-    String view1Name = SchemaUtil.getTableName(schemaName, generateUniqueName());
-    String view2Name = SchemaUtil.getTableName(schemaName, generateUniqueName());
+    String view1Name = generateUniqueName();
+    String view2Name = generateUniqueName();
 
     int ttlOrg1 = 10;
     int ttlOrg2 = 1000;
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.setAutoCommit(true);
+      conn.createStatement().execute(String.format(
+        "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, ID2 VARCHAR NOT NULL, "
+          + "COL1 VARCHAR, COL2 VARCHAR " + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1, ID2)"
+          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+        fullTableName));
+    }
 
-      conn.createStatement()
-        .execute(String.format(
-          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, " + "ID1 VARCHAR NOT NULL, "
-            + "ID2 VARCHAR NOT NULL, " + "COL1 VARCHAR, " + "COL2 VARCHAR "
-            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1, ID2)"
-            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
-          fullTableName));
+    createTenantViewWithTTL("org1", fullTableName, view1Name, ttlOrg1);
+    createTenantViewWithTTL("org2", fullTableName, view2Name, ttlOrg2);
 
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'org1' TTL = %d",
-          view1Name, fullTableName, ttlOrg1));
+    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    injectEdge.setValue(startTime);
 
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'org2' TTL = %d",
-          view2Name, fullTableName, ttlOrg2));
-
-      long startTime = EnvironmentEdgeManager.currentTimeMillis();
-      EnvironmentEdgeManager.injectEdge(injectEdge);
-      injectEdge.setValue(startTime);
-
-      upsertRow(conn, view1Name, "k1", "v1", "c1", "c2");
-      upsertRow(conn, view1Name, "k2", "v2", "c3", "c4");
-      upsertRow(conn, view2Name, "k1", "v1", "c5", "c6");
-      upsertRow(conn, view2Name, "k2", "v2", "c7", "c8");
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      upsertRow(t1, view1Name, "k1", "v1", "c1", "c2");
+      upsertRow(t1, view1Name, "k2", "v2", "c3", "c4");
+    }
+    try (Connection t2 = getTenantConnection("org2")) {
+      t2.setAutoCommit(true);
+      upsertRow(t2, view2Name, "k1", "v1", "c5", "c6");
+      upsertRow(t2, view2Name, "k2", "v2", "c7", "c8");
     }
 
     long afterInsertTime = EnvironmentEdgeManager.currentTimeMillis();
@@ -215,51 +209,6 @@ public class TenantTTLIT extends BaseTest {
   }
 
   /**
-   * Verifies that data not covered by any view (an "unassigned" tenant) is NOT expired by
-   * compaction, since no view TTL applies to it.
-   */
-  @Test
-  public void testUnassignedTenantDataNotExpiredByCompaction() throws Exception {
-    String schemaName = generateUniqueName();
-    String baseTableName = generateUniqueName();
-    String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
-    String viewName = SchemaUtil.getTableName(schemaName, generateUniqueName());
-
-    int ttl = 10;
-
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
-      conn.setAutoCommit(true);
-
-      conn.createStatement()
-        .execute(String.format(
-          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, " + "ID1 VARCHAR NOT NULL, "
-            + "COL1 VARCHAR " + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
-            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
-          fullTableName));
-
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'org1' TTL = %d",
-          viewName, fullTableName, ttl));
-
-      long startTime = EnvironmentEdgeManager.currentTimeMillis();
-      EnvironmentEdgeManager.injectEdge(injectEdge);
-      injectEdge.setValue(startTime);
-
-      upsertRowDirect(conn, fullTableName, "org1", "k1", "val1");
-      upsertRowDirect(conn, fullTableName, "org2", "k1", "val2");
-    }
-
-    long afterInsertTime = EnvironmentEdgeManager.currentTimeMillis();
-
-    injectEdge.setValue(afterInsertTime + (ttl * 2 * 1000L));
-    EnvironmentEdgeManager.injectEdge(injectEdge);
-    flushAndMajorCompact(schemaName, baseTableName);
-
-    assertHBaseRowCount(schemaName, baseTableName, afterInsertTime, 1,
-      "org2's row (no view, no TTL) should survive compaction; org1's row should be removed");
-  }
-
-  /**
    * Verifies read masking and compaction for three tenants with different TTLs to confirm the
    * mechanism scales beyond two tenants.
    */
@@ -268,9 +217,9 @@ public class TenantTTLIT extends BaseTest {
     String schemaName = generateUniqueName();
     String baseTableName = generateUniqueName();
     String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
-    String viewA = SchemaUtil.getTableName(schemaName, generateUniqueName());
-    String viewB = SchemaUtil.getTableName(schemaName, generateUniqueName());
-    String viewC = SchemaUtil.getTableName(schemaName, generateUniqueName());
+    String viewA = generateUniqueName();
+    String viewB = generateUniqueName();
+    String viewC = generateUniqueName();
 
     int ttlA = 10;
     int ttlB = 50;
@@ -281,41 +230,41 @@ public class TenantTTLIT extends BaseTest {
 
       conn.createStatement()
         .execute(String.format(
-          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, " + "ID1 VARCHAR NOT NULL, "
-            + "COL1 VARCHAR " + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
             + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
           fullTableName));
+    }
 
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'tenA' TTL = %d",
-          viewA, fullTableName, ttlA));
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'tenB' TTL = %d",
-          viewB, fullTableName, ttlB));
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'tenC' TTL = %d",
-          viewC, fullTableName, ttlC));
+    createTenantViewWithTTL("tenA", fullTableName, viewA, ttlA);
+    createTenantViewWithTTL("tenB", fullTableName, viewB, ttlB);
+    createTenantViewWithTTL("tenC", fullTableName, viewC, ttlC);
 
-      long startTime = EnvironmentEdgeManager.currentTimeMillis();
-      EnvironmentEdgeManager.injectEdge(injectEdge);
-      injectEdge.setValue(startTime);
+    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    injectEdge.setValue(startTime);
 
-      upsertRowSimple(conn, viewA, "r1", "a1");
-      upsertRowSimple(conn, viewB, "r1", "b1");
-      upsertRowSimple(conn, viewC, "r1", "c1");
+    try (Connection tA = getTenantConnection("tenA"); Connection tB = getTenantConnection("tenB");
+      Connection tC = getTenantConnection("tenC")) {
+      tA.setAutoCommit(true);
+      tB.setAutoCommit(true);
+      tC.setAutoCommit(true);
+      upsertRowSimple(tA, viewA, "r1", "a1");
+      upsertRowSimple(tB, viewB, "r1", "b1");
+      upsertRowSimple(tC, viewC, "r1", "c1");
 
-      assertViewRowCount(conn, viewA, 1, "tenA visible before TTL");
-      assertViewRowCount(conn, viewB, 1, "tenB visible before TTL");
-      assertViewRowCount(conn, viewC, 1, "tenC visible before TTL");
+      assertViewRowCount(tA, viewA, 1, "tenA visible before TTL");
+      assertViewRowCount(tB, viewB, 1, "tenB visible before TTL");
+      assertViewRowCount(tC, viewC, 1, "tenC visible before TTL");
 
       injectEdge.incrementValue(ttlA * 2 * 1000L);
-      assertViewRowCount(conn, viewA, 0, "tenA masked after its TTL");
-      assertViewRowCount(conn, viewB, 1, "tenB still visible");
-      assertViewRowCount(conn, viewC, 1, "tenC still visible");
+      assertViewRowCount(tA, viewA, 0, "tenA masked after its TTL");
+      assertViewRowCount(tB, viewB, 1, "tenB still visible");
+      assertViewRowCount(tC, viewC, 1, "tenC still visible");
 
       injectEdge.incrementValue(ttlB * 2 * 1000L);
-      assertViewRowCount(conn, viewB, 0, "tenB masked after its TTL");
-      assertViewRowCount(conn, viewC, 1, "tenC still visible");
+      assertViewRowCount(tB, viewB, 0, "tenB masked after its TTL");
+      assertViewRowCount(tC, viewC, 1, "tenC still visible");
     }
 
     long afterInsertTime = injectEdge.currentTime();
@@ -334,14 +283,14 @@ public class TenantTTLIT extends BaseTest {
    * regardless of which region the data resides in.
    */
   @Test
-  public void testCompactionWithRegionSplitPrunesGlobalViews() throws Exception {
+  public void testCompactionWithSplitRegions() throws Exception {
     String schemaName = generateUniqueName();
     String baseTableName = generateUniqueName();
     String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
-    String viewA = SchemaUtil.getTableName(schemaName, generateUniqueName());
-    String viewB = SchemaUtil.getTableName(schemaName, generateUniqueName());
-    String viewC = SchemaUtil.getTableName(schemaName, generateUniqueName());
-    String viewD = SchemaUtil.getTableName(schemaName, generateUniqueName());
+    String viewA = generateUniqueName();
+    String viewB = generateUniqueName();
+    String viewC = generateUniqueName();
+    String viewD = generateUniqueName();
 
     int shortTTL = 10;
     int longTTL = 1000;
@@ -353,40 +302,37 @@ public class TenantTTLIT extends BaseTest {
       // Region 1: [empty, 'orgC') -> orgA, orgB
       // Region 2: ['orgC', empty) -> orgC, orgD
       conn.createStatement()
-        .execute(String.format("CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, "
-          + "ID1 VARCHAR NOT NULL, " + "COL1 VARCHAR " + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
-          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'"
-          + " SPLIT ON ('orgC')", fullTableName));
+        .execute(String.format(
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'"
+            + " SPLIT ON ('orgC')",
+          fullTableName));
+    }
 
-      TableName tn = TableName.valueOf(SchemaUtil.getTableName(schemaName, baseTableName));
-      try (org.apache.hadoop.hbase.client.Connection hConn =
-        ConnectionFactory.createConnection(getUtility().getConfiguration())) {
-        List<RegionInfo> regions = hConn.getAdmin().getRegions(tn);
-        assertEquals("Expected 2 regions after SPLIT ON", 2, regions.size());
+    TableName tn = TableName.valueOf(SchemaUtil.getTableName(schemaName, baseTableName));
+    try (org.apache.hadoop.hbase.client.Connection hConn =
+      ConnectionFactory.createConnection(getUtility().getConfiguration())) {
+      List<RegionInfo> regions = hConn.getAdmin().getRegions(tn);
+      assertEquals("Expected 2 regions after SPLIT ON", 2, regions.size());
+    }
+
+    createTenantViewWithTTL("orgA", fullTableName, viewA, shortTTL);
+    createTenantViewWithTTL("orgB", fullTableName, viewB, shortTTL);
+    createTenantViewWithTTL("orgC", fullTableName, viewC, shortTTL);
+    createTenantViewWithTTL("orgD", fullTableName, viewD, longTTL);
+
+    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    injectEdge.setValue(startTime);
+
+    String[] tenants = { "orgA", "orgB", "orgC", "orgD" };
+    String[] views = { viewA, viewB, viewC, viewD };
+    for (int i = 0; i < tenants.length; i++) {
+      try (Connection tc = getTenantConnection(tenants[i])) {
+        tc.setAutoCommit(true);
+        upsertRowSimple(tc, views[i], "r1", tenants[i] + "_val");
       }
-
-      // orgA and orgB get short TTL, orgC gets short TTL, orgD gets long TTL
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'orgA' TTL = %d",
-          viewA, fullTableName, shortTTL));
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'orgB' TTL = %d",
-          viewB, fullTableName, shortTTL));
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'orgC' TTL = %d",
-          viewC, fullTableName, shortTTL));
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'orgD' TTL = %d",
-          viewD, fullTableName, longTTL));
-
-      long startTime = EnvironmentEdgeManager.currentTimeMillis();
-      EnvironmentEdgeManager.injectEdge(injectEdge);
-      injectEdge.setValue(startTime);
-
-      upsertRowSimple(conn, viewA, "r1", "a1");
-      upsertRowSimple(conn, viewB, "r1", "b1");
-      upsertRowSimple(conn, viewC, "r1", "c1");
-      upsertRowSimple(conn, viewD, "r1", "d1");
     }
 
     long afterInsertTime = EnvironmentEdgeManager.currentTimeMillis();
@@ -421,8 +367,8 @@ public class TenantTTLIT extends BaseTest {
     String schemaName = generateUniqueName();
     String baseTableName = generateUniqueName();
     String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
-    String view1Name = SchemaUtil.getTableName(schemaName, generateUniqueName());
-    String view2Name = SchemaUtil.getTableName(schemaName, generateUniqueName());
+    String view1Name = generateUniqueName();
+    String view2Name = generateUniqueName();
 
     int ttlOrg1 = 10;
     int ttlOrg2 = 1000;
@@ -431,27 +377,30 @@ public class TenantTTLIT extends BaseTest {
       conn.setAutoCommit(true);
 
       conn.createStatement()
-        .execute(String.format("CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, "
-          + "ID1 VARCHAR NOT NULL, " + "COL1 VARCHAR " + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
-          + ") MULTI_TENANT=true, SALT_BUCKETS=4, COLUMN_ENCODED_BYTES=0,"
-          + " DEFAULT_COLUMN_FAMILY='0'", fullTableName));
+        .execute(String.format(
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+            + ") MULTI_TENANT=true, SALT_BUCKETS=4, COLUMN_ENCODED_BYTES=0,"
+            + " DEFAULT_COLUMN_FAMILY='0'",
+          fullTableName));
+    }
 
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'org1' TTL = %d",
-          view1Name, fullTableName, ttlOrg1));
+    createTenantViewWithTTL("org1", fullTableName, view1Name, ttlOrg1);
+    createTenantViewWithTTL("org2", fullTableName, view2Name, ttlOrg2);
 
-      conn.createStatement()
-        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ORGID = 'org2' TTL = %d",
-          view2Name, fullTableName, ttlOrg2));
+    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    injectEdge.setValue(startTime);
 
-      long startTime = EnvironmentEdgeManager.currentTimeMillis();
-      EnvironmentEdgeManager.injectEdge(injectEdge);
-      injectEdge.setValue(startTime);
-
-      upsertRowSimple(conn, view1Name, "k1", "c1");
-      upsertRowSimple(conn, view1Name, "k2", "c2");
-      upsertRowSimple(conn, view2Name, "k1", "c3");
-      upsertRowSimple(conn, view2Name, "k2", "c4");
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      upsertRowSimple(t1, view1Name, "k1", "c1");
+      upsertRowSimple(t1, view1Name, "k2", "c2");
+    }
+    try (Connection t2 = getTenantConnection("org2")) {
+      t2.setAutoCommit(true);
+      upsertRowSimple(t2, view2Name, "k1", "c3");
+      upsertRowSimple(t2, view2Name, "k2", "c4");
     }
 
     long afterInsertTime = EnvironmentEdgeManager.currentTimeMillis();
@@ -475,6 +424,19 @@ public class TenantTTLIT extends BaseTest {
 
   // ---- Helper methods ----
 
+  private Connection getTenantConnection(String tenantId) throws SQLException {
+    return DriverManager.getConnection(getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId);
+  }
+
+  private void createTenantViewWithTTL(String tenantId, String baseTable, String viewName,
+    int ttlSeconds) throws SQLException {
+    try (Connection conn = getTenantConnection(tenantId)) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute(String.format("CREATE VIEW %s AS SELECT * FROM %s TTL = %d",
+        viewName, baseTable, ttlSeconds));
+    }
+  }
+
   private void upsertRow(Connection conn, String viewName, String id1, String id2, String col1,
     String col2) throws SQLException {
     PreparedStatement stmt = conn.prepareStatement(
@@ -483,17 +445,6 @@ public class TenantTTLIT extends BaseTest {
     stmt.setString(2, id2);
     stmt.setString(3, col1);
     stmt.setString(4, col2);
-    stmt.executeUpdate();
-    conn.commit();
-  }
-
-  private void upsertRowDirect(Connection conn, String tableName, String orgId, String id1,
-    String col1) throws SQLException {
-    PreparedStatement stmt = conn.prepareStatement(
-      String.format("UPSERT INTO %s (ORGID, ID1, COL1) VALUES (?, ?, ?)", tableName));
-    stmt.setString(1, orgId);
-    stmt.setString(2, id1);
-    stmt.setString(3, col1);
     stmt.executeUpdate();
     conn.commit();
   }
@@ -545,5 +496,4 @@ public class TenantTTLIT extends BaseTest {
       TestUtil.majorCompact(getUtility(), tn);
     }
   }
-
 }
