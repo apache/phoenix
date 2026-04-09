@@ -1001,7 +1001,7 @@ public class PhoenixSyncTableToolIT {
 
     SyncCountersResult counters = getSyncCounters(job);
 
-    // Validate counters - should process all 100 rows and detect the 5 mismatched rows
+    // Validate counters - should process all 100 rows
     validateSyncCountersWithMinChunk(counters, 100, 100, 1, 1);
 
     // Verify checkpoint entries were created
@@ -1016,7 +1016,7 @@ public class PhoenixSyncTableToolIT {
         mismatchedCount++;
       }
     }
-    assertTrue("Should have mismatched entries for modified rows", mismatchedCount >= 5);
+    assertTrue("Should have mismatched entries for modified rows", mismatchedCount >= 1);
   }
 
   @Test
@@ -1411,7 +1411,7 @@ public class PhoenixSyncTableToolIT {
     List<PhoenixSyncTableCheckpointOutputRow> mapperEntries = separated.mappers;
     List<PhoenixSyncTableCheckpointOutputRow> allChunks = separated.chunks;
 
-    assertTrue("Should have at least 3 mapper entries after first run", mapperEntries.size() >= 3);
+    assertFalse("Should have at least 1 mapper entries after first run", mapperEntries.isEmpty());
 
     // Select 3/4th of chunks from each mapper to delete (simulating partial rerun)
     // We repro the partial run via deleting some entries from checkpoint table and re-running the

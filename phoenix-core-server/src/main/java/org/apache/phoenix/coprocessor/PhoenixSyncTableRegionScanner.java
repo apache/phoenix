@@ -135,8 +135,7 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
             break;
           }
 
-          byte[] rowKey = CellUtil.cloneRow(rowCells.get(0));
-          currentChunk.addRow(rowKey, rowCells);
+          currentChunk.addRow(rowCells);
           if (!isTargetClusterScan && currentChunk.exceedsSize(chunkSizeBytes)) {
             break;
           }
@@ -272,7 +271,8 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
     /**
      * Adds a row to this chunk, updating size, count, and digest.
      */
-    void addRow(byte[] rowKey, List<Cell> cells) {
+    void addRow(List<Cell> cells) {
+      byte[] rowKey = CellUtil.cloneRow(cells.get(0));
       if (startKey == null) {
         startKey = rowKey;
       }
@@ -285,7 +285,7 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
     private long calculateRowSize(List<Cell> cells) {
       long rowSize = 0;
       for (Cell cell : cells) {
-        rowSize += PrivateCellUtil.estimatedSerializedSizeOf(cell);
+        rowSize +=  cell.getSerializedSize();
       }
       return rowSize;
     }
