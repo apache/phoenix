@@ -127,6 +127,7 @@ public class HAGroupStoreManagerIT extends HABaseIT {
 
     // Create two HA groups with ACTIVE and ACTIVE_NOT_IN_SYNC roles
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName1, zkUrl, this.peerZKUrl,
+      CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
       ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.ACTIVE, null,
       CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
     HAGroupStoreRecord activeRecord1 = new HAGroupStoreRecord("1.0", haGroupName1,
@@ -136,6 +137,7 @@ public class HAGroupStoreManagerIT extends HABaseIT {
     haAdmin.createHAGroupStoreRecordInZooKeeper(activeRecord1);
 
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName2, zkUrl, this.peerZKUrl,
+      CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
       ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.ACTIVE, null,
       CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
@@ -180,6 +182,7 @@ public class HAGroupStoreManagerIT extends HABaseIT {
 
     // Create record again in System Table
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, this.peerZKUrl,
+      CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
       ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
       CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
     // Now it should be present
@@ -437,21 +440,24 @@ public class HAGroupStoreManagerIT extends HABaseIT {
     // Create HA groups with current zkUrl as ZK_URL_1
     String haGroupWithCurrentZkUrl = testName.getMethodName() + "_current_zk";
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupWithCurrentZkUrl, zkUrl,
-      this.peerZKUrl, ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY,
-      null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.peerZKUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Create HA group with current zkUrl as ZK_URL_2 (swapped)
     String haGroupWithCurrentZkUrlAsPeer = testName.getMethodName() + "_current_as_peer";
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupWithCurrentZkUrlAsPeer,
-      this.peerZKUrl, zkUrl, ClusterRoleRecord.ClusterRole.STANDBY,
-      ClusterRoleRecord.ClusterRole.ACTIVE, zkUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.peerZKUrl, zkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE, zkUrl,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Create HA group with different zkUrl (should not appear in results)
     String differentZkUrl = "localhost:2182:/different";
     String haGroupWithDifferentZkUrl = testName.getMethodName() + "_different_zk";
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupWithDifferentZkUrl, differentZkUrl,
-      "localhost:2183:/other", ClusterRoleRecord.ClusterRole.ACTIVE,
-      ClusterRoleRecord.ClusterRole.STANDBY, zkUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      "localhost:2183:/other", CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Get HA group names - should only return groups where current zkUrl matches ZK_URL_1 or
     // ZK_URL_2
@@ -492,8 +498,9 @@ public class HAGroupStoreManagerIT extends HABaseIT {
     String differentZkUrl2 = "localhost:2183:/different2";
     String haGroupWithDifferentZkUrls = testName.getMethodName() + "_different";
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupWithDifferentZkUrls,
-      differentZkUrl1, differentZkUrl2, ClusterRoleRecord.ClusterRole.ACTIVE,
-      ClusterRoleRecord.ClusterRole.STANDBY, zkUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      differentZkUrl1, differentZkUrl2, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Get HA group names - should not contain the group with different zkUrls
     List<String> filteredHAGroupNames = haGroupStoreManager.getHAGroupNames();

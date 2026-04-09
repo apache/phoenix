@@ -39,6 +39,8 @@ public class HAGroupStoreTestUtil {
    * @param haGroupName       the HA group name
    * @param zkUrl             the ZooKeeper URL for the local cluster
    * @param peerZKUrl         the ZooKeeper URL for the peer cluster
+   * @param clusterUrl1       the HMaster address of the local cluster
+   * @param clusterUrl2       the HMaster address of the peer cluster
    * @param localClusterRole  the role of the local cluster
    * @param peerClusterRole   the role of the peer cluster
    * @param overrideConnZkUrl optional override for the connection ZK URL
@@ -46,15 +48,6 @@ public class HAGroupStoreTestUtil {
    * @param hdfsUrl2          the peer cluster HDFS URI
    * @throws SQLException if the database operation fails
    */
-  public static void upsertHAGroupRecordInSystemTable(String haGroupName, String zkUrl,
-    String peerZKUrl, ClusterRoleRecord.ClusterRole localClusterRole,
-    ClusterRoleRecord.ClusterRole peerClusterRole, String overrideConnZkUrl, String hdfsUrl1,
-    String hdfsUrl2) throws SQLException {
-    upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZKUrl, zkUrl, peerZKUrl,
-      localClusterRole, peerClusterRole, 1L, overrideConnZkUrl, HighAvailabilityPolicy.FAILOVER,
-      new Properties(), hdfsUrl1, hdfsUrl2);
-  }
-
   public static void upsertHAGroupRecordInSystemTable(String haGroupName, String zkUrl,
     String peerZKUrl, String clusterUrl1, String clusterUrl2,
     ClusterRoleRecord.ClusterRole localClusterRole, ClusterRoleRecord.ClusterRole peerClusterRole,

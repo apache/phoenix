@@ -21,6 +21,7 @@ import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
+import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
 import static org.junit.Assert.assertEquals;
@@ -81,6 +82,10 @@ public class HAGroupStoreClientIT extends HABaseIT {
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
+    // some of the test scenarios don't behave correctly because of the interactions
+    // between ReplayService and HAGroupStore
+    conf1.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, false);
+    conf2.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, false);
     CLUSTERS.start();
   }
 
@@ -104,8 +109,8 @@ public class HAGroupStoreClientIT extends HABaseIT {
     this.masterUrl = CLUSTERS.getMasterAddress1();
     this.peerMasterUrl = CLUSTERS.getMasterAddress2();
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, this.zkUrl, this.peerZKUrl,
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
-      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.masterUrl, this.peerMasterUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
   }
 
   @After
@@ -121,9 +126,10 @@ public class HAGroupStoreClientIT extends HABaseIT {
     String haGroupName = testName.getMethodName();
     // Clean existing record
     HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupName, zkUrl);
-    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, null, null,
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, this.zkUrl,
-      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, null, null, this.masterUrl,
+      this.peerMasterUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY, this.zkUrl, CLUSTERS.getHdfsUrl1(),
+      CLUSTERS.getHdfsUrl2());
     HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient
       .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
     assertNull(haGroupStoreClient);
@@ -314,11 +320,11 @@ public class HAGroupStoreClientIT extends HABaseIT {
     String haGroupName1 = testName.getMethodName() + "1";
     String haGroupName2 = testName.getMethodName() + "2";
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName1, this.zkUrl, this.peerZKUrl,
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
-      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.masterUrl, this.peerMasterUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName2, this.zkUrl, this.peerZKUrl,
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
-      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.masterUrl, this.peerMasterUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Setup initial HAGroupStoreRecords
     HAGroupStoreRecord record1 =
@@ -567,7 +573,9 @@ public class HAGroupStoreClientIT extends HABaseIT {
 
     // Delete the record from ZK
     haAdmin.getCurator().delete().deletingChildrenIfNeeded().forPath(toPath(haGroupName));
+    System.out.println("Going to sleep after deleting record from zk");
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+    System.out.println("Waking up after deleting record from zk");
 
     // Delete the record from System Table
     try (
@@ -578,6 +586,7 @@ public class HAGroupStoreClientIT extends HABaseIT {
         "DELETE FROM " + SYSTEM_HA_GROUP_NAME + " WHERE HA_GROUP_NAME = '" + haGroupName + "'");
       conn.commit();
     }
+    System.out.println("Deleted record from system table");
 
     // This should fail because no record exists in either ZK or System Table
     try {
@@ -949,8 +958,8 @@ public class HAGroupStoreClientIT extends HABaseIT {
   public void testGetHAGroupNamesWithSingleGroup() throws Exception {
     String haGroupName = testName.getMethodName();
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, this.zkUrl, this.peerZKUrl,
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
-      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.masterUrl, this.peerMasterUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     List<String> haGroupNames = HAGroupStoreClient.getHAGroupNames(zkUrl);
 
@@ -976,17 +985,18 @@ public class HAGroupStoreClientIT extends HABaseIT {
 
     // Insert multiple HA group records
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName1, this.zkUrl, this.peerZKUrl,
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
-      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.masterUrl, this.peerMasterUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName2, this.zkUrl, this.peerZKUrl,
-      ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE, null,
-      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.masterUrl, this.peerMasterUrl, ClusterRoleRecord.ClusterRole.STANDBY,
+      ClusterRoleRecord.ClusterRole.ACTIVE, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName3, this.zkUrl, this.peerZKUrl,
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
-      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.masterUrl, this.peerMasterUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName4, "bad_zk_url",
-      this.peerZKUrl, ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY,
-      this.zkUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.peerZKUrl, this.masterUrl, this.peerMasterUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY, this.zkUrl, CLUSTERS.getHdfsUrl1(),
+      CLUSTERS.getHdfsUrl2());
 
     List<String> haGroupNames = HAGroupStoreClient.getHAGroupNames(zkUrl);
 
@@ -1030,11 +1040,11 @@ public class HAGroupStoreClientIT extends HABaseIT {
 
     // Insert HA group records
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName1, this.zkUrl, this.peerZKUrl,
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
-      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.masterUrl, this.peerMasterUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName2, this.zkUrl, this.peerZKUrl,
-      ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE, null,
-      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.masterUrl, this.peerMasterUrl, ClusterRoleRecord.ClusterRole.STANDBY,
+      ClusterRoleRecord.ClusterRole.ACTIVE, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Verify both groups exist
     List<String> haGroupNames = HAGroupStoreClient.getHAGroupNames(zkUrl);
@@ -1087,8 +1097,8 @@ public class HAGroupStoreClientIT extends HABaseIT {
 
     // 1. Setup: Create initial system table record with default values
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, this.zkUrl, this.peerZKUrl,
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
-      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      this.masterUrl, this.peerMasterUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // 2. Create ZK record with DIFFERENT values for testable fields (skip zkUrl changes)
     String updatedClusterUrl = this.masterUrl + ":updated";
