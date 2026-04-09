@@ -164,11 +164,12 @@ public class TenantTTLIT extends BaseTest {
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.setAutoCommit(true);
-      conn.createStatement().execute(String.format(
-        "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, ID2 VARCHAR NOT NULL, "
-          + "COL1 VARCHAR, COL2 VARCHAR " + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1, ID2)"
-          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
-        fullTableName));
+      conn.createStatement()
+        .execute(String.format(
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 INTEGER NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+          fullTableName));
     }
 
     createTenantViewWithTTL("org1", fullTableName, view1Name, ttlOrg1);
@@ -180,13 +181,13 @@ public class TenantTTLIT extends BaseTest {
 
     try (Connection t1 = getTenantConnection("org1")) {
       t1.setAutoCommit(true);
-      upsertRow(t1, view1Name, "k1", "v1", "c1", "c2");
-      upsertRow(t1, view1Name, "k2", "v2", "c3", "c4");
+      upsertRowInt(t1, view1Name, 1, "c1");
+      upsertRowInt(t1, view1Name, 2, "c2");
     }
     try (Connection t2 = getTenantConnection("org2")) {
       t2.setAutoCommit(true);
-      upsertRow(t2, view2Name, "k1", "v1", "c5", "c6");
-      upsertRow(t2, view2Name, "k2", "v2", "c7", "c8");
+      upsertRowInt(t2, view2Name, 1, "c3");
+      upsertRowInt(t2, view2Name, 2, "c4");
     }
 
     long afterInsertTime = EnvironmentEdgeManager.currentTimeMillis();
@@ -227,11 +228,10 @@ public class TenantTTLIT extends BaseTest {
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.setAutoCommit(true);
-
       conn.createStatement()
         .execute(String.format(
-          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
-            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, KP CHAR(3) NOT NULL, SEQ BIGINT NOT NULL, "
+            + "COL1 VARCHAR " + "CONSTRAINT PK PRIMARY KEY (ORGID, KP, SEQ)"
             + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
           fullTableName));
     }
@@ -249,9 +249,9 @@ public class TenantTTLIT extends BaseTest {
       tA.setAutoCommit(true);
       tB.setAutoCommit(true);
       tC.setAutoCommit(true);
-      upsertRowSimple(tA, viewA, "r1", "a1");
-      upsertRowSimple(tB, viewB, "r1", "b1");
-      upsertRowSimple(tC, viewC, "r1", "c1");
+      upsertRowCharBigint(tA, viewA, "AAA", 1L, "a1");
+      upsertRowCharBigint(tB, viewB, "BBB", 1L, "b1");
+      upsertRowCharBigint(tC, viewC, "CCC", 1L, "c1");
 
       assertViewRowCount(tA, viewA, 1, "tenA visible before TTL");
       assertViewRowCount(tB, viewB, 1, "tenB visible before TTL");
@@ -445,6 +445,27 @@ public class TenantTTLIT extends BaseTest {
     stmt.setString(2, id2);
     stmt.setString(3, col1);
     stmt.setString(4, col2);
+    stmt.executeUpdate();
+    conn.commit();
+  }
+
+  private void upsertRowInt(Connection conn, String viewName, int id1, String col1)
+    throws SQLException {
+    PreparedStatement stmt =
+      conn.prepareStatement(String.format("UPSERT INTO %s (ID1, COL1) VALUES (?, ?)", viewName));
+    stmt.setInt(1, id1);
+    stmt.setString(2, col1);
+    stmt.executeUpdate();
+    conn.commit();
+  }
+
+  private void upsertRowCharBigint(Connection conn, String viewName, String kp, long seq,
+    String col1) throws SQLException {
+    PreparedStatement stmt = conn
+      .prepareStatement(String.format("UPSERT INTO %s (KP, SEQ, COL1) VALUES (?, ?, ?)", viewName));
+    stmt.setString(1, kp);
+    stmt.setLong(2, seq);
+    stmt.setString(3, col1);
     stmt.executeUpdate();
     conn.commit();
   }

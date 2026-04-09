@@ -91,6 +91,7 @@ import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.RowKeyValueAccessor;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TTLExpression;
@@ -1003,6 +1004,15 @@ public class CompactionScanner implements InternalScanner {
                   }
                 } else {
                   compiledExpr = (LiteralTTLExpression) viewTTL;
+                }
+                if (
+                  (rowKeyMatcher == null || rowKeyMatcher.length == 0) && tid != null
+                    && !tid.isEmpty() && isMultiTenant
+                ) {
+                  RowKeySchema schema = baseTable.getRowKeySchema();
+                  boolean salted = baseTable.getBucketNum() != null;
+                  rowKeyMatcher = ScanUtil.getTenantIdBytes(schema, salted,
+                    PNameFactory.newName(tid), true, false);
                 }
                 tableTTLInfoList.add(new TableTTLInfo(physicalTableName.getBytes(), tenantIdBytes,
                   fullTableName.getBytes(), rowKeyMatcher, compiledExpr));
