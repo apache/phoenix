@@ -99,9 +99,9 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
       CLUSTERS.getMasterAddress2(), ClusterRoleRecord.ClusterRole.ACTIVE,
       ClusterRoleRecord.ClusterRole.STANDBY, null);
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(),
-      CLUSTERS.getZkUrl2(), CLUSTERS.getZkUrl1(), CLUSTERS.getMasterAddress2(),
-      CLUSTERS.getMasterAddress1(), ClusterRoleRecord.ClusterRole.STANDBY,
-      ClusterRoleRecord.ClusterRole.ACTIVE, null);
+      CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(),
+      CLUSTERS.getMasterAddress2(), ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY, CLUSTERS.getZkUrl2());
 
   }
 

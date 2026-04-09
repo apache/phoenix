@@ -288,8 +288,8 @@ public class HighAvailabilityTestingUtility {
       HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl1(), getZkUrl2(),
         getMasterAddress1(), getMasterAddress2(), role1, role2, version1, overrideZKUrl, policy,
         getHATestProperties(), null, null);
-      HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl2(), getZkUrl1(),
-        getMasterAddress2(), getMasterAddress1(), role2, role1, version2, overrideZKUrl, policy,
+      HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl1(), getZkUrl2(),
+        getMasterAddress1(), getMasterAddress2(), role1, role2, version1, getZkUrl2(), policy,
         getHATestProperties(), null, null);
     }
 
@@ -304,9 +304,10 @@ public class HighAvailabilityTestingUtility {
           getMasterAddress1(), getMasterAddress2(), role1, role2, version1, overrideZKUrl, policy,
           getHATestProperties(), null, null);
       } else {
-        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl2(), getZkUrl1(),
-          getMasterAddress2(), getMasterAddress1(), role2, role1, version2, overrideZKUrl, policy,
-          getHATestProperties(), null, null);
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl1(), getZkUrl2(),
+          getMasterAddress1(), getMasterAddress2(), role1, role2, version2,
+          overrideZKUrl != null ? overrideZKUrl : getZkUrl2(), policy, getHATestProperties(), null,
+          null);
       }
     }
 
