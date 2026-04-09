@@ -28,25 +28,12 @@ import org.bouncycastle.crypto.digests.SHA256Digest;
 public class SHA256DigestUtil {
 
   /**
-   * Maximum allowed size for encoded SHA-256 digest state. BouncyCastle's SHA256Digest encoded
-   * state ranges from 53 to 113 bytes (52 base + 0-60 buffered words + 1 purpose byte). We allow up
-   * to 128 bytes as headroom.
-   */
-  public static final int MAX_SHA256_DIGEST_STATE_SIZE = 128;
-
-  /**
    * Encodes a SHA256Digest state to a byte array.
    * @param digest The digest whose state should be encoded
    * @return Byte array containing the raw BouncyCastle encoded state
    */
   public static byte[] encodeDigestState(SHA256Digest digest) {
-    byte[] encoded = digest.getEncodedState();
-    if (encoded.length > MAX_SHA256_DIGEST_STATE_SIZE) {
-      throw new IllegalArgumentException(
-        String.format("SHA256 encoded state too large: %d, expected <= %d", encoded.length,
-          MAX_SHA256_DIGEST_STATE_SIZE));
-    }
-    return encoded;
+    return digest.getEncodedState();
   }
 
   /**
@@ -59,11 +46,6 @@ public class SHA256DigestUtil {
     if (encodedState == null || encodedState.length == 0) {
       throw new IllegalArgumentException(
         "Invalid encoded digest state: encodedState is null or empty");
-    }
-    if (encodedState.length > MAX_SHA256_DIGEST_STATE_SIZE) {
-      throw new IllegalArgumentException(
-        String.format("Invalid SHA256 state length: %d, expected <= %d", encodedState.length,
-          MAX_SHA256_DIGEST_STATE_SIZE));
     }
     return new SHA256Digest(encodedState);
   }

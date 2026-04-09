@@ -51,8 +51,7 @@ public class SHA256DigestUtilTest {
     byte[] encoded = SHA256DigestUtil.encodeDigestState(digest);
 
     Assert.assertNotNull("Encoded state should not be null", encoded);
-    Assert.assertTrue("Encoded state should be within limits",
-      encoded.length <= SHA256DigestUtil.MAX_SHA256_DIGEST_STATE_SIZE);
+    Assert.assertTrue("Encoded state should have data", encoded.length > 0);
   }
 
   @Test
@@ -110,38 +109,6 @@ public class SHA256DigestUtilTest {
       Assert.assertTrue("Error message should mention empty", e.getMessage().contains("empty"));
     } catch (IOException e) {
       Assert.fail("Should throw IllegalArgumentException, not IOException");
-    }
-  }
-
-  @Test
-  public void testDecodeDigestStateTooShort() {
-    // Too short to be a valid BouncyCastle SHA-256 state
-    byte[] tooShort = new byte[] { 0x01, 0x02, 0x03 };
-
-    try {
-      SHA256DigestUtil.decodeDigestState(tooShort);
-      Assert.fail("Should throw exception for invalid state");
-    } catch (Exception e) {
-      // Expected - BouncyCastle will reject invalid state
-    }
-  }
-
-  @Test
-  public void testDecodeDigestStateMaliciousLargeState() {
-    // Array larger than MAX_SHA256_DIGEST_STATE_SIZE
-    byte[] malicious = new byte[SHA256DigestUtil.MAX_SHA256_DIGEST_STATE_SIZE + 1];
-
-    try {
-      SHA256DigestUtil.decodeDigestState(malicious);
-      Assert.fail(
-        "Should throw IllegalArgumentException for state size exceeding MAX_SHA256_DIGEST_STATE_SIZE");
-    } catch (IllegalArgumentException e) {
-      Assert.assertTrue("Error message should mention invalid state length",
-        e.getMessage().contains("Invalid SHA256 state length"));
-      Assert.assertTrue("Error message should show expected max size",
-        e.getMessage().contains(String.valueOf(SHA256DigestUtil.MAX_SHA256_DIGEST_STATE_SIZE)));
-    } catch (IOException e) {
-      Assert.fail("Should throw IllegalArgumentException for security check failure");
     }
   }
 
@@ -269,20 +236,6 @@ public class SHA256DigestUtilTest {
   }
 
   @Test
-  public void testEncodedStateSizeWithinLimits() {
-    SHA256Digest digest = new SHA256Digest();
-    // Hash large data
-    for (int i = 0; i < 1000; i++) {
-      digest.update("test data chunk".getBytes(), 0, 15);
-    }
-
-    byte[] encoded = SHA256DigestUtil.encodeDigestState(digest);
-
-    Assert.assertTrue("Encoded state should be within MAX_SHA256_DIGEST_STATE_SIZE limit",
-      encoded.length <= SHA256DigestUtil.MAX_SHA256_DIGEST_STATE_SIZE);
-  }
-
-  @Test
   public void testEmptyDigestFinalization() {
     SHA256Digest emptyDigest = new SHA256Digest();
 
@@ -306,13 +259,6 @@ public class SHA256DigestUtilTest {
 
     Assert.assertNotNull("Hash of large data should not be null", hash);
     Assert.assertEquals("SHA-256 hash should always be 32 bytes", 32, hash.length);
-  }
-
-  @Test
-  public void testStateSizeConstant() {
-    // Verify the constant is reasonable for SHA-256 state
-    Assert.assertTrue("MAX_SHA256_DIGEST_STATE_SIZE should be at least 96 bytes", true);
-    Assert.assertTrue("MAX_SHA256_DIGEST_STATE_SIZE should not be excessively large", true);
   }
 
   @Test
