@@ -403,6 +403,9 @@ public class PhoenixSyncTableMapper
       scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_SIZE_BYTES,
         Bytes.toBytes(chunkSizeBytes));
     }
+    // Use the half of the HBase RPC timeout value as the server page size to make sure
+    // that the HBase region server will be able to send a heartbeat message to the
+    // client before the client times out.
     long syncTablePageTimeoutMs = (long) (conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
       QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT) * 0.5);
     scan.setAttribute(BaseScannerRegionObserverConstants.SERVER_PAGE_SIZE_MS,

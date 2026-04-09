@@ -222,7 +222,11 @@ public class PhoenixSyncTableCheckpointOutputRow {
       String[] pairs = counters.split(",");
       for (String pair : pairs) {
         String[] keyValue = pair.split("=");
-        if (keyValue.length == 2 && keyValue[0].trim().equals(counterName)) {
+        if (keyValue.length != 2) {
+          throw new IllegalArgumentException(
+            String.format("Corrupted counter format: '%s' in counters '%s'", pair, counters));
+        }
+        if (keyValue[0].trim().equals(counterName)) {
           return Long.parseLong(keyValue[1].trim());
         }
       }

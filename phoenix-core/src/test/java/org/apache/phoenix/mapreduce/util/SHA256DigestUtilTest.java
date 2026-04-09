@@ -151,9 +151,9 @@ public class SHA256DigestUtilTest {
     digest.update("test".getBytes(), 0, 4);
     byte[] encoded = SHA256DigestUtil.encodeDigestState(digest);
 
-    // Corrupt the state data
-    encoded[0] = (byte) 0xFF;
-    encoded[1] = (byte) 0xFF;
+    // Corrupt bytes in the internal hash state region of the encoded format
+    encoded[4] ^= 0xFF;
+    encoded[5] ^= 0xFF;
 
     try {
       SHA256Digest decoded = SHA256DigestUtil.decodeDigestState(encoded);

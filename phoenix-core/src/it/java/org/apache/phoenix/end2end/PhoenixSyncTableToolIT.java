@@ -1515,7 +1515,7 @@ public class PhoenixSyncTableToolIT {
     validateSyncCounters(counters1, 10, 10, 10, 0);
     validateMapperCounters(counters1, 4, 0);
 
-    // Run sync tool wiht --raw-scan
+    // Run sync tool with --raw-scan
     // Should detect mismatch because target has delete marker, source doesn't
     Job job2 = runSyncTool(uniqueTableName, "--raw-scan");
     SyncCountersResult counters2 = getSyncCounters(job2);
@@ -2251,6 +2251,7 @@ public class PhoenixSyncTableToolIT {
 
       // Attempt to split the region at the specified row key
       try (Admin admin = pconn.getQueryServices().getAdmin()) {
+        admin.flush(hbaseTableName);
         admin.split(hbaseTableName, splitPoint);
         LOGGER.info("Split initiated for table {} at split point {} (bytes: {})", tableName,
           splitId, Bytes.toStringBinary(splitPoint));

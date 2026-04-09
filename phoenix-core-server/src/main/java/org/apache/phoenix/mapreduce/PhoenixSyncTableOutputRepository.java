@@ -47,6 +47,18 @@ public class PhoenixSyncTableOutputRepository {
     + " TENANT_ID, START_ROW_KEY, END_ROW_KEY, IS_DRY_RUN, EXECUTION_START_TIME, EXECUTION_END_TIME,"
     + " STATUS, COUNTERS) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
+  private static final String CREATE_CHECKPOINT_TABLE_DDL = "CREATE TABLE IF NOT EXISTS "
+    + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (\n" + "    TABLE_NAME VARCHAR NOT NULL,\n"
+    + "    TARGET_CLUSTER VARCHAR NOT NULL,\n" + "    TYPE VARCHAR(20) NOT NULL,\n"
+    + "    FROM_TIME BIGINT NOT NULL,\n" + "    TO_TIME BIGINT NOT NULL,\n"
+    + "    TENANT_ID VARCHAR,\n" + "    START_ROW_KEY VARBINARY_ENCODED,\n"
+    + "    END_ROW_KEY VARBINARY_ENCODED,\n" + "    IS_DRY_RUN BOOLEAN, \n"
+    + "    EXECUTION_START_TIME TIMESTAMP,\n" + "    EXECUTION_END_TIME TIMESTAMP,\n"
+    + "    STATUS VARCHAR(20),\n" + "    COUNTERS VARCHAR, \n" + "    CONSTRAINT PK PRIMARY KEY (\n"
+    + "        TABLE_NAME,\n" + "        TARGET_CLUSTER,\n" + "        TYPE ,\n"
+    + "        FROM_TIME,\n" + "        TO_TIME,\n" + "        TENANT_ID,\n"
+    + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS;
+
   /**
    * Creates a repository for managing sync table checkpoint operations. Note: The connection is
    * stored as-is and shared across operations. The caller retains ownership and is responsible for
@@ -58,20 +70,8 @@ public class PhoenixSyncTableOutputRepository {
   }
 
   public void createSyncCheckpointTableIfNotExists() throws SQLException {
-    String ddl = "CREATE TABLE IF NOT EXISTS " + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (\n"
-      + "    TABLE_NAME VARCHAR NOT NULL,\n" + "    TARGET_CLUSTER VARCHAR NOT NULL,\n"
-      + "    TYPE VARCHAR(20) NOT NULL,\n" + "    FROM_TIME BIGINT NOT NULL,\n"
-      + "    TO_TIME BIGINT NOT NULL,\n" + "    TENANT_ID VARCHAR,\n"
-      + "    START_ROW_KEY VARBINARY_ENCODED,\n" + "    END_ROW_KEY VARBINARY_ENCODED,\n"
-      + "    IS_DRY_RUN BOOLEAN, \n" + "    EXECUTION_START_TIME TIMESTAMP,\n"
-      + "    EXECUTION_END_TIME TIMESTAMP,\n" + "    STATUS VARCHAR(20),\n"
-      + "    COUNTERS VARCHAR, \n" + "    CONSTRAINT PK PRIMARY KEY (\n" + "        TABLE_NAME,\n"
-      + "        TARGET_CLUSTER,\n" + "        TYPE ,\n" + "        FROM_TIME,\n"
-      + "        TO_TIME,\n" + "        TENANT_ID,\n" + "        START_ROW_KEY )" + ") TTL="
-      + OUTPUT_TABLE_TTL_SECONDS;
-
     try (Statement stmt = connection.createStatement()) {
-      stmt.execute(ddl);
+      stmt.execute(CREATE_CHECKPOINT_TABLE_DDL);
       connection.commit();
       LOGGER.info("Initialization of checkpoint table {} complete",
         SYNC_TABLE_CHECKPOINT_TABLE_NAME);

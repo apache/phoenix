@@ -509,5 +509,4 @@ public class PhoenixSyncTableMapperTest {
     chunks.add(createChunk(Bytes.toBytes("a"), Bytes.toBytes("g")));
     assertFalse(mapper.shouldStartKeyBeInclusive(mapperStart, chunks));
   }
-
 }
