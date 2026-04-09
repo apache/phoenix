@@ -165,7 +165,8 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
         return ret;
       }
     }).when(haGroupStoreManager).setHAGroupStatusToSync(haGroupName);
-    Thread.sleep(roundDurationSeconds * 4 * 1000);
+    Thread.sleep(roundDurationSeconds * 3 * 1000);
+    LOG.info("Coming out of sleep");
     // we should have switched back to the SYNC mode
     assertEquals(SYNC, logGroup.getMode());
   }
