@@ -28,7 +28,6 @@ import java.util.ArrayList;
 import java.util.List;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
-import org.apache.hadoop.hbase.PrivateCellUtil;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
@@ -285,7 +284,7 @@ public class PhoenixSyncTableRegionScanner extends BaseRegionScanner {
     private long calculateRowSize(List<Cell> cells) {
       long rowSize = 0;
       for (Cell cell : cells) {
-        rowSize +=  cell.getSerializedSize();
+        rowSize += cell.getSerializedSize();
       }
       return rowSize;
     }

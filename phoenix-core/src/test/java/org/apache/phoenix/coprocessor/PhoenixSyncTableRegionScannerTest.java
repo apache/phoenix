@@ -30,7 +30,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.KeyValue;
@@ -81,7 +80,7 @@ public class PhoenixSyncTableRegionScannerTest {
     Chunk chunk = new Chunk(null);
     byte[] rowKey = Bytes.toBytes("row1");
     List<Cell> cells =
-        createTestRow(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE);
+      createTestRow(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE);
     chunk.addRow(cells);
     assertArrayEquals(rowKey, chunk.getStartKey());
     assertArrayEquals(rowKey, chunk.getEndKey());
@@ -107,7 +106,7 @@ public class PhoenixSyncTableRegionScannerTest {
     Chunk chunk = new Chunk(null);
     byte[] rowKey = Bytes.toBytes("row1");
     List<Cell> cells =
-        createTestRow(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE);
+      createTestRow(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE);
 
     long initialSize = chunk.getSize();
     chunk.addRow(cells);
@@ -116,7 +115,7 @@ public class PhoenixSyncTableRegionScannerTest {
     assertTrue(sizeAfterFirstRow > initialSize);
 
     chunk.addRow(createTestRow(Bytes.toBytes("row2"), TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP,
-        TEST_VALUE));
+      TEST_VALUE));
     long sizeAfterSecondRow = chunk.getSize();
 
     assertTrue(sizeAfterSecondRow > sizeAfterFirstRow);
@@ -133,7 +132,7 @@ public class PhoenixSyncTableRegionScannerTest {
 
     Chunk chunkSingleCell = new Chunk(null);
     List<Cell> singleCell =
-        createTestRow(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE);
+      createTestRow(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE);
     chunkSingleCell.addRow(singleCell);
     long sizeWithSingleCell = chunkSingleCell.getSize();
 
@@ -147,7 +146,7 @@ public class PhoenixSyncTableRegionScannerTest {
     byte[] largeValue = new byte[1000];
     Arrays.fill(largeValue, (byte) 'X');
     List<Cell> cells =
-        createTestRow(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, largeValue);
+      createTestRow(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, largeValue);
 
     chunk.addRow(cells);
 
@@ -172,7 +171,7 @@ public class PhoenixSyncTableRegionScannerTest {
   public void testSameDataProducesSameHash() throws IOException {
     byte[] rowKey = Bytes.toBytes("row1");
     List<Cell> cells =
-        createTestRow(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE);
+      createTestRow(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE);
 
     Chunk chunk1 = new Chunk(null);
     chunk1.addRow(cells);
@@ -257,16 +256,14 @@ public class PhoenixSyncTableRegionScannerTest {
     byte[] rowKey = Bytes.toBytes("row1");
 
     Chunk chunk1 = new Chunk(null);
-    List<Cell> putCells =
-        createTestRowWithType(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE,
-            Type.Put);
+    List<Cell> putCells = createTestRowWithType(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP,
+      TEST_VALUE, Type.Put);
     chunk1.addRow(putCells);
     byte[] hash1 = chunk1.finalizeHash();
 
     Chunk chunk2 = new Chunk(null);
-    List<Cell> deleteCells =
-        createTestRowWithType(rowKey, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE,
-            Type.Delete);
+    List<Cell> deleteCells = createTestRowWithType(rowKey, TEST_FAMILY, TEST_QUALIFIER,
+      TEST_TIMESTAMP, TEST_VALUE, Type.Delete);
     chunk2.addRow(deleteCells);
     byte[] hash2 = chunk2.finalizeHash();
 
@@ -295,9 +292,9 @@ public class PhoenixSyncTableRegionScannerTest {
     byte[] rowKey1 = Bytes.toBytes("row1");
     byte[] rowKey2 = Bytes.toBytes("row2");
     List<Cell> cells1 =
-        createTestRow(rowKey1, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE);
+      createTestRow(rowKey1, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE);
     List<Cell> cells2 =
-        createTestRow(rowKey2, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE);
+      createTestRow(rowKey2, TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP, TEST_VALUE);
 
     // Create combined chunk with both rows
     Chunk combined = new Chunk(null);
@@ -375,11 +372,11 @@ public class PhoenixSyncTableRegionScannerTest {
     assertEquals(0, chunk.getRowCount());
 
     chunk.addRow(createTestRow(Bytes.toBytes("row1"), TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP,
-        TEST_VALUE));
+      TEST_VALUE));
     assertEquals(1, chunk.getRowCount());
 
     chunk.addRow(createTestRow(Bytes.toBytes("row2"), TEST_FAMILY, TEST_QUALIFIER, TEST_TIMESTAMP,
-        TEST_VALUE));
+      TEST_VALUE));
     assertEquals(2, chunk.getRowCount());
   }
 
@@ -407,7 +404,7 @@ public class PhoenixSyncTableRegionScannerTest {
     PhoenixSyncTableRegionScanner.buildChunkMetadataResult(results, chunk, false);
 
     Cell startKeyCell =
-        findCell(results, BaseScannerRegionObserverConstants.SYNC_TABLE_START_KEY_QUALIFIER);
+      findCell(results, BaseScannerRegionObserverConstants.SYNC_TABLE_START_KEY_QUALIFIER);
     assertNotNull(startKeyCell);
     assertArrayEquals(startRow, CellUtil.cloneValue(startKeyCell));
   }
@@ -415,13 +412,13 @@ public class PhoenixSyncTableRegionScannerTest {
   @Test
   public void testBuildChunkMetadataResultCompleteChunkRowCountCell() {
     Chunk chunk =
-        createChunkWithRows(Bytes.toBytes("row1"), Bytes.toBytes("row2"), Bytes.toBytes("row3"));
+      createChunkWithRows(Bytes.toBytes("row1"), Bytes.toBytes("row2"), Bytes.toBytes("row3"));
     List<Cell> results = new ArrayList<>();
 
     PhoenixSyncTableRegionScanner.buildChunkMetadataResult(results, chunk, false);
 
     Cell rowCountCell =
-        findCell(results, BaseScannerRegionObserverConstants.SYNC_TABLE_ROW_COUNT_QUALIFIER);
+      findCell(results, BaseScannerRegionObserverConstants.SYNC_TABLE_ROW_COUNT_QUALIFIER);
     assertNotNull(rowCountCell);
     assertEquals(3, Bytes.toLong(CellUtil.cloneValue(rowCountCell)));
   }
@@ -451,7 +448,7 @@ public class PhoenixSyncTableRegionScannerTest {
     PhoenixSyncTableRegionScanner.buildChunkMetadataResult(results, chunk, false);
 
     Cell isPartialCell =
-        findCell(results, BaseScannerRegionObserverConstants.SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER);
+      findCell(results, BaseScannerRegionObserverConstants.SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER);
     assertNotNull(isPartialCell);
     assertArrayEquals(FALSE_BYTES, CellUtil.cloneValue(isPartialCell));
   }
@@ -464,7 +461,7 @@ public class PhoenixSyncTableRegionScannerTest {
     PhoenixSyncTableRegionScanner.buildChunkMetadataResult(results, chunk, true);
 
     Cell isPartialCell =
-        findCell(results, BaseScannerRegionObserverConstants.SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER);
+      findCell(results, BaseScannerRegionObserverConstants.SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER);
     assertNotNull(isPartialCell);
     assertArrayEquals(TRUE_BYTES, CellUtil.cloneValue(isPartialCell));
   }
@@ -486,7 +483,7 @@ public class PhoenixSyncTableRegionScannerTest {
    * Creates a test row with a single cell.
    */
   private List<Cell> createTestRow(byte[] rowKey, byte[] family, byte[] qualifier, long timestamp,
-      byte[] value) {
+    byte[] value) {
     List<Cell> cells = new ArrayList<>();
     Cell cell = new KeyValue(rowKey, family, qualifier, timestamp, value);
     cells.add(cell);
@@ -497,7 +494,7 @@ public class PhoenixSyncTableRegionScannerTest {
    * Creates a test row with a single cell of specified type.
    */
   private List<Cell> createTestRowWithType(byte[] rowKey, byte[] family, byte[] qualifier,
-      long timestamp, byte[] value, Type type) {
+    long timestamp, byte[] value, Type type) {
     List<Cell> cells = new ArrayList<>();
     Cell cell = new KeyValue(rowKey, family, qualifier, timestamp, type, value);
     cells.add(cell);
