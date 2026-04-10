@@ -231,7 +231,7 @@ public class CreateTableCompiler {
       }
       if (viewTypeToBe == ViewType.MAPPED && parentToBe.getPKColumns().isEmpty()) {
         validateCreateViewCompilation(connection, parentToBe, columnDefs, pkConstraint);
-      } else if (where != null && viewTypeToBe == ViewType.UPDATABLE) {
+      } else if (viewTypeToBe == ViewType.UPDATABLE) {
         rowKeyMatcher =
           WhereOptimizer.getRowKeyMatcher(context, create.getTableName(), parentToBe, where);
       }
