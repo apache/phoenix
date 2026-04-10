@@ -2172,20 +2172,24 @@ public class PhoenixSyncTableToolIT {
 
   private void deleteHBaseRows(HBaseTestingUtility cluster, String tableName, int rowsToDelete)
     throws Exception {
-    Table table = cluster.getConnection().getTable(TableName.valueOf(tableName));
-    ResultScanner scanner = table.getScanner(new Scan());
-    List<Delete> deletes = new ArrayList<>();
-    Result result;
-    int rowsDeleted = 0;
-    while ((result = scanner.next()) != null && rowsDeleted < rowsToDelete) {
-      deletes.add(new Delete(result.getRow()));
-      rowsDeleted++;
+    TableName hbaseTableName = TableName.valueOf(tableName);
+    try (Table table = cluster.getConnection().getTable(hbaseTableName)) {
+      ResultScanner scanner = table.getScanner(new Scan());
+      List<Delete> deletes = new ArrayList<>();
+      Result result;
+      int rowsDeleted = 0;
+      while ((result = scanner.next()) != null && rowsDeleted < rowsToDelete) {
+        deletes.add(new Delete(result.getRow()));
+        rowsDeleted++;
+      }
+      scanner.close();
+      if (!deletes.isEmpty()) {
+        table.delete(deletes);
+      }
     }
-    scanner.close();
-    if (!deletes.isEmpty()) {
-      table.delete(deletes);
+    try (Admin admin = cluster.getConnection().getAdmin()) {
+      admin.flush(hbaseTableName);
     }
-    table.close();
   }
 
   private int getRowCount(Connection conn, String tableName) throws SQLException {

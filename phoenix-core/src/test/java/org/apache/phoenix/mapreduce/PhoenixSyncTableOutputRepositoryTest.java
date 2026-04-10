@@ -29,9 +29,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Status;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Type;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -93,6 +96,14 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     try (Statement stmt = connection.createStatement(); ResultSet rs = stmt.executeQuery(query)) {
       assertTrue("Table should exist and be queryable", rs.next());
     }
+  }
+
+  @Test
+  public void testCheckpointTableUsesColumnEncoding() throws Exception {
+    PhoenixConnection pconn = connection.unwrap(PhoenixConnection.class);
+    PTable table =
+      pconn.getTable(PhoenixSyncTableOutputRepository.SYNC_TABLE_CHECKPOINT_TABLE_NAME);
+    assertEquals(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, table.getEncodingScheme());
   }
 
   @Test

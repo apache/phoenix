@@ -25,6 +25,7 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Type;
+import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,7 +58,8 @@ public class PhoenixSyncTableOutputRepository {
     + "    STATUS VARCHAR(20),\n" + "    COUNTERS VARCHAR, \n" + "    CONSTRAINT PK PRIMARY KEY (\n"
     + "        TABLE_NAME,\n" + "        TARGET_CLUSTER,\n" + "        TYPE ,\n"
     + "        FROM_TIME,\n" + "        TO_TIME,\n" + "        TENANT_ID,\n"
-    + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS;
+    + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS + ", COLUMN_ENCODED_BYTES="
+    + QualifierEncodingScheme.TWO_BYTE_QUALIFIERS.getSerializedMetadataValue();
 
   /**
    * Creates a repository for managing sync table checkpoint operations. Note: The connection is
