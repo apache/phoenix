@@ -56,6 +56,7 @@ import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.jdbc.PhoenixHAAdmin.HighAvailibilityCuratorProvider;
+import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -921,8 +922,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     String query =
       "SELECT COUNT(*) FROM " + SYSTEM_HA_GROUP_NAME + " WHERE " + HA_GROUP_NAME + " = ?";
     try (
-      PhoenixConnection conn = (PhoenixConnection) DriverManager
-        .getConnection(JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + localZkUrl);
+      PhoenixConnection conn = (PhoenixConnection) ConnectionUtil.getInputConnection(getConf());
       PreparedStatement pstmt = conn.prepareStatement(query)) {
       pstmt.setString(1, haGroupName);
       try (ResultSet rs = pstmt.executeQuery()) {
@@ -948,8 +948,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       + VERSION + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     try (
-      PhoenixConnection conn = (PhoenixConnection) DriverManager
-        .getConnection(JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + localZkUrl);
+      PhoenixConnection conn = ConnectionUtil.getInputConnection(getConf());
       PreparedStatement pstmt = conn.prepareStatement(insertQuery)) {
       pstmt.setString(1, haGroupName);
       pstmt.setString(2, policy);

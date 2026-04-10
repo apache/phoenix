@@ -900,9 +900,8 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
   }
 
   /**
-   * Test that the create command successfully creates a new HA group entry in SYSTEM.HA_GROUP. The
-   * ZK znode should NOT be created by the create command (it initializes lazily on first access via
-   * HAGroupStoreClient.initializeZNodeIfNeeded).
+   * Test that the create command successfully creates a new HA group
+   * entry in SYSTEM.HA_GROUP and znode for the HA group is also created.
    */
   @Test(timeout = 180000)
   public void testCreateCommandNewHAGroup() throws Exception {
