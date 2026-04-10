@@ -63,8 +63,8 @@ public class ReplicationLogBaseTest {
   protected Configuration conf;
   protected ServerName serverName;
   protected FileSystem localFs;
-  protected URI standbyUri;
-  protected URI fallbackUri;
+  protected URI peerUri;
+  protected URI localUri;
   @Mock
   protected HAGroupStoreManager haGroupStoreManager;
   protected HAGroupStoreRecord storeRecord;
@@ -91,11 +91,9 @@ public class ReplicationLogBaseTest {
     haGroupName = name.getMethodName();
     conf = HBaseConfiguration.create();
     localFs = FileSystem.getLocal(conf);
-    standbyUri = new Path(standbyFolder.getRoot().toString()).toUri();
-    fallbackUri = new Path(localFolder.getRoot().toString()).toUri();
+    peerUri = new Path(standbyFolder.getRoot().toString()).toUri();
+    localUri = new Path(localFolder.getRoot().toString()).toUri();
     serverName = ServerName.valueOf("test", 60010, EnvironmentEdgeManager.currentTimeMillis());
-    conf.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
-    conf.set(ReplicationLogGroup.REPLICATION_FALLBACK_HDFS_URL_KEY, fallbackUri.toString());
     // Small ring buffer size for testing
     conf.setInt(ReplicationLogGroup.REPLICATION_LOG_RINGBUFFER_SIZE_KEY, TEST_RINGBUFFER_SIZE);
     // Set a short sync timeout for testing
@@ -128,7 +126,7 @@ public class ReplicationLogBaseTest {
   private HAGroupStoreRecord initHAGroupStoreRecord() {
     return new HAGroupStoreRecord(null, haGroupName, initialState, 0,
       HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl", "clusterUrl", "peerClusterUrl",
-      "hdfsUrl", "peerHdfsUrl", 0L);
+      localUri.toString(), peerUri.toString(), 0L);
   }
 
   static class TestableLogGroup extends ReplicationLogGroup {
@@ -140,12 +138,12 @@ public class ReplicationLogBaseTest {
 
     @Override
     protected ReplicationLog createStandbyLog() throws IOException {
-      return spy(new TestableLog(this, standbyShardManager));
+      return spy(new TestableLog(this, peerShardManager));
     }
 
     @Override
     protected ReplicationLog createFallbackLog() throws IOException {
-      return spy(new TestableLog(this, fallbackShardManager));
+      return spy(new TestableLog(this, localShardManager));
     }
 
   }

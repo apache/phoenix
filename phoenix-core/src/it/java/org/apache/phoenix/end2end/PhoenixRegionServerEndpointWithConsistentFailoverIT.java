@@ -24,7 +24,6 @@ import static org.junit.Assert.assertNotNull;
 
 import com.google.protobuf.RpcCallback;
 import java.io.IOException;
-import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Connection;
@@ -39,15 +38,13 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 import org.apache.phoenix.coprocessor.generated.RegionServerEndpointProtos;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
+import org.apache.phoenix.jdbc.HABaseIT;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
-import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
 import org.apache.phoenix.jdbc.PhoenixHAAdmin;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -58,17 +55,12 @@ import org.junit.rules.TestName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
 @Category({ NeedsOwnMiniClusterTest.class })
-public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTest {
+public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends HABaseIT {
 
   private static final Logger LOGGER =
     LoggerFactory.getLogger(PhoenixRegionServerEndpointWithConsistentFailoverIT.class);
   private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 5000L;
-  private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS =
-    new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
-  private String zkUrl;
   private String peerZkUrl;
 
   @Rule
@@ -76,8 +68,6 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     // Set prewarm enabled to true for cluster 1 and false for cluster 2 for comparison.
     CLUSTERS.getHBaseCluster1().getConfiguration()
       .setBoolean(QueryServices.HA_GROUP_STORE_CLIENT_PREWARM_ENABLED, true);
@@ -97,12 +87,12 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(),
       CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(),
       CLUSTERS.getMasterAddress2(), ClusterRoleRecord.ClusterRole.ACTIVE,
-      ClusterRoleRecord.ClusterRole.STANDBY, null);
+      ClusterRoleRecord.ClusterRole.STANDBY, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(),
       CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(),
       CLUSTERS.getMasterAddress2(), ClusterRoleRecord.ClusterRole.ACTIVE,
-      ClusterRoleRecord.ClusterRole.STANDBY, CLUSTERS.getZkUrl2());
-
+      ClusterRoleRecord.ClusterRole.STANDBY, CLUSTERS.getZkUrl2(),
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
   }
 
   @Test
@@ -120,12 +110,13 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
     // inserted into the system table.
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, CLUSTERS.getZkUrl1(),
       CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, CLUSTERS.getZkUrl1(),
       CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
       ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY,
-      CLUSTERS.getZkUrl2());
+      CLUSTERS.getZkUrl2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Get RegionServer instances from both clusters
     HRegionServer regionServer1 = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
@@ -195,7 +186,7 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
           CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress2(), CLUSTERS.getMasterAddress1(),
-          localUri.toString(), standbyUri.toString(), 0L);
+          CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
       peerHAAdmin.createHAGroupStoreRecordInZooKeeper(peerHAGroupStoreRecord);
     }
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
@@ -225,7 +216,8 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends BaseTes
     // Update the row
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(),
       CLUSTERS.getZkUrl1(), peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY, ClusterRoleRecord.ClusterRole.STANDBY, null);
+      ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
     // Now Invalidate the Cache
     controller = new ServerRpcController();
     coprocessor.invalidateHAGroupStoreClient(controller,

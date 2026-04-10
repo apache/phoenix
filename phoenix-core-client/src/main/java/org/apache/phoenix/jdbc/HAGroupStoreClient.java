@@ -613,6 +613,8 @@ public class HAGroupStoreClient implements Closeable {
         Preconditions.checkNotNull(peerZKUrl, "Peer ZK URL in System Table cannot be null");
         Preconditions.checkNotNull(peerClusterUrl,
           "Peer Cluster URL in System Table cannot be null");
+        Preconditions.checkNotNull(hdfsUrl, "Local HDFS URL in System Table cannot be null");
+        Preconditions.checkNotNull(peerHdfsUrl, "Peer HDFS URL in System Table cannot be null");
 
         return new SystemTableHAGroupRecord(policy, clusterRole, peerClusterRole, clusterUrl,
           peerClusterUrl, formattedZkUrl, peerZKUrl, hdfsUrl, peerHdfsUrl, adminCRRVersion);

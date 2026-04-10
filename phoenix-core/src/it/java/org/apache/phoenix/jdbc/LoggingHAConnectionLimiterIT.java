@@ -22,7 +22,6 @@ import static org.apache.phoenix.jdbc.HighAvailabilityPolicy.PARALLEL;
 import static org.apache.phoenix.query.QueryServices.HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED;
 import static org.apache.phoenix.query.QueryServices.SYNCHRONOUS_REPLICATION_ENABLED;
 
-import java.net.URI;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
@@ -32,12 +31,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.log.ConnectionLimiter;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -97,14 +94,8 @@ public class LoggingHAConnectionLimiterIT extends LoggingConnectionLimiterIT {
 
     Configuration conf1 = CLUSTERS.getHBaseCluster1().getConfiguration();
     Configuration conf2 = CLUSTERS.getHBaseCluster2().getConfiguration();
-    URI standbyUri = new Path(standbyFolder.getRoot().toString()).toUri();
-    URI fallbackUri = new Path(localFolder.getRoot().toString()).toUri();
     conf1.setBoolean(SYNCHRONOUS_REPLICATION_ENABLED, true);
     conf2.setBoolean(SYNCHRONOUS_REPLICATION_ENABLED, true);
-    conf1.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
-    conf1.set(ReplicationLogGroup.REPLICATION_FALLBACK_HDFS_URL_KEY, fallbackUri.toString());
-    conf2.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
-    conf2.set(ReplicationLogGroup.REPLICATION_FALLBACK_HDFS_URL_KEY, fallbackUri.toString());
     CLUSTERS.getHBaseCluster1().getConfiguration()
       .setBoolean(HA_GROUP_STALE_FOR_MUTATION_CHECK_ENABLED, false);
     CLUSTERS.getHBaseCluster2().getConfiguration()

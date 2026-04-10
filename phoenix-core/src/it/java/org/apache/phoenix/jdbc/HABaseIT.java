@@ -18,40 +18,26 @@
 package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.query.QueryServices.SYNCHRONOUS_REPLICATION_ENABLED;
+import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED;
 
-import java.net.URI;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.Path;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
-import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.junit.BeforeClass;
-import org.junit.ClassRule;
-import org.junit.rules.TemporaryFolder;
 
 public class HABaseIT {
-  @ClassRule
-  public static TemporaryFolder standbyFolder = new TemporaryFolder();
-  @ClassRule
-  public static TemporaryFolder localFolder = new TemporaryFolder();
-
   protected static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
 
   protected static Configuration conf1;
   protected static Configuration conf2;
-  protected static URI standbyUri;
-  protected static URI fallbackUri;
 
   @BeforeClass
   public static synchronized void doBaseSetup() {
     conf1 = CLUSTERS.getHBaseCluster1().getConfiguration();
     conf2 = CLUSTERS.getHBaseCluster2().getConfiguration();
-    standbyUri = new Path(standbyFolder.getRoot().toString()).toUri();
-    fallbackUri = new Path(localFolder.getRoot().toString()).toUri();
     conf1.setBoolean(SYNCHRONOUS_REPLICATION_ENABLED, true);
     conf2.setBoolean(SYNCHRONOUS_REPLICATION_ENABLED, true);
-    conf1.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
-    conf1.set(ReplicationLogGroup.REPLICATION_FALLBACK_HDFS_URL_KEY, fallbackUri.toString());
-    conf2.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
-    conf2.set(ReplicationLogGroup.REPLICATION_FALLBACK_HDFS_URL_KEY, fallbackUri.toString());
+    // Enable replication replay service
+    conf1.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, true);
+    conf2.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, true);
   }
 }

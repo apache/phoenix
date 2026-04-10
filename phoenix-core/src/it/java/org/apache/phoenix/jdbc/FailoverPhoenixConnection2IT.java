@@ -29,6 +29,7 @@ import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATT
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.sleepThreadFor;
+import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -86,6 +87,9 @@ public class FailoverPhoenixConnection2IT extends HABaseIT {
 
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
+    // Disable replication replay service
+    conf1.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, false);
+    conf2.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, false);
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
   }

@@ -49,12 +49,10 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
 import org.apache.phoenix.jdbc.HABaseIT;
-import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HighAvailabilityGroup;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
 import org.apache.phoenix.jdbc.PhoenixDriver;
-import org.apache.phoenix.jdbc.PhoenixHAAdmin;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.replication.tool.LogFileAnalyzer;
@@ -77,15 +75,11 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 public class ReplicationLogGroupIT extends HABaseIT {
   private static final Logger LOG = LoggerFactory.getLogger(ReplicationLogGroupIT.class);
 
-  private static String zkUrl;
-  private static String peerZkUrl;
-
   @Rule
   public TestName name = new TestName();
 
   private Properties clientProps = new Properties();
   private String haGroupName;
-  private PhoenixHAAdmin haAdmin1;
   private HighAvailabilityGroup haGroup;
   private ReplicationLogGroup logGroup;
 
@@ -93,8 +87,6 @@ public class ReplicationLogGroupIT extends HABaseIT {
   public static void doSetup() throws Exception {
     conf1.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, 20);
     CLUSTERS.start();
-    zkUrl = CLUSTERS.getZkUrl1();
-    peerZkUrl = CLUSTERS.getZkUrl2();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
   }
 
@@ -108,20 +100,11 @@ public class ReplicationLogGroupIT extends HABaseIT {
   public void beforeTest() throws Exception {
     LOG.info("Starting test {}", name.getMethodName());
     haGroupName = name.getMethodName();
-    haAdmin1 = CLUSTERS.getHaAdmin1();
     clientProps = HighAvailabilityTestingUtility.getHATestProperties();
     clientProps.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
     CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
     haGroup = getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), clientProps);
     LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
-
-    // Update the state to ACTIVE_IN_SYNC
-    HAGroupStoreRecord haGroupStoreRecord =
-      new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
-        HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, 0L,
-        HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
-        CLUSTERS.getMasterAddress2(), fallbackUri.toString(), standbyUri.toString(), 0L);
-    haAdmin1.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
     logGroup = getReplicationLogGroup();
   }
 
@@ -139,8 +122,9 @@ public class ReplicationLogGroupIT extends HABaseIT {
 
   private Map<String, List<Mutation>> groupLogsByTable() throws Exception {
     LogFileAnalyzer analyzer = new LogFileAnalyzer();
-    analyzer.setConf(conf1);
-    Path standByLogDir = logGroup.getStandbyShardManager().getRootDirectoryPath();
+    // use peer cluster conf
+    analyzer.setConf(conf2);
+    Path standByLogDir = logGroup.getPeerShardManager().getRootDirectoryPath();
     LOG.info("Analyzing log files at {}", standByLogDir);
     String[] args = { "--check", standByLogDir.toString() };
     assertEquals(0, analyzer.run(args));

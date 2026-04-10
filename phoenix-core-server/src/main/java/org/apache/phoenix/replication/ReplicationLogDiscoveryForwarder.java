@@ -49,7 +49,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
   public static final String REPLICATION_LOG_COPY_THROUGHPUT_BYTES_PER_MS_KEY =
     "phoenix.replication.log.copy.throughput.bytes.per.ms";
   // TODO: come up with a better default after testing
-  public static final double DEFAULT_LOG_COPY_THROUGHPUT_BYTES_PER_MS = 1.0;
+  public static final double DEFAULT_LOG_COPY_THROUGHPUT_BYTES_PER_MS = 0.1;
 
   /**
    * Configuration key for waiting buffer percentage
@@ -67,7 +67,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
    * @param logGroup HAGroup
    */
   private static ReplicationLogTracker createLogTracker(ReplicationLogGroup logGroup) {
-    ReplicationShardDirectoryManager localShardManager = logGroup.getFallbackShardManager();
+    ReplicationShardDirectoryManager localShardManager = logGroup.getLocalShardManager();
     return new ReplicationLogTracker(logGroup.conf, logGroup.getHAGroupName(), localShardManager,
       MetricsReplicationLogForwarderSourceFactory.getInstanceForTracker(logGroup.getHAGroupName()));
   }
@@ -134,7 +134,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
     FileSystem srcFS = replicationLogTracker.getFileSystem();
     FileStatus srcStat = srcFS.getFileStatus(src);
     long ts = replicationLogTracker.getFileTimestamp(srcStat.getPath());
-    ReplicationShardDirectoryManager remoteShardManager = logGroup.getStandbyShardManager();
+    ReplicationShardDirectoryManager remoteShardManager = logGroup.getPeerShardManager();
     Path dst = remoteShardManager.getWriterPath(ts, logGroup.getServerName().getServerName());
     long startTime = EnvironmentEdgeManager.currentTimeMillis();
     FileUtil.copy(srcFS, srcStat, remoteShardManager.getFileSystem(), dst, false, false, conf);

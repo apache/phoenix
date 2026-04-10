@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.replication.reader;
 
-import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -32,7 +31,6 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
@@ -42,77 +40,58 @@ import org.apache.hadoop.hbase.util.EnvironmentEdge;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
+import org.apache.phoenix.jdbc.HABaseIT;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
-import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
-import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.ReplicationLogTracker;
 import org.apache.phoenix.replication.ReplicationRound;
 import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
 import org.apache.phoenix.replication.metrics.*;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
-import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.junit.rules.TemporaryFolder;
 import org.junit.rules.TestName;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
 @Category(NeedsOwnMiniClusterTest.class)
-public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
+public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
 
   private static final Logger LOG =
     LoggerFactory.getLogger(ReplicationLogDiscoveryReplayTestIT.class);
 
-  private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS =
-    new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
   private String zkUrl;
   private String peerZkUrl;
-  private FileSystem localFs;
-  private URI standbyUri;
-  private static final String haGroupName = "testGroup";
-  private static final MetricsReplicationLogTracker METRICS_REPLICATION_LOG_TRACKER =
-    new MetricsReplicationLogTrackerReplayImpl(haGroupName);
-
-  @ClassRule
-  public static TemporaryFolder testFolder = new TemporaryFolder();
+  private FileSystem rootFs;
+  private URI rootUri;
+  private String haGroupName;
+  private MetricsReplicationLogTracker metricsReplicationLogTracker;
 
   @Rule
   public TestName testName = new TestName();
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     CLUSTERS.start();
   }
 
   @Before
   public void setUp() throws Exception {
-    zkUrl = getLocalZkUrl(config);
+    haGroupName = testName.getMethodName();
+    zkUrl = CLUSTERS.getZkUrl1();
     peerZkUrl = CLUSTERS.getZkUrl2();
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZkUrl,
       CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
-    localFs = FileSystem.getLocal(config);
-    standbyUri = testFolder.getRoot().toURI();
-    config.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
-  }
-
-  @After
-  public void tearDown() throws IOException {
-    localFs.delete(new Path(testFolder.getRoot().toURI()), true);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+    rootFs = FileSystem.get(conf1);
+    rootUri = new URI(CLUSTERS.getHdfsUrl1());
+    metricsReplicationLogTracker = new MetricsReplicationLogTrackerReplayImpl(haGroupName);
   }
 
   /**
@@ -122,7 +101,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   public void testGetExecutorThreadNameFormat() throws IOException {
     // Create ReplicationLogDiscoveryReplay instance
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
     ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
 
     // Test that it returns the expected constant value
@@ -138,7 +117,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   public void testGetReplayIntervalSeconds() throws IOException {
     // Create ReplicationLogDiscoveryReplay instance
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
     ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
 
     // Test default value when no custom config is set
@@ -147,7 +126,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       ReplicationLogDiscoveryReplay.DEFAULT_REPLAY_INTERVAL_SECONDS, defaultResult);
 
     // Test custom value when config is set
-    config.setLong(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_INTERVAL_SECONDS_KEY, 120L);
+    conf1.setLong(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_INTERVAL_SECONDS_KEY, 120L);
     long customResult = discovery.getReplayIntervalSeconds();
     assertEquals("Should return custom value when config is set", 120L, customResult);
   }
@@ -159,7 +138,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   public void testGetShutdownTimeoutSeconds() throws IOException {
     // Create ReplicationLogDiscoveryReplay instance
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
     ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
 
     // Test default value when no custom config is set
@@ -168,7 +147,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       ReplicationLogDiscoveryReplay.DEFAULT_SHUTDOWN_TIMEOUT_SECONDS, defaultResult);
 
     // Test custom value when config is set
-    config.setLong(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_SHUTDOWN_TIMEOUT_SECONDS_KEY,
+    conf1.setLong(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_SHUTDOWN_TIMEOUT_SECONDS_KEY,
       45L);
     long customResult = discovery.getShutdownTimeoutSeconds();
     assertEquals("Should return custom value when config is set", 45L, customResult);
@@ -181,7 +160,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   public void testGetExecutorThreadCount() throws IOException {
     // Create ReplicationLogDiscoveryReplay instance
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
     ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
 
     // Test default value when no custom config is set
@@ -190,7 +169,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       ReplicationLogDiscoveryReplay.DEFAULT_EXECUTOR_THREAD_COUNT, defaultResult);
 
     // Test custom value when config is set
-    config.setInt(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_EXECUTOR_THREAD_COUNT_KEY, 3);
+    conf1.setInt(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_EXECUTOR_THREAD_COUNT_KEY, 3);
     int customResult = discovery.getExecutorThreadCount();
     assertEquals("Should return custom value when config is set", 3, customResult);
   }
@@ -202,7 +181,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   public void testGetInProgressDirectoryProcessProbability() throws IOException {
     // Create ReplicationLogDiscoveryReplay instance
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
     ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
 
     // Test default value when no custom config is set
@@ -212,7 +191,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       defaultResult, 0.001);
 
     // Test custom value when config is set
-    config.setDouble(
+    conf1.setDouble(
       ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_IN_PROGRESS_DIRECTORY_PROCESSING_PROBABILITY_KEY,
       10.5);
     double customResult = discovery.getInProgressDirectoryProcessProbability();
@@ -226,7 +205,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   public void testGetWaitingBufferPercentage() throws IOException {
     // Create ReplicationLogDiscoveryReplay instance
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
     ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
 
     // Test default value when no custom config is set
@@ -235,13 +214,13 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       ReplicationLogDiscoveryReplay.DEFAULT_WAITING_BUFFER_PERCENTAGE, defaultResult, 0.001);
 
     // Test custom value when config is set
-    config.setDouble(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY,
+    conf1.setDouble(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY,
       20.0);
     double customResult = discovery.getWaitingBufferPercentage();
     assertEquals("Should return custom value when config is set", 20.0, customResult, 0.001);
 
     // Clear the custom config
-    config.unset(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY);
+    conf1.unset(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY);
   }
 
   /**
@@ -455,7 +434,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     long currentTime = 1704153600000L; // 2024-01-02 00:00:00
 
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
     fileTracker.init();
     long roundTimeMills =
       fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds()
@@ -494,7 +473,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     boolean expectedFailoverPending) throws IOException {
 
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
     fileTracker.init();
 
     try {
@@ -505,9 +484,9 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       // Create in-progress file if timestamp provided
       if (inProgressFileTimestamp != null) {
         Path inProgressDir = fileTracker.getInProgressDirPath();
-        localFs.mkdirs(inProgressDir);
+        rootFs.mkdirs(inProgressDir);
         Path inProgressFile = new Path(inProgressDir, inProgressFileTimestamp + "_rs-1_uuid.plog");
-        localFs.create(inProgressFile, true).close();
+        rootFs.create(inProgressFile, true).close();
       }
 
       // Create new file if timestamp provided
@@ -516,17 +495,17 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
           new ReplicationRound(newFileTimestamp - roundTimeMills, newFileTimestamp);
         Path shardPath = fileTracker.getReplicationShardDirectoryManager()
           .getShardDirectory(newFileRound.getStartTime());
-        localFs.mkdirs(shardPath);
+        rootFs.mkdirs(shardPath);
         Path newFile = new Path(shardPath, newFileTimestamp + "_rs-1.plog");
-        localFs.create(newFile, true).close();
+        rootFs.create(newFile, true).close();
       }
 
       // Create HAGroupStoreRecord
       long recordTime = lastSyncStateTime != null ? lastSyncStateTime : currentTime;
-      HAGroupStoreRecord mockRecord =
-        new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
-          haGroupState, recordTime, HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl,
-          peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
+      HAGroupStoreRecord mockRecord = new HAGroupStoreRecord(
+        HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, haGroupState, recordTime,
+        HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+        CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
       EnvironmentEdge edge = () -> currentTime;
       EnvironmentEdgeManager.injectEdge(edge);
@@ -570,7 +549,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   @Test
   public void testReplay_SyncState_ProcessMultipleRounds() throws IOException {
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
 
     try {
       long initialEndTime = 1704153600000L; // 2024-01-02 00:00:00
@@ -584,8 +563,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
-          localUri.toString(), standbyUri.toString(), 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
       // Set current time to allow processing 3 rounds
       long currentTime = initialEndTime + (3 * totalWaitTime);
@@ -667,7 +646,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   @Test
   public void testReplay_DegradedState_MultipleRounds() throws IOException {
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
 
     try {
       long initialEndTime = 1704240000000L;
@@ -681,8 +660,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
-          localUri.toString(), standbyUri.toString(), 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
       // Set current time to allow processing 3 rounds
       long currentTime = initialEndTime + (3 * totalWaitTime);
@@ -763,7 +742,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   @Test
   public void testReplay_SyncedRecoveryState_RewindToLastInSync() throws IOException {
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
 
     try {
       long initialEndTime = 1704326400000L;
@@ -777,8 +756,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
-          localUri.toString(), standbyUri.toString(), 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
       // Set current time to allow processing multiple rounds
       long currentTime = initialEndTime + (5 * totalWaitTime);
@@ -892,7 +871,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   @Test
   public void testReplay_StateTransition_SyncToDegradedDuringProcessing() throws IOException {
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
 
     try {
       long initialEndTime = 1704412800000L;
@@ -906,8 +885,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
-          localUri.toString(), standbyUri.toString(), 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
       // Set current time to allow processing 5 rounds
       long currentTime = initialEndTime + (5 * totalWaitTime);
@@ -1008,7 +987,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   @Test
   public void testReplay_StateTransition_DegradedToSyncedRecovery() throws IOException {
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
 
     try {
       long initialEndTime = 1704499200000L;
@@ -1021,8 +1000,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
-          localUri.toString(), standbyUri.toString(), 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
       // Set current time to allow processing 5 rounds
       long currentTime = initialEndTime + (5 * roundTimeMills) + bufferMillis;
@@ -1135,7 +1114,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   @Test
   public void testReplay_StateTransition_SyncToDegradedAndBackToSync() throws IOException {
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
 
     try {
       long initialEndTime = 1704672000000L;
@@ -1148,8 +1127,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
-          localUri.toString(), standbyUri.toString(), 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
       // Set current time to allow processing enough rounds (including rewind)
       long currentTime = initialEndTime + (10 * roundTimeMills) + bufferMillis;
@@ -1293,7 +1272,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   @Test
   public void testReplay_NoRoundsToProcess() throws IOException {
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
 
     try {
       long initialEndTime = 1704585600000L;
@@ -1305,8 +1284,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
-          localUri.toString(), standbyUri.toString(), 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
       // Set current time to NOT allow processing any rounds (not enough time has passed)
       long currentTime = initialEndTime + 1000L; // Only 1 second after
@@ -1374,7 +1353,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   @Test
   public void testReplay_LastRoundInSync_NotInitialized() throws IOException {
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
 
     try {
       long roundTimeMills =
@@ -1397,27 +1376,28 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
 
       // Create file with minimum timestamp
       Path shardPath1 = shardManager.getShardDirectory(minFileTimestamp);
-      localFs.mkdirs(shardPath1);
+      rootFs.mkdirs(shardPath1);
       Path file1 = new Path(shardPath1, minFileTimestamp + "_rs-1.plog");
-      localFs.create(file1, true).close();
+      rootFs.create(file1, true).close();
 
       // Create file with middle timestamp
       Path shardPath2 = shardManager.getShardDirectory(middleFileTimestamp);
-      localFs.mkdirs(shardPath2);
+      rootFs.mkdirs(shardPath2);
       Path file2 = new Path(shardPath2, middleFileTimestamp + "_rs-2.plog");
-      localFs.create(file2, true).close();
+      rootFs.create(file2, true).close();
 
       // Create file with maximum timestamp
       Path shardPath3 = shardManager.getShardDirectory(maxFileTimestamp);
-      localFs.mkdirs(shardPath3);
+      rootFs.mkdirs(shardPath3);
       Path file3 = new Path(shardPath3, maxFileTimestamp + "_rs-3.plog");
-      localFs.create(file3, true).close();
+      rootFs.create(file3, true).close();
 
       // Create HAGroupStoreRecord for STANDBY state
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-          peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
+          peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+          CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
       // Calculate expected first round start time (minimum timestamp rounded down to nearest round
       // start)
@@ -1553,7 +1533,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   @Test
   public void testReplay_DegradedToSync_LastRoundInSyncStartTimeZero() throws IOException {
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
 
     try {
       long roundTimeMills =
@@ -1574,21 +1554,22 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
 
       // Create file with minimum timestamp
       Path shardPath1 = shardManager.getShardDirectory(minFileTimestamp);
-      localFs.mkdirs(shardPath1);
+      rootFs.mkdirs(shardPath1);
       Path file1 = new Path(shardPath1, minFileTimestamp + "_rs-1.plog");
-      localFs.create(file1, true).close();
+      rootFs.create(file1, true).close();
 
       // Create file with maximum timestamp
       Path shardPath2 = shardManager.getShardDirectory(maxFileTimestamp);
-      localFs.mkdirs(shardPath2);
+      rootFs.mkdirs(shardPath2);
       Path file2 = new Path(shardPath2, maxFileTimestamp + "_rs-2.plog");
-      localFs.create(file2, true).close();
+      rootFs.create(file2, true).close();
 
       // Create HAGroupStoreRecord for STANDBY state
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-          peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
+          peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+          CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
       // Calculate expected first round start time (minimum timestamp rounded down to nearest round
       // start)
@@ -1771,7 +1752,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   @Test
   public void testReplay_TriggerFailoverAfterProcessing() throws IOException {
     TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
 
     try {
       long initialEndTime = 1704153600000L; // 2024-01-02 00:00:00
@@ -1785,8 +1766,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       HAGroupStoreRecord mockRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
-          localUri.toString(), standbyUri.toString(), 0L);
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
       // Set current time to allow processing 3 rounds
       long currentTime = initialEndTime + (3 * totalWaitTime);
@@ -1880,7 +1861,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
       new ReplicationShardDirectoryManager(config, fileSystem, newFilesDirectory);
     TestableReplicationLogTracker testableReplicationLogTracker =
       new TestableReplicationLogTracker(config, haGroupName, fileSystem,
-        replicationShardDirectoryManager, METRICS_REPLICATION_LOG_TRACKER);
+        replicationShardDirectoryManager, metricsReplicationLogTracker);
     testableReplicationLogTracker.init();
     return testableReplicationLogTracker;
   }
@@ -1914,14 +1895,14 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
 
     // Initialize haGroupStoreRecord
     final ReplicationLogTracker tracker =
-      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+      Mockito.spy(createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri));
     long initialEndTime = currentTime
       - tracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds() * 1000L;
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, initialEndTime,
-        HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, zkUrl, peerZkUrl,
-        localUri.toString(), standbyUri.toString(), 0L);
+        HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+        CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
     try {
       // Create test rounds
@@ -2074,11 +2055,12 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZkUrl,
       CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
       ClusterRoleRecord.ClusterRole.STANDBY_TO_ACTIVE,
-      ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY, null);
+      ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY, null, CLUSTERS.getHdfsUrl1(),
+      CLUSTERS.getHdfsUrl2());
 
     TestableReplicationLogTracker fileTracker = null;
     try {
-      fileTracker = createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      fileTracker = createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
 
       // Create a spy of ReplicationLogDiscoveryReplay to test actual implementation
       ReplicationLogDiscoveryReplay discovery =
@@ -2094,7 +2076,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
 
       // Verify initial state is STANDBY_TO_ACTIVE
       Optional<HAGroupStoreRecord> recordBefore =
-        HAGroupStoreManager.getInstance(config).getHAGroupStoreRecord(haGroupName);
+        HAGroupStoreManager.getInstance(conf1).getHAGroupStoreRecord(haGroupName);
       assertTrue("HA group record should exist", recordBefore.isPresent());
       assertEquals("Initial state should be STANDBY_TO_ACTIVE",
         HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, recordBefore.get().getHAGroupState());
@@ -2107,7 +2089,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
 
       // Verify cluster state is updated to ACTIVE_IN_SYNC after failover
       Optional<HAGroupStoreRecord> recordAfter =
-        HAGroupStoreManager.getInstance(config).getHAGroupStoreRecord(haGroupName);
+        HAGroupStoreManager.getInstance(conf1).getHAGroupStoreRecord(haGroupName);
       assertTrue("HA group record should exist after failover", recordAfter.isPresent());
       assertEquals("Cluster state should be ACTIVE_IN_SYNC after successful failover",
         HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, recordAfter.get().getHAGroupState());
@@ -2137,11 +2119,12 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   public void testGetConsistencyPointSyncStateWithInProgressFiles() throws IOException {
     // Create ReplicationLogTracker
     ReplicationLogTracker tracker =
-      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+      Mockito.spy(createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri));
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
+        peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+        CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2175,11 +2158,12 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     throws IOException {
     // Create ReplicationLogTracker
     ReplicationLogTracker tracker =
-      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+      Mockito.spy(createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri));
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
+        peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+        CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2211,11 +2195,12 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     throws IOException {
     // Create ReplicationLogTracker
     ReplicationLogTracker tracker =
-      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+      Mockito.spy(createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri));
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
+        peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+        CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2257,11 +2242,12 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     // because transitioning from STANDBY directly to ACTIVE_IN_SYNC is invalid
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZkUrl,
       CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE, null);
+      ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     TestableReplicationLogTracker fileTracker = null;
     try {
-      fileTracker = createReplicationLogTracker(config, haGroupName, localFs, standbyUri);
+      fileTracker = createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
 
       // Create a spy of ReplicationLogDiscoveryReplay to test actual implementation
       ReplicationLogDiscoveryReplay discovery =
@@ -2277,7 +2263,7 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
 
       // Verify initial state is STANDBY (not STANDBY_TO_ACTIVE)
       Optional<HAGroupStoreRecord> recordBefore =
-        HAGroupStoreManager.getInstance(config).getHAGroupStoreRecord(haGroupName);
+        HAGroupStoreManager.getInstance(conf1).getHAGroupStoreRecord(haGroupName);
       assertTrue("HA group record should exist", recordBefore.isPresent());
       assertEquals("Initial state should be STANDBY", HAGroupStoreRecord.HAGroupState.STANDBY,
         recordBefore.get().getHAGroupState());
@@ -2316,11 +2302,12 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   public void testGetConsistencyPointDegradedStateWithLastRoundInSync() throws IOException {
     // Create ReplicationLogTracker
     ReplicationLogTracker tracker =
-      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+      Mockito.spy(createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri));
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
+        peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+        CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2349,11 +2336,12 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   public void testGetConsistencyPointDegradedStateWithoutLastRoundInSync() throws IOException {
     // Create ReplicationLogTracker
     ReplicationLogTracker tracker =
-      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+      Mockito.spy(createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri));
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
+        peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+        CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2382,11 +2370,12 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   public void testGetConsistencyPointSyncedRecoveryStateWithLastRoundInSync() throws IOException {
     // Create ReplicationLogTracker
     ReplicationLogTracker tracker =
-      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+      Mockito.spy(createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri));
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
+        peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+        CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2416,11 +2405,12 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
     throws IOException {
     // Create ReplicationLogTracker
     ReplicationLogTracker tracker =
-      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+      Mockito.spy(createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri));
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
+        peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+        CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
@@ -2448,11 +2438,12 @@ public class ReplicationLogDiscoveryReplayTestIT extends BaseTest {
   public void testGetConsistencyPointNotInitializedState() throws IOException {
     // Create ReplicationLogTracker
     ReplicationLogTracker tracker =
-      Mockito.spy(createReplicationLogTracker(config, haGroupName, localFs, standbyUri));
+      Mockito.spy(createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri));
     HAGroupStoreRecord haGroupStoreRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZkUrl, zkUrl, peerZkUrl, localUri.toString(), standbyUri.toString(), 0L);
+        peerZkUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+        CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
     TestableReplicationLogDiscoveryReplay discovery =
       new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
 
