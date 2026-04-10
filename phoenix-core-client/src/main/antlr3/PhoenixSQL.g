@@ -225,7 +225,7 @@ import org.apache.phoenix.schema.types.PUnsignedTime;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
-import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.parse.AddJarsStatement;
 import org.apache.phoenix.parse.ExplainType;
 }
@@ -724,7 +724,7 @@ alter_index_node returns [AlterIndexStatement ret]
 // Parse a trace statement.
 trace_node returns [TraceStatement ret]
     :   TRACE ((flag = ON  ( WITH SAMPLING s = sampling_rate)?) | flag = OFF)
-       {ret = factory.trace(Tracing.isTraceOn(flag.getText()), s == null ? Tracing.isTraceOn(flag.getText()) ? 1.0 : 0.0 : (((BigDecimal)s.getValue())).doubleValue());}
+       {ret = factory.trace(PhoenixTracing.isTraceOn(flag.getText()), s == null ? PhoenixTracing.isTraceOn(flag.getText()) ? 1.0 : 0.0 : (((BigDecimal)s.getValue())).doubleValue());}
     ;
 
 // Parse a create function statement.

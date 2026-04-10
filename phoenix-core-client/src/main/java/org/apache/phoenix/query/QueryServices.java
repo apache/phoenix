@@ -222,17 +222,27 @@ public interface QueryServices extends SQLCloseable {
   public static final String METADATA_WRITE_RETRIES_NUMBER = "phoenix.metadata.rpc.retries.number";
   public static final String METADATA_WRITE_RETRY_PAUSE = "phoenix.metadata.rpc.pause";
 
-  // Config parameters for for configuring tracing
+  // Config parameters for tracing.
+  // NOTE: Most of these are deprecated — tracing is now handled by OpenTelemetry.
+  // The OTel Java Agent is configured via environment variables (OTEL_EXPORTER_OTLP_ENDPOINT, etc.)
+  // rather than Phoenix configuration properties.
+  @Deprecated /** Use OpenTelemetry agent configuration instead */
   public static final String TRACING_FREQ_ATTRIB = "phoenix.trace.frequency";
+  @Deprecated /** Use OpenTelemetry agent configuration instead */
   public static final String TRACING_PAGE_SIZE_ATTRIB = "phoenix.trace.read.pagesize";
+  @Deprecated /** Use OpenTelemetry agent configuration instead */
   public static final String TRACING_PROBABILITY_THRESHOLD_ATTRIB =
     "phoenix.trace.probability.threshold";
   public static final String TRACING_STATS_TABLE_NAME_ATTRIB = "phoenix.trace.statsTableName";
   public static final String TRACING_CUSTOM_ANNOTATION_ATTRIB_PREFIX =
     "phoenix.trace.custom.annotation.";
+  @Deprecated /** Use OpenTelemetry agent configuration instead */
   public static final String TRACING_ENABLED = "phoenix.trace.enabled";
+  @Deprecated /** Use OpenTelemetry agent configuration instead */
   public static final String TRACING_BATCH_SIZE = "phoenix.trace.batchSize";
+  @Deprecated /** Use OpenTelemetry agent configuration instead */
   public static final String TRACING_THREAD_POOL_SIZE = "phoenix.trace.threadPoolSize";
+  @Deprecated /** Use OpenTelemetry agent configuration instead */
   public static final String TRACING_TRACE_BUFFER_SIZE = "phoenix.trace.traceBufferSize";
 
   public static final String USE_REVERSE_SCAN_ATTRIB = "phoenix.query.useReverseScan";

@@ -26,6 +26,8 @@ import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkNotNull;
 
+import io.opentelemetry.api.trace.Span;
+import io.opentelemetry.context.Scope;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.PrintStream;
@@ -65,8 +67,6 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Consistency;
-import org.apache.htrace.Sampler;
-import org.apache.htrace.TraceScope;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.FailoverSQLException;
@@ -120,7 +120,7 @@ import org.apache.phoenix.schema.types.PUnsignedDate;
 import org.apache.phoenix.schema.types.PUnsignedTime;
 import org.apache.phoenix.schema.types.PUnsignedTimestamp;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.trace.util.Tracing;
+import org.apache.phoenix.trace.PhoenixTracing;
 import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
@@ -168,10 +168,10 @@ public class PhoenixConnection
   private final String timePattern;
   private final String timestampPattern;
   private int statementExecutionCounter;
-  private TraceScope traceScope = null;
+  private Span traceSpan = null;
+  private Scope traceScope = null;
   private volatile boolean isClosed = false;
   private volatile boolean isClosing = false;
-  private Sampler<?> sampler;
   private boolean readOnly = false;
   private Consistency consistency = Consistency.STRONG;
   private Map<String, String> customTracingAnnotations = emptyMap();
@@ -201,7 +201,8 @@ public class PhoenixConnection
   private ConnectionActivityLogger connectionActivityLogger = ConnectionActivityLogger.NO_OP_LOGGER;
 
   static {
-    Tracing.addTraceMetricsSource();
+    // OpenTelemetry tracing is initialized via the Java Agent at runtime.
+    // No explicit initialization needed here.
     CONNECTION_PROPERTIES = PhoenixRuntime.getConnectionProperties();
   }
 
@@ -218,7 +219,6 @@ public class PhoenixConnection
       connection.buildingIndex, true);
     this.isAutoCommit = connection.isAutoCommit;
     this.isAutoFlush = connection.isAutoFlush;
-    this.sampler = connection.sampler;
     this.statementExecutionCounter = connection.statementExecutionCounter;
   }
 
@@ -243,7 +243,6 @@ public class PhoenixConnection
       connection.buildingIndex, true);
     this.isAutoCommit = connection.isAutoCommit;
     this.isAutoFlush = connection.isAutoFlush;
-    this.sampler = connection.sampler;
     this.statementExecutionCounter = connection.statementExecutionCounter;
   }
 
@@ -373,7 +372,6 @@ public class PhoenixConnection
     this.services.addConnection(this);
 
     // setup tracing, if its enabled
-    this.sampler = Tracing.getConfiguredSampler(this);
     this.customTracingAnnotations = getImmutableCustomTracingAnnotations();
     this.scannerQueue = new LinkedBlockingQueue<>();
     this.tableResultIteratorFactory = new DefaultTableResultIteratorFactory();
@@ -475,14 +473,6 @@ public class PhoenixConnection
   @VisibleForTesting
   public int getChildConnectionsCount() {
     return childConnections.size();
-  }
-
-  public Sampler<?> getSampler() {
-    return this.sampler;
-  }
-
-  public void setSampler(Sampler<?> sampler) throws SQLException {
-    this.sampler = sampler;
   }
 
   public Map<String, String> getCustomTracingAnnotations() {
@@ -834,6 +824,9 @@ public class PhoenixConnection
         if (traceScope != null) {
           traceScope.close();
         }
+        if (traceSpan != null) {
+          traceSpan.end();
+        }
       } finally {
         services.removeConnection(this);
       }
@@ -875,7 +868,7 @@ public class PhoenixConnection
         }
         return null;
       }
-    }, Tracing.withTracing(this, "committing mutations"));
+    }, PhoenixTracing.withTracing("phoenix.connection.commit"));
     statementExecutionCounter = 0;
   }
 
@@ -1156,7 +1149,7 @@ public class PhoenixConnection
         mutationState.rollback();
         return null;
       }
-    }, Tracing.withTracing(this, "rolling back"));
+    }, PhoenixTracing.withTracing("phoenix.connection.rollback"));
     statementExecutionCounter = 0;
   }
 
@@ -1362,11 +1355,19 @@ public class PhoenixConnection
     }
   }
 
-  public TraceScope getTraceScope() {
+  public Span getTraceSpan() {
+    return traceSpan;
+  }
+
+  public Scope getTraceScope() {
     return traceScope;
   }
 
-  public void setTraceScope(TraceScope traceScope) {
+  public void setTraceSpan(Span traceSpan) {
+    this.traceSpan = traceSpan;
+  }
+
+  public void setTraceScope(Scope traceScope) {
     this.traceScope = traceScope;
   }
 
