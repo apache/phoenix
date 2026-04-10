@@ -62,6 +62,7 @@ import org.apache.commons.lang3.RandomUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hbase.*;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.ipc.PhoenixRpcSchedulerFactory;
@@ -105,8 +106,9 @@ public class HighAvailabilityTestingUtility {
     private Admin admin2;
     @VisibleForTesting
     static final String PRINCIPAL = "USER_FOO";
-    private String hdfsUrl = "hdfs://hdfsUrl";
-    private String peerHdfsUrl = "hdfs://peerHdfsUrl";
+    private String hdfsUrl1;
+    private String hdfsUrl2;
+    private static String HA_DIR = "/phoenixHA";
 
     public HBaseTestingUtilityPair() {
       Configuration conf1 = hbaseCluster1.getConfiguration();
@@ -137,6 +139,9 @@ public class HighAvailabilityTestingUtility {
       zkUrl2 = String.format("%s\\:%d::/hbase", confAddress2,
         hbaseCluster2.getZkCluster().getClientPort());
 
+      hdfsUrl1 = hbaseCluster1.getConfiguration().get(FileSystem.FS_DEFAULT_NAME_KEY) + HA_DIR;
+      hdfsUrl2 = hbaseCluster2.getConfiguration().get(FileSystem.FS_DEFAULT_NAME_KEY) + HA_DIR;
+
       masterAddress1 =
         hbaseCluster1.getConfiguration().get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:");
       masterAddress2 =
@@ -161,8 +166,9 @@ public class HighAvailabilityTestingUtility {
 
       LOG.info(
         "MiniHBase DR cluster pair is ready for testing.  Cluster Urls [{},{}] "
-          + "and Master Urls [{}, {}]",
-        getZkUrl1(), getZkUrl2(), getMasterAddress1(), getMasterAddress2());
+          + "and Master Urls [{}, {}] and HDFS Urls [{}, {}]",
+        getZkUrl1(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), getHdfsUrl1(),
+        getHdfsUrl2());
       logClustersStates();
     }
 
@@ -195,11 +201,11 @@ public class HighAvailabilityTestingUtility {
       HAGroupStoreRecord activeRecord = new HAGroupStoreRecord(
         HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, ACTIVE.getDefaultHAGroupState(),
         0L, policy != null ? policy.name() : HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(),
-        getMasterAddress1(), getMasterAddress2(), hdfsUrl, peerHdfsUrl, 1L);
+        getMasterAddress1(), getMasterAddress2(), getHdfsUrl1(), getHdfsUrl2(), 1L);
       HAGroupStoreRecord standbyRecord = new HAGroupStoreRecord(
         HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, STANDBY.getDefaultHAGroupState(),
         0L, policy != null ? policy.name() : HighAvailabilityPolicy.FAILOVER.name(), getZkUrl1(),
-        getMasterAddress2(), getMasterAddress1(), hdfsUrl, peerHdfsUrl, 1L);
+        getMasterAddress2(), getMasterAddress1(), getHdfsUrl2(), getHdfsUrl1(), 1L);
       upsertGroupRecordInBothSystemTable(haGroupName, ACTIVE, STANDBY, 1L, 1L, null, policy);
       addOrUpdateRoleRecordToClusters(haGroupName, activeRecord, standbyRecord);
     }
@@ -215,7 +221,7 @@ public class HighAvailabilityTestingUtility {
       HAGroupStoreRecord activeRecord =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           ACTIVE.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(),
-          getMasterAddress1(), getMasterAddress2(), hdfsUrl, peerHdfsUrl, 1L);
+          getMasterAddress1(), getMasterAddress2(), getHdfsUrl1(), getHdfsUrl2(), 1L);
       upsertGroupRecordInASystemTable(haGroupName, ACTIVE, STANDBY, 1L, 1L, null, policy, 1);
       addOrUpdateRoleRecordToClusters(haGroupName, activeRecord, null);
     }
@@ -287,10 +293,10 @@ public class HighAvailabilityTestingUtility {
       HighAvailabilityPolicy policy) throws Exception {
       HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl1(), getZkUrl2(),
         getMasterAddress1(), getMasterAddress2(), role1, role2, version1, overrideZKUrl, policy,
-        getHATestProperties(), null, null);
+        getHATestProperties(), getHdfsUrl1(), getHdfsUrl2());
       HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl2(), getZkUrl1(),
         getMasterAddress2(), getMasterAddress1(), role2, role1, version2, overrideZKUrl, policy,
-        getHATestProperties(), null, null);
+        getHATestProperties(), getHdfsUrl2(), getHdfsUrl1());
     }
 
     /**
@@ -302,11 +308,11 @@ public class HighAvailabilityTestingUtility {
       if (clusterIndex == 1) {
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl1(), getZkUrl2(),
           getMasterAddress1(), getMasterAddress2(), role1, role2, version1, overrideZKUrl, policy,
-          getHATestProperties(), null, null);
+          getHATestProperties(), getHdfsUrl1(), getHdfsUrl2());
       } else {
         HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl2(), getZkUrl1(),
           getMasterAddress2(), getMasterAddress1(), role2, role1, version2, overrideZKUrl, policy,
-          getHATestProperties(), null, null);
+          getHATestProperties(), getHdfsUrl2(), getHdfsUrl1());
       }
     }
 
@@ -349,7 +355,7 @@ public class HighAvailabilityTestingUtility {
       if (clusterIndex == 1) {
         newRecord = new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(),
           haGroupName, role1.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(),
-          getZkUrl2(), getMasterAddress1(), getMasterAddress2(), hdfsUrl, peerHdfsUrl, 1L);
+          getZkUrl2(), getMasterAddress1(), getMasterAddress2(), getHdfsUrl1(), getHdfsUrl2(), 1L);
         refreshSystemTableInOneCluster(haGroupName, role1, role2, newRecord.getAdminCRRVersion(),
           currentRecord2.getLeft().getAdminCRRVersion(), null, haGroup.getRoleRecord().getPolicy(),
           clusterIndex);
@@ -357,7 +363,7 @@ public class HighAvailabilityTestingUtility {
       } else {
         newRecord = new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(),
           haGroupName, role2.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(),
-          getZkUrl2(), getMasterAddress1(), getMasterAddress2(), hdfsUrl, peerHdfsUrl, 1L);
+          getZkUrl1(), getMasterAddress2(), getMasterAddress1(), getHdfsUrl2(), getHdfsUrl1(), 1L);
         refreshSystemTableInOneCluster(haGroupName, role1, role2,
           currentRecord1.getLeft().getAdminCRRVersion(), newRecord.getAdminCRRVersion(), null,
           haGroup.getRoleRecord().getPolicy(), clusterIndex);
@@ -487,7 +493,7 @@ public class HighAvailabilityTestingUtility {
       HAGroupStoreRecord record2 =
         new HAGroupStoreRecord(currentRecord2.getLeft().getProtocolVersion(), haGroupName,
           role2.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl1(),
-          getMasterAddress2(), getMasterAddress1(), hdfsUrl, peerHdfsUrl, 1L);
+          getMasterAddress2(), getMasterAddress1(), getHdfsUrl2(), getHdfsUrl1(), 1L);
 
       refreshSystemTableInOneCluster(haGroupName, role1, role2, 1, 1, null,
         haGroup.getRoleRecord().getPolicy(), 2);
@@ -500,7 +506,7 @@ public class HighAvailabilityTestingUtility {
       HAGroupStoreRecord record1 =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           UNKNOWN.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(),
-          getMasterAddress1(), getMasterAddress2(), hdfsUrl, peerHdfsUrl, 1L);
+          getMasterAddress1(), getMasterAddress2(), getHdfsUrl1(), getHdfsUrl2(), 1L);
       ;
 
       // wait for the cluster roles are populated into client side from RegionServer endpoints.
@@ -519,7 +525,7 @@ public class HighAvailabilityTestingUtility {
       HAGroupStoreRecord record1 =
         new HAGroupStoreRecord(currentRecord1.getLeft().getProtocolVersion(), haGroupName,
           role1.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(),
-          getMasterAddress1(), getMasterAddress2(), hdfsUrl, peerHdfsUrl, 1L);
+          getMasterAddress1(), getMasterAddress2(), getHdfsUrl1(), getHdfsUrl2(), 1L);
 
       refreshSystemTableInOneCluster(haGroupName, role1, role2, 1, 1, null,
         haGroup.getRoleRecord().getPolicy(), 1);
@@ -531,8 +537,8 @@ public class HighAvailabilityTestingUtility {
       // passed in refreshSystemTableInOneCluster and OFFLINE role.
       HAGroupStoreRecord record2 =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
-          UNKNOWN.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(),
-          getMasterAddress1(), getMasterAddress2(), hdfsUrl, peerHdfsUrl, 1L);
+          UNKNOWN.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl1(),
+          getMasterAddress2(), getMasterAddress1(), getHdfsUrl2(), getHdfsUrl1(), 1L);
 
       // wait for the cluster roles are populated into client side from RegionServer endpoints.
       ClusterRoleRecord newRoleRecord =
@@ -549,11 +555,11 @@ public class HighAvailabilityTestingUtility {
       HAGroupStoreRecord record1 =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           role1.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl2(),
-          getMasterAddress1(), getMasterAddress2(), hdfsUrl, peerHdfsUrl, 2L);
+          getMasterAddress1(), getMasterAddress2(), getHdfsUrl1(), getHdfsUrl2(), 2L);
       HAGroupStoreRecord record2 =
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           role2.getDefaultHAGroupState(), 0L, HighAvailabilityPolicy.FAILOVER.name(), getZkUrl1(),
-          getMasterAddress2(), getMasterAddress1(), hdfsUrl, peerHdfsUrl, 2L);
+          getMasterAddress2(), getMasterAddress1(), getHdfsUrl2(), getHdfsUrl1(), 2L);
 
       refreshSystemTableInBothClusters(haGroupName, role1, role2, 2, 2, null,
         haGroup.getRoleRecord().getPolicy());
@@ -833,6 +839,14 @@ public class HighAvailabilityTestingUtility {
 
     public PhoenixHAAdmin getHaAdmin2() {
       return haAdmin2;
+    }
+
+    public String getHdfsUrl1() {
+      return hdfsUrl1;
+    }
+
+    public String getHdfsUrl2() {
+      return hdfsUrl2;
     }
 
     private String getUrlWithoutPrincipal(HighAvailabilityGroup haGroup, String url) {

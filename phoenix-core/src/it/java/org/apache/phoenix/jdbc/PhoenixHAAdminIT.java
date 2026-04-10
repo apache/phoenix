@@ -26,7 +26,6 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -35,8 +34,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
-import org.apache.phoenix.query.BaseTest;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.zookeeper.KeeperException;
 import org.apache.zookeeper.data.Stat;
 import org.junit.After;
@@ -47,28 +44,20 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.rules.TestName;
 
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
-
 /**
  * Integration tests for {@link PhoenixHAAdmin} HAGroupStoreRecord operations
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class PhoenixHAAdminIT extends BaseTest {
+public class PhoenixHAAdminIT extends HABaseIT {
 
-  private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS =
-    new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
   private PhoenixHAAdmin haAdmin;
   private PhoenixHAAdmin peerHaAdmin;
-  private static final String TEST_HDFS_URL = localUri.toString();
-  private static final String TEST_PEER_HDFS_URL = standbyUri.toString();
 
   @Rule
   public TestName testName = new TestName();
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     CLUSTERS.start();
   }
 
@@ -129,7 +118,7 @@ public class PhoenixHAAdminIT extends BaseTest {
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
         CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-        TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+        CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
     // This should throw an exception due to NodeExistsException handling
     try {
@@ -170,8 +159,8 @@ public class PhoenixHAAdminIT extends BaseTest {
     HAGroupStoreRecord updatedRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZKUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), TEST_HDFS_URL,
-        TEST_PEER_HDFS_URL, 0L);
+        peerZKUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+        CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, currentVersion);
 
@@ -205,8 +194,8 @@ public class PhoenixHAAdminIT extends BaseTest {
     HAGroupStoreRecord updatedRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZKUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), TEST_HDFS_URL,
-        TEST_PEER_HDFS_URL, 0L);
+        peerZKUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+        CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, currentVersion);
 
@@ -215,7 +204,7 @@ public class PhoenixHAAdminIT extends BaseTest {
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 0L,
         HighAvailabilityPolicy.FAILOVER.toString(), peerZKUrl, CLUSTERS.getMasterAddress1(),
-        CLUSTERS.getMasterAddress2(), TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+        CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
     try {
       haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, anotherUpdate, currentVersion);
@@ -289,8 +278,8 @@ public class PhoenixHAAdminIT extends BaseTest {
     HAGroupStoreRecord updatedRecord =
       new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
         HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
-        peerZKUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), TEST_HDFS_URL,
-        TEST_PEER_HDFS_URL, 0L);
+        peerZKUrl, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+        CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, stat.getVersion());
 
@@ -345,7 +334,7 @@ public class PhoenixHAAdminIT extends BaseTest {
             HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
             HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
             CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-            TEST_HDFS_URL, TEST_PEER_HDFS_URL, 0L);
+            CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
           // All threads use the same currentVersion, causing conflicts
           haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, currentVersion);
@@ -426,8 +415,8 @@ public class PhoenixHAAdminIT extends BaseTest {
                 ? HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
                 : HAGroupStoreRecord.HAGroupState.STANDBY,
               0L, HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
-              CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), TEST_HDFS_URL,
-              TEST_PEER_HDFS_URL, 0L);
+              CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(),
+              CLUSTERS.getHdfsUrl2(), 0L);
 
           // Update with the current version
           haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, updatedRecord, currentVersion);
@@ -465,7 +454,7 @@ public class PhoenixHAAdminIT extends BaseTest {
     return new HAGroupStoreRecord("v1.0", haGroupName,
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, 0L,
       HighAvailabilityPolicy.FAILOVER.toString(), CLUSTERS.getZkUrl2(),
-      CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), TEST_HDFS_URL, TEST_PEER_HDFS_URL,
-      0L);
+      CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(),
+      CLUSTERS.getHdfsUrl2(), 0L);
   }
 }

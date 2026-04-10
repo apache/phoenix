@@ -69,8 +69,7 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
   public void testLogForwardingAndTransitionBackToSyncMode() throws Exception {
     final String tableName = "TESTTBL";
     final long count = 100L;
-    int roundDurationSeconds =
-      logGroup.getFallbackShardManager().getReplicationRoundDurationSeconds();
+    int roundDurationSeconds = logGroup.getLocalShardManager().getReplicationRoundDurationSeconds();
 
     doAnswer(new Answer<Object>() {
       @Override
@@ -144,8 +143,7 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
   @Test
   public void testSyncModeUpdateWaitTime() throws Exception {
     final long[] waitTime = { 8L };
-    int roundDurationSeconds =
-      logGroup.getFallbackShardManager().getReplicationRoundDurationSeconds();
+    int roundDurationSeconds = logGroup.getLocalShardManager().getReplicationRoundDurationSeconds();
 
     doAnswer(new Answer<Object>() {
       @Override
@@ -167,7 +165,8 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
         return ret;
       }
     }).when(haGroupStoreManager).setHAGroupStatusToSync(haGroupName);
-    Thread.sleep(roundDurationSeconds * 4 * 1000);
+    Thread.sleep(roundDurationSeconds * 3 * 1000);
+    LOG.info("Coming out of sleep");
     // we should have switched back to the SYNC mode
     assertEquals(SYNC, logGroup.getMode());
   }

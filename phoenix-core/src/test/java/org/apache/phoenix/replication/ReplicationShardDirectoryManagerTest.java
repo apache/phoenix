@@ -23,7 +23,6 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 
 import java.io.IOException;
-import java.net.URI;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.conf.Configuration;
@@ -44,16 +43,12 @@ public class ReplicationShardDirectoryManagerTest {
 
   private Configuration conf;
   private FileSystem localFs;
-  private URI standbyUri;
   private ReplicationShardDirectoryManager manager;
 
   @Before
   public void setUp() throws IOException {
     conf = HBaseConfiguration.create();
     localFs = FileSystem.getLocal(conf);
-    standbyUri = new Path(testFolder.toString()).toUri();
-    conf.set(ReplicationLogGroup.REPLICATION_STANDBY_HDFS_URL_KEY, standbyUri.toString());
-
     // Create manager with default configuration
     Path rootPath = new Path(testFolder.getRoot().getAbsolutePath());
     manager = new ReplicationShardDirectoryManager(conf, localFs, rootPath);

@@ -47,8 +47,6 @@ import java.util.List;
 import java.util.Optional;
 import org.apache.hadoop.util.ToolRunner;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
-import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.replication.reader.ReplicationLogReplay;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.phoenix.util.JDBCUtil;
@@ -71,9 +69,8 @@ import org.slf4j.LoggerFactory;
  * Integration tests for {@link PhoenixHAAdminTool}.
  */
 @Category(NeedsOwnMiniClusterTest.class)
-public class PhoenixHAAdminToolIT extends BaseTest {
+public class PhoenixHAAdminToolIT extends HABaseIT {
   private static final Logger LOG = LoggerFactory.getLogger(PhoenixHAAdminToolIT.class);
-  private static final HBaseTestingUtilityPair CLUSTERS = new HBaseTestingUtilityPair();
   private static final PrintStream STDOUT = System.out;
   private static final ByteArrayOutputStream STDOUT_CAPTURE = new ByteArrayOutputStream();
   private static final Long BUFFER_TIME_IN_MS = 100L;
@@ -159,11 +156,6 @@ public class PhoenixHAAdminToolIT extends BaseTest {
       // Don't fail the test due to cleanup errors
     }
 
-    standbyUri = testFolder.getRoot().toURI();
-    // Set the required configuration for ReplicationLogReplay
-    CLUSTERS.getHBaseCluster2().getConfiguration()
-      .set(ReplicationLogReplay.REPLICATION_LOG_REPLAY_HDFS_URL_KEY, standbyUri.toString());
-
     adminTool = new PhoenixHAAdminTool();
     adminTool.setConf(CLUSTERS.getHBaseCluster1().getConfiguration());
 
@@ -177,18 +169,19 @@ public class PhoenixHAAdminToolIT extends BaseTest {
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable("prod_cluster_alpha",
       CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(),
       CLUSTERS.getMasterAddress2(), ClusterRoleRecord.ClusterRole.ACTIVE,
-      ClusterRoleRecord.ClusterRole.STANDBY, null);
+      ClusterRoleRecord.ClusterRole.STANDBY, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Group 2 - Standby cluster group
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable("disaster_recovery_beta",
       CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(),
       CLUSTERS.getMasterAddress2(), ClusterRoleRecord.ClusterRole.STANDBY,
-      ClusterRoleRecord.ClusterRole.ACTIVE, null);
+      ClusterRoleRecord.ClusterRole.ACTIVE, null, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Group 3 - Test-specific group (uses test method name for uniqueness across test runs)
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, CLUSTERS.getZkUrl1(),
       CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Clear stdout capture
     STDOUT_CAPTURE.reset();
@@ -420,7 +413,7 @@ public class PhoenixHAAdminToolIT extends BaseTest {
         new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
           HAGroupStoreRecord.HAGroupState.STANDBY, 0L, HighAvailabilityPolicy.FAILOVER.toString(),
           CLUSTERS.getZkUrl1(), CLUSTERS.getMasterAddress2(), CLUSTERS.getMasterAddress1(),
-          localUri.toString(), standbyUri.toString(), 1L);
+          CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 1L);
 
       peerHaAdmin.createHAGroupStoreRecordInZooKeeper(peerRecord);
 
@@ -498,10 +491,12 @@ public class PhoenixHAAdminToolIT extends BaseTest {
     // Set up system tables for both clusters
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(failoverHaGroupName, zkUrl1, zkUrl2,
       CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(failoverHaGroupName, zkUrl1, zkUrl2,
       CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl2);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl2,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Create HAGroupStoreManager instances for both clusters
     // This will automatically setup failover management and create ZNodes from system table
@@ -594,10 +589,12 @@ public class PhoenixHAAdminToolIT extends BaseTest {
     // Set up system tables for both clusters
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(abortFailoverHaGroupName, zkUrl1, zkUrl2,
       CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(abortFailoverHaGroupName, zkUrl1, zkUrl2,
       CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl2);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl2,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Create HAGroupStoreManager instances for both clusters
     HAGroupStoreManager cluster1HAManager =
@@ -694,10 +691,12 @@ public class PhoenixHAAdminToolIT extends BaseTest {
     // Set up system tables for both clusters
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(timeoutFailoverHaGroupName, zkUrl1,
       zkUrl2, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(timeoutFailoverHaGroupName, zkUrl1,
       zkUrl2, CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
-      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl2);
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl2,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
     // Create HAGroupStoreManager instances for both clusters
     HAGroupStoreManager cluster1HAManager =
