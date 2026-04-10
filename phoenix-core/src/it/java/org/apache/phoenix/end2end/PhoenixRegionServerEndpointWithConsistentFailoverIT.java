@@ -91,8 +91,8 @@ public class PhoenixRegionServerEndpointWithConsistentFailoverIT extends HABaseI
     HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(testName.getMethodName(),
       CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2(), CLUSTERS.getMasterAddress1(),
       CLUSTERS.getMasterAddress2(), ClusterRoleRecord.ClusterRole.ACTIVE,
-      ClusterRoleRecord.ClusterRole.STANDBY, CLUSTERS.getZkUrl2(),
-      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+      ClusterRoleRecord.ClusterRole.STANDBY, CLUSTERS.getZkUrl2(), CLUSTERS.getHdfsUrl1(),
+      CLUSTERS.getHdfsUrl2());
   }
 
   @Test
