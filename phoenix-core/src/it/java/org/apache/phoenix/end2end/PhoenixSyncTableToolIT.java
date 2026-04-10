@@ -1235,14 +1235,12 @@ public class PhoenixSyncTableToolIT {
 
     // Enable server-side paging
     conf.setBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB, true);
-    // Set extremely short paging timeout to force frequent paging
-    long aggressiveRpcTimeout = 1000L; // 1 second RPC timeout
+    // Set extremely short rpc timeout to force frequent paging
+    long aggressiveRpcTimeout = 1L; // 1ms RPC timeout
     conf.setLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB, aggressiveRpcTimeout);
     conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, aggressiveRpcTimeout);
-    // Force server-side paging to occur by setting page size to 1ms
-    conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 1);
 
-    int chunkSize = 10240; // 100KB
+    int chunkSize = 102400; // 100KB
 
     // Create a thread that will perform splits on source cluster during sync
     Thread sourceSplitThread = new Thread(() -> {
