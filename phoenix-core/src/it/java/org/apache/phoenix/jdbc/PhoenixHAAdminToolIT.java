@@ -74,7 +74,6 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
   private static final Logger LOG = LoggerFactory.getLogger(PhoenixHAAdminToolIT.class);
   private static final PrintStream STDOUT = System.out;
   private static final ByteArrayOutputStream STDOUT_CAPTURE = new ByteArrayOutputStream();
-  private static final Long BUFFER_TIME_IN_MS = 100L;
 
   private String haGroupName;
   private PhoenixHAAdminTool adminTool;

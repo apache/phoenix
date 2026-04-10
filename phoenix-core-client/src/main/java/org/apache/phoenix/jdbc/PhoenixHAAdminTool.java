@@ -946,7 +946,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       + ", " + ZK_URL_2 + ", " + CLUSTER_URL_2 + ", " + CLUSTER_ROLE_2 + ", " + HDFS_URL_2 + ", "
       + VERSION + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    try (PhoenixConnection conn = ConnectionUtil.getInputConnection(getConf());
+    try (PhoenixConnection conn = (PhoenixConnection) ConnectionUtil.getInputConnection(getConf());
       PreparedStatement pstmt = conn.prepareStatement(insertQuery)) {
       pstmt.setString(1, haGroupName);
       pstmt.setString(2, policy);
