@@ -294,9 +294,9 @@ public class HighAvailabilityTestingUtility {
       HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl1(), getZkUrl2(),
         getMasterAddress1(), getMasterAddress2(), role1, role2, version1, overrideZKUrl, policy,
         getHATestProperties(), getHdfsUrl1(), getHdfsUrl2());
-      HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl2(), getZkUrl1(),
-        getMasterAddress2(), getMasterAddress1(), role2, role1, version2, overrideZKUrl, policy,
-        getHATestProperties(), getHdfsUrl2(), getHdfsUrl1());
+      HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl1(), getZkUrl2(),
+        getMasterAddress1(), getMasterAddress2(), role1, role2, version1, getZkUrl2(), policy,
+        getHATestProperties(), getHdfsUrl1(), getHdfsUrl2());
     }
 
     /**
@@ -310,9 +310,10 @@ public class HighAvailabilityTestingUtility {
           getMasterAddress1(), getMasterAddress2(), role1, role2, version1, overrideZKUrl, policy,
           getHATestProperties(), getHdfsUrl1(), getHdfsUrl2());
       } else {
-        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl2(), getZkUrl1(),
-          getMasterAddress2(), getMasterAddress1(), role2, role1, version2, overrideZKUrl, policy,
-          getHATestProperties(), getHdfsUrl2(), getHdfsUrl1());
+        HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, getZkUrl1(), getZkUrl2(),
+          getMasterAddress1(), getMasterAddress2(), role1, role2, version2,
+          overrideZKUrl != null ? overrideZKUrl : getZkUrl2(), policy, getHATestProperties(),
+          getHdfsUrl1(), getHdfsUrl2());
       }
     }
 
