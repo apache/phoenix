@@ -921,8 +921,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     throws SQLException {
     String query =
       "SELECT COUNT(*) FROM " + SYSTEM_HA_GROUP_NAME + " WHERE " + HA_GROUP_NAME + " = ?";
-    try (
-      PhoenixConnection conn = (PhoenixConnection) ConnectionUtil.getInputConnection(getConf());
+    try (PhoenixConnection conn = (PhoenixConnection) ConnectionUtil.getInputConnection(getConf());
       PreparedStatement pstmt = conn.prepareStatement(query)) {
       pstmt.setString(1, haGroupName);
       try (ResultSet rs = pstmt.executeQuery()) {
@@ -947,8 +946,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       + ", " + ZK_URL_2 + ", " + CLUSTER_URL_2 + ", " + CLUSTER_ROLE_2 + ", " + HDFS_URL_2 + ", "
       + VERSION + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-    try (
-      PhoenixConnection conn = ConnectionUtil.getInputConnection(getConf());
+    try (PhoenixConnection conn = ConnectionUtil.getInputConnection(getConf());
       PreparedStatement pstmt = conn.prepareStatement(insertQuery)) {
       pstmt.setString(1, haGroupName);
       pstmt.setString(2, policy);
