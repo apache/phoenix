@@ -30,6 +30,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VERSION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ZK_URL_1;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ZK_URL_2;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
+import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_ARGUMENT_ERROR;
 import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_SUCCESS;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
@@ -73,7 +74,6 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
   private static final Logger LOG = LoggerFactory.getLogger(PhoenixHAAdminToolIT.class);
   private static final PrintStream STDOUT = System.out;
   private static final ByteArrayOutputStream STDOUT_CAPTURE = new ByteArrayOutputStream();
-  private static final Long BUFFER_TIME_IN_MS = 100L;
 
   private String haGroupName;
   private PhoenixHAAdminTool adminTool;
@@ -896,5 +896,148 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     LOG.info(
       "✓ System table verification passed: all fields updated correctly, version incremented");
     LOG.info("✓ Update test completed successfully: ZK and System Table both updated correctly");
+  }
+
+  /**
+   * Test that the create command successfully creates a new HA group entry in SYSTEM.HA_GROUP and
+   * znode for the HA group is also created.
+   */
+  @Test(timeout = 180000)
+  public void testCreateCommandNewHAGroup() throws Exception {
+    String createHaGroupName = "testCreate_new_" + System.currentTimeMillis();
+
+    System.setOut(new PrintStream(STDOUT_CAPTURE));
+
+    int ret = ToolRunner.run(adminTool,
+      new String[] { "create", "-g", createHaGroupName, "-p", "FAILOVER", "-zk1",
+        CLUSTERS.getZkUrl1(), "-c1", CLUSTERS.getMasterAddress1(), "-cr1", "ACTIVE", "-zk2",
+        CLUSTERS.getZkUrl2(), "-c2", CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1", 
+        CLUSTERS.getHdfsUrl1(), "-hdfs2", CLUSTERS.getHdfsUrl2() });
+
+    assertEquals("create command should succeed", RET_SUCCESS, ret);
+
+    String output = STDOUT_CAPTURE.toString();
+    LOG.info("Got stdout from create command: \n++++++++\n{}++++++++\n", output);
+
+    assertTrue("Output should indicate creation succeeded",
+      output.contains("created successfully"));
+    assertTrue("Output should indicate Znode was initialized",
+      output.contains("Znode initialized"));
+
+    // Verify row was written to SYSTEM.HA_GROUP
+    SystemTableRecord record = querySystemTable(createHaGroupName, CLUSTERS.getZkUrl1());
+    assertNotNull("System table should contain the new HA group", record);
+    assertEquals("Policy should be FAILOVER", "FAILOVER", record.policy);
+    assertEquals("Version should default to 1", 1L, record.version);
+
+    // Verify ZK znode was created by the create command
+    try (PhoenixHAAdmin haAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(),
+      ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE)) {
+      HAGroupStoreRecord zkRecord =
+        haAdmin.getHAGroupStoreRecordInZooKeeper(createHaGroupName).getLeft();
+      assertNotNull("ZK znode should be created by create command", zkRecord);
+      assertEquals("ZK record HA group name should match", createHaGroupName,
+        zkRecord.getHaGroupName());
+      assertEquals("ZK record policy should match", "FAILOVER", zkRecord.getPolicy());
+      assertEquals("ZK record local cluster URL should match", CLUSTERS.getMasterAddress1(),
+        zkRecord.getClusterUrl());
+      assertEquals("ZK record peer cluster URL should match", CLUSTERS.getMasterAddress2(),
+        zkRecord.getPeerClusterUrl());
+      assertEquals("ZK record peer ZK URL should match", CLUSTERS.getZkUrl2(),
+        zkRecord.getPeerZKUrl());
+      assertEquals("ZK record local HDFS URL should match", CLUSTERS.getHdfsUrl1(),
+        zkRecord.getHdfsUrl());
+      assertEquals("ZK record peer HDFS URL should match", CLUSTERS.getHdfsUrl2(),
+        zkRecord.getPeerHdfsUrl());
+      assertEquals("ZK record admin version should match", 1L, zkRecord.getAdminCRRVersion());
+    }
+  }
+
+  /**
+   * Test that the create command is idempotent: if the HA group already exists in SYSTEM.HA_GROUP,
+   * it returns success without modifying the existing row.
+   */
+  @Test(timeout = 180000)
+  public void testCreateCommandAlreadyExists() throws Exception {
+    // haGroupName is pre-inserted by @Before
+    SystemTableRecord originalRecord = querySystemTable(haGroupName, CLUSTERS.getZkUrl1());
+    assertNotNull("Record should exist before create command", originalRecord);
+
+    System.setOut(new PrintStream(STDOUT_CAPTURE));
+
+    // Run create with different values - these should NOT overwrite the existing row
+    int ret = ToolRunner.run(adminTool,
+      new String[] { "create", "-g", haGroupName, "-p", "FAILOVER", "-zk1", CLUSTERS.getZkUrl1(),
+        "-c1", "different-url:16000", "-cr1", "STANDBY", "-zk2", CLUSTERS.getZkUrl2(), "-c2",
+        CLUSTERS.getMasterAddress2(), "-cr2", "ACTIVE", "-hdfs1", CLUSTERS.getHdfsUrl1(), "-hdfs2",
+        CLUSTERS.getHdfsUrl2() });
+
+    assertEquals("create command should return success even when group already exists", RET_SUCCESS,
+      ret);
+
+    String output = STDOUT_CAPTURE.toString();
+    LOG.info("Got stdout from create (existing group): \n++++++++\n{}++++++++\n", output);
+
+    assertTrue("Output should indicate group already exists and was skipped",
+      output.contains("already exists") && output.contains("Skipping"));
+
+    // Verify the system table row was NOT modified
+    SystemTableRecord afterRecord = querySystemTable(haGroupName, CLUSTERS.getZkUrl1());
+    assertNotNull("System table record should still exist", afterRecord);
+    assertEquals("Policy should remain unchanged", originalRecord.policy, afterRecord.policy);
+    assertEquals("Version should remain unchanged", originalRecord.version, afterRecord.version);
+    assertEquals("ZK URL 1 should remain unchanged", originalRecord.zkUrl1, afterRecord.zkUrl1);
+    assertEquals("ZK URL 2 should remain unchanged", originalRecord.zkUrl2, afterRecord.zkUrl2);
+    assertEquals("Cluster URL 1 should remain unchanged", originalRecord.clusterUrl1,
+      afterRecord.clusterUrl1);
+    assertEquals("Cluster URL 2 should remain unchanged", originalRecord.clusterUrl2,
+      afterRecord.clusterUrl2);
+  }
+
+  /**
+   * Test that the create command dry-run mode shows what would be created without writing to
+   * SYSTEM.HA_GROUP.
+   */
+  @Test(timeout = 180000)
+  public void testCreateCommandDryRun() throws Exception {
+    String dryRunHaGroupName = "testCreate_dryRun_" + System.currentTimeMillis();
+
+    System.setOut(new PrintStream(STDOUT_CAPTURE));
+
+    int ret = ToolRunner.run(adminTool,
+      new String[] { "create", "-g", dryRunHaGroupName, "-p", "FAILOVER", "-zk1",
+        CLUSTERS.getZkUrl1(), "-c1", CLUSTERS.getMasterAddress1(), "-cr1", "ACTIVE", "-zk2",
+        CLUSTERS.getZkUrl2(), "-c2", CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1",
+        CLUSTERS.getHdfsUrl1(), "-hdfs2", CLUSTERS.getHdfsUrl2(), "-d" });
+
+    assertEquals("create dry-run should succeed", RET_SUCCESS, ret);
+
+    String output = STDOUT_CAPTURE.toString();
+    LOG.info("Got stdout from create dry-run: \n++++++++\n{}++++++++\n", output);
+
+    assertTrue("Output should indicate dry-run completed",
+      output.contains("Dry-run") || output.contains("dry-run"));
+
+    // Verify nothing was written to system table
+    SystemTableRecord record = querySystemTable(dryRunHaGroupName, CLUSTERS.getZkUrl1());
+    assertTrue("System table should NOT contain the HA group after dry-run", record == null);
+  }
+
+  /**
+   * Test that the create command returns RET_ARGUMENT_ERROR when a required argument is missing.
+   */
+  @Test(timeout = 180000)
+  public void testCreateCommandMissingRequiredArg() throws Exception {
+    System.setOut(new PrintStream(STDOUT_CAPTURE));
+
+    // Run create without the required --policy argument
+    int ret = ToolRunner.run(adminTool,
+      new String[] { "create", "-g", "anyGroupName", "-zk1", CLUSTERS.getZkUrl1(), "-c1",
+        CLUSTERS.getMasterAddress1(), "-cr1", "ACTIVE", "-zk2", CLUSTERS.getZkUrl2(), "-c2",
+        CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1", CLUSTERS.getHdfsUrl1(), "-hdfs2",
+        CLUSTERS.getHdfsUrl2() });
+
+    assertEquals("create command should return RET_ARGUMENT_ERROR when --policy is missing",
+      RET_ARGUMENT_ERROR, ret);
   }
 }
