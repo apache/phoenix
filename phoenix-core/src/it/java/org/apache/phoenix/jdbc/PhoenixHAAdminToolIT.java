@@ -911,8 +911,8 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     int ret = ToolRunner.run(adminTool,
       new String[] { "create", "-g", createHaGroupName, "-p", "FAILOVER", "-zk1",
         CLUSTERS.getZkUrl1(), "-c1", CLUSTERS.getMasterAddress1(), "-cr1", "ACTIVE", "-zk2",
-        CLUSTERS.getZkUrl2(), "-c2", CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1",
-        localUri.toString(), "-hdfs2", standbyUri.toString() });
+        CLUSTERS.getZkUrl2(), "-c2", CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1", 
+        CLUSTERS.getHdfsUrl1(), "-hdfs2", CLUSTERS.getHdfsUrl2() });
 
     assertEquals("create command should succeed", RET_SUCCESS, ret);
 
@@ -945,9 +945,9 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
         zkRecord.getPeerClusterUrl());
       assertEquals("ZK record peer ZK URL should match", CLUSTERS.getZkUrl2(),
         zkRecord.getPeerZKUrl());
-      assertEquals("ZK record local HDFS URL should match", localUri.toString(),
+      assertEquals("ZK record local HDFS URL should match", CLUSTERS.getHdfsUrl1(),
         zkRecord.getHdfsUrl());
-      assertEquals("ZK record peer HDFS URL should match", standbyUri.toString(),
+      assertEquals("ZK record peer HDFS URL should match", CLUSTERS.getHdfsUrl2(),
         zkRecord.getPeerHdfsUrl());
       assertEquals("ZK record admin version should match", 1L, zkRecord.getAdminCRRVersion());
     }
@@ -969,8 +969,8 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     int ret = ToolRunner.run(adminTool,
       new String[] { "create", "-g", haGroupName, "-p", "FAILOVER", "-zk1", CLUSTERS.getZkUrl1(),
         "-c1", "different-url:16000", "-cr1", "STANDBY", "-zk2", CLUSTERS.getZkUrl2(), "-c2",
-        CLUSTERS.getMasterAddress2(), "-cr2", "ACTIVE", "-hdfs1", localUri.toString(), "-hdfs2",
-        standbyUri.toString() });
+        CLUSTERS.getMasterAddress2(), "-cr2", "ACTIVE", "-hdfs1", CLUSTERS.getHdfsUrl1(), "-hdfs2",
+        CLUSTERS.getHdfsUrl2() });
 
     assertEquals("create command should return success even when group already exists", RET_SUCCESS,
       ret);
@@ -1008,7 +1008,7 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
       new String[] { "create", "-g", dryRunHaGroupName, "-p", "FAILOVER", "-zk1",
         CLUSTERS.getZkUrl1(), "-c1", CLUSTERS.getMasterAddress1(), "-cr1", "ACTIVE", "-zk2",
         CLUSTERS.getZkUrl2(), "-c2", CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1",
-        localUri.toString(), "-hdfs2", standbyUri.toString(), "-d" });
+        CLUSTERS.getHdfsUrl1(), "-hdfs2", CLUSTERS.getHdfsUrl2(), "-d" });
 
     assertEquals("create dry-run should succeed", RET_SUCCESS, ret);
 
@@ -1034,8 +1034,8 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     int ret = ToolRunner.run(adminTool,
       new String[] { "create", "-g", "anyGroupName", "-zk1", CLUSTERS.getZkUrl1(), "-c1",
         CLUSTERS.getMasterAddress1(), "-cr1", "ACTIVE", "-zk2", CLUSTERS.getZkUrl2(), "-c2",
-        CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1", localUri.toString(), "-hdfs2",
-        standbyUri.toString() });
+        CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1", CLUSTERS.getHdfsUrl1(), "-hdfs2",
+        CLUSTERS.getHdfsUrl2() });
 
     assertEquals("create command should return RET_ARGUMENT_ERROR when --policy is missing",
       RET_ARGUMENT_ERROR, ret);
