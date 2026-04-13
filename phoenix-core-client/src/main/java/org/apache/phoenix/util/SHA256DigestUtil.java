@@ -27,6 +27,9 @@ import org.bouncycastle.crypto.digests.SHA256Digest;
  */
 public class SHA256DigestUtil {
 
+  private SHA256DigestUtil() {
+  }
+
   /**
    * Encodes a SHA256Digest state to a byte array.
    * @param digest The digest whose state should be encoded
