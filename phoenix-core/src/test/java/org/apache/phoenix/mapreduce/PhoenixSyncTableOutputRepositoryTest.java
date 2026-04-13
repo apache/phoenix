@@ -17,13 +17,7 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import static org.junit.Assert.assertArrayEquals;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNotSame;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -34,10 +28,16 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.mapreduce.PhoenixSyncTableOutputRow.Status;
-import org.apache.phoenix.mapreduce.PhoenixSyncTableOutputRow.Type;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Status;
+import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Type;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -48,8 +48,8 @@ import org.junit.Test;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
- * Unit tests for PhoenixSyncTableOutputRepository and PhoenixSyncTableOutputRow. Tests checkpoint
- * table operations and data model functionality.
+ * Unit tests for PhoenixSyncTableOutputRepository and PhoenixSyncTableCheckpointOutputRow. Tests
+ * checkpoint table operations and data model functionality.
  */
 public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
 
@@ -102,6 +102,26 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
   }
 
   @Test
+  public void testCheckpointTableUsesColumnEncoding() throws Exception {
+    PhoenixConnection pconn = connection.unwrap(PhoenixConnection.class);
+    PTable table =
+      pconn.getTable(PhoenixSyncTableOutputRepository.SYNC_TABLE_CHECKPOINT_TABLE_NAME);
+    assertEquals(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, table.getEncodingScheme());
+  }
+
+  @Test
+  public void testCheckpointTableUsesSnappyCompression() throws Exception {
+    PhoenixConnection pconn = connection.unwrap(PhoenixConnection.class);
+    PTable table =
+      pconn.getTable(PhoenixSyncTableOutputRepository.SYNC_TABLE_CHECKPOINT_TABLE_NAME);
+    TableDescriptor td =
+      pconn.getQueryServices().getTableDescriptor(table.getPhysicalName().getBytes());
+    for (ColumnFamilyDescriptor cfd : td.getColumnFamilies()) {
+      assertEquals(Compression.Algorithm.SNAPPY, cfd.getCompressionType());
+    }
+  }
+
+  @Test
   public void testCreateSyncCheckpointTableIdempotent() throws Exception {
     // Create again - should not throw exception
     repository.createSyncCheckpointTableIfNotExists();
@@ -121,12 +141,14 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     byte[] endKey = Bytes.toBytes("row100");
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, 0L, 1000L,
-      false, startKey, endKey, Status.VERIFIED, timestamp, timestamp,
-      "SOURCE_ROWS_PROCESSED=10,TARGET_ROWS_PROCESSED=10");
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .setCounters("SOURCE_ROWS_PROCESSED=10,TARGET_ROWS_PROCESSED=10").build());
 
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L);
+    List<PhoenixSyncTableCheckpointOutputRow> results =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, null);
 
     assertEquals(1, results.size());
     assertArrayEquals(startKey, results.get(0).getStartRowKey());
@@ -142,34 +164,50 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     byte[] mapperEnd = Bytes.toBytes("row100");
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.CHUNK, 0L, 1000L, false,
-      chunkStart, chunkEnd, Status.VERIFIED, timestamp, timestamp, null);
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunkStart).setEndRowKey(chunkEnd)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
 
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedChunks(tableName, targetCluster, 0L, 1000L, mapperStart, mapperEnd);
+    List<PhoenixSyncTableCheckpointOutputRow> results = repository.getProcessedChunks(tableName,
+      targetCluster, 0L, 1000L, null, mapperStart, mapperEnd);
 
-    assertTrue("Should find chunk within mapper region", results.size() > 0);
+    assertFalse("Should find chunk within mapper region", results.isEmpty());
   }
 
   @Test
   public void testCheckpointWithEmptyStartKey() throws Exception {
     String tableName = generateUniqueName();
-    byte[] startKey = new byte[0];
-    byte[] endKey = Bytes.toBytes("row100");
+    byte[] emptyStartKey = new byte[0];
+    byte[] endKey1 = Bytes.toBytes("row50");
+    byte[] startKey2 = Bytes.toBytes("row50");
+    byte[] endKey2 = Bytes.toBytes("row100");
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
-    // Pass empty byte array as start key (first region)
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, 0L, 1000L,
-      false, startKey, endKey, Status.VERIFIED, timestamp, timestamp, null);
+    // Insert second region first, then first region (empty start key)
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey2).setEndRowKey(endKey2)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
 
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L);
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(emptyStartKey).setEndRowKey(endKey1)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
 
-    assertEquals(1, results.size());
+    List<PhoenixSyncTableCheckpointOutputRow> results =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, null);
+
+    assertEquals(2, results.size());
     // Phoenix returns null for empty byte arrays in primary key columns
+    // Verify ORDER BY: empty/null key should come first
     byte[] retrievedStartKey = results.get(0).getStartRowKey();
-    assertTrue("Start key should be null or empty for first region",
+    assertTrue("First result should have empty/null start key for first region",
       retrievedStartKey == null || retrievedStartKey.length == 0);
+    assertArrayEquals("Second result should be row50", startKey2, results.get(1).getStartRowKey());
   }
 
   @Test
@@ -178,11 +216,13 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     byte[] startKey = Bytes.toBytes("row1");
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, 0L, 1000L,
-      false, startKey, null, Status.VERIFIED, timestamp, timestamp, null);
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setStatus(Status.VERIFIED)
+      .setExecutionStartTime(timestamp).setExecutionEndTime(timestamp).build());
 
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L);
+    List<PhoenixSyncTableCheckpointOutputRow> results =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, null);
 
     assertEquals(1, results.size());
   }
@@ -195,8 +235,11 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
     String counters = "SOURCE_ROWS_PROCESSED=100,TARGET_ROWS_PROCESSED=95";
 
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, 0L, 1000L,
-      false, startKey, endKey, Status.MISMATCHED, timestamp, timestamp, counters);
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey)
+      .setStatus(Status.MISMATCHED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .setCounters(counters).build());
 
     // Verify by querying directly
     String query = "SELECT COUNTERS FROM "
@@ -216,8 +259,11 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
     try {
-      repository.checkpointSyncTableResult(null, targetCluster, Type.MAPPER_REGION, 0L, 1000L,
-        false, startKey, startKey, Status.VERIFIED, timestamp, timestamp, null);
+      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+        .setTableName(null).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+        .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(startKey)
+        .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+        .build());
       fail("Should throw IllegalArgumentException for null tableName");
     } catch (IllegalArgumentException e) {
       assertTrue(e.getMessage().contains("TableName cannot be null"));
@@ -231,8 +277,11 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
     try {
-      repository.checkpointSyncTableResult(tableName, null, Type.MAPPER_REGION, 0L, 1000L, false,
-        startKey, startKey, Status.VERIFIED, timestamp, timestamp, null);
+      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+        .setTableName(tableName).setTargetCluster(null).setType(Type.REGION).setFromTime(0L)
+        .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(startKey)
+        .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+        .build());
       fail("Should throw IllegalArgumentException for null targetCluster");
     } catch (IllegalArgumentException e) {
       assertTrue(e.getMessage().contains("TargetCluster cannot be null"));
@@ -246,10 +295,13 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
     try {
-      repository.checkpointSyncTableResult(tableName, targetCluster, null, 0L, 1000L, false,
-        startKey, startKey, Status.VERIFIED, timestamp, timestamp, null);
-      fail("Should throw IllegalArgumentException for null type");
-    } catch (IllegalArgumentException e) {
+      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+        .setTableName(tableName).setTargetCluster(targetCluster).setType(null).setFromTime(0L)
+        .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(startKey)
+        .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+        .build());
+      fail("Should throw NullPointerException for null type");
+    } catch (NullPointerException e) {
       assertTrue(e.getMessage().contains("Type cannot be null"));
     }
   }
@@ -261,11 +313,14 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
     try {
-      repository.checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, null,
-        1000L, false, startKey, startKey, Status.VERIFIED, timestamp, timestamp, null);
-      fail("Should throw IllegalArgumentException for null fromTime");
-    } catch (IllegalArgumentException e) {
-      assertTrue(e.getMessage().contains("FromTime and ToTime cannot be null"));
+      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+        .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION)
+        .setFromTime(null).setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey)
+        .setEndRowKey(startKey).setStatus(Status.VERIFIED).setExecutionStartTime(timestamp)
+        .setExecutionEndTime(timestamp).build());
+      fail("Should throw NullPointerException for null fromTime");
+    } catch (NullPointerException e) {
+      assertTrue(e.getMessage().contains("FromTime cannot be null"));
     }
   }
 
@@ -278,16 +333,22 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     Timestamp timestamp2 = new Timestamp(System.currentTimeMillis() + 1000);
 
     // Insert first time
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, 0L, 1000L,
-      false, startKey, endKey, Status.VERIFIED, timestamp1, timestamp1, "counter=1");
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp1).setExecutionEndTime(timestamp1)
+      .setCounters("counter=1").build());
 
     // Upsert with same PK but different values
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, 0L, 1000L,
-      false, startKey, endKey, Status.MISMATCHED, timestamp2, timestamp2, "counter=2");
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey)
+      .setStatus(Status.MISMATCHED).setExecutionStartTime(timestamp2)
+      .setExecutionEndTime(timestamp2).setCounters("counter=2").build());
 
     // Verify only one row exists with updated values
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L);
+    List<PhoenixSyncTableCheckpointOutputRow> results =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, null);
 
     assertEquals("Should have only one row after upsert", 1, results.size());
   }
@@ -296,8 +357,8 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
   public void testGetProcessedMapperRegionsEmpty() throws Exception {
     String tableName = generateUniqueName();
 
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L);
+    List<PhoenixSyncTableCheckpointOutputRow> results =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, null);
 
     assertEquals(0, results.size());
   }
@@ -311,16 +372,26 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     byte[] endKey2 = Bytes.toBytes("row100");
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, 0L, 1000L,
-      false, startKey1, endKey1, Status.VERIFIED, timestamp, timestamp, null);
+    // Insert in reverse order to verify ORDER BY clause
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey2).setEndRowKey(endKey2)
+      .setStatus(Status.MISMATCHED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
 
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, 0L, 1000L,
-      false, startKey2, endKey2, Status.MISMATCHED, timestamp, timestamp, null);
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey1).setEndRowKey(endKey1)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
 
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L);
+    List<PhoenixSyncTableCheckpointOutputRow> results =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, null);
 
     assertEquals(2, results.size());
+    // Verify ORDER BY START_ROW_KEY: row1 should come before row50
+    assertArrayEquals("First result should be row1", startKey1, results.get(0).getStartRowKey());
+    assertArrayEquals("Second result should be row50", startKey2, results.get(1).getStartRowKey());
   }
 
   @Test
@@ -331,17 +402,23 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
     // Insert mapper region
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, 0L, 1000L,
-      false, startKey, endKey, Status.VERIFIED, timestamp, timestamp, null);
+    repository.checkpointSyncTableResult(
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+        .setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L).setToTime(1000L)
+        .setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey).setStatus(Status.VERIFIED)
+        .setExecutionStartTime(timestamp).setExecutionEndTime(timestamp).build());
 
     // Insert chunk
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.CHUNK, 0L, 1000L, false,
-      startKey, endKey, Status.VERIFIED, timestamp, timestamp, null);
+    repository.checkpointSyncTableResult(
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+        .setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L).setToTime(1000L)
+        .setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey).setStatus(Status.VERIFIED)
+        .setExecutionStartTime(timestamp).setExecutionEndTime(timestamp).build());
 
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L);
+    List<PhoenixSyncTableCheckpointOutputRow> results =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, null);
 
-    assertEquals("Should only return MAPPER_REGION entries", 1, results.size());
+    assertEquals("Should only return REGION entries", 1, results.size());
   }
 
   @Test
@@ -352,12 +429,15 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
     // Insert with time range 0-1000
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, 0L, 1000L,
-      false, startKey, endKey, Status.VERIFIED, timestamp, timestamp, null);
+    repository.checkpointSyncTableResult(
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+        .setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L).setToTime(1000L)
+        .setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey).setStatus(Status.VERIFIED)
+        .setExecutionStartTime(timestamp).setExecutionEndTime(timestamp).build());
 
     // Query with different time range
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedMapperRegions(tableName, targetCluster, 2000L, 3000L);
+    List<PhoenixSyncTableCheckpointOutputRow> results =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 2000L, 3000L, null);
 
     assertEquals("Should not find entry with different time range", 0, results.size());
   }
@@ -368,8 +448,8 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     byte[] mapperStart = Bytes.toBytes("row1");
     byte[] mapperEnd = Bytes.toBytes("row100");
 
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedChunks(tableName, targetCluster, 0L, 1000L, mapperStart, mapperEnd);
+    List<PhoenixSyncTableCheckpointOutputRow> results = repository.getProcessedChunks(tableName,
+      targetCluster, 0L, 1000L, null, mapperStart, mapperEnd);
 
     assertEquals(0, results.size());
   }
@@ -385,16 +465,27 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     byte[] mapperEnd = Bytes.toBytes("row99");
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.CHUNK, 0L, 1000L, false,
-      chunk1Start, chunk1End, Status.VERIFIED, timestamp, timestamp, null);
+    // Insert in reverse order to verify ORDER BY clause
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunk2Start).setEndRowKey(chunk2End)
+      .setStatus(Status.MISMATCHED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
 
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.CHUNK, 0L, 1000L, false,
-      chunk2Start, chunk2End, Status.MISMATCHED, timestamp, timestamp, null);
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunk1Start).setEndRowKey(chunk1End)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
 
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedChunks(tableName, targetCluster, 0L, 1000L, mapperStart, mapperEnd);
+    List<PhoenixSyncTableCheckpointOutputRow> results = repository.getProcessedChunks(tableName,
+      targetCluster, 0L, 1000L, null, mapperStart, mapperEnd);
 
     assertEquals(2, results.size());
+    // Verify ORDER BY START_ROW_KEY: row10 should come before row30
+    assertArrayEquals("First result should be row10", chunk1Start, results.get(0).getStartRowKey());
+    assertArrayEquals("Second result should be row30", chunk2Start,
+      results.get(1).getStartRowKey());
   }
 
   @Test
@@ -407,15 +498,21 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
     // Insert mapper region
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.MAPPER_REGION, 0L, 1000L,
-      false, startKey, endKey, Status.VERIFIED, timestamp, timestamp, null);
+    repository.checkpointSyncTableResult(
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+        .setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L).setToTime(1000L)
+        .setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey).setStatus(Status.VERIFIED)
+        .setExecutionStartTime(timestamp).setExecutionEndTime(timestamp).build());
 
     // Insert chunk
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.CHUNK, 0L, 1000L, false,
-      startKey, endKey, Status.VERIFIED, timestamp, timestamp, null);
+    repository.checkpointSyncTableResult(
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+        .setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L).setToTime(1000L)
+        .setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey).setStatus(Status.VERIFIED)
+        .setExecutionStartTime(timestamp).setExecutionEndTime(timestamp).build());
 
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedChunks(tableName, targetCluster, 0L, 1000L, mapperStart, mapperEnd);
+    List<PhoenixSyncTableCheckpointOutputRow> results = repository.getProcessedChunks(tableName,
+      targetCluster, 0L, 1000L, null, mapperStart, mapperEnd);
 
     assertEquals("Should only return CHUNK entries", 1, results.size());
   }
@@ -427,26 +524,123 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     byte[] chunkEnd = Bytes.toBytes("row60");
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
-    repository.checkpointSyncTableResult(tableName, targetCluster, Type.CHUNK, 0L, 1000L, false,
-      chunkStart, chunkEnd, Status.VERIFIED, timestamp, timestamp, null);
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunkStart).setEndRowKey(chunkEnd)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
 
     // Query with no boundaries (entire table)
-    List<PhoenixSyncTableOutputRow> results =
-      repository.getProcessedChunks(tableName, targetCluster, 0L, 1000L, null, null);
+    List<PhoenixSyncTableCheckpointOutputRow> results =
+      repository.getProcessedChunks(tableName, targetCluster, 0L, 1000L, null, null, null);
 
     assertEquals(1, results.size());
   }
 
   @Test
-  public void testBuilderAllFields() throws Exception {
+  public void testGetProcessedChunksWithOnlyEndBoundary() throws Exception {
+    String tableName = generateUniqueName();
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    // Insert chunks at different positions
+    byte[] chunk1Start = Bytes.toBytes("row10");
+    byte[] chunk1End = Bytes.toBytes("row20");
+    byte[] chunk2Start = Bytes.toBytes("row30");
+    byte[] chunk2End = Bytes.toBytes("row40");
+    byte[] chunk3Start = Bytes.toBytes("row60");
+    byte[] chunk3End = Bytes.toBytes("row70");
+
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunk1Start).setEndRowKey(chunk1End)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
+
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunk2Start).setEndRowKey(chunk2End)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
+
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunk3Start).setEndRowKey(chunk3End)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
+
+    // Query with only end boundary (first region of table: empty start, non-empty end)
+    // This tests the code path where hasEndBoundary=true, hasStartBoundary=false
+    // SQL should add: START_ROW_KEY <= ? (but not END_ROW_KEY >= ?)
+    byte[] mapperStart = new byte[0]; // Empty start key (first region)
+    byte[] mapperEnd = Bytes.toBytes("row50");
+
+    List<PhoenixSyncTableCheckpointOutputRow> results = repository.getProcessedChunks(tableName,
+      targetCluster, 0L, 1000L, null, mapperStart, mapperEnd);
+
+    // Should return chunk1 and chunk2 (both have startKey <= row50)
+    // Should NOT return chunk3 (startKey row60 > row50)
+    assertEquals("Should return chunks with startKey <= mapperEnd", 2, results.size());
+    assertArrayEquals("First chunk should be row10", chunk1Start, results.get(0).getStartRowKey());
+    assertArrayEquals("Second chunk should be row30", chunk2Start, results.get(1).getStartRowKey());
+  }
+
+  @Test
+  public void testGetProcessedChunksWithOnlyStartBoundary() throws Exception {
+    String tableName = generateUniqueName();
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    // Insert chunks at different positions
+    byte[] chunk1Start = Bytes.toBytes("row10");
+    byte[] chunk1End = Bytes.toBytes("row20");
+    byte[] chunk2Start = Bytes.toBytes("row40");
+    byte[] chunk2End = Bytes.toBytes("row50");
+    byte[] chunk3Start = Bytes.toBytes("row60");
+    byte[] chunk3End = Bytes.toBytes("row70");
+
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunk1Start).setEndRowKey(chunk1End)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
+
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunk2Start).setEndRowKey(chunk2End)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
+
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunk3Start).setEndRowKey(chunk3End)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
+
+    // Query with only start boundary (last region of table: non-empty start, empty end)
+    // This tests the code path where hasEndBoundary=false, hasStartBoundary=true
+    // SQL should add: END_ROW_KEY >= ? (but not START_ROW_KEY <= ?)
+    byte[] mapperStart = Bytes.toBytes("row30");
+    byte[] mapperEnd = new byte[0]; // Empty end key (last region)
+
+    List<PhoenixSyncTableCheckpointOutputRow> results = repository.getProcessedChunks(tableName,
+      targetCluster, 0L, 1000L, null, mapperStart, mapperEnd);
+
+    // Should return chunk2 and chunk3 (both have endKey >= row30)
+    // Should NOT return chunk1 (endKey row20 < row30)
+    assertEquals("Should return chunks with endKey >= mapperStart", 2, results.size());
+    assertArrayEquals("First chunk should be row40", chunk2Start, results.get(0).getStartRowKey());
+    assertArrayEquals("Second chunk should be row60", chunk3Start, results.get(1).getStartRowKey());
+  }
+
+  @Test
+  public void testBuilderAllFields() {
     String tableName = generateUniqueName();
     byte[] startKey = Bytes.toBytes("start");
     byte[] endKey = Bytes.toBytes("end");
     Timestamp timestamp = new Timestamp(System.currentTimeMillis());
 
-    PhoenixSyncTableOutputRow row = new PhoenixSyncTableOutputRow.Builder().setTableName(tableName)
-      .setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L).setToTime(1000L)
-      .setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey)
+    PhoenixSyncTableCheckpointOutputRow row = new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey)
       .setExecutionStartTime(timestamp).setExecutionEndTime(timestamp).setStatus(Status.VERIFIED)
       .setCounters("SOURCE_ROWS_PROCESSED=100").build();
 
@@ -461,22 +655,22 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
   }
 
   @Test
-  public void testBuilderMinimalFields() throws Exception {
+  public void testBuilderMinimalFields() {
     byte[] startKey = Bytes.toBytes("start");
 
-    PhoenixSyncTableOutputRow row =
-      new PhoenixSyncTableOutputRow.Builder().setStartRowKey(startKey).build();
+    PhoenixSyncTableCheckpointOutputRow row =
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setStartRowKey(startKey).build();
 
     assertNotNull(row);
     assertArrayEquals(startKey, row.getStartRowKey());
   }
 
   @Test
-  public void testGetStartRowKeyDefensiveCopy() throws Exception {
+  public void testGetStartRowKeyDefensiveCopy() {
     byte[] startKey = Bytes.toBytes("start");
 
-    PhoenixSyncTableOutputRow row =
-      new PhoenixSyncTableOutputRow.Builder().setStartRowKey(startKey).build();
+    PhoenixSyncTableCheckpointOutputRow row =
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setStartRowKey(startKey).build();
 
     byte[] retrieved = row.getStartRowKey();
     assertNotSame("Should return a copy, not the original", startKey, retrieved);
@@ -486,62 +680,62 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
 
     // Get again and verify it's unchanged
     byte[] retrievedAgain = row.getStartRowKey();
-    assertFalse("Internal array should not be modified", retrievedAgain[0] == (byte) 0xFF);
+    assertNotEquals("Internal array should not be modified", (byte) 0xFF, retrievedAgain[0]);
   }
 
   @Test
-  public void testEqualsDifferentObjectSameValues() throws Exception {
+  public void testEqualsDifferentObjectSameValues() {
     byte[] startKey = Bytes.toBytes("start");
     byte[] endKey = Bytes.toBytes("end");
 
-    PhoenixSyncTableOutputRow row1 =
-      new PhoenixSyncTableOutputRow.Builder().setTableName("table1").setTargetCluster(targetCluster)
-        .setType(Type.CHUNK).setStartRowKey(startKey).setEndRowKey(endKey).build();
+    PhoenixSyncTableCheckpointOutputRow row1 = new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName("table1").setTargetCluster(targetCluster).setType(Type.CHUNK)
+      .setStartRowKey(startKey).setEndRowKey(endKey).build();
 
-    PhoenixSyncTableOutputRow row2 =
-      new PhoenixSyncTableOutputRow.Builder().setTableName("table1").setTargetCluster(targetCluster)
-        .setType(Type.CHUNK).setStartRowKey(startKey).setEndRowKey(endKey).build();
+    PhoenixSyncTableCheckpointOutputRow row2 = new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName("table1").setTargetCluster(targetCluster).setType(Type.CHUNK)
+      .setStartRowKey(startKey).setEndRowKey(endKey).build();
 
-    assertTrue(row1.equals(row2));
+    assertEquals(row1, row2);
     assertEquals(row1.hashCode(), row2.hashCode());
   }
 
   @Test
-  public void testEqualsDifferentValues() throws Exception {
-    PhoenixSyncTableOutputRow row1 = new PhoenixSyncTableOutputRow.Builder().setTableName("table1")
-      .setStartRowKey(Bytes.toBytes("start1")).build();
+  public void testEqualsDifferentValues() {
+    PhoenixSyncTableCheckpointOutputRow row1 = new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName("table1").setStartRowKey(Bytes.toBytes("start1")).build();
 
-    PhoenixSyncTableOutputRow row2 = new PhoenixSyncTableOutputRow.Builder().setTableName("table2")
-      .setStartRowKey(Bytes.toBytes("start2")).build();
+    PhoenixSyncTableCheckpointOutputRow row2 = new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName("table2").setStartRowKey(Bytes.toBytes("start2")).build();
 
-    assertFalse(row1.equals(row2));
+    assertNotEquals(row1, row2);
   }
 
   @Test
-  public void testEqualsWithByteArrays() throws Exception {
+  public void testEqualsWithByteArrays() {
     byte[] startKey1 = Bytes.toBytes("start");
     byte[] startKey2 = Bytes.toBytes("start"); // Same content, different object
 
-    PhoenixSyncTableOutputRow row1 =
-      new PhoenixSyncTableOutputRow.Builder().setStartRowKey(startKey1).build();
+    PhoenixSyncTableCheckpointOutputRow row1 =
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setStartRowKey(startKey1).build();
 
-    PhoenixSyncTableOutputRow row2 =
-      new PhoenixSyncTableOutputRow.Builder().setStartRowKey(startKey2).build();
+    PhoenixSyncTableCheckpointOutputRow row2 =
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setStartRowKey(startKey2).build();
 
-    assertTrue("Byte arrays with same content should be equal", row1.equals(row2));
+    assertEquals("Byte arrays with same content should be equal", row1, row2);
   }
 
   @Test
-  public void testParseCounterValueSingle() throws Exception {
-    PhoenixSyncTableOutputRow row = new PhoenixSyncTableOutputRow.Builder()
+  public void testParseCounterValueSingle() {
+    PhoenixSyncTableCheckpointOutputRow row = new PhoenixSyncTableCheckpointOutputRow.Builder()
       .setStartRowKey(Bytes.toBytes("start")).setCounters("SOURCE_ROWS_PROCESSED=100").build();
 
     assertEquals(100L, row.getSourceRowsProcessed());
   }
 
   @Test
-  public void testParseCounterValueMultiple() throws Exception {
-    PhoenixSyncTableOutputRow row = new PhoenixSyncTableOutputRow.Builder()
+  public void testParseCounterValueMultiple() {
+    PhoenixSyncTableCheckpointOutputRow row = new PhoenixSyncTableCheckpointOutputRow.Builder()
       .setStartRowKey(Bytes.toBytes("start"))
       .setCounters("SOURCE_ROWS_PROCESSED=100,TARGET_ROWS_PROCESSED=95,CHUNKS_VERIFIED=10").build();
 
@@ -550,11 +744,105 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
   }
 
   @Test
-  public void testParseCounterValueNull() throws Exception {
-    PhoenixSyncTableOutputRow row = new PhoenixSyncTableOutputRow.Builder()
+  public void testParseCounterValueNull() {
+    PhoenixSyncTableCheckpointOutputRow row = new PhoenixSyncTableCheckpointOutputRow.Builder()
       .setStartRowKey(Bytes.toBytes("start")).setCounters(null).build();
 
     assertEquals(0L, row.getSourceRowsProcessed());
     assertEquals(0L, row.getTargetRowsProcessed());
+  }
+
+  @Test
+  public void testCheckpointMapperRegionWithTenantId() throws Exception {
+    String tableName = generateUniqueName();
+    byte[] startKey = Bytes.toBytes("row1");
+    byte[] endKey = Bytes.toBytes("row100");
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+    String tenantId1 = "TENANT_001";
+    String tenantId2 = "TENANT_002";
+
+    // Insert checkpoint for TENANT_001
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setTenantId(tenantId1).setIsDryRun(false).setStartRowKey(startKey)
+      .setEndRowKey(endKey).setStatus(Status.VERIFIED).setExecutionStartTime(timestamp)
+      .setExecutionEndTime(timestamp).setCounters("counter=1").build());
+
+    // Insert checkpoint for TENANT_002 with same table/target/time but different tenant
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setTenantId(tenantId2).setIsDryRun(false).setStartRowKey(startKey)
+      .setEndRowKey(endKey).setStatus(Status.VERIFIED).setExecutionStartTime(timestamp)
+      .setExecutionEndTime(timestamp).setCounters("counter=2").build());
+
+    // Insert checkpoint for null tenant (non-multi-tenant table)
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .setCounters("counter=3").build());
+
+    // Query for TENANT_001 - should return only TENANT_001's checkpoint
+    List<PhoenixSyncTableCheckpointOutputRow> results1 =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, tenantId1);
+    assertEquals("TENANT_001 should have 1 checkpoint", 1, results1.size());
+
+    // Query for TENANT_002 - should return only TENANT_002's checkpoint
+    List<PhoenixSyncTableCheckpointOutputRow> results2 =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, tenantId2);
+    assertEquals("TENANT_002 should have 1 checkpoint", 1, results2.size());
+
+    // Query for null tenant - should return only null-tenant checkpoint (tenant isolation)
+    List<PhoenixSyncTableCheckpointOutputRow> results3 =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, null);
+    assertEquals("Null tenant query should return only null-tenant checkpoint", 1, results3.size());
+  }
+
+  @Test
+  public void testChunkCheckpointChunkWithDifferentTenants() throws Exception {
+    String tableName = generateUniqueName();
+    byte[] chunkStart = Bytes.toBytes("row10");
+    byte[] chunkEnd = Bytes.toBytes("row20");
+    byte[] mapperStart = Bytes.toBytes("row1");
+    byte[] mapperEnd = Bytes.toBytes("row100");
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+    String tenantId1 = "TENANT_001";
+    String tenantId2 = "TENANT_002";
+
+    // Insert chunk checkpoint for TENANT_001
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setTenantId(tenantId1).setIsDryRun(false).setStartRowKey(chunkStart)
+      .setEndRowKey(chunkEnd).setStatus(Status.VERIFIED).setExecutionStartTime(timestamp)
+      .setExecutionEndTime(timestamp).build());
+
+    // Insert chunk checkpoint for TENANT_002
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setTenantId(tenantId2).setIsDryRun(false).setStartRowKey(chunkStart)
+      .setEndRowKey(chunkEnd).setStatus(Status.MISMATCHED).setExecutionStartTime(timestamp)
+      .setExecutionEndTime(timestamp).build());
+
+    // Insert chunk checkpoint for null tenant (non-multi-tenant table)
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunkStart).setEndRowKey(chunkEnd)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
+
+    // Query for TENANT_001 chunks
+    List<PhoenixSyncTableCheckpointOutputRow> results1 = repository.getProcessedChunks(tableName,
+      targetCluster, 0L, 1000L, tenantId1, mapperStart, mapperEnd);
+    assertEquals("TENANT_001 should have 1 chunk", 1, results1.size());
+
+    // Query for TENANT_002 chunks
+    List<PhoenixSyncTableCheckpointOutputRow> results2 = repository.getProcessedChunks(tableName,
+      targetCluster, 0L, 1000L, tenantId2, mapperStart, mapperEnd);
+    assertEquals("TENANT_002 should have 1 chunk", 1, results2.size());
+
+    // Query for null tenant - should return only null-tenant chunk (tenant isolation)
+    List<PhoenixSyncTableCheckpointOutputRow> results3 = repository.getProcessedChunks(tableName,
+      targetCluster, 0L, 1000L, null, mapperStart, mapperEnd);
+    assertEquals("Null tenant query should return only null-tenant chunk", 1, results3.size());
   }
 }

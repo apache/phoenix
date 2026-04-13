@@ -22,13 +22,14 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.List;
-import org.apache.phoenix.mapreduce.PhoenixSyncTableOutputRow.Status;
-import org.apache.phoenix.mapreduce.PhoenixSyncTableOutputRow.Type;
+import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Type;
+import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
  * Repository for managing the PHOENIX_SYNC_TABLE_CHECKPOINT table. This table stores checkpoint
@@ -44,8 +45,22 @@ public class PhoenixSyncTableOutputRepository {
   private final Connection connection;
   private static final String UPSERT_CHECKPOINT_SQL = "UPSERT INTO "
     + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (TABLE_NAME, TARGET_CLUSTER, TYPE, FROM_TIME, TO_TIME,"
-    + " START_ROW_KEY, END_ROW_KEY, IS_DRY_RUN, EXECUTION_START_TIME, EXECUTION_END_TIME,"
-    + " STATUS, COUNTERS) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    + " TENANT_ID, START_ROW_KEY, END_ROW_KEY, IS_DRY_RUN, EXECUTION_START_TIME, EXECUTION_END_TIME,"
+    + " STATUS, COUNTERS) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+  private static final String CREATE_CHECKPOINT_TABLE_DDL = "CREATE TABLE IF NOT EXISTS "
+    + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (\n" + "    TABLE_NAME VARCHAR NOT NULL,\n"
+    + "    TARGET_CLUSTER VARCHAR NOT NULL,\n" + "    TYPE VARCHAR(20) NOT NULL,\n"
+    + "    FROM_TIME BIGINT NOT NULL,\n" + "    TO_TIME BIGINT NOT NULL,\n"
+    + "    TENANT_ID VARCHAR,\n" + "    START_ROW_KEY VARBINARY_ENCODED,\n"
+    + "    END_ROW_KEY VARBINARY_ENCODED,\n" + "    IS_DRY_RUN BOOLEAN, \n"
+    + "    EXECUTION_START_TIME TIMESTAMP,\n" + "    EXECUTION_END_TIME TIMESTAMP,\n"
+    + "    STATUS VARCHAR(20),\n" + "    COUNTERS VARCHAR, \n" + "    CONSTRAINT PK PRIMARY KEY (\n"
+    + "        TABLE_NAME,\n" + "        TARGET_CLUSTER,\n" + "        TYPE ,\n"
+    + "        FROM_TIME,\n" + "        TO_TIME,\n" + "        TENANT_ID,\n"
+    + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS + ", COLUMN_ENCODED_BYTES="
+    + QualifierEncodingScheme.TWO_BYTE_QUALIFIERS.getSerializedMetadataValue()
+    + ", COMPRESSION='SNAPPY'";
 
   /**
    * Creates a repository for managing sync table checkpoint operations. Note: The connection is
@@ -58,56 +73,40 @@ public class PhoenixSyncTableOutputRepository {
   }
 
   public void createSyncCheckpointTableIfNotExists() throws SQLException {
-    String ddl = "CREATE TABLE IF NOT EXISTS " + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (\n"
-      + "    TABLE_NAME VARCHAR NOT NULL,\n" + "    TARGET_CLUSTER VARCHAR NOT NULL,\n"
-      + "    TYPE VARCHAR(20) NOT NULL,\n" + "    FROM_TIME BIGINT NOT NULL,\n"
-      + "    TO_TIME BIGINT NOT NULL,\n" + "    START_ROW_KEY VARBINARY_ENCODED,\n"
-      + "    END_ROW_KEY VARBINARY_ENCODED,\n" + "    IS_DRY_RUN BOOLEAN, \n"
-      + "    EXECUTION_START_TIME TIMESTAMP,\n" + "    EXECUTION_END_TIME TIMESTAMP,\n"
-      + "    STATUS VARCHAR(20),\n" + "    COUNTERS VARCHAR(255), \n"
-      + "    CONSTRAINT PK PRIMARY KEY (\n" + "        TABLE_NAME,\n" + "        TARGET_CLUSTER,\n"
-      + "        TYPE ,\n" + "        FROM_TIME,\n" + "        TO_TIME,\n"
-      + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS;
-
     try (Statement stmt = connection.createStatement()) {
-      stmt.execute(ddl);
+      stmt.execute(CREATE_CHECKPOINT_TABLE_DDL);
       connection.commit();
-      LOGGER.info("Successfully created or verified existence of {} table",
+      LOGGER.info("Initialization of checkpoint table {} complete",
         SYNC_TABLE_CHECKPOINT_TABLE_NAME);
     }
   }
 
-  public void checkpointSyncTableResult(String tableName, String targetCluster, Type type,
-    Long fromTime, Long toTime, boolean isDryRun, byte[] startKey, byte[] endKey, Status status,
-    Timestamp executionStartTime, Timestamp executionEndTime, String counters) throws SQLException {
+  public void checkpointSyncTableResult(PhoenixSyncTableCheckpointOutputRow row)
+    throws SQLException {
 
     // Validate required parameters
-    if (tableName == null || tableName.isEmpty()) {
-      throw new IllegalArgumentException("TableName cannot be null or empty for checkpoint");
-    }
-    if (targetCluster == null || targetCluster.isEmpty()) {
-      throw new IllegalArgumentException("TargetCluster cannot be null or empty for checkpoint");
-    }
-    if (type == null) {
-      throw new IllegalArgumentException("Type cannot be null for checkpoint");
-    }
-    if (fromTime == null || toTime == null) {
-      throw new IllegalArgumentException("FromTime and ToTime cannot be null for checkpoint");
-    }
+    Preconditions.checkArgument(row.getTableName() != null && !row.getTableName().isEmpty(),
+      "TableName cannot be null or empty for checkpoint");
+    Preconditions.checkArgument(row.getTargetCluster() != null && !row.getTargetCluster().isEmpty(),
+      "TargetCluster cannot be null or empty for checkpoint");
+    Preconditions.checkNotNull(row.getType(), "Type cannot be null for checkpoint");
+    Preconditions.checkNotNull(row.getFromTime(), "FromTime cannot be null for checkpoint");
+    Preconditions.checkNotNull(row.getToTime(), "ToTime cannot be null for checkpoint");
 
     try (PreparedStatement ps = connection.prepareStatement(UPSERT_CHECKPOINT_SQL)) {
-      ps.setString(1, tableName);
-      ps.setString(2, targetCluster);
-      ps.setString(3, type.name());
-      ps.setLong(4, fromTime);
-      ps.setLong(5, toTime);
-      ps.setBytes(6, startKey);
-      ps.setBytes(7, endKey);
-      ps.setBoolean(8, isDryRun);
-      ps.setTimestamp(9, executionStartTime);
-      ps.setTimestamp(10, executionEndTime);
-      ps.setString(11, status != null ? status.name() : null);
-      ps.setString(12, counters);
+      ps.setString(1, row.getTableName());
+      ps.setString(2, row.getTargetCluster());
+      ps.setString(3, row.getType().name());
+      ps.setLong(4, row.getFromTime());
+      ps.setLong(5, row.getToTime());
+      ps.setString(6, row.getTenantId());
+      ps.setBytes(7, row.getStartRowKey());
+      ps.setBytes(8, row.getEndRowKey());
+      ps.setBoolean(9, row.getIsDryRun());
+      ps.setTimestamp(10, row.getExecutionStartTime());
+      ps.setTimestamp(11, row.getExecutionEndTime());
+      ps.setString(12, row.getStatus() != null ? row.getStatus().name() : null);
+      ps.setString(13, row.getCounters());
       ps.executeUpdate();
       connection.commit();
     }
@@ -118,31 +117,48 @@ public class PhoenixSyncTableOutputRepository {
    * already-processed regions.
    * @param tableName     Source table name
    * @param targetCluster Target cluster ZK quorum
-   * @param fromTime      Start timestamp (nullable)
-   * @param toTime        End timestamp (nullable)
+   * @param fromTime      Start timestamp
+   * @param toTime        End timestamp
+   * @param tenantId      Tenant ID
    * @return List of completed mapper regions
    */
-  public List<PhoenixSyncTableOutputRow> getProcessedMapperRegions(String tableName,
-    String targetCluster, Long fromTime, Long toTime) throws SQLException {
+  public List<PhoenixSyncTableCheckpointOutputRow> getProcessedMapperRegions(String tableName,
+    String targetCluster, Long fromTime, Long toTime, String tenantId) throws SQLException {
 
-    String query = "SELECT START_ROW_KEY, END_ROW_KEY FROM " + SYNC_TABLE_CHECKPOINT_TABLE_NAME
-      + " WHERE TABLE_NAME = ?  AND TARGET_CLUSTER = ?"
-      + " AND TYPE = ? AND FROM_TIME = ? AND TO_TIME = ? AND STATUS IN ( ?, ?)";
-    List<PhoenixSyncTableOutputRow> results = new ArrayList<>();
-    try (PreparedStatement ps = connection.prepareStatement(query)) {
+    StringBuilder queryBuilder = new StringBuilder();
+    queryBuilder.append("SELECT START_ROW_KEY, END_ROW_KEY FROM ")
+      .append(SYNC_TABLE_CHECKPOINT_TABLE_NAME)
+      .append(" WHERE TABLE_NAME = ?  AND TARGET_CLUSTER = ?")
+      .append(" AND TYPE = ? AND FROM_TIME = ? AND TO_TIME = ? ");
+
+    // Conditionally build TENANT_ID clause based on whether tenantId is null
+    if (tenantId == null) {
+      queryBuilder.append(" AND TENANT_ID IS NULL");
+    } else {
+      queryBuilder.append(" AND TENANT_ID = ?");
+    }
+
+    queryBuilder.append(
+      " ORDER BY TABLE_NAME, TARGET_CLUSTER, TYPE, FROM_TIME, TO_TIME, TENANT_ID, START_ROW_KEY");
+
+    List<PhoenixSyncTableCheckpointOutputRow> results = new ArrayList<>();
+    try (PreparedStatement ps = connection.prepareStatement(queryBuilder.toString())) {
       int paramIndex = 1;
       ps.setString(paramIndex++, tableName);
       ps.setString(paramIndex++, targetCluster);
-      ps.setString(paramIndex++, Type.MAPPER_REGION.name());
+      ps.setString(paramIndex++, Type.REGION.name());
       ps.setLong(paramIndex++, fromTime);
       ps.setLong(paramIndex++, toTime);
-      ps.setString(paramIndex++, Status.VERIFIED.name());
-      ps.setString(paramIndex, Status.MISMATCHED.name());
+      // Only bind tenantId parameter if non-null
+      if (tenantId != null) {
+        ps.setString(paramIndex, tenantId);
+      }
       try (ResultSet rs = ps.executeQuery()) {
         while (rs.next()) {
-          PhoenixSyncTableOutputRow row =
-            new PhoenixSyncTableOutputRow.Builder().setStartRowKey(rs.getBytes("START_ROW_KEY"))
-              .setEndRowKey(rs.getBytes("END_ROW_KEY")).build();
+          PhoenixSyncTableCheckpointOutputRow row =
+            new PhoenixSyncTableCheckpointOutputRow.Builder()
+              .setStartRowKey(rs.getBytes("START_ROW_KEY")).setEndRowKey(rs.getBytes("END_ROW_KEY"))
+              .build();
           results.add(row);
         }
       }
@@ -154,19 +170,27 @@ public class PhoenixSyncTableOutputRepository {
    * Queries for processed chunks. Used by PhoenixSyncTableMapper to skip already-processed chunks.
    * @param tableName         Source table name
    * @param targetCluster     Target cluster ZK quorum
-   * @param fromTime          Start timestamp (nullable)
-   * @param toTime            End timestamp (nullable)
+   * @param fromTime          Start timestamp
+   * @param toTime            End timestamp
+   * @param tenantId          Tenant ID
    * @param mapperRegionStart Mapper region start key
    * @param mapperRegionEnd   Mapper region end key
    * @return List of processed chunks in the region
    */
-  public List<PhoenixSyncTableOutputRow> getProcessedChunks(String tableName, String targetCluster,
-    Long fromTime, Long toTime, byte[] mapperRegionStart, byte[] mapperRegionEnd)
-    throws SQLException {
+  public List<PhoenixSyncTableCheckpointOutputRow> getProcessedChunks(String tableName,
+    String targetCluster, Long fromTime, Long toTime, String tenantId, byte[] mapperRegionStart,
+    byte[] mapperRegionEnd) throws SQLException {
     StringBuilder queryBuilder = new StringBuilder();
     queryBuilder.append("SELECT START_ROW_KEY, END_ROW_KEY FROM " + SYNC_TABLE_CHECKPOINT_TABLE_NAME
       + " WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
       + " AND TYPE = ? AND FROM_TIME = ? AND TO_TIME = ?");
+
+    // Conditionally build TENANT_ID clause based on whether tenantId is null
+    if (tenantId == null) {
+      queryBuilder.append(" AND TENANT_ID IS NULL");
+    } else {
+      queryBuilder.append(" AND TENANT_ID = ?");
+    }
 
     // Check if mapper region boundaries are non-empty (i.e., NOT first/last regions)
     // Only add boundary conditions for non-empty boundaries
@@ -182,9 +206,11 @@ public class PhoenixSyncTableOutputRepository {
     if (hasStartBoundary) {
       queryBuilder.append(" AND END_ROW_KEY >= ?");
     }
-    queryBuilder.append(" AND STATUS IN (?, ?)");
 
-    List<PhoenixSyncTableOutputRow> results = new ArrayList<>();
+    queryBuilder.append(
+      " ORDER BY TABLE_NAME, TARGET_CLUSTER, TYPE, FROM_TIME, TO_TIME, TENANT_ID, START_ROW_KEY");
+
+    List<PhoenixSyncTableCheckpointOutputRow> results = new ArrayList<>();
     try (PreparedStatement ps = connection.prepareStatement(queryBuilder.toString())) {
       int paramIndex = 1;
       ps.setString(paramIndex++, tableName);
@@ -192,20 +218,23 @@ public class PhoenixSyncTableOutputRepository {
       ps.setString(paramIndex++, Type.CHUNK.name());
       ps.setLong(paramIndex++, fromTime);
       ps.setLong(paramIndex++, toTime);
+      // Only bind tenantId parameter if non-null
+      if (tenantId != null) {
+        ps.setString(paramIndex++, tenantId);
+      }
       if (hasEndBoundary) {
         ps.setBytes(paramIndex++, mapperRegionEnd);
       }
       if (hasStartBoundary) {
-        ps.setBytes(paramIndex++, mapperRegionStart);
+        ps.setBytes(paramIndex, mapperRegionStart);
       }
-      ps.setString(paramIndex++, Status.VERIFIED.name());
-      ps.setString(paramIndex, Status.MISMATCHED.name());
       try (ResultSet rs = ps.executeQuery()) {
         while (rs.next()) {
           byte[] rawStartKey = rs.getBytes("START_ROW_KEY");
           byte[] endRowKey = rs.getBytes("END_ROW_KEY");
-          PhoenixSyncTableOutputRow row = new PhoenixSyncTableOutputRow.Builder()
-            .setStartRowKey(rawStartKey).setEndRowKey(endRowKey).build();
+          PhoenixSyncTableCheckpointOutputRow row =
+            new PhoenixSyncTableCheckpointOutputRow.Builder().setStartRowKey(rawStartKey)
+              .setEndRowKey(endRowKey).build();
           results.add(row);
         }
       }

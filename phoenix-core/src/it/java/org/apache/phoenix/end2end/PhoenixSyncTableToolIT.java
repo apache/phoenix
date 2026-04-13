@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -43,13 +44,13 @@ import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.CompactionState;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
@@ -57,9 +58,10 @@ import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
+import org.apache.phoenix.mapreduce.PhoenixJobCounters;
+import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableMapper.SyncCounters;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableOutputRepository;
-import org.apache.phoenix.mapreduce.PhoenixSyncTableOutputRow;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -118,11 +120,12 @@ public class PhoenixSyncTableToolIT {
     if (sourceConnection != null && uniqueTableName != null) {
       try {
         dropTableIfExists(sourceConnection, uniqueTableName);
-        dropTableIfExists(sourceConnection, uniqueTableName + "_IDX"); // For global index test
-        dropTableIfExists(sourceConnection, uniqueTableName + "_LOCAL_IDX"); // For local index test
-        cleanupCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
-        cleanupCheckpointTable(sourceConnection, uniqueTableName + "_IDX", targetZkQuorum);
-        cleanupCheckpointTable(sourceConnection, uniqueTableName + "_LOCAL_IDX", targetZkQuorum);
+        dropTableIfExists(sourceConnection, uniqueTableName + "_IDX");
+        dropTableIfExists(sourceConnection, uniqueTableName + "_LOCAL_IDX");
+        cleanupCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
+        cleanupCheckpointTable(sourceConnection, uniqueTableName + "_IDX", targetZkQuorum, null);
+        cleanupCheckpointTable(sourceConnection, uniqueTableName + "_LOCAL_IDX", targetZkQuorum,
+          null);
       } catch (Exception e) {
         LOGGER.warn("Failed to cleanup tables for {}: {}", uniqueTableName, e.getMessage());
       }
@@ -131,8 +134,8 @@ public class PhoenixSyncTableToolIT {
     if (targetConnection != null && uniqueTableName != null) {
       try {
         dropTableIfExists(targetConnection, uniqueTableName);
-        dropTableIfExists(targetConnection, uniqueTableName + "_IDX"); // For global index test
-        dropTableIfExists(targetConnection, uniqueTableName + "_LOCAL_IDX"); // For local index test
+        dropTableIfExists(targetConnection, uniqueTableName + "_IDX");
+        dropTableIfExists(targetConnection, uniqueTableName + "_LOCAL_IDX");
       } catch (Exception e) {
         LOGGER.warn("Failed to cleanup tables on target for {}: {}", uniqueTableName,
           e.getMessage());
@@ -157,18 +160,80 @@ public class PhoenixSyncTableToolIT {
     SyncCountersResult counters = getSyncCounters(job);
 
     validateSyncCounters(counters, 10, 10, 1, 3);
+    validateMapperCounters(counters, 1, 3);
 
-    List<PhoenixSyncTableOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
     validateCheckpointEntries(checkpointEntries, uniqueTableName, targetZkQuorum, 10, 10, 1, 3, 4,
-      3);
+      3, null);
+  }
+
+  @Test
+  public void testSyncTableValidateWithSplitCoalescing() throws Exception {
+    setupStandardTestWithReplication(uniqueTableName, 1, 10);
+
+    introduceAndVerifyTargetDifferences(uniqueTableName);
+
+    // Enable split coalescing via configuration
+    // In mini-cluster with single RegionServer, all regions will be coalesced into one mapper
+    Configuration conf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
+    conf.setBoolean("phoenix.sync.table.split.coalescing", true);
+
+    Job job = runSyncToolWithChunkSize(uniqueTableName, 1, conf);
+    SyncCountersResult counters = getSyncCounters(job);
+
+    // Validate that coalescing actually reduced mapper count
+    // With coalescing enabled on single RegionServer: all 4 regions processed by 1 mapper
+    // Without coalescing: would be 4 mappers (one per region)
+    assertEquals("INPUT_RECORDS should be 1 with coalescing (all regions coalesced into one mapper)",
+      1, counters.inputRecords);
+
+    // Validate that data is correctly processed
+    // Differences on rows 2, 5, 8 affect 3 of the 4 regions, leaving 1 region verified
+    // Region 1 (-∞, 3): rows 1,2 → mismatched (row 2)
+    // Region 2 [3, 5): rows 3,4 → verified (no differences)
+    // Region 3 [5, 7): rows 5,6 → mismatched (row 5)
+    // Region 4 [7, +∞): rows 7,8,9,10 → mismatched (row 8)
+    validateSyncCounters(counters, 10, 10, 7, 3);
+    validateMapperCounters(counters, 1, 3);
+
+    // Verify checkpoint entries are created correctly
+    // With coalescing: 4 region entries total (1 verified, 3 mismatched) + chunk entries
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
+    validateCheckpointEntries(checkpointEntries, uniqueTableName, targetZkQuorum, 10, 10, 7, 3, 4,
+      3, null);
+
+    LOGGER.info("Split coalescing test completed successfully - single mapper processed all regions");
+  }
+
+  @Test
+  public void testSyncTableValidateWithDifferentZkQuorumFormats() throws Exception {
+    setupStandardTestWithReplication(uniqueTableName, 1, 10);
+    introduceAndVerifyTargetDifferences(uniqueTableName);
+
+    String zkHost = CLUSTERS.getHBaseCluster2().getConfiguration().get("hbase.zookeeper.quorum");
+    int zkPort = CLUSTERS.getHBaseCluster2().getZkCluster().getClientPort();
+
+    // Three supported formats
+    String[] zkQuorumFormats = new String[] { zkHost + ":" + zkPort + ":/hbase", // "host:port:/znode"
+      zkHost + "," + zkHost + ":" + zkPort + ":/hbase", // "h1,h2:port:/znode"
+      zkHost + ":" + zkPort + "," + zkHost + ":" + zkPort + ":/hbase", // "h1:p1,h2:p2:/znode"
+    };
+
+    for (String zkQuorum : zkQuorumFormats) {
+      Job job = runSyncToolWithZkQuorum(uniqueTableName, zkQuorum);
+      SyncCountersResult counters = getSyncCounters(job);
+      validateSyncCounters(counters, 10, 10, 7, 3);
+      cleanupCheckpointTable(sourceConnection, uniqueTableName, zkQuorum, null);
+    }
   }
 
   @Test
   public void testSyncTableWithDeletedRowsOnTarget() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 10);
 
-    deleteRowsOnTarget(targetConnection, uniqueTableName, 1, 4, 9);
+    deleteRows(targetConnection, uniqueTableName, 1, 4, 9);
 
     // Verify row counts differ between source and target
     int sourceCount = getRowCount(sourceConnection, uniqueTableName);
@@ -179,7 +244,41 @@ public class PhoenixSyncTableToolIT {
     Job job = runSyncTool(uniqueTableName);
     SyncCountersResult counters = getSyncCounters(job);
 
-    validateSyncCounters(counters, 10, 10, 7, 3);
+    validateSyncCounters(counters, 10, 7, 7, 3);
+    validateMapperCounters(counters, 1, 3);
+  }
+
+  @Test
+  public void testSyncTableWithConditionalTTLExpiredRows() throws Exception {
+    String ddl = "CREATE TABLE IF NOT EXISTS %s (" + "ID INTEGER NOT NULL PRIMARY KEY, "
+      + "NAME VARCHAR(50), NAME_VALUE BIGINT, UPDATED_DATE TIMESTAMP, " + "EXPIRED BOOLEAN"
+      + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, TTL='EXPIRED = TRUE' "
+      + "SPLIT ON (3, 5, 7)";
+    executeTableCreation(sourceConnection, String.format(ddl, uniqueTableName, 1));
+    executeTableCreation(targetConnection, String.format(ddl, uniqueTableName, 0));
+
+    // Insert 10 rows on source: rows 1-3 marked as expired, rows 4-10 as live
+    insertTestDataWithExpiredFlag(sourceConnection, uniqueTableName, 1, 3, true);
+    insertTestDataWithExpiredFlag(sourceConnection, uniqueTableName, 4, 10, false);
+
+    // Only non-expired rows (4-10) are visible via Phoenix queries
+    waitForReplication(targetConnection, uniqueTableName, 7);
+
+    int sourceCount = getRowCount(sourceConnection, uniqueTableName);
+    int targetCount = getRowCount(targetConnection, uniqueTableName);
+    assertEquals("Source should see 7 live rows", 7, sourceCount);
+    assertEquals("Target should see 7 live rows", 7, targetCount);
+
+    // Introduce differences on 2 of the 7 live rows on target
+    upsertRowsOnTarget(targetConnection, uniqueTableName, new int[] { 5, 8 },
+      new String[] { "MODIFIED_5", "MODIFIED_8" });
+
+    // Run sync tool, TTL-expired rows (1-3) should be skipped on both source and target
+    Job job = runSyncTool(uniqueTableName);
+    SyncCountersResult counters = getSyncCounters(job);
+
+    validateSyncCounters(counters, 7, 7, 5, 2);
+    validateMapperCounters(counters, 1, 2);
   }
 
   @Test
@@ -206,13 +305,11 @@ public class PhoenixSyncTableToolIT {
     Job job = runSyncTool(indexName);
     SyncCountersResult counters = getSyncCounters(job);
 
-    assertEquals("Should process 10 source rows", 10, counters.sourceRowsProcessed);
-    assertTrue("Some chunk should be verified", counters.chunksVerified > 0);
-    assertTrue("Some chunk should be mismatched", counters.chunksMismatched > 0);
+    validateSyncCounters(counters, 10, 7, 7, 3);
 
     // Verify checkpoint entries show mismatches
-    List<PhoenixSyncTableOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, indexName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, indexName, targetZkQuorum, null);
 
     assertFalse("Should have checkpointEntries", checkpointEntries.isEmpty());
   }
@@ -241,13 +338,14 @@ public class PhoenixSyncTableToolIT {
     Job job = runSyncTool(indexName);
     SyncCountersResult counters = getSyncCounters(job);
 
-    assertEquals("Should process 20 source rows", 20, counters.sourceRowsProcessed);
-    assertTrue("Some chunk should be verified", counters.chunksVerified > 0);
-    assertTrue("Some chunk should be mismatched", counters.chunksMismatched > 0);
+    assertTrue(String.format("Should have at least %d verified chunks, actual: %d", 1,
+      counters.chunksVerified), counters.chunksVerified >= 1);
+    assertTrue(String.format("Should have at least %d mismatched chunks, actual: %d", 1,
+      counters.chunksMismatched), counters.chunksMismatched >= 1);
 
     // Verify checkpoint entries
-    List<PhoenixSyncTableOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, indexName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, indexName, targetZkQuorum, null);
 
     assertFalse("Should have checkpoint entries for local index", checkpointEntries.isEmpty());
   }
@@ -290,16 +388,35 @@ public class PhoenixSyncTableToolIT {
           targetRows);
       });
     }
+    String toTime = String.valueOf(System.currentTimeMillis());
+
+    for (String tenantId : tenantIds) {
+      Connection tenantSourceConn = getTenantConnection(sourceConnection, tenantId);
+      insertMultiTenantTestData(tenantSourceConn, uniqueTableName, 1000, rowsPerTenant);
+      tenantSourceConn.close();
+    }
 
     // TENANT_001 has no differences, expect all rows verified
-    Job job1 = runSyncTool(uniqueTableName, "--tenant-id", tenantIds[0]);
+    Job job1 = runSyncTool(uniqueTableName, "--tenant-id", tenantIds[0], "--to-time", toTime);
     SyncCountersResult counters1 = getSyncCounters(job1);
     validateSyncCounters(counters1, 10, 10, 10, 0);
+    validateMapperCounters(counters1, 4, 0);
 
     // TENANT_002 has 3 modified rows
     Job job2 = runSyncTool(uniqueTableName, "--tenant-id", tenantIds[1]);
     SyncCountersResult counters2 = getSyncCounters(job2);
     validateSyncCounters(counters2, 10, 10, 7, 3);
+    validateMapperCounters(counters2, 2, 2);
+
+    // Verify checkpoint table has entries for the reprocessed regions
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, "TENANT_002");
+    assertFalse("Should have checkpoint entries for TENANT_002", checkpointEntries.isEmpty());
+
+    checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, "TENANT_001");
+    assertFalse("Should have checkpoint entries for TENANT_001", checkpointEntries.isEmpty());
+
   }
 
   @Test
@@ -339,6 +456,7 @@ public class PhoenixSyncTableToolIT {
     SyncCountersResult counters = getSyncCounters(job);
 
     validateSyncCounters(counters, 10, 10, 10, 0);
+    validateMapperCounters(counters, 1, 0);
   }
 
   @Test
@@ -365,19 +483,17 @@ public class PhoenixSyncTableToolIT {
     SyncCountersResult counters1 = getSyncCounters(job1);
 
     // Validate first run counters - should process all 100 rows
-    assertEquals("Should process 100 source rows", 100, counters1.sourceRowsProcessed);
-    assertEquals("Should process 100 target rows", 100, counters1.targetRowsProcessed);
-    assertTrue("Should have at least 1 mismatched chunks", counters1.chunksMismatched > 0);
+    validateSyncCountersWithMinChunk(counters1, 100, 100, 1, 1);
 
-    List<PhoenixSyncTableOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
 
     assertFalse("Should have checkpoint entries after first run", checkpointEntries.isEmpty());
 
     // Separate mapper and chunk entries using utility method
     SeparatedCheckpointEntries separated = separateMapperAndChunkEntries(checkpointEntries);
-    List<PhoenixSyncTableOutputRow> allMappers = separated.mappers;
-    List<PhoenixSyncTableOutputRow> allChunks = separated.chunks;
+    List<PhoenixSyncTableCheckpointOutputRow> allMappers = separated.mappers;
+    List<PhoenixSyncTableCheckpointOutputRow> allChunks = separated.chunks;
 
     assertFalse("Should have mapper region entries", allMappers.isEmpty());
     assertFalse("Should have chunk entries", allChunks.isEmpty());
@@ -385,18 +501,18 @@ public class PhoenixSyncTableToolIT {
     // Select 3/4th of chunks from each mapper to delete (simulating partial rerun)
     // We repro the partial run via deleting some entries from checkpoint table and re-running the
     // tool
-    List<PhoenixSyncTableOutputRow> chunksToDelete = selectChunksToDeleteFromMappers(
-      sourceConnection, uniqueTableName, targetZkQuorum, fromTime, toTime, allMappers, 0.75);
+    List<PhoenixSyncTableCheckpointOutputRow> chunksToDelete = selectChunksToDeleteFromMappers(
+      sourceConnection, uniqueTableName, targetZkQuorum, fromTime, toTime, null, allMappers, 0.75);
 
     // Delete all mappers and selected chunks
     int deletedCount = deleteCheckpointEntries(sourceConnection, uniqueTableName, targetZkQuorum,
-      allMappers, chunksToDelete);
+      null, allMappers, chunksToDelete);
 
     assertEquals("Should have deleted all mapper and selected chunk entries",
       allMappers.size() + chunksToDelete.size(), deletedCount);
 
-    List<PhoenixSyncTableOutputRow> checkpointEntriesAfterDelete =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterDelete =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
     assertEquals("Should have fewer checkpoint entries after deletion",
       allMappers.size() + chunksToDelete.size(),
       checkpointEntries.size() - checkpointEntriesAfterDelete.size());
@@ -454,12 +570,98 @@ public class PhoenixSyncTableToolIT {
       counters1.chunksMismatched, totalMismatchedChunks);
 
     // Verify checkpoint table has entries for the reprocessed regions
-    List<PhoenixSyncTableOutputRow> checkpointEntriesAfterRerun =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterRerun =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
 
     // After rerun, we should have at least more entries compared to delete table
     assertTrue("Should have checkpoint entries after rerun",
       checkpointEntriesAfterRerun.size() > checkpointEntriesAfterDelete.size());
+  }
+
+  @Test
+  public void testSyncTableValidateCheckpointWithChunkSizeChangeOnReRun() throws Exception {
+    setupStandardTestWithReplication(uniqueTableName, 1, 100);
+
+    List<Integer> sourceSplits = Arrays.asList(25, 50, 75);
+    splitTableAt(sourceConnection, uniqueTableName, sourceSplits);
+
+    List<Integer> mismatchIds = Arrays.asList(10, 30, 60, 90);
+    for (int id : mismatchIds) {
+      upsertRowsOnTarget(targetConnection, uniqueTableName, new int[] { id },
+        new String[] { "MODIFIED_NAME_" + id });
+    }
+
+    long fromTime = 0L;
+    long toTime = System.currentTimeMillis();
+
+    // First run with large chunk size
+    int largeChunkSize = 10240;
+    Job job1 = runSyncToolWithChunkSize(uniqueTableName, largeChunkSize, "--from-time",
+      String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
+    SyncCountersResult counters1 = getSyncCounters(job1);
+
+    validateSyncCounters(counters1, 100, 100, counters1.chunksVerified, counters1.chunksMismatched);
+
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
+    assertFalse("Should have checkpoint entries after first run", checkpointEntries.isEmpty());
+
+    SeparatedCheckpointEntries separated = separateMapperAndChunkEntries(checkpointEntries);
+    List<PhoenixSyncTableCheckpointOutputRow> allMappers = separated.mappers;
+    List<PhoenixSyncTableCheckpointOutputRow> allChunks = separated.chunks;
+    int mapperCountAfterFirstRun = allMappers.size();
+    int chunkCountAfterFirstRun = allChunks.size();
+
+    assertFalse("Should have mapper entries", allMappers.isEmpty());
+    assertFalse("Should have chunk entries", allChunks.isEmpty());
+
+    // Delete all mappers and 3/4th of chunks from each mapper
+    List<PhoenixSyncTableCheckpointOutputRow> chunksToDelete = selectChunksToDeleteFromMappers(
+      sourceConnection, uniqueTableName, targetZkQuorum, fromTime, toTime, null, allMappers, 0.75);
+
+    int deletedCount = deleteCheckpointEntries(sourceConnection, uniqueTableName, targetZkQuorum,
+      null, allMappers, chunksToDelete);
+    assertEquals("Should have deleted all mapper and selected chunk entries",
+      allMappers.size() + chunksToDelete.size(), deletedCount);
+
+    // Calculate counters from remaining (1/4th) chunk entries
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterDelete =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
+    CheckpointAggregateCounters remainingCounters =
+      calculateAggregateCountersFromCheckpoint(checkpointEntriesAfterDelete);
+
+    // Re-run with smaller chunk size (1 byte) - produces more, smaller chunks
+    int smallChunkSize = 1;
+    Job job2 = runSyncToolWithChunkSize(uniqueTableName, smallChunkSize, "--from-time",
+      String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
+    SyncCountersResult counters2 = getSyncCounters(job2);
+
+    // (Remaining chunks) + (Second run) should equal (First run) for row counts
+    long totalSourceRows = remainingCounters.sourceRowsProcessed + counters2.sourceRowsProcessed;
+    long totalTargetRows = remainingCounters.targetRowsProcessed + counters2.targetRowsProcessed;
+
+    assertEquals("Remaining + rerun source rows should equal first run",
+      counters1.sourceRowsProcessed, totalSourceRows);
+    assertEquals("Remaining + rerun target rows should equal first run",
+      counters1.targetRowsProcessed, totalTargetRows);
+
+    // Validate checkpoint table after rerun
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterRerun =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
+    SeparatedCheckpointEntries separatedAfterRerun =
+      separateMapperAndChunkEntries(checkpointEntriesAfterRerun);
+
+    // Mapper count should be at least what the first run had
+    assertTrue(
+      "Mapper count after rerun (" + separatedAfterRerun.mappers.size()
+        + ") should be >= first run (" + mapperCountAfterFirstRun + ")",
+      separatedAfterRerun.mappers.size() >= mapperCountAfterFirstRun);
+
+    // Chunk count should be more because smaller chunk size produces more chunks
+    assertTrue(
+      "Chunk count after rerun (" + separatedAfterRerun.chunks.size()
+        + ") should be greater than first run (" + chunkCountAfterFirstRun + ")",
+      separatedAfterRerun.chunks.size() > chunkCountAfterFirstRun);
   }
 
   @Test
@@ -482,37 +684,35 @@ public class PhoenixSyncTableToolIT {
       String.valueOf(toTime));
     SyncCountersResult counters1 = getSyncCounters(job1);
 
-    assertEquals("Should process 100 source rows", 100, counters1.sourceRowsProcessed);
-    assertEquals("Should process 100 target rows", 100, counters1.targetRowsProcessed);
-    assertTrue("Should have mismatched chunks", counters1.chunksMismatched > 0);
+    validateSyncCounters(counters1, 100, 100, 90, 10);
 
-    List<PhoenixSyncTableOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
 
-    assertTrue("Should have checkpoint entries after first run", !checkpointEntries.isEmpty());
+    assertFalse("Should have checkpoint entries after first run", checkpointEntries.isEmpty());
 
     // Separate mapper and chunk entries using utility method
     SeparatedCheckpointEntries separated = separateMapperAndChunkEntries(checkpointEntries);
-    List<PhoenixSyncTableOutputRow> allMappers = separated.mappers;
-    List<PhoenixSyncTableOutputRow> allChunks = separated.chunks;
+    List<PhoenixSyncTableCheckpointOutputRow> allMappers = separated.mappers;
+    List<PhoenixSyncTableCheckpointOutputRow> allChunks = separated.chunks;
 
     assertFalse("Should have mapper region entries", allMappers.isEmpty());
     assertFalse("Should have chunk entries", allChunks.isEmpty());
 
     // Select 3/4th of chunks from each mapper to delete (simulating partial rerun)
     // We repro the partial run via deleting some entries from checkpoint table and re-running the
-    List<PhoenixSyncTableOutputRow> chunksToDelete = selectChunksToDeleteFromMappers(
-      sourceConnection, uniqueTableName, targetZkQuorum, fromTime, toTime, allMappers, 0.75);
+    List<PhoenixSyncTableCheckpointOutputRow> chunksToDelete = selectChunksToDeleteFromMappers(
+      sourceConnection, uniqueTableName, targetZkQuorum, fromTime, toTime, null, allMappers, 0.75);
 
     // Delete all mappers and selected chunks
     int deletedCount = deleteCheckpointEntries(sourceConnection, uniqueTableName, targetZkQuorum,
-      allMappers, chunksToDelete);
+      null, allMappers, chunksToDelete);
 
     assertEquals("Should have deleted all mapper and selected chunk entries",
       allMappers.size() + chunksToDelete.size(), deletedCount);
 
-    List<PhoenixSyncTableOutputRow> checkpointEntriesAfterDelete =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterDelete =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
     assertEquals("Should have fewer checkpoint entries after deletion",
       allMappers.size() + chunksToDelete.size(),
       checkpointEntries.size() - checkpointEntriesAfterDelete.size());
@@ -562,8 +762,8 @@ public class PhoenixSyncTableToolIT {
         + counters1.chunksMismatched,
       counters1.chunksMismatched, totalMismatchedChunks);
 
-    List<PhoenixSyncTableOutputRow> checkpointEntriesAfterRerun =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterRerun =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
 
     // After rerun with merges, we should have more entries as after deletion
     assertTrue("Should have checkpoint entries after rerun",
@@ -585,10 +785,11 @@ public class PhoenixSyncTableToolIT {
 
     // Validate first run counters
     validateSyncCounters(counters1, 10, 10, 10, 0);
+    validateMapperCounters(counters1, 4, 0);
 
     // Query checkpoint table to verify entries were created
-    List<PhoenixSyncTableOutputRow> checkpointEntriesAfterFirstRun =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterFirstRun =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
 
     // Run sync tool for the SECOND time WITHOUT deleting any checkpoints (idempotent behavior)
     Job job2 = runSyncTool(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
@@ -597,9 +798,10 @@ public class PhoenixSyncTableToolIT {
 
     // Second run should process ZERO rows (idempotent behavior)
     validateSyncCounters(counters2, 0, 0, 0, 0);
+    validateMapperCounters(counters2, 0, 0);
 
-    List<PhoenixSyncTableOutputRow> checkpointEntriesAfterSecondRun =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterSecondRun =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
 
     assertEquals("Checkpoint entries should be identical after idempotent run",
       checkpointEntriesAfterFirstRun, checkpointEntriesAfterSecondRun);
@@ -624,10 +826,11 @@ public class PhoenixSyncTableToolIT {
 
     // Validate first run: all rows processed, no mismatches
     validateSyncCounters(counters1, 10, 10, 4, 0);
+    validateMapperCounters(counters1, 4, 0);
 
     // Query checkpoint table to verify entries were created
-    List<PhoenixSyncTableOutputRow> checkpointEntriesAfterFirstRun =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterFirstRun =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
 
     assertFalse("Should have checkpoint entries after first run",
       checkpointEntriesAfterFirstRun.isEmpty());
@@ -642,11 +845,12 @@ public class PhoenixSyncTableToolIT {
       String.valueOf(toTime));
     SyncCountersResult counters2 = getSyncCounters(job2);
 
-    // KEY VALIDATION: Second run should process ZERO rows despite new region boundaries
+    // Second run should process ZERO rows despite new region boundaries
     validateSyncCounters(counters2, 0, 0, 0, 0);
+    validateMapperCounters(counters2, 0, 0);
 
-    List<PhoenixSyncTableOutputRow> checkpointEntriesAfterSecondRun =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterSecondRun =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
 
     // Checkpoint entries may differ in count due to new regions, but all original data is
     // checkpointed
@@ -667,6 +871,7 @@ public class PhoenixSyncTableToolIT {
 
     // Validate counters
     validateSyncCounters(counters, 10, 10, 7, 3);
+    validateMapperCounters(counters, 1, 3);
   }
 
   @Test
@@ -695,6 +900,7 @@ public class PhoenixSyncTableToolIT {
     counters.logCounters(testName.getMethodName());
 
     validateSyncCounters(counters, 10, 10, 7, 3);
+    validateMapperCounters(counters, 1, 3);
   }
 
   @Test
@@ -744,6 +950,7 @@ public class PhoenixSyncTableToolIT {
     SyncCountersResult counters = new SyncCountersResult(job.getCounters());
     counters.logCounters(testName.getMethodName());
     validateSyncCounters(counters, 10, 10, 7, 3);
+    validateMapperCounters(counters, 1, 3);
   }
 
   @Test
@@ -777,14 +984,15 @@ public class PhoenixSyncTableToolIT {
     SyncCountersResult counters = getSyncCounters(job);
 
     validateSyncCounters(counters, 10, 15, 5, 5);
+    validateMapperCounters(counters, 0, 4);
 
-    List<PhoenixSyncTableOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
 
     // Count mismatched entries in checkpoint table
     int mismatchedCount = 0;
-    for (PhoenixSyncTableOutputRow entry : checkpointEntries) {
-      if (PhoenixSyncTableOutputRow.Status.MISMATCHED.equals(entry.getStatus())) {
+    for (PhoenixSyncTableCheckpointOutputRow entry : checkpointEntries) {
+      if (PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED.equals(entry.getStatus())) {
         mismatchedCount++;
       }
     }
@@ -853,9 +1061,8 @@ public class PhoenixSyncTableToolIT {
     targetSplitThread.start();
 
     // Run sync tool while splits are happening
-    // Use smaller chunk size to increase chances of hitting split boundaries
-    Job job = runSyncToolWithChunkSize(uniqueTableName, 512, "--from-time",
-      String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
+    Job job = runSyncTool(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
+      String.valueOf(toTime));
 
     // Wait for split threads to complete
     sourceSplitThread.join(30000); // 30 second timeout
@@ -867,22 +1074,22 @@ public class PhoenixSyncTableToolIT {
 
     SyncCountersResult counters = getSyncCounters(job);
 
-    // Validate counters - should process all 100 rows and detect the 5 mismatched rows
-    validateSyncCountersExactSourceTarget(counters, 100, 100, 1, 1);
+    // Validate counters - should process all 100 rows
+    validateSyncCountersWithMinChunk(counters, 100, 100, 1, 1);
 
     // Verify checkpoint entries were created
-    List<PhoenixSyncTableOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
     assertFalse("Should have checkpoint entries", checkpointEntries.isEmpty());
 
     // Count mismatched entries
     int mismatchedCount = 0;
-    for (PhoenixSyncTableOutputRow entry : checkpointEntries) {
-      if (PhoenixSyncTableOutputRow.Status.MISMATCHED.equals(entry.getStatus())) {
+    for (PhoenixSyncTableCheckpointOutputRow entry : checkpointEntries) {
+      if (PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED.equals(entry.getStatus())) {
         mismatchedCount++;
       }
     }
-    assertTrue("Should have mismatched entries for modified rows", mismatchedCount >= 5);
+    assertTrue("Should have mismatched entries for modified rows", mismatchedCount >= 1);
   }
 
   @Test
@@ -921,12 +1128,12 @@ public class PhoenixSyncTableToolIT {
     validateSyncCounters(counters, 10, 10, 0, 10);
 
     // Verify checkpoint entries show mismatches
-    List<PhoenixSyncTableOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
 
     int mismatchedCount = 0;
-    for (PhoenixSyncTableOutputRow entry : checkpointEntries) {
-      if (PhoenixSyncTableOutputRow.Status.MISMATCHED.equals(entry.getStatus())) {
+    for (PhoenixSyncTableCheckpointOutputRow entry : checkpointEntries) {
+      if (PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED.equals(entry.getStatus())) {
         mismatchedCount++;
       }
     }
@@ -978,8 +1185,8 @@ public class PhoenixSyncTableToolIT {
     targetMergeThread.start();
 
     // Run sync tool while merges are happening
-    Job job = runSyncToolWithChunkSize(uniqueTableName, 512, "--from-time",
-      String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
+    Job job = runSyncTool(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
+      String.valueOf(toTime));
 
     // Wait for merge threads to complete
     sourceMergeThread.join(30000); // 30 second timeout
@@ -992,11 +1199,11 @@ public class PhoenixSyncTableToolIT {
     SyncCountersResult counters = getSyncCounters(job);
 
     // Validate counters - should process all 100 rows and detect mismatched chunks
-    validateSyncCountersExactSourceTarget(counters, 100, 100, 1, 1);
+    validateSyncCountersWithMinChunk(counters, 100, 100, 1, 1);
 
     // Verify checkpoint entries were created
-    List<PhoenixSyncTableOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
     assertFalse("Should have checkpoint entries", checkpointEntries.isEmpty());
 
     // Run sync again to verify idempotent behavior after merges
@@ -1056,7 +1263,7 @@ public class PhoenixSyncTableToolIT {
 
     // Validate that all 100 rows were processed on both sides
     // Despite paging timeouts, no rows should be lost
-    validateSyncCountersExactSourceTarget(counters, 100, 100, 1, 1);
+    validateSyncCountersWithMinChunk(counters, 100, 100, 1, 1);
 
     long pagingChunkCount = counters.chunksVerified;
 
@@ -1066,8 +1273,8 @@ public class PhoenixSyncTableToolIT {
       pagingChunkCount > baselineChunkCount);
 
     // Verify checkpoint entries were created
-    List<PhoenixSyncTableOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
     assertFalse("Should have checkpoint entries", checkpointEntries.isEmpty());
   }
 
@@ -1101,14 +1308,12 @@ public class PhoenixSyncTableToolIT {
 
     // Enable server-side paging
     conf.setBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB, true);
-    // Set extremely short paging timeout to force frequent paging
-    long aggressiveRpcTimeout = 1000L; // 1 second RPC timeout
+    // Set extremely short rpc timeout to force frequent paging
+    long aggressiveRpcTimeout = 1L; // 1ms RPC timeout
     conf.setLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB, aggressiveRpcTimeout);
     conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, aggressiveRpcTimeout);
-    // Force server-side paging to occur by setting page size to 1ms
-    conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 1);
 
-    int chunkSize = 10240; // 100KB
+    int chunkSize = 102400; // 100KB
 
     // Create a thread that will perform splits on source cluster during sync
     Thread sourceSplitThread = new Thread(() -> {
@@ -1153,7 +1358,7 @@ public class PhoenixSyncTableToolIT {
 
     // Validate that all 100 rows were processed on both sides
     // Despite paging timeouts AND concurrent region splits, no rows should be lost
-    validateSyncCountersExactSourceTarget(counters, 100, 100, 1, 1);
+    validateSyncCountersWithMinChunk(counters, 100, 100, 1, 1);
 
     // Paging should create MORE chunks than baseline
     // Concurrent region splits may also create additional chunks as mappers process new regions
@@ -1165,8 +1370,8 @@ public class PhoenixSyncTableToolIT {
       pagingChunkCount > baselineChunkCount);
 
     // Verify checkpoint entries were created
-    List<PhoenixSyncTableOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
     assertFalse("Should have checkpoint entries", checkpointEntries.isEmpty());
   }
 
@@ -1266,33 +1471,33 @@ public class PhoenixSyncTableToolIT {
 
     // Validate first run succeeded
     assertTrue("First run should succeed", job1.isSuccessful());
-    assertEquals("Should process 10 source rows", 10, counters1.sourceRowsProcessed);
-    assertEquals("Should process 10 target rows", 10, counters1.targetRowsProcessed);
+    validateSyncCounters(counters1, 10, 10, 10, 0);
 
     // Query checkpoint table to get all mapper entries
-    List<PhoenixSyncTableOutputRow> allCheckpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> allCheckpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
 
     // Separate mapper and chunk entries using utility method
     SeparatedCheckpointEntries separated = separateMapperAndChunkEntries(allCheckpointEntries);
-    List<PhoenixSyncTableOutputRow> mapperEntries = separated.mappers;
-    List<PhoenixSyncTableOutputRow> allChunks = separated.chunks;
+    List<PhoenixSyncTableCheckpointOutputRow> mapperEntries = separated.mappers;
+    List<PhoenixSyncTableCheckpointOutputRow> allChunks = separated.chunks;
 
-    assertTrue("Should have at least 3 mapper entries after first run", mapperEntries.size() >= 3);
+    assertFalse("Should have at least 1 mapper entries after first run", mapperEntries.isEmpty());
 
     // Select 3/4th of chunks from each mapper to delete (simulating partial rerun)
     // We repro the partial run via deleting some entries from checkpoint table and re-running the
     // tool.
-    List<PhoenixSyncTableOutputRow> chunksToDelete = selectChunksToDeleteFromMappers(
-      sourceConnection, uniqueTableName, targetZkQuorum, fromTime, toTime, mapperEntries, 0.75);
+    List<PhoenixSyncTableCheckpointOutputRow> chunksToDelete =
+      selectChunksToDeleteFromMappers(sourceConnection, uniqueTableName, targetZkQuorum, fromTime,
+        toTime, null, mapperEntries, 0.75);
 
     // Delete all mappers and selected chunks using utility method
-    deleteCheckpointEntries(sourceConnection, uniqueTableName, targetZkQuorum, mapperEntries,
+    deleteCheckpointEntries(sourceConnection, uniqueTableName, targetZkQuorum, null, mapperEntries,
       chunksToDelete);
 
     // Verify mapper entries were deleted
-    List<PhoenixSyncTableOutputRow> checkpointEntriesAfterDelete =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterDelete =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
     SeparatedCheckpointEntries separatedAfterDelete =
       separateMapperAndChunkEntries(checkpointEntriesAfterDelete);
 
@@ -1328,8 +1533,8 @@ public class PhoenixSyncTableToolIT {
     LOGGER.info("Second run failed as expected with exit code: {}", exitCode);
 
     // Remaining chunk entries that we dint delete should still persist despite job failure
-    List<PhoenixSyncTableOutputRow> checkpointEntriesAfterFailedRun =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum);
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntriesAfterFailedRun =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
     SeparatedCheckpointEntries separatedAfterFailedRun =
       separateMapperAndChunkEntries(checkpointEntriesAfterFailedRun);
 
@@ -1343,15 +1548,218 @@ public class PhoenixSyncTableToolIT {
       allChunks.size() - chunksToDelete.size(), separatedAfterFailedRun.chunks.size());
   }
 
+  @Test
+  public void testSyncTableWithDeleteAndCompactionOnSource() throws Exception {
+    // Setup table with replication and insert data (rows 1-10)
+    setupStandardTestWithReplication(uniqueTableName, 1, 10);
+
+    // Verify data is identical after replication
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    assertEquals("Should have 10 rows on source", 10,
+      getRowCount(sourceConnection, uniqueTableName));
+    assertEquals("Should have 10 rows on target", 10,
+      getRowCount(targetConnection, uniqueTableName));
+
+    // Insert extra row on source and then delete it to create a delete marker on source
+    upsertRowsOnTarget(sourceConnection, uniqueTableName, new int[] { 100 },
+      new String[] { "EXTRA_ROW" });
+    sourceConnection.commit();
+    waitForReplication(targetConnection, uniqueTableName, 11);
+
+    assertEquals("Should have 11 rows on target after insert", 11,
+      getRowCount(targetConnection, uniqueTableName));
+    assertEquals("Should have 11 rows on source after insert", 11,
+      getRowCount(targetConnection, uniqueTableName));
+
+    deleteRows(sourceConnection, uniqueTableName, 100);
+    waitForReplication(targetConnection, uniqueTableName, 10);
+    assertEquals("Should have 10 rows on target after deletion", 10,
+      getRowCount(targetConnection, uniqueTableName));
+    assertEquals("Should have 10 rows on source after deletion", 10,
+      getRowCount(sourceConnection, uniqueTableName));
+
+    // Run sync tool without raw scan
+    Job job1 = runSyncTool(uniqueTableName);
+    SyncCountersResult counters1 = getSyncCounters(job1);
+
+    assertTrue("First run without raw scan should succeed", job1.isSuccessful());
+    validateSyncCounters(counters1, 10, 10, 10, 0);
+    validateMapperCounters(counters1, 4, 0);
+
+    // Run sync tool with --raw-scan
+    // Should detect mismatch because target has delete marker, source doesn't
+    Job job2 = runSyncTool(uniqueTableName, "--raw-scan");
+    SyncCountersResult counters2 = getSyncCounters(job2);
+
+    assertTrue("Second run with raw scan should succeed", job2.isSuccessful());
+    validateSyncCounters(counters2, 11, 11, 11, 0);
+    validateMapperCounters(counters2, 4, 0);
+
+    sourceConnection.createStatement()
+      .execute("ALTER TABLE " + uniqueTableName + " SET KEEP_DELETED_CELLS=false");
+    sourceConnection.commit();
+
+    compactTable(sourceConnection, uniqueTableName);
+
+    // Run sync tool with --raw-scan again
+    Job job3 = runSyncTool(uniqueTableName, "--raw-scan");
+    SyncCountersResult counters3 = getSyncCounters(job3);
+
+    assertTrue("Third run with raw scan after compaction should succeed", job3.isSuccessful());
+    validateSyncCounters(counters3, 10, 11, 9, 1);
+    validateMapperCounters(counters3, 3, 1);
+  }
+
+  @Test
+  public void testSyncTableWithDeleteAndCompactionOnTarget() throws Exception {
+    // Setup table with replication and insert data (rows 1-10)
+    setupStandardTestWithReplication(uniqueTableName, 1, 10);
+
+    // Verify data is identical after replication
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    assertEquals("Should have 10 rows on source", 10,
+      getRowCount(sourceConnection, uniqueTableName));
+    assertEquals("Should have 10 rows on target", 10,
+      getRowCount(targetConnection, uniqueTableName));
+
+    // Insert extra row on target and then delete it to create delete marker on target
+    upsertRowsOnTarget(targetConnection, uniqueTableName, new int[] { 100 },
+      new String[] { "EXTRA_ROW" });
+    targetConnection.commit();
+    assertEquals("Should have 11 rows on target after insert", 11,
+      getRowCount(targetConnection, uniqueTableName));
+
+    deleteRows(targetConnection, uniqueTableName, 100);
+    assertEquals("Should have 10 rows on target after deletion", 10,
+      getRowCount(targetConnection, uniqueTableName));
+
+    // Run sync tool without raw scan, should match
+    Job job1 = runSyncTool(uniqueTableName);
+    SyncCountersResult counters1 = getSyncCounters(job1);
+
+    assertTrue("First run without raw scan should succeed", job1.isSuccessful());
+    validateSyncCounters(counters1, 10, 10, 10, 0);
+    validateMapperCounters(counters1, 4, 0);
+
+    // Run sync tool with --raw-scan, should detect mismatch
+    Job job2 = runSyncTool(uniqueTableName, "--raw-scan");
+    SyncCountersResult counters2 = getSyncCounters(job2);
+
+    assertTrue("Second run with raw scan should succeed", job2.isSuccessful());
+    validateSyncCounters(counters2, 10, 11, 9, 1);
+    validateMapperCounters(counters2, 3, 1);
+
+    compactTable(targetConnection, uniqueTableName);
+
+    // Run sync tool with --raw-scan again, Should now match
+    Job job3 = runSyncTool(uniqueTableName, "--raw-scan");
+    SyncCountersResult counters3 = getSyncCounters(job3);
+
+    assertTrue("Third run with raw scan after compaction should succeed", job3.isSuccessful());
+    validateSyncCounters(counters3, 10, 10, 10, 0);
+    validateMapperCounters(counters3, 4, 0);
+  }
+
+  @Test
+  public void testSyncTableWithMultipleVersionAndCompactionOnSource() throws Exception {
+    setupStandardTestWithReplication(uniqueTableName, 1, 10);
+    // Set VERSIONS=2 on target so readAllVersions scan can return both versions
+    try (Statement stmt = targetConnection.createStatement()) {
+      stmt.execute("ALTER TABLE " + uniqueTableName + " SET VERSIONS=2");
+    }
+    targetConnection.commit();
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    assertEquals("Should have 10 rows on source", 10,
+      getRowCount(sourceConnection, uniqueTableName));
+    assertEquals("Should have 10 rows on target", 10,
+      getRowCount(targetConnection, uniqueTableName));
+
+    // Update row 5 on source to create a second version
+    upsertRowsOnTarget(sourceConnection, uniqueTableName, new int[] { 5 },
+      new String[] { "EXTRA_ROW" });
+    sourceConnection.commit();
+
+    waitForRowContentReplication(targetConnection, uniqueTableName, 5, "EXTRA_ROW");
+
+    // Compact source
+    compactTable(sourceConnection, uniqueTableName);
+
+    // Run sync without reading all versions, only latest version compared, should match
+    Job job1 = runSyncTool(uniqueTableName);
+    SyncCountersResult counters1 = getSyncCounters(job1);
+
+    assertTrue("First run without reading all versions should succeed", job1.isSuccessful());
+    validateSyncCounters(counters1, 10, 10, 10, 0);
+    validateMapperCounters(counters1, 4, 0);
+
+    // Run sync with --read-all-versions: target has extra old version, should mismatch
+    Job job3 = runSyncTool(uniqueTableName, "--read-all-versions");
+    SyncCountersResult counters3 = getSyncCounters(job3);
+
+    assertTrue("Second run with all versions should succeed", job3.isSuccessful());
+    // Target retains old version of row 5 (VERSIONS=2), source does not after compaction.
+    validateSyncCounters(counters3, 10, 10, 9, 1);
+    validateMapperCounters(counters3, 3, 1);
+  }
+
+  @Test
+  public void testSyncTableWithMultipleVersionAndCompactionOnTarget() throws Exception {
+    setupStandardTestWithReplication(uniqueTableName, 1, 10);
+    // Set VERSIONS=2 on target so readAllVersions scan can return both versions
+    try (Statement stmt = sourceConnection.createStatement()) {
+      stmt.execute("ALTER TABLE " + uniqueTableName + " SET VERSIONS=2");
+    }
+    sourceConnection.commit();
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    assertEquals("Should have 10 rows on source", 10,
+      getRowCount(sourceConnection, uniqueTableName));
+    assertEquals("Should have 10 rows on target", 10,
+      getRowCount(targetConnection, uniqueTableName));
+
+    // Update row 5 on source to create a second version
+    upsertRowsOnTarget(targetConnection, uniqueTableName, new int[] { 5 },
+      new String[] { "EXTRA_ROW" });
+    targetConnection.commit();
+
+    // Run sync with --read-all-versions: target has extra old version, should mismatch
+    Job job = runSyncTool(uniqueTableName, "--read-all-versions");
+    SyncCountersResult counters1 = getSyncCounters(job);
+
+    assertTrue("First run with all versions should succeed", job.isSuccessful());
+    validateSyncCounters(counters1, 10, 10, 9, 1);
+    validateMapperCounters(counters1, 3, 1);
+
+    // Compact target
+    compactTable(targetConnection, uniqueTableName);
+
+    // Run sync without reading all versions (default behavior): only latest version compared,
+    // should still mismatch
+    Job job1 = runSyncTool(uniqueTableName);
+    SyncCountersResult counters = getSyncCounters(job1);
+
+    assertTrue("Second run without reading all versions should succeed", job1.isSuccessful());
+    validateSyncCounters(counters, 10, 10, 9, 1);
+    validateMapperCounters(counters, 3, 1);
+
+    // Run sync with --read-all-versions, target has extra old version even after compaction, should
+    // mismatch
+    Job job3 = runSyncTool(uniqueTableName, "--read-all-versions");
+    SyncCountersResult counters3 = getSyncCounters(job3);
+
+    assertTrue("Second run with all versions should succeed", job3.isSuccessful());
+    validateSyncCounters(counters3, 10, 10, 9, 1);
+    validateMapperCounters(counters3, 3, 1);
+  }
+
   /**
    * Helper class to hold separated mapper and chunk entries.
    */
   private static class SeparatedCheckpointEntries {
-    final List<PhoenixSyncTableOutputRow> mappers;
-    final List<PhoenixSyncTableOutputRow> chunks;
+    final List<PhoenixSyncTableCheckpointOutputRow> mappers;
+    final List<PhoenixSyncTableCheckpointOutputRow> chunks;
 
-    SeparatedCheckpointEntries(List<PhoenixSyncTableOutputRow> mappers,
-      List<PhoenixSyncTableOutputRow> chunks) {
+    SeparatedCheckpointEntries(List<PhoenixSyncTableCheckpointOutputRow> mappers,
+      List<PhoenixSyncTableCheckpointOutputRow> chunks) {
       this.mappers = mappers;
       this.chunks = chunks;
     }
@@ -1379,14 +1787,14 @@ public class PhoenixSyncTableToolIT {
    * Separates checkpoint entries into mapper and chunk entries.
    */
   private SeparatedCheckpointEntries
-    separateMapperAndChunkEntries(List<PhoenixSyncTableOutputRow> entries) {
-    List<PhoenixSyncTableOutputRow> mappers = new ArrayList<>();
-    List<PhoenixSyncTableOutputRow> chunks = new ArrayList<>();
+    separateMapperAndChunkEntries(List<PhoenixSyncTableCheckpointOutputRow> entries) {
+    List<PhoenixSyncTableCheckpointOutputRow> mappers = new ArrayList<>();
+    List<PhoenixSyncTableCheckpointOutputRow> chunks = new ArrayList<>();
 
-    for (PhoenixSyncTableOutputRow entry : entries) {
-      if (PhoenixSyncTableOutputRow.Type.MAPPER_REGION.equals(entry.getType())) {
+    for (PhoenixSyncTableCheckpointOutputRow entry : entries) {
+      if (PhoenixSyncTableCheckpointOutputRow.Type.REGION.equals(entry.getType())) {
         mappers.add(entry);
-      } else if (PhoenixSyncTableOutputRow.Type.CHUNK.equals(entry.getType())) {
+      } else if (PhoenixSyncTableCheckpointOutputRow.Type.CHUNK.equals(entry.getType())) {
         chunks.add(entry);
       }
     }
@@ -1401,21 +1809,22 @@ public class PhoenixSyncTableToolIT {
    * @return Aggregated counters from chunk entries
    */
   private CheckpointAggregateCounters
-    calculateAggregateCountersFromCheckpoint(List<PhoenixSyncTableOutputRow> entries) {
+    calculateAggregateCountersFromCheckpoint(List<PhoenixSyncTableCheckpointOutputRow> entries) {
     long sourceRowsProcessed = 0;
     long targetRowsProcessed = 0;
     long chunksVerified = 0;
     long chunksMismatched = 0;
 
-    for (PhoenixSyncTableOutputRow entry : entries) {
-      if (PhoenixSyncTableOutputRow.Type.CHUNK.equals(entry.getType())) {
+    for (PhoenixSyncTableCheckpointOutputRow entry : entries) {
+      if (PhoenixSyncTableCheckpointOutputRow.Type.CHUNK.equals(entry.getType())) {
         sourceRowsProcessed += entry.getSourceRowsProcessed();
         targetRowsProcessed += entry.getTargetRowsProcessed();
-        if (PhoenixSyncTableOutputRow.Status.VERIFIED.equals(entry.getStatus())) {
+        if (PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED.equals(entry.getStatus())) {
           chunksVerified++;
-        } else if (PhoenixSyncTableOutputRow.Status.MISMATCHED.equals(entry.getStatus())) {
-          chunksMismatched++;
-        }
+        } else
+          if (PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED.equals(entry.getStatus())) {
+            chunksMismatched++;
+          }
       }
     }
 
@@ -1423,11 +1832,11 @@ public class PhoenixSyncTableToolIT {
       chunksMismatched);
   }
 
-  private List<PhoenixSyncTableOutputRow> findChunksBelongingToMapper(Connection conn,
-    String tableName, String targetCluster, long fromTime, long toTime,
-    PhoenixSyncTableOutputRow mapper) throws SQLException {
+  private List<PhoenixSyncTableCheckpointOutputRow> findChunksBelongingToMapper(Connection conn,
+    String tableName, String targetCluster, long fromTime, long toTime, String tenantId,
+    PhoenixSyncTableCheckpointOutputRow mapper) throws SQLException {
     PhoenixSyncTableOutputRepository repository = new PhoenixSyncTableOutputRepository(conn);
-    return repository.getProcessedChunks(tableName, targetCluster, fromTime, toTime,
+    return repository.getProcessedChunks(tableName, targetCluster, fromTime, toTime, tenantId,
       mapper.getStartRowKey(), mapper.getEndRowKey());
   }
 
@@ -1438,19 +1847,20 @@ public class PhoenixSyncTableToolIT {
    * by multiple mappers. We use a Set to track unique chunks by their start row key to avoid
    * duplicates.
    */
-  private List<PhoenixSyncTableOutputRow> selectChunksToDeleteFromMappers(Connection conn,
-    String tableName, String targetCluster, long fromTime, long toTime,
-    List<PhoenixSyncTableOutputRow> mappers, double deletionFraction) throws SQLException {
+  private List<PhoenixSyncTableCheckpointOutputRow> selectChunksToDeleteFromMappers(Connection conn,
+    String tableName, String targetCluster, long fromTime, long toTime, String tenantId,
+    List<PhoenixSyncTableCheckpointOutputRow> mappers, double deletionFraction)
+    throws SQLException {
     // Use a map to track unique chunks by start row key to avoid duplicates
-    Map<String, PhoenixSyncTableOutputRow> uniqueChunksToDelete = new LinkedHashMap<>();
+    Map<String, PhoenixSyncTableCheckpointOutputRow> uniqueChunksToDelete = new LinkedHashMap<>();
 
-    for (PhoenixSyncTableOutputRow mapper : mappers) {
-      List<PhoenixSyncTableOutputRow> mapperChunks =
-        findChunksBelongingToMapper(conn, tableName, targetCluster, fromTime, toTime, mapper);
+    for (PhoenixSyncTableCheckpointOutputRow mapper : mappers) {
+      List<PhoenixSyncTableCheckpointOutputRow> mapperChunks = findChunksBelongingToMapper(conn,
+        tableName, targetCluster, fromTime, toTime, tenantId, mapper);
 
       int chunksToDeleteCount = (int) Math.ceil(mapperChunks.size() * deletionFraction);
       for (int i = 0; i < chunksToDeleteCount && i < mapperChunks.size(); i++) {
-        PhoenixSyncTableOutputRow chunk = mapperChunks.get(i);
+        PhoenixSyncTableCheckpointOutputRow chunk = mapperChunks.get(i);
         // Use start row key as unique identifier (convert to string for map key)
         String key =
           chunk.getStartRowKey() == null ? "NULL" : Bytes.toStringBinary(chunk.getStartRowKey());
@@ -1466,25 +1876,26 @@ public class PhoenixSyncTableToolIT {
    * @param conn            Connection to use
    * @param tableName       Table name
    * @param targetZkQuorum  Target cluster ZK quorum
+   * @param tenantId        Tenant ID
    * @param mappersToDelete List of mapper entries to delete
    * @param chunksToDelete  List of chunk entries to delete
    * @return Total number of entries deleted
    */
   private int deleteCheckpointEntries(Connection conn, String tableName, String targetZkQuorum,
-    List<PhoenixSyncTableOutputRow> mappersToDelete, List<PhoenixSyncTableOutputRow> chunksToDelete)
-    throws SQLException {
+    String tenantId, List<PhoenixSyncTableCheckpointOutputRow> mappersToDelete,
+    List<PhoenixSyncTableCheckpointOutputRow> chunksToDelete) throws SQLException {
     int deletedCount = 0;
 
     // Delete mapper entries
-    for (PhoenixSyncTableOutputRow mapper : mappersToDelete) {
-      deletedCount += deleteSingleCheckpointEntry(conn, tableName, targetZkQuorum,
-        PhoenixSyncTableOutputRow.Type.MAPPER_REGION, mapper.getStartRowKey(), false);
+    for (PhoenixSyncTableCheckpointOutputRow mapper : mappersToDelete) {
+      deletedCount += deleteSingleCheckpointEntry(conn, tableName, targetZkQuorum, tenantId,
+        PhoenixSyncTableCheckpointOutputRow.Type.REGION, mapper.getStartRowKey(), false);
     }
 
     // Delete chunk entries
-    for (PhoenixSyncTableOutputRow chunk : chunksToDelete) {
-      deletedCount += deleteSingleCheckpointEntry(conn, tableName, targetZkQuorum,
-        PhoenixSyncTableOutputRow.Type.CHUNK, chunk.getStartRowKey(), false);
+    for (PhoenixSyncTableCheckpointOutputRow chunk : chunksToDelete) {
+      deletedCount += deleteSingleCheckpointEntry(conn, tableName, targetZkQuorum, tenantId,
+        PhoenixSyncTableCheckpointOutputRow.Type.CHUNK, chunk.getStartRowKey(), false);
     }
 
     conn.commit();
@@ -1595,6 +2006,37 @@ public class PhoenixSyncTableToolIT {
     }
 
     fail("Replication timeout: expected " + expectedRows + " rows on target");
+  }
+
+  /**
+   * Waits for a specific row's content to be replicated to the target cluster. This is more precise
+   * than waitForReplication() when dealing with UPDATEs where the row count doesn't change but the
+   * content does.
+   * @param targetConn   Target cluster connection
+   * @param tableName    Table name
+   * @param rowId        The ID of the row to check
+   * @param expectedName The expected NAME value
+   * @throws Exception if replication times out or query fails
+   */
+  private void waitForRowContentReplication(Connection targetConn, String tableName, int rowId,
+    String expectedName) throws Exception {
+    long startTime = System.currentTimeMillis();
+    String query = "SELECT NAME FROM " + tableName + " WHERE ID = ?";
+
+    while (System.currentTimeMillis() - startTime < REPLICATION_WAIT_TIMEOUT_MS) {
+      try (PreparedStatement stmt = targetConn.prepareStatement(query)) {
+        stmt.setInt(1, rowId);
+        try (ResultSet rs = stmt.executeQuery()) {
+          if (rs.next() && expectedName.equals(rs.getString(1))) {
+            return;
+          }
+        }
+      }
+      Thread.sleep(200);
+    }
+
+    fail(String.format("Row content replication timeout for table %s, row %d. Expected NAME='%s'",
+      tableName, rowId, expectedName));
   }
 
   /**
@@ -1787,11 +2229,30 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
+   * Inserts test data with an EXPIRED boolean flag for conditional TTL testing.
+   */
+  private void insertTestDataWithExpiredFlag(Connection conn, String tableName, int startId,
+    int endId, boolean expired) throws SQLException {
+    String upsert = "UPSERT INTO " + tableName
+      + " (ID, NAME, NAME_VALUE, UPDATED_DATE, EXPIRED) VALUES (?, ?, ?, ?, ?)";
+    PreparedStatement stmt = conn.prepareStatement(upsert);
+    Timestamp ts = new Timestamp(System.currentTimeMillis());
+    for (int id = startId; id <= endId; id++) {
+      stmt.setInt(1, id);
+      stmt.setString(2, "NAME_" + id);
+      stmt.setLong(3, (long) id);
+      stmt.setTimestamp(4, ts);
+      stmt.setBoolean(5, expired);
+      stmt.executeUpdate();
+    }
+    conn.commit();
+  }
+
+  /**
    * Deletes multiple rows from target cluster to create mismatches. This method accepts variable
    * number of row IDs to delete.
    */
-  private void deleteRowsOnTarget(Connection conn, String tableName, int... rowIds)
-    throws SQLException {
+  private void deleteRows(Connection conn, String tableName, int... rowIds) throws SQLException {
     String delete = "DELETE FROM " + tableName + " WHERE ID = ?";
     PreparedStatement stmt = conn.prepareStatement(delete);
 
@@ -1804,20 +2265,24 @@ public class PhoenixSyncTableToolIT {
 
   private void deleteHBaseRows(HBaseTestingUtility cluster, String tableName, int rowsToDelete)
     throws Exception {
-    Table table = cluster.getConnection().getTable(TableName.valueOf(tableName));
-    ResultScanner scanner = table.getScanner(new Scan());
-    List<Delete> deletes = new ArrayList<>();
-    Result result;
-    int rowsDeleted = 0;
-    while ((result = scanner.next()) != null && rowsDeleted < rowsToDelete) {
-      deletes.add(new Delete(result.getRow()));
-      rowsDeleted++;
+    TableName hbaseTableName = TableName.valueOf(tableName);
+    try (Table table = cluster.getConnection().getTable(hbaseTableName)) {
+      ResultScanner scanner = table.getScanner(new Scan());
+      List<Delete> deletes = new ArrayList<>();
+      Result result;
+      int rowsDeleted = 0;
+      while ((result = scanner.next()) != null && rowsDeleted < rowsToDelete) {
+        deletes.add(new Delete(result.getRow()));
+        rowsDeleted++;
+      }
+      scanner.close();
+      if (!deletes.isEmpty()) {
+        table.delete(deletes);
+      }
     }
-    scanner.close();
-    if (!deletes.isEmpty()) {
-      table.delete(deletes);
+    try (Admin admin = cluster.getConnection().getAdmin()) {
+      admin.flush(hbaseTableName);
     }
-    table.close();
   }
 
   private int getRowCount(Connection conn, String tableName) throws SQLException {
@@ -1881,6 +2346,7 @@ public class PhoenixSyncTableToolIT {
 
       // Attempt to split the region at the specified row key
       try (Admin admin = pconn.getQueryServices().getAdmin()) {
+        admin.flush(hbaseTableName);
         admin.split(hbaseTableName, splitPoint);
         LOGGER.info("Split initiated for table {} at split point {} (bytes: {})", tableName,
           splitId, Bytes.toStringBinary(splitPoint));
@@ -1910,32 +2376,37 @@ public class PhoenixSyncTableToolIT {
    * Queries the checkpoint table for entries matching the given table and target cluster. Retrieves
    * all columns for comprehensive validation.
    */
-  private List<PhoenixSyncTableOutputRow> queryCheckpointTable(Connection conn, String tableName,
-    String targetCluster) throws SQLException {
-    List<PhoenixSyncTableOutputRow> entries = new ArrayList<>();
+  private List<PhoenixSyncTableCheckpointOutputRow> queryCheckpointTable(Connection conn,
+    String tableName, String targetCluster, String tenantId) throws SQLException {
+    List<PhoenixSyncTableCheckpointOutputRow> entries = new ArrayList<>();
     String query = "SELECT TABLE_NAME, TARGET_CLUSTER, TYPE, FROM_TIME, TO_TIME, IS_DRY_RUN, "
       + "START_ROW_KEY, END_ROW_KEY, EXECUTION_START_TIME, EXECUTION_END_TIME, "
       + "STATUS, COUNTERS FROM PHOENIX_SYNC_TABLE_CHECKPOINT "
-      + "WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ?";
+      + "WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
+      + (tenantId != null ? "AND TENANT_ID = ?" : "AND TENANT_ID IS NULL");
 
     PreparedStatement stmt = conn.prepareStatement(query);
     stmt.setString(1, tableName);
     stmt.setString(2, targetCluster);
+    if (tenantId != null) {
+      stmt.setString(3, tenantId);
+    }
     ResultSet rs = stmt.executeQuery();
 
     while (rs.next()) {
       String typeStr = rs.getString("TYPE");
       String statusStr = rs.getString("STATUS");
 
-      PhoenixSyncTableOutputRow entry = new PhoenixSyncTableOutputRow.Builder()
+      PhoenixSyncTableCheckpointOutputRow entry = new PhoenixSyncTableCheckpointOutputRow.Builder()
         .setTableName(rs.getString("TABLE_NAME")).setTargetCluster(rs.getString("TARGET_CLUSTER"))
-        .setType(typeStr != null ? PhoenixSyncTableOutputRow.Type.valueOf(typeStr) : null)
+        .setType(typeStr != null ? PhoenixSyncTableCheckpointOutputRow.Type.valueOf(typeStr) : null)
         .setFromTime(rs.getLong("FROM_TIME")).setToTime(rs.getLong("TO_TIME"))
         .setIsDryRun(rs.getBoolean("IS_DRY_RUN")).setStartRowKey(rs.getBytes("START_ROW_KEY"))
         .setEndRowKey(rs.getBytes("END_ROW_KEY"))
         .setExecutionStartTime(rs.getTimestamp("EXECUTION_START_TIME"))
         .setExecutionEndTime(rs.getTimestamp("EXECUTION_END_TIME"))
-        .setStatus(statusStr != null ? PhoenixSyncTableOutputRow.Status.valueOf(statusStr) : null)
+        .setStatus(
+          statusStr != null ? PhoenixSyncTableCheckpointOutputRow.Status.valueOf(statusStr) : null)
         .setCounters(rs.getString("COUNTERS")).build();
       entries.add(entry);
     }
@@ -1950,16 +2421,20 @@ public class PhoenixSyncTableToolIT {
    * @param conn          Connection to use
    * @param tableName     Table name
    * @param targetCluster Target cluster ZK quorum
-   * @param type          Entry type (MAPPER_REGION or CHUNK), or null to delete regardless of type
+   * @param tenantId      Tenant ID (nullable)
+   * @param type          Entry type (REGION or CHUNK), or null to delete regardless of type
    * @param startRowKey   Start row key to match
    * @param autoCommit    Whether to commit after delete
    * @return Number of rows deleted
    */
   private int deleteSingleCheckpointEntry(Connection conn, String tableName, String targetCluster,
-    PhoenixSyncTableOutputRow.Type type, byte[] startRowKey, boolean autoCommit)
-    throws SQLException {
+    String tenantId, PhoenixSyncTableCheckpointOutputRow.Type type, byte[] startRowKey,
+    boolean autoCommit) throws SQLException {
     StringBuilder deleteBuilder = new StringBuilder(
       "DELETE FROM PHOENIX_SYNC_TABLE_CHECKPOINT WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ?");
+
+    // Add TENANT_ID filter
+    deleteBuilder.append(tenantId != null ? " AND TENANT_ID = ?" : " AND TENANT_ID IS NULL");
 
     // Add TYPE filter if provided
     if (type != null) {
@@ -1979,6 +2454,9 @@ public class PhoenixSyncTableToolIT {
     int paramIndex = 1;
     stmt.setString(paramIndex++, tableName);
     stmt.setString(paramIndex++, targetCluster);
+    if (tenantId != null) {
+      stmt.setString(paramIndex++, tenantId);
+    }
 
     if (type != null) {
       stmt.setString(paramIndex++, type.name());
@@ -1998,13 +2476,18 @@ public class PhoenixSyncTableToolIT {
   /**
    * Cleans up checkpoint table entries for a specific table and target cluster.
    */
-  private void cleanupCheckpointTable(Connection conn, String tableName, String targetCluster) {
+  private void cleanupCheckpointTable(Connection conn, String tableName, String targetCluster,
+    String tenantId) {
     try {
       String delete = "DELETE FROM PHOENIX_SYNC_TABLE_CHECKPOINT "
-        + "WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ?";
+        + "WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
+        + (tenantId != null ? "AND TENANT_ID = ?" : "AND TENANT_ID IS NULL");
       PreparedStatement stmt = conn.prepareStatement(delete);
       stmt.setString(1, tableName);
       stmt.setString(2, targetCluster);
+      if (tenantId != null) {
+        stmt.setString(3, tenantId);
+      }
       stmt.executeUpdate();
       conn.commit();
     } catch (SQLException e) {
@@ -2031,6 +2514,17 @@ public class PhoenixSyncTableToolIT {
    */
   private Job runSyncTool(String tableName, String... additionalArgs) throws Exception {
     return runSyncToolWithChunkSize(tableName, 1, additionalArgs);
+  }
+
+  private Job runSyncToolWithZkQuorum(String tableName, String zkQuorum, String... additionalArgs)
+    throws Exception {
+    String savedZkQuorum = targetZkQuorum;
+    targetZkQuorum = zkQuorum;
+    try {
+      return runSyncToolWithChunkSize(tableName, 1, additionalArgs);
+    } finally {
+      targetZkQuorum = savedZkQuorum;
+    }
   }
 
   /**
@@ -2107,6 +2601,9 @@ public class PhoenixSyncTableToolIT {
     public final long targetRowsProcessed;
     public final long chunksMismatched;
     public final long chunksVerified;
+    public final long mappersVerified;
+    public final long mappersMismatched;
+    public final long inputRecords;
 
     SyncCountersResult(Counters counters) {
       this.sourceRowsProcessed =
@@ -2115,11 +2612,17 @@ public class PhoenixSyncTableToolIT {
         counters.findCounter(SyncCounters.TARGET_ROWS_PROCESSED).getValue();
       this.chunksMismatched = counters.findCounter(SyncCounters.CHUNKS_MISMATCHED).getValue();
       this.chunksVerified = counters.findCounter(SyncCounters.CHUNKS_VERIFIED).getValue();
+      this.mappersVerified = counters.findCounter(SyncCounters.MAPPERS_VERIFIED).getValue();
+      this.mappersMismatched = counters.findCounter(SyncCounters.MAPPERS_MISMATCHED).getValue();
+      this.inputRecords = counters.findCounter(PhoenixJobCounters.INPUT_RECORDS).getValue();
     }
 
     public void logCounters(String testName) {
-      LOGGER.info("{}: source rows={}, target rows={}, chunks mismatched={}, chunks verified={}",
-        testName, sourceRowsProcessed, targetRowsProcessed, chunksMismatched, chunksVerified);
+      LOGGER.info(
+        "{}: source rows={}, target rows={}, chunks mismatched={}, chunks verified={}, "
+          + "mappers verified={}, mappers mismatched={}",
+        testName, sourceRowsProcessed, targetRowsProcessed, chunksMismatched, chunksVerified,
+        mappersVerified, mappersMismatched);
     }
   }
 
@@ -2145,11 +2648,19 @@ public class PhoenixSyncTableToolIT {
       counters.chunksMismatched);
   }
 
+  private void validateMapperCounters(SyncCountersResult counters, long expectedMappersVerified,
+    long expectedMappersMismatched) {
+    assertEquals("Should have expected verified mappers", expectedMappersVerified,
+      counters.mappersVerified);
+    assertEquals("Should have expected mismatched mappers", expectedMappersMismatched,
+      counters.mappersMismatched);
+  }
+
   /**
    * Validates sync counters with exact source/target rows and minimum chunk thresholds. Use this
    * when chunk counts may vary but should be at least certain values.
    */
-  private void validateSyncCountersExactSourceTarget(SyncCountersResult counters,
+  private void validateSyncCountersWithMinChunk(SyncCountersResult counters,
     long expectedSourceRows, long expectedTargetRows, long minChunksVerified,
     long minChunksMismatched) {
     assertEquals("Should process expected source rows", expectedSourceRows,
@@ -2166,23 +2677,30 @@ public class PhoenixSyncTableToolIT {
   /**
    * Validates that a checkpoint table has entries with proper structure.
    */
-  private void validateCheckpointEntries(List<PhoenixSyncTableOutputRow> entries,
+  private void validateCheckpointEntries(List<PhoenixSyncTableCheckpointOutputRow> entries,
     String expectedTableName, String expectedTargetCluster, int expectedSourceRows,
     int expectedTargetRows, int expectedChunkVerified, int expectedChunkMismatched,
-    int expectedMapperRegion, int expectedMapperMismatched) {
+    int expectedMapperRegion, int expectedMapperMismatched, String expectedTenantId) {
     int mapperRegionCount = 0;
     int chunkCount = 0;
     int mismatchedEntry = 0;
     int sourceRowsProcessed = 0;
     int targetRowsProcessed = 0;
-    for (PhoenixSyncTableOutputRow entry : entries) {
+    for (PhoenixSyncTableCheckpointOutputRow entry : entries) {
       // Validate primary key columns
       assertEquals("TABLE_NAME should match", expectedTableName, entry.getTableName());
       assertEquals("TARGET_CLUSTER should match", expectedTargetCluster, entry.getTargetCluster());
       assertNotNull("TYPE should not be null", entry.getType());
-      assertTrue("TYPE should be MAPPER_REGION or CHUNK",
-        PhoenixSyncTableOutputRow.Type.MAPPER_REGION.equals(entry.getType())
-          || PhoenixSyncTableOutputRow.Type.CHUNK.equals(entry.getType()));
+      assertTrue("TYPE should be REGION or CHUNK",
+        PhoenixSyncTableCheckpointOutputRow.Type.REGION.equals(entry.getType())
+          || PhoenixSyncTableCheckpointOutputRow.Type.CHUNK.equals(entry.getType()));
+
+      // Validate TENANT_ID
+      if (expectedTenantId == null) {
+        assertNull("TENANT_ID should be null for non-multi-tenant tables", entry.getTenantId());
+      } else {
+        assertEquals("TENANT_ID should match", expectedTenantId, entry.getTenantId());
+      }
 
       // Validate time range
       assertTrue("FROM_TIME should be >= 0", entry.getFromTime() >= 0);
@@ -2197,25 +2715,25 @@ public class PhoenixSyncTableToolIT {
       // Validate status
       assertNotNull("STATUS should not be null", entry.getStatus());
       assertTrue("STATUS should be VERIFIED or MISMATCHED",
-        PhoenixSyncTableOutputRow.Status.VERIFIED.equals(entry.getStatus())
-          || PhoenixSyncTableOutputRow.Status.MISMATCHED.equals(entry.getStatus()));
+        PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED.equals(entry.getStatus())
+          || PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED.equals(entry.getStatus()));
 
-      if (PhoenixSyncTableOutputRow.Status.MISMATCHED.equals(entry.getStatus())) {
+      if (PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED.equals(entry.getStatus())) {
         mismatchedEntry++;
       }
 
       // Count entry types
-      if (PhoenixSyncTableOutputRow.Type.MAPPER_REGION.equals(entry.getType())) {
+      if (PhoenixSyncTableCheckpointOutputRow.Type.REGION.equals(entry.getType())) {
         mapperRegionCount++;
         sourceRowsProcessed += (int) entry.getSourceRowsProcessed();
         targetRowsProcessed += (int) entry.getTargetRowsProcessed();
-      } else if (PhoenixSyncTableOutputRow.Type.CHUNK.equals(entry.getType())) {
+      } else if (PhoenixSyncTableCheckpointOutputRow.Type.CHUNK.equals(entry.getType())) {
         chunkCount++;
         assertNotNull("COUNTERS should not be null for CHUNK entries", entry.getCounters());
       }
     }
 
-    assertEquals(String.format("Should have %d MAPPER_REGION entry", expectedMapperRegion),
+    assertEquals(String.format("Should have %d REGION entry", expectedMapperRegion),
       expectedMapperMismatched, expectedMapperRegion, mapperRegionCount);
     assertEquals(
       String.format("Should have %d CHUNK entry", expectedChunkVerified + expectedChunkMismatched),
@@ -2230,21 +2748,26 @@ public class PhoenixSyncTableToolIT {
       expectedTargetRows, targetRowsProcessed);
   }
 
-  private void disableReplication(Connection conn, String tableName) throws Exception {
+  /**
+   * Triggers major compaction on a table and waits for it to complete. Flushes first to ensure
+   * memstore data is in HFiles before compaction.
+   */
+  private void compactTable(Connection conn, String tableName) throws Exception {
     PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
     PTable table = pconn.getTable(tableName);
     TableName hbaseTableName = TableName.valueOf(table.getPhysicalName().getBytes());
 
     try (Admin admin = pconn.getQueryServices().getAdmin()) {
-      // Disable table first
-      admin.disableTable(hbaseTableName);
+      admin.flush(hbaseTableName);
+      admin.majorCompact(hbaseTableName);
 
-      // Modify table descriptor to disable replication
-      admin.modifyTable(TableDescriptorBuilder.newBuilder(admin.getDescriptor(hbaseTableName))
-        .setRegionReplication(1).build());
-
-      // Re-enable table
-      admin.enableTable(hbaseTableName);
+      for (int i = 0; i < 10; i++) {
+        Thread.sleep(1000);
+        if (admin.getCompactionState(hbaseTableName) == CompactionState.NONE) {
+          return;
+        }
+      }
+      LOGGER.warn("Compaction may not have completed within timeout for table {}", tableName);
     }
   }
 

@@ -418,7 +418,7 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
           return rebuildIndices(s, region, scan, env);
         }
       });
-    } else if (ScanUtil.isSyncTableChunkFormation(scan)) {
+    } else if (ScanUtil.isSyncTableChunkFormationEnabled(scan)) {
       return User.runAsLoginUser(new PrivilegedExceptionAction<RegionScanner>() {
         @Override
         public RegionScanner run() throws Exception {

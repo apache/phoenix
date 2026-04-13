@@ -18,7 +18,6 @@
 package org.apache.phoenix.mapreduce.util;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.util.SHA256DigestUtil;
 import org.bouncycastle.crypto.digests.SHA256Digest;
@@ -39,8 +38,7 @@ public class SHA256DigestUtilTest {
     byte[] encoded = SHA256DigestUtil.encodeDigestState(digest);
 
     Assert.assertNotNull("Encoded state should not be null", encoded);
-    Assert.assertTrue("Encoded state should have length prefix + state data",
-      encoded.length > Bytes.SIZEOF_INT);
+    Assert.assertTrue("Encoded state should have data", encoded.length > 0);
   }
 
   @Test
@@ -53,12 +51,7 @@ public class SHA256DigestUtilTest {
     byte[] encoded = SHA256DigestUtil.encodeDigestState(digest);
 
     Assert.assertNotNull("Encoded state should not be null", encoded);
-    // Extract length prefix
-    ByteBuffer buffer = ByteBuffer.wrap(encoded);
-    int stateLength = buffer.getInt();
-    Assert.assertTrue("State length should be positive", stateLength > 0);
-    Assert.assertEquals("Encoded length should match length prefix + state",
-      Bytes.SIZEOF_INT + stateLength, encoded.length);
+    Assert.assertTrue("Encoded state should have data", encoded.length > 0);
   }
 
   @Test
@@ -111,75 +104,34 @@ public class SHA256DigestUtilTest {
   public void testDecodeDigestStateEmptyByteArray() {
     try {
       SHA256DigestUtil.decodeDigestState(new byte[0]);
-      Assert.fail("Should throw IOException for empty byte array");
-    } catch (IOException e) {
-      // Expected - empty array can't contain a valid 4-byte length prefix
-    }
-  }
-
-  @Test
-  public void testDecodeDigestStateTooShort() {
-    // Only 3 bytes - less than the 4-byte length prefix
-    byte[] tooShort = new byte[] { 0x01, 0x02, 0x03 };
-
-    try {
-      SHA256DigestUtil.decodeDigestState(tooShort);
-      Assert.fail("Should throw IOException for too short byte array");
-    } catch (IOException e) {
-      // Expected
-    }
-  }
-
-  @Test
-  public void testDecodeDigestStateMaliciousLargeLength() {
-    // Create a byte array with malicious large length prefix
-    ByteBuffer buffer = ByteBuffer.allocate(Bytes.SIZEOF_INT);
-    buffer.putInt(SHA256DigestUtil.MAX_SHA256_DIGEST_STATE_SIZE + 1);
-
-    try {
-      SHA256DigestUtil.decodeDigestState(buffer.array());
-      Assert.fail(
-        "Should throw IllegalArgumentException for state size exceeding MAX_SHA256_DIGEST_STATE_SIZE");
+      Assert.fail("Should throw IllegalArgumentException for empty byte array");
     } catch (IllegalArgumentException e) {
-      Assert.assertTrue("Error message should mention invalid state length",
-        e.getMessage().contains("Invalid SHA256 state length"));
-      Assert.assertTrue("Error message should show expected max size",
-        e.getMessage().contains(String.valueOf(SHA256DigestUtil.MAX_SHA256_DIGEST_STATE_SIZE)));
+      Assert.assertTrue("Error message should mention empty", e.getMessage().contains("empty"));
     } catch (IOException e) {
-      Assert.fail("Should throw IllegalArgumentException for security check failure");
+      Assert.fail("Should throw IllegalArgumentException, not IOException");
     }
   }
 
   @Test
-  public void testDecodeDigestStateNegativeLength() {
-    // Create a byte array with negative length prefix
-    ByteBuffer buffer = ByteBuffer.allocate(Bytes.SIZEOF_INT);
-    buffer.putInt(-1);
-
-    try {
-      SHA256DigestUtil.decodeDigestState(buffer.array());
-      Assert.fail("Should throw exception for negative length");
-    } catch (Exception e) {
-      // Expected - either IllegalArgumentException or IOException
-    }
-  }
-
-  @Test
-  public void testDecodeDigestStateLengthMismatch() {
-    // Create encoded state with length that doesn't match actual data
+  public void testDecodeDigestStateCorruptedData() {
     SHA256Digest digest = new SHA256Digest();
     digest.update("test".getBytes(), 0, 4);
     byte[] encoded = SHA256DigestUtil.encodeDigestState(digest);
 
-    // Corrupt the length prefix to be larger than actual state
-    ByteBuffer buffer = ByteBuffer.wrap(encoded);
-    buffer.putInt(encoded.length); // Set length larger than actual state size
+    // Corrupt bytes in the internal hash state region of the encoded format
+    encoded[4] ^= 0xFF;
+    encoded[5] ^= 0xFF;
 
     try {
-      SHA256DigestUtil.decodeDigestState(encoded);
-      Assert.fail("Should throw IOException for length mismatch");
-    } catch (IOException e) {
-      // Expected
+      SHA256Digest decoded = SHA256DigestUtil.decodeDigestState(encoded);
+      // BouncyCastle may accept corrupted data but produce wrong results
+      // Verify it doesn't match the original
+      byte[] originalHash = SHA256DigestUtil.finalizeDigestToChecksum(digest);
+      byte[] corruptedHash = SHA256DigestUtil.finalizeDigestToChecksum(decoded);
+      Assert.assertNotEquals("Corrupted state should not produce same hash",
+        Bytes.toStringBinary(originalHash), Bytes.toStringBinary(corruptedHash));
+    } catch (Exception e) {
+      // Also acceptable - BouncyCastle may reject corrupted state
     }
   }
 
@@ -284,20 +236,6 @@ public class SHA256DigestUtilTest {
   }
 
   @Test
-  public void testEncodedStateSizeWithinLimits() {
-    SHA256Digest digest = new SHA256Digest();
-    // Hash large data
-    for (int i = 0; i < 1000; i++) {
-      digest.update("test data chunk".getBytes(), 0, 15);
-    }
-
-    byte[] encoded = SHA256DigestUtil.encodeDigestState(digest);
-
-    Assert.assertTrue("Encoded state should be within MAX_SHA256_DIGEST_STATE_SIZE limit",
-      encoded.length <= Bytes.SIZEOF_INT + SHA256DigestUtil.MAX_SHA256_DIGEST_STATE_SIZE);
-  }
-
-  @Test
   public void testEmptyDigestFinalization() {
     SHA256Digest emptyDigest = new SHA256Digest();
 
@@ -321,29 +259,6 @@ public class SHA256DigestUtilTest {
 
     Assert.assertNotNull("Hash of large data should not be null", hash);
     Assert.assertEquals("SHA-256 hash should always be 32 bytes", 32, hash.length);
-  }
-
-  @Test
-  public void testStateSizeConstant() {
-    // Verify the constant is reasonable for SHA-256 state
-    Assert.assertTrue("MAX_SHA256_DIGEST_STATE_SIZE should be at least 96 bytes", true);
-    Assert.assertTrue("MAX_SHA256_DIGEST_STATE_SIZE should not be excessively large", true);
-  }
-
-  @Test
-  public void testEncodedStateLengthPrefixFormat() {
-    SHA256Digest digest = new SHA256Digest();
-    digest.update("test".getBytes(), 0, 4);
-
-    byte[] encoded = SHA256DigestUtil.encodeDigestState(digest);
-
-    // Extract and verify length prefix
-    ByteBuffer buffer = ByteBuffer.wrap(encoded);
-    int lengthPrefix = buffer.getInt();
-
-    Assert.assertEquals("Length prefix should match actual state size", lengthPrefix,
-      encoded.length - Bytes.SIZEOF_INT);
-    Assert.assertTrue("Length prefix should be positive", lengthPrefix > 0);
   }
 
   @Test

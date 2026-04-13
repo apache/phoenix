@@ -31,18 +31,18 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
  * InputFormat designed for PhoenixSyncTableTool that generates splits based on HBase region
@@ -50,7 +50,7 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * resumable sync jobs. Uses {@link PhoenixNoOpSingleRecordReader} to invoke the mapper once per
  * split (region).
  */
-public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
+public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixSyncTableInputFormat.class);
 
@@ -69,9 +69,9 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
    * @param split Input Split
    * @return A PhoenixNoOpSingleRecordReader instance
    */
-  @SuppressWarnings("rawtypes")
   @Override
-  public RecordReader createRecordReader(InputSplit split, TaskAttemptContext context) {
+  public RecordReader<NullWritable, DBWritable> createRecordReader(InputSplit split,
+    TaskAttemptContext context) {
     return new PhoenixNoOpSingleRecordReader();
   }
 
@@ -82,10 +82,10 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
   @Override
   public List<InputSplit> getSplits(JobContext context) throws IOException, InterruptedException {
     Configuration conf = context.getConfiguration();
-    String tableName = PhoenixConfigurationUtil.getPhoenixSyncTableName(conf);
-    String targetZkQuorum = PhoenixConfigurationUtil.getPhoenixSyncTableTargetZkQuorum(conf);
-    Long fromTime = PhoenixConfigurationUtil.getPhoenixSyncTableFromTime(conf);
-    Long toTime = PhoenixConfigurationUtil.getPhoenixSyncTableToTime(conf);
+    String tableName = PhoenixSyncTableTool.getPhoenixSyncTableName(conf);
+    String targetZkQuorum = PhoenixSyncTableTool.getPhoenixSyncTableTargetZkQuorum(conf);
+    Long fromTime = PhoenixSyncTableTool.getPhoenixSyncTableFromTime(conf);
+    Long toTime = PhoenixSyncTableTool.getPhoenixSyncTableToTime(conf);
     List<InputSplit> allSplits = super.getSplits(context);
     if (allSplits == null || allSplits.isEmpty()) {
       throw new IOException(String.format(
@@ -112,14 +112,14 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
       completedRegions.size(), tableName, unprocessedSplits.size());
 
     // Coalesce splits to reduce mapper count and avoid hotspotting
-    boolean enableCoalescing = conf.getBoolean(
-      PhoenixConfigurationUtil.PHOENIX_SYNC_TABLE_ENABLE_SPLIT_COALESCING,
-      PhoenixConfigurationUtil.DEFAULT_PHOENIX_SYNC_TABLE_ENABLE_SPLIT_COALESCING);
+    boolean enableSplitCoalescing = conf.getBoolean(
+      PhoenixSyncTableTool.PHOENIX_SYNC_TABLE_SPLIT_COALESCING,
+        PhoenixSyncTableTool.DEFAULT_PHOENIX_SYNC_TABLE_SPLIT_COALESCING);
 
-    if (enableCoalescing && unprocessedSplits.size() > 1) {
+    if (enableSplitCoalescing && unprocessedSplits.size() > 1) {
       try {
         List<InputSplit> coalescedSplits = coalesceSplits(context, unprocessedSplits);
-        LOGGER.info("Split coalescing: {} unprocessed splits -> {} coalesced splits for table {}",
+        LOGGER.info("Split coalescing: {} unprocessed splits {} coalesced splits for table {}",
           unprocessedSplits.size(), coalescedSplits.size(), tableName);
         return coalescedSplits;
       } catch (Exception e) {
@@ -137,12 +137,13 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
    */
   private List<KeyRange> queryCompletedMapperRegions(Configuration conf, String tableName,
     String targetZkQuorum, Long fromTime, Long toTime) throws SQLException {
+    String tenantId = PhoenixConfigurationUtil.getTenantId(conf);
     List<KeyRange> completedRegions = new ArrayList<>();
     try (Connection conn = ConnectionUtil.getInputConnection(conf)) {
       PhoenixSyncTableOutputRepository repository = new PhoenixSyncTableOutputRepository(conn);
-      List<PhoenixSyncTableOutputRow> completedRows =
-        repository.getProcessedMapperRegions(tableName, targetZkQuorum, fromTime, toTime);
-      for (PhoenixSyncTableOutputRow row : completedRows) {
+      List<PhoenixSyncTableCheckpointOutputRow> completedRows =
+        repository.getProcessedMapperRegions(tableName, targetZkQuorum, fromTime, toTime, tenantId);
+      for (PhoenixSyncTableCheckpointOutputRow row : completedRows) {
         KeyRange keyRange = KeyRange.getKeyRange(row.getStartRowKey(), row.getEndRowKey());
         completedRegions.add(keyRange);
       }
@@ -156,7 +157,6 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
    * @param completedRegions Regions already verified (from checkpoint table)
    * @return Splits that need processing
    */
-  @VisibleForTesting
   List<InputSplit> filterCompletedSplits(List<InputSplit> allSplits,
     List<KeyRange> completedRegions) {
     allSplits.sort((s1, s2) -> {
@@ -173,6 +173,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
       PhoenixInputSplit split = (PhoenixInputSplit) allSplits.get(splitIdx);
       KeyRange splitRange = split.getKeyRange();
       KeyRange completedRange = completedRegions.get(completedIdx);
+      // Both splitRange and completedRange start key would be inclusive and end key exclusive
       byte[] splitStart = splitRange.getLowerRange();
       byte[] splitEnd = splitRange.getUpperRange();
       byte[] completedStart = completedRange.getLowerRange();
@@ -248,9 +249,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
   private List<InputSplit> coalesceSplits(JobContext context, List<InputSplit> unprocessedSplits)
       throws IOException, SQLException, InterruptedException {
     Configuration conf = context.getConfiguration();
-    String tableName = PhoenixConfigurationUtil.getPhoenixSyncTableName(conf);
-
-    // Get physical table name and RegionLocator
+    String tableName = PhoenixSyncTableTool.getPhoenixSyncTableName(conf);
     Connection conn = ConnectionUtil.getInputConnection(conf);
     PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
     byte[] physicalTableName = pConn.getTable(tableName).getPhysicalName().getBytes();
@@ -276,8 +275,6 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
         // Sort splits by start key for sequential processing
         serverSplits.sort((s1, s2) ->
           Bytes.compareTo(s1.getKeyRange().getLowerRange(), s2.getKeyRange().getLowerRange()));
-
-        // Calculate total size for logging
         long totalSize = 0;
         for (PhoenixInputSplit split : serverSplits) {
           totalSize += split.getLength();
@@ -314,13 +311,11 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat {
     for (InputSplit split : splits) {
       PhoenixInputSplit pSplit = (PhoenixInputSplit) split;
       KeyRange keyRange = pSplit.getKeyRange();
-
-      // Get region location for this key range using HBase API
       HRegionLocation regionLocation = regionLocator.getRegionLocation(
         keyRange.getLowerRange(),
-        false // useCache
+        false
       );
-      String serverName = regionLocation.getServerName().getHostAndPort();
+      String serverName = regionLocation.getServerName().getAddress().toString();
       splitsByServer.computeIfAbsent(serverName, k -> new ArrayList<>()).add(pSplit);
       LOGGER.debug("Split {} assigned to server {}",
         Bytes.toStringBinary(keyRange.getLowerRange()), serverName);
