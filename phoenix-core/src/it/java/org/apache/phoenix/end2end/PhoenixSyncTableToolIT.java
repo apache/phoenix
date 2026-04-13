@@ -182,29 +182,16 @@ public class PhoenixSyncTableToolIT {
     Job job = runSyncToolWithChunkSize(uniqueTableName, 1, conf);
     SyncCountersResult counters = getSyncCounters(job);
 
-    // Validate that coalescing actually reduced mapper count
-    // With coalescing enabled on single RegionServer: all 4 regions processed by 1 mapper
-    // Without coalescing: would be 4 mappers (one per region)
-    assertEquals("INPUT_RECORDS should be 1 with coalescing (all regions coalesced into one mapper)",
-      1, counters.inputRecords);
+    assertEquals("Should have only 1 Mapper task created with coalescing", 1, counters.taskCreated);
 
-    // Validate that data is correctly processed
-    // Differences on rows 2, 5, 8 affect 3 of the 4 regions, leaving 1 region verified
-    // Region 1 (-∞, 3): rows 1,2 → mismatched (row 2)
-    // Region 2 [3, 5): rows 3,4 → verified (no differences)
-    // Region 3 [5, 7): rows 5,6 → mismatched (row 5)
-    // Region 4 [7, +∞): rows 7,8,9,10 → mismatched (row 8)
     validateSyncCounters(counters, 10, 10, 7, 3);
     validateMapperCounters(counters, 1, 3);
 
     // Verify checkpoint entries are created correctly
-    // With coalescing: 4 region entries total (1 verified, 3 mismatched) + chunk entries
     List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
       queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
     validateCheckpointEntries(checkpointEntries, uniqueTableName, targetZkQuorum, 10, 10, 7, 3, 4,
       3, null);
-
-    LOGGER.info("Split coalescing test completed successfully - single mapper processed all regions");
   }
 
   @Test
@@ -2603,7 +2590,7 @@ public class PhoenixSyncTableToolIT {
     public final long chunksVerified;
     public final long mappersVerified;
     public final long mappersMismatched;
-    public final long inputRecords;
+    public final long taskCreated;
 
     SyncCountersResult(Counters counters) {
       this.sourceRowsProcessed =
@@ -2614,7 +2601,7 @@ public class PhoenixSyncTableToolIT {
       this.chunksVerified = counters.findCounter(SyncCounters.CHUNKS_VERIFIED).getValue();
       this.mappersVerified = counters.findCounter(SyncCounters.MAPPERS_VERIFIED).getValue();
       this.mappersMismatched = counters.findCounter(SyncCounters.MAPPERS_MISMATCHED).getValue();
-      this.inputRecords = counters.findCounter(PhoenixJobCounters.INPUT_RECORDS).getValue();
+      this.taskCreated = counters.findCounter(SyncCounters.TASK_CREATED).getValue();
     }
 
     public void logCounters(String testName) {

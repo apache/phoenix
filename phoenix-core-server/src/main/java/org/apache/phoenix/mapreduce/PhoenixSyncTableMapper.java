@@ -67,6 +67,7 @@ public class PhoenixSyncTableMapper
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixSyncTableMapper.class);
 
   public enum SyncCounters {
+    TASK_CREATED,
     MAPPERS_VERIFIED,
     MAPPERS_MISMATCHED,
     CHUNKS_VERIFIED,
@@ -98,6 +99,7 @@ public class PhoenixSyncTableMapper
   protected void setup(Context context) throws InterruptedException {
     try {
       super.setup(context);
+      context.getCounter(SyncCounters.TASK_CREATED).increment(1);
       mapperStartTime = new Timestamp(System.currentTimeMillis());
       this.conf = context.getConfiguration();
       tableName = PhoenixSyncTableTool.getPhoenixSyncTableName(conf);

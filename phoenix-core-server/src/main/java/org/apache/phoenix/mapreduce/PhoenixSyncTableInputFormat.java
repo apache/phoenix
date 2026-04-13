@@ -101,11 +101,6 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
-    if (completedRegions.isEmpty()) {
-      LOGGER.info("No completed regions for table {} - processing all {} splits", tableName,
-        allSplits.size());
-      return allSplits;
-    }
 
     List<InputSplit> unprocessedSplits = filterCompletedSplits(allSplits, completedRegions);
     LOGGER.info("Found {} completed mapper regions for table {}, {} unprocessed splits remaining",
@@ -115,6 +110,9 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
     boolean enableSplitCoalescing = conf.getBoolean(
       PhoenixSyncTableTool.PHOENIX_SYNC_TABLE_SPLIT_COALESCING,
         PhoenixSyncTableTool.DEFAULT_PHOENIX_SYNC_TABLE_SPLIT_COALESCING);
+
+    LOGGER.info("Split coalescing enabled: {}, unprocessed splits: {} for table {}",
+      enableSplitCoalescing, unprocessedSplits.size(), tableName);
 
     if (enableSplitCoalescing && unprocessedSplits.size() > 1) {
       try {
@@ -159,6 +157,9 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
    */
   List<InputSplit> filterCompletedSplits(List<InputSplit> allSplits,
     List<KeyRange> completedRegions) {
+    if (completedRegions.isEmpty()) {
+      return allSplits;
+    }
     allSplits.sort((s1, s2) -> {
       PhoenixInputSplit ps1 = (PhoenixInputSplit) s1;
       PhoenixInputSplit ps2 = (PhoenixInputSplit) s2;

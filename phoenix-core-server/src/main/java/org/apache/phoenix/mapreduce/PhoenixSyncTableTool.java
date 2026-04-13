@@ -400,6 +400,8 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     }
     Counters counters = job.getCounters();
     if (counters != null) {
+      long taskCreated =
+          counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TASK_CREATED).getValue();
       long verifiedMappers =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_VERIFIED).getValue();
       long mismatchedMappers =
@@ -411,13 +413,14 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       long sourceRowsProcessed =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
       long targetRowsProcessed =
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED).getValue();
+          counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED)
+              .getValue();
       LOGGER.info(
-        "PhoenixSyncTable job completed, gathered counters are \n Verified Mappers: {}, \n"
-          + "Mismatched Mappers: {}, \n Chunks Verified: {}, \n"
-          + "Chunks Mismatched: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}",
-        verifiedMappers, mismatchedMappers, chunksVerified, chunksMismatched, sourceRowsProcessed,
-        targetRowsProcessed);
+          "PhoenixSyncTable job completed, gathered counters are \n Task Created: {}, \n Verified Mappers: {}, \n"
+              + "Mismatched Mappers: {}, \n Chunks Verified: {}, \n"
+              + "Chunks Mismatched: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}",
+          taskCreated, verifiedMappers, mismatchedMappers, chunksVerified, chunksMismatched,
+          sourceRowsProcessed, targetRowsProcessed);
     } else {
       LOGGER.warn("Unable to retrieve job counters for table {} - job may have failed "
         + "during initialization", qTable);
