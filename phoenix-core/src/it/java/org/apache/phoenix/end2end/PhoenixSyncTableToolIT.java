@@ -209,6 +209,39 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
+  public void testSyncTableWithConditionalTTLExpiredRows() throws Exception {
+    String ddl = "CREATE TABLE IF NOT EXISTS %s (" + "ID INTEGER NOT NULL PRIMARY KEY, "
+      + "NAME VARCHAR(50), NAME_VALUE BIGINT, UPDATED_DATE TIMESTAMP, " + "EXPIRED BOOLEAN"
+      + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, TTL='EXPIRED = TRUE' "
+      + "SPLIT ON (3, 5, 7)";
+    executeTableCreation(sourceConnection, String.format(ddl, uniqueTableName, 1));
+    executeTableCreation(targetConnection, String.format(ddl, uniqueTableName, 0));
+
+    // Insert 10 rows on source: rows 1-3 marked as expired, rows 4-10 as live
+    insertTestDataWithExpiredFlag(sourceConnection, uniqueTableName, 1, 3, true);
+    insertTestDataWithExpiredFlag(sourceConnection, uniqueTableName, 4, 10, false);
+
+    // Only non-expired rows (4-10) are visible via Phoenix queries
+    waitForReplication(targetConnection, uniqueTableName, 7);
+
+    int sourceCount = getRowCount(sourceConnection, uniqueTableName);
+    int targetCount = getRowCount(targetConnection, uniqueTableName);
+    assertEquals("Source should see 7 live rows", 7, sourceCount);
+    assertEquals("Target should see 7 live rows", 7, targetCount);
+
+    // Introduce differences on 2 of the 7 live rows on target
+    upsertRowsOnTarget(targetConnection, uniqueTableName, new int[] { 5, 8 },
+      new String[] { "MODIFIED_5", "MODIFIED_8" });
+
+    // Run sync tool, TTL-expired rows (1-3) should be skipped on both source and target
+    Job job = runSyncTool(uniqueTableName);
+    SyncCountersResult counters = getSyncCounters(job);
+
+    validateSyncCounters(counters, 7, 7, 5, 2);
+    validateMapperCounters(counters, 1, 2);
+  }
+
+  @Test
   public void testSyncValidateIndexTable() throws Exception {
     // Create data table on both clusters with replication
     createTableOnBothClusters(sourceConnection, targetConnection, uniqueTableName);
@@ -2153,6 +2186,26 @@ public class PhoenixSyncTableToolIT {
   private void insertTestData(Connection conn, String tableName, List<Integer> ids)
     throws SQLException {
     insertTestData(conn, tableName, ids, System.currentTimeMillis());
+  }
+
+  /**
+   * Inserts test data with an EXPIRED boolean flag for conditional TTL testing.
+   */
+  private void insertTestDataWithExpiredFlag(Connection conn, String tableName, int startId,
+    int endId, boolean expired) throws SQLException {
+    String upsert = "UPSERT INTO " + tableName
+      + " (ID, NAME, NAME_VALUE, UPDATED_DATE, EXPIRED) VALUES (?, ?, ?, ?, ?)";
+    PreparedStatement stmt = conn.prepareStatement(upsert);
+    Timestamp ts = new Timestamp(System.currentTimeMillis());
+    for (int id = startId; id <= endId; id++) {
+      stmt.setInt(1, id);
+      stmt.setString(2, "NAME_" + id);
+      stmt.setLong(3, (long) id);
+      stmt.setTimestamp(4, ts);
+      stmt.setBoolean(5, expired);
+      stmt.executeUpdate();
+    }
+    conn.commit();
   }
 
   /**

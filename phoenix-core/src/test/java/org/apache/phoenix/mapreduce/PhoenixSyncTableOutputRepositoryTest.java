@@ -28,6 +28,9 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
+import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Status;
@@ -104,6 +107,18 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     PTable table =
       pconn.getTable(PhoenixSyncTableOutputRepository.SYNC_TABLE_CHECKPOINT_TABLE_NAME);
     assertEquals(QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, table.getEncodingScheme());
+  }
+
+  @Test
+  public void testCheckpointTableUsesSnappyCompression() throws Exception {
+    PhoenixConnection pconn = connection.unwrap(PhoenixConnection.class);
+    PTable table =
+      pconn.getTable(PhoenixSyncTableOutputRepository.SYNC_TABLE_CHECKPOINT_TABLE_NAME);
+    TableDescriptor td =
+      pconn.getQueryServices().getTableDescriptor(table.getPhysicalName().getBytes());
+    for (ColumnFamilyDescriptor cfd : td.getColumnFamilies()) {
+      assertEquals(Compression.Algorithm.SNAPPY, cfd.getCompressionType());
+    }
   }
 
   @Test

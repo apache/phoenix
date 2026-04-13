@@ -50,6 +50,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SHA256DigestUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -387,13 +388,14 @@ public class PhoenixSyncTableMapper
     byte[] continuedDigestState, boolean isStartKeyInclusive, boolean isEndKeyInclusive,
     boolean isTargetScan) throws IOException, SQLException {
     // Not using try-with-resources since ChunkScannerContext owns the table lifecycle
-    Table hTable =
-      conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(physicalTableName);
+    PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
+    Table hTable = phoenixConn.getQueryServices().getTable(physicalTableName);
     Scan scan =
       createChunkScan(startKey, endKey, isStartKeyInclusive, isEndKeyInclusive, isTargetScan);
     scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_FORMATION, TRUE_BYTES);
     scan.setAttribute(BaseScannerRegionObserverConstants.SKIP_REGION_BOUNDARY_CHECK, TRUE_BYTES);
     scan.setAttribute(BaseScannerRegionObserverConstants.UNGROUPED_AGG, TRUE_BYTES);
+    ScanUtil.setScanAttributesForPhoenixTTL(scan, pTable, phoenixConn);
     if (continuedDigestState != null && continuedDigestState.length > 0) {
       scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CONTINUED_DIGEST_STATE,
         continuedDigestState);
