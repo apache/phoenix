@@ -210,10 +210,12 @@ public class PhoenixSyncTableToolIT {
 
   @Test
   public void testSyncTableWithConditionalTTLExpiredRows() throws Exception {
+    // With IS_STRICT_TTL=false
     String ddl = "CREATE TABLE IF NOT EXISTS %s (" + "ID INTEGER NOT NULL PRIMARY KEY, "
       + "NAME VARCHAR(50), NAME_VALUE BIGINT, UPDATED_DATE TIMESTAMP, " + "EXPIRED BOOLEAN"
-      + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, TTL='EXPIRED = TRUE' "
-      + "SPLIT ON (3, 5, 7)";
+      + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, "
+      + "TTL='EXPIRED = TRUE', IS_STRICT_TTL=false "
+      + "SPLIT ON (5, 7, 9)";
     executeTableCreation(sourceConnection, String.format(ddl, uniqueTableName, 1));
     executeTableCreation(targetConnection, String.format(ddl, uniqueTableName, 0));
 
@@ -221,13 +223,12 @@ public class PhoenixSyncTableToolIT {
     insertTestDataWithExpiredFlag(sourceConnection, uniqueTableName, 1, 3, true);
     insertTestDataWithExpiredFlag(sourceConnection, uniqueTableName, 4, 10, false);
 
-    // Only non-expired rows (4-10) are visible via Phoenix queries
-    waitForReplication(targetConnection, uniqueTableName, 7);
+    waitForReplication(targetConnection, uniqueTableName, 10);
 
     int sourceCount = getRowCount(sourceConnection, uniqueTableName);
     int targetCount = getRowCount(targetConnection, uniqueTableName);
-    assertEquals("Source should see 7 live rows", 7, sourceCount);
-    assertEquals("Target should see 7 live rows", 7, targetCount);
+    assertEquals("Source should see 10 live rows", 10, sourceCount);
+    assertEquals("Target should see 10 live rows", 10, targetCount);
 
     // Introduce differences on 2 of the 7 live rows on target
     upsertRowsOnTarget(targetConnection, uniqueTableName, new int[] { 5, 8 },
@@ -238,7 +239,7 @@ public class PhoenixSyncTableToolIT {
     SyncCountersResult counters = getSyncCounters(job);
 
     validateSyncCounters(counters, 7, 7, 5, 2);
-    validateMapperCounters(counters, 1, 2);
+    validateMapperCounters(counters, 2, 2);
   }
 
   @Test
