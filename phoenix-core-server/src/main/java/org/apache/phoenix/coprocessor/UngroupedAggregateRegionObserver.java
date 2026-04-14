@@ -24,6 +24,7 @@ import static org.apache.phoenix.query.QueryConstants.SINGLE_COLUMN_FAMILY;
 import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
 import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.COMPACTION_UPDATE_STATS_ROW_COUNT;
 import static org.apache.phoenix.schema.stats.StatisticsCollectionRunTracker.CONCURRENT_UPDATE_STATS_ROW_COUNT;
+import static org.apache.phoenix.util.ScanUtil.getPageSizeMsForFilter;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -414,6 +415,14 @@ public class UngroupedAggregateRegionObserver extends BaseScannerRegionObserver
         @Override
         public RegionScanner run() throws Exception {
           return rebuildIndices(s, region, scan, env);
+        }
+      });
+    } else if (ScanUtil.isSyncTableChunkFormationEnabled(scan)) {
+      return User.runAsLoginUser(new PrivilegedExceptionAction<RegionScanner>() {
+        @Override
+        public RegionScanner run() throws Exception {
+          return new PhoenixSyncTableRegionScanner(s, region, scan, env,
+            UngroupedAggregateRegionObserver.this, getPageSizeMsForFilter(scan));
         }
       });
     }

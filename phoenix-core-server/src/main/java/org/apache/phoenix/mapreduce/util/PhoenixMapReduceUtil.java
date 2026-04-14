@@ -18,21 +18,29 @@
 package org.apache.phoenix.mapreduce.util;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.mapreduce.PhoenixMultiViewInputFormat;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
 import org.apache.phoenix.mapreduce.PhoenixTTLTool;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 
 /**
  * Utility class for setting Configuration parameters for the Map Reduce job
  */
 public final class PhoenixMapReduceUtil {
+
+  public static final String INVALID_TIME_RANGE_EXCEPTION_MESSAGE = "Invalid time range for table";
 
   private PhoenixMapReduceUtil() {
 
@@ -239,4 +247,51 @@ public final class PhoenixMapReduceUtil {
     PhoenixConfigurationUtil.setTenantId(job.getConfiguration(), tenantId);
   }
 
+  /**
+   * Validates that start and end times are in the past and start < end.
+   * @param startTime Start timestamp in millis (nullable, defaults to 0)
+   * @param endTime   End timestamp in millis (nullable, defaults to current time)
+   * @param tableName Table name for error messages
+   * @throws IllegalArgumentException if time range is invalid
+   */
+  public static void validateTimeRange(Long startTime, Long endTime, String tableName) {
+    long currentTime = EnvironmentEdgeManager.currentTimeMillis();
+    long st = (startTime == null) ? 0L : startTime;
+    long et = (endTime == null) ? currentTime : endTime;
+
+    if (et > currentTime || st >= et) {
+      throw new IllegalArgumentException(String.format(
+        "%s %s: start and end times must be in the past "
+          + "and start < end. Start: %d, End: %d, Current: %d",
+        INVALID_TIME_RANGE_EXCEPTION_MESSAGE, tableName, st, et, currentTime));
+    }
+  }
+
+  /**
+   * Validates that a table is suitable for MR operations. Checks table existence, type, and state.
+   * @param connection         Phoenix connection
+   * @param qualifiedTableName Qualified table name
+   * @param allowViews         Whether to allow VIEW tables
+   * @param allowIndexes       Whether to allow INDEX tables
+   * @return PTable instance
+   * @throws SQLException             if connection fails
+   * @throws IllegalArgumentException if validation fails
+   */
+  public static PTable getPTableWithValidation(Connection connection, String qualifiedTableName,
+    boolean allowViews, boolean allowIndexes) throws SQLException {
+    PTable pTable = connection.unwrap(PhoenixConnection.class).getTableNoCache(qualifiedTableName);
+
+    if (pTable == null) {
+      throw new IllegalArgumentException(
+        String.format("Table %s does not exist", qualifiedTableName));
+    } else if (!allowViews && pTable.getType() == PTableType.VIEW) {
+      throw new IllegalArgumentException(
+        String.format("Cannot run MR job on VIEW table %s", qualifiedTableName));
+    } else if (!allowIndexes && pTable.getType() == PTableType.INDEX) {
+      throw new IllegalArgumentException(
+        String.format("Cannot run MR job on INDEX table %s directly", qualifiedTableName));
+    }
+
+    return pTable;
+  }
 }

@@ -296,9 +296,6 @@ public class IndexTool extends Configured implements Tool {
 
   public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
-  public static final String INVALID_TIME_RANGE_EXCEPTION_MESSAGE = "startTime is greater than "
-    + "or equal to endTime " + "or either of them are set in the future; IndexTool can't proceed.";
-
   public static final String FEATURE_NOT_APPLICABLE =
     "start-time/end-time and retry verify feature are only "
       + "applicable for local or non-transactional global indexes";
@@ -925,9 +922,6 @@ public class IndexTool extends Configured implements Tool {
       lastVerifyTime = new Long(cmdLine.getOptionValue(RETRY_VERIFY_OPTION.getOpt()));
       validateLastVerifyTime();
     }
-    if (isTimeRangeSet(startTime, endTime)) {
-      validateTimeRange(startTime, endTime);
-    }
     if (verify) {
       String value = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
       indexVerifyType = IndexVerifyType.fromValue(value);
@@ -952,6 +946,9 @@ public class IndexTool extends Configured implements Tool {
     isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
     useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
     shouldDeleteBeforeRebuild = cmdLine.hasOption(DELETE_ALL_AND_REBUILD_OPTION.getOpt());
+    if (isTimeRangeSet(startTime, endTime)) {
+      PhoenixMapReduceUtil.validateTimeRange(startTime, endTime, qDataTable);
+    }
     return 0;
   }
 
@@ -979,15 +976,6 @@ public class IndexTool extends Configured implements Tool {
       try (ResultScanner rs = hIndexToolTable.getScanner(s)) {
         return rs.next() != null;
       }
-    }
-  }
-
-  public static void validateTimeRange(Long sTime, Long eTime) {
-    Long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-    Long st = (sTime == null) ? 0 : sTime;
-    Long et = (eTime == null) ? currentTime : eTime;
-    if (st.compareTo(currentTime) > 0 || et.compareTo(currentTime) > 0 || st.compareTo(et) >= 0) {
-      throw new RuntimeException(INVALID_TIME_RANGE_EXCEPTION_MESSAGE);
     }
   }
 
