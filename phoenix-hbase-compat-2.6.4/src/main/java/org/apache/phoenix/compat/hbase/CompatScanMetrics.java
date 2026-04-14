@@ -35,7 +35,7 @@ public class CompatScanMetrics {
     private final Map<String, Long> metrics;
 
     public RegionMetricsInfo(String encodedRegionName, String serverName,
-        Map<String, Long> metrics) {
+      Map<String, Long> metrics) {
       this.encodedRegionName = encodedRegionName;
       this.serverName = serverName;
       this.metrics = metrics;
@@ -53,6 +53,7 @@ public class CompatScanMetrics {
       return metrics;
     }
   }
+
   public static final String FS_READ_TIME_METRIC_NAME =
     ServerSideScanMetrics.FS_READ_TIME_METRIC_NAME;
   public static final String BYTES_READ_FROM_FS_METRIC_NAME =
@@ -111,18 +112,15 @@ public class CompatScanMetrics {
   }
 
   public static List<RegionMetricsInfo> collectRegionMetrics(ScanMetrics scanMetrics) {
-    Map<ScanMetricsRegionInfo, Map<String, Long>> byRegion =
-        scanMetrics.collectMetricsByRegion();
+    Map<ScanMetricsRegionInfo, Map<String, Long>> byRegion = scanMetrics.collectMetricsByRegion();
     if (byRegion == null || byRegion.isEmpty()) {
       return Collections.emptyList();
     }
     List<RegionMetricsInfo> result = new ArrayList<>();
     for (Map.Entry<ScanMetricsRegionInfo, Map<String, Long>> entry : byRegion.entrySet()) {
       ScanMetricsRegionInfo regionInfo = entry.getKey();
-      result.add(new RegionMetricsInfo(
-          regionInfo.getEncodedRegionName(),
-          regionInfo.getServerName().toString(),
-          entry.getValue()));
+      result.add(new RegionMetricsInfo(regionInfo.getEncodedRegionName(),
+        regionInfo.getServerName().toString(), entry.getValue()));
     }
     return result;
   }

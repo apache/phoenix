@@ -180,8 +180,8 @@ public class ScanMetricsHolder {
     this.scanMetricMap = scanMetricMap;
   }
 
-  public void setScanMetricsByRegion(
-      List<CompatScanMetrics.RegionMetricsInfo> scanMetricsByRegion) {
+  public void
+    setScanMetricsByRegion(List<CompatScanMetrics.RegionMetricsInfo> scanMetricsByRegion) {
     this.scanMetricsByRegion = scanMetricsByRegion;
   }
 

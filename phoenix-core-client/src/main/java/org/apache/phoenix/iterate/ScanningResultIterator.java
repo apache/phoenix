@@ -29,12 +29,12 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.query.QueryServices;
@@ -107,8 +107,8 @@ public class ScanningResultIterator implements ResultIterator {
       PhoenixConnection connection = context.getConnection();
       int slowestScanMetricsCount = connection.getSlowestScanMetricsCount();
       if (slowestScanMetricsCount > 0) {
-        scanMetricsHolder.setScanMetricsByRegion(
-            CompatScanMetrics.collectRegionMetrics(scanMetrics));
+        scanMetricsHolder
+          .setScanMetricsByRegion(CompatScanMetrics.collectRegionMetrics(scanMetrics));
         context.getSlowestScanMetricsQueue().add(scanMetricsHolder);
       }
 
