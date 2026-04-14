@@ -1887,13 +1887,13 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
   private static class ExecutableAlterIndexStatement extends AlterIndexStatement
     implements CompilableStatement {
 
-    public ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName,
+    ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName,
       boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
       ListMultimap<String, Pair<String, Object>> props) {
       super(indexTableNode, dataTableName, ifExists, state, isRebuildAll, async, props);
     }
 
-    public ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName,
+    ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName,
       boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
       ListMultimap<String, Pair<String, Object>> props, IndexConsistency indexConsistency) {
       super(indexTableNode, dataTableName, ifExists, state, isRebuildAll, async, props,

@@ -198,9 +198,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
                   }
                 }
                 if (
-                  isEmptyCQ || (changeBuilder.isDataRowStateInScope()
+                  isEmptyCQ || changeBuilder.isDataRowStateInScope()
                     && !changeBuilder.isChangeImageInScope() && !changeBuilder.isPreImageInScope()
-                    && !changeBuilder.isPostImageInScope())
+                    && !changeBuilder.isPostImageInScope()
                 ) {
                   continue;
                 }

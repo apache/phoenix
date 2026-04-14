@@ -259,7 +259,7 @@ public class TransformClient {
       .setImmutableRows(table.isImmutableRows())
       .setIsChangeDetectionEnabled(table.isChangeDetectionEnabled())
       .setIndexType(table.getIndexType()).setIndexConsistency(table.getIndexConsistency())
-      .setIndexes(Collections.<PTable> emptyList()).setName(newTableName)
+      .setIndexes(Collections.emptyList()).setName(newTableName)
       .setMultiTenant(table.isMultiTenant()).setParentName(table.getParentName())
       .setParentSchemaName(table.getParentSchemaName())
       .setNamespaceMapped(table.isNamespaceMapped()).setSchemaName(table.getSchemaName())
