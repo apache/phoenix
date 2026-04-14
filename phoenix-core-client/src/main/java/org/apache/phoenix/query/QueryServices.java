@@ -221,10 +221,8 @@ public interface QueryServices extends SQLCloseable {
   // Timeout config for PhoenixSyncTableTool
   String SYNC_TABLE_QUERY_TIMEOUT_ATTRIB = "phoenix.sync.table.query.timeout";
   String SYNC_TABLE_RPC_TIMEOUT_ATTRIB = "phoenix.sync.table.rpc.timeout";
-  String SYNC_TABLE_CLIENT_SCANNER_TIMEOUT_ATTRIB =
-    "phoenix.sync.table.client.scanner.timeout";
-  String SYNC_TABLE_RPC_RETRIES_COUNTER =
-    "phoenix.sync.table.rpc.retries.counter";
+  String SYNC_TABLE_CLIENT_SCANNER_TIMEOUT_ATTRIB = "phoenix.sync.table.client.scanner.timeout";
+  String SYNC_TABLE_RPC_RETRIES_COUNTER = "phoenix.sync.table.rpc.retries.counter";
 
   // Retries when doing server side writes to SYSTEM.CATALOG
   public static final String METADATA_WRITE_RETRIES_NUMBER = "phoenix.metadata.rpc.retries.number";

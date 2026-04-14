@@ -42,11 +42,10 @@ import java.util.Objects;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
-import org.apache.hadoop.hbase.client.CompactionState;
 import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -64,8 +63,8 @@ import org.apache.phoenix.mapreduce.PhoenixSyncTableOutputRepository;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
@@ -196,8 +195,8 @@ public class PhoenixSyncTableToolIT {
     deleteRows(targetConnection, uniqueTableName, 1, 4, 9);
 
     // Verify row counts differ between source and target
-    int sourceCount = getRowCount(sourceConnection, uniqueTableName);
-    int targetCount = getRowCount(targetConnection, uniqueTableName);
+    long sourceCount = TestUtil.getRowCount(sourceConnection, uniqueTableName);
+    long targetCount = TestUtil.getRowCount(targetConnection, uniqueTableName);
     assertEquals("Source should have 10 rows", 10, sourceCount);
     assertEquals("Target should have 7 rows (3 deleted)", 7, targetCount);
 
@@ -214,8 +213,7 @@ public class PhoenixSyncTableToolIT {
     String ddl = "CREATE TABLE IF NOT EXISTS %s (" + "ID INTEGER NOT NULL PRIMARY KEY, "
       + "NAME VARCHAR(50), NAME_VALUE BIGINT, UPDATED_DATE TIMESTAMP, " + "EXPIRED BOOLEAN"
       + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, "
-      + "TTL='EXPIRED = TRUE', IS_STRICT_TTL=false "
-      + "SPLIT ON (5, 7, 9)";
+      + "TTL='EXPIRED = TRUE', IS_STRICT_TTL=false " + "SPLIT ON (5, 7, 9)";
     executeTableCreation(sourceConnection, String.format(ddl, uniqueTableName, 1));
     executeTableCreation(targetConnection, String.format(ddl, uniqueTableName, 0));
 
@@ -225,8 +223,8 @@ public class PhoenixSyncTableToolIT {
 
     waitForReplication(targetConnection, uniqueTableName, 10);
 
-    int sourceCount = getRowCount(sourceConnection, uniqueTableName);
-    int targetCount = getRowCount(targetConnection, uniqueTableName);
+    long sourceCount = TestUtil.getRowCount(sourceConnection, uniqueTableName);
+    long targetCount = TestUtil.getRowCount(targetConnection, uniqueTableName);
     assertEquals("Source should see 10 live rows", 10, sourceCount);
     assertEquals("Target should see 10 live rows", 10, targetCount);
 
@@ -246,10 +244,9 @@ public class PhoenixSyncTableToolIT {
   public void testSyncTableWithConditionalTTLExpiredRowsCompact() throws Exception {
     // With IS_STRICT_TTL=false
     String ddl = "CREATE TABLE IF NOT EXISTS %s (" + "ID INTEGER NOT NULL PRIMARY KEY, "
-        + "NAME VARCHAR(50), NAME_VALUE BIGINT, UPDATED_DATE TIMESTAMP, " + "EXPIRED BOOLEAN"
-        + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, "
-        + "TTL='EXPIRED = TRUE', IS_STRICT_TTL=false "
-        + "SPLIT ON (5, 7, 9)";
+      + "NAME VARCHAR(50), NAME_VALUE BIGINT, UPDATED_DATE TIMESTAMP, " + "EXPIRED BOOLEAN"
+      + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, "
+      + "TTL='EXPIRED = TRUE', IS_STRICT_TTL=false " + "SPLIT ON (5, 7, 9)";
     executeTableCreation(sourceConnection, String.format(ddl, uniqueTableName, 1));
     executeTableCreation(targetConnection, String.format(ddl, uniqueTableName, 0));
 
@@ -259,8 +256,8 @@ public class PhoenixSyncTableToolIT {
 
     waitForReplication(targetConnection, uniqueTableName, 10);
 
-    int sourceCount = getRowCount(sourceConnection, uniqueTableName);
-    int targetCount = getRowCount(targetConnection, uniqueTableName);
+    long sourceCount = TestUtil.getRowCount(sourceConnection, uniqueTableName);
+    long targetCount = TestUtil.getRowCount(targetConnection, uniqueTableName);
     assertEquals("Source should see 10 live rows", 10, sourceCount);
     assertEquals("Target should see 10 live rows", 10, targetCount);
 
@@ -271,10 +268,10 @@ public class PhoenixSyncTableToolIT {
     validateSyncCounters(counters, 7, 7, 7, 0);
     validateMapperCounters(counters, 4, 0);
 
-    compactTable(targetConnection, uniqueTableName);
+    flushAndMajorCompact(CLUSTERS.getHBaseCluster2(), uniqueTableName);
 
-    int sourceCountPostCompact = getRowCount(sourceConnection, uniqueTableName);
-    int targetCountPostCompact = getRowCount(targetConnection, uniqueTableName);
+    long sourceCountPostCompact = TestUtil.getRowCount(sourceConnection, uniqueTableName);
+    long targetCountPostCompact = TestUtil.getRowCount(targetConnection, uniqueTableName);
     assertEquals("Source should see 10 live rows", 10, sourceCountPostCompact);
     assertEquals("Target should see 7 live rows", 7, targetCountPostCompact);
 
@@ -979,8 +976,8 @@ public class PhoenixSyncTableToolIT {
     insertTestData(targetConnection, uniqueTableName, evenIds);
 
     // Verify target now has more rows than source
-    int sourceCount = getRowCount(sourceConnection, uniqueTableName);
-    int targetCount = getRowCount(targetConnection, uniqueTableName);
+    long sourceCount = TestUtil.getRowCount(sourceConnection, uniqueTableName);
+    long targetCount = TestUtil.getRowCount(targetConnection, uniqueTableName);
     assertEquals("Source should have 10 rows (odd numbers 1-19)", 10, sourceCount);
     assertEquals("Target should have 15 rows (odd 1-19 + even 2-10)", 15, targetCount);
 
@@ -1113,8 +1110,8 @@ public class PhoenixSyncTableToolIT {
     insertTestData(targetConnection, uniqueTableName, 1, 10, timestamp2);
 
     // Verify both have same row count and same values
-    int sourceCount = getRowCount(sourceConnection, uniqueTableName);
-    int targetCount = getRowCount(targetConnection, uniqueTableName);
+    long sourceCount = TestUtil.getRowCount(sourceConnection, uniqueTableName);
+    long targetCount = TestUtil.getRowCount(targetConnection, uniqueTableName);
     assertEquals("Both should have 10 rows", sourceCount, targetCount);
 
     // Query and verify data values are identical (but timestamps differ)
@@ -1561,9 +1558,9 @@ public class PhoenixSyncTableToolIT {
     // Verify data is identical after replication
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
     assertEquals("Should have 10 rows on source", 10,
-      getRowCount(sourceConnection, uniqueTableName));
+      TestUtil.getRowCount(sourceConnection, uniqueTableName));
     assertEquals("Should have 10 rows on target", 10,
-      getRowCount(targetConnection, uniqueTableName));
+      TestUtil.getRowCount(targetConnection, uniqueTableName));
 
     // Insert extra row on source and then delete it to create a delete marker on source
     upsertRowsOnTarget(sourceConnection, uniqueTableName, new int[] { 100 },
@@ -1572,16 +1569,16 @@ public class PhoenixSyncTableToolIT {
     waitForReplication(targetConnection, uniqueTableName, 11);
 
     assertEquals("Should have 11 rows on target after insert", 11,
-      getRowCount(targetConnection, uniqueTableName));
+      TestUtil.getRowCount(targetConnection, uniqueTableName));
     assertEquals("Should have 11 rows on source after insert", 11,
-      getRowCount(sourceConnection, uniqueTableName));
+      TestUtil.getRowCount(sourceConnection, uniqueTableName));
 
     deleteRows(sourceConnection, uniqueTableName, 100);
     waitForReplication(targetConnection, uniqueTableName, 10);
     assertEquals("Should have 10 rows on target after deletion", 10,
-      getRowCount(targetConnection, uniqueTableName));
+      TestUtil.getRowCount(targetConnection, uniqueTableName));
     assertEquals("Should have 10 rows on source after deletion", 10,
-      getRowCount(sourceConnection, uniqueTableName));
+      TestUtil.getRowCount(sourceConnection, uniqueTableName));
 
     // Run sync tool without raw scan
     Job job1 = runSyncTool(uniqueTableName);
@@ -1604,7 +1601,7 @@ public class PhoenixSyncTableToolIT {
       .execute("ALTER TABLE " + uniqueTableName + " SET KEEP_DELETED_CELLS=false");
     sourceConnection.commit();
 
-    compactTable(sourceConnection, uniqueTableName);
+    flushAndMajorCompact(CLUSTERS.getHBaseCluster1(), uniqueTableName);
 
     // Run sync tool with --raw-scan again
     Job job3 = runSyncTool(uniqueTableName, "--raw-scan");
@@ -1623,20 +1620,20 @@ public class PhoenixSyncTableToolIT {
     // Verify data is identical after replication
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
     assertEquals("Should have 10 rows on source", 10,
-      getRowCount(sourceConnection, uniqueTableName));
+      TestUtil.getRowCount(sourceConnection, uniqueTableName));
     assertEquals("Should have 10 rows on target", 10,
-      getRowCount(targetConnection, uniqueTableName));
+      TestUtil.getRowCount(targetConnection, uniqueTableName));
 
     // Insert extra row on target and then delete it to create delete marker on target
     upsertRowsOnTarget(targetConnection, uniqueTableName, new int[] { 100 },
       new String[] { "EXTRA_ROW" });
     targetConnection.commit();
     assertEquals("Should have 11 rows on target after insert", 11,
-      getRowCount(targetConnection, uniqueTableName));
+      TestUtil.getRowCount(targetConnection, uniqueTableName));
 
     deleteRows(targetConnection, uniqueTableName, 100);
     assertEquals("Should have 10 rows on target after deletion", 10,
-      getRowCount(targetConnection, uniqueTableName));
+      TestUtil.getRowCount(targetConnection, uniqueTableName));
 
     // Run sync tool without raw scan, should match
     Job job1 = runSyncTool(uniqueTableName);
@@ -1654,7 +1651,7 @@ public class PhoenixSyncTableToolIT {
     validateSyncCounters(counters2, 10, 11, 9, 1);
     validateMapperCounters(counters2, 3, 1);
 
-    compactTable(targetConnection, uniqueTableName);
+    flushAndMajorCompact(CLUSTERS.getHBaseCluster2(), uniqueTableName);
 
     // Run sync tool with --raw-scan again, Should now match
     Job job3 = runSyncTool(uniqueTableName, "--raw-scan");
@@ -1675,9 +1672,9 @@ public class PhoenixSyncTableToolIT {
     targetConnection.commit();
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
     assertEquals("Should have 10 rows on source", 10,
-      getRowCount(sourceConnection, uniqueTableName));
+      TestUtil.getRowCount(sourceConnection, uniqueTableName));
     assertEquals("Should have 10 rows on target", 10,
-      getRowCount(targetConnection, uniqueTableName));
+      TestUtil.getRowCount(targetConnection, uniqueTableName));
 
     // Update row 5 on source to create a second version
     upsertRowsOnTarget(sourceConnection, uniqueTableName, new int[] { 5 },
@@ -1686,8 +1683,7 @@ public class PhoenixSyncTableToolIT {
 
     waitForRowContentReplication(targetConnection, uniqueTableName, 5, "EXTRA_ROW");
 
-    // Compact source
-    compactTable(sourceConnection, uniqueTableName);
+    flushAndMajorCompact(CLUSTERS.getHBaseCluster1(), uniqueTableName);
 
     // Run sync without reading all versions, only latest version compared, should match
     Job job1 = runSyncTool(uniqueTableName);
@@ -1717,9 +1713,9 @@ public class PhoenixSyncTableToolIT {
     sourceConnection.commit();
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
     assertEquals("Should have 10 rows on source", 10,
-      getRowCount(sourceConnection, uniqueTableName));
+      TestUtil.getRowCount(sourceConnection, uniqueTableName));
     assertEquals("Should have 10 rows on target", 10,
-      getRowCount(targetConnection, uniqueTableName));
+      TestUtil.getRowCount(targetConnection, uniqueTableName));
 
     // Update row 5 on source to create a second version
     upsertRowsOnTarget(targetConnection, uniqueTableName, new int[] { 5 },
@@ -1734,8 +1730,7 @@ public class PhoenixSyncTableToolIT {
     validateSyncCounters(counters1, 10, 10, 9, 1);
     validateMapperCounters(counters1, 3, 1);
 
-    // Compact target
-    compactTable(targetConnection, uniqueTableName);
+    flushAndMajorCompact(CLUSTERS.getHBaseCluster2(), uniqueTableName);
 
     // Run sync without reading all versions (default behavior): only latest version compared,
     // should still mismatch
@@ -1912,40 +1907,23 @@ public class PhoenixSyncTableToolIT {
    */
   private void mergeAdjacentRegions(Connection conn, String tableName, int mergeCount) {
     try {
-      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-      PTable table = pconn.getTable(tableName);
-      TableName hbaseTableName = TableName.valueOf(table.getPhysicalName().getBytes());
-      try (Admin admin = pconn.getQueryServices().getAdmin()) {
-        // Get current regions
-        List<RegionInfo> regions = admin.getRegions(hbaseTableName);
-        LOGGER.info("Table {} has {} regions before merge", tableName, regions.size());
+      List<HRegionLocation> regions = TestUtil.getAllTableRegions(conn, tableName);
+      LOGGER.info("Table {} has {} regions before merge", tableName, regions.size());
 
-        // Merge adjacent region pairs
-        int mergedCount = 0;
-        for (int i = 0; i < regions.size() - 1 && mergedCount < mergeCount; i++) {
-          try {
-            RegionInfo region1 = regions.get(i);
-            RegionInfo region2 = regions.get(i + 1);
-
-            LOGGER.info("Initiating merge of regions {} and {}", region1.getEncodedName(),
-              region2.getEncodedName());
-            // Merge regions asynchronously
-            admin.mergeRegionsAsync(region1.getEncodedNameAsBytes(),
-              region2.getEncodedNameAsBytes(), false);
-            mergedCount++;
-            i++; // Skip next region since it's being merged
-          } catch (Exception e) {
-            LOGGER.warn("Failed to merge regions: {}", e.getMessage());
-          }
+      int mergedCount = 0;
+      for (int i = 0; i < regions.size() - 1 && mergedCount < mergeCount; i++) {
+        try {
+          String region1 = regions.get(i).getRegion().getEncodedName();
+          String region2 = regions.get(i + 1).getRegion().getEncodedName();
+          LOGGER.info("Merging regions {} and {}", region1, region2);
+          TestUtil.mergeTableRegions(conn, tableName, Arrays.asList(region1, region2));
+          mergedCount++;
+          i++;
+        } catch (Exception e) {
+          LOGGER.warn("Failed to merge regions: {}", e.getMessage());
         }
-
-        LOGGER.info("Initiated {} region merges for table {}", mergedCount, tableName);
-        // Wait a bit for merges to start processing
-        Thread.sleep(1000);
-        // Get updated region count
-        List<RegionInfo> regionsAfter = admin.getRegions(hbaseTableName);
-        LOGGER.info("Table {} has {} regions after merge attempts", tableName, regionsAfter.size());
       }
+      LOGGER.info("Completed {} region merges for table {}", mergedCount, tableName);
     } catch (Exception e) {
       LOGGER.error("Error during region merge for table {}: {}", tableName, e.getMessage(), e);
     }
@@ -2290,15 +2268,16 @@ public class PhoenixSyncTableToolIT {
     }
   }
 
-  private int getRowCount(Connection conn, String tableName) throws SQLException {
-    String countQuery = "SELECT COUNT(*) FROM " + tableName;
-    Statement stmt = conn.createStatement();
-    ResultSet rs = stmt.executeQuery(countQuery);
-    rs.next();
-    int count = rs.getInt(1);
-    rs.close();
-    stmt.close();
-    return count;
+  /**
+   * Flushes and major-compacts a table on the given cluster
+   */
+  private void flushAndMajorCompact(HBaseTestingUtility cluster, String tableName)
+    throws Exception {
+    TableName hbaseTableName = TableName.valueOf(tableName);
+    try (Admin admin = cluster.getConnection().getAdmin()) {
+      admin.flush(hbaseTableName);
+    }
+    TestUtil.majorCompact(cluster, hbaseTableName);
   }
 
   /**
@@ -2343,22 +2322,11 @@ public class PhoenixSyncTableToolIT {
    */
   private void splitTableAt(Connection conn, String tableName, int splitId) {
     try {
-      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-      PTable table = pconn.getTable(tableName);
-      TableName hbaseTableName = TableName.valueOf(table.getPhysicalName().getBytes());
-
       byte[] splitPoint = PInteger.INSTANCE.toBytes(splitId);
-
-      // Attempt to split the region at the specified row key
-      try (Admin admin = pconn.getQueryServices().getAdmin()) {
-        admin.flush(hbaseTableName);
-        admin.split(hbaseTableName, splitPoint);
-        LOGGER.info("Split initiated for table {} at split point {} (bytes: {})", tableName,
-          splitId, Bytes.toStringBinary(splitPoint));
-      }
-      Thread.sleep(1500);
+      TestUtil.splitTable(conn, tableName, splitPoint);
+      LOGGER.info("Split completed for table {} at split point {} (bytes: {})", tableName, splitId,
+        Bytes.toStringBinary(splitPoint));
     } catch (Exception e) {
-      // Ignore split failures - they don't affect the test's main goal
       LOGGER.warn("Failed to split table {} at split point {}: {}", tableName, splitId,
         e.getMessage());
     }
@@ -2749,29 +2717,6 @@ public class PhoenixSyncTableToolIT {
       expectedSourceRows, sourceRowsProcessed);
     assertEquals(String.format("Should have %d Target rows processed", expectedTargetRows),
       expectedTargetRows, targetRowsProcessed);
-  }
-
-  /**
-   * Triggers major compaction on a table and waits for it to complete. Flushes first to ensure
-   * memstore data is in HFiles before compaction.
-   */
-  private void compactTable(Connection conn, String tableName) throws Exception {
-    PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-    PTable table = pconn.getTable(tableName);
-    TableName hbaseTableName = TableName.valueOf(table.getPhysicalName().getBytes());
-
-    try (Admin admin = pconn.getQueryServices().getAdmin()) {
-      admin.flush(hbaseTableName);
-      admin.majorCompact(hbaseTableName);
-
-      for (int i = 0; i < 10; i++) {
-        Thread.sleep(1000);
-        if (admin.getCompactionState(hbaseTableName) == CompactionState.NONE) {
-          return;
-        }
-      }
-      LOGGER.warn("Compaction may not have completed within timeout for table {}", tableName);
-    }
   }
 
   /**
