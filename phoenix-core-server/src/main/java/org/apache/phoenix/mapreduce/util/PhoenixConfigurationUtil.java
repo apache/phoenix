@@ -870,6 +870,11 @@ public final class PhoenixConfigurationUtil {
     configuration.set(MAPREDUCE_TENANT_ID, tenantId);
   }
 
+  public static String getTenantId(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.get(MAPREDUCE_TENANT_ID);
+  }
+
   public static void setMRSnapshotManagedExternally(Configuration configuration,
     Boolean isSnapshotRestoreManagedExternally) {
     Preconditions.checkNotNull(configuration);
