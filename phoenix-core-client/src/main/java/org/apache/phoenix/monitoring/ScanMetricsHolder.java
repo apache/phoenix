@@ -40,11 +40,12 @@ import static org.apache.phoenix.monitoring.MetricType.SCAN_BYTES;
 
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
-import org.apache.hadoop.hbase.client.metrics.ScanMetricsRegionInfo;
 import org.apache.hadoop.hbase.util.JsonMapper;
+import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.log.LogLevel;
 
 import org.apache.hbase.thirdparty.com.google.gson.JsonArray;
@@ -53,7 +54,7 @@ import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 public class ScanMetricsHolder {
 
   private Map<String, Long> scanMetricMap;
-  private Map<ScanMetricsRegionInfo, Map<String, Long>> scanMetricsByRegion;
+  private List<CompatScanMetrics.RegionMetricsInfo> scanMetricsByRegion;
   private Object scan;
   private final String tableName;
   private final Map<MetricType, CombinableMetric> metricTypeToMetric;
@@ -81,7 +82,7 @@ public class ScanMetricsHolder {
     this.scan = scan;
     if (scan != null) {
       scan.setScanMetricsEnabled(true);
-      scan.setEnableScanMetricsByRegion(isScanMetricsByRegionEnabled);
+      CompatScanMetrics.enableScanMetricsByRegion(scan, isScanMetricsByRegionEnabled);
     }
     metricTypeToMetric = new HashMap<>();
     metricTypeToMetric.put(PAGED_ROWS_COUNTER,
@@ -179,8 +180,8 @@ public class ScanMetricsHolder {
     this.scanMetricMap = scanMetricMap;
   }
 
-  public void
-    setScanMetricsByRegion(Map<ScanMetricsRegionInfo, Map<String, Long>> scanMetricsByRegion) {
+  public void setScanMetricsByRegion(
+      List<CompatScanMetrics.RegionMetricsInfo> scanMetricsByRegion) {
     this.scanMetricsByRegion = scanMetricsByRegion;
   }
 
@@ -219,13 +220,11 @@ public class ScanMetricsHolder {
     if (scanMetricsByRegion != null && !scanMetricsByRegion.isEmpty()) {
       tableJson.addProperty("table", tableName);
       JsonArray regionMetrics = new JsonArray();
-      for (Map.Entry<ScanMetricsRegionInfo, Map<String, Long>> entry : scanMetricsByRegion
-        .entrySet()) {
+      for (CompatScanMetrics.RegionMetricsInfo regionInfo : scanMetricsByRegion) {
         JsonObject regionJson = new JsonObject();
-        ScanMetricsRegionInfo regionInfo = entry.getKey();
         regionJson.addProperty("region", regionInfo.getEncodedRegionName());
-        regionJson.addProperty("server", regionInfo.getServerName().toString());
-        for (Map.Entry<String, Long> scanMetricEntry : entry.getValue().entrySet()) {
+        regionJson.addProperty("server", regionInfo.getServerName());
+        for (Map.Entry<String, Long> scanMetricEntry : regionInfo.getMetrics().entrySet()) {
           MetricType metricType = MetricType.getMetricType(scanMetricEntry.getKey());
           if (metricType == null) {
             continue;
