@@ -31,7 +31,7 @@ public class CompatScanMetrics {
     private final Map<String, Long> metrics;
 
     public RegionMetricsInfo(String encodedRegionName, String serverName,
-        Map<String, Long> metrics) {
+      Map<String, Long> metrics) {
       this.encodedRegionName = encodedRegionName;
       this.serverName = serverName;
       this.metrics = metrics;
@@ -49,6 +49,7 @@ public class CompatScanMetrics {
       return metrics;
     }
   }
+
   public static final String FS_READ_TIME_METRIC_NAME = "FS_READ_TIME";
   public static final String BYTES_READ_FROM_FS_METRIC_NAME = "BYTES_READ_FROM_FS";
   public static final String BYTES_READ_FROM_MEMSTORE_METRIC_NAME = "BYTES_READ_FROM_MEMSTORE";
