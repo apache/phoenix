@@ -17,11 +17,42 @@
  */
 package org.apache.phoenix.compat.hbase;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
+import org.apache.hadoop.hbase.client.metrics.ScanMetricsRegionInfo;
 import org.apache.hadoop.hbase.client.metrics.ServerSideScanMetrics;
 
 public class CompatScanMetrics {
+
+  public static class RegionMetricsInfo {
+    private final String encodedRegionName;
+    private final String serverName;
+    private final Map<String, Long> metrics;
+
+    public RegionMetricsInfo(String encodedRegionName, String serverName,
+        Map<String, Long> metrics) {
+      this.encodedRegionName = encodedRegionName;
+      this.serverName = serverName;
+      this.metrics = metrics;
+    }
+
+    public String getEncodedRegionName() {
+      return encodedRegionName;
+    }
+
+    public String getServerName() {
+      return serverName;
+    }
+
+    public Map<String, Long> getMetrics() {
+      return metrics;
+    }
+  }
   public static final String FS_READ_TIME_METRIC_NAME =
     ServerSideScanMetrics.FS_READ_TIME_METRIC_NAME;
   public static final String BYTES_READ_FROM_FS_METRIC_NAME =
@@ -69,5 +100,30 @@ public class CompatScanMetrics {
   private static Long getCounterValue(ScanMetrics scanMetrics, String metricName) {
     AtomicLong counter = scanMetrics.getCounter(metricName);
     return counter != null ? counter.get() : 0L;
+  }
+
+  public static boolean supportsScanMetricsByRegion() {
+    return true;
+  }
+
+  public static void enableScanMetricsByRegion(Scan scan, boolean enabled) {
+    scan.setEnableScanMetricsByRegion(enabled);
+  }
+
+  public static List<RegionMetricsInfo> collectRegionMetrics(ScanMetrics scanMetrics) {
+    Map<ScanMetricsRegionInfo, Map<String, Long>> byRegion =
+        scanMetrics.collectMetricsByRegion();
+    if (byRegion == null || byRegion.isEmpty()) {
+      return Collections.emptyList();
+    }
+    List<RegionMetricsInfo> result = new ArrayList<>();
+    for (Map.Entry<ScanMetricsRegionInfo, Map<String, Long>> entry : byRegion.entrySet()) {
+      ScanMetricsRegionInfo regionInfo = entry.getKey();
+      result.add(new RegionMetricsInfo(
+          regionInfo.getEncodedRegionName(),
+          regionInfo.getServerName().toString(),
+          entry.getValue()));
+    }
+    return result;
   }
 }
