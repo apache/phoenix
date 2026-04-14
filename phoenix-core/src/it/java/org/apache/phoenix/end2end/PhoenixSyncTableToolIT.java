@@ -1574,7 +1574,7 @@ public class PhoenixSyncTableToolIT {
     assertEquals("Should have 11 rows on target after insert", 11,
       getRowCount(targetConnection, uniqueTableName));
     assertEquals("Should have 11 rows on source after insert", 11,
-      getRowCount(targetConnection, uniqueTableName));
+      getRowCount(sourceConnection, uniqueTableName));
 
     deleteRows(sourceConnection, uniqueTableName, 100);
     waitForReplication(targetConnection, uniqueTableName, 10);
