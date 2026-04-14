@@ -243,6 +243,50 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
+  public void testSyncTableWithConditionalTTLExpiredRowsCompact() throws Exception {
+    // With IS_STRICT_TTL=false
+    String ddl = "CREATE TABLE IF NOT EXISTS %s (" + "ID INTEGER NOT NULL PRIMARY KEY, "
+        + "NAME VARCHAR(50), NAME_VALUE BIGINT, UPDATED_DATE TIMESTAMP, " + "EXPIRED BOOLEAN"
+        + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, "
+        + "TTL='EXPIRED = TRUE', IS_STRICT_TTL=false "
+        + "SPLIT ON (5, 7, 9)";
+    executeTableCreation(sourceConnection, String.format(ddl, uniqueTableName, 1));
+    executeTableCreation(targetConnection, String.format(ddl, uniqueTableName, 0));
+
+    // Insert 10 rows on source: rows 1-3 marked as expired, rows 4-10 as live
+    insertTestDataWithExpiredFlag(sourceConnection, uniqueTableName, 1, 3, true);
+    insertTestDataWithExpiredFlag(sourceConnection, uniqueTableName, 4, 10, false);
+
+    waitForReplication(targetConnection, uniqueTableName, 10);
+
+    int sourceCount = getRowCount(sourceConnection, uniqueTableName);
+    int targetCount = getRowCount(targetConnection, uniqueTableName);
+    assertEquals("Source should see 10 live rows", 10, sourceCount);
+    assertEquals("Target should see 10 live rows", 10, targetCount);
+
+    // Run sync tool, TTL-expired rows (1-3) should be skipped on both source and target
+    Job job = runSyncTool(uniqueTableName);
+    SyncCountersResult counters = getSyncCounters(job);
+
+    validateSyncCounters(counters, 7, 7, 7, 0);
+    validateMapperCounters(counters, 4, 0);
+
+    compactTable(targetConnection, uniqueTableName);
+
+    int sourceCountPostCompact = getRowCount(sourceConnection, uniqueTableName);
+    int targetCountPostCompact = getRowCount(targetConnection, uniqueTableName);
+    assertEquals("Source should see 10 live rows", 10, sourceCountPostCompact);
+    assertEquals("Target should see 7 live rows", 7, targetCountPostCompact);
+
+    // We shouldn't see expired rows even with --raw-scan flag
+    Job job2 = runSyncTool(uniqueTableName, "--raw-scan");
+    SyncCountersResult counters2 = getSyncCounters(job2);
+
+    validateSyncCounters(counters2, 7, 7, 7, 0);
+    validateMapperCounters(counters2, 4, 0);
+  }
+
+  @Test
   public void testSyncValidateIndexTable() throws Exception {
     // Create data table on both clusters with replication
     createTableOnBothClusters(sourceConnection, targetConnection, uniqueTableName);
