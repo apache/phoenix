@@ -186,7 +186,7 @@ public class QueryServicesOptions {
   public static final int DEFAULT_TRACING_THREAD_POOL_SIZE = 5;
   public static final int DEFAULT_TRACING_BATCH_SIZE = 100;
   public static final int DEFAULT_TRACING_TRACE_BUFFER_SIZE = 1000;
-  public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 10;
+  public static final int DEFAULT_MAX_INDEXES_PER_TABLE = 30;
   public static final int DEFAULT_CLIENT_INDEX_ASYNC_THRESHOLD = 0;
 
   public final static int DEFAULT_MUTATE_BATCH_SIZE = 100; // Batch size for UPSERT SELECT and
@@ -253,6 +253,12 @@ public class QueryServicesOptions {
   public static final int DEFAULT_INDEX_REBUILD_DISABLE_TIMESTAMP_THRESHOLD = 60000 * 60 * 24; // 24
                                                                                                // hrs
   public static final long DEFAULT_INDEX_PENDING_DISABLE_THRESHOLD = 30000; // 30 secs
+
+  // 30 min scan timeout * 5 tries, with 2100ms total pause time between retries
+  public static final long DEFAULT_SYNC_TABLE_QUERY_TIMEOUT = (5 * 30000 * 60) + 2100;
+  public static final long DEFAULT_SYNC_TABLE_RPC_TIMEOUT = 30000 * 60; // 30 mins
+  public static final long DEFAULT_SYNC_TABLE_CLIENT_SCANNER_TIMEOUT = 30000 * 60; // 30 mins
+  public static final int DEFAULT_SYNC_TABLE_RPC_RETRIES_COUNTER = 5; // 5 total tries at rpc level
 
   /**
    * HConstants#HIGH_QOS is the max we will see to a standard table. We go higher to differentiate
@@ -479,7 +485,7 @@ public class QueryServicesOptions {
   public static final boolean DEFAULT_APPLY_TIME_ZONE_DISPLACMENT = false;
   public static final boolean DEFAULT_PHOENIX_TABLE_TTL_ENABLED = true;
   public static final boolean DEFAULT_PHOENIX_COMPACTION_ENABLED = true;
-  public static final boolean DEFAULT_PHOENIX_VIEW_TTL_ENABLED = true;
+  public static final boolean DEFAULT_PHOENIX_VIEW_TTL_ENABLED = false;
   public static final int DEFAULT_PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT = 100;
 
   public static final int DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN = 5;

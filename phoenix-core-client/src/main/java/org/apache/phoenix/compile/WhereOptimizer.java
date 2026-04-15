@@ -77,6 +77,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.ByteUtil;
@@ -421,9 +422,11 @@ public class WhereOptimizer {
 
   private static KeyRange getTrailingRange(RowKeySchema rowKeySchema, int clippedPkPos,
     KeyRange range, KeyRange clippedResult, ImmutableBytesWritable ptr) {
-    // We are interested in the clipped part's Seperator. Since we combined first part, we need to
+    // We are interested in the clipped part's Separator. Since we combined first part, we need to
     // remove its separator from the trailing parts' start
-    int clippedSepLength = rowKeySchema.getField(clippedPkPos).getDataType().isFixedWidth() ? 0 : 1;
+    PDataType clippedType = rowKeySchema.getField(clippedPkPos).getDataType();
+    int clippedSepLength =
+      clippedType.isFixedWidth() ? 0 : clippedType == PVarbinaryEncoded.INSTANCE ? 2 : 1;
     byte[] lowerRange = KeyRange.UNBOUND;
     boolean lowerInclusive = false;
     // Lower range of trailing part of RVC must be true, so we can form a new range to intersect
@@ -1614,8 +1617,9 @@ public class WhereOptimizer {
       int otherPKPos) {
       RowKeySchema rowKeySchema = table.getRowKeySchema();
       ImmutableBytesWritable ptr = context.getTempPtr();
+      PDataType sepType = table.getPKColumns().get(otherPKPos - 1).getDataType();
       int separatorLength =
-        table.getPKColumns().get(otherPKPos - 1).getDataType().isFixedWidth() ? 0 : 1;
+        sepType.isFixedWidth() ? 0 : sepType == PVarbinaryEncoded.INSTANCE ? 2 : 1;
       boolean lowerInclusive = result.isLowerInclusive();
       byte[] lowerRange = result.getLowerRange();
       ptr.set(lowerRange);

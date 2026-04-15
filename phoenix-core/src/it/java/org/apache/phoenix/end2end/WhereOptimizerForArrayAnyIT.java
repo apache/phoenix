@@ -33,29 +33,21 @@ import java.sql.Statement;
 import java.sql.Time;
 import java.sql.Timestamp;
 import java.sql.Types;
-import java.util.HashMap;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
-import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
-import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.bson.RawBsonDocument;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(NeedsOwnMiniClusterTest.class)
-public class WhereOptimizerForArrayAnyIT extends BaseTest {
-  @BeforeClass
-  public static void setup() throws Exception {
-    setUpTestDriver(new ReadOnlyProps(new HashMap<String, String>()));
-  }
+public class WhereOptimizerForArrayAnyIT extends WhereOptimizerForArrayAnyITBase {
 
   @Test
   public void testArrayAnyComparisonForNonPkColumn() throws Exception {
@@ -784,35 +776,10 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
     assertEquals("FULL SCAN ", planAttributes.getExplainScanType());
   }
 
-  private void assertPointLookupsAreGenerated(PreparedStatement stmt, int noOfPointLookups)
-    throws SQLException {
-    QueryPlan queryPlan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
-    assertPointLookupsAreGenerated(queryPlan, noOfPointLookups);
-  }
-
   private void assertPointLookupsAreGenerated(Statement stmt, String selectSql,
     int noOfPointLookups) throws SQLException {
     QueryPlan queryPlan = stmt.unwrap(PhoenixStatement.class).optimizeQuery(selectSql);
     assertPointLookupsAreGenerated(queryPlan, noOfPointLookups);
-  }
-
-  private void assertSkipScanIsGenerated(PreparedStatement stmt, int skipListSize)
-    throws SQLException {
-    QueryPlan queryPlan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
-    ExplainPlan explain = queryPlan.getExplainPlan();
-    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
-    String expectedScanType =
-      "SKIP SCAN ON " + skipListSize + " KEY" + (skipListSize > 1 ? "S " : " ");
-    assertEquals(expectedScanType, planAttributes.getExplainScanType());
-  }
-
-  private void assertPointLookupsAreGenerated(QueryPlan queryPlan, int noOfPointLookups)
-    throws SQLException {
-    ExplainPlan explain = queryPlan.getExplainPlan();
-    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
-    String expectedScanType =
-      "POINT LOOKUP ON " + noOfPointLookups + " KEY" + (noOfPointLookups > 1 ? "S " : " ");
-    assertEquals(expectedScanType, planAttributes.getExplainScanType());
   }
 
   private void createTableASCPkColumns(String tableName) throws SQLException {
@@ -887,5 +854,4 @@ public class WhereOptimizerForArrayAnyIT extends BaseTest {
       + "  \"attr_0\" : \"str_val_0\"\n" + "}";
     return RawBsonDocument.parse(json);
   }
-
 }

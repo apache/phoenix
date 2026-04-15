@@ -17,9 +17,39 @@
  */
 package org.apache.phoenix.compat.hbase;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
 
 public class CompatScanMetrics {
+
+  public static class RegionMetricsInfo {
+    private final String encodedRegionName;
+    private final String serverName;
+    private final Map<String, Long> metrics;
+
+    public RegionMetricsInfo(String encodedRegionName, String serverName,
+      Map<String, Long> metrics) {
+      this.encodedRegionName = encodedRegionName;
+      this.serverName = serverName;
+      this.metrics = metrics;
+    }
+
+    public String getEncodedRegionName() {
+      return encodedRegionName;
+    }
+
+    public String getServerName() {
+      return serverName;
+    }
+
+    public Map<String, Long> getMetrics() {
+      return metrics;
+    }
+  }
+
   public static final String FS_READ_TIME_METRIC_NAME = "FS_READ_TIME";
   public static final String BYTES_READ_FROM_FS_METRIC_NAME = "BYTES_READ_FROM_FS";
   public static final String BYTES_READ_FROM_MEMSTORE_METRIC_NAME = "BYTES_READ_FROM_MEMSTORE";
@@ -55,5 +85,16 @@ public class CompatScanMetrics {
 
   public static Long getBlockReadOpsCount(ScanMetrics scanMetrics) {
     return 0L;
+  }
+
+  public static boolean supportsScanMetricsByRegion() {
+    return false;
+  }
+
+  public static void enableScanMetricsByRegion(Scan scan, boolean enabled) {
+  }
+
+  public static List<RegionMetricsInfo> collectRegionMetrics(ScanMetrics scanMetrics) {
+    return Collections.emptyList();
   }
 }
