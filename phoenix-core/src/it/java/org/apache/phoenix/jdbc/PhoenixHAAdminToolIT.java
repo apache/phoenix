@@ -911,7 +911,7 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     int ret = ToolRunner.run(adminTool,
       new String[] { "create", "-g", createHaGroupName, "-p", "FAILOVER", "-zk1",
         CLUSTERS.getZkUrl1(), "-c1", CLUSTERS.getMasterAddress1(), "-cr1", "ACTIVE", "-zk2",
-        CLUSTERS.getZkUrl2(), "-c2", CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1", 
+        CLUSTERS.getZkUrl2(), "-c2", CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1",
         CLUSTERS.getHdfsUrl1(), "-hdfs2", CLUSTERS.getHdfsUrl2() });
 
     assertEquals("create command should succeed", RET_SUCCESS, ret);
