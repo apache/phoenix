@@ -159,9 +159,9 @@ public class PhoenixSyncTableInputFormatTest {
     assertEquals("Only middle split should be unprocessed", 1, result.size());
     PhoenixInputSplit unprocessed = (PhoenixInputSplit) result.get(0);
     assertTrue("Should be [d,g) split",
-      Bytes.equals(Bytes.toBytes("d"), unprocessed.getKeyRange().getLowerRange()));
+        Bytes.equals(Bytes.toBytes("d"), unprocessed.getKeyRange().getLowerRange()));
     assertTrue("Should be [d,g) split",
-      Bytes.equals(Bytes.toBytes("g"), unprocessed.getKeyRange().getUpperRange()));
+        Bytes.equals(Bytes.toBytes("g"), unprocessed.getKeyRange().getUpperRange()));
   }
 
   @Test
@@ -196,7 +196,7 @@ public class PhoenixSyncTableInputFormatTest {
     List<InputSplit> result = inputFormat.filterCompletedSplits(allSplits, completedRegions);
 
     assertEquals("Split should be filtered out when it exactly matches completed region", 0,
-      result.size());
+        result.size());
   }
 
   @Test
@@ -216,14 +216,14 @@ public class PhoenixSyncTableInputFormatTest {
     List<InputSplit> result = inputFormat.filterCompletedSplits(allSplits, completedRegions);
 
     assertEquals(
-      "First two splits should be unprocessed (partial overlap keeps split), last should be filtered",
-      2, result.size());
+        "First two splits should be unprocessed (partial overlap keeps split), last should be filtered",
+        2, result.size());
     PhoenixInputSplit first = (PhoenixInputSplit) result.get(0);
     PhoenixInputSplit second = (PhoenixInputSplit) result.get(1);
     assertTrue("First should be [a,d) split",
-      Bytes.equals(Bytes.toBytes("a"), first.getKeyRange().getLowerRange()));
+        Bytes.equals(Bytes.toBytes("a"), first.getKeyRange().getLowerRange()));
     assertTrue("Second should be [d,g) split",
-      Bytes.equals(Bytes.toBytes("d"), second.getKeyRange().getLowerRange()));
+        Bytes.equals(Bytes.toBytes("d"), second.getKeyRange().getLowerRange()));
   }
 
   @Test
@@ -243,7 +243,7 @@ public class PhoenixSyncTableInputFormatTest {
     List<InputSplit> result = inputFormat.filterCompletedSplits(allSplits, completedRegions);
 
     assertEquals("All splits should be filtered when covered by one large completed region", 0,
-      result.size());
+        result.size());
   }
 
   @Test
@@ -271,9 +271,9 @@ public class PhoenixSyncTableInputFormatTest {
     PhoenixInputSplit split2 = (PhoenixInputSplit) result.get(1);
 
     assertTrue("First unprocessed should be [c,e)",
-      Bytes.equals(Bytes.toBytes("c"), split1.getKeyRange().getLowerRange()));
+        Bytes.equals(Bytes.toBytes("c"), split1.getKeyRange().getLowerRange()));
     assertTrue("Second unprocessed should be [g,i)",
-      Bytes.equals(Bytes.toBytes("g"), split2.getKeyRange().getLowerRange()));
+        Bytes.equals(Bytes.toBytes("g"), split2.getKeyRange().getLowerRange()));
   }
 
   @Test
@@ -294,7 +294,7 @@ public class PhoenixSyncTableInputFormatTest {
     assertEquals("Second split should be unprocessed", 1, result.size());
     PhoenixInputSplit unprocessed = (PhoenixInputSplit) result.get(0);
     assertTrue("Should be [c,f) split",
-      Bytes.equals(Bytes.toBytes("c"), unprocessed.getKeyRange().getLowerRange()));
+        Bytes.equals(Bytes.toBytes("c"), unprocessed.getKeyRange().getLowerRange()));
   }
 
   @Test
@@ -319,8 +319,8 @@ public class PhoenixSyncTableInputFormatTest {
     PhoenixInputSplit split2 = (PhoenixInputSplit) result.get(1);
 
     assertTrue("First should be [d,g)",
-      Bytes.compareTo(split1.getKeyRange().getLowerRange(), split2.getKeyRange().getLowerRange())
-          < 0);
+        Bytes.compareTo(split1.getKeyRange().getLowerRange(), split2.getKeyRange().getLowerRange())
+            < 0);
   }
 
   @SuppressWarnings("rawtypes")
@@ -329,7 +329,7 @@ public class PhoenixSyncTableInputFormatTest {
     RecordReader reader = inputFormat.createRecordReader(null, null);
     assertNotNull("createRecordReader should never return null", reader);
     assertTrue("Should return a PhoenixNoOpSingleRecordReader",
-      reader instanceof PhoenixNoOpSingleRecordReader);
+        reader instanceof PhoenixNoOpSingleRecordReader);
   }
 
   @Test
@@ -345,11 +345,11 @@ public class PhoenixSyncTableInputFormatTest {
 
     // Mock RegionLocator to return same server for all splits
     when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
-      .thenReturn(mockRegion);
+        .thenReturn(mockRegion);
 
     // Call groupSplitsByServer
     Map<String, List<PhoenixInputSplit>> splitsByServer =
-      inputFormat.groupSplitsByServer(splits, mockRegionLocator);
+        inputFormat.groupSplitsByServer(splits, mockRegionLocator);
 
     // Verify: All splits grouped under one server
     assertEquals("Should have 1 server", 1, splitsByServer.size());
@@ -359,7 +359,7 @@ public class PhoenixSyncTableInputFormatTest {
 
   @Test
   public void testCreateCoalescedSplitWithMultipleSplits()
-    throws IOException, InterruptedException {
+      throws IOException, InterruptedException {
     // Create 3 PhoenixInputSplits in unsorted order
     List<PhoenixInputSplit> splits = new ArrayList<>();
     splits.add((PhoenixInputSplit) createSplit(Bytes.toBytes("g"), Bytes.toBytes("j")));
@@ -379,11 +379,11 @@ public class PhoenixSyncTableInputFormatTest {
     List<KeyRange> keyRanges = coalescedSplit.getKeyRanges();
     // Since createCoalescedSplit doesn't sort, they'll be in the order provided (g, a, d)
     assertTrue("First KeyRange should start with 'g'",
-      Bytes.equals(Bytes.toBytes("g"), keyRanges.get(0).getLowerRange()));
+        Bytes.equals(Bytes.toBytes("g"), keyRanges.get(0).getLowerRange()));
     assertTrue("Second KeyRange should start with 'a'",
-      Bytes.equals(Bytes.toBytes("a"), keyRanges.get(1).getLowerRange()));
+        Bytes.equals(Bytes.toBytes("a"), keyRanges.get(1).getLowerRange()));
     assertTrue("Third KeyRange should start with 'd'",
-      Bytes.equals(Bytes.toBytes("d"), keyRanges.get(2).getLowerRange()));
+        Bytes.equals(Bytes.toBytes("d"), keyRanges.get(2).getLowerRange()));
   }
 
   @Test
@@ -415,7 +415,7 @@ public class PhoenixSyncTableInputFormatTest {
 
     // Call groupSplitsByServer
     Map<String, List<PhoenixInputSplit>> splitsByServer =
-      inputFormat.groupSplitsByServer(splits, mockRegionLocator);
+        inputFormat.groupSplitsByServer(splits, mockRegionLocator);
 
     // Verify: 2 servers with 3 splits each
     assertEquals("Should have 2 servers", 2, splitsByServer.size());
@@ -432,7 +432,7 @@ public class PhoenixSyncTableInputFormatTest {
 
     // Call groupSplitsByServer
     Map<String, List<PhoenixInputSplit>> splitsByServer =
-      inputFormat.groupSplitsByServer(splits, mockRegionLocator);
+        inputFormat.groupSplitsByServer(splits, mockRegionLocator);
 
     // Verify: Returns empty map
     assertTrue("Should return empty map for empty input", splitsByServer.isEmpty());
@@ -502,13 +502,13 @@ public class PhoenixSyncTableInputFormatTest {
     // Check that KeyRanges are sorted (each should be less than next)
     for (int i = 0; i < keyRanges1.size() - 1; i++) {
       assertTrue("KeyRanges in split 1 should be sorted",
-        Bytes.compareTo(keyRanges1.get(i).getLowerRange(), keyRanges1.get(i + 1).getLowerRange())
-            < 0);
+          Bytes.compareTo(keyRanges1.get(i).getLowerRange(), keyRanges1.get(i + 1).getLowerRange())
+              < 0);
     }
     for (int i = 0; i < keyRanges2.size() - 1; i++) {
       assertTrue("KeyRanges in split 2 should be sorted",
-        Bytes.compareTo(keyRanges2.get(i).getLowerRange(), keyRanges2.get(i + 1).getLowerRange())
-            < 0);
+          Bytes.compareTo(keyRanges2.get(i).getLowerRange(), keyRanges2.get(i + 1).getLowerRange())
+              < 0);
     }
   }
 
@@ -525,7 +525,7 @@ public class PhoenixSyncTableInputFormatTest {
 
     // Mock RegionLocator: all splits → server1
     when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
-      .thenReturn(mockRegion);
+        .thenReturn(mockRegion);
 
     // Call coalesceSplits()
     List<InputSplit> result = inputFormat.coalesceSplits(splits, mockRegionLocator);
@@ -542,11 +542,11 @@ public class PhoenixSyncTableInputFormatTest {
     // Verify: KeyRanges are sorted
     List<KeyRange> keyRanges = coalescedSplit.getKeyRanges();
     assertTrue("First KeyRange should start with 'a'",
-      Bytes.equals(Bytes.toBytes("a"), keyRanges.get(0).getLowerRange()));
+        Bytes.equals(Bytes.toBytes("a"), keyRanges.get(0).getLowerRange()));
     assertTrue("Second KeyRange should start with 'd'",
-      Bytes.equals(Bytes.toBytes("d"), keyRanges.get(1).getLowerRange()));
+        Bytes.equals(Bytes.toBytes("d"), keyRanges.get(1).getLowerRange()));
     assertTrue("Third KeyRange should start with 'g'",
-      Bytes.equals(Bytes.toBytes("g"), keyRanges.get(2).getLowerRange()));
+        Bytes.equals(Bytes.toBytes("g"), keyRanges.get(2).getLowerRange()));
   }
 
   @Test(expected = IllegalArgumentException.class)
@@ -562,7 +562,7 @@ public class PhoenixSyncTableInputFormatTest {
     splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
     // Mock RegionLocator to throw IOException
     when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
-      .thenThrow(new IOException("Simulated region location failure"));
+        .thenThrow(new IOException("Simulated region location failure"));
 
     // should propagate IOException
     inputFormat.groupSplitsByServer(splits, mockRegionLocator);
@@ -580,7 +580,7 @@ public class PhoenixSyncTableInputFormatTest {
     String hostname = parts[0];
     int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 16020;
     org.apache.hadoop.hbase.net.Address address =
-      org.apache.hadoop.hbase.net.Address.fromParts(hostname, port);
+        org.apache.hadoop.hbase.net.Address.fromParts(hostname, port);
 
     when(mockServerName.getAddress()).thenReturn(address);
     when(mockRegionLocation.getServerName()).thenReturn(mockServerName);

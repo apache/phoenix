@@ -93,28 +93,28 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixSyncTableTool.class);
 
   private static final Option SCHEMA_NAME_OPTION =
-    new Option("s", "schema", true, "Phoenix schema name (optional)");
+      new Option("s", "schema", true, "Phoenix schema name (optional)");
   private static final Option TABLE_NAME_OPTION =
-    new Option("tn", "table-name", true, "Table name (mandatory)");
+      new Option("tn", "table-name", true, "Table name (mandatory)");
   private static final Option TARGET_CLUSTER_OPTION =
-    new Option("tc", "target-cluster", true, "Target cluster ZooKeeper quorum (mandatory)");
+      new Option("tc", "target-cluster", true, "Target cluster ZooKeeper quorum (mandatory)");
   private static final Option FROM_TIME_OPTION = new Option("ft", "from-time", true,
-    "Start time in milliseconds for sync (optional, defaults to 0)");
+      "Start time in milliseconds for sync (optional, defaults to 0)");
   private static final Option TO_TIME_OPTION = new Option("tt", "to-time", true,
-    "End time in milliseconds for sync (optional, defaults to current time - 1 hour)");
+      "End time in milliseconds for sync (optional, defaults to current time - 1 hour)");
   private static final Option DRY_RUN_OPTION = new Option("dr", "dry-run", false,
-    "Dry run mode - only checkpoint inconsistencies, do not repair (optional)");
+      "Dry run mode - only checkpoint inconsistencies, do not repair (optional)");
   private static final Option CHUNK_SIZE_OPTION =
-    new Option("cs", "chunk-size", true, "Chunk size in bytes (optional, defaults to 1GB)");
+      new Option("cs", "chunk-size", true, "Chunk size in bytes (optional, defaults to 1GB)");
   private static final Option RUN_FOREGROUND_OPTION = new Option("runfg", "run-foreground", false,
-    "Run the job in foreground. Default - Runs the job in background.");
+      "Run the job in foreground. Default - Runs the job in background.");
   private static final Option TENANT_ID_OPTION =
-    new Option("tenant", "tenant-id", true, "Tenant ID for tenant-specific table sync (optional)");
+      new Option("tenant", "tenant-id", true, "Tenant ID for tenant-specific table sync (optional)");
   private static final Option RAW_SCAN_OPTION = new Option("rs", "raw-scan", false,
-    "Enable raw scan mode to include delete markers (optional, disabled by default)");
+      "Enable raw scan mode to include delete markers (optional, disabled by default)");
   private static final Option READ_ALL_VERSIONS_OPTION = new Option("rav", "read-all-versions",
-    false,
-    "Enable reading all cell versions (optional, disabled by default, reads only latest version)");
+      false,
+      "Enable reading all cell versions (optional, disabled by default, reads only latest version)");
   private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
 
   public static final String PHOENIX_SYNC_TABLE_NAME = "phoenix.sync.table.table.name";
@@ -123,14 +123,14 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   public static final String PHOENIX_SYNC_TABLE_TO_TIME = "phoenix.sync.table.to.time";
   public static final String PHOENIX_SYNC_TABLE_DRY_RUN = "phoenix.sync.table.dry.run";
   public static final String PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES =
-    "phoenix.sync.table.chunk.size.bytes";
+      "phoenix.sync.table.chunk.size.bytes";
   public static final long DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
   public static final String PHOENIX_SYNC_TABLE_SPLIT_COALESCING =
-    "phoenix.sync.table.split.coalescing";
+      "phoenix.sync.table.split.coalescing";
   public static final boolean DEFAULT_PHOENIX_SYNC_TABLE_SPLIT_COALESCING = false;
   public static final String PHOENIX_SYNC_TABLE_RAW_SCAN = "phoenix.sync.table.raw.scan";
   public static final String PHOENIX_SYNC_TABLE_READ_ALL_VERSIONS =
-    "phoenix.sync.table.read.all.versions";
+      "phoenix.sync.table.read.all.versions";
 
   private String schemaName;
   private String tableName;
@@ -178,14 +178,14 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   private void obtainTargetClusterTokens(Job job) throws IOException {
     try {
       Configuration targetConf =
-        HBaseConfiguration.createClusterConf(job.getConfiguration(), targetZkQuorum);
+          HBaseConfiguration.createClusterConf(job.getConfiguration(), targetZkQuorum);
       TableMapReduceUtil.initCredentialsForCluster(job, targetConf);
     } catch (IOException e) {
       if (UserProvider.instantiate(job.getConfiguration()).isHBaseSecurityEnabled()) {
         throw e;
       }
       LOGGER.info("Skipping target cluster token acquisition (security not enabled): {}",
-        e.getMessage());
+          e.getMessage());
     }
   }
 
@@ -194,22 +194,22 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
    */
   private void configureTimeoutsAndRetries(Configuration configuration) {
     long syncTableQueryTimeoutMs =
-      configuration.getLong(QueryServices.SYNC_TABLE_QUERY_TIMEOUT_ATTRIB,
-        QueryServicesOptions.DEFAULT_SYNC_TABLE_QUERY_TIMEOUT);
+        configuration.getLong(QueryServices.SYNC_TABLE_QUERY_TIMEOUT_ATTRIB,
+            QueryServicesOptions.DEFAULT_SYNC_TABLE_QUERY_TIMEOUT);
     long syncTableRPCTimeoutMs = configuration.getLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB,
-      QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT);
+        QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT);
     long syncTableClientScannerTimeoutMs =
-      configuration.getLong(QueryServices.SYNC_TABLE_CLIENT_SCANNER_TIMEOUT_ATTRIB,
-        QueryServicesOptions.DEFAULT_SYNC_TABLE_CLIENT_SCANNER_TIMEOUT);
+        configuration.getLong(QueryServices.SYNC_TABLE_CLIENT_SCANNER_TIMEOUT_ATTRIB,
+            QueryServicesOptions.DEFAULT_SYNC_TABLE_CLIENT_SCANNER_TIMEOUT);
     int syncTableRpcRetriesCounter =
-      configuration.getInt(QueryServices.SYNC_TABLE_RPC_RETRIES_COUNTER,
-        QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_RETRIES_COUNTER);
+        configuration.getInt(QueryServices.SYNC_TABLE_RPC_RETRIES_COUNTER,
+            QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_RETRIES_COUNTER);
 
     configuration.set(HConstants.HBASE_CLIENT_SCANNER_TIMEOUT_PERIOD,
-      Long.toString(syncTableClientScannerTimeoutMs));
+        Long.toString(syncTableClientScannerTimeoutMs));
     configuration.set(HConstants.HBASE_RPC_TIMEOUT_KEY, Long.toString(syncTableRPCTimeoutMs));
     configuration.set(HConstants.HBASE_CLIENT_RETRIES_NUMBER,
-      Integer.toString(syncTableRpcRetriesCounter));
+        Integer.toString(syncTableRpcRetriesCounter));
     configuration.set(MRJobConfig.TASK_TIMEOUT, Long.toString(syncTableQueryTimeoutMs));
   }
 
@@ -230,7 +230,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     }
     PhoenixConfigurationUtil.setCurrentScnValue(configuration, endTime);
     configuration
-      .setBooleanIfUnset(PhoenixConfigurationUtil.MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER, true);
+        .setBooleanIfUnset(PhoenixConfigurationUtil.MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER, true);
   }
 
   private void configureInput(Job job, PTableType tableType) {
@@ -238,7 +238,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     String hint = (tableType == PTableType.INDEX) ? "" : "/*+ NO_INDEX */ ";
     String selectStatement = "SELECT " + hint + "1 FROM " + qTable;
     PhoenixMapReduceUtil.setInput(job, DBInputFormat.NullDBWritable.class,
-      PhoenixSyncTableInputFormat.class, qTable, selectStatement);
+        PhoenixSyncTableInputFormat.class, qTable, selectStatement);
   }
 
   private void configureOutput(Job job) {
@@ -259,13 +259,13 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   public CommandLine parseOptions(String[] args) throws IllegalStateException {
     Options options = getOptions();
     CommandLineParser parser = DefaultParser.builder().setAllowPartialMatching(false)
-      .setStripLeadingAndTrailingQuotes(false).build();
+        .setStripLeadingAndTrailingQuotes(false).build();
     CommandLine cmdLine = null;
     try {
       cmdLine = parser.parse(options, args);
     } catch (ParseException e) {
       LOGGER.error("Failed to parse command line options. Args: {}. Error: {}",
-        Arrays.toString(args), e.getMessage(), e);
+          Arrays.toString(args), e.getMessage(), e);
       printHelpAndExit("Error parsing command line options: " + e.getMessage(), options);
     }
     if (cmdLine.hasOption(HELP_OPTION.getOpt())) {
@@ -308,10 +308,10 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     HelpFormatter formatter = new HelpFormatter();
     String cmdLineSyntax = "/hbase/bin/hbase " + PhoenixSyncTableTool.class.getName();
     formatter.printHelp(cmdLineSyntax,
-      "Synchronize a Phoenix table between source and target clusters", options,
-      "\nExample:\n" + cmdLineSyntax + " \\\n" + "  --table-name MY_TABLE \\\n"
-        + "  --target-cluster <zk_quorum>:2181 \\\n" + "  --dry-run\n",
-      true);
+        "Synchronize a Phoenix table between source and target clusters", options,
+        "\nExample:\n" + cmdLineSyntax + " \\\n" + "  --table-name MY_TABLE \\\n"
+            + "  --target-cluster <zk_quorum>:2181 \\\n" + "  --dry-run\n",
+        true);
     System.exit(exitCode);
   }
 
@@ -337,7 +337,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       chunkSizeBytes = Long.valueOf(cmdLine.getOptionValue(CHUNK_SIZE_OPTION.getOpt()));
       if (chunkSizeBytes <= 0) {
         throw new IllegalArgumentException(
-          "Chunk size must be a positive value, got: " + chunkSizeBytes);
+            "Chunk size must be a positive value, got: " + chunkSizeBytes);
       }
     }
     if (cmdLine.hasOption(TENANT_ID_OPTION.getOpt())) {
@@ -351,11 +351,11 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     qSchemaName = SchemaUtil.normalizeIdentifier(schemaName);
     PhoenixMapReduceUtil.validateTimeRange(startTime, endTime, qTable);
     LOGGER.info(
-      "PhoenixSyncTableTool configured - Table: {}, Schema: {}, Target: {}, "
-        + "StartTime: {}, EndTime: {}, DryRun: {}, ChunkSize: {}, Foreground: {}, TenantId: {}, "
-        + "RawScan: {}, ReadAllVersions: {}",
-      qTable, qSchemaName, targetZkQuorum, startTime, endTime, isDryRun, chunkSizeBytes,
-      isForeground, tenantId, isRawScan, isReadAllVersions);
+        "PhoenixSyncTableTool configured - Table: {}, Schema: {}, Target: {}, "
+            + "StartTime: {}, EndTime: {}, DryRun: {}, ChunkSize: {}, Foreground: {}, TenantId: {}, "
+            + "RawScan: {}, ReadAllVersions: {}",
+        qTable, qSchemaName, targetZkQuorum, startTime, endTime, isDryRun, chunkSizeBytes,
+        isForeground, tenantId, isRawScan, isReadAllVersions);
   }
 
   /**
@@ -385,43 +385,43 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     if (!isForeground) {
       job.submit();
       LOGGER.info("PhoenixSyncTable Job :{} submitted successfully in background for table {} ",
-        job.getJobName(), qTable);
+          job.getJobName(), qTable);
       return true;
     }
     LOGGER.info("Running PhoenixSyncTable job: {} for table:{} in foreground.", job.getJobName(),
-      qTable);
+        qTable);
     boolean success = job.waitForCompletion(true);
     if (success) {
       LOGGER.info("PhoenixSyncTable job: {} completed for table {}", job.getJobName(), qTable);
     } else {
       LOGGER.error("PhoenixSyncTable job {} failed for table {} to target cluster {}",
-        job.getJobName(), qTable, targetZkQuorum);
+          job.getJobName(), qTable, targetZkQuorum);
     }
     Counters counters = job.getCounters();
     if (counters != null) {
       long taskCreated =
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TASK_CREATED).getValue();
+          counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TASK_CREATED).getValue();
       long verifiedMappers =
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_VERIFIED).getValue();
+          counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_VERIFIED).getValue();
       long mismatchedMappers =
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_MISMATCHED).getValue();
+          counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_MISMATCHED).getValue();
       long chunksVerified =
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_VERIFIED).getValue();
+          counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_VERIFIED).getValue();
       long chunksMismatched =
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED).getValue();
+          counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED).getValue();
       long sourceRowsProcessed =
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
+          counters.findCounter(PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
       long targetRowsProcessed =
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED).getValue();
+          counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED).getValue();
       LOGGER.info(
-        "PhoenixSyncTable job completed, gathered counters are \n Task Created: {}, \n Verified Mappers: {}, \n"
-          + "Mismatched Mappers: {}, \n Chunks Verified: {}, \n"
-          + "Chunks Mismatched: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}",
-        taskCreated, verifiedMappers, mismatchedMappers, chunksVerified, chunksMismatched,
-        sourceRowsProcessed, targetRowsProcessed);
+          "PhoenixSyncTable job completed, gathered counters are \n Task Created: {}, \n Verified Mappers: {}, \n"
+              + "Mismatched Mappers: {}, \n Chunks Verified: {}, \n"
+              + "Chunks Mismatched: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}",
+          taskCreated, verifiedMappers, mismatchedMappers, chunksVerified, chunksMismatched,
+          sourceRowsProcessed, targetRowsProcessed);
     } else {
       LOGGER.warn("Unable to retrieve job counters for table {} - job may have failed "
-        + "during initialization", qTable);
+          + "during initialization", qTable);
     }
     return success;
   }
@@ -447,8 +447,8 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       return result ? 0 : -1;
     } catch (Exception ex) {
       LOGGER.error(
-        "Exception occurred while performing phoenix sync table job for table {} to target {}: {}",
-        qTable, targetZkQuorum, ExceptionUtils.getMessage(ex), ex);
+          "Exception occurred while performing phoenix sync table job for table {} to target {}: {}",
+          qTable, targetZkQuorum, ExceptionUtils.getMessage(ex), ex);
       return -1;
     }
   }
@@ -516,7 +516,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   public static long getPhoenixSyncTableChunkSizeBytes(Configuration conf) {
     Preconditions.checkNotNull(conf);
     return conf.getLong(PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES,
-      DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES);
+        DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES);
   }
 
   public static void setPhoenixSyncTableRawScan(Configuration conf, boolean rawScan) {
@@ -530,7 +530,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   }
 
   public static void setPhoenixSyncTableReadAllVersions(Configuration conf,
-    boolean readAllVersions) {
+      boolean readAllVersions) {
     Preconditions.checkNotNull(conf);
     conf.setBoolean(PHOENIX_SYNC_TABLE_READ_ALL_VERSIONS, readAllVersions);
   }

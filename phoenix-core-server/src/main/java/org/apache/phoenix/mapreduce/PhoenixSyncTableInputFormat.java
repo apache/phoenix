@@ -71,7 +71,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
    */
   @Override
   public RecordReader<NullWritable, DBWritable> createRecordReader(InputSplit split,
-    TaskAttemptContext context) {
+      TaskAttemptContext context) {
     return new PhoenixNoOpSingleRecordReader();
   }
 
@@ -89,30 +89,30 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
     List<InputSplit> allSplits = super.getSplits(context);
     if (allSplits == null || allSplits.isEmpty()) {
       throw new IOException(String.format(
-        "PhoenixInputFormat generated no splits for table %s. Check table exists and has regions.",
-        tableName));
+          "PhoenixInputFormat generated no splits for table %s. Check table exists and has regions.",
+          tableName));
     }
     LOGGER.info("Total splits generated {} of table {} for PhoenixSyncTable ", allSplits.size(),
-      tableName);
+        tableName);
     List<KeyRange> completedRegions;
     try {
       completedRegions =
-        queryCompletedMapperRegions(conf, tableName, targetZkQuorum, fromTime, toTime);
+          queryCompletedMapperRegions(conf, tableName, targetZkQuorum, fromTime, toTime);
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
 
     List<InputSplit> unprocessedSplits = filterCompletedSplits(allSplits, completedRegions);
     LOGGER.info("Found {} completed mapper regions for table {}, {} unprocessed splits remaining",
-      completedRegions.size(), tableName, unprocessedSplits.size());
+        completedRegions.size(), tableName, unprocessedSplits.size());
 
     // Coalesce splits to reduce mapper count and avoid hotspotting
     boolean enableSplitCoalescing =
-      conf.getBoolean(PhoenixSyncTableTool.PHOENIX_SYNC_TABLE_SPLIT_COALESCING,
-        PhoenixSyncTableTool.DEFAULT_PHOENIX_SYNC_TABLE_SPLIT_COALESCING);
+        conf.getBoolean(PhoenixSyncTableTool.PHOENIX_SYNC_TABLE_SPLIT_COALESCING,
+            PhoenixSyncTableTool.DEFAULT_PHOENIX_SYNC_TABLE_SPLIT_COALESCING);
 
     LOGGER.info("Split coalescing enabled: {}, unprocessed splits: {} for table {}",
-      enableSplitCoalescing, unprocessedSplits.size(), tableName);
+        enableSplitCoalescing, unprocessedSplits.size(), tableName);
 
     if (enableSplitCoalescing && unprocessedSplits.size() > 1) {
       Connection conn = null;
@@ -123,17 +123,17 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
         PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
         byte[] physicalTableName = pConn.getTable(tableName).getPhysicalName().getBytes();
         org.apache.hadoop.hbase.client.Connection hbaseConn =
-          pConn.getQueryServices().getAdmin().getConnection();
+            pConn.getQueryServices().getAdmin().getConnection();
         regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(physicalTableName));
 
         List<InputSplit> coalescedSplits = coalesceSplits(unprocessedSplits, regionLocator);
         LOGGER.info("Split coalescing: {} unprocessed splits {} coalesced splits for table {}",
-          unprocessedSplits.size(), coalescedSplits.size(), tableName);
+            unprocessedSplits.size(), coalescedSplits.size(), tableName);
         return coalescedSplits;
       } catch (Exception e) {
         LOGGER.warn(
-          "Failed to coalesce splits for table {}, falling back to uncoalesced splits: {}",
-          tableName, e.getMessage(), e);
+            "Failed to coalesce splits for table {}, falling back to uncoalesced splits: {}",
+            tableName, e.getMessage(), e);
         return unprocessedSplits;
       } finally {
         // Clean up resources
@@ -161,13 +161,13 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
    * Queries Sync checkpoint table for completed mapper regions
    */
   private List<KeyRange> queryCompletedMapperRegions(Configuration conf, String tableName,
-    String targetZkQuorum, Long fromTime, Long toTime) throws SQLException {
+      String targetZkQuorum, Long fromTime, Long toTime) throws SQLException {
     String tenantId = PhoenixConfigurationUtil.getTenantId(conf);
     List<KeyRange> completedRegions = new ArrayList<>();
     try (Connection conn = ConnectionUtil.getInputConnection(conf)) {
       PhoenixSyncTableOutputRepository repository = new PhoenixSyncTableOutputRepository(conn);
       List<PhoenixSyncTableCheckpointOutputRow> completedRows =
-        repository.getProcessedMapperRegions(tableName, targetZkQuorum, fromTime, toTime, tenantId);
+          repository.getProcessedMapperRegions(tableName, targetZkQuorum, fromTime, toTime, tenantId);
       for (PhoenixSyncTableCheckpointOutputRow row : completedRows) {
         KeyRange keyRange = KeyRange.getKeyRange(row.getStartRowKey(), row.getEndRowKey());
         completedRegions.add(keyRange);
@@ -183,7 +183,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
    * @return Splits that need processing
    */
   List<InputSplit> filterCompletedSplits(List<InputSplit> allSplits,
-    List<KeyRange> completedRegions) {
+      List<KeyRange> completedRegions) {
     if (completedRegions.isEmpty()) {
       return allSplits;
     }
@@ -214,13 +214,13 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
       // [----completed----)
       // If completedEnd is [], it means this is for last region, this check has no meaning.
       if (
-        !Bytes.equals(completedEnd, HConstants.EMPTY_END_ROW)
-          && Bytes.compareTo(completedEnd, splitStart) <= 0
+          !Bytes.equals(completedEnd, HConstants.EMPTY_END_ROW)
+              && Bytes.compareTo(completedEnd, splitStart) <= 0
       ) {
         completedIdx++;
       } else if (
-        !Bytes.equals(splitEnd, HConstants.EMPTY_END_ROW)
-          && Bytes.compareTo(completedStart, splitEnd) >= 0
+          !Bytes.equals(splitEnd, HConstants.EMPTY_END_ROW)
+              && Bytes.compareTo(completedStart, splitEnd) >= 0
       ) {
         // No overlap b/w completedRange/splitRange.
         // splitEnd is before completedStart, add this splitRange to unprocessed. For scenario like
@@ -247,7 +247,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
         // If we are at end of completedRange region, we can assume end boundary is always contained
         // wrt splitRange
         boolean endContained = Bytes.equals(completedEnd, HConstants.EMPTY_END_ROW)
-          || Bytes.compareTo(splitEnd, completedEnd) <= 0;
+            || Bytes.compareTo(splitEnd, completedEnd) <= 0;
 
         boolean fullyContained = startContained && endContained;
         if (!fullyContained) {
@@ -275,10 +275,10 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
    * @return Coalesced splits with all regions per server combined into one split
    */
   List<InputSplit> coalesceSplits(List<InputSplit> unprocessedSplits, RegionLocator regionLocator)
-    throws IOException, InterruptedException {
+      throws IOException, InterruptedException {
     // Group splits by RegionServer location
     Map<String, List<PhoenixInputSplit>> splitsByServer =
-      groupSplitsByServer(unprocessedSplits, regionLocator);
+        groupSplitsByServer(unprocessedSplits, regionLocator);
 
     List<InputSplit> coalescedSplits = new ArrayList<>();
 
@@ -288,11 +288,11 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
       List<PhoenixInputSplit> serverSplits = entry.getValue();
 
       LOGGER.info("Coalescing {} splits from server {} into single split", serverSplits.size(),
-        serverName);
+          serverName);
 
       // Sort splits by start key for sequential processing
       serverSplits.sort((s1, s2) -> Bytes.compareTo(s1.getKeyRange().getLowerRange(),
-        s2.getKeyRange().getLowerRange()));
+          s2.getKeyRange().getLowerRange()));
       long totalSize = 0;
       for (PhoenixInputSplit split : serverSplits) {
         totalSize += split.getLength();
@@ -301,7 +301,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
       // Create single coalesced split with ALL regions from this server
       coalescedSplits.add(createCoalescedSplit(serverSplits, serverName));
       LOGGER.info("Created coalesced split with {} regions, {} MB from server {}",
-        serverSplits.size(), totalSize / (1024 * 1024), serverName);
+          serverSplits.size(), totalSize / (1024 * 1024), serverName);
     }
 
     return coalescedSplits;
@@ -315,18 +315,18 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
    * @return Map of server name to list of splits hosted on that server
    */
   Map<String, List<PhoenixInputSplit>> groupSplitsByServer(List<InputSplit> splits,
-    RegionLocator regionLocator) throws IOException {
+      RegionLocator regionLocator) throws IOException {
 
     Map<String, List<PhoenixInputSplit>> splitsByServer = new LinkedHashMap<>();
     for (InputSplit split : splits) {
       PhoenixInputSplit pSplit = (PhoenixInputSplit) split;
       KeyRange keyRange = pSplit.getKeyRange();
       HRegionLocation regionLocation =
-        regionLocator.getRegionLocation(keyRange.getLowerRange(), false);
+          regionLocator.getRegionLocation(keyRange.getLowerRange(), false);
       String serverName = regionLocation.getServerName().getAddress().toString();
       splitsByServer.computeIfAbsent(serverName, k -> new ArrayList<>()).add(pSplit);
       LOGGER.debug("Split {} assigned to server {}", Bytes.toStringBinary(keyRange.getLowerRange()),
-        serverName);
+          serverName);
     }
 
     return splitsByServer;
@@ -340,7 +340,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
    * @return Coalesced PhoenixInputSplit
    */
   PhoenixInputSplit createCoalescedSplit(List<PhoenixInputSplit> splits, String serverLocation)
-    throws IOException, InterruptedException {
+      throws IOException, InterruptedException {
 
     if (splits.isEmpty()) {
       throw new IllegalArgumentException("Cannot create coalesced split from empty list");
@@ -364,10 +364,10 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
 
     // Create a new PhoenixInputSplit containing multiple KeyRanges
     PhoenixInputSplit coalescedSplit =
-      new PhoenixInputSplit(allScans, allKeyRanges, totalSize, serverLocation);
+        new PhoenixInputSplit(allScans, allKeyRanges, totalSize, serverLocation);
 
     LOGGER.debug("Created coalesced split: {} regions, total size {} MB, location {}",
-      allKeyRanges.size(), totalSize / (1024 * 1024), serverLocation);
+        allKeyRanges.size(), totalSize / (1024 * 1024), serverLocation);
 
     return coalescedSplit;
   }

@@ -644,7 +644,7 @@ public class SlowestScanMetricsIT extends BaseTest {
 
   @Test
   public void testQueryOnCoveredIndex() throws Exception {
-    int topN = 2;
+    int topN = 3;
     String tableName = generateUniqueName();
     String indexName = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -669,8 +669,8 @@ public class SlowestScanMetricsIT extends BaseTest {
       JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
 
       int totalBroc = 0;
-      // Outer array has size 2 as the base table is salted so, salt bucket no. of parallel scans
-      // are generated and topN is 2.
+      // Outer array has size 3 as the base table is salted so, salt bucket no. of parallel scans
+      // are generated and topN is 3.
       assertEquals(topN, slowestScanMetricsJsonArray.size());
       for (int i = 0; i < topN; i++) {
         JsonArray groupArray = slowestScanMetricsJsonArray.get(i).getAsJsonArray();
@@ -693,7 +693,7 @@ public class SlowestScanMetricsIT extends BaseTest {
 
   @Test
   public void testQueryOnUncoveredIndex() throws Exception {
-    int topN = 2;
+    int topN = 3;
     String tableName = generateUniqueName();
     String indexName = generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -718,8 +718,8 @@ public class SlowestScanMetricsIT extends BaseTest {
       JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
 
       int totalBroc = 0;
-      // Outer array has size 2 as the base table is salted so, salt bucket no. of parallel scans
-      // are generated and topN is 2.
+      // Outer array has size 3 as the base table is salted so, salt bucket no. of parallel scans
+      // are generated and topN is 3.
       assertEquals(topN, slowestScanMetricsJsonArray.size());
       for (int i = 0; i < topN; i++) {
         JsonArray groupArray = slowestScanMetricsJsonArray.get(i).getAsJsonArray();
@@ -787,7 +787,7 @@ public class SlowestScanMetricsIT extends BaseTest {
 
   @Test
   public void testQueryOnViewIndex() throws Exception {
-    int topN = 2;
+    int topN = 3;
     String tableName = generateUniqueName();
     String viewName = generateUniqueName();
     String viewIndexName = generateUniqueName();
@@ -816,8 +816,8 @@ public class SlowestScanMetricsIT extends BaseTest {
       JsonArray slowestScanMetricsJsonArray = getSlowestScanMetricsJsonArray(rs);
 
       int totalBroc = 0;
-      // Outer array has size 2 as the base table is salted so, salt bucket no. of parallel scans
-      // are generated and topN is 2.
+      // Outer array has size 3 as the base table is salted so, salt bucket no. of parallel scans
+      // are generated and topN is 3.
       assertEquals(topN, slowestScanMetricsJsonArray.size());
       for (int i = 0; i < topN; i++) {
         JsonArray groupArray = slowestScanMetricsJsonArray.get(i).getAsJsonArray();
