@@ -59,6 +59,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -984,6 +985,8 @@ public class IndexCDCConsumer implements Runnable {
         metricSource.updateCdcBatchProcessTime(dataTableName,
           EnvironmentEdgeManager.currentTimeMillis() - batchStartTime);
         metricSource.incrementCdcBatchCount(dataTableName);
+        metricSource.updateCdcLag(dataTableName,
+          EnvironmentEdgeManager.currentTimeMillis() - newLastTimestamp);
         updateTrackerProgress(conn, partitionId, ownerPartitionId, newLastTimestamp,
           PhoenixDatabaseMetaData.TRACKER_STATUS_IN_PROGRESS);
       }
@@ -997,14 +1000,7 @@ public class IndexCDCConsumer implements Runnable {
     if (cdcObjectName == null) {
       throw new SQLException("No CDC object found for table " + dataTableName);
     }
-    String schemaName = dataTable.getSchemaName().getString();
-    if (schemaName == null || schemaName.isEmpty()) {
-      cdcObjectName = "\"" + cdcObjectName + "\"";
-    } else {
-      cdcObjectName =
-        "\"" + schemaName + "\"" + QueryConstants.NAME_SEPARATOR + "\"" + cdcObjectName + "\"";
-    }
-    return cdcObjectName;
+    return SchemaUtil.getEscapedTableName(dataTable.getSchemaName().getString(), cdcObjectName);
   }
 
   /**
@@ -1110,6 +1106,8 @@ public class IndexCDCConsumer implements Runnable {
         metricSource.updateCdcBatchProcessTime(dataTableName,
           EnvironmentEdgeManager.currentTimeMillis() - batchStartTime);
         metricSource.incrementCdcBatchCount(dataTableName);
+        metricSource.updateCdcLag(dataTableName,
+          EnvironmentEdgeManager.currentTimeMillis() - newLastTimestamp);
       }
       if (newLastTimestamp > lastProcessedTimestamp) {
         updateTrackerProgress(conn, partitionId, ownerPartitionId, newLastTimestamp,

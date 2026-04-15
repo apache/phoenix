@@ -33,6 +33,7 @@ public class MetricsIndexCDCConsumerSourceImpl extends BaseSourceImpl
   private final MutableFastCounter cdcBatchCounter;
   private final MutableFastCounter cdcMutationCounter;
   private final MutableFastCounter cdcBatchFailureCounter;
+  private final MetricHistogram cdcIndexUpdateLagHisto;
 
   public MetricsIndexCDCConsumerSourceImpl() {
     this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
@@ -53,6 +54,8 @@ public class MetricsIndexCDCConsumerSourceImpl extends BaseSourceImpl
       getMetricsRegistry().newCounter(CDC_MUTATION_COUNT, CDC_MUTATION_COUNT_DESC, 0L);
     cdcBatchFailureCounter =
       getMetricsRegistry().newCounter(CDC_BATCH_FAILURE_COUNT, CDC_BATCH_FAILURE_COUNT_DESC, 0L);
+    cdcIndexUpdateLagHisto =
+      getMetricsRegistry().newHistogram(CDC_INDEX_UPDATE_LAG, CDC_INDEX_UPDATE_LAG_DESC);
   }
 
   @Override
@@ -91,6 +94,12 @@ public class MetricsIndexCDCConsumerSourceImpl extends BaseSourceImpl
   public void incrementCdcBatchFailureCount(String dataTableName) {
     incrementTableSpecificCounter(CDC_BATCH_FAILURE_COUNT, dataTableName);
     cdcBatchFailureCounter.incr();
+  }
+
+  @Override
+  public void updateCdcLag(String dataTableName, long lag) {
+    incrementTableSpecificHistogram(CDC_INDEX_UPDATE_LAG, dataTableName, lag);
+    cdcIndexUpdateLagHisto.add(lag);
   }
 
   private void incrementTableSpecificCounter(String baseName, String tableName) {

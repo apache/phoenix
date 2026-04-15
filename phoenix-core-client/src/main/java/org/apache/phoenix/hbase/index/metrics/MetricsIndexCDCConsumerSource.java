@@ -50,6 +50,10 @@ public interface MetricsIndexCDCConsumerSource extends BaseSource {
   String CDC_BATCH_FAILURE_COUNT = "cdcBatchFailureCount";
   String CDC_BATCH_FAILURE_COUNT_DESC = "The number of CDC batch processing failures";
 
+  String CDC_INDEX_UPDATE_LAG = "cdcIndexUpdateLag";
+  String CDC_INDEX_UPDATE_LAG_DESC =
+    "Histogram for the lag in milliseconds between current time and the last processed CDC event";
+
   /**
    * Updates the CDC batch processing time histogram.
    * @param dataTableName physical data table name
@@ -89,4 +93,11 @@ public interface MetricsIndexCDCConsumerSource extends BaseSource {
    * @param dataTableName physical data table name
    */
   void incrementCdcBatchFailureCount(String dataTableName);
+
+  /**
+   * Updates the CDC lag histogram.
+   * @param dataTableName physical data table name
+   * @param lag           lag in milliseconds between current time and last processed event
+   */
+  void updateCdcLag(String dataTableName, long lag);
 }
