@@ -126,12 +126,11 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     "phoenix.sync.table.chunk.size.bytes";
   public static final long DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
   public static final String PHOENIX_SYNC_TABLE_SPLIT_COALESCING =
-      "phoenix.sync.table.split.coalescing";
+    "phoenix.sync.table.split.coalescing";
   public static final boolean DEFAULT_PHOENIX_SYNC_TABLE_SPLIT_COALESCING = false;
   public static final String PHOENIX_SYNC_TABLE_RAW_SCAN = "phoenix.sync.table.raw.scan";
   public static final String PHOENIX_SYNC_TABLE_READ_ALL_VERSIONS =
     "phoenix.sync.table.read.all.versions";
-
 
   private String schemaName;
   private String tableName;
@@ -401,7 +400,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     Counters counters = job.getCounters();
     if (counters != null) {
       long taskCreated =
-          counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TASK_CREATED).getValue();
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TASK_CREATED).getValue();
       long verifiedMappers =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_VERIFIED).getValue();
       long mismatchedMappers =
@@ -413,14 +412,13 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       long sourceRowsProcessed =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
       long targetRowsProcessed =
-          counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED)
-              .getValue();
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED).getValue();
       LOGGER.info(
-          "PhoenixSyncTable job completed, gathered counters are \n Task Created: {}, \n Verified Mappers: {}, \n"
-              + "Mismatched Mappers: {}, \n Chunks Verified: {}, \n"
-              + "Chunks Mismatched: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}",
-          taskCreated, verifiedMappers, mismatchedMappers, chunksVerified, chunksMismatched,
-          sourceRowsProcessed, targetRowsProcessed);
+        "PhoenixSyncTable job completed, gathered counters are \n Task Created: {}, \n Verified Mappers: {}, \n"
+          + "Mismatched Mappers: {}, \n Chunks Verified: {}, \n"
+          + "Chunks Mismatched: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}",
+        taskCreated, verifiedMappers, mismatchedMappers, chunksVerified, chunksMismatched,
+        sourceRowsProcessed, targetRowsProcessed);
     } else {
       LOGGER.warn("Unable to retrieve job counters for table {} - job may have failed "
         + "during initialization", qTable);

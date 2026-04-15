@@ -17,27 +17,78 @@
  */
 package org.apache.phoenix.mapreduce;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.HRegionLocation;
+import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.schema.PTable;
+import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.Mock;
+import org.mockito.junit.MockitoJUnitRunner;
 
 /**
  * Unit tests for PhoenixSyncTableInputFormat. Tests various scenarios of filtering completed splits
+ * and split coalescing functionality.
  */
+@RunWith(MockitoJUnitRunner.class)
 public class PhoenixSyncTableInputFormatTest {
 
   private PhoenixSyncTableInputFormat inputFormat = new PhoenixSyncTableInputFormat();
+
+  @Mock
+  private JobContext mockJobContext;
+
+  @Mock
+  private Configuration mockConf;
+
+  @Mock
+  private java.sql.Connection mockConnection;
+
+  @Mock
+  private PhoenixConnection mockPhoenixConnection;
+
+  @Mock
+  private PTable mockPTable;
+
+  @Mock
+  private ConnectionQueryServices mockQueryServices;
+
+  @Mock
+  private Admin mockAdmin;
+
+  @Mock
+  private org.apache.hadoop.hbase.client.Connection mockHBaseConnection;
+
+  @Mock
+  private RegionLocator mockRegionLocator;
+
+  @Before
+  public void setup() throws Exception {
+    // Setup is intentionally empty - stubs are configured per-test as needed
+  }
 
   /**
    * Helper method to create a PhoenixInputSplit with given key range boundaries.
@@ -279,5 +330,260 @@ public class PhoenixSyncTableInputFormatTest {
     assertNotNull("createRecordReader should never return null", reader);
     assertTrue("Should return a PhoenixNoOpSingleRecordReader",
       reader instanceof PhoenixNoOpSingleRecordReader);
+  }
+
+  @Test
+  public void testGroupSplitsByServerWithSingleServer() throws IOException {
+    // Create 3 PhoenixInputSplits with different key ranges
+    List<InputSplit> splits = new ArrayList<>();
+    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
+    splits.add(createSplit(Bytes.toBytes("d"), Bytes.toBytes("g")));
+    splits.add(createSplit(Bytes.toBytes("g"), Bytes.toBytes("j")));
+
+    // Create mock region location BEFORE stubbing to avoid nested stubbing issues
+    HRegionLocation mockRegion = createMockRegionLocation("server1:16020", Bytes.toBytes("a"));
+
+    // Mock RegionLocator to return same server for all splits
+    when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
+      .thenReturn(mockRegion);
+
+    // Call groupSplitsByServer
+    Map<String, List<PhoenixInputSplit>> splitsByServer =
+      inputFormat.groupSplitsByServer(splits, mockRegionLocator);
+
+    // Verify: All splits grouped under one server
+    assertEquals("Should have 1 server", 1, splitsByServer.size());
+    assertTrue("Should contain server1:16020", splitsByServer.containsKey("server1:16020"));
+    assertEquals("Server should have 3 splits", 3, splitsByServer.get("server1:16020").size());
+  }
+
+  @Test
+  public void testCreateCoalescedSplitWithMultipleSplits()
+    throws IOException, InterruptedException {
+    // Create 3 PhoenixInputSplits in unsorted order
+    List<PhoenixInputSplit> splits = new ArrayList<>();
+    splits.add((PhoenixInputSplit) createSplit(Bytes.toBytes("g"), Bytes.toBytes("j")));
+    splits.add((PhoenixInputSplit) createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
+    splits.add((PhoenixInputSplit) createSplit(Bytes.toBytes("d"), Bytes.toBytes("g")));
+
+    // Call createCoalescedSplit
+    PhoenixInputSplit coalescedSplit = inputFormat.createCoalescedSplit(splits, "server1:16020");
+
+    // Verify: isCoalesced() == true
+    assertTrue("Split should be marked as coalesced", coalescedSplit.isCoalesced());
+
+    // Verify: Contains 3 KeyRanges
+    assertEquals("Should contain 3 KeyRanges", 3, coalescedSplit.getKeyRanges().size());
+
+    // Verify: KeyRanges are sorted by start key (logic in coalesceSplits sorts before calling this)
+    List<KeyRange> keyRanges = coalescedSplit.getKeyRanges();
+    // Since createCoalescedSplit doesn't sort, they'll be in the order provided (g, a, d)
+    assertTrue("First KeyRange should start with 'g'",
+      Bytes.equals(Bytes.toBytes("g"), keyRanges.get(0).getLowerRange()));
+    assertTrue("Second KeyRange should start with 'a'",
+      Bytes.equals(Bytes.toBytes("a"), keyRanges.get(1).getLowerRange()));
+    assertTrue("Third KeyRange should start with 'd'",
+      Bytes.equals(Bytes.toBytes("d"), keyRanges.get(2).getLowerRange()));
+  }
+
+  @Test
+  public void testGroupSplitsByServerWithMultipleServers() throws IOException {
+    // Create 6 PhoenixInputSplits
+    List<InputSplit> splits = new ArrayList<>();
+    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("c")));
+    splits.add(createSplit(Bytes.toBytes("c"), Bytes.toBytes("e")));
+    splits.add(createSplit(Bytes.toBytes("e"), Bytes.toBytes("g")));
+    splits.add(createSplit(Bytes.toBytes("g"), Bytes.toBytes("i")));
+    splits.add(createSplit(Bytes.toBytes("i"), Bytes.toBytes("k")));
+    splits.add(createSplit(Bytes.toBytes("k"), Bytes.toBytes("m")));
+
+    // Create mock region locations BEFORE stubbing to avoid nested stubbing issues
+    HRegionLocation mockRegionA = createMockRegionLocation("server1:16020", Bytes.toBytes("a"));
+    HRegionLocation mockRegionC = createMockRegionLocation("server1:16020", Bytes.toBytes("c"));
+    HRegionLocation mockRegionE = createMockRegionLocation("server1:16020", Bytes.toBytes("e"));
+    HRegionLocation mockRegionG = createMockRegionLocation("server2:16020", Bytes.toBytes("g"));
+    HRegionLocation mockRegionI = createMockRegionLocation("server2:16020", Bytes.toBytes("i"));
+    HRegionLocation mockRegionK = createMockRegionLocation("server2:16020", Bytes.toBytes("k"));
+
+    // Mock RegionLocator: first 3 splits → server1, last 3 splits → server2
+    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("a"), false)).thenReturn(mockRegionA);
+    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("c"), false)).thenReturn(mockRegionC);
+    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("e"), false)).thenReturn(mockRegionE);
+    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("g"), false)).thenReturn(mockRegionG);
+    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("i"), false)).thenReturn(mockRegionI);
+    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("k"), false)).thenReturn(mockRegionK);
+
+    // Call groupSplitsByServer
+    Map<String, List<PhoenixInputSplit>> splitsByServer =
+      inputFormat.groupSplitsByServer(splits, mockRegionLocator);
+
+    // Verify: 2 servers with 3 splits each
+    assertEquals("Should have 2 servers", 2, splitsByServer.size());
+    assertTrue("Should contain server1:16020", splitsByServer.containsKey("server1:16020"));
+    assertTrue("Should contain server2:16020", splitsByServer.containsKey("server2:16020"));
+    assertEquals("Server1 should have 3 splits", 3, splitsByServer.get("server1:16020").size());
+    assertEquals("Server2 should have 3 splits", 3, splitsByServer.get("server2:16020").size());
+  }
+
+  @Test
+  public void testGroupSplitsByServerWithEmptyList() throws IOException {
+    // Pass empty splits list
+    List<InputSplit> splits = new ArrayList<>();
+
+    // Call groupSplitsByServer
+    Map<String, List<PhoenixInputSplit>> splitsByServer =
+      inputFormat.groupSplitsByServer(splits, mockRegionLocator);
+
+    // Verify: Returns empty map
+    assertTrue("Should return empty map for empty input", splitsByServer.isEmpty());
+  }
+
+  @Test
+  public void testCreateCoalescedSplitWithSingleSplit() throws IOException, InterruptedException {
+    // Create 1 PhoenixInputSplit
+    List<PhoenixInputSplit> splits = new ArrayList<>();
+    splits.add((PhoenixInputSplit) createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
+
+    // Call createCoalescedSplit
+    PhoenixInputSplit result = inputFormat.createCoalescedSplit(splits, "server1:16020");
+
+    // Verify: Returns the same split (no coalescing needed)
+    assertFalse("Single split should not be marked as coalesced", result.isCoalesced());
+    assertEquals("Should contain 1 KeyRange", 1, result.getKeyRanges().size());
+  }
+
+  @Test
+  public void testCoalesceSplitsWithMultipleServers() throws Exception {
+    // Create 6 PhoenixInputSplits
+    List<InputSplit> splits = new ArrayList<>();
+    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("c")));
+    splits.add(createSplit(Bytes.toBytes("c"), Bytes.toBytes("e")));
+    splits.add(createSplit(Bytes.toBytes("e"), Bytes.toBytes("g")));
+    splits.add(createSplit(Bytes.toBytes("g"), Bytes.toBytes("i")));
+    splits.add(createSplit(Bytes.toBytes("i"), Bytes.toBytes("k")));
+    splits.add(createSplit(Bytes.toBytes("k"), Bytes.toBytes("m")));
+
+    // Create mock region locations BEFORE stubbing to avoid nested stubbing issues
+    HRegionLocation mockRegionA = createMockRegionLocation("server1:16020", Bytes.toBytes("a"));
+    HRegionLocation mockRegionC = createMockRegionLocation("server1:16020", Bytes.toBytes("c"));
+    HRegionLocation mockRegionE = createMockRegionLocation("server1:16020", Bytes.toBytes("e"));
+    HRegionLocation mockRegionG = createMockRegionLocation("server2:16020", Bytes.toBytes("g"));
+    HRegionLocation mockRegionI = createMockRegionLocation("server2:16020", Bytes.toBytes("i"));
+    HRegionLocation mockRegionK = createMockRegionLocation("server2:16020", Bytes.toBytes("k"));
+
+    // Mock RegionLocator: first 3 splits → server1, last 3 splits → server2
+    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("a"), false)).thenReturn(mockRegionA);
+    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("c"), false)).thenReturn(mockRegionC);
+    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("e"), false)).thenReturn(mockRegionE);
+    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("g"), false)).thenReturn(mockRegionG);
+    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("i"), false)).thenReturn(mockRegionI);
+    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("k"), false)).thenReturn(mockRegionK);
+
+    // Call coalesceSplits()
+    List<InputSplit> result = inputFormat.coalesceSplits(splits, mockRegionLocator);
+
+    // Verify: 2 coalesced splits (one per server)
+    assertEquals("Should have 2 coalesced splits (one per server)", 2, result.size());
+
+    // Verify: Each split is coalesced and contains 3 KeyRanges
+    PhoenixInputSplit split1 = (PhoenixInputSplit) result.get(0);
+    PhoenixInputSplit split2 = (PhoenixInputSplit) result.get(1);
+
+    assertTrue("Split 1 should be coalesced", split1.isCoalesced());
+    assertTrue("Split 2 should be coalesced", split2.isCoalesced());
+
+    assertEquals("Split 1 should have 3 KeyRanges", 3, split1.getKeyRanges().size());
+    assertEquals("Split 2 should have 3 KeyRanges", 3, split2.getKeyRanges().size());
+
+    // Verify: Splits are sorted by start key within each server group
+    List<KeyRange> keyRanges1 = split1.getKeyRanges();
+    List<KeyRange> keyRanges2 = split2.getKeyRanges();
+
+    // Check that KeyRanges are sorted (each should be less than next)
+    for (int i = 0; i < keyRanges1.size() - 1; i++) {
+      assertTrue("KeyRanges in split 1 should be sorted",
+        Bytes.compareTo(keyRanges1.get(i).getLowerRange(), keyRanges1.get(i + 1).getLowerRange())
+            < 0);
+    }
+    for (int i = 0; i < keyRanges2.size() - 1; i++) {
+      assertTrue("KeyRanges in split 2 should be sorted",
+        Bytes.compareTo(keyRanges2.get(i).getLowerRange(), keyRanges2.get(i + 1).getLowerRange())
+            < 0);
+    }
+  }
+
+  @Test
+  public void testCoalesceSplitsWithSingleServer() throws Exception {
+    // Create 3 PhoenixInputSplits all on same server
+    List<InputSplit> splits = new ArrayList<>();
+    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
+    splits.add(createSplit(Bytes.toBytes("d"), Bytes.toBytes("g")));
+    splits.add(createSplit(Bytes.toBytes("g"), Bytes.toBytes("j")));
+
+    // Create mock region location - all splits on server1
+    HRegionLocation mockRegion = createMockRegionLocation("server1:16020", Bytes.toBytes("a"));
+
+    // Mock RegionLocator: all splits → server1
+    when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
+      .thenReturn(mockRegion);
+
+    // Call coalesceSplits()
+    List<InputSplit> result = inputFormat.coalesceSplits(splits, mockRegionLocator);
+
+    // Verify: 1 coalesced split (all on same server)
+    assertEquals("Should have 1 coalesced split (all on same server)", 1, result.size());
+
+    // Verify: Split is coalesced and contains 3 KeyRanges
+    PhoenixInputSplit coalescedSplit = (PhoenixInputSplit) result.get(0);
+
+    assertTrue("Split should be coalesced", coalescedSplit.isCoalesced());
+    assertEquals("Split should have 3 KeyRanges", 3, coalescedSplit.getKeyRanges().size());
+
+    // Verify: KeyRanges are sorted
+    List<KeyRange> keyRanges = coalescedSplit.getKeyRanges();
+    assertTrue("First KeyRange should start with 'a'",
+      Bytes.equals(Bytes.toBytes("a"), keyRanges.get(0).getLowerRange()));
+    assertTrue("Second KeyRange should start with 'd'",
+      Bytes.equals(Bytes.toBytes("d"), keyRanges.get(1).getLowerRange()));
+    assertTrue("Third KeyRange should start with 'g'",
+      Bytes.equals(Bytes.toBytes("g"), keyRanges.get(2).getLowerRange()));
+  }
+
+  @Test(expected = IllegalArgumentException.class)
+  public void testCreateCoalescedSplitWithEmptyList() throws IOException, InterruptedException {
+    List<PhoenixInputSplit> splits = new ArrayList<>();
+    // should throw IllegalArgumentException
+    inputFormat.createCoalescedSplit(splits, "server1:16020");
+  }
+
+  @Test(expected = IOException.class)
+  public void testGroupSplitsByServerWithIOException() throws IOException {
+    List<InputSplit> splits = new ArrayList<>();
+    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
+    // Mock RegionLocator to throw IOException
+    when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
+      .thenThrow(new IOException("Simulated region location failure"));
+
+    // should propagate IOException
+    inputFormat.groupSplitsByServer(splits, mockRegionLocator);
+  }
+
+  /**
+   * Helper method to create a mock HRegionLocation with the given server address and start key.
+   */
+  private HRegionLocation createMockRegionLocation(String serverAddress, byte[] startKey) {
+    HRegionLocation mockRegionLocation = mock(HRegionLocation.class);
+    ServerName mockServerName = mock(ServerName.class);
+    // Create a real Address object instead of mocking it, since toString() is final
+    // Parse the serverAddress string to extract hostname and port
+    String[] parts = serverAddress.split(":");
+    String hostname = parts[0];
+    int port = parts.length > 1 ? Integer.parseInt(parts[1]) : 16020;
+    org.apache.hadoop.hbase.net.Address address =
+      org.apache.hadoop.hbase.net.Address.fromParts(hostname, port);
+
+    when(mockServerName.getAddress()).thenReturn(address);
+    when(mockRegionLocation.getServerName()).thenReturn(mockServerName);
+    return mockRegionLocation;
   }
 }

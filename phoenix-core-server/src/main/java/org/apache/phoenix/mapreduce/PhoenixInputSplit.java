@@ -66,15 +66,15 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
   }
 
   /**
-   * Constructor for coalesced splits containing multiple regions.
-   * Used by PhoenixSyncTableTool to reduce mapper count and avoid hotspotting.
-   * @param scans List of scans (one per region)
-   * @param keyRanges List of KeyRanges (one per region)
-   * @param splitSize Total size of coalesced split
+   * Constructor for coalesced splits containing multiple regions. Used by PhoenixSyncTableTool to
+   * reduce mapper count and avoid hotspotting.
+   * @param scans          List of scans (one per region)
+   * @param keyRanges      List of KeyRanges (one per region)
+   * @param splitSize      Total size of coalesced split
    * @param regionLocation RegionServer location for data locality
    */
-  public PhoenixInputSplit(final List<Scan> scans, final List<KeyRange> keyRanges,
-    long splitSize, String regionLocation) {
+  public PhoenixInputSplit(final List<Scan> scans, final List<KeyRange> keyRanges, long splitSize,
+    String regionLocation) {
     Preconditions.checkNotNull(scans);
     Preconditions.checkNotNull(keyRanges);
     Preconditions.checkState(!scans.isEmpty());
@@ -97,8 +97,8 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
   }
 
   /**
-   * Returns all KeyRanges for coalesced splits (one per region).
-   * For non-coalesced splits, returns a single-element list.
+   * Returns all KeyRanges for coalesced splits (one per region). For non-coalesced splits, returns
+   * a single-element list.
    * @return List of KeyRanges
    */
   public List<KeyRange> getKeyRanges() {
