@@ -62,7 +62,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * chunk hashes from both clusters, compares them and write to checkpoint table.
  */
 public class PhoenixSyncTableMapper
-    extends Mapper<NullWritable, DBInputFormat.NullDBWritable, NullWritable, NullWritable> {
+  extends Mapper<NullWritable, DBInputFormat.NullDBWritable, NullWritable, NullWritable> {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixSyncTableMapper.class);
 
@@ -121,7 +121,7 @@ public class PhoenixSyncTableMapper
     } catch (Exception e) {
       tryClosingResources();
       throw new RuntimeException(
-          String.format("Failed to setup PhoenixSyncTableMapper for table: %s", tableName), e);
+        String.format("Failed to setup PhoenixSyncTableMapper for table: %s", tableName), e);
     }
   }
 
@@ -134,13 +134,13 @@ public class PhoenixSyncTableMapper
     if (split.isCoalesced()) {
       regionKeyRanges = split.getKeyRanges();
       LOGGER.info("Mapper processing coalesced split with {} regions for table {}",
-          regionKeyRanges.size(), tableName);
+        regionKeyRanges.size(), tableName);
     } else {
       KeyRange keyRange = split.getKeyRange();
       if (keyRange == null) {
         throw new IllegalStateException(String.format(
-            "PhoenixInputSplit has no KeyRange for table: %s . Cannot determine region boundaries for sync operation.",
-            tableName));
+          "PhoenixInputSplit has no KeyRange for table: %s . Cannot determine region boundaries for sync operation.",
+          tableName));
       }
       regionKeyRanges = Lists.newArrayList(keyRange);
     }
@@ -172,7 +172,7 @@ public class PhoenixSyncTableMapper
    */
   @Override
   protected void map(NullWritable key, DBInputFormat.NullDBWritable value, Context context)
-      throws IOException, InterruptedException {
+    throws IOException, InterruptedException {
     context.getCounter(PhoenixJobCounters.INPUT_RECORDS).increment(1);
     try {
       // Process each region in the split (one or multiple for coalesced splits)
@@ -180,7 +180,7 @@ public class PhoenixSyncTableMapper
         byte[] regionStart = keyRange.getLowerRange();
         byte[] regionEnd = keyRange.getUpperRange();
         LOGGER.info("Processing region [{}, {}) from split for table {}",
-            Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd), tableName);
+          Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd), tableName);
         processRegion(regionStart, regionEnd, context);
       }
     } catch (SQLException e) {
@@ -196,18 +196,18 @@ public class PhoenixSyncTableMapper
    * @param context     Mapper context
    */
   private void processRegion(byte[] regionStart, byte[] regionEnd, Context context)
-      throws SQLException, IOException, InterruptedException {
+    throws SQLException, IOException, InterruptedException {
 
     Timestamp regionStartTime = new Timestamp(System.currentTimeMillis());
 
     // Get processed chunks for this specific region
     List<PhoenixSyncTableCheckpointOutputRow> processedChunks =
-        syncTableOutputRepository.getProcessedChunks(tableName, targetZkQuorum, fromTime, toTime,
-            tenantId, regionStart, regionEnd);
+      syncTableOutputRepository.getProcessedChunks(tableName, targetZkQuorum, fromTime, toTime,
+        tenantId, regionStart, regionEnd);
 
     // Calculate unprocessed ranges within this region
     List<KeyRange> unprocessedRanges =
-        calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
+      calculateUnprocessedRanges(regionStart, regionEnd, processedChunks);
 
     // Track counters before processing this region
     long verifiedBefore = context.getCounter(SyncCounters.CHUNKS_VERIFIED).getValue();
@@ -219,59 +219,59 @@ public class PhoenixSyncTableMapper
     boolean isStartKeyInclusive = shouldStartKeyBeInclusive(regionStart, processedChunks);
     for (KeyRange range : unprocessedRanges) {
       processMapperRanges(range.getLowerRange(), range.getUpperRange(), isStartKeyInclusive,
-          context);
+        context);
       isStartKeyInclusive = false;
     }
 
     // Calculate counters for this region only
     long verifiedChunks =
-        context.getCounter(SyncCounters.CHUNKS_VERIFIED).getValue() - verifiedBefore;
+      context.getCounter(SyncCounters.CHUNKS_VERIFIED).getValue() - verifiedBefore;
     long mismatchedChunks =
-        context.getCounter(SyncCounters.CHUNKS_MISMATCHED).getValue() - mismatchedBefore;
+      context.getCounter(SyncCounters.CHUNKS_MISMATCHED).getValue() - mismatchedBefore;
     long sourceRowsProcessed =
-        context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).getValue() - sourceRowsBefore;
+      context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).getValue() - sourceRowsBefore;
     long targetRowsProcessed =
-        context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).getValue() - targetRowsBefore;
+      context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).getValue() - targetRowsBefore;
 
     Timestamp regionEndTime = new Timestamp(System.currentTimeMillis());
     String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
-        .formatMapper(verifiedChunks, mismatchedChunks, sourceRowsProcessed, targetRowsProcessed);
+      .formatMapper(verifiedChunks, mismatchedChunks, sourceRowsProcessed, targetRowsProcessed);
     if (sourceRowsProcessed > 0) {
       if (mismatchedChunks == 0) {
         context.getCounter(SyncCounters.MAPPERS_VERIFIED).increment(1);
         syncTableOutputRepository
-            .checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
-                .setTableName(tableName).setTargetCluster(targetZkQuorum)
-                .setType(PhoenixSyncTableCheckpointOutputRow.Type.REGION).setFromTime(fromTime)
-                .setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun)
-                .setStartRowKey(regionStart).setEndRowKey(regionEnd)
-                .setStatus(PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED)
-                .setExecutionStartTime(mapperStartTime).setExecutionEndTime(regionEndTime)
-                .setCounters(counters).build());
+          .checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+            .setTableName(tableName).setTargetCluster(targetZkQuorum)
+            .setType(PhoenixSyncTableCheckpointOutputRow.Type.REGION).setFromTime(fromTime)
+            .setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun)
+            .setStartRowKey(regionStart).setEndRowKey(regionEnd)
+            .setStatus(PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED)
+            .setExecutionStartTime(mapperStartTime).setExecutionEndTime(regionEndTime)
+            .setCounters(counters).build());
         LOGGER.info(
-            "PhoenixSyncTable region [{}, {}) completed with verified: {} verified chunks, {} mismatched chunks",
-            Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd), verifiedChunks,
-            mismatchedChunks);
+          "PhoenixSyncTable region [{}, {}) completed with verified: {} verified chunks, {} mismatched chunks",
+          Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd), verifiedChunks,
+          mismatchedChunks);
       } else {
         context.getCounter(SyncCounters.MAPPERS_MISMATCHED).increment(1);
         LOGGER.warn(
-            "PhoenixSyncTable region [{}, {}) completed with mismatch: {} verified chunks, {} mismatched chunks",
-            Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd), verifiedChunks,
-            mismatchedChunks);
+          "PhoenixSyncTable region [{}, {}) completed with mismatch: {} verified chunks, {} mismatched chunks",
+          Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd), verifiedChunks,
+          mismatchedChunks);
         syncTableOutputRepository
-            .checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
-                .setTableName(tableName).setTargetCluster(targetZkQuorum)
-                .setType(PhoenixSyncTableCheckpointOutputRow.Type.REGION).setFromTime(fromTime)
-                .setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun)
-                .setStartRowKey(regionStart).setEndRowKey(regionEnd)
-                .setStatus(PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED)
-                .setExecutionStartTime(mapperStartTime).setExecutionEndTime(regionEndTime)
-                .setCounters(counters).build());
+          .checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+            .setTableName(tableName).setTargetCluster(targetZkQuorum)
+            .setType(PhoenixSyncTableCheckpointOutputRow.Type.REGION).setFromTime(fromTime)
+            .setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun)
+            .setStartRowKey(regionStart).setEndRowKey(regionEnd)
+            .setStatus(PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED)
+            .setExecutionStartTime(mapperStartTime).setExecutionEndTime(regionEndTime)
+            .setCounters(counters).build());
       }
     } else {
       LOGGER.info(
-          "No rows pending to process. All region boundaries are covered for startKey:{}, endKey: {}",
-          Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd));
+        "No rows pending to process. All region boundaries are covered for startKey:{}, endKey: {}",
+        Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd));
     }
   }
 
@@ -289,7 +289,7 @@ public class PhoenixSyncTableMapper
    * @throws SQLException if database operations fail
    */
   private void processMapperRanges(byte[] rangeStart, byte[] rangeEnd,
-      boolean isSourceStartKeyInclusive, Context context) throws IOException, SQLException {
+    boolean isSourceStartKeyInclusive, Context context) throws IOException, SQLException {
     // To handle scenario of target having extra keys compared to source keys:
     // For every source chunk, we track whether its first chunk of Region or whether its lastChunk
     // of region
@@ -319,7 +319,7 @@ public class PhoenixSyncTableMapper
     // would be exclusive
     boolean isTargetStartKeyInclusive = isSourceStartKeyInclusive;
     try (ChunkScannerContext sourceScanner = createChunkScanner(sourceConnection, rangeStart,
-        rangeEnd, null, isSourceStartKeyInclusive, false, false)) {
+      rangeEnd, null, isSourceStartKeyInclusive, false, false)) {
       ChunkInfo previousSourceChunk = null;
       ChunkInfo sourceChunk = sourceScanner.getNextChunk();
       while (sourceChunk != null) {
@@ -330,30 +330,30 @@ public class PhoenixSyncTableMapper
           isLastChunkOfRegion = true;
         }
         ChunkInfo targetChunk = getTargetChunkWithSourceBoundary(targetConnection,
-            previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey,
-            isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey, isTargetStartKeyInclusive,
-            !isLastChunkOfRegion);
+          previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey,
+          isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey, isTargetStartKeyInclusive,
+          !isLastChunkOfRegion);
         context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).increment(sourceChunk.rowCount);
         context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).increment(targetChunk.rowCount);
         boolean matched = MessageDigest.isEqual(sourceChunk.hash, targetChunk.hash);
         if (LOGGER.isDebugEnabled()) {
           LOGGER.debug(
-              "isSourceStartKeyInclusive: {}, isTargetStartKeyInclusive: {},"
-                  + "isTargetEndKeyInclusive: {}, isFirstChunkOfRegion: {}, isLastChunkOfRegion: {}."
-                  + "Chunk comparison source {}, {}. Key range passed to target chunk: {}, {}."
-                  + "target chunk returned {}, {}: source={} rows, target={} rows, matched={}",
-              isSourceStartKeyInclusive, isTargetStartKeyInclusive, !isLastChunkOfRegion,
-              previousSourceChunk == null, isLastChunkOfRegion,
-              Bytes.toStringBinary(sourceChunk.startKey), Bytes.toStringBinary(sourceChunk.endKey),
-              Bytes.toStringBinary(
-                  previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey),
-              Bytes.toStringBinary(isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey),
-              Bytes.toStringBinary(targetChunk.startKey), Bytes.toStringBinary(targetChunk.endKey),
-              sourceChunk.rowCount, targetChunk.rowCount, matched);
+            "isSourceStartKeyInclusive: {}, isTargetStartKeyInclusive: {},"
+              + "isTargetEndKeyInclusive: {}, isFirstChunkOfRegion: {}, isLastChunkOfRegion: {}."
+              + "Chunk comparison source {}, {}. Key range passed to target chunk: {}, {}."
+              + "target chunk returned {}, {}: source={} rows, target={} rows, matched={}",
+            isSourceStartKeyInclusive, isTargetStartKeyInclusive, !isLastChunkOfRegion,
+            previousSourceChunk == null, isLastChunkOfRegion,
+            Bytes.toStringBinary(sourceChunk.startKey), Bytes.toStringBinary(sourceChunk.endKey),
+            Bytes.toStringBinary(
+              previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey),
+            Bytes.toStringBinary(isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey),
+            Bytes.toStringBinary(targetChunk.startKey), Bytes.toStringBinary(targetChunk.endKey),
+            sourceChunk.rowCount, targetChunk.rowCount, matched);
         }
         sourceChunk.executionEndTime = new Timestamp(System.currentTimeMillis());
         String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
-            .formatChunk(sourceChunk.rowCount, targetChunk.rowCount);
+          .formatChunk(sourceChunk.rowCount, targetChunk.rowCount);
         if (matched) {
           handleVerifiedChunk(sourceChunk, context, counters);
         } else {
@@ -368,7 +368,7 @@ public class PhoenixSyncTableMapper
       }
     }
     LOGGER.info("Completed sync table processing of Mapper region boundary {}, {}",
-        Bytes.toStringBinary(rangeStart), Bytes.toStringBinary(rangeEnd));
+      Bytes.toStringBinary(rangeStart), Bytes.toStringBinary(rangeEnd));
   }
 
   /**
@@ -383,8 +383,8 @@ public class PhoenixSyncTableMapper
    * @return Single ChunkInfo with final hash from all target regions
    */
   private ChunkInfo getTargetChunkWithSourceBoundary(Connection conn, byte[] startKey,
-      byte[] endKey, boolean isTargetStartKeyInclusive, boolean isTargetEndKeyInclusive)
-      throws IOException, SQLException {
+    byte[] endKey, boolean isTargetStartKeyInclusive, boolean isTargetEndKeyInclusive)
+    throws IOException, SQLException {
     ChunkInfo combinedTargetChunk = new ChunkInfo();
     combinedTargetChunk.startKey = null;
     combinedTargetChunk.endKey = null;
@@ -399,14 +399,14 @@ public class PhoenixSyncTableMapper
       // marked partial and the digest state is passed to the next
       // scanner for cross-region hash continuation.
       try (ChunkScannerContext scanner = createChunkScanner(conn, currentStartKey, endKey,
-          continuedDigestState, isTargetStartKeyInclusive, isTargetEndKeyInclusive, true)) {
+        continuedDigestState, isTargetStartKeyInclusive, isTargetEndKeyInclusive, true)) {
         chunk = scanner.getNextChunk();
         // chunk == null means no more rows in the target range.
         // We must finalize the digest to produce a proper checksum for comparison.
         if (chunk == null) {
           if (continuedDigestState != null) {
             combinedTargetChunk.hash =
-                SHA256DigestUtil.finalizeDigestToChecksum(continuedDigestState);
+              SHA256DigestUtil.finalizeDigestToChecksum(continuedDigestState);
           }
           break;
         }
@@ -436,13 +436,13 @@ public class PhoenixSyncTableMapper
    * @throws SQLException hTable connection fails
    */
   private ChunkScannerContext createChunkScanner(Connection conn, byte[] startKey, byte[] endKey,
-      byte[] continuedDigestState, boolean isStartKeyInclusive, boolean isEndKeyInclusive,
-      boolean isTargetScan) throws IOException, SQLException {
+    byte[] continuedDigestState, boolean isStartKeyInclusive, boolean isEndKeyInclusive,
+    boolean isTargetScan) throws IOException, SQLException {
     // Not using try-with-resources since ChunkScannerContext owns the table lifecycle
     PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
     Table hTable = phoenixConn.getQueryServices().getTable(physicalTableName);
     Scan scan =
-        createChunkScan(startKey, endKey, isStartKeyInclusive, isEndKeyInclusive, isTargetScan);
+      createChunkScan(startKey, endKey, isStartKeyInclusive, isEndKeyInclusive, isTargetScan);
     scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_FORMATION, TRUE_BYTES);
     scan.setAttribute(BaseScannerRegionObserverConstants.SKIP_REGION_BOUNDARY_CHECK, TRUE_BYTES);
     scan.setAttribute(BaseScannerRegionObserverConstants.UNGROUPED_AGG, TRUE_BYTES);
@@ -452,20 +452,20 @@ public class PhoenixSyncTableMapper
     scan.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL, TRUE_BYTES);
     if (continuedDigestState != null && continuedDigestState.length > 0) {
       scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CONTINUED_DIGEST_STATE,
-          continuedDigestState);
+        continuedDigestState);
     }
 
     if (!isTargetScan) {
       scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_SIZE_BYTES,
-          Bytes.toBytes(chunkSizeBytes));
+        Bytes.toBytes(chunkSizeBytes));
     }
     // Use the half of the HBase RPC timeout value as the server page size to make sure
     // that the HBase region server will be able to send a heartbeat message to the
     // client before the client times out.
     long syncTablePageTimeoutMs = (long) (conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
-        QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT) * 0.5);
+      QueryServicesOptions.DEFAULT_SYNC_TABLE_RPC_TIMEOUT) * 0.5);
     scan.setAttribute(BaseScannerRegionObserverConstants.SERVER_PAGE_SIZE_MS,
-        Bytes.toBytes(syncTablePageTimeoutMs));
+      Bytes.toBytes(syncTablePageTimeoutMs));
     ResultScanner scanner = hTable.getScanner(scan);
     return new ChunkScannerContext(hTable, scanner);
   }
@@ -478,16 +478,16 @@ public class PhoenixSyncTableMapper
   private ChunkInfo parseChunkInfo(Result result) {
     List<Cell> cells = Arrays.asList(result.rawCells());
     Cell startKeyCell = MetaDataUtil.getCell(cells,
-        BaseScannerRegionObserverConstants.SYNC_TABLE_START_KEY_QUALIFIER);
+      BaseScannerRegionObserverConstants.SYNC_TABLE_START_KEY_QUALIFIER);
     Cell rowCountCell = MetaDataUtil.getCell(cells,
-        BaseScannerRegionObserverConstants.SYNC_TABLE_ROW_COUNT_QUALIFIER);
+      BaseScannerRegionObserverConstants.SYNC_TABLE_ROW_COUNT_QUALIFIER);
     Cell isPartialChunkCell = MetaDataUtil.getCell(cells,
-        BaseScannerRegionObserverConstants.SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER);
+      BaseScannerRegionObserverConstants.SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER);
     Cell hashCell =
-        MetaDataUtil.getCell(cells, BaseScannerRegionObserverConstants.SYNC_TABLE_HASH_QUALIFIER);
+      MetaDataUtil.getCell(cells, BaseScannerRegionObserverConstants.SYNC_TABLE_HASH_QUALIFIER);
 
     if (
-        startKeyCell == null || rowCountCell == null || isPartialChunkCell == null || hashCell == null
+      startKeyCell == null || rowCountCell == null || isPartialChunkCell == null || hashCell == null
     ) {
       throw new RuntimeException("Missing required chunk metadata cells.");
     }
@@ -496,37 +496,37 @@ public class PhoenixSyncTableMapper
     info.startKey = CellUtil.cloneValue(startKeyCell);
     info.endKey = result.getRow();
     info.rowCount = Bytes.toLong(rowCountCell.getValueArray(), rowCountCell.getValueOffset(),
-        rowCountCell.getValueLength());
+      rowCountCell.getValueLength());
     info.isPartial = isPartialChunkCell.getValueArray()[isPartialChunkCell.getValueOffset()] != 0;
     info.hash = CellUtil.cloneValue(hashCell);
     return info;
   }
 
   private void handleVerifiedChunk(ChunkInfo sourceChunk, Context context, String counters)
-      throws SQLException {
+    throws SQLException {
     syncTableOutputRepository.checkpointSyncTableResult(
-        new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
-            .setTargetCluster(targetZkQuorum).setType(PhoenixSyncTableCheckpointOutputRow.Type.CHUNK)
-            .setFromTime(fromTime).setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun)
-            .setStartRowKey(sourceChunk.startKey).setEndRowKey(sourceChunk.endKey)
-            .setStatus(PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED)
-            .setExecutionStartTime(sourceChunk.executionStartTime)
-            .setExecutionEndTime(sourceChunk.executionEndTime).setCounters(counters).build());
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+        .setTargetCluster(targetZkQuorum).setType(PhoenixSyncTableCheckpointOutputRow.Type.CHUNK)
+        .setFromTime(fromTime).setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun)
+        .setStartRowKey(sourceChunk.startKey).setEndRowKey(sourceChunk.endKey)
+        .setStatus(PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED)
+        .setExecutionStartTime(sourceChunk.executionStartTime)
+        .setExecutionEndTime(sourceChunk.executionEndTime).setCounters(counters).build());
     context.getCounter(SyncCounters.CHUNKS_VERIFIED).increment(1);
   }
 
   private void handleMismatchedChunk(ChunkInfo sourceChunk, Context context, String counters)
-      throws SQLException {
+    throws SQLException {
     LOGGER.warn("Chunk mismatch detected for table: {}, with startKey: {}, endKey {}", tableName,
-        Bytes.toStringBinary(sourceChunk.startKey), Bytes.toStringBinary(sourceChunk.endKey));
+      Bytes.toStringBinary(sourceChunk.startKey), Bytes.toStringBinary(sourceChunk.endKey));
     syncTableOutputRepository.checkpointSyncTableResult(
-        new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
-            .setTargetCluster(targetZkQuorum).setType(PhoenixSyncTableCheckpointOutputRow.Type.CHUNK)
-            .setFromTime(fromTime).setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun)
-            .setStartRowKey(sourceChunk.startKey).setEndRowKey(sourceChunk.endKey)
-            .setStatus(PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED)
-            .setExecutionStartTime(sourceChunk.executionStartTime)
-            .setExecutionEndTime(sourceChunk.executionEndTime).setCounters(counters).build());
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+        .setTargetCluster(targetZkQuorum).setType(PhoenixSyncTableCheckpointOutputRow.Type.CHUNK)
+        .setFromTime(fromTime).setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun)
+        .setStartRowKey(sourceChunk.startKey).setEndRowKey(sourceChunk.endKey)
+        .setStatus(PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED)
+        .setExecutionStartTime(sourceChunk.executionStartTime)
+        .setExecutionEndTime(sourceChunk.executionEndTime).setCounters(counters).build());
 
     context.getCounter(SyncCounters.CHUNKS_MISMATCHED).increment(1);
   }
@@ -536,7 +536,7 @@ public class PhoenixSyncTableMapper
    * cell versions based on command-line options.
    */
   private Scan createChunkScan(byte[] startKey, byte[] endKey, boolean isStartKeyInclusive,
-      boolean isEndKeyInclusive, boolean isTargetScan) throws IOException {
+    boolean isEndKeyInclusive, boolean isTargetScan) throws IOException {
     Scan scan = new Scan();
     scan.withStartRow(startKey, isStartKeyInclusive);
     scan.withStopRow(endKey, isEndKeyInclusive);
@@ -570,7 +570,7 @@ public class PhoenixSyncTableMapper
    * @return List of KeyRange representing unprocessed ranges
    */
   List<KeyRange> calculateUnprocessedRanges(byte[] mapperRegionStart, byte[] mapperRegionEnd,
-      List<PhoenixSyncTableCheckpointOutputRow> processedChunks) {
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks) {
     List<KeyRange> gaps = new ArrayList<>();
     // If processedChunks is null or empty, the entire mapper region needs processing
     if (processedChunks == null || processedChunks.isEmpty()) {
@@ -601,7 +601,7 @@ public class PhoenixSyncTableMapper
       // -----[---Mapper---]
       // --[chunk]
       byte[] effectiveStart =
-          Bytes.compareTo(chunkStart, mapperRegionStart) > 0 ? chunkStart : mapperRegionStart;
+        Bytes.compareTo(chunkStart, mapperRegionStart) > 0 ? chunkStart : mapperRegionStart;
 
       // Clip end: min(chunkEnd, mapperRegionEnd) : Skip clipping for end-of-table since []
       // semantically means infinity
@@ -645,7 +645,7 @@ public class PhoenixSyncTableMapper
    * processed chunks within this Mapper region boundary.
    */
   boolean shouldStartKeyBeInclusive(byte[] mapperRegionStart,
-      List<PhoenixSyncTableCheckpointOutputRow> processedChunks) {
+    List<PhoenixSyncTableCheckpointOutputRow> processedChunks) {
     // Only with processed chunk like below we need to
     // have first unprocessedRanges startKeyInclusive = true.
     // [---MapperRegion---------------)
@@ -659,8 +659,8 @@ public class PhoenixSyncTableMapper
     // [---MapperRegion---------------)
     // [--chunk1--] [--chunk2--]
     if (
-        mapperRegionStart == null || mapperRegionStart.length == 0 || processedChunks == null
-            || processedChunks.isEmpty()
+      mapperRegionStart == null || mapperRegionStart.length == 0 || processedChunks == null
+        || processedChunks.isEmpty()
     ) {
       return true;
     }
@@ -712,7 +712,7 @@ public class PhoenixSyncTableMapper
     @Override
     public String toString() {
       return String.format("Chunk[start=%s, end=%s, rows=%d, partial=%s]",
-          Bytes.toStringBinary(startKey), Bytes.toStringBinary(endKey), rowCount, isPartial);
+        Bytes.toStringBinary(startKey), Bytes.toStringBinary(endKey), rowCount, isPartial);
     }
   }
 
