@@ -160,6 +160,7 @@ public class PhoenixSyncTableToolIT {
 
     validateSyncCounters(counters, 10, 10, 1, 3);
     validateMapperCounters(counters, 1, 3);
+    assertEquals("Expected 4 mapper task to be created", 4, counters.taskCreated);
 
     List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
       queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
@@ -206,6 +207,8 @@ public class PhoenixSyncTableToolIT {
 
     validateSyncCounters(counters, 10, 7, 7, 3);
     validateMapperCounters(counters, 1, 3);
+    assertEquals("Should have only 1 Mapper task created with coalescing", 4, counters.taskCreated);
+
   }
 
   @Test
@@ -1245,10 +1248,8 @@ public class PhoenixSyncTableToolIT {
 
     // Configure paging with aggressive timeouts to force mid-chunk timeouts
     Configuration conf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
-
-    long aggressiveRpcTimeout = 2L;
-    conf.setLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB, aggressiveRpcTimeout);
-    conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, aggressiveRpcTimeout);
+    conf.setBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB, true);
+    conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 1);
 
     int chunkSize = 10240;
 
@@ -1308,14 +1309,7 @@ public class PhoenixSyncTableToolIT {
 
     // Configure paging with aggressive timeouts to force mid-chunk timeouts
     Configuration conf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
-
-    // Enable server-side paging
     conf.setBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB, true);
-    // Set extremely short paging timeout to force frequent paging
-    long aggressiveRpcTimeout = 1000L; // 1 second RPC timeout
-    conf.setLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB, aggressiveRpcTimeout);
-    conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, aggressiveRpcTimeout);
-    // Force server-side paging to occur by setting page size to 1ms
     conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 1);
 
     int chunkSize = 10240;
@@ -1760,11 +1754,9 @@ public class PhoenixSyncTableToolIT {
 
     introduceAndVerifyTargetDifferences(uniqueTableName);
 
-    // Enable split coalescing, all regions will be coalesced into one mapper
-    Configuration conf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
-    conf.setBoolean(PhoenixSyncTableTool.PHOENIX_SYNC_TABLE_SPLIT_COALESCING, true);
-
-    Job job = runSyncToolWithChunkSize(uniqueTableName, 1, conf);
+    // Enable split coalescing via command-line parameter, all regions will be coalesced into one
+    // mapper
+    Job job = runSyncTool(uniqueTableName, "--coalesce-split");
     SyncCountersResult counters = getSyncCounters(job);
 
     assertEquals("Should have only 1 Mapper task created with coalescing", 1, counters.taskCreated);
@@ -2665,6 +2657,8 @@ public class PhoenixSyncTableToolIT {
       counters.mappersVerified);
     assertEquals("Should have expected mismatched mappers", expectedMappersMismatched,
       counters.mappersMismatched);
+    // assertEquals("Should have expected mapper task",
+    // expectedMappersVerified + expectedMappersMismatched, counters.taskCreated);
   }
 
   /**

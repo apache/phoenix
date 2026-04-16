@@ -27,7 +27,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -333,123 +332,40 @@ public class PhoenixSyncTableInputFormatTest {
   }
 
   @Test
-  public void testGroupSplitsByServerWithSingleServer() throws IOException {
-    // Create 3 PhoenixInputSplits with different key ranges
+  public void testCoalesceSplitsWithSingleServer() throws Exception {
+    // Create 3 PhoenixInputSplits all on same server
     List<InputSplit> splits = new ArrayList<>();
     splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
     splits.add(createSplit(Bytes.toBytes("d"), Bytes.toBytes("g")));
     splits.add(createSplit(Bytes.toBytes("g"), Bytes.toBytes("j")));
 
-    // Create mock region location BEFORE stubbing to avoid nested stubbing issues
+    // Create mock region location - all splits on server1
     HRegionLocation mockRegion = createMockRegionLocation("server1:16020", Bytes.toBytes("a"));
 
-    // Mock RegionLocator to return same server for all splits
+    // Mock RegionLocator: all splits → server1
     when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
       .thenReturn(mockRegion);
 
-    // Call groupSplitsByServer
-    Map<String, List<PhoenixInputSplit>> splitsByServer =
-      inputFormat.groupSplitsByServer(splits, mockRegionLocator);
+    // Call coalesceSplits()
+    List<InputSplit> result = inputFormat.coalesceSplits(splits, mockRegionLocator);
 
-    // Verify: All splits grouped under one server
-    assertEquals("Should have 1 server", 1, splitsByServer.size());
-    assertTrue("Should contain server1:16020", splitsByServer.containsKey("server1:16020"));
-    assertEquals("Server should have 3 splits", 3, splitsByServer.get("server1:16020").size());
-  }
+    // Verify: 1 coalesced split (all on same server)
+    assertEquals("Should have 1 coalesced split (all on same server)", 1, result.size());
 
-  @Test
-  public void testCreateCoalescedSplitWithMultipleSplits()
-    throws IOException, InterruptedException {
-    // Create 3 PhoenixInputSplits in unsorted order
-    List<PhoenixInputSplit> splits = new ArrayList<>();
-    splits.add((PhoenixInputSplit) createSplit(Bytes.toBytes("g"), Bytes.toBytes("j")));
-    splits.add((PhoenixInputSplit) createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
-    splits.add((PhoenixInputSplit) createSplit(Bytes.toBytes("d"), Bytes.toBytes("g")));
+    // Verify: Split is coalesced and contains 3 KeyRanges
+    PhoenixInputSplit coalescedSplit = (PhoenixInputSplit) result.get(0);
 
-    // Call createCoalescedSplit
-    PhoenixInputSplit coalescedSplit = inputFormat.createCoalescedSplit(splits, "server1:16020");
+    assertTrue("Split should be coalesced", coalescedSplit.isCoalesced());
+    assertEquals("Split should have 3 KeyRanges", 3, coalescedSplit.getKeyRanges().size());
 
-    // Verify: isCoalesced() == true
-    assertTrue("Split should be marked as coalesced", coalescedSplit.isCoalesced());
-
-    // Verify: Contains 3 KeyRanges
-    assertEquals("Should contain 3 KeyRanges", 3, coalescedSplit.getKeyRanges().size());
-
-    // Verify: KeyRanges are sorted by start key (logic in coalesceSplits sorts before calling this)
+    // Verify: KeyRanges are sorted
     List<KeyRange> keyRanges = coalescedSplit.getKeyRanges();
-    // Since createCoalescedSplit doesn't sort, they'll be in the order provided (g, a, d)
-    assertTrue("First KeyRange should start with 'g'",
-      Bytes.equals(Bytes.toBytes("g"), keyRanges.get(0).getLowerRange()));
-    assertTrue("Second KeyRange should start with 'a'",
-      Bytes.equals(Bytes.toBytes("a"), keyRanges.get(1).getLowerRange()));
-    assertTrue("Third KeyRange should start with 'd'",
-      Bytes.equals(Bytes.toBytes("d"), keyRanges.get(2).getLowerRange()));
-  }
-
-  @Test
-  public void testGroupSplitsByServerWithMultipleServers() throws IOException {
-    // Create 6 PhoenixInputSplits
-    List<InputSplit> splits = new ArrayList<>();
-    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("c")));
-    splits.add(createSplit(Bytes.toBytes("c"), Bytes.toBytes("e")));
-    splits.add(createSplit(Bytes.toBytes("e"), Bytes.toBytes("g")));
-    splits.add(createSplit(Bytes.toBytes("g"), Bytes.toBytes("i")));
-    splits.add(createSplit(Bytes.toBytes("i"), Bytes.toBytes("k")));
-    splits.add(createSplit(Bytes.toBytes("k"), Bytes.toBytes("m")));
-
-    // Create mock region locations BEFORE stubbing to avoid nested stubbing issues
-    HRegionLocation mockRegionA = createMockRegionLocation("server1:16020", Bytes.toBytes("a"));
-    HRegionLocation mockRegionC = createMockRegionLocation("server1:16020", Bytes.toBytes("c"));
-    HRegionLocation mockRegionE = createMockRegionLocation("server1:16020", Bytes.toBytes("e"));
-    HRegionLocation mockRegionG = createMockRegionLocation("server2:16020", Bytes.toBytes("g"));
-    HRegionLocation mockRegionI = createMockRegionLocation("server2:16020", Bytes.toBytes("i"));
-    HRegionLocation mockRegionK = createMockRegionLocation("server2:16020", Bytes.toBytes("k"));
-
-    // Mock RegionLocator: first 3 splits → server1, last 3 splits → server2
-    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("a"), false)).thenReturn(mockRegionA);
-    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("c"), false)).thenReturn(mockRegionC);
-    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("e"), false)).thenReturn(mockRegionE);
-    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("g"), false)).thenReturn(mockRegionG);
-    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("i"), false)).thenReturn(mockRegionI);
-    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("k"), false)).thenReturn(mockRegionK);
-
-    // Call groupSplitsByServer
-    Map<String, List<PhoenixInputSplit>> splitsByServer =
-      inputFormat.groupSplitsByServer(splits, mockRegionLocator);
-
-    // Verify: 2 servers with 3 splits each
-    assertEquals("Should have 2 servers", 2, splitsByServer.size());
-    assertTrue("Should contain server1:16020", splitsByServer.containsKey("server1:16020"));
-    assertTrue("Should contain server2:16020", splitsByServer.containsKey("server2:16020"));
-    assertEquals("Server1 should have 3 splits", 3, splitsByServer.get("server1:16020").size());
-    assertEquals("Server2 should have 3 splits", 3, splitsByServer.get("server2:16020").size());
-  }
-
-  @Test
-  public void testGroupSplitsByServerWithEmptyList() throws IOException {
-    // Pass empty splits list
-    List<InputSplit> splits = new ArrayList<>();
-
-    // Call groupSplitsByServer
-    Map<String, List<PhoenixInputSplit>> splitsByServer =
-      inputFormat.groupSplitsByServer(splits, mockRegionLocator);
-
-    // Verify: Returns empty map
-    assertTrue("Should return empty map for empty input", splitsByServer.isEmpty());
-  }
-
-  @Test
-  public void testCreateCoalescedSplitWithSingleSplit() throws IOException, InterruptedException {
-    // Create 1 PhoenixInputSplit
-    List<PhoenixInputSplit> splits = new ArrayList<>();
-    splits.add((PhoenixInputSplit) createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
-
-    // Call createCoalescedSplit
-    PhoenixInputSplit result = inputFormat.createCoalescedSplit(splits, "server1:16020");
-
-    // Verify: Returns the same split (no coalescing needed)
-    assertFalse("Single split should not be marked as coalesced", result.isCoalesced());
-    assertEquals("Should contain 1 KeyRange", 1, result.getKeyRanges().size());
+    assertTrue("First KeyRange should start with 'a'",
+      Bytes.equals(Bytes.toBytes("a"), keyRanges.get(0).getLowerRange()));
+    assertTrue("Second KeyRange should start with 'd'",
+      Bytes.equals(Bytes.toBytes("d"), keyRanges.get(1).getLowerRange()));
+    assertTrue("Third KeyRange should start with 'g'",
+      Bytes.equals(Bytes.toBytes("g"), keyRanges.get(2).getLowerRange()));
   }
 
   @Test
@@ -513,59 +429,75 @@ public class PhoenixSyncTableInputFormatTest {
   }
 
   @Test
-  public void testCoalesceSplitsWithSingleServer() throws Exception {
-    // Create 3 PhoenixInputSplits all on same server
+  public void testCoalesceSplitsWithEmptyList() throws Exception {
+    // Test edge case: empty input list
+    List<InputSplit> splits = new ArrayList<>();
+
+    List<InputSplit> result = inputFormat.coalesceSplits(splits, mockRegionLocator);
+
+    assertEquals("Should return empty list for empty input", 0, result.size());
+  }
+
+  @Test
+  public void testCoalesceSplitsWithSingleSplit() throws Exception {
+    // Test edge case: single split (no coalescing needed)
     List<InputSplit> splits = new ArrayList<>();
     splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
-    splits.add(createSplit(Bytes.toBytes("d"), Bytes.toBytes("g")));
-    splits.add(createSplit(Bytes.toBytes("g"), Bytes.toBytes("j")));
 
-    // Create mock region location - all splits on server1
     HRegionLocation mockRegion = createMockRegionLocation("server1:16020", Bytes.toBytes("a"));
-
-    // Mock RegionLocator: all splits → server1
     when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
       .thenReturn(mockRegion);
 
-    // Call coalesceSplits()
     List<InputSplit> result = inputFormat.coalesceSplits(splits, mockRegionLocator);
 
-    // Verify: 1 coalesced split (all on same server)
-    assertEquals("Should have 1 coalesced split (all on same server)", 1, result.size());
-
-    // Verify: Split is coalesced and contains 3 KeyRanges
-    PhoenixInputSplit coalescedSplit = (PhoenixInputSplit) result.get(0);
-
-    assertTrue("Split should be coalesced", coalescedSplit.isCoalesced());
-    assertEquals("Split should have 3 KeyRanges", 3, coalescedSplit.getKeyRanges().size());
-
-    // Verify: KeyRanges are sorted
-    List<KeyRange> keyRanges = coalescedSplit.getKeyRanges();
-    assertTrue("First KeyRange should start with 'a'",
-      Bytes.equals(Bytes.toBytes("a"), keyRanges.get(0).getLowerRange()));
-    assertTrue("Second KeyRange should start with 'd'",
-      Bytes.equals(Bytes.toBytes("d"), keyRanges.get(1).getLowerRange()));
-    assertTrue("Third KeyRange should start with 'g'",
-      Bytes.equals(Bytes.toBytes("g"), keyRanges.get(2).getLowerRange()));
-  }
-
-  @Test(expected = IllegalArgumentException.class)
-  public void testCreateCoalescedSplitWithEmptyList() throws IOException, InterruptedException {
-    List<PhoenixInputSplit> splits = new ArrayList<>();
-    // should throw IllegalArgumentException
-    inputFormat.createCoalescedSplit(splits, "server1:16020");
+    assertEquals("Should return 1 split", 1, result.size());
+    PhoenixInputSplit resultSplit = (PhoenixInputSplit) result.get(0);
+    assertFalse("Single split should not be marked as coalesced", resultSplit.isCoalesced());
+    assertEquals("Should have 1 KeyRange", 1, resultSplit.getKeyRanges().size());
   }
 
   @Test(expected = IOException.class)
-  public void testGroupSplitsByServerWithIOException() throws IOException {
+  public void testCoalesceSplitsWithIOException() throws Exception {
+    // IOException from RegionLocator
     List<InputSplit> splits = new ArrayList<>();
     splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
+
     // Mock RegionLocator to throw IOException
     when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
       .thenThrow(new IOException("Simulated region location failure"));
 
-    // should propagate IOException
-    inputFormat.groupSplitsByServer(splits, mockRegionLocator);
+    // Should propagate IOException
+    inputFormat.coalesceSplits(splits, mockRegionLocator);
+  }
+
+  @Test(expected = IOException.class)
+  public void testCoalesceSplitsWithNullRegionLocation() throws Exception {
+    // RegionLocator returns null
+    List<InputSplit> splits = new ArrayList<>();
+    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
+
+    // Mock RegionLocator to return null (region not found)
+    when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean())).thenReturn(null);
+
+    // Should throw IOException with message about null region location
+    inputFormat.coalesceSplits(splits, mockRegionLocator);
+  }
+
+  @Test(expected = IOException.class)
+  public void testCoalesceSplitsWithNullServerName() throws Exception {
+    // RegionLocation has null ServerName
+    List<InputSplit> splits = new ArrayList<>();
+    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
+
+    // Create mock region location with null ServerName
+    HRegionLocation mockRegionLocation = mock(HRegionLocation.class);
+    when(mockRegionLocation.getServerName()).thenReturn(null);
+
+    when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
+      .thenReturn(mockRegionLocation);
+
+    // Should throw IOException with message about null server name
+    inputFormat.coalesceSplits(splits, mockRegionLocator);
   }
 
   /**

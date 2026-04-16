@@ -106,51 +106,31 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
     LOGGER.info("Found {} completed mapper regions for table {}, {} unprocessed splits remaining",
       completedRegions.size(), tableName, unprocessedSplits.size());
 
-    // Coalesce splits to reduce mapper count and avoid hotspotting
+    // Coalesce splits to reduce mapper count and avoid hot spotting
     boolean enableSplitCoalescing =
       conf.getBoolean(PhoenixSyncTableTool.PHOENIX_SYNC_TABLE_SPLIT_COALESCING,
         PhoenixSyncTableTool.DEFAULT_PHOENIX_SYNC_TABLE_SPLIT_COALESCING);
-
-    LOGGER.info("Split coalescing enabled: {}, unprocessed splits: {} for table {}",
-      enableSplitCoalescing, unprocessedSplits.size(), tableName);
+    LOGGER.info("Split coalescing enabled: {}, for table {}", enableSplitCoalescing, tableName);
 
     if (enableSplitCoalescing && unprocessedSplits.size() > 1) {
-      Connection conn = null;
-      RegionLocator regionLocator = null;
-      try {
-        // Acquire connection and RegionLocator for coalescing
-        conn = ConnectionUtil.getInputConnection(conf);
+      try (Connection conn = ConnectionUtil.getInputConnection(conf)) {
         PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
         byte[] physicalTableName = pConn.getTable(tableName).getPhysicalName().getBytes();
         org.apache.hadoop.hbase.client.Connection hbaseConn =
           pConn.getQueryServices().getAdmin().getConnection();
-        regionLocator = hbaseConn.getRegionLocator(TableName.valueOf(physicalTableName));
 
-        List<InputSplit> coalescedSplits = coalesceSplits(unprocessedSplits, regionLocator);
-        LOGGER.info("Split coalescing: {} unprocessed splits {} coalesced splits for table {}",
-          unprocessedSplits.size(), coalescedSplits.size(), tableName);
-        return coalescedSplits;
+        try (RegionLocator regionLocator =
+          hbaseConn.getRegionLocator(TableName.valueOf(physicalTableName))) {
+          List<InputSplit> coalescedSplits = coalesceSplits(unprocessedSplits, regionLocator);
+          LOGGER.info("Split coalescing: {} unprocessed splits {} coalesced splits for table {}",
+            unprocessedSplits.size(), coalescedSplits.size(), tableName);
+          return coalescedSplits;
+        }
       } catch (Exception e) {
         LOGGER.warn(
           "Failed to coalesce splits for table {}, falling back to uncoalesced splits: {}",
           tableName, e.getMessage(), e);
         return unprocessedSplits;
-      } finally {
-        // Clean up resources
-        if (regionLocator != null) {
-          try {
-            regionLocator.close();
-          } catch (IOException e) {
-            LOGGER.warn("Failed to close regionLocator: {}", e.getMessage());
-          }
-        }
-        if (conn != null) {
-          try {
-            conn.close();
-          } catch (SQLException e) {
-            LOGGER.warn("Failed to close connection: {}", e.getMessage());
-          }
-        }
       }
     }
 
@@ -269,7 +249,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
   /**
    * Coalesces multiple region splits from the same RegionServer into single InputSplits. All
    * regions from the same server are coalesced into one split, regardless of count or size. This
-   * reduces mapper count and avoids hotspotting when many mappers hit the same server.
+   * reduces mapper count and avoids hot spotting when many concurrent mappers hit the same server.
    * @param unprocessedSplits Splits remaining after filtering completed regions
    * @param regionLocator     HBase RegionLocator for querying region locations
    * @return Coalesced splits with all regions per server combined into one split
@@ -286,9 +266,6 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
     for (Map.Entry<String, List<PhoenixInputSplit>> entry : splitsByServer.entrySet()) {
       String serverName = entry.getKey();
       List<PhoenixInputSplit> serverSplits = entry.getValue();
-
-      LOGGER.info("Coalescing {} splits from server {} into single split", serverSplits.size(),
-        serverName);
 
       // Sort splits by start key for sequential processing
       serverSplits.sort((s1, s2) -> Bytes.compareTo(s1.getKeyRange().getLowerRange(),
@@ -314,7 +291,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
    * @param regionLocator HBase RegionLocator for querying region locations
    * @return Map of server name to list of splits hosted on that server
    */
-  Map<String, List<PhoenixInputSplit>> groupSplitsByServer(List<InputSplit> splits,
+  private Map<String, List<PhoenixInputSplit>> groupSplitsByServer(List<InputSplit> splits,
     RegionLocator regionLocator) throws IOException {
 
     Map<String, List<PhoenixInputSplit>> splitsByServer = new LinkedHashMap<>();
@@ -323,6 +300,14 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
       KeyRange keyRange = pSplit.getKeyRange();
       HRegionLocation regionLocation =
         regionLocator.getRegionLocation(keyRange.getLowerRange(), false);
+      if (regionLocation == null) {
+        throw new IOException("Could not determine region location for key: "
+          + Bytes.toStringBinary(keyRange.getLowerRange()));
+      }
+      if (regionLocation.getServerName() == null) {
+        throw new IOException("Could not determine server name for region at key: "
+          + Bytes.toStringBinary(keyRange.getLowerRange()));
+      }
       String serverName = regionLocation.getServerName().getAddress().toString();
       splitsByServer.computeIfAbsent(serverName, k -> new ArrayList<>()).add(pSplit);
       LOGGER.debug("Split {} assigned to server {}", Bytes.toStringBinary(keyRange.getLowerRange()),
@@ -339,36 +324,18 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
    * @param serverLocation RegionServer location for data locality
    * @return Coalesced PhoenixInputSplit
    */
-  PhoenixInputSplit createCoalescedSplit(List<PhoenixInputSplit> splits, String serverLocation)
-    throws IOException, InterruptedException {
+  private PhoenixInputSplit createCoalescedSplit(List<PhoenixInputSplit> splits,
+    String serverLocation) throws IOException, InterruptedException {
 
-    if (splits.isEmpty()) {
-      throw new IllegalArgumentException("Cannot create coalesced split from empty list");
-    }
-
-    if (splits.size() == 1) {
-      // No coalescing needed, return original split
-      return splits.get(0);
-    }
-
-    // Extract all scans and KeyRanges from individual splits
     List<Scan> allScans = new ArrayList<>();
-    List<KeyRange> allKeyRanges = new ArrayList<>();
     long totalSize = 0;
-
+    // Extract all scans from individual splits
     for (PhoenixInputSplit split : splits) {
       allScans.addAll(split.getScans());
-      allKeyRanges.add(split.getKeyRange());
       totalSize += split.getLength();
     }
 
-    // Create a new PhoenixInputSplit containing multiple KeyRanges
-    PhoenixInputSplit coalescedSplit =
-      new PhoenixInputSplit(allScans, allKeyRanges, totalSize, serverLocation);
-
-    LOGGER.debug("Created coalesced split: {} regions, total size {} MB, location {}",
-      allKeyRanges.size(), totalSize / (1024 * 1024), serverLocation);
-
-    return coalescedSplit;
+    // Create a new PhoenixInputSplit, keyRanges will be derived from scans in init()
+    return new PhoenixInputSplit(allScans, totalSize, serverLocation);
   }
 }

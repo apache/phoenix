@@ -36,10 +36,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.junit.MockitoJUnitRunner;
 
-/**
- * Unit tests for PhoenixInputSplit. Tests standard constructor, coalescing constructor,
- * serialization, and getter methods.
- */
 @RunWith(MockitoJUnitRunner.class)
 public class PhoenixInputSplitTest {
 
@@ -51,13 +47,6 @@ public class PhoenixInputSplitTest {
     scan.withStartRow(startRow, true);
     scan.withStopRow(stopRow, false);
     return scan;
-  }
-
-  /**
-   * Helper method to create a KeyRange with given boundaries.
-   */
-  private KeyRange createKeyRange(byte[] start, byte[] end) {
-    return KeyRange.getKeyRange(start, true, end, false);
   }
 
   /**
@@ -77,10 +66,6 @@ public class PhoenixInputSplitTest {
 
     return deserialized;
   }
-
-  // ============================================================================
-  // Standard Constructor Tests
-  // ============================================================================
 
   @Test
   public void testStandardConstructorWithSingleScan() {
@@ -107,8 +92,9 @@ public class PhoenixInputSplitTest {
 
     PhoenixInputSplit split = new PhoenixInputSplit(scans, 1024, "server1:16020");
 
-    assertFalse("Should not be coalesced (keyRanges not provided)", split.isCoalesced());
-    assertEquals("Should have 1 keyRange", 1, split.getKeyRanges().size());
+    // With multiple scans, keyRanges are automatically derived
+    assertTrue("Should be coalesced with multiple scans", split.isCoalesced());
+    assertEquals("Should have 3 keyRanges (derived from scans)", 3, split.getKeyRanges().size());
     assertNotNull("KeyRange should be initialized", split.getKeyRange());
     // KeyRange should span from first scan start to last scan stop
     assertTrue("KeyRange should span from first to last scan",
@@ -127,10 +113,6 @@ public class PhoenixInputSplitTest {
     new PhoenixInputSplit(Collections.emptyList());
   }
 
-  // ============================================================================
-  // Coalescing Constructor Tests
-  // ============================================================================
-
   @Test
   public void testCoalescingConstructorWithMultipleRegions()
     throws IOException, InterruptedException {
@@ -139,63 +121,33 @@ public class PhoenixInputSplitTest {
     scans.add(createScan(Bytes.toBytes("d"), Bytes.toBytes("g")));
     scans.add(createScan(Bytes.toBytes("g"), Bytes.toBytes("j")));
 
-    List<KeyRange> keyRanges = new ArrayList<>();
-    keyRanges.add(createKeyRange(Bytes.toBytes("a"), Bytes.toBytes("d")));
-    keyRanges.add(createKeyRange(Bytes.toBytes("d"), Bytes.toBytes("g")));
-    keyRanges.add(createKeyRange(Bytes.toBytes("g"), Bytes.toBytes("j")));
-
     long splitSize = 3072;
     String regionLocation = "server1:16020";
 
-    PhoenixInputSplit split = new PhoenixInputSplit(scans, keyRanges, splitSize, regionLocation);
+    // KeyRanges are now automatically derived from scans
+    PhoenixInputSplit split = new PhoenixInputSplit(scans, splitSize, regionLocation);
 
     assertTrue("Should be coalesced with multiple regions", split.isCoalesced());
-    assertEquals("Should have 3 keyRanges", 3, split.getKeyRanges().size());
+    assertEquals("Should have 3 keyRanges (derived from scans)", 3, split.getKeyRanges().size());
     assertEquals("Split size should match", splitSize, split.getLength());
     assertArrayEquals("Region location should match", new String[] { regionLocation },
       split.getLocations());
+
+    // Verify keyRanges were derived correctly from scans
+    List<KeyRange> keyRanges = split.getKeyRanges();
+    assertTrue("First keyRange should match first scan",
+      Bytes.equals(Bytes.toBytes("a"), keyRanges.get(0).getLowerRange()));
+    assertTrue("First keyRange should match first scan",
+      Bytes.equals(Bytes.toBytes("d"), keyRanges.get(0).getUpperRange()));
+    assertTrue("Second keyRange should match second scan",
+      Bytes.equals(Bytes.toBytes("d"), keyRanges.get(1).getLowerRange()));
+    assertTrue("Second keyRange should match second scan",
+      Bytes.equals(Bytes.toBytes("g"), keyRanges.get(1).getUpperRange()));
+    assertTrue("Third keyRange should match third scan",
+      Bytes.equals(Bytes.toBytes("g"), keyRanges.get(2).getLowerRange()));
+    assertTrue("Third keyRange should match third scan",
+      Bytes.equals(Bytes.toBytes("j"), keyRanges.get(2).getUpperRange()));
   }
-
-  @Test(expected = NullPointerException.class)
-  public void testCoalescingConstructorWithNullKeyRanges() {
-    List<Scan> scans = new ArrayList<>();
-    scans.add(createScan(Bytes.toBytes("a"), Bytes.toBytes("d")));
-
-    new PhoenixInputSplit(scans, null, 1024, "server1:16020");
-  }
-
-  @Test(expected = IllegalStateException.class)
-  public void testCoalescingConstructorWithEmptyKeyRanges() {
-    List<Scan> scans = new ArrayList<>();
-    scans.add(createScan(Bytes.toBytes("a"), Bytes.toBytes("d")));
-
-    new PhoenixInputSplit(scans, Collections.emptyList(), 1024, "server1:16020");
-  }
-
-  @Test
-  public void testCoalescingConstructorValidatesSizeMismatch() {
-    List<Scan> scans = new ArrayList<>();
-    scans.add(createScan(Bytes.toBytes("a"), Bytes.toBytes("d")));
-    scans.add(createScan(Bytes.toBytes("d"), Bytes.toBytes("g")));
-    scans.add(createScan(Bytes.toBytes("g"), Bytes.toBytes("j")));
-
-    List<KeyRange> keyRanges = new ArrayList<>();
-    keyRanges.add(createKeyRange(Bytes.toBytes("a"), Bytes.toBytes("d")));
-    keyRanges.add(createKeyRange(Bytes.toBytes("d"), Bytes.toBytes("g")));
-    // Only 2 keyRanges for 3 scans
-
-    try {
-      new PhoenixInputSplit(scans, keyRanges, 1024, "server1:16020");
-      fail("Should have thrown IllegalStateException for size mismatch");
-    } catch (IllegalStateException e) {
-      assertTrue("Error message should mention size mismatch",
-        e.getMessage().contains("Number of scans must match number of keyRanges"));
-    }
-  }
-
-  // ============================================================================
-  // Serialization Tests
-  // ============================================================================
 
   @Test
   public void testSerializationWithSingleRegion() throws IOException, InterruptedException {
@@ -224,12 +176,8 @@ public class PhoenixInputSplitTest {
     scans.add(createScan(Bytes.toBytes("d"), Bytes.toBytes("g")));
     scans.add(createScan(Bytes.toBytes("g"), Bytes.toBytes("j")));
 
-    List<KeyRange> keyRanges = new ArrayList<>();
-    keyRanges.add(createKeyRange(Bytes.toBytes("a"), Bytes.toBytes("d")));
-    keyRanges.add(createKeyRange(Bytes.toBytes("d"), Bytes.toBytes("g")));
-    keyRanges.add(createKeyRange(Bytes.toBytes("g"), Bytes.toBytes("j")));
-
-    PhoenixInputSplit original = new PhoenixInputSplit(scans, keyRanges, 3072, "server1:16020");
+    // KeyRanges are now automatically derived from scans
+    PhoenixInputSplit original = new PhoenixInputSplit(scans, 3072, "server1:16020");
 
     PhoenixInputSplit deserialized = serializeAndDeserialize(original);
 
@@ -239,19 +187,16 @@ public class PhoenixInputSplitTest {
     assertArrayEquals("Region location should match", original.getLocations(),
       deserialized.getLocations());
 
-    // Verify all keyRanges are preserved
+    // Verify all keyRanges are preserved (derived from scans)
+    List<KeyRange> originalKeyRanges = original.getKeyRanges();
     List<KeyRange> deserializedKeyRanges = deserialized.getKeyRanges();
-    for (int i = 0; i < keyRanges.size(); i++) {
-      assertTrue("KeyRange " + i + " should match", Bytes.equals(keyRanges.get(i).getLowerRange(),
-        deserializedKeyRanges.get(i).getLowerRange()));
-      assertTrue("KeyRange " + i + " should match", Bytes.equals(keyRanges.get(i).getUpperRange(),
-        deserializedKeyRanges.get(i).getUpperRange()));
+    for (int i = 0; i < originalKeyRanges.size(); i++) {
+      assertTrue("KeyRange " + i + " should match", Bytes.equals(
+        originalKeyRanges.get(i).getLowerRange(), deserializedKeyRanges.get(i).getLowerRange()));
+      assertTrue("KeyRange " + i + " should match", Bytes.equals(
+        originalKeyRanges.get(i).getUpperRange(), deserializedKeyRanges.get(i).getUpperRange()));
     }
   }
-
-  // ============================================================================
-  // Getter Method Tests
-  // ============================================================================
 
   @Test
   public void testGetLocations() throws IOException, InterruptedException {
