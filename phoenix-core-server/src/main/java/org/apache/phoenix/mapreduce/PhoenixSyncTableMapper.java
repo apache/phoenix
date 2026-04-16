@@ -87,7 +87,7 @@ public class PhoenixSyncTableMapper
   private Connection globalConnection;
   private PTable pTable;
   private byte[] physicalTableName;
-  private List<KeyRange> regionKeyRanges; // For coalesced splits - one per region
+  private List<KeyRange> regionKeyRanges;
   private PhoenixSyncTableOutputRepository syncTableOutputRepository;
   private Timestamp mapperStartTime;
 
@@ -469,40 +469,28 @@ public class PhoenixSyncTableMapper
     boolean isTargetScan) throws IOException, SQLException {
     // Not using try-with-resources since ChunkScannerContext owns the table lifecycle
     PhoenixConnection phoenixConn = conn.unwrap(PhoenixConnection.class);
-    Table hTable = null;
-    try {
-      hTable = phoenixConn.getQueryServices().getTable(physicalTableName);
-      Scan scan =
-        createChunkScan(startKey, endKey, isStartKeyInclusive, isEndKeyInclusive, isTargetScan);
-      scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_FORMATION, TRUE_BYTES);
-      scan.setAttribute(BaseScannerRegionObserverConstants.SKIP_REGION_BOUNDARY_CHECK, TRUE_BYTES);
-      scan.setAttribute(BaseScannerRegionObserverConstants.UNGROUPED_AGG, TRUE_BYTES);
-      ScanUtil.setScanAttributesForPhoenixTTL(scan, pTable, phoenixConn);
-      // Force strict TTL for sync tool regardless of table setting. Even when the table
-      // uses non-strict TTL, the sync tool should only compare live rows.
-      scan.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL, TRUE_BYTES);
-      if (continuedDigestState != null && continuedDigestState.length > 0) {
-        scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CONTINUED_DIGEST_STATE,
-          continuedDigestState);
-      }
-
-      if (!isTargetScan) {
-        scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_SIZE_BYTES,
-          Bytes.toBytes(chunkSizeBytes));
-      }
-      ScanUtil.setScanAttributeForPaging(scan, phoenixConn);
-      ResultScanner scanner = hTable.getScanner(scan);
-      return new ChunkScannerContext(hTable, scanner);
-    } catch (Exception e) {
-      if (hTable != null) {
-        try {
-          hTable.close();
-        } catch (IOException closeEx) {
-          LOGGER.warn("Failed to close table after scanner creation failure", closeEx);
-        }
-      }
-      throw e;
+    Table hTable = phoenixConn.getQueryServices().getTable(physicalTableName);
+    Scan scan =
+      createChunkScan(startKey, endKey, isStartKeyInclusive, isEndKeyInclusive, isTargetScan);
+    scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_FORMATION, TRUE_BYTES);
+    scan.setAttribute(BaseScannerRegionObserverConstants.SKIP_REGION_BOUNDARY_CHECK, TRUE_BYTES);
+    scan.setAttribute(BaseScannerRegionObserverConstants.UNGROUPED_AGG, TRUE_BYTES);
+    ScanUtil.setScanAttributesForPhoenixTTL(scan, pTable, phoenixConn);
+    // Force strict TTL for sync tool regardless of table setting. Even when the table
+    // uses non-strict TTL, the sync tool should only compare live rows.
+    scan.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL, TRUE_BYTES);
+    if (continuedDigestState != null && continuedDigestState.length > 0) {
+      scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CONTINUED_DIGEST_STATE,
+        continuedDigestState);
     }
+
+    if (!isTargetScan) {
+      scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_SIZE_BYTES,
+        Bytes.toBytes(chunkSizeBytes));
+    }
+    ScanUtil.setScanAttributeForPaging(scan, phoenixConn);
+    ResultScanner scanner = hTable.getScanner(scan);
+    return new ChunkScannerContext(hTable, scanner);
   }
 
   /**

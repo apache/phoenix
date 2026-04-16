@@ -21,7 +21,7 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
@@ -106,7 +106,6 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
     LOGGER.info("Found {} completed mapper regions for table {}, {} unprocessed splits remaining",
       completedRegions.size(), tableName, unprocessedSplits.size());
 
-    // Coalesce splits to reduce mapper count and avoid hot spotting
     boolean enableSplitCoalescing =
       conf.getBoolean(PhoenixSyncTableTool.PHOENIX_SYNC_TABLE_SPLIT_COALESCING,
         PhoenixSyncTableTool.DEFAULT_PHOENIX_SYNC_TABLE_SPLIT_COALESCING);
@@ -270,15 +269,8 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
       // Sort splits by start key for sequential processing
       serverSplits.sort((s1, s2) -> Bytes.compareTo(s1.getKeyRange().getLowerRange(),
         s2.getKeyRange().getLowerRange()));
-      long totalSize = 0;
-      for (PhoenixInputSplit split : serverSplits) {
-        totalSize += split.getLength();
-      }
-
       // Create single coalesced split with ALL regions from this server
       coalescedSplits.add(createCoalescedSplit(serverSplits, serverName));
-      LOGGER.info("Created coalesced split with {} regions, {} MB from server {}",
-        serverSplits.size(), totalSize / (1024 * 1024), serverName);
     }
 
     return coalescedSplits;
@@ -293,8 +285,7 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
    */
   private Map<String, List<PhoenixInputSplit>> groupSplitsByServer(List<InputSplit> splits,
     RegionLocator regionLocator) throws IOException {
-
-    Map<String, List<PhoenixInputSplit>> splitsByServer = new LinkedHashMap<>();
+    Map<String, List<PhoenixInputSplit>> splitsByServer = new HashMap<>();
     for (InputSplit split : splits) {
       PhoenixInputSplit pSplit = (PhoenixInputSplit) split;
       KeyRange keyRange = pSplit.getKeyRange();
@@ -310,8 +301,10 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
       }
       String serverName = regionLocation.getServerName().getAddress().toString();
       splitsByServer.computeIfAbsent(serverName, k -> new ArrayList<>()).add(pSplit);
-      LOGGER.debug("Split {} assigned to server {}", Bytes.toStringBinary(keyRange.getLowerRange()),
-        serverName);
+      if (LOGGER.isDebugEnabled()) {
+        LOGGER.debug("Split {} assigned to server {}",
+          Bytes.toStringBinary(keyRange.getLowerRange()), serverName);
+      }
     }
 
     return splitsByServer;
@@ -335,6 +328,8 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
       totalSize += split.getLength();
     }
 
+    LOGGER.info("Created coalesced split with {} regions, {} MB from server {}", splits.size(),
+      totalSize / (1024 * 1024), serverLocation);
     // Create a new PhoenixInputSplit, keyRanges will be derived from scans in init()
     return new PhoenixInputSplit(allScans, totalSize, serverLocation);
   }

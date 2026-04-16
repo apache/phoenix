@@ -91,9 +91,10 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
   }
 
   private void init() {
-    // Overall split bounds (first scan start to last scan stop)
+    // Overall split bounds
     this.keyRange =
       KeyRange.getKeyRange(scans.get(0).getStartRow(), scans.get(scans.size() - 1).getStopRow());
+    // coalesced split bound
     this.keyRanges = Lists.newArrayListWithExpectedSize(scans.size());
     for (Scan scan : scans) {
       KeyRange kr = KeyRange.getKeyRange(scan.getStartRow(), scan.getStopRow());

@@ -2657,8 +2657,6 @@ public class PhoenixSyncTableToolIT {
       counters.mappersVerified);
     assertEquals("Should have expected mismatched mappers", expectedMappersMismatched,
       counters.mappersMismatched);
-    // assertEquals("Should have expected mapper task",
-    // expectedMappersVerified + expectedMappersMismatched, counters.taskCreated);
   }
 
   /**

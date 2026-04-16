@@ -27,66 +27,31 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.InputSplit;
-import org.apache.hadoop.mapreduce.JobContext;
 import org.apache.hadoop.mapreduce.RecordReader;
-import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
-import org.apache.phoenix.schema.PTable;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.mockito.Mock;
-import org.mockito.junit.MockitoJUnitRunner;
 
 /**
  * Unit tests for PhoenixSyncTableInputFormat. Tests various scenarios of filtering completed splits
  * and split coalescing functionality.
  */
-@RunWith(MockitoJUnitRunner.class)
 public class PhoenixSyncTableInputFormatTest {
 
   private PhoenixSyncTableInputFormat inputFormat = new PhoenixSyncTableInputFormat();
 
-  @Mock
-  private JobContext mockJobContext;
-
-  @Mock
-  private Configuration mockConf;
-
-  @Mock
-  private java.sql.Connection mockConnection;
-
-  @Mock
-  private PhoenixConnection mockPhoenixConnection;
-
-  @Mock
-  private PTable mockPTable;
-
-  @Mock
-  private ConnectionQueryServices mockQueryServices;
-
-  @Mock
-  private Admin mockAdmin;
-
-  @Mock
-  private org.apache.hadoop.hbase.client.Connection mockHBaseConnection;
-
-  @Mock
   private RegionLocator mockRegionLocator;
 
   @Before
   public void setup() throws Exception {
-    // Setup is intentionally empty - stubs are configured per-test as needed
+    mockRegionLocator = mock(RegionLocator.class);
   }
 
   /**
