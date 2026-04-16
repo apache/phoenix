@@ -310,4 +310,95 @@ public class LogFileCodecTest {
       new LogFileRecord().setHBaseTableName("TBLLVAL").setCommitId(1L).setMutation(put));
   }
 
+  // Cell timestamp preservation tests
+  // These verify that per-cell timestamps survive a codec round-trip when they differ from the
+  // mutation-level timestamp. Before the fix the encoder omitted cell.getTimestamp() entirely
+  // and the decoder fell back to the mutation-level timestamp (or HConstants.LATEST_TIMESTAMP
+  // for addFamily), so any divergence produced wrong timestamps on the standby cluster.
+
+  @Test
+  public void testPutCellTimestampsDifferFromMutationTimestamp() throws IOException {
+    long mutationTs = 99999L;
+    Put put = new Put(Bytes.toBytes("row"));
+    put.setTimestamp(mutationTs);
+    // Each cell gets its own timestamp, all different from mutationTs and from each other
+    put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q1"), 11111L, Bytes.toBytes("v1"));
+    put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q2"), 22222L, Bytes.toBytes("v2"));
+    put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q3"), 33333L, Bytes.toBytes("v3"));
+    singleRecordTest(
+      new LogFileRecord().setHBaseTableName("TBLPUTTS").setCommitId(1L).setMutation(put));
+  }
+
+  @Test
+  public void testDeleteColumnCellTimestampDiffersFromMutationTimestamp() throws IOException {
+    long mutationTs = 99999L;
+    long cellTs = 11111L;
+    Delete delete = new Delete(Bytes.toBytes("row"));
+    delete.setTimestamp(mutationTs);
+    delete.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q"), cellTs);
+    singleRecordTest(
+      new LogFileRecord().setHBaseTableName("TBLDELCOLTS").setCommitId(1L).setMutation(delete));
+  }
+
+  @Test
+  public void testDeleteFamilyCellTimestampDiffersFromMutationTimestamp() throws IOException {
+    // This is the most direct regression test for the bug: addFamily(cf) was called without ts,
+    // defaulting to HConstants.LATEST_TIMESTAMP instead of preserving the original cell timestamp.
+    long mutationTs = 99999L;
+    long cellTs = 11111L;
+    Delete delete = new Delete(Bytes.toBytes("row"));
+    delete.setTimestamp(mutationTs);
+    delete.addFamily(Bytes.toBytes("cf"), cellTs); // explicit cell ts != mutationTs
+    singleRecordTest(
+      new LogFileRecord().setHBaseTableName("TBLDELFAMTS").setCommitId(1L).setMutation(delete));
+  }
+
+  @Test
+  public void testDeleteFamilyVersionCellTimestampDiffersFromMutationTimestamp()
+    throws IOException {
+    long mutationTs = 99999L;
+    long cellTs = 11111L;
+    Delete delete = new Delete(Bytes.toBytes("row"));
+    delete.setTimestamp(mutationTs);
+    delete.addFamilyVersion(Bytes.toBytes("cf"), cellTs); // explicit cell ts != mutationTs
+    singleRecordTest(
+      new LogFileRecord().setHBaseTableName("TBLDELFAMVERTS").setCommitId(1L).setMutation(delete));
+  }
+
+  @Test
+  public void testMultipleCellsWithDistinctTimestampsPreserved() throws IOException {
+    // Multiple cells in the same mutation each carry a unique timestamp; all must survive
+    // the round-trip intact.
+    long mutationTs = 50000L;
+    Put put = new Put(Bytes.toBytes("row"));
+    put.setTimestamp(mutationTs);
+    for (int i = 0; i < 10; i++) {
+      put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q" + i), (long) (i * 1000),
+        Bytes.toBytes("v" + i));
+    }
+    LogFileCodec codec = new LogFileCodec();
+    LogFile.Record original =
+      new LogFileRecord().setHBaseTableName("TBLDISTINCT").setCommitId(1L).setMutation(put);
+
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    codec.getEncoder(new DataOutputStream(baos)).write(original);
+    LogFile.Codec.Decoder decoder =
+      codec.getDecoder(new DataInputStream(new ByteArrayInputStream(baos.toByteArray())));
+
+    assertTrue(decoder.advance());
+    LogFile.Record decoded = decoder.current();
+    LogFileTestUtil.assertRecordEquals("All per-cell timestamps must be preserved", original,
+      decoded);
+    // Also verify each cell timestamp explicitly
+    java.util.List<org.apache.hadoop.hbase.Cell> originalCells =
+      put.getFamilyCellMap().get(Bytes.toBytes("cf"));
+    java.util.List<org.apache.hadoop.hbase.Cell> decodedCells =
+      decoded.getMutation().getFamilyCellMap().get(Bytes.toBytes("cf"));
+    assertEquals("Cell count must match", originalCells.size(), decodedCells.size());
+    for (int i = 0; i < originalCells.size(); i++) {
+      assertEquals("Cell " + i + " timestamp must be preserved",
+        originalCells.get(i).getTimestamp(), decodedCells.get(i).getTimestamp());
+    }
+  }
+
 }

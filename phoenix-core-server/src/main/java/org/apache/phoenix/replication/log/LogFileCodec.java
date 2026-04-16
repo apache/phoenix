@@ -67,6 +67,7 @@ import org.apache.hadoop.io.WritableUtils;
  *   |   +--------------------------------------+ |
  *   |   | PER-CELL DATA (repeated)             | |
  *   |   |   +––––––––––––----------------–--–+ | |
+ *   |   |   | CELL TIMESTAMP (long)          | | |
  *   |   |   | COLUMN QUALIFIER LENGTH (vint) | | |
  *   |   |   | COLUMN QUALIFIER (byte[])      | | |
  *   |   |   | VALUE LENGTH (vint)            | | |
@@ -139,6 +140,7 @@ public class LogFileCodec implements LogFile.Codec {
         List<Cell> cells = entry.getValue();
         WritableUtils.writeVInt(recordOut, cells.size());
         for (Cell cell : cells) {
+          recordOut.writeLong(cell.getTimestamp());
           WritableUtils.writeVInt(recordOut, cell.getQualifierLength());
           recordOut.write(cell.getQualifierArray(), cell.getQualifierOffset(),
             cell.getQualifierLength());
@@ -225,6 +227,8 @@ public class LogFileCodec implements LogFile.Codec {
           // Qualifiers+Values Count
           int columnValuePairsCount = WritableUtils.readVInt(in);
           for (int j = 0; j < columnValuePairsCount; j++) {
+            // Cell timestamp
+            long cellTs = in.readLong();
             // Qualifier name
             int qualLen = WritableUtils.readVInt(in);
             byte[] qual = new byte[qualLen];
@@ -239,17 +243,17 @@ public class LogFileCodec implements LogFile.Codec {
             }
             switch (type) {
               case PUT:
-                ((Put) mutation).addColumn(cf, qual, ts, value);
+                ((Put) mutation).addColumn(cf, qual, cellTs, value);
                 break;
               case DELETE:
               case DELETECOLUMN:
-                ((Delete) mutation).addColumn(cf, qual, ts);
+                ((Delete) mutation).addColumn(cf, qual, cellTs);
                 break;
               case DELETEFAMILYVERSION:
-                ((Delete) mutation).addFamilyVersion(cf, ts);
+                ((Delete) mutation).addFamilyVersion(cf, cellTs);
                 break;
               case DELETEFAMILY:
-                ((Delete) mutation).addFamily(cf);
+                ((Delete) mutation).addFamily(cf, cellTs);
                 break;
               default:
                 throw new UnsupportedOperationException("Unhandled mutation type " + type);
