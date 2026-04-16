@@ -63,7 +63,6 @@ import org.apache.phoenix.mapreduce.PhoenixSyncTableOutputRepository;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
@@ -2342,19 +2341,10 @@ public class PhoenixSyncTableToolIT {
    */
   private void splitTableAt(Connection conn, String tableName, int splitId) {
     try {
-      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-      PTable table = pconn.getTable(tableName);
-      TableName hbaseTableName = TableName.valueOf(table.getPhysicalName().getBytes());
-
       byte[] splitPoint = PInteger.INSTANCE.toBytes(splitId);
-
-      // Attempt to split the region at the specified row key
-      try (Admin admin = pconn.getQueryServices().getAdmin()) {
-        admin.split(hbaseTableName, splitPoint);
-        LOGGER.info("Split initiated for table {} at split point {} (bytes: {})", tableName,
-          splitId, Bytes.toStringBinary(splitPoint));
-      }
-      Thread.sleep(1500);
+      TestUtil.splitTable(conn, tableName, splitPoint);
+      LOGGER.info("Split completed for table {} at split point {} (bytes: {})", tableName, splitId,
+        Bytes.toStringBinary(splitPoint));
     } catch (Exception e) {
       // Ignore split failures - they don't affect the test's main goal
       LOGGER.warn("Failed to split table {} at split point {}: {}", tableName, splitId,
