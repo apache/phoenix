@@ -234,7 +234,7 @@ public class PhoenixSyncTableMapper
     String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
       .formatMapper(verifiedChunks, mismatchedChunks, sourceRowsProcessed, targetRowsProcessed);
     if (sourceRowsProcessed > 0) {
-      recordRegionCompletion(regionStart, regionEnd, mapperStartTime, regionEndTime, verifiedChunks,
+      recordRegionCompletion(regionStart, regionEnd, regionStartTime, regionEndTime, verifiedChunks,
         mismatchedChunks, counters, context);
     } else {
       LOGGER.info(

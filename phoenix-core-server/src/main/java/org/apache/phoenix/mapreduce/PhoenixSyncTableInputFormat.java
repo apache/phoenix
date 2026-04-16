@@ -126,10 +126,8 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
           return coalescedSplits;
         }
       } catch (Exception e) {
-        LOGGER.warn(
-          "Failed to coalesce splits for table {}, falling back to uncoalesced splits: {}",
-          tableName, e.getMessage(), e);
-        return unprocessedSplits;
+        throw new IOException(String.format("Failed to coalesce splits for table %s. "
+            + "Split coalescing is enabled but failed due to: %s.", tableName, e.getMessage()), e);
       }
     }
 

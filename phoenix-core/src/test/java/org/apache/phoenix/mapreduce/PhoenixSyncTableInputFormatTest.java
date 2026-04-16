@@ -465,6 +465,27 @@ public class PhoenixSyncTableInputFormatTest {
     inputFormat.coalesceSplits(splits, mockRegionLocator);
   }
 
+  @Test
+  public void testCoalesceSplitsFailureThrowsIOExceptionWithMessage() throws Exception {
+    // coalescing failures throw IOException
+    List<InputSplit> splits = new ArrayList<>();
+    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
+
+    // Mock RegionLocator to throw IOException (simulating cluster issue)
+    IOException simulatedFailure = new IOException("Simulated RegionServer communication failure");
+    when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
+      .thenThrow(simulatedFailure);
+
+    try {
+      inputFormat.coalesceSplits(splits, mockRegionLocator);
+      fail("Expected IOException to be thrown for coalescing failure");
+    } catch (IOException e) {
+      // Verify exception message is informative
+      assertTrue("Exception message should mention coalescing failure",
+        e.getMessage().contains("Simulated RegionServer communication failure"));
+    }
+  }
+
   /**
    * Helper method to create a mock HRegionLocation with the given server address and start key.
    */
