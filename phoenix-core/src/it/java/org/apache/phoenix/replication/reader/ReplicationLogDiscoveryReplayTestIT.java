@@ -1922,6 +1922,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         discovery.setLastRoundInSync(testRound);
         discovery.setLastRoundProcessed(testRound);
         discovery.setFailoverPending(true);
+        discovery.setReplicationReplayState(
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
 
         assertTrue("Should trigger failover when all conditions are met",
           discovery.shouldTriggerFailover());
@@ -1953,6 +1955,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         discovery.setLastRoundInSync(testRound);
         discovery.setLastRoundProcessed(testRound);
         discovery.setFailoverPending(true);
+        discovery.setReplicationReplayState(
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
 
         assertFalse("Should not trigger failover when in-progress files are not empty",
           discovery.shouldTriggerFailover());
@@ -1969,6 +1973,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         discovery.setLastRoundInSync(testRound);
         discovery.setLastRoundProcessed(testRound);
         discovery.setFailoverPending(true);
+        discovery.setReplicationReplayState(
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
 
         assertFalse(
           "Should not trigger failover when new files exist from next round to current timestamp round",
@@ -2018,6 +2024,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         discovery.setLastRoundInSync(testRound);
         discovery.setLastRoundProcessed(testRound);
         discovery.setFailoverPending(true);
+        discovery.setReplicationReplayState(
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
 
         assertFalse("Should not trigger failover when both in-progress and new files exist",
           discovery.shouldTriggerFailover());
@@ -2036,6 +2044,58 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         discovery.setFailoverPending(false);
 
         assertFalse("Should not trigger failover when all conditions are false",
+          discovery.shouldTriggerFailover());
+      }
+
+      // Test Case 9: SYNCED_RECOVERY state with all other conditions met - should return false
+      {
+        when(tracker.getInProgressFiles()).thenReturn(Collections.emptyList());
+        when(tracker.getNewFiles(nextRoundToProcess, currentTimestampRound))
+          .thenReturn(Collections.emptyList());
+        TestableReplicationLogDiscoveryReplay discovery =
+          new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+        discovery.setLastRoundInSync(testRound);
+        discovery.setLastRoundProcessed(testRound);
+        discovery.setFailoverPending(true);
+        discovery.setReplicationReplayState(
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY);
+
+        assertFalse(
+          "Should not trigger failover when replay state is SYNCED_RECOVERY (rewind pending)",
+          discovery.shouldTriggerFailover());
+      }
+
+      // Test Case 10: DEGRADED state with all other conditions met - should return false
+      {
+        when(tracker.getInProgressFiles()).thenReturn(Collections.emptyList());
+        when(tracker.getNewFiles(nextRoundToProcess, currentTimestampRound))
+          .thenReturn(Collections.emptyList());
+        TestableReplicationLogDiscoveryReplay discovery =
+          new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+        discovery.setLastRoundInSync(testRound);
+        discovery.setLastRoundProcessed(testRound);
+        discovery.setFailoverPending(true);
+        discovery.setReplicationReplayState(
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
+
+        assertFalse("Should not trigger failover when replay state is DEGRADED",
+          discovery.shouldTriggerFailover());
+      }
+
+      // Test Case 11: NOT_INITIALIZED state with all other conditions met - should return false
+      {
+        when(tracker.getInProgressFiles()).thenReturn(Collections.emptyList());
+        when(tracker.getNewFiles(nextRoundToProcess, currentTimestampRound))
+          .thenReturn(Collections.emptyList());
+        TestableReplicationLogDiscoveryReplay discovery =
+          new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+        discovery.setLastRoundInSync(testRound);
+        discovery.setLastRoundProcessed(testRound);
+        discovery.setFailoverPending(true);
+        discovery.setReplicationReplayState(
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.NOT_INITIALIZED);
+
+        assertFalse("Should not trigger failover when replay state is NOT_INITIALIZED",
           discovery.shouldTriggerFailover());
       }
 

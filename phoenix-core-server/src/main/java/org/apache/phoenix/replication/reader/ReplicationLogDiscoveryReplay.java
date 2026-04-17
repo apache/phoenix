@@ -488,12 +488,13 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
   /**
    * Determines whether failover should be triggered based on completion criteria. Failover is safe
    * to trigger when all of the following conditions are met: 1. A failover has been requested
-   * (failoverPending is true) 2. No files are currently in the in-progress directory 3. No new
-   * files exist from the next round to process up to the current timestamp round. The third
+   * (failoverPending is true) 2. The replication replay state is SYNC (not SYNCED_RECOVERY,
+   * DEGRADED, or NOT_INITIALIZED) 3. No files are currently in the in-progress directory 4. No new
+   * files exist from the next round to process up to the current timestamp round. The fourth
    * condition checks for new files in the range from nextRoundToProcess (derived from
    * getLastRoundProcessed()) to currentTimestampRound (derived from current time). This ensures all
-   * replication logs up to the current time have been processed before transitioning the cluster
-   * from STANDBY to ACTIVE state.
+   * replication logs up to the current time have been processed and any pending rewind has completed
+   * before transitioning the cluster from STANDBY to ACTIVE state.
    * @return true if all conditions are met and failover should be triggered, false otherwise
    * @throws IOException if there's an error checking file status
    */
@@ -504,6 +505,14 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
       LOG.debug("Failover not triggered. failoverPending is false.");
       return false;
     }
+    // Check if replay state is SYNC; block failover during SYNCED_RECOVERY (rewind pending),
+    // DEGRADED, or NOT_INITIALIZED to prevent bypassing the rewind logic
+    if (replicationReplayState.get() != ReplicationReplayState.SYNC) {
+      LOG.debug("Failover not triggered. Replay state is {}, not SYNC.",
+        replicationReplayState.get());
+      return false;
+    }
+
     // Check if in-progress directory is empty
     boolean isInProgressDirectoryEmpty = replicationLogTracker.getInProgressFiles().isEmpty();
     if (!isInProgressDirectoryEmpty) {
