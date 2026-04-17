@@ -326,7 +326,7 @@ public class ConfigurationParserTest extends ResultBaseTest {
       // Writing to console
       jaxbMarshaller.marshal(data, System.out);
     } catch (JAXBException e) {
-      // some exception occured
+      // some exception occurred
       e.printStackTrace();
     }
     return data.toString();
