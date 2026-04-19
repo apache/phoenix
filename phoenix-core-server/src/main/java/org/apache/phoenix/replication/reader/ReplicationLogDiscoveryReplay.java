@@ -493,8 +493,8 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
    * files exist from the next round to process up to the current timestamp round. The fourth
    * condition checks for new files in the range from nextRoundToProcess (derived from
    * getLastRoundProcessed()) to currentTimestampRound (derived from current time). This ensures all
-   * replication logs up to the current time have been processed and any pending rewind has completed
-   * before transitioning the cluster from STANDBY to ACTIVE state.
+   * replication logs up to the current time have been processed and any pending rewind has
+   * completed before transitioning the cluster from STANDBY to ACTIVE state.
    * @return true if all conditions are met and failover should be triggered, false otherwise
    * @throws IOException if there's an error checking file status
    */
