@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT;
@@ -142,6 +143,7 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
     props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
       TestScanningResultPostDummyResultCaller.class.getName());
     props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
+    props.put(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 

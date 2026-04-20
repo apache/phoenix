@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.junit.Assert.assertEquals;
 
 import com.google.protobuf.RpcCallback;
@@ -100,6 +101,7 @@ public class UCFWithServerMetadataIT extends BaseTest {
   public static synchronized void doSetup() throws Exception {
     Map<String, String> props = new HashMap<>(1);
     props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+    props.put(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     setUpTestDriver(new ReadOnlyProps(props));
   }
 

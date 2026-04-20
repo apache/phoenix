@@ -49,6 +49,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
@@ -482,6 +483,13 @@ public class ParseNodeFactory {
     ListMultimap<String, Pair<String, Object>> props) {
     return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, isRebuildAll,
       async, props);
+  }
+
+  public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName,
+    boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
+    ListMultimap<String, Pair<String, Object>> props, IndexConsistency indexConsistency) {
+    return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, isRebuildAll,
+      async, props, indexConsistency);
   }
 
   public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName,

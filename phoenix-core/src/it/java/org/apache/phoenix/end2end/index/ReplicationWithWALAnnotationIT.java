@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_STARTUP_DELAY_MS;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -151,6 +152,7 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
       ReplicationSinkEndpoint.class.getName());
     conf1.setBoolean(IndexRegionObserver.PHOENIX_APPEND_METADATA_TO_WAL, true);
     conf1.set(HConstants.ZOOKEEPER_ZNODE_PARENT, "/1");
+    conf1.set(INDEX_CDC_CONSUMER_STARTUP_DELAY_MS, Integer.toString(Integer.MAX_VALUE));
     setUpConfigForMiniCluster(conf1);
 
     utility1 = new HBaseTestingUtility(conf1);
@@ -165,6 +167,7 @@ public class ReplicationWithWALAnnotationIT extends BaseTest {
     conf2.setInt(HConstants.HBASE_CLIENT_RETRIES_NUMBER, 6);
     conf2.setBoolean("dfs.support.append", true);
     conf2.setBoolean("hbase.tests.use.shortcircuit.reads", false);
+    conf2.set(INDEX_CDC_CONSUMER_STARTUP_DELAY_MS, Integer.toString(Integer.MAX_VALUE));
 
     utility2 = new HBaseTestingUtility(conf2);
     utility2.startMiniZKCluster();

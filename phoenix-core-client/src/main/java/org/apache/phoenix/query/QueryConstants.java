@@ -54,9 +54,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GLOBAL_SCAN_DETAIL
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_ROW_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POST_KEY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IDX_CDC_TRACKER_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INCREMENT_BY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_CONSISTENCY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
@@ -73,6 +75,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.JAR_PATH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_DDL_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_STATS_UPDATE_TIME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LIMIT_REACHED_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LINK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LOGICAL_PARENT_NAME;
@@ -88,6 +91,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_ARGS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NUM_PREC_RADIX;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.OLD_METADATA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.OWNER_PARTITION_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_PARTITION_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARENT_PARTITION_START_TIME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_END_KEY;
@@ -133,6 +137,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CDC_STREAM_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_IDX_CDC_TRACKER_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_MUTEX_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_STATS_TABLE;
@@ -150,6 +155,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TABLE_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRACKER_STATUS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTIONAL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSACTION_PROVIDER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TRANSFORM_FUNCTION;
@@ -376,12 +382,17 @@ public interface QueryConstants {
   String CDC_PRE_IMAGE = "pre_image";
   String CDC_POST_IMAGE = "post_image";
   String CDC_CHANGE_IMAGE = "change_image";
+  String CDC_IDX_MUTATIONS = "idx_mutations";
   String CDC_UPSERT_EVENT_TYPE = "upsert";
   String CDC_DELETE_EVENT_TYPE = "delete";
   String SPLITS_FILE = "SPLITS_FILE";
   String CDC_TTL_DELETE_EVENT_TYPE = "ttl_delete";
   String CDC_IMAGE_CQ = "_CDC_IMG_";
   byte[] CDC_IMAGE_CQ_BYTES = Bytes.toBytes(CDC_IMAGE_CQ);
+  String CDC_INDEX_PRE_MUTATIONS_CQ = "_IDX_PRE_";
+  byte[] CDC_INDEX_PRE_MUTATIONS_CQ_BYTES = Bytes.toBytes(CDC_INDEX_PRE_MUTATIONS_CQ);
+  String CDC_INDEX_POST_MUTATIONS_CQ = "_IDX_POST_";
+  byte[] CDC_INDEX_POST_MUTATIONS_CQ_BYTES = Bytes.toBytes(CDC_INDEX_POST_MUTATIONS_CQ);
 
   /**
    * We mark counter values 0 to 10 as reserved. Value 0 is used by
@@ -408,7 +419,7 @@ public interface QueryConstants {
       + " BOOLEAN, \n" + SCHEMA_VERSION + " VARCHAR, \n" + EXTERNAL_SCHEMA_ID + " VARCHAR, \n"
       + STREAMING_TOPIC_NAME + " VARCHAR, \n" + INDEX_WHERE + " VARCHAR, \n" + CDC_INCLUDE_TABLE
       + " VARCHAR, \n" + TTL + " VARCHAR, \n" + ROW_KEY_MATCHER + " VARBINARY_ENCODED, \n"
-      + IS_STRICT_TTL + " BOOLEAN, \n" +
+      + IS_STRICT_TTL + " BOOLEAN, \n" + INDEX_CONSISTENCY + " CHAR(1), \n" +
       // Column metadata (will be null for table row)
       DATA_TYPE + " INTEGER," + COLUMN_SIZE + " INTEGER," + DECIMAL_DIGITS + " INTEGER," + NULLABLE
       + " INTEGER," + ORDINAL_POSITION + " INTEGER," + SORT_ORDER + " INTEGER," + ARRAY_SIZE
@@ -586,4 +597,18 @@ public interface QueryConstants {
       + PARENT_PARTITION_ID + "))\n" + HConstants.VERSIONS + "=%s,\n"
       + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" + TRANSACTIONAL + "="
       + Boolean.FALSE + ",\n" + UPDATE_CACHE_FREQUENCY + "=" + "7200000";
+
+  String CREATE_IDX_CDC_TRACKER_METADATA =
+    "CREATE TABLE " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_IDX_CDC_TRACKER_TABLE + "\"(\n" +
+    // PK columns
+      TABLE_NAME + " VARCHAR NOT NULL," + PARTITION_ID + " VARCHAR NOT NULL," + OWNER_PARTITION_ID
+      + " VARCHAR NOT NULL," +
+      // Non-PK columns
+      LAST_TIMESTAMP + " BIGINT," + TRACKER_STATUS + " CHAR(1),\n" + "CONSTRAINT "
+      + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TABLE_NAME + "," + PARTITION_ID + ","
+      + OWNER_PARTITION_ID + "))\n" + HConstants.VERSIONS + "=%s,\n"
+      + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n" + TRANSACTIONAL + "="
+      + Boolean.FALSE + ",\n" + UPDATE_CACHE_FREQUENCY + "=" + "7200000" + ",\n"
+      + ColumnFamilyDescriptorBuilder.TTL + "=" + IDX_CDC_TRACKER_TTL + ",\n"
+      + "\"phoenix.max.lookback.age.seconds\"=0";
 }

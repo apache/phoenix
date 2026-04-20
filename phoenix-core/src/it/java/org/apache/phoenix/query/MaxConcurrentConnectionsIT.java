@@ -18,6 +18,7 @@
 package org.apache.phoenix.query;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.NEW_INTERNAL_CONNECTION_THROTTLED;
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_OPEN_PHOENIX_CONNECTIONS;
 import static org.apache.phoenix.query.QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS;
@@ -60,6 +61,7 @@ public class MaxConcurrentConnectionsIT extends BaseTest {
   @BeforeClass
   public static void setUp() throws Exception {
     final Configuration conf = HBaseConfiguration.create();
+    conf.set(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     setUpConfigForMiniCluster(conf);
     hbaseTestUtil = new HBaseTestingUtility(conf);
 

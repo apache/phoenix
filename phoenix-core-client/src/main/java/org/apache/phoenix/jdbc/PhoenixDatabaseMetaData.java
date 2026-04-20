@@ -213,6 +213,8 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final byte[] VIEW_TYPE_BYTES = Bytes.toBytes(VIEW_TYPE);
   public static final String INDEX_TYPE = "INDEX_TYPE";
   public static final byte[] INDEX_TYPE_BYTES = Bytes.toBytes(INDEX_TYPE);
+  public static final String INDEX_CONSISTENCY = "INDEX_CONSISTENCY";
+  public static final byte[] INDEX_CONSISTENCY_BYTES = Bytes.toBytes(INDEX_CONSISTENCY);
   public static final String LINK_TYPE = "LINK_TYPE";
   public static final byte[] LINK_TYPE_BYTES = Bytes.toBytes(LINK_TYPE);
   public static final String TASK_TYPE = "TASK_TYPE";
@@ -497,6 +499,16 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final String CDC_STREAM_CONDITIONAL_TTL_EXPRESSION =
     "PARTITION_END_TIME IS NOT NULL "
       + "AND TO_NUMBER(CURRENT_TIME()) - TO_NUMBER(PHOENIX_ROW_TIMESTAMP()) >= %d";
+
+  public static final String SYSTEM_IDX_CDC_TRACKER_TABLE = "IDX_CDC_TRACKER";
+  public static final String SYSTEM_IDX_CDC_TRACKER_NAME =
+    SchemaUtil.getTableName(SYSTEM_CATALOG_SCHEMA, SYSTEM_IDX_CDC_TRACKER_TABLE);
+  public static final String LAST_TIMESTAMP = "LAST_TIMESTAMP";
+  public static final String OWNER_PARTITION_ID = "OWNER_PARTITION_ID";
+  public static final String TRACKER_STATUS = "STATUS";
+  public static final String TRACKER_STATUS_IN_PROGRESS = "i";
+  public static final String TRACKER_STATUS_COMPLETE = "c";
+  public static final int IDX_CDC_TRACKER_TTL = 10 * 24 * 60 * 60;
 
   public static final String QUERY_ID = "QUERY_ID";
   public static final String USER = "USER";

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -117,6 +118,7 @@ public abstract class ParallelStatsDisabledWithRegionMovesIT extends BaseTest {
     props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));
     props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
       TestScanningResultPostDummyResultCaller.class.getName());
+    props.put(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 

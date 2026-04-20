@@ -18,6 +18,7 @@
 package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityPolicy.PARALLEL;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
@@ -57,6 +58,10 @@ public class ParallelPhoenixConnectionFallbackIT {
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
     haGroupName = ParallelPhoenixConnectionFallbackIT.class.getSimpleName();
+    CLUSTERS.getHBaseCluster1().getConfiguration().setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED,
+      false);
+    CLUSTERS.getHBaseCluster2().getConfiguration().setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED,
+      false);
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
     PROPERTIES.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);

@@ -1,0 +1,89 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.phoenix.end2end.index;
+
+import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_RETRY_PAUSE_MS;
+import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS;
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_MUTATION_SERIALIZE;
+
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.ReadOnlyProps;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.BeforeClass;
+import org.junit.experimental.categories.Category;
+import org.junit.runners.Parameterized;
+
+import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+
+@Category(NeedsOwnMiniClusterTest.class)
+public class GlobalIndexCheckerEventualIT extends GlobalIndexCheckerIT {
+
+  public GlobalIndexCheckerEventualIT(boolean async, boolean encoded) {
+    super(async, encoded);
+  }
+
+  @BeforeClass
+  public static synchronized void doSetup() throws Exception {
+    Map<String, String> props = Maps.newHashMapWithExpectedSize(8);
+    props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
+    props.put(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, Integer.toString(2000));
+    props.put(INDEX_CDC_CONSUMER_RETRY_PAUSE_MS, Integer.toString(5));
+    props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Integer.toString(-1));
+    props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(2));
+    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(1));
+    props.put(PHOENIX_INDEX_CDC_MUTATION_SERIALIZE, Boolean.TRUE.toString());
+    setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
+  }
+
+  @Before
+  public void appendEventualConsistency() {
+    if (indexDDLOptions.trim().isEmpty()) {
+      indexDDLOptions = " CONSISTENCY=EVENTUAL";
+    } else {
+      indexDDLOptions = " CONSISTENCY=EVENTUAL," + indexDDLOptions;
+    }
+  }
+
+  @After
+  public void after() throws Exception {
+  }
+
+  @Override
+  protected void waitForEventualConsistency() throws Exception {
+    Thread.sleep(15000);
+  }
+
+  @Parameterized.Parameters(name = "async={0},encoded={1}")
+  public static synchronized Collection<Object[]> data() {
+    List<Object[]> list = Lists.newArrayListWithExpectedSize(4);
+    boolean[] Booleans = new boolean[] { true, false };
+    for (boolean async : Booleans) {
+      for (boolean encoded : Booleans) {
+        list.add(new Object[] { async, encoded });
+      }
+    }
+    return list;
+  }
+
+}

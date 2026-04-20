@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -133,6 +134,7 @@ public class UncoveredGlobalIndexRegionScanner2IT extends BaseTest {
     props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
     props.put(QueryServices.PHOENIX_POST_DUMMY_PROCESS,
       TestScanningResultPostDummyResultCaller.class.getName());
+    props.put(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 

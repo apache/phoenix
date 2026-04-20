@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION;
+import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_STARTUP_DELAY_MS;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.URLS;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
@@ -99,6 +100,10 @@ public class FailoverPhoenixConnectionIT {
 
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
+    CLUSTERS.getHBaseCluster1().getConfiguration().setInt(INDEX_CDC_CONSUMER_STARTUP_DELAY_MS,
+      Integer.MAX_VALUE);
+    CLUSTERS.getHBaseCluster2().getConfiguration().setInt(INDEX_CDC_CONSUMER_STARTUP_DELAY_MS,
+      Integer.MAX_VALUE);
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
   }
