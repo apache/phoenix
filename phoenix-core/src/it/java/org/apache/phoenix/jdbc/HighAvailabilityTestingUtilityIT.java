@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair.doTestWhenOneHBaseDown;
@@ -81,6 +82,10 @@ public class HighAvailabilityTestingUtilityIT {
 
   @BeforeClass
   public static void setUpBeforeClass() throws Exception {
+    CLUSTERS.getHBaseCluster1().getConfiguration().setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED,
+      false);
+    CLUSTERS.getHBaseCluster2().getConfiguration().setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED,
+      false);
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
   }

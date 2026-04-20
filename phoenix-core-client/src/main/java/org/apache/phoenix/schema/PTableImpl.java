@@ -103,6 +103,7 @@ import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.RowKeySchema.RowKeySchemaBuilder;
 import org.apache.phoenix.schema.transform.TransformMaintainer;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
@@ -193,6 +194,7 @@ public class PTableImpl implements PTable {
   private final Long viewIndexId;
   private final int estimatedSize;
   private final IndexType indexType;
+  private final IndexConsistency indexConsistency;
   private final int baseColumnCount;
   private final boolean rowKeyOrderOptimizable; // TODO: remove when required that tables have been
                                                 // upgrade for PHOENIX-2067
@@ -267,6 +269,7 @@ public class PTableImpl implements PTable {
     private Long viewIndexId;
     private int estimatedSize;
     private IndexType indexType;
+    private IndexConsistency indexConsistency;
     private int baseColumnCount;
     private boolean rowKeyOrderOptimizable;
     private boolean hasColumnsRequiringUpgrade;
@@ -531,6 +534,11 @@ public class PTableImpl implements PTable {
 
     public Builder setIndexType(IndexType indexType) {
       this.indexType = indexType;
+      return this;
+    }
+
+    public Builder setIndexConsistency(IndexConsistency indexConsistency) {
+      this.indexConsistency = indexConsistency;
       return this;
     }
 
@@ -994,6 +1002,7 @@ public class PTableImpl implements PTable {
     this.viewIndexId = builder.viewIndexId;
     this.estimatedSize = builder.estimatedSize;
     this.indexType = builder.indexType;
+    this.indexConsistency = builder.indexConsistency;
     this.baseColumnCount = builder.baseColumnCount;
     this.rowKeyOrderOptimizable = builder.rowKeyOrderOptimizable;
     this.hasColumnsRequiringUpgrade = builder.hasColumnsRequiringUpgrade;
@@ -1052,6 +1061,7 @@ public class PTableImpl implements PTable {
       .setMultiTenant(table.isMultiTenant()).setStoreNulls(table.getStoreNulls())
       .setViewType(table.getViewType()).setViewIndexIdType(table.getviewIndexIdType())
       .setViewIndexId(table.getViewIndexId()).setIndexType(table.getIndexType())
+      .setIndexConsistency(table.getIndexConsistency())
       .setTransactionProvider(table.getTransactionProvider())
       .setUpdateCacheFrequency(table.getUpdateCacheFrequency())
       .setNamespaceMapped(table.isNamespaceMapped())
@@ -1890,6 +1900,11 @@ public class PTableImpl implements PTable {
     return indexType;
   }
 
+  @Override
+  public IndexConsistency getIndexConsistency() {
+    return type == PTableType.INDEX ? indexConsistency : null;
+  }
+
   /**
    * Construct a PTable instance from ProtoBuffered PTable instance
    */
@@ -2096,6 +2111,14 @@ public class PTableImpl implements PTable {
     if (table.hasRowKeyMatcher()) {
       rowKeyMatcher = table.getRowKeyMatcher().toByteArray();
     }
+    IndexConsistency indexConsistency = null;
+    if (tableType == PTableType.INDEX) {
+      if (table.hasIndexConsistency()) {
+        indexConsistency = IndexConsistency.valueOf(table.getIndexConsistency());
+      } else {
+        indexConsistency = null;
+      }
+    }
 
     try {
       return new PTableImpl.Builder().setType(tableType).setState(indexState)
@@ -2103,7 +2126,7 @@ public class PTableImpl implements PTable {
         .setSequenceNumber(sequenceNumber).setImmutableRows(isImmutableRows)
         .setViewStatement(viewStatement).setDisableWAL(disableWAL).setMultiTenant(multiTenant)
         .setStoreNulls(storeNulls).setViewType(viewType).setViewIndexIdType(viewIndexIdType)
-        .setViewIndexId(viewIndexId).setIndexType(indexType)
+        .setViewIndexId(viewIndexId).setIndexType(indexType).setIndexConsistency(indexConsistency)
         .setTransactionProvider(transactionProvider).setUpdateCacheFrequency(updateCacheFrequency)
         .setNamespaceMapped(isNamespaceMapped).setAutoPartitionSeqName(autoPartitionSeqName)
         .setAppendOnlySchema(isAppendOnlySchema)
@@ -2165,6 +2188,9 @@ public class PTableImpl implements PTable {
       if (table.getIndexType() != null) {
         builder.setIndexType(
           ByteStringer.wrap(new byte[] { table.getIndexType().getSerializedValue() }));
+      }
+      if (table.getIndexConsistency() != null) {
+        builder.setIndexConsistency(table.getIndexConsistency().name());
       }
     }
     builder.setSequenceNumber(table.getSequenceNumber());

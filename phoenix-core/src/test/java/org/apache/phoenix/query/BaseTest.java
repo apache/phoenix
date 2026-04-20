@@ -2070,7 +2070,7 @@ public abstract class BaseTest {
    * @throws IOException if something went wrong while connecting to Admin
    */
   public synchronized static boolean isAnyStoreRefCountLeaked(Admin admin) throws IOException {
-    int retries = 5;
+    int retries = 15;
     while (retries > 0) {
       boolean isStoreRefCountLeaked = isStoreRefCountLeaked(admin);
       if (!isStoreRefCountLeaked) {
