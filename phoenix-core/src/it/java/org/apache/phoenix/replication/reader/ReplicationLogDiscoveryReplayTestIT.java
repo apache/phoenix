@@ -23,6 +23,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
@@ -1922,6 +1924,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         discovery.setLastRoundInSync(testRound);
         discovery.setLastRoundProcessed(testRound);
         discovery.setFailoverPending(true);
+        discovery
+          .setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
 
         assertTrue("Should trigger failover when all conditions are met",
           discovery.shouldTriggerFailover());
@@ -1953,6 +1957,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         discovery.setLastRoundInSync(testRound);
         discovery.setLastRoundProcessed(testRound);
         discovery.setFailoverPending(true);
+        discovery
+          .setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
 
         assertFalse("Should not trigger failover when in-progress files are not empty",
           discovery.shouldTriggerFailover());
@@ -1969,6 +1975,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         discovery.setLastRoundInSync(testRound);
         discovery.setLastRoundProcessed(testRound);
         discovery.setFailoverPending(true);
+        discovery
+          .setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
 
         assertFalse(
           "Should not trigger failover when new files exist from next round to current timestamp round",
@@ -2018,6 +2026,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         discovery.setLastRoundInSync(testRound);
         discovery.setLastRoundProcessed(testRound);
         discovery.setFailoverPending(true);
+        discovery
+          .setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
 
         assertFalse("Should not trigger failover when both in-progress and new files exist",
           discovery.shouldTriggerFailover());
@@ -2037,6 +2047,61 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
 
         assertFalse("Should not trigger failover when all conditions are false",
           discovery.shouldTriggerFailover());
+      }
+
+      // Test Case 9: SYNCED_RECOVERY state with all other conditions met - should return false
+      // Also verifies short-circuit: no file I/O should occur when state is not SYNC
+      {
+        Mockito.clearInvocations(tracker);
+        TestableReplicationLogDiscoveryReplay discovery =
+          new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+        discovery.setLastRoundInSync(testRound);
+        discovery.setLastRoundProcessed(testRound);
+        discovery.setFailoverPending(true);
+        discovery.setReplicationReplayState(
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY);
+
+        assertFalse(
+          "Should not trigger failover when replay state is SYNCED_RECOVERY (rewind pending)",
+          discovery.shouldTriggerFailover());
+        verify(tracker, never()).getInProgressFiles();
+        verify(tracker, never()).getNewFiles(nextRoundToProcess, currentTimestampRound);
+      }
+
+      // Test Case 10: DEGRADED state with all other conditions met - should return false
+      // Also verifies short-circuit: no file I/O should occur when state is not SYNC
+      {
+        Mockito.clearInvocations(tracker);
+        TestableReplicationLogDiscoveryReplay discovery =
+          new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+        discovery.setLastRoundInSync(testRound);
+        discovery.setLastRoundProcessed(testRound);
+        discovery.setFailoverPending(true);
+        discovery
+          .setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
+
+        assertFalse("Should not trigger failover when replay state is DEGRADED",
+          discovery.shouldTriggerFailover());
+        verify(tracker, never()).getInProgressFiles();
+        verify(tracker, never()).getNewFiles(nextRoundToProcess, currentTimestampRound);
+      }
+
+      // Test Case 11: NOT_INITIALIZED state with all other conditions met - should return false
+      // Also verifies short-circuit: no file I/O should occur when state is not SYNC
+      {
+        Mockito.clearInvocations(tracker);
+        TestableReplicationLogDiscoveryReplay discovery =
+          new TestableReplicationLogDiscoveryReplay(tracker, haGroupStoreRecord);
+        discovery.setLastRoundInSync(testRound);
+        discovery.setLastRoundProcessed(testRound);
+        discovery.setFailoverPending(true);
+        discovery.setReplicationReplayState(
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.NOT_INITIALIZED);
+
+        assertFalse("Should not trigger failover when replay state is NOT_INITIALIZED",
+          discovery.shouldTriggerFailover());
+        verify(tracker, never()).getInProgressFiles();
+        verify(tracker, never()).getNewFiles(nextRoundToProcess, currentTimestampRound);
       }
 
     } finally {
