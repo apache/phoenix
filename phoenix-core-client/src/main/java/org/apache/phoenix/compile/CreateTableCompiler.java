@@ -40,6 +40,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -81,7 +82,6 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
-import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
@@ -444,8 +444,8 @@ public class CreateTableCompiler {
 
   /**
    * For a multi-tenant parent, ensure the current tenant has no existing view without a WHERE
-   * clause. Two such views would share the same ROW_KEY_MATCHER (the tenant-id bytes), causing
-   * a conflict in the compaction RowKeyMatcher trie.
+   * clause. Two such views would share the same ROW_KEY_MATCHER (the tenant-id bytes), causing a
+   * conflict in the compaction RowKeyMatcher trie.
    */
   private void validateNoExistingTenantViewWithoutWhere(final PhoenixConnection connection,
     final PTable parentToBe) throws SQLException {
@@ -475,8 +475,7 @@ public class CreateTableCompiler {
         String existingViewStmt = existing.getViewStatement();
         if (existingViewStmt == null || existingViewStmt.isEmpty()) {
           throw new SQLExceptionInfo.Builder(
-            SQLExceptionCode.TENANT_ALREADY_HAS_VIEW_WITHOUT_WHERE_CLAUSE).build()
-              .buildException();
+            SQLExceptionCode.TENANT_ALREADY_HAS_VIEW_WITHOUT_WHERE_CLAUSE).build().buildException();
         }
       } catch (TableNotFoundException e) {
         // Orphan child link, ignore.

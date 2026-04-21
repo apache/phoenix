@@ -426,8 +426,8 @@ public class TenantTTLIT extends BaseTest {
   }
 
   /**
-   * Verifies that tenant TTL compaction on the base table works correctly when a secondary
-   * index exists on the base table.
+   * Verifies that tenant TTL compaction on the base table works correctly when a secondary index
+   * exists on the base table.
    */
   @Test
   public void testCompactionWithTenantTableIndex() throws Exception {
@@ -443,14 +443,15 @@ public class TenantTTLIT extends BaseTest {
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.setAutoCommit(true);
-      conn.createStatement().execute(String.format(
-        "CREATE TABLE %s ("
-          + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR, COL2 VARCHAR "
-          + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
-          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
-        fullTableName));
-      conn.createStatement().execute(String.format(
-        "CREATE INDEX %s ON %s(COL1) INCLUDE(COL2)", indexName, fullTableName));
+      conn.createStatement()
+        .execute(String.format(
+          "CREATE TABLE %s ("
+            + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR, COL2 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+          fullTableName));
+      conn.createStatement().execute(
+        String.format("CREATE INDEX %s ON %s(COL1) INCLUDE(COL2)", indexName, fullTableName));
     }
 
     createTenantViewWithTTL("org1", fullTableName, view1Name, ttlOrg1);
@@ -491,8 +492,8 @@ public class TenantTTLIT extends BaseTest {
   }
 
   /**
-   * Verifies that two different tenants can create tenant views with the SAME view name
-   * on the same base table, with independent TTLs that don't interfere with each other.
+   * Verifies that two different tenants can create tenant views with the SAME view name on the same
+   * base table, with independent TTLs that don't interfere with each other.
    */
   @Test
   public void testSameViewNameAcrossDifferentTenants() throws Exception {
@@ -506,12 +507,12 @@ public class TenantTTLIT extends BaseTest {
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.setAutoCommit(true);
-      conn.createStatement().execute(String.format(
-        "CREATE TABLE %s ("
-          + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
-          + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
-          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
-        fullTableName));
+      conn.createStatement()
+        .execute(String.format(
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+          fullTableName));
     }
 
     // Both tenants create a view with the same name; scoped by tenant-id in SYSTEM.CATALOG.
@@ -533,8 +534,7 @@ public class TenantTTLIT extends BaseTest {
       upsertRowSimple(t2, sharedViewName, "k2", "b2");
     }
 
-    try (Connection t1 = getTenantConnection("org1");
-         Connection t2 = getTenantConnection("org2")) {
+    try (Connection t1 = getTenantConnection("org1"); Connection t2 = getTenantConnection("org2")) {
       assertViewRowCount(t1, sharedViewName, 2, "org1 should see 2 rows");
       assertViewRowCount(t2, sharedViewName, 2, "org2 should see 2 rows");
 
@@ -551,8 +551,8 @@ public class TenantTTLIT extends BaseTest {
 
   /**
    * Verifies that a tenant cannot create two tenant views without WHERE clauses on the same
-   * multi-tenant parent, since both would produce the same ROW_KEY_MATCHER and conflict in
-   * the compaction trie.
+   * multi-tenant parent, since both would produce the same ROW_KEY_MATCHER and conflict in the
+   * compaction trie.
    */
   @Test
   public void testCannotCreateMultipleNoWhereViewsSameTenant() throws Exception {
@@ -564,20 +564,20 @@ public class TenantTTLIT extends BaseTest {
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.setAutoCommit(true);
-      conn.createStatement().execute(String.format(
-        "CREATE TABLE %s ("
-          + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
-          + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
-          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
-        fullTableName));
+      conn.createStatement()
+        .execute(String.format(
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+          fullTableName));
     }
 
     createTenantViewWithTTL("org1", fullTableName, view1Name, 10);
 
     try (Connection conn = getTenantConnection("org1")) {
       conn.setAutoCommit(true);
-      conn.createStatement().execute(String.format(
-        "CREATE VIEW %s AS SELECT * FROM %s TTL = 20", view2Name, fullTableName));
+      conn.createStatement().execute(
+        String.format("CREATE VIEW %s AS SELECT * FROM %s TTL = 20", view2Name, fullTableName));
       fail("Expected TENANT_ALREADY_HAS_VIEW_WITHOUT_WHERE_CLAUSE");
     } catch (SQLException e) {
       assertEquals(SQLExceptionCode.TENANT_ALREADY_HAS_VIEW_WITHOUT_WHERE_CLAUSE.getErrorCode(),
@@ -602,17 +602,16 @@ public class TenantTTLIT extends BaseTest {
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.setAutoCommit(true);
-      conn.createStatement().execute(String.format(
-        "CREATE TABLE %s ("
-          + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
-          + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
-          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
-        fullTableName));
+      conn.createStatement()
+        .execute(String.format(
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+          fullTableName));
     }
 
     Properties restrictProps = new Properties();
-    restrictProps.setProperty(
-      QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
+    restrictProps.setProperty(QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
     createTenantViewWithProps("org1", fullTableName, view1Name, ttlOrg1, restrictProps);
     createTenantViewWithProps("org2", fullTableName, view2Name, ttlOrg2, restrictProps);
 
@@ -648,7 +647,7 @@ public class TenantTTLIT extends BaseTest {
   }
 
   private Connection getTenantConnectionWithProps(String tenantId, Properties props)
-      throws SQLException {
+    throws SQLException {
     Properties merged = new Properties();
     merged.putAll(props);
     merged.setProperty(TENANT_ID_ATTRIB, tenantId);
