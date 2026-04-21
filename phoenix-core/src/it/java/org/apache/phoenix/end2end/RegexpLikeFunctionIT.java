@@ -336,4 +336,117 @@ public class RegexpLikeFunctionIT extends ParallelStatsDisabledIT {
     stmt.close();
     conn.close();
   }
+
+  // ---- Tests for dynamic (evaluate-time) pattern compilation ----
+  // These tests exercise the code path where this.pattern is null after init()
+  // because the pattern expression is not stateless (fails isStateless() check).
+  // In these cases, the pattern is compiled per-row during evaluate().
+
+  /**
+   * Helper to create and populate a table with columns needed for dynamic pattern tests.
+   */
+  private String createDynamicPatternTable() throws Exception {
+    String dynTable = generateUniqueName();
+    Connection conn = DriverManager.getConnection(getUrl());
+    conn.createStatement()
+      .execute("CREATE TABLE " + dynTable + " (ID VARCHAR NOT NULL PRIMARY KEY, VAL VARCHAR,"
+        + " PATTERN_COL VARCHAR, CATEGORY VARCHAR, PREFIX_COL VARCHAR)");
+    PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + dynTable
+      + " (ID, VAL, PATTERN_COL, CATEGORY, PREFIX_COL) VALUES (?, ?, ?, ?, ?)");
+    // id0: Hello World, pattern "Hello.*", greeting, prefix "Hello"
+    upsertDynRow(stmt, "id0", "Hello World", "Hello.*", "greeting", "Hello");
+    // id1: hello world, pattern "hello.*", greeting, prefix "hello"
+    upsertDynRow(stmt, "id1", "hello world", "hello.*", "greeting", "hello");
+    // id2: Report123, pattern ".*\\d+.*", code, prefix "Report"
+    upsertDynRow(stmt, "id2", "Report123", ".*\\d+.*", "code", "Report");
+    // id3: Test456, pattern "Test.*", code, prefix "Test"
+    upsertDynRow(stmt, "id3", "Test456", "Test.*", "code", "Test");
+    // id4: line1\nline2, pattern "NOMATCH", other, prefix "line1"
+    upsertDynRow(stmt, "id4", "line1\nline2", "NOMATCH", "other", "line1");
+    // id5: null val, null pattern, null category, null prefix
+    upsertDynRow(stmt, "id5", null, null, null, null);
+    conn.commit();
+    conn.close();
+    return dynTable;
+  }
+
+  private void upsertDynRow(PreparedStatement stmt, String id, String val, String patternCol,
+    String category, String prefixCol) throws SQLException {
+    stmt.setString(1, id);
+    stmt.setString(2, val);
+    stmt.setString(3, patternCol);
+    stmt.setString(4, category);
+    stmt.setString(5, prefixCol);
+    stmt.executeUpdate();
+  }
+
+  @Test
+  public void testDynamicPatternFromColumn() throws Exception {
+    // Category: not stateless — pattern is a column reference.
+    // PATTERN_COL is not a literal constant, so init() cannot pre-compile.
+    // Each row supplies its own regex via PATTERN_COL, compiled at evaluate time.
+    String dynTable = createDynamicPatternTable();
+    Connection conn = DriverManager.getConnection(getUrl());
+    ResultSet rs = conn.createStatement().executeQuery(
+      "SELECT ID FROM " + dynTable + " WHERE REGEXP_LIKE(VAL, PATTERN_COL) ORDER BY ID");
+    assertTrue(rs.next());
+    assertEquals("id0", rs.getString(1)); // "Hello World" matches "Hello.*"
+    assertTrue(rs.next());
+    assertEquals("id1", rs.getString(1)); // "hello world" matches "hello.*"
+    assertTrue(rs.next());
+    assertEquals("id2", rs.getString(1)); // "Report123" matches ".*\\d+.*"
+    assertTrue(rs.next());
+    assertEquals("id3", rs.getString(1)); // "Test456" matches "Test.*"
+    // id4: "line1\nline2" does NOT match "NOMATCH"
+    // id5: null val and null pattern — excluded
+    assertFalse(rs.next());
+    conn.close();
+  }
+
+  @Test
+  public void testDynamicPatternFromCaseExpression() throws Exception {
+    // Category: not stateless — CASE expression depends on CATEGORY column.
+    // The CASE references a column, so the entire expression is not stateless.
+    // Pattern is determined per-row based on the CATEGORY value.
+    String dynTable = createDynamicPatternTable();
+    Connection conn = DriverManager.getConnection(getUrl());
+    ResultSet rs = conn.createStatement()
+      .executeQuery("SELECT ID FROM " + dynTable + " WHERE REGEXP_LIKE(VAL,"
+        + " CASE WHEN CATEGORY = 'greeting' THEN 'Hello.*'"
+        + "      WHEN CATEGORY = 'code' THEN '.*\\d+.*'" + "      ELSE 'NOMATCH' END) ORDER BY ID");
+    assertTrue(rs.next());
+    assertEquals("id0", rs.getString(1)); // greeting → "Hello.*" matches "Hello World"
+    // id1: greeting → "Hello.*" does NOT match "hello world" (case-sensitive)
+    assertTrue(rs.next());
+    assertEquals("id2", rs.getString(1)); // code → ".*\\d+.*" matches "Report123"
+    assertTrue(rs.next());
+    assertEquals("id3", rs.getString(1)); // code → ".*\\d+.*" matches "Test456"
+    // id4: other → "NOMATCH" does NOT match "line1\nline2"
+    // id5: null category → ELSE "NOMATCH", null val → excluded
+    assertFalse(rs.next());
+    conn.close();
+  }
+
+  @Test
+  public void testDynamicPatternFromColumnExpression() throws Exception {
+    // Category: not stateless — expression involves PREFIX_COL column.
+    // PREFIX_COL || '.*' is a concatenation that includes a column reference,
+    // so the expression is not stateless. Pattern is built per-row at evaluate time.
+    String dynTable = createDynamicPatternTable();
+    Connection conn = DriverManager.getConnection(getUrl());
+    ResultSet rs = conn.createStatement().executeQuery(
+      "SELECT ID FROM " + dynTable + " WHERE REGEXP_LIKE(VAL, PREFIX_COL || '.*') ORDER BY ID");
+    assertTrue(rs.next());
+    assertEquals("id0", rs.getString(1)); // "Hello" || ".*" → "Hello.*" matches "Hello World"
+    assertTrue(rs.next());
+    assertEquals("id1", rs.getString(1)); // "hello" || ".*" → "hello.*" matches "hello world"
+    assertTrue(rs.next());
+    assertEquals("id2", rs.getString(1)); // "Report" || ".*" → "Report.*" matches "Report123"
+    assertTrue(rs.next());
+    assertEquals("id3", rs.getString(1)); // "Test" || ".*" → "Test.*" matches "Test456"
+    // id4: "line1" || ".*" → "line1.*" does NOT match "line1\nline2" (dot doesn't match \n)
+    // id5: null prefix → null pattern → excluded
+    assertFalse(rs.next());
+    conn.close();
+  }
 }
