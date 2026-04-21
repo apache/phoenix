@@ -130,11 +130,11 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   public static final int MAX_LOOKBACK_AGE = 3600;
-  private final String tableDDLOptions;
+  protected final String tableDDLOptions;
 
   private final boolean useSnapshot = false;
-  private final boolean mutable;
-  private final String indexDDLOptions;
+  protected final boolean mutable;
+  protected String indexDDLOptions;
   private boolean singleCell;
 
   @Rule
@@ -196,6 +196,9 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
     getUtility().getConfiguration().set(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER, "1");
   }
 
+  protected void waitForEventualConsistency() throws Exception {
+  }
+
   @After
   public void cleanup() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
@@ -240,15 +243,18 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
       assertTrue("Index rebuild failed!", indexTool.getJob().isSuccessful());
       TestUtil.assertIndexState(conn, indexTableFullName, PIndexState.ACTIVE, null);
+      waitForEventualConsistency();
       long actualRowCount =
         IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(NROWS, actualRowCount);
       IndexToolIT.setEveryNthRowWithNull(NROWS, 5, stmt);
       conn.commit();
+      waitForEventualConsistency();
       actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(NROWS, actualRowCount);
       IndexToolIT.setEveryNthRowWithNull(NROWS, 7, stmt);
       conn.commit();
+      waitForEventualConsistency();
       actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(NROWS, actualRowCount);
       actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
@@ -445,6 +451,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       }
       assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+      waitForEventualConsistency();
       long actualRowCount =
         IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(NROWS, actualRowCount);
@@ -454,6 +461,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         IndexToolIT.upsertRow(stmt1, i);
       }
       conn.commit();
+      waitForEventualConsistency();
       indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
         null, 0, IndexTool.IndexVerifyType.BOTH, new String[0]);
       assertEquals(2 * NROWS,
@@ -492,6 +500,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         .findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
       assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+      waitForEventualConsistency();
       actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(2 * NROWS, actualRowCount);
     }
@@ -554,6 +563,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         .findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
       assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
+      waitForEventualConsistency();
       long actualRowCount =
         IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(N_ROWS, actualRowCount);
@@ -580,6 +590,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
       assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
+      waitForEventualConsistency();
       actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(N_ROWS, actualRowCount);
     }
@@ -587,6 +598,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   @Test
   public void testIndexToolVerifyBeforeAndBothOptions() throws Exception {
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String schemaName = generateUniqueName();
@@ -630,6 +643,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   @Test
   public void testIndexToolVerifyAfterOption() throws Exception {
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String schemaName = generateUniqueName();
@@ -841,6 +856,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   @Test
   public void testIndexToolForIncrementalVerify() throws Exception {
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     ManualEnvironmentEdge customEdge = new ManualEnvironmentEdge();
     String schemaName = generateUniqueName();
     String dataTableName = generateUniqueName();
@@ -976,6 +993,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   @Test
   public void testIndexToolForIncrementalVerify_viewIndex() throws Exception {
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     ManualEnvironmentEdge customeEdge = new ManualEnvironmentEdge();
     String schemaName = generateUniqueName();
     String dataTableName = generateUniqueName();
@@ -1383,6 +1402,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   @Test
   public void testUpdatablePKFilterViewIndexRebuild() throws Exception {
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     if (!mutable) {
       return;
     }
@@ -1452,6 +1473,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   @Test
   public void testUpdatableNonPkFilterViewIndexRebuild() throws Exception {
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     if (!mutable) {
       return;
     }
