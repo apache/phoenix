@@ -48,6 +48,20 @@ import org.apache.phoenix.schema.types.PVarchar;
  * if partial-match semantics are adopted in the future.</li>
  * <li>'s' - dotall mode (. matches any character including newline)</li>
  * </ul>
+ * <p>
+ * <b>Differences from LIKE expression:</b>
+ * <ul>
+ * <li><b>Pattern syntax:</b> REGEXP_LIKE uses full Java regular expressions, while LIKE uses simple
+ * wildcard patterns with '%' (zero or more characters) and '_' (single character)</li>
+ * <li><b>Complexity:</b> REGEXP_LIKE supports complex pattern matching including character classes,
+ * quantifiers, anchors, and groups, while LIKE is limited to basic wildcard matching</li>
+ * <li><b>Flags:</b> REGEXP_LIKE supports multiple matching flags (i/c/m/s), while LIKE only
+ * supports case-sensitive/case-insensitive modes</li>
+ * <li><b>Performance:</b> LIKE is typically faster for simple patterns, while REGEXP_LIKE provides
+ * more flexibility at the cost of potential performance overhead</li>
+ * <li><b>Examples:</b> {@code LIKE: column LIKE 'test%'} vs {@code REGEXP_LIKE(column, '^test.*')}
+ * {@code LIKE: column LIKE 't_st'} vs {@code REGEXP_LIKE(column, '^t.st$')}</li>
+ * </ul>
  * The function returns a {@link org.apache.phoenix.schema.types.PBoolean}.
  * @since 5.3
  */
