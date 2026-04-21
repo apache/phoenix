@@ -25,6 +25,7 @@ import static org.apache.phoenix.query.QueryServices.PHOENIX_UPDATABLE_VIEW_REST
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.HashSet;
@@ -38,6 +39,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -79,10 +81,12 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
+import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.util.ViewUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -234,6 +238,9 @@ public class CreateTableCompiler {
       } else if (viewTypeToBe == ViewType.UPDATABLE) {
         rowKeyMatcher =
           WhereOptimizer.getRowKeyMatcher(context, create.getTableName(), parentToBe, where);
+        if (where == null && parentToBe.isMultiTenant() && connection.getTenantId() != null) {
+          validateNoExistingTenantViewWithoutWhere(connection, parentToBe);
+        }
       }
       verifyIfAnyParentHasIndexesAndViewExtendsPk(parentToBe, columnDefs, pkConstraint);
     }
@@ -431,6 +438,48 @@ public class CreateTableCompiler {
         } catch (TableNotFoundException e) {
           table = null;
         }
+      }
+    }
+  }
+
+  /**
+   * For a multi-tenant parent, ensure the current tenant has no existing view without a WHERE
+   * clause. Two such views would share the same ROW_KEY_MATCHER (the tenant-id bytes), causing
+   * a conflict in the compaction RowKeyMatcher trie.
+   */
+  private void validateNoExistingTenantViewWithoutWhere(final PhoenixConnection connection,
+    final PTable parentToBe) throws SQLException {
+    PName myTenantId = connection.getTenantId();
+    if (myTenantId == null) {
+      return;
+    }
+    byte[] myTenantIdBytes = myTenantId.getBytes();
+    TableViewFinderResult childViews;
+    try {
+      childViews = ViewUtil.findChildViews(connection,
+        parentToBe.getTenantId() == null ? null : parentToBe.getTenantId().getString(),
+        parentToBe.getSchemaName() == null ? null : parentToBe.getSchemaName().getString(),
+        parentToBe.getTableName().getString());
+    } catch (IOException e) {
+      throw new SQLException(e);
+    }
+    for (TableInfo info : childViews.getLinks()) {
+      if (!Arrays.equals(info.getTenantId(), myTenantIdBytes)) {
+        continue;
+      }
+      String childFullName = SchemaUtil.getTableName(
+        info.getSchemaName() == null ? null : Bytes.toString(info.getSchemaName()),
+        Bytes.toString(info.getTableName()));
+      try {
+        PTable existing = connection.getTable(childFullName);
+        String existingViewStmt = existing.getViewStatement();
+        if (existingViewStmt == null || existingViewStmt.isEmpty()) {
+          throw new SQLExceptionInfo.Builder(
+            SQLExceptionCode.TENANT_ALREADY_HAS_VIEW_WITHOUT_WHERE_CLAUSE).build()
+              .buildException();
+        }
+      } catch (TableNotFoundException e) {
+        // Orphan child link, ignore.
       }
     }
   }
