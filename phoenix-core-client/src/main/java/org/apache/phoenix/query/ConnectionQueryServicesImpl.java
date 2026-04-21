@@ -4776,7 +4776,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 6,
         PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 7,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 5,
         PhoenixDatabaseMetaData.INDEX_WHERE + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
         MIN_SYSTEM_TABLE_TIMESTAMP_5_3_0 - 4,
