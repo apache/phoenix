@@ -21,6 +21,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -31,6 +32,7 @@ import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
@@ -41,6 +43,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -422,10 +425,243 @@ public class TenantTTLIT extends BaseTest {
       "All rows should be removed from salted table after all TTLs expire");
   }
 
+  /**
+   * Verifies that tenant TTL compaction on the base table works correctly when a secondary
+   * index exists on the base table.
+   */
+  @Test
+  public void testCompactionWithTenantTableIndex() throws Exception {
+    String schemaName = generateUniqueName();
+    String baseTableName = generateUniqueName();
+    String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
+    String indexName = generateUniqueName();
+    String view1Name = generateUniqueName();
+    String view2Name = generateUniqueName();
+
+    int ttlOrg1 = 10;
+    int ttlOrg2 = 1000;
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute(String.format(
+        "CREATE TABLE %s ("
+          + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR, COL2 VARCHAR "
+          + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+        fullTableName));
+      conn.createStatement().execute(String.format(
+        "CREATE INDEX %s ON %s(COL1) INCLUDE(COL2)", indexName, fullTableName));
+    }
+
+    createTenantViewWithTTL("org1", fullTableName, view1Name, ttlOrg1);
+    createTenantViewWithTTL("org2", fullTableName, view2Name, ttlOrg2);
+
+    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    injectEdge.setValue(startTime);
+
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      upsertRowSimple(t1, view1Name, "k1", "v1");
+      upsertRowSimple(t1, view1Name, "k2", "v2");
+    }
+    try (Connection t2 = getTenantConnection("org2")) {
+      t2.setAutoCommit(true);
+      upsertRowSimple(t2, view2Name, "k1", "v3");
+      upsertRowSimple(t2, view2Name, "k2", "v4");
+    }
+
+    long afterInsertTime = EnvironmentEdgeManager.currentTimeMillis();
+
+    assertHBaseRowCount(schemaName, baseTableName, afterInsertTime, 4,
+      "Base table should have 4 rows before compaction");
+
+    injectEdge.setValue(afterInsertTime + (ttlOrg1 * 2 * 1000L));
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    flushAndMajorCompact(schemaName, baseTableName);
+
+    assertHBaseRowCount(schemaName, baseTableName, afterInsertTime, 2,
+      "Only org2's 2 rows should remain in base table after org1 TTL even with index present");
+
+    injectEdge.setValue(afterInsertTime + (ttlOrg2 * 2 * 1000L));
+    flushAndMajorCompact(schemaName, baseTableName);
+
+    assertHBaseRowCount(schemaName, baseTableName, afterInsertTime, 0,
+      "All rows should be removed from base table after all TTLs expire");
+  }
+
+  /**
+   * Verifies that two different tenants can create tenant views with the SAME view name
+   * on the same base table, with independent TTLs that don't interfere with each other.
+   */
+  @Test
+  public void testSameViewNameAcrossDifferentTenants() throws Exception {
+    String schemaName = generateUniqueName();
+    String baseTableName = generateUniqueName();
+    String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
+    String sharedViewName = generateUniqueName();
+
+    int ttlOrg1 = 10;
+    int ttlOrg2 = 1000;
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute(String.format(
+        "CREATE TABLE %s ("
+          + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+          + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+        fullTableName));
+    }
+
+    // Both tenants create a view with the same name; scoped by tenant-id in SYSTEM.CATALOG.
+    createTenantViewWithTTL("org1", fullTableName, sharedViewName, ttlOrg1);
+    createTenantViewWithTTL("org2", fullTableName, sharedViewName, ttlOrg2);
+
+    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    injectEdge.setValue(startTime);
+
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      upsertRowSimple(t1, sharedViewName, "k1", "a1");
+      upsertRowSimple(t1, sharedViewName, "k2", "a2");
+    }
+    try (Connection t2 = getTenantConnection("org2")) {
+      t2.setAutoCommit(true);
+      upsertRowSimple(t2, sharedViewName, "k1", "b1");
+      upsertRowSimple(t2, sharedViewName, "k2", "b2");
+    }
+
+    try (Connection t1 = getTenantConnection("org1");
+         Connection t2 = getTenantConnection("org2")) {
+      assertViewRowCount(t1, sharedViewName, 2, "org1 should see 2 rows");
+      assertViewRowCount(t2, sharedViewName, 2, "org2 should see 2 rows");
+
+      injectEdge.incrementValue((ttlOrg1 * 2) * 1000L);
+      assertViewRowCount(t1, sharedViewName, 0, "org1 rows should be masked after its TTL");
+      assertViewRowCount(t2, sharedViewName, 2, "org2 rows should still be visible");
+    }
+
+    long afterInsertTime = injectEdge.currentTime();
+    flushAndMajorCompact(schemaName, baseTableName);
+    assertHBaseRowCount(schemaName, baseTableName, 0, 2,
+      "Only org2's rows should remain after compacting past org1 TTL");
+  }
+
+  /**
+   * Verifies that a tenant cannot create two tenant views without WHERE clauses on the same
+   * multi-tenant parent, since both would produce the same ROW_KEY_MATCHER and conflict in
+   * the compaction trie.
+   */
+  @Test
+  public void testCannotCreateMultipleNoWhereViewsSameTenant() throws Exception {
+    String schemaName = generateUniqueName();
+    String baseTableName = generateUniqueName();
+    String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
+    String view1Name = generateUniqueName();
+    String view2Name = generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute(String.format(
+        "CREATE TABLE %s ("
+          + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+          + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+        fullTableName));
+    }
+
+    createTenantViewWithTTL("org1", fullTableName, view1Name, 10);
+
+    try (Connection conn = getTenantConnection("org1")) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute(String.format(
+        "CREATE VIEW %s AS SELECT * FROM %s TTL = 20", view2Name, fullTableName));
+      fail("Expected TENANT_ALREADY_HAS_VIEW_WITHOUT_WHERE_CLAUSE");
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.TENANT_ALREADY_HAS_VIEW_WITHOUT_WHERE_CLAUSE.getErrorCode(),
+        e.getErrorCode());
+    }
+  }
+
+  /**
+   * Verifies that tenant TTL works correctly when the connection has
+   * PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED=true.
+   */
+  @Test
+  public void testTenantTTLWithUpdatableViewRestrictionEnabled() throws Exception {
+    String schemaName = generateUniqueName();
+    String baseTableName = generateUniqueName();
+    String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
+    String view1Name = generateUniqueName();
+    String view2Name = generateUniqueName();
+
+    int ttlOrg1 = 10;
+    int ttlOrg2 = 1000;
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute(String.format(
+        "CREATE TABLE %s ("
+          + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+          + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+        fullTableName));
+    }
+
+    Properties restrictProps = new Properties();
+    restrictProps.setProperty(
+      QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED, "true");
+    createTenantViewWithProps("org1", fullTableName, view1Name, ttlOrg1, restrictProps);
+    createTenantViewWithProps("org2", fullTableName, view2Name, ttlOrg2, restrictProps);
+
+    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    injectEdge.setValue(startTime);
+
+    try (Connection t1 = getTenantConnectionWithProps("org1", restrictProps)) {
+      t1.setAutoCommit(true);
+      upsertRowSimple(t1, view1Name, "k1", "v1");
+      upsertRowSimple(t1, view1Name, "k2", "v2");
+    }
+    try (Connection t2 = getTenantConnectionWithProps("org2", restrictProps)) {
+      t2.setAutoCommit(true);
+      upsertRowSimple(t2, view2Name, "k1", "v3");
+      upsertRowSimple(t2, view2Name, "k2", "v4");
+    }
+
+    long afterInsertTime = EnvironmentEdgeManager.currentTimeMillis();
+
+    injectEdge.setValue(afterInsertTime + (ttlOrg1 * 2 * 1000L));
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    flushAndMajorCompact(schemaName, baseTableName);
+
+    assertHBaseRowCount(schemaName, baseTableName, afterInsertTime, 2,
+      "Only org2's 2 rows should remain after org1 TTL, even with view restriction enabled");
+  }
+
   // ---- Helper methods ----
 
   private Connection getTenantConnection(String tenantId) throws SQLException {
     return DriverManager.getConnection(getUrl() + ';' + TENANT_ID_ATTRIB + '=' + tenantId);
+  }
+
+  private Connection getTenantConnectionWithProps(String tenantId, Properties props)
+      throws SQLException {
+    Properties merged = new Properties();
+    merged.putAll(props);
+    merged.setProperty(TENANT_ID_ATTRIB, tenantId);
+    return DriverManager.getConnection(getUrl(), merged);
+  }
+
+  private void createTenantViewWithProps(String tenantId, String baseTable, String viewName,
+    int ttlSeconds, Properties props) throws SQLException {
+    try (Connection conn = getTenantConnectionWithProps(tenantId, props)) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute(String.format("CREATE VIEW %s AS SELECT * FROM %s TTL = %d",
+        viewName, baseTable, ttlSeconds));
+    }
   }
 
   private void createTenantViewWithTTL(String tenantId, String baseTable, String viewName,
