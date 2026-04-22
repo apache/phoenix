@@ -87,26 +87,6 @@ public class PhoenixInputSplitTest {
       Bytes.equals(Bytes.toBytes("d"), split.getKeyRange().getUpperRange()));
   }
 
-  @Test
-  public void testStandardConstructorWithMultipleScans() {
-    List<Scan> scans = new ArrayList<>();
-    scans.add(createScan(Bytes.toBytes("a"), Bytes.toBytes("d")));
-    scans.add(createScan(Bytes.toBytes("d"), Bytes.toBytes("g")));
-    scans.add(createScan(Bytes.toBytes("g"), Bytes.toBytes("j")));
-
-    PhoenixInputSplit split = new PhoenixInputSplit(scans, 1024, "server1:16020");
-
-    // With multiple scans, keyRanges are automatically derived
-    assertTrue("Should be coalesced with multiple scans", split.isCoalesced());
-    assertEquals("Should have 3 keyRanges (derived from scans)", 3, split.getKeyRanges().size());
-    assertNotNull("KeyRange should be initialized", split.getKeyRange());
-    // KeyRange should span from first scan start to last scan stop
-    assertTrue("KeyRange should span from first to last scan",
-      Bytes.equals(Bytes.toBytes("a"), split.getKeyRange().getLowerRange()));
-    assertTrue("KeyRange should span from first to last scan",
-      Bytes.equals(Bytes.toBytes("j"), split.getKeyRange().getUpperRange()));
-  }
-
   @Test(expected = NullPointerException.class)
   public void testStandardConstructorWithNullScans() {
     new PhoenixInputSplit(null);

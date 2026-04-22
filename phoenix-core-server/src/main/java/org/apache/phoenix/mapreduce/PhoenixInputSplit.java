@@ -38,7 +38,6 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 public class PhoenixInputSplit extends InputSplit implements Writable {
 
   private List<Scan> scans;
-  private KeyRange keyRange;
   private List<KeyRange> keyRanges;
   private String regionLocation = null;
   private long splitSize = 0;
@@ -69,8 +68,17 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     return scans;
   }
 
+  /**
+   * Returns the overall KeyRange spanning this split. For coalesced splits, spans from the first
+   * region's lower bound to the last region's upper bound. Computed on-demand from keyRanges.
+   * @return KeyRange spanning the entire split, or null if keyRanges is empty
+   */
   public KeyRange getKeyRange() {
-    return keyRange;
+    if (keyRanges == null || keyRanges.isEmpty()) {
+      return null;
+    }
+    return KeyRange.getKeyRange(keyRanges.get(0).getLowerRange(),
+      keyRanges.get(keyRanges.size() - 1).getUpperRange());
   }
 
   /**
@@ -91,10 +99,7 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
   }
 
   private void init() {
-    // Overall split bounds
-    this.keyRange =
-      KeyRange.getKeyRange(scans.get(0).getStartRow(), scans.get(scans.size() - 1).getStopRow());
-    // coalesced split bound
+    // Initialize keyRanges from scans
     this.keyRanges = Lists.newArrayListWithExpectedSize(scans.size());
     for (Scan scan : scans) {
       KeyRange kr = KeyRange.getKeyRange(scan.getStartRow(), scan.getStopRow());
@@ -151,7 +156,8 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
   public int hashCode() {
     final int prime = 31;
     int result = 1;
-    result = prime * result + keyRange.hashCode();
+    KeyRange range = getKeyRange();
+    result = prime * result + (range == null ? 0 : range.hashCode());
     return result;
   }
 
@@ -167,11 +173,13 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
       return false;
     }
     PhoenixInputSplit other = (PhoenixInputSplit) obj;
-    if (keyRange == null) {
-      if (other.keyRange != null) {
+    KeyRange thisRange = getKeyRange();
+    KeyRange otherRange = other.getKeyRange();
+    if (thisRange == null) {
+      if (otherRange != null) {
         return false;
       }
-    } else if (!keyRange.equals(other.keyRange)) {
+    } else if (!thisRange.equals(otherRange)) {
       return false;
     }
     return true;

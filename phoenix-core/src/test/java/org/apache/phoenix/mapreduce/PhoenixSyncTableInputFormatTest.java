@@ -18,25 +18,27 @@
 package org.apache.phoenix.mapreduce;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.junit.Before;
 import org.junit.Test;
@@ -49,11 +51,12 @@ public class PhoenixSyncTableInputFormatTest {
 
   private PhoenixSyncTableInputFormat inputFormat = new PhoenixSyncTableInputFormat();
 
-  private RegionLocator mockRegionLocator;
+  private ConnectionQueryServices mockQueryServices;
+  private byte[] physicalTableName = Bytes.toBytes("TEST_TABLE");
 
   @Before
   public void setup() throws Exception {
-    mockRegionLocator = mock(RegionLocator.class);
+    mockQueryServices = mock(ConnectionQueryServices.class);
   }
 
   /**
@@ -309,12 +312,13 @@ public class PhoenixSyncTableInputFormatTest {
     // Create mock region location - all splits on server1
     HRegionLocation mockRegion = createMockRegionLocation("server1:16020", Bytes.toBytes("a"));
 
-    // Mock RegionLocator: all splits → server1
-    when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
+    // Mock ConnectionQueryServices: all splits → server1
+    when(mockQueryServices.getTableRegionLocation(any(byte[].class), any(byte[].class)))
       .thenReturn(mockRegion);
 
     // Call coalesceSplits()
-    List<InputSplit> result = inputFormat.coalesceSplits(splits, mockRegionLocator);
+    List<InputSplit> result =
+      inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
 
     // Verify: 1 coalesced split (all on same server)
     assertEquals("Should have 1 coalesced split (all on same server)", 1, result.size());
@@ -354,16 +358,23 @@ public class PhoenixSyncTableInputFormatTest {
     HRegionLocation mockRegionI = createMockRegionLocation("server2:16020", Bytes.toBytes("i"));
     HRegionLocation mockRegionK = createMockRegionLocation("server2:16020", Bytes.toBytes("k"));
 
-    // Mock RegionLocator: first 3 splits → server1, last 3 splits → server2
-    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("a"), false)).thenReturn(mockRegionA);
-    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("c"), false)).thenReturn(mockRegionC);
-    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("e"), false)).thenReturn(mockRegionE);
-    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("g"), false)).thenReturn(mockRegionG);
-    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("i"), false)).thenReturn(mockRegionI);
-    when(mockRegionLocator.getRegionLocation(Bytes.toBytes("k"), false)).thenReturn(mockRegionK);
+    // Mock ConnectionQueryServices: first 3 splits → server1, last 3 splits → server2
+    when(mockQueryServices.getTableRegionLocation(physicalTableName, Bytes.toBytes("a")))
+      .thenReturn(mockRegionA);
+    when(mockQueryServices.getTableRegionLocation(physicalTableName, Bytes.toBytes("c")))
+      .thenReturn(mockRegionC);
+    when(mockQueryServices.getTableRegionLocation(physicalTableName, Bytes.toBytes("e")))
+      .thenReturn(mockRegionE);
+    when(mockQueryServices.getTableRegionLocation(physicalTableName, Bytes.toBytes("g")))
+      .thenReturn(mockRegionG);
+    when(mockQueryServices.getTableRegionLocation(physicalTableName, Bytes.toBytes("i")))
+      .thenReturn(mockRegionI);
+    when(mockQueryServices.getTableRegionLocation(physicalTableName, Bytes.toBytes("k")))
+      .thenReturn(mockRegionK);
 
     // Call coalesceSplits()
-    List<InputSplit> result = inputFormat.coalesceSplits(splits, mockRegionLocator);
+    List<InputSplit> result =
+      inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
 
     // Verify: 2 coalesced splits (one per server)
     assertEquals("Should have 2 coalesced splits (one per server)", 2, result.size());
@@ -400,7 +411,8 @@ public class PhoenixSyncTableInputFormatTest {
     // Test edge case: empty input list
     List<InputSplit> splits = new ArrayList<>();
 
-    List<InputSplit> result = inputFormat.coalesceSplits(splits, mockRegionLocator);
+    List<InputSplit> result =
+      inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
 
     assertEquals("Should return empty list for empty input", 0, result.size());
   }
@@ -412,10 +424,11 @@ public class PhoenixSyncTableInputFormatTest {
     splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
 
     HRegionLocation mockRegion = createMockRegionLocation("server1:16020", Bytes.toBytes("a"));
-    when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
+    when(mockQueryServices.getTableRegionLocation(any(byte[].class), any(byte[].class)))
       .thenReturn(mockRegion);
 
-    List<InputSplit> result = inputFormat.coalesceSplits(splits, mockRegionLocator);
+    List<InputSplit> result =
+      inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
 
     assertEquals("Should return 1 split", 1, result.size());
     PhoenixInputSplit resultSplit = (PhoenixInputSplit) result.get(0);
@@ -424,30 +437,17 @@ public class PhoenixSyncTableInputFormatTest {
   }
 
   @Test(expected = IOException.class)
-  public void testCoalesceSplitsWithIOException() throws Exception {
-    // IOException from RegionLocator
-    List<InputSplit> splits = new ArrayList<>();
-    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
-
-    // Mock RegionLocator to throw IOException
-    when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
-      .thenThrow(new IOException("Simulated region location failure"));
-
-    // Should propagate IOException
-    inputFormat.coalesceSplits(splits, mockRegionLocator);
-  }
-
-  @Test(expected = IOException.class)
   public void testCoalesceSplitsWithNullRegionLocation() throws Exception {
-    // RegionLocator returns null
+    // ConnectionQueryServices returns null
     List<InputSplit> splits = new ArrayList<>();
     splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
 
-    // Mock RegionLocator to return null (region not found)
-    when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean())).thenReturn(null);
+    // Mock ConnectionQueryServices to return null (region not found)
+    when(mockQueryServices.getTableRegionLocation(any(byte[].class), any(byte[].class)))
+      .thenReturn(null);
 
     // Should throw IOException with message about null region location
-    inputFormat.coalesceSplits(splits, mockRegionLocator);
+    inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
   }
 
   @Test(expected = IOException.class)
@@ -460,28 +460,29 @@ public class PhoenixSyncTableInputFormatTest {
     HRegionLocation mockRegionLocation = mock(HRegionLocation.class);
     when(mockRegionLocation.getServerName()).thenReturn(null);
 
-    when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
+    when(mockQueryServices.getTableRegionLocation(any(byte[].class), any(byte[].class)))
       .thenReturn(mockRegionLocation);
 
     // Should throw IOException with message about null server name
-    inputFormat.coalesceSplits(splits, mockRegionLocator);
+    inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
   }
 
   @Test
   public void testCoalesceSplitsFailureThrowsIOExceptionWithMessage() throws Exception {
-    // coalescing failures throw IOException
+    // coalescing failures throw SQLException directly when called from tests
     List<InputSplit> splits = new ArrayList<>();
     splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
 
-    // Mock RegionLocator to throw IOException (simulating cluster issue)
-    IOException simulatedFailure = new IOException("Simulated RegionServer communication failure");
-    when(mockRegionLocator.getRegionLocation(any(byte[].class), anyBoolean()))
+    // Mock ConnectionQueryServices to throw SQLException (simulating cluster issue)
+    SQLException simulatedFailure =
+      new SQLException("Simulated RegionServer communication failure");
+    when(mockQueryServices.getTableRegionLocation(any(byte[].class), any(byte[].class)))
       .thenThrow(simulatedFailure);
 
     try {
-      inputFormat.coalesceSplits(splits, mockRegionLocator);
-      fail("Expected IOException to be thrown for coalescing failure");
-    } catch (IOException e) {
+      inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
+      fail("Expected SQLException to be thrown for coalescing failure");
+    } catch (SQLException e) {
       // Verify exception message is informative
       assertTrue("Exception message should mention coalescing failure",
         e.getMessage().contains("Simulated RegionServer communication failure"));

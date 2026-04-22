@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.security.UserProvider;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.JobCounter;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
@@ -405,8 +406,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     }
     Counters counters = job.getCounters();
     if (counters != null) {
-      long taskCreated =
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TASK_CREATED).getValue();
+      long taskCreated = counters.findCounter(JobCounter.TOTAL_LAUNCHED_MAPS).getValue();
       long verifiedMappers =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_VERIFIED).getValue();
       long mismatchedMappers =

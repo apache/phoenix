@@ -27,8 +27,6 @@ import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
-import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.NullWritable;
@@ -40,6 +38,7 @@ import org.apache.hadoop.mapreduce.lib.db.DBWritable;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -115,16 +114,11 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
       try (Connection conn = ConnectionUtil.getInputConnection(conf)) {
         PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
         byte[] physicalTableName = pConn.getTable(tableName).getPhysicalName().getBytes();
-        org.apache.hadoop.hbase.client.Connection hbaseConn =
-          pConn.getQueryServices().getAdmin().getConnection();
-
-        try (RegionLocator regionLocator =
-          hbaseConn.getRegionLocator(TableName.valueOf(physicalTableName))) {
-          List<InputSplit> coalescedSplits = coalesceSplits(unprocessedSplits, regionLocator);
-          LOGGER.info("Split coalescing: {} unprocessed splits {} coalesced splits for table {}",
-            unprocessedSplits.size(), coalescedSplits.size(), tableName);
-          return coalescedSplits;
-        }
+        List<InputSplit> coalescedSplits =
+          coalesceSplits(unprocessedSplits, pConn.getQueryServices(), physicalTableName);
+        LOGGER.info("Split coalescing: {} unprocessed splits {} coalesced splits for table {}",
+          unprocessedSplits.size(), coalescedSplits.size(), tableName);
+        return coalescedSplits;
       } catch (Exception e) {
         throw new IOException(String.format("Failed to coalesce splits for table %s. "
           + "Split coalescing is enabled but failed due to: %s.", tableName, e.getMessage()), e);
@@ -248,14 +242,16 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
    * regions from the same server are coalesced into one split, regardless of count or size. This
    * reduces mapper count and avoids hot spotting when many concurrent mappers hit the same server.
    * @param unprocessedSplits Splits remaining after filtering completed regions
-   * @param regionLocator     HBase RegionLocator for querying region locations
+   * @param queryServices     ConnectionQueryServices for querying region locations
+   * @param physicalTableName Physical HBase table name
    * @return Coalesced splits with all regions per server combined into one split
    */
-  List<InputSplit> coalesceSplits(List<InputSplit> unprocessedSplits, RegionLocator regionLocator)
-    throws IOException, InterruptedException {
+  List<InputSplit> coalesceSplits(List<InputSplit> unprocessedSplits,
+    ConnectionQueryServices queryServices, byte[] physicalTableName)
+    throws IOException, InterruptedException, SQLException {
     // Group splits by RegionServer location
     Map<String, List<PhoenixInputSplit>> splitsByServer =
-      groupSplitsByServer(unprocessedSplits, regionLocator);
+      groupSplitsByServer(unprocessedSplits, queryServices, physicalTableName);
 
     List<InputSplit> coalescedSplits = new ArrayList<>();
 
@@ -275,20 +271,22 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
   }
 
   /**
-   * Groups splits by RegionServer location for locality-aware coalescing. Uses HBase RegionLocator
-   * API to determine which server hosts each region.
-   * @param splits        List of splits to group
-   * @param regionLocator HBase RegionLocator for querying region locations
+   * Groups splits by RegionServer location for locality-aware coalescing. Uses
+   * ConnectionQueryServices to determine which server hosts each region.
+   * @param splits            List of splits to group
+   * @param queryServices     ConnectionQueryServices for querying region locations
+   * @param physicalTableName Physical HBase table name
    * @return Map of server name to list of splits hosted on that server
    */
   private Map<String, List<PhoenixInputSplit>> groupSplitsByServer(List<InputSplit> splits,
-    RegionLocator regionLocator) throws IOException {
+    ConnectionQueryServices queryServices, byte[] physicalTableName)
+    throws IOException, SQLException {
     Map<String, List<PhoenixInputSplit>> splitsByServer = new HashMap<>();
     for (InputSplit split : splits) {
       PhoenixInputSplit pSplit = (PhoenixInputSplit) split;
       KeyRange keyRange = pSplit.getKeyRange();
       HRegionLocation regionLocation =
-        regionLocator.getRegionLocation(keyRange.getLowerRange(), false);
+        queryServices.getTableRegionLocation(physicalTableName, keyRange.getLowerRange());
       if (regionLocation == null) {
         throw new IOException("Could not determine region location for key: "
           + Bytes.toStringBinary(keyRange.getLowerRange()));
