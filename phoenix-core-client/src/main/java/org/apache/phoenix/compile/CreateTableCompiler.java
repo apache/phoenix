@@ -453,6 +453,9 @@ public class CreateTableCompiler {
     if (myTenantId == null) {
       return;
     }
+    if (connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl) {
+      return;
+    }
     byte[] myTenantIdBytes = myTenantId.getBytes();
     TableViewFinderResult childViews;
     try {
