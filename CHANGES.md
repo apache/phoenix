@@ -18,6 +18,85 @@
 -->
 # PHOENIX Changelog
 
+## Release 5.3.1 - Unreleased (as of 2026-04-22)
+
+
+
+### NEW FEATURES:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7794](https://issues.apache.org/jira/browse/PHOENIX-7794) | Eventually Consistent Global Secondary Indexes |  Major | . |
+| [PHOENIX-7759](https://issues.apache.org/jira/browse/PHOENIX-7759) | Preserve buffered mutations when batch size limit is exceeded |  Minor | . |
+| [PHOENIX-7198](https://issues.apache.org/jira/browse/PHOENIX-7198) | support for multi row constructors in single upsert query |  Major | . |
+
+
+### IMPROVEMENTS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7746](https://issues.apache.org/jira/browse/PHOENIX-7746) | Fix flapper test MetaDataCacheMetricsIT.testGlobalClientCacheMetricsOfCreateAndDropTable |  Major | . |
+| [PHOENIX-7766](https://issues.apache.org/jira/browse/PHOENIX-7766) | Generate point lookups while using IS NULL on trailing PK columns |  Major | . |
+| [PHOENIX-7777](https://issues.apache.org/jira/browse/PHOENIX-7777) | Disable default configuration for View TTL |  Major | . |
+| [PHOENIX-7774](https://issues.apache.org/jira/browse/PHOENIX-7774) | Increase default value of maximum numbers of indexes allowed on a table |  Major | . |
+| [PHOENIX-7729](https://issues.apache.org/jira/browse/PHOENIX-7729) | Identify top N slowest parallel scans for metrics reporting |  Major | . |
+| [PHOENIX-7753](https://issues.apache.org/jira/browse/PHOENIX-7753) | Allow uncovered index creation on tables with relaxed conditional TTL |  Major | . |
+| [PHOENIX-7748](https://issues.apache.org/jira/browse/PHOENIX-7748) | Empty column cell is not returned when scan has both EmptyColumnOnlyFilter and DistinctPrefixFilter |  Major | . |
+| [PHOENIX-7704](https://issues.apache.org/jira/browse/PHOENIX-7704) | Integrate HBase's new Scan Latency Metrics |  Major | . |
+| [PHOENIX-7727](https://issues.apache.org/jira/browse/PHOENIX-7727) | Eliminate IndexMetadataCache RPCs by leveraging server PTable cache |  Major | . |
+| [PHOENIX-7741](https://issues.apache.org/jira/browse/PHOENIX-7741) | Remove usage of isRegionInTransition method from phoenix tests |  Major | . |
+| [PHOENIX-7737](https://issues.apache.org/jira/browse/PHOENIX-7737) | Fix flapper test testScanningResultIteratorQueryTimeoutForPagingWithVeryLowTimeout |  Major | . |
+| [PHOENIX-6644](https://issues.apache.org/jira/browse/PHOENIX-6644) | Fix column name based ResultSet getter for view indexes |  Major | . |
+| [PHOENIX-7370](https://issues.apache.org/jira/browse/PHOENIX-7370) | Server to server system table RPC calls should use separate RPC handler pool |  Critical | . |
+| [PHOENIX-7711](https://issues.apache.org/jira/browse/PHOENIX-7711) | Make Phoenix test jar available for consumption by applications |  Minor | . |
+| [PHOENIX-7707](https://issues.apache.org/jira/browse/PHOENIX-7707) | Phoenix server paging on valid rows |  Major | . |
+| [PHOENIX-7709](https://issues.apache.org/jira/browse/PHOENIX-7709) | Index committer post writer lazy mode - Async RPC call for verified index mutations |  Major | . |
+| [PHOENIX-7708](https://issues.apache.org/jira/browse/PHOENIX-7708) | Update Jackson to 2.18.4.1 |  Minor | core |
+| [PHOENIX-7705](https://issues.apache.org/jira/browse/PHOENIX-7705) | Support for a row size function |  Major | . |
+| [PHOENIX-7582](https://issues.apache.org/jira/browse/PHOENIX-7582) | Accept phoenix.skip.system.tables.existence.check and phoenix.ddl.timestamp.validation.enabled from hbase-site.xml |  Major | core |
+| [PHOENIX-7701](https://issues.apache.org/jira/browse/PHOENIX-7701) | UngroupedAggregateRegionScanner doesn't release rpc handler on page timeouts |  Major | . |
+| [PHOENIX-7493](https://issues.apache.org/jira/browse/PHOENIX-7493) | Graceful Failover with Phoenix HA |  Major | . |
+
+
+### BUG FIXES:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7718](https://issues.apache.org/jira/browse/PHOENIX-7718) | Drop CDC fails with TNFE when there is a schema name |  Major | . |
+| [PHOENIX-7743](https://issues.apache.org/jira/browse/PHOENIX-7743) | IndexTool server-side build fails with TableNotFoundException for case-sensitive table/schema/index names |  Major | . |
+| [PHOENIX-7758](https://issues.apache.org/jira/browse/PHOENIX-7758) | Read repair with DistinctPrefixFilter can give incorrect results |  Major | . |
+| [PHOENIX-7797](https://issues.apache.org/jira/browse/PHOENIX-7797) | Fixing Flapping test HAGroupStoreClientIT.testHAGroupStoreClientWithMultiThreadedUpdates |  Minor | . |
+| [PHOENIX-7772](https://issues.apache.org/jira/browse/PHOENIX-7772) | TOTAL\_SEGMENTS query leads to NPE when table has index |  Major | . |
+| [PHOENIX-7770](https://issues.apache.org/jira/browse/PHOENIX-7770) | Incorrect index scan range while using RVC on VARBINARY\_ENCODED |  Major | . |
+| [PHOENIX-7762](https://issues.apache.org/jira/browse/PHOENIX-7762) | Incorrect scan boundary when slot span exceeds actual bound in composite key |  Major | . |
+| [PHOENIX-7760](https://issues.apache.org/jira/browse/PHOENIX-7760) | Incorrect scan range for RVC with overlapping constraints |  Major | . |
+| [PHOENIX-7757](https://issues.apache.org/jira/browse/PHOENIX-7757) | Bson SET update expression does not support arithmetic operation with if\_not\_exists |  Major | . |
+| [PHOENIX-7744](https://issues.apache.org/jira/browse/PHOENIX-7744) | Update log4j2 to 2.25.3 |  Major | connectors, core, queryserver |
+| [PHOENIX-7740](https://issues.apache.org/jira/browse/PHOENIX-7740) | Update jaxb to 2.3.9 in Pherf and fix XML object collection initialization |  Major | . |
+
+
+### TESTS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7702](https://issues.apache.org/jira/browse/PHOENIX-7702) | Backward compatibility test framework support for phoenix 5.2 and hbase 2.6 |  Major | . |
+
+
+### SUB-TASKS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7426](https://issues.apache.org/jira/browse/PHOENIX-7426) | Generating index mutations for immutable tables on the server side |  Major | . |
+
+
+### OTHER:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7739](https://issues.apache.org/jira/browse/PHOENIX-7739) | Update Default HBase 2.5 version to 2.5.13 |  Major | core |
+
+
+
 ## Release 5.3.0 - Unreleased (as of 2025-09-14)
 
 

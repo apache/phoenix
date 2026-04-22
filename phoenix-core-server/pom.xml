@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.phoenix</groupId>
     <artifactId>phoenix</artifactId>
-    <version>5.3.0</version>
+    <version>5.3.1</version>
   </parent>
   <artifactId>phoenix-core-server</artifactId>
   <name>Phoenix Core Server</name>
@@ -177,6 +177,8 @@
       <groupId>org.bouncycastle</groupId>
       <artifactId>bcprov-jdk18on</artifactId>
       <version>1.79</version>
+      <groupId>org.xerial.snappy</groupId>
+      <artifactId>snappy-java</artifactId>
     </dependency>
   </dependencies>
   <build>

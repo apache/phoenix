@@ -85,6 +85,8 @@ tokens
     PRE='pre';
     POST='post';
     CHANGE='change';
+    IDX_MUTATIONS='idx_mutations';
+    DATA_ROW_STATE='data_row_state';
     LATEST='latest';
     ALL='all';
     INDEX='index';
@@ -161,6 +163,9 @@ tokens
     REGIONS = 'regions';
     NOVERIFY = 'noverify';
     RETURNING = 'returning';
+    CONSISTENCY = 'consistency';
+    EVENTUAL = 'eventual';
+    STRONG = 'strong';
 }
 
 
@@ -209,6 +214,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.CDCChangeScope;
@@ -585,7 +591,7 @@ cdc_change_scopes returns [Set<CDCChangeScope> ret]
     ;
 
 cdc_change_scope returns [CDCChangeScope ret]
-    :   v=(PRE | POST | CHANGE)
+    :   v=(PRE | POST | CHANGE | IDX_MUTATIONS | DATA_ROW_STATE)
         {
             ret = CDCChangeScope.valueOf(v.getText().toUpperCase());
         }
@@ -699,8 +705,8 @@ drop_cdc_node returns [DropCDCStatement ret]
 // Parse a alter index statement
 alter_index_node returns [AlterIndexStatement ret]
     : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name
-      ((s=(USABLE | UNUSABLE | REBUILD (isRebuildAll=ALL)? | DISABLE | ACTIVE)) (async=ASYNC)? ((SET?)p=fam_properties)?)
-      {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText())), isRebuildAll!=null, async!=null, p); }
+      ((s=(USABLE | UNUSABLE | REBUILD (isRebuildAll=ALL)? | DISABLE | ACTIVE)) (async=ASYNC)? ((SET?)p=fam_properties)? | (CONSISTENCY EQ c=(STRONG | EVENTUAL)))
+      {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, s!=null ? PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText())) : null, isRebuildAll!=null, async!=null, p, c!=null ? IndexConsistency.valueOf(SchemaUtil.normalizeIdentifier(c.getText())) : null); }
     ;
 
 // Parse a trace statement.
@@ -1318,6 +1324,9 @@ identifier returns [String ret]
 
 parseNoReserved returns [String ret]
     :   n=NAME { $ret = n.getText(); }
+    |   CONSISTENCY { $ret = "CONSISTENCY"; }
+    |   EVENTUAL { $ret = "EVENTUAL"; }
+    |   STRONG { $ret = "STRONG"; }
     ;
 
 case_statement returns [ParseNode ret]

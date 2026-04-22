@@ -16,6 +16,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 -->
+# PHOENIX  5.3.1 Release Notes
+
+These release notes cover new developer and user-facing incompatibilities, important issues, features, and major improvements.
+
+
+---
+
+* [PHOENIX-7582](https://issues.apache.org/jira/browse/PHOENIX-7582) | *Major* | **Accept phoenix.skip.system.tables.existence.check and phoenix.ddl.timestamp.validation.enabled from hbase-site.xml**
+
+The phoenix.skip.system.tables.existence.check is not only accepted if specified as a connection property, but also via hbase-site.xml.
+
+
+
 # PHOENIX  5.3.0 Release Notes
 
 These release notes cover new developer and user-facing incompatibilities, important issues, features, and major improvements.
