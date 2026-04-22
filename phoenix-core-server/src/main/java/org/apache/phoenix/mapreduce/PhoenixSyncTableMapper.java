@@ -396,9 +396,6 @@ public class PhoenixSyncTableMapper
     scan.setAttribute(BaseScannerRegionObserverConstants.SKIP_REGION_BOUNDARY_CHECK, TRUE_BYTES);
     scan.setAttribute(BaseScannerRegionObserverConstants.UNGROUPED_AGG, TRUE_BYTES);
     ScanUtil.setScanAttributesForPhoenixTTL(scan, pTable, phoenixConn);
-    // Force strict TTL for sync tool regardless of table setting. Even when the table
-    // uses non-strict TTL, the sync tool should only compare live rows.
-    scan.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL, TRUE_BYTES);
     if (continuedDigestState != null && continuedDigestState.length > 0) {
       scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CONTINUED_DIGEST_STATE,
         continuedDigestState);

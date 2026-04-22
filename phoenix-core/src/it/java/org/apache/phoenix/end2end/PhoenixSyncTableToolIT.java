@@ -63,6 +63,7 @@ import org.apache.phoenix.mapreduce.PhoenixSyncTableOutputRepository;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
@@ -105,8 +106,8 @@ public class PhoenixSyncTableToolIT {
 
   @Before
   public void setUp() throws Exception {
-    sourceConnection = DriverManager.getConnection("jdbc:phoenix:" + CLUSTERS.getZkUrl1());
-    targetConnection = DriverManager.getConnection("jdbc:phoenix:" + CLUSTERS.getZkUrl2());
+    sourceConnection = DriverManager.getConnection("jdbc:phoenix:" + CLUSTERS.getUrl1());
+    targetConnection = DriverManager.getConnection("jdbc:phoenix:" + CLUSTERS.getUrl2());
     uniqueTableName = BaseTest.generateUniqueName();
     targetZkQuorum = String.format("%s:%d:/hbase",
       CLUSTERS.getHBaseCluster2().getConfiguration().get("hbase.zookeeper.quorum"),
@@ -208,79 +209,35 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
-  public void testSyncTableWithConditionalTTLExpiredRows() throws Exception {
-    // With IS_STRICT_TTL=false
-    String ddl = "CREATE TABLE IF NOT EXISTS %s (" + "ID INTEGER NOT NULL PRIMARY KEY, "
-      + "NAME VARCHAR(50), NAME_VALUE BIGINT, UPDATED_DATE TIMESTAMP, " + "EXPIRED BOOLEAN"
-      + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, "
-      + "TTL='EXPIRED = TRUE', IS_STRICT_TTL=false " + "SPLIT ON (5, 7, 9)";
-    executeTableCreation(sourceConnection, String.format(ddl, uniqueTableName, 1));
-    executeTableCreation(targetConnection, String.format(ddl, uniqueTableName, 0));
-
-    // Insert 10 rows on source: rows 1-3 marked as expired, rows 4-10 as live
-    insertTestDataWithExpiredFlag(sourceConnection, uniqueTableName, 1, 3, true);
-    insertTestDataWithExpiredFlag(sourceConnection, uniqueTableName, 4, 10, false);
-
-    waitForReplication(targetConnection, uniqueTableName, 10);
-
-    long sourceCount = TestUtil.getRowCount(sourceConnection, uniqueTableName);
-    long targetCount = TestUtil.getRowCount(targetConnection, uniqueTableName);
-    assertEquals("Source should see 10 live rows", 10, sourceCount);
-    assertEquals("Target should see 10 live rows", 10, targetCount);
-
-    // Introduce differences on 2 of the 7 live rows on target
-    upsertRowsOnTarget(targetConnection, uniqueTableName, new int[] { 5, 8 },
-      new String[] { "MODIFIED_5", "MODIFIED_8" });
-
-    // Run sync tool, TTL-expired rows (1-3) should be skipped on both source and target
-    Job job = runSyncTool(uniqueTableName);
-    SyncCountersResult counters = getSyncCounters(job);
-
-    validateSyncCounters(counters, 7, 7, 5, 2);
-    validateMapperCounters(counters, 2, 2);
-  }
-
-  @Test
   public void testSyncTableWithConditionalTTLExpiredRowsCompact() throws Exception {
-    // With IS_STRICT_TTL=false
     String ddl = "CREATE TABLE IF NOT EXISTS %s (" + "ID INTEGER NOT NULL PRIMARY KEY, "
-      + "NAME VARCHAR(50), NAME_VALUE BIGINT, UPDATED_DATE TIMESTAMP, " + "EXPIRED BOOLEAN"
-      + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, "
-      + "TTL='EXPIRED = TRUE', IS_STRICT_TTL=false " + "SPLIT ON (5, 7, 9)";
+      + "NAME VARCHAR(50), NAME_VALUE BIGINT, UPDATED_DATE TIMESTAMP"
+      + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, " + "TTL=1 SPLIT ON (5, 7, 9)";
     executeTableCreation(sourceConnection, String.format(ddl, uniqueTableName, 1));
     executeTableCreation(targetConnection, String.format(ddl, uniqueTableName, 0));
 
-    // Insert 10 rows on source: rows 1-3 marked as expired, rows 4-10 as live
-    insertTestDataWithExpiredFlag(sourceConnection, uniqueTableName, 1, 3, true);
-    insertTestDataWithExpiredFlag(sourceConnection, uniqueTableName, 4, 10, false);
+    // Insert 10 rows on source
+    insertTestData(sourceConnection, uniqueTableName, 1, 10);
 
-    waitForReplication(targetConnection, uniqueTableName, 10);
+    // Wait 2 seconds for TTL expiration (TTL=1 second)
+    Thread.sleep(2000);
 
-    long sourceCount = TestUtil.getRowCount(sourceConnection, uniqueTableName);
-    long targetCount = TestUtil.getRowCount(targetConnection, uniqueTableName);
-    assertEquals("Source should see 10 live rows", 10, sourceCount);
-    assertEquals("Target should see 10 live rows", 10, targetCount);
-
-    // Run sync tool, TTL-expired rows (1-3) should be skipped on both source and target
+    // Run sync tool - all rows should still be visible before compaction
     Job job = runSyncTool(uniqueTableName);
     SyncCountersResult counters = getSyncCounters(job);
 
-    validateSyncCounters(counters, 7, 7, 7, 0);
+    validateSyncCounters(counters, 10, 10, 10, 0);
     validateMapperCounters(counters, 4, 0);
 
+    // Flush and major compact target - this will physically remove expired rows
     flushAndMajorCompact(CLUSTERS.getHBaseCluster2(), uniqueTableName);
 
-    long sourceCountPostCompact = TestUtil.getRowCount(sourceConnection, uniqueTableName);
-    long targetCountPostCompact = TestUtil.getRowCount(targetConnection, uniqueTableName);
-    assertEquals("Source should see 10 live rows", 10, sourceCountPostCompact);
-    assertEquals("Target should see 7 live rows", 7, targetCountPostCompact);
-
-    // We shouldn't see expired rows even with --raw-scan flag
-    Job job2 = runSyncTool(uniqueTableName, "--raw-scan");
+    // Run sync tool after compaction - should detect mismatch (source has rows, target doesn't)
+    Job job2 = runSyncTool(uniqueTableName);
     SyncCountersResult counters2 = getSyncCounters(job2);
 
-    validateSyncCounters(counters2, 7, 7, 7, 0);
-    validateMapperCounters(counters2, 4, 0);
+    validateSyncCounters(counters2, 10, 0, 0, 10);
+    validateMapperCounters(counters2, 0, 4);
   }
 
   @Test
@@ -1907,7 +1864,7 @@ public class PhoenixSyncTableToolIT {
    */
   private void mergeAdjacentRegions(Connection conn, String tableName, int mergeCount) {
     try {
-      List<HRegionLocation> regions = TestUtil.getAllTableRegions(conn, tableName);
+      List<HRegionLocation> regions = getAllTableRegions(conn, tableName);
       LOGGER.info("Table {} has {} regions before merge", tableName, regions.size());
 
       int mergedCount = 0;
@@ -1916,7 +1873,7 @@ public class PhoenixSyncTableToolIT {
           String region1 = regions.get(i).getRegion().getEncodedName();
           String region2 = regions.get(i + 1).getRegion().getEncodedName();
           LOGGER.info("Merging regions {} and {}", region1, region2);
-          TestUtil.mergeTableRegions(conn, tableName, Arrays.asList(region1, region2));
+          mergeTableRegions(conn, Arrays.asList(region1, region2));
           mergedCount++;
           i++;
         } catch (Exception e) {
@@ -1927,6 +1884,49 @@ public class PhoenixSyncTableToolIT {
     } catch (Exception e) {
       LOGGER.error("Error during region merge for table {}: {}", tableName, e.getMessage(), e);
     }
+  }
+
+  /**
+   * Merges multiple adjacent regions. This is a helper method to replace
+   * TestUtil.mergeTableRegions.
+   * @param conn               Phoenix connection
+   * @param regionEncodedNames List of encoded region names to merge
+   */
+  private void mergeTableRegions(Connection conn, List<String> regionEncodedNames)
+    throws Exception {
+    if (regionEncodedNames == null || regionEncodedNames.size() < 2) {
+      throw new IllegalArgumentException("Need at least 2 regions to merge");
+    }
+
+    PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+    try (Admin admin = pconn.getQueryServices().getAdmin()) {
+      // Convert encoded names to byte arrays
+      byte[][] regionNames = new byte[regionEncodedNames.size()][];
+      for (int i = 0; i < regionEncodedNames.size(); i++) {
+        regionNames[i] = Bytes.toBytes(regionEncodedNames.get(i));
+      }
+
+      // Merge the regions
+      admin.mergeRegionsAsync(regionNames, false);
+    }
+  }
+
+  /**
+   * Gets all region locations for a table. This is a helper method to replace
+   * TestUtil.getAllTableRegions.
+   * @param conn      Phoenix connection
+   * @param tableName Phoenix table name
+   * @return List of HRegionLocation objects for the table
+   */
+  private List<HRegionLocation> getAllTableRegions(Connection conn, String tableName)
+    throws Exception {
+    PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+    PTable table = pconn.getTable(tableName);
+    TableName hbaseTableName = TableName.valueOf(table.getPhysicalName().getBytes());
+
+    org.apache.hadoop.hbase.client.Connection hbaseConn =
+      pconn.getQueryServices().getAdmin().getConnection();
+    return hbaseConn.getRegionLocator(hbaseTableName).getAllRegionLocations();
   }
 
   private void createTableOnBothClusters(Connection sourceConn, Connection targetConn,
@@ -1953,11 +1953,15 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * Executes table creation DDL.
+   * Executes table creation DDL and clears the server-side metadata coprocessor global cache. The
+   * two mini clusters share a JVM, so the coprocessor cache is a global singleton. Without
+   * clearing, the second cluster's DDL short-circuits via the cached metadata from the first
+   * cluster, skipping SYSTEM.CATALOG writes.
    */
   private void executeTableCreation(Connection conn, String ddl) throws SQLException {
     conn.createStatement().execute(ddl);
     conn.commit();
+    ((PhoenixConnection) conn).getQueryServices().clearCache();
   }
 
   private void insertTestData(Connection conn, String tableName, int startId, int endId)
@@ -2286,16 +2290,17 @@ public class PhoenixSyncTableToolIT {
    */
   private void createIndexOnBothClusters(Connection sourceConn, Connection targetConn,
     String tableName, String indexName) throws SQLException {
-    // Create index on source (inherits replication from data table)
     String indexDdl = String.format(
       "CREATE INDEX IF NOT EXISTS %s ON %s (NAME) INCLUDE (NAME_VALUE)", indexName, tableName);
 
     sourceConn.createStatement().execute(indexDdl);
     sourceConn.commit();
+    ((PhoenixConnection) sourceConn).getQueryServices().clearCache();
 
     // Create same index on target
     targetConn.createStatement().execute(indexDdl);
     targetConn.commit();
+    ((PhoenixConnection) targetConn).getQueryServices().clearCache();
   }
 
   /**
@@ -2310,10 +2315,12 @@ public class PhoenixSyncTableToolIT {
 
     sourceConn.createStatement().execute(indexDdl);
     sourceConn.commit();
+    ((PhoenixConnection) sourceConn).getQueryServices().clearCache();
 
     // Create same local index on target
     targetConn.createStatement().execute(indexDdl);
     targetConn.commit();
+    ((PhoenixConnection) targetConn).getQueryServices().clearCache();
   }
 
   /**
@@ -2322,11 +2329,21 @@ public class PhoenixSyncTableToolIT {
    */
   private void splitTableAt(Connection conn, String tableName, int splitId) {
     try {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable table = pconn.getTable(tableName);
+      TableName hbaseTableName = TableName.valueOf(table.getPhysicalName().getBytes());
+
       byte[] splitPoint = PInteger.INSTANCE.toBytes(splitId);
-      TestUtil.splitTable(conn, tableName, splitPoint);
-      LOGGER.info("Split completed for table {} at split point {} (bytes: {})", tableName, splitId,
-        Bytes.toStringBinary(splitPoint));
+
+      // Attempt to split the region at the specified row key
+      try (Admin admin = pconn.getQueryServices().getAdmin()) {
+        admin.split(hbaseTableName, splitPoint);
+        LOGGER.info("Split initiated for table {} at split point {} (bytes: {})", tableName,
+          splitId, Bytes.toStringBinary(splitPoint));
+      }
+      Thread.sleep(1500);
     } catch (Exception e) {
+      // Ignore split failures - they don't affect the test's main goal
       LOGGER.warn("Failed to split table {} at split point {}: {}", tableName, splitId,
         e.getMessage());
     }
@@ -2354,8 +2371,8 @@ public class PhoenixSyncTableToolIT {
     List<PhoenixSyncTableCheckpointOutputRow> entries = new ArrayList<>();
     String query = "SELECT TABLE_NAME, TARGET_CLUSTER, TYPE, FROM_TIME, TO_TIME, IS_DRY_RUN, "
       + "START_ROW_KEY, END_ROW_KEY, EXECUTION_START_TIME, EXECUTION_END_TIME, "
-      + "STATUS, COUNTERS FROM PHOENIX_SYNC_TABLE_CHECKPOINT "
-      + "WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
+      + "STATUS, COUNTERS FROM " + PhoenixSyncTableOutputRepository.SYNC_TABLE_CHECKPOINT_TABLE_NAME
+      + " WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
       + (tenantId != null ? "AND TENANT_ID = ?" : "AND TENANT_ID IS NULL");
 
     PreparedStatement stmt = conn.prepareStatement(query);
@@ -2370,12 +2387,14 @@ public class PhoenixSyncTableToolIT {
       String typeStr = rs.getString("TYPE");
       String statusStr = rs.getString("STATUS");
 
+      byte[] startKey = PhoenixSyncTableOutputRepository.hexToBytes(rs.getString("START_ROW_KEY"));
+      byte[] endKey = PhoenixSyncTableOutputRepository.hexToBytes(rs.getString("END_ROW_KEY"));
+
       PhoenixSyncTableCheckpointOutputRow entry = new PhoenixSyncTableCheckpointOutputRow.Builder()
         .setTableName(rs.getString("TABLE_NAME")).setTargetCluster(rs.getString("TARGET_CLUSTER"))
         .setType(typeStr != null ? PhoenixSyncTableCheckpointOutputRow.Type.valueOf(typeStr) : null)
         .setFromTime(rs.getLong("FROM_TIME")).setToTime(rs.getLong("TO_TIME"))
-        .setIsDryRun(rs.getBoolean("IS_DRY_RUN")).setStartRowKey(rs.getBytes("START_ROW_KEY"))
-        .setEndRowKey(rs.getBytes("END_ROW_KEY"))
+        .setIsDryRun(rs.getBoolean("IS_DRY_RUN")).setStartRowKey(startKey).setEndRowKey(endKey)
         .setExecutionStartTime(rs.getTimestamp("EXECUTION_START_TIME"))
         .setExecutionEndTime(rs.getTimestamp("EXECUTION_END_TIME"))
         .setStatus(
@@ -2404,7 +2423,8 @@ public class PhoenixSyncTableToolIT {
     String tenantId, PhoenixSyncTableCheckpointOutputRow.Type type, byte[] startRowKey,
     boolean autoCommit) throws SQLException {
     StringBuilder deleteBuilder = new StringBuilder(
-      "DELETE FROM PHOENIX_SYNC_TABLE_CHECKPOINT WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ?");
+      "DELETE FROM " + PhoenixSyncTableOutputRepository.SYNC_TABLE_CHECKPOINT_TABLE_NAME
+        + " WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ?");
 
     // Add TENANT_ID filter
     deleteBuilder.append(tenantId != null ? " AND TENANT_ID = ?" : " AND TENANT_ID IS NULL");
@@ -2417,7 +2437,6 @@ public class PhoenixSyncTableToolIT {
     // Add START_ROW_KEY filter (handle NULL/empty keys)
     boolean isNullOrEmptyKey = (startRowKey == null || startRowKey.length == 0);
     if (isNullOrEmptyKey) {
-      // Phoenix stores empty byte arrays as NULL in VARBINARY columns
       deleteBuilder.append(" AND START_ROW_KEY IS NULL");
     } else {
       deleteBuilder.append(" AND START_ROW_KEY = ?");
@@ -2436,7 +2455,7 @@ public class PhoenixSyncTableToolIT {
     }
 
     if (!isNullOrEmptyKey) {
-      stmt.setBytes(paramIndex, startRowKey);
+      stmt.setString(paramIndex, PhoenixSyncTableOutputRepository.bytesToHex(startRowKey));
     }
 
     int deleted = stmt.executeUpdate();
@@ -2452,9 +2471,10 @@ public class PhoenixSyncTableToolIT {
   private void cleanupCheckpointTable(Connection conn, String tableName, String targetCluster,
     String tenantId) {
     try {
-      String delete = "DELETE FROM PHOENIX_SYNC_TABLE_CHECKPOINT "
-        + "WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
-        + (tenantId != null ? "AND TENANT_ID = ?" : "AND TENANT_ID IS NULL");
+      String delete =
+        "DELETE FROM " + PhoenixSyncTableOutputRepository.SYNC_TABLE_CHECKPOINT_TABLE_NAME
+          + " WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
+          + (tenantId != null ? "AND TENANT_ID = ?" : "AND TENANT_ID IS NULL");
       PreparedStatement stmt = conn.prepareStatement(delete);
       stmt.setString(1, tableName);
       stmt.setString(2, targetCluster);

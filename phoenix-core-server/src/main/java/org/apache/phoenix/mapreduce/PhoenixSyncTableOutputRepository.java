@@ -24,11 +24,13 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Type;
 import org.apache.phoenix.schema.PTable.QualifierEncodingScheme;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
@@ -40,7 +42,7 @@ public class PhoenixSyncTableOutputRepository {
 
   private static final Logger LOGGER =
     LoggerFactory.getLogger(PhoenixSyncTableOutputRepository.class);
-  public static final String SYNC_TABLE_CHECKPOINT_TABLE_NAME = "PHOENIX_SYNC_TABLE_CHECKPOINT";
+  public static final String SYNC_TABLE_CHECKPOINT_TABLE_NAME = "PHOENIX_SYNC_TABLE_CHECKPOINT_OLD";
   private static final int OUTPUT_TABLE_TTL_SECONDS = 90 * 24 * 60 * 60; // 90 days
   private final Connection connection;
   private static final String UPSERT_CHECKPOINT_SQL = "UPSERT INTO "
@@ -48,19 +50,19 @@ public class PhoenixSyncTableOutputRepository {
     + " TENANT_ID, START_ROW_KEY, END_ROW_KEY, IS_DRY_RUN, EXECUTION_START_TIME, EXECUTION_END_TIME,"
     + " STATUS, COUNTERS) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-  private static final String CREATE_CHECKPOINT_TABLE_DDL = "CREATE TABLE IF NOT EXISTS "
-    + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (\n" + "    TABLE_NAME VARCHAR NOT NULL,\n"
-    + "    TARGET_CLUSTER VARCHAR NOT NULL,\n" + "    TYPE VARCHAR(20) NOT NULL,\n"
-    + "    FROM_TIME BIGINT NOT NULL,\n" + "    TO_TIME BIGINT NOT NULL,\n"
-    + "    TENANT_ID VARCHAR,\n" + "    START_ROW_KEY VARBINARY_ENCODED,\n"
-    + "    END_ROW_KEY VARBINARY_ENCODED,\n" + "    IS_DRY_RUN BOOLEAN, \n"
-    + "    EXECUTION_START_TIME TIMESTAMP,\n" + "    EXECUTION_END_TIME TIMESTAMP,\n"
-    + "    STATUS VARCHAR(20),\n" + "    COUNTERS VARCHAR, \n" + "    CONSTRAINT PK PRIMARY KEY (\n"
-    + "        TABLE_NAME,\n" + "        TARGET_CLUSTER,\n" + "        TYPE ,\n"
-    + "        FROM_TIME,\n" + "        TO_TIME,\n" + "        TENANT_ID,\n"
-    + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS + ", COLUMN_ENCODED_BYTES="
-    + QualifierEncodingScheme.TWO_BYTE_QUALIFIERS.getSerializedMetadataValue()
-    + ", COMPRESSION='SNAPPY'";
+  private static final String CREATE_CHECKPOINT_TABLE_DDL =
+    "CREATE TABLE IF NOT EXISTS " + SYNC_TABLE_CHECKPOINT_TABLE_NAME + " (\n"
+      + "    TABLE_NAME VARCHAR NOT NULL,\n" + "    TARGET_CLUSTER VARCHAR NOT NULL,\n"
+      + "    TYPE VARCHAR(20) NOT NULL,\n" + "    FROM_TIME BIGINT NOT NULL,\n"
+      + "    TO_TIME BIGINT NOT NULL,\n" + "    TENANT_ID VARCHAR,\n"
+      + "    START_ROW_KEY VARCHAR,\n" + "    END_ROW_KEY VARCHAR,\n" + "    IS_DRY_RUN BOOLEAN, \n"
+      + "    EXECUTION_START_TIME TIMESTAMP,\n" + "    EXECUTION_END_TIME TIMESTAMP,\n"
+      + "    STATUS VARCHAR(20),\n" + "    COUNTERS VARCHAR, \n"
+      + "    CONSTRAINT PK PRIMARY KEY (\n" + "        TABLE_NAME,\n" + "        TARGET_CLUSTER,\n"
+      + "        TYPE ,\n" + "        FROM_TIME,\n" + "        TO_TIME,\n" + "        TENANT_ID,\n"
+      + "        START_ROW_KEY )" + ") TTL=" + OUTPUT_TABLE_TTL_SECONDS + ", COLUMN_ENCODED_BYTES="
+      + QualifierEncodingScheme.TWO_BYTE_QUALIFIERS.getSerializedMetadataValue()
+      + ", COMPRESSION='SNAPPY'";
 
   /**
    * Creates a repository for managing sync table checkpoint operations. Note: The connection is
@@ -100,8 +102,8 @@ public class PhoenixSyncTableOutputRepository {
       ps.setLong(4, row.getFromTime());
       ps.setLong(5, row.getToTime());
       ps.setString(6, row.getTenantId());
-      ps.setBytes(7, row.getStartRowKey());
-      ps.setBytes(8, row.getEndRowKey());
+      ps.setString(7, bytesToHex(row.getStartRowKey()));
+      ps.setString(8, bytesToHex(row.getEndRowKey()));
       ps.setBoolean(9, row.getIsDryRun());
       ps.setTimestamp(10, row.getExecutionStartTime());
       ps.setTimestamp(11, row.getExecutionEndTime());
@@ -157,8 +159,8 @@ public class PhoenixSyncTableOutputRepository {
         while (rs.next()) {
           PhoenixSyncTableCheckpointOutputRow row =
             new PhoenixSyncTableCheckpointOutputRow.Builder()
-              .setStartRowKey(rs.getBytes("START_ROW_KEY")).setEndRowKey(rs.getBytes("END_ROW_KEY"))
-              .build();
+              .setStartRowKey(hexToBytes(rs.getString("START_ROW_KEY")))
+              .setEndRowKey(hexToBytes(rs.getString("END_ROW_KEY"))).build();
           results.add(row);
         }
       }
@@ -223,15 +225,15 @@ public class PhoenixSyncTableOutputRepository {
         ps.setString(paramIndex++, tenantId);
       }
       if (hasEndBoundary) {
-        ps.setBytes(paramIndex++, mapperRegionEnd);
+        ps.setString(paramIndex++, bytesToHex(mapperRegionEnd));
       }
       if (hasStartBoundary) {
-        ps.setBytes(paramIndex, mapperRegionStart);
+        ps.setString(paramIndex, bytesToHex(mapperRegionStart));
       }
       try (ResultSet rs = ps.executeQuery()) {
         while (rs.next()) {
-          byte[] rawStartKey = rs.getBytes("START_ROW_KEY");
-          byte[] endRowKey = rs.getBytes("END_ROW_KEY");
+          byte[] rawStartKey = hexToBytes(rs.getString("START_ROW_KEY"));
+          byte[] endRowKey = hexToBytes(rs.getString("END_ROW_KEY"));
           PhoenixSyncTableCheckpointOutputRow row =
             new PhoenixSyncTableCheckpointOutputRow.Builder().setStartRowKey(rawStartKey)
               .setEndRowKey(endRowKey).build();
@@ -240,5 +242,29 @@ public class PhoenixSyncTableOutputRepository {
       }
     }
     return results;
+  }
+
+  /**
+   * Converts a byte array to a hexadecimal string for order-preserving storage in a VARCHAR PK
+   * column. Null or empty arrays map to null for Phoenix NULL handling.
+   */
+  @VisibleForTesting
+  public static String bytesToHex(byte[] bytes) {
+    if (bytes == null || bytes.length == 0) {
+      return null;
+    }
+    return Bytes.toHex(bytes);
+  }
+
+  /**
+   * Converts a hexadecimal string back to its byte array representation. Null or empty strings map
+   * to an empty byte array for Phoenix NULL handling.
+   */
+  @VisibleForTesting
+  public static byte[] hexToBytes(String hex) {
+    if (hex == null || hex.isEmpty()) {
+      return new byte[0];
+    }
+    return Bytes.fromHex(hex);
   }
 }
