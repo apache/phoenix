@@ -208,7 +208,10 @@ public enum ExpressionType {
   ScanEndKeyFunction(ScanEndKeyFunction.class),
   TotalSegmentsFunction(TotalSegmentsFunction.class),
   RowSizeFunction(RowSizeFunction.class),
-  RawRowSizeFunction(RawRowSizeFunction.class);
+  RawRowSizeFunction(RawRowSizeFunction.class),
+  RegexpLikeFunction(RegexpLikeFunction.class),
+  ByteBasedRegexpLikeFunction(ByteBasedRegexpLikeFunction.class),
+  StringBasedRegexpLikeFunction(StringBasedRegexpLikeFunction.class);
 
   ExpressionType(Class<? extends Expression> clazz) {
     this.clazz = clazz;
