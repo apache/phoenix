@@ -25,7 +25,6 @@ import static org.apache.phoenix.query.QueryServices.PHOENIX_UPDATABLE_VIEW_REST
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.HashSet;
@@ -39,8 +38,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
-import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.coprocessorclient.TableInfo;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -55,6 +53,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.BindParseNode;
@@ -86,7 +85,6 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.apache.phoenix.util.TableViewFinderResult;
 import org.apache.phoenix.util.ViewUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -238,9 +236,14 @@ public class CreateTableCompiler {
       } else if (viewTypeToBe == ViewType.UPDATABLE) {
         rowKeyMatcher =
           WhereOptimizer.getRowKeyMatcher(context, create.getTableName(), parentToBe, where);
-        if (where == null && parentToBe.isMultiTenant() && connection.getTenantId() != null) {
-          validateNoExistingTenantViewWithoutWhere(connection, parentToBe);
-        }
+        // On a multi-tenant base table, for a given tenant we allow EITHER
+        // (a) any number of tenant views without TTL, OR
+        // (b) exactly one tenant view with TTL (WHERE or no-WHERE).
+        // A TTL view coexisting with any other view for the same tenant causes
+        // ROW_KEY_MATCHER prefix conflicts in the compaction RowKeyMatcher trie (the tenant-id
+        // bytes are a prefix of any scoped pattern).
+        ViewUtil.validateTenantTTLViewCoexistence(connection, parentToBe, hasTTLProperty(create),
+          null);
       }
       verifyIfAnyParentHasIndexesAndViewExtendsPk(parentToBe, columnDefs, pkConstraint);
     }
@@ -443,47 +446,15 @@ public class CreateTableCompiler {
   }
 
   /**
-   * For a multi-tenant parent, ensure the current tenant has no existing view without a WHERE
-   * clause. Two such views would share the same ROW_KEY_MATCHER (the tenant-id bytes), causing a
-   * conflict in the compaction RowKeyMatcher trie.
+   * Returns true if the {@code CREATE VIEW} statement has a {@code TTL} property set.
    */
-  private void validateNoExistingTenantViewWithoutWhere(final PhoenixConnection connection,
-    final PTable parentToBe) throws SQLException {
-    PName myTenantId = connection.getTenantId();
-    if (myTenantId == null) {
-      return;
-    }
-    if (connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl) {
-      return;
-    }
-    byte[] myTenantIdBytes = myTenantId.getBytes();
-    TableViewFinderResult childViews;
-    try {
-      childViews = ViewUtil.findChildViews(connection,
-        parentToBe.getTenantId() == null ? null : parentToBe.getTenantId().getString(),
-        parentToBe.getSchemaName() == null ? null : parentToBe.getSchemaName().getString(),
-        parentToBe.getTableName().getString());
-    } catch (IOException e) {
-      throw new SQLException(e);
-    }
-    for (TableInfo info : childViews.getLinks()) {
-      if (!Arrays.equals(info.getTenantId(), myTenantIdBytes)) {
-        continue;
-      }
-      String childFullName = SchemaUtil.getTableName(
-        info.getSchemaName() == null ? null : Bytes.toString(info.getSchemaName()),
-        Bytes.toString(info.getTableName()));
-      try {
-        PTable existing = connection.getTable(childFullName);
-        String existingViewStmt = existing.getViewStatement();
-        if (existingViewStmt == null || existingViewStmt.isEmpty()) {
-          throw new SQLExceptionInfo.Builder(
-            SQLExceptionCode.TENANT_ALREADY_HAS_VIEW_WITHOUT_WHERE_CLAUSE).build().buildException();
-        }
-      } catch (TableNotFoundException e) {
-        // Orphan child link, ignore.
+  private boolean hasTTLProperty(CreateTableStatement create) {
+    for (Pair<String, Object> prop : create.getProps().values()) {
+      if (PhoenixDatabaseMetaData.TTL.equalsIgnoreCase(prop.getFirst())) {
+        return true;
       }
     }
+    return false;
   }
 
   /**

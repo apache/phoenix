@@ -27,6 +27,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -67,11 +68,14 @@ import org.apache.phoenix.coprocessorclient.MetaDataEndpointImplConstants;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.coprocessorclient.WhereConstantParser;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
@@ -430,6 +434,85 @@ public class ViewUtil {
       }
     }
     return childViewsResult;
+  }
+
+  /**
+   * Validates tenant TTL view coexistence rules on a multi-tenant base table. For a given tenant on
+   * such a base table we allow EITHER multiple tenant views without TTL, OR exactly one tenant view
+   * with TTL (WHERE or no-WHERE). A TTL view coexisting with any other view for the same tenant
+   * causes ROW_KEY_MATCHER prefix conflicts in the compaction RowKeyMatcher trie (the tenant-id
+   * bytes are a prefix of any WHERE-scoped pattern).
+   * <p>
+   * This is a no-op when:
+   * <ul>
+   * <li>the connection has no tenant id,</li>
+   * <li>query services are connectionless (unit test mode),</li>
+   * <li>the parent is not a multi-tenant base {@link PTableType#TABLE}.</li>
+   * </ul>
+   * @param connection            phoenix connection (must be a tenant connection for the check to
+   *                              fire)
+   * @param parent                the parent table the view is being created/altered against
+   * @param newViewHasTTL         true if the view being created or altered will have TTL
+   * @param viewToExcludeFullName full name of the view to skip from sibling iteration (used on the
+   *                              ALTER path to exclude the view being altered itself); pass
+   *                              {@code null} on the CREATE path
+   * @throws SQLException {@link SQLExceptionCode#TENANT_TTL_VIEW_CONFLICT} if the operation would
+   *                      create a TTL / non-TTL coexistence conflict
+   */
+  public static void validateTenantTTLViewCoexistence(PhoenixConnection connection, PTable parent,
+    boolean newViewHasTTL, String viewToExcludeFullName) throws SQLException {
+    if (connection.getTenantId() == null) {
+      return;
+    }
+    if (connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl) {
+      return;
+    }
+    if (parent.getType() != PTableType.TABLE || !parent.isMultiTenant()) {
+      return;
+    }
+    byte[] myTenantIdBytes = connection.getTenantId().getBytes();
+    TableViewFinderResult childViews;
+    try {
+      childViews = findChildViews(connection,
+        parent.getTenantId() == null ? null : parent.getTenantId().getString(),
+        parent.getSchemaName() == null ? null : parent.getSchemaName().getString(),
+        parent.getTableName().getString());
+    } catch (IOException e) {
+      // CHILD_LINK may be unavailable (namespace mapping edge cases, partial setup, etc.).
+      // Skip validation rather than fail the DDL.
+      return;
+    }
+    boolean foundAnyExisting = false;
+    for (TableInfo info : childViews.getLinks()) {
+      if (!Arrays.equals(info.getTenantId(), myTenantIdBytes)) {
+        continue;
+      }
+      String childFullName = SchemaUtil.getTableName(
+        info.getSchemaName() == null ? null : Bytes.toString(info.getSchemaName()),
+        Bytes.toString(info.getTableName()));
+      if (childFullName.equals(viewToExcludeFullName)) {
+        continue;
+      }
+      try {
+        PTable existing = connection.getTable(childFullName);
+        foundAnyExisting = true;
+        boolean existingHasTTL = existing.getTTLExpression() != null
+          && !existing.getTTLExpression().equals(TTL_EXPRESSION_NOT_DEFINED);
+        if (existingHasTTL) {
+          // An existing TTL view blocks any additional view (TTL or not).
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANT_TTL_VIEW_CONFLICT).build()
+            .buildException();
+        }
+      } catch (TableNotFoundException e) {
+        // Orphan child link, ignore.
+      }
+    }
+    if (newViewHasTTL && foundAnyExisting) {
+      // The new / altered view has TTL but sibling views already exist; the TTL view's trie
+      // entry would silently apply to the existing views' rows.
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANT_TTL_VIEW_CONFLICT).build()
+        .buildException();
+    }
   }
 
   /**

@@ -550,12 +550,81 @@ public class TenantTTLIT extends BaseTest {
   }
 
   /**
-   * Verifies that a tenant cannot create two tenant views without WHERE clauses on the same
-   * multi-tenant parent, since both would produce the same ROW_KEY_MATCHER and conflict in the
-   * compaction trie.
+   * Exercises every branch of the tenant-view-conflict check in CreateTableCompiler:
+   * <ol>
+   * <li>Non-TTL view as first view for a tenant: allowed.</li>
+   * <li>Another non-TTL view for the same tenant: allowed (both without TTL).</li>
+   * <li>TTL view added to a tenant that already has non-TTL views: rejected (new has TTL, existing
+   * siblings exist).</li>
+   * <li>Different tenant on the same base creates a TTL view: allowed (per-tenant scope).</li>
+   * <li>Same tenant tries to add a second TTL view: rejected (existing has TTL).</li>
+   * <li>Same tenant tries to add a non-TTL view when a TTL view already exists: rejected (existing
+   * has TTL).</li>
+   * <li>Tenant view with WHERE clause is allowed when only non-TTL views exist.</li>
+   * </ol>
    */
   @Test
-  public void testCannotCreateMultipleNoWhereViewsSameTenant() throws Exception {
+  public void testTenantTTLViewCoexistenceRules() throws Exception {
+    String schemaName = generateUniqueName();
+    String baseTableName = generateUniqueName();
+    String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute(String.format(
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+          fullTableName));
+    }
+
+    // Case 1: First non-TTL view for org1 -> allowed.
+    String org1View1 = generateUniqueName();
+    createTenantViewNoTTL("org1", fullTableName, org1View1);
+
+    // Case 2: Another non-TTL view for org1 -> allowed (pattern (a): all non-TTL).
+    String org1View2 = generateUniqueName();
+    createTenantViewNoTTL("org1", fullTableName, org1View2);
+
+    // Case 3: TTL view for org1 while non-TTL siblings exist -> rejected.
+    String org1TTLView = generateUniqueName();
+    assertCreateTenantViewFails("org1", fullTableName, org1TTLView, 10);
+
+    // Case 4: org2 (different tenant) creates a TTL view on the same base -> allowed.
+    String org2TTLView = generateUniqueName();
+    createTenantViewWithTTL("org2", fullTableName, org2TTLView, 10);
+
+    // Case 5: org2 tries a second TTL view -> rejected (existing has TTL).
+    String org2TTLView2 = generateUniqueName();
+    assertCreateTenantViewFails("org2", fullTableName, org2TTLView2, 20);
+
+    // Case 6: org2 tries a non-TTL view -> rejected (existing has TTL).
+    String org2NoTTLView = generateUniqueName();
+    try (Connection conn = getTenantConnection("org2")) {
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s", org2NoTTLView, fullTableName));
+      fail("Expected TENANT_TTL_VIEW_CONFLICT when adding non-TTL view to tenant with TTL view");
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.TENANT_TTL_VIEW_CONFLICT.getErrorCode(), e.getErrorCode());
+    }
+
+    // Case 7: org1 with only non-TTL siblings can still create a WHERE-scoped non-TTL view.
+    String org1WhereView = generateUniqueName();
+    try (Connection conn = getTenantConnection("org1")) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute(String.format(
+        "CREATE VIEW %s AS SELECT * FROM %s WHERE ID1 = 'x'", org1WhereView, fullTableName));
+    }
+  }
+
+  /**
+   * Verifies the ALTER-path tenant TTL conflict check: altering a tenant view on a multi-tenant
+   * base table to SET TTL is rejected if any sibling view exists for the same tenant.
+   */
+  @Test
+  public void testAlterTTLOnTenantViewWithSiblingIsRejected() throws Exception {
     String schemaName = generateUniqueName();
     String baseTableName = generateUniqueName();
     String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
@@ -572,17 +641,169 @@ public class TenantTTLIT extends BaseTest {
           fullTableName));
     }
 
-    createTenantViewWithTTL("org1", fullTableName, view1Name, 10);
+    // Two non-TTL sibling views for org1 - allowed at create time.
+    createTenantViewNoTTL("org1", fullTableName, view1Name);
+    createTenantViewNoTTL("org1", fullTableName, view2Name);
 
-    try (Connection conn = getTenantConnection("org1")) {
-      conn.setAutoCommit(true);
-      conn.createStatement().execute(
-        String.format("CREATE VIEW %s AS SELECT * FROM %s TTL = 20", view2Name, fullTableName));
-      fail("Expected TENANT_ALREADY_HAS_VIEW_WITHOUT_WHERE_CLAUSE");
+    // Altering view1 to add TTL while view2 exists should be rejected.
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      t1.createStatement().execute(String.format("ALTER VIEW %s SET TTL = 10", view1Name));
+      fail("Expected TENANT_TTL_VIEW_CONFLICT when altering TTL while sibling view exists");
     } catch (SQLException e) {
-      assertEquals(SQLExceptionCode.TENANT_ALREADY_HAS_VIEW_WITHOUT_WHERE_CLAUSE.getErrorCode(),
+      assertEquals(SQLExceptionCode.TENANT_TTL_VIEW_CONFLICT.getErrorCode(), e.getErrorCode());
+    }
+
+    // Drop sibling then alter succeeds.
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      t1.createStatement().execute(String.format("DROP VIEW %s", view2Name));
+      t1.createStatement().execute(String.format("ALTER VIEW %s SET TTL = 10", view1Name));
+    }
+  }
+
+  /**
+   * Creates a tenant view without TTL, inserts rows, then alters the view to add TTL. Verifies read
+   * masking and compaction honor the new TTL after the ALTER.
+   */
+  @Test
+  public void testAlterTenantViewToAddTTL() throws Exception {
+    String schemaName = generateUniqueName();
+    String baseTableName = generateUniqueName();
+    String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
+    String viewName = generateUniqueName();
+
+    int ttl = 10;
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute(String.format(
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+          fullTableName));
+    }
+
+    createTenantViewNoTTL("org1", fullTableName, viewName);
+
+    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    injectEdge.setValue(startTime);
+
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      upsertRowSimple(t1, viewName, "k1", "v1");
+      upsertRowSimple(t1, viewName, "k2", "v2");
+      assertViewRowCount(t1, viewName, 2, "rows visible before TTL is set");
+    }
+
+    // Apply TTL after data was inserted.
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      t1.createStatement().execute(String.format("ALTER VIEW %s SET TTL = %d", viewName, ttl));
+    }
+
+    long afterInsertTime = EnvironmentEdgeManager.currentTimeMillis();
+    injectEdge.setValue(afterInsertTime + (ttl * 2 * 1000L));
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+
+    // Read masking after ALTER: rows should be masked.
+    try (Connection t1 = getTenantConnection("org1")) {
+      assertViewRowCount(t1, viewName, 0, "rows should be masked after ALTER TTL expiry");
+    }
+
+    // Compaction after ALTER: rows should be physically removed.
+    flushAndMajorCompact(schemaName, baseTableName);
+    assertHBaseRowCount(schemaName, baseTableName, afterInsertTime, 0,
+      "rows should be removed by compaction after ALTER TTL expiry");
+  }
+
+  /**
+   * Creates a tenant view (no WHERE) with TTL on a multi-tenant base table, then creates child
+   * views on the tenant view using WHERE on the next PK column. Verifies:
+   * <ul>
+   * <li>Setting TTL on the child view is rejected with TTL_ALREADY_DEFINED_IN_HIERARCHY.</li>
+   * <li>Child views without TTL are accepted and inherit the parent tenant view's TTL for both read
+   * masking and compaction.</li>
+   * </ul>
+   */
+  @Test
+  public void testChildViewsOfTenantTTLViewInheritTTL() throws Exception {
+    String schemaName = generateUniqueName();
+    String baseTableName = generateUniqueName();
+    String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
+    String tenantViewName = generateUniqueName();
+    String childView1 = generateUniqueName();
+    String childView2 = generateUniqueName();
+    String childViewConflict = generateUniqueName();
+
+    int parentTTL = 10;
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute(String.format(
+        "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, ID2 VARCHAR NOT NULL, "
+          + "COL1 VARCHAR " + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1, ID2)"
+          + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+        fullTableName));
+    }
+
+    // Parent tenant view (no WHERE) with TTL.
+    createTenantViewWithTTL("org1", fullTableName, tenantViewName, parentTTL);
+
+    // Setting TTL on a child view should fail with hierarchy error.
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      t1.createStatement()
+        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ID1 = 'a' TTL = 5",
+          childViewConflict, tenantViewName));
+      fail("Expected TTL_ALREADY_DEFINED_IN_HIERARCHY");
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY.getErrorCode(),
         e.getErrorCode());
     }
+
+    // Create two child views on the tenant view without TTL.
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      t1.createStatement().execute(String
+        .format("CREATE VIEW %s AS SELECT * FROM %s WHERE ID1 = 'a'", childView1, tenantViewName));
+      t1.createStatement().execute(String
+        .format("CREATE VIEW %s AS SELECT * FROM %s WHERE ID1 = 'b'", childView2, tenantViewName));
+    }
+
+    long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    injectEdge.setValue(startTime);
+
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      upsertRowChildView(t1, childView1, "z1", "v1");
+      upsertRowChildView(t1, childView1, "z2", "v2");
+      upsertRowChildView(t1, childView2, "z1", "v3");
+      upsertRowChildView(t1, childView2, "z2", "v4");
+      assertViewRowCount(t1, childView1, 2, "childView1 visible before parent TTL");
+      assertViewRowCount(t1, childView2, 2, "childView2 visible before parent TTL");
+    }
+
+    long afterInsertTime = EnvironmentEdgeManager.currentTimeMillis();
+
+    // Advance past parent's TTL: child views should be masked (inherited TTL).
+    injectEdge.setValue(afterInsertTime + (parentTTL * 2 * 1000L));
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+
+    try (Connection t1 = getTenantConnection("org1")) {
+      assertViewRowCount(t1, childView1, 0,
+        "childView1 should be masked using inherited parent TTL");
+      assertViewRowCount(t1, childView2, 0,
+        "childView2 should be masked using inherited parent TTL");
+    }
+
+    // Compaction should physically remove all rows (inherited TTL).
+    flushAndMajorCompact(schemaName, baseTableName);
+    assertHBaseRowCount(schemaName, baseTableName, afterInsertTime, 0,
+      "all rows should be removed from base table after parent TTL expiry");
   }
 
   /**
@@ -751,5 +972,36 @@ public class TenantTTLIT extends BaseTest {
       admin.flush(tn);
       TestUtil.majorCompact(getUtility(), tn);
     }
+  }
+
+  private void createTenantViewNoTTL(String tenantId, String baseTable, String viewName)
+    throws SQLException {
+    try (Connection conn = getTenantConnection(tenantId)) {
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s", viewName, baseTable));
+    }
+  }
+
+  private void assertCreateTenantViewFails(String tenantId, String baseTable, String viewName,
+    int ttlSeconds) throws SQLException {
+    try (Connection conn = getTenantConnection(tenantId)) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute(String.format("CREATE VIEW %s AS SELECT * FROM %s TTL = %d",
+        viewName, baseTable, ttlSeconds));
+      fail("Expected TENANT_TTL_VIEW_CONFLICT for tenant=" + tenantId + ", view=" + viewName);
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.TENANT_TTL_VIEW_CONFLICT.getErrorCode(), e.getErrorCode());
+    }
+  }
+
+  private void upsertRowChildView(Connection conn, String viewName, String id2, String col1)
+    throws SQLException {
+    PreparedStatement stmt =
+      conn.prepareStatement(String.format("UPSERT INTO %s (ID2, COL1) VALUES (?, ?)", viewName));
+    stmt.setString(1, id2);
+    stmt.setString(2, col1);
+    stmt.executeUpdate();
+    conn.commit();
   }
 }
