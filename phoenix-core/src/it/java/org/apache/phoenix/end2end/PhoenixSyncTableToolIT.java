@@ -209,7 +209,7 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
-  public void testSyncTableWithHBaseTTLExpiredRows() throws Exception {
+  public void testSyncTableWithTTLExpiredRows() throws Exception {
     String ddl = "CREATE TABLE IF NOT EXISTS %s (" + "ID INTEGER NOT NULL PRIMARY KEY, "
       + "NAME VARCHAR(50), NAME_VALUE BIGINT, UPDATED_DATE TIMESTAMP"
       + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, " + "TTL=1 SPLIT ON (5, 7, 9)";
