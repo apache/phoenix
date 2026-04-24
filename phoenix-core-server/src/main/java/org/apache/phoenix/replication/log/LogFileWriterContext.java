@@ -21,6 +21,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.io.compress.Compression;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,6 +50,7 @@ public class LogFileWriterContext {
   private Compression.Algorithm compression;
   private LogFileCodec codec;
   private long maxBlockSize;
+  private boolean useHsync;
 
   public LogFileWriterContext(Configuration conf) {
     this.conf = conf;
@@ -65,6 +67,7 @@ public class LogFileWriterContext {
         this.maxBlockSize, DEFAULT_LOGFILE_BLOCK_SIZE);
       this.maxBlockSize = DEFAULT_LOGFILE_BLOCK_SIZE;
     }
+    this.useHsync = conf.getBoolean(HRegion.WAL_HSYNC_CONF_KEY, HRegion.DEFAULT_WAL_HSYNC);
     // Note: When we have multiple codec types, instantiate the appropriate type based on
     // configuration;
     this.codec = new LogFileCodec();
@@ -119,10 +122,19 @@ public class LogFileWriterContext {
     return this;
   }
 
+  public boolean getUseHsync() {
+    return useHsync;
+  }
+
+  public LogFileWriterContext setUseHsync(boolean useHsync) {
+    this.useHsync = useHsync;
+    return this;
+  }
+
   @Override
   public String toString() {
     return "LogFileWriterContext [path=" + path + ", compression=" + compression + ", codec="
-      + codec + ", maxBlockSize=" + maxBlockSize + "]";
+      + codec + ", maxBlockSize=" + maxBlockSize + ", useHsync=" + useHsync + "]";
   }
 
 }

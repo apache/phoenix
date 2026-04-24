@@ -34,6 +34,7 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -50,6 +51,7 @@ public class LogFileWriterSyncTest {
   @Before
   public void setUp() throws IOException {
     conf = HBaseConfiguration.create();
+    conf.setBoolean(HRegion.WAL_HSYNC_CONF_KEY, true);
 
     // This is structured so we verify that FSDataOutputStream correctly calls hsync() on its
     // understream, which in this case will be our SyncableByteArrayOutputStream.
@@ -187,6 +189,33 @@ public class LogFileWriterSyncTest {
 
     // A total of one hsync
     verify(internalOutput, times(1)).hsync();
+  }
+
+  @Test
+  public void testSyncWithHflush() throws IOException {
+    // Create a separate writer with default config (hbase.wal.hsync=false)
+    Configuration hflushConf = HBaseConfiguration.create();
+    SyncableDataOutput hflushOutput = spy(new LogFileTestUtil.SyncableByteArrayOutputStream());
+    FileSystem hflushMockFs = mock(FileSystem.class);
+    when(hflushMockFs.create(any(), anyBoolean())).thenReturn(
+      new FSDataOutputStream((OutputStream) hflushOutput, new FileSystem.Statistics("hdfs"), 0));
+    when(hflushOutput.getPos()).thenReturn(100L);
+
+    LogFileWriterContext hflushContext =
+      new LogFileWriterContext(hflushConf).setFileSystem(hflushMockFs);
+    LogFileWriter hflushWriter = new LogFileWriter();
+    hflushWriter.init(hflushContext);
+
+    try {
+      Mutation m1 = LogFileTestUtil.newPut("row1", 1L, 1);
+      hflushWriter.append("TBL", 1L, m1);
+      hflushWriter.sync();
+
+      verify(hflushOutput, times(1)).hflush();
+      verify(hflushOutput, never()).hsync();
+    } finally {
+      hflushWriter.close();
+    }
   }
 
 }

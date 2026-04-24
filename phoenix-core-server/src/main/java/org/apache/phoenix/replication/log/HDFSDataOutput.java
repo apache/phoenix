@@ -28,9 +28,11 @@ import org.apache.hadoop.fs.FSDataOutputStream;
 public class HDFSDataOutput implements SyncableDataOutput {
 
   private final FSDataOutputStream delegate;
+  private final boolean useHsync;
 
-  public HDFSDataOutput(FSDataOutputStream delegate) {
+  public HDFSDataOutput(FSDataOutputStream delegate, boolean useHsync) {
     this.delegate = delegate;
+    this.useHsync = useHsync;
   }
 
   @Override
@@ -125,7 +127,11 @@ public class HDFSDataOutput implements SyncableDataOutput {
 
   @Override
   public void sync() throws IOException {
-    delegate.hsync();
+    if (useHsync) {
+      delegate.hsync();
+    } else {
+      delegate.hflush();
+    }
   }
 
 }
