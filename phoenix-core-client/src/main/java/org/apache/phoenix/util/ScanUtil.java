@@ -1355,17 +1355,9 @@ public class ScanUtil {
     }
 
     if (dataTable.getPhoenixTTL() != 0) {
-      byte[] emptyColumnFamilyName = SchemaUtil.getEmptyColumnFamily(table);
-      byte[] emptyColumnName =
-        table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS
-          ? QueryConstants.EMPTY_COLUMN_BYTES
-          : table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+      setEmptyColumnScanAttributes(scan, table);
       scan.setAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL_SCAN_TABLE_NAME,
         Bytes.toBytes(tableName));
-      scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
-        emptyColumnFamilyName);
-      scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
-        emptyColumnName);
       scan.setAttribute(BaseScannerRegionObserverConstants.PHOENIX_TTL,
         Bytes.toBytes(Long.valueOf(dataTable.getPhoenixTTL())));
       if (!ScanUtil.isDeleteTTLExpiredRows(scan)) {
@@ -1382,6 +1374,20 @@ public class ScanUtil {
     }
   }
 
+  /**
+   * Sets the empty column family and qualifier scan attributes needed by TTLRegionScanner to
+   * identify the empty column cell for TTL expiry checks.
+   */
+  public static void setEmptyColumnScanAttributes(Scan scan, PTable table) {
+    scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+      SchemaUtil.getEmptyColumnFamily(table));
+    byte[] emptyCQ =
+      table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS
+        ? QueryConstants.EMPTY_COLUMN_BYTES
+        : table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+    scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
+  }
+
   public static void setScanAttributesForClient(Scan scan, PTable table,
     PhoenixConnection phoenixConnection) throws SQLException {
     setScanAttributesForIndexReadRepair(scan, table, phoenixConnection);
@@ -1392,12 +1398,9 @@ public class ScanUtil {
     if (emptyCF != null && emptyCQ != null) {
       addEmptyColumnToScan(scan, emptyCF, emptyCQ);
     } else if (!isAnalyzeTable(scan)) {
-      emptyCF = SchemaUtil.getEmptyColumnFamily(table);
-      emptyCQ = table.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS
-        ? QueryConstants.EMPTY_COLUMN_BYTES
-        : table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
-      scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
-      scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
+      setEmptyColumnScanAttributes(scan, table);
+      emptyCF = scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
+      emptyCQ = scan.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
       addEmptyColumnToScan(scan, emptyCF, emptyCQ);
     }
 
