@@ -255,7 +255,7 @@ public class PhoenixSyncTableMapper
     Timestamp regionStartTime, Timestamp regionEndTime, long verifiedChunks, long mismatchedChunks,
     String counters, Context context) throws SQLException {
 
-    boolean isVerified = (mismatchedChunks == 0);
+    boolean isVerified = mismatchedChunks == 0;
     PhoenixSyncTableCheckpointOutputRow.Status status = isVerified
       ? PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED
       : PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED;
