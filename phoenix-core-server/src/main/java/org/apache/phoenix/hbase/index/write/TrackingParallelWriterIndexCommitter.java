@@ -151,11 +151,13 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
     Set<Entry<HTableInterfaceReference, Collection<Mutation>>> entries = toWrite.asMap().entrySet();
     TaskBatch<Boolean> tasks = new TaskBatch<Boolean>(entries.size());
     List<HTableInterfaceReference> tables = new ArrayList<HTableInterfaceReference>(entries.size());
+    int totalMutations = 0;
     for (Entry<HTableInterfaceReference, Collection<Mutation>> entry : entries) {
       // get the mutations for each table. We leak the implementation here a little bit to save
       // doing a complete copy over of all the index update for each table.
       final List<Mutation> mutations =
         kvBuilder.cloneIfNecessary((List<Mutation>) entry.getValue());
+      totalMutations += mutations.size();
       // track each reference so we can get at it easily later, when determing failures
       final HTableInterfaceReference tableReference = entry.getKey();
       final RegionCoprocessorEnvironment env = this.env;
@@ -249,7 +251,10 @@ public class TrackingParallelWriterIndexCommitter implements IndexCommitter {
 
     Pair<List<Boolean>, List<Future<Boolean>>> resultsAndFutures = null;
     try {
-      LOGGER.debug("Waiting on index update tasks to complete...");
+      LOGGER.debug(
+        "Waiting on index update tasks to complete... "
+          + "tasks size {}, total mutations {}, num tables {}",
+        tasks.size(), totalMutations, tables.size());
       resultsAndFutures = this.pool.submitUninterruptible(tasks);
     } catch (ExecutionException e) {
       throw new RuntimeException(

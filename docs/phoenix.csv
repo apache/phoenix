@@ -1840,6 +1840,22 @@ REGEXP_SPLIT('ONE,TWO,THREE', ',') evaluates to ARRAY['ONE', 'TWO', 'THREE']
 REGEXP_SPLIT('ONE!#TWO#,!THREE', '[,!#]+') evaluates to ARRAY['ONE', 'TWO', 'THREE']
 "
 
+"Functions (String)","REGEXP_LIKE","
+REGEXP_LIKE( stringTerm, patternString [, matchParameterString ] )
+","
+Tests whether a string matches a regular expression pattern and returns true or false.
+Uses full-match semantics: the entire string must match the pattern.
+The optional matchParameterString controls matching behavior:
+'i' for case-insensitive, 'c' for case-sensitive (default),
+'m' for multiline mode, 's' for dotall mode (dot matches newline).
+If both 'i' and 'c' are specified, the last one wins.
+","
+REGEXP_LIKE('Hello World', 'Hello.*') evaluates to true
+REGEXP_LIKE('Hello World', 'Hello') evaluates to false (full match required)
+REGEXP_LIKE('Hello World', 'hello.*', 'i') evaluates to true (case-insensitive)
+REGEXP_LIKE('abc123', '.*\\d+.*') evaluates to true
+"
+
 "Functions (General)","MD5","
 MD5( term )
 ","

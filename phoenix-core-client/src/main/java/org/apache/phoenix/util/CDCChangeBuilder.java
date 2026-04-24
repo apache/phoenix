@@ -26,9 +26,12 @@ import static org.apache.phoenix.query.QueryConstants.CDC_TTL_DELETE_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
 
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.schema.PTable;
 
@@ -36,6 +39,8 @@ public class CDCChangeBuilder {
   private final boolean isChangeImageInScope;
   private final boolean isPreImageInScope;
   private final boolean isPostImageInScope;
+  private final boolean isIdxMutationsInScope;
+  private final boolean isDataRowStateInScope;
   private final CDCTableInfo cdcDataTableInfo;
   private String changeType;
   private long lastDeletedTimestamp;
@@ -43,12 +48,20 @@ public class CDCChangeBuilder {
   private Map<String, Object> preImage = null;
   private Map<String, Object> changeImage = null;
 
+  private boolean isFullRowDelete;
+  private Map<ImmutableBytesPtr, Cell> rawLatestBeforeChange;
+  private Map<ImmutableBytesPtr, Cell> rawAtChange;
+  private Set<ImmutableBytesPtr> rawDeletedColumnsAtChange;
+  private Map<ImmutableBytesPtr, Long> rawDeletedColumnsBeforeChange;
+
   public CDCChangeBuilder(CDCTableInfo cdcDataTableInfo) {
     this.cdcDataTableInfo = cdcDataTableInfo;
     Set<PTable.CDCChangeScope> changeScopes = cdcDataTableInfo.getIncludeScopes();
     isChangeImageInScope = changeScopes.contains(PTable.CDCChangeScope.CHANGE);
     isPreImageInScope = changeScopes.contains(PTable.CDCChangeScope.PRE);
     isPostImageInScope = changeScopes.contains(PTable.CDCChangeScope.POST);
+    isIdxMutationsInScope = changeScopes.contains(PTable.CDCChangeScope.IDX_MUTATIONS);
+    isDataRowStateInScope = changeScopes.contains(PTable.CDCChangeScope.DATA_ROW_STATE);
   }
 
   public void initChange(long ts) {
@@ -60,6 +73,13 @@ public class CDCChangeBuilder {
     }
     if (isChangeImageInScope || isPostImageInScope) {
       changeImage = new HashMap<>();
+    }
+    if (isDataRowStateInScope) {
+      isFullRowDelete = false;
+      rawLatestBeforeChange = new LinkedHashMap<>();
+      rawAtChange = new LinkedHashMap<>();
+      rawDeletedColumnsAtChange = new HashSet<>();
+      rawDeletedColumnsBeforeChange = new HashMap<>();
     }
   }
 
@@ -77,6 +97,9 @@ public class CDCChangeBuilder {
 
   public void markAsDeletionEvent() {
     changeType = CDC_DELETE_EVENT_TYPE;
+    if (isDataRowStateInScope) {
+      isFullRowDelete = true;
+    }
   }
 
   public long getLastDeletedTimestamp() {
@@ -141,12 +164,69 @@ public class CDCChangeBuilder {
   }
 
   public boolean isOlderThanChange(Cell cell) {
-    return (cell.getTimestamp() < changeTimestamp && cell.getTimestamp() > lastDeletedTimestamp)
-      ? true
-      : false;
+    return cell.getTimestamp() < changeTimestamp && cell.getTimestamp() > lastDeletedTimestamp;
+  }
+
+  public void registerRawPut(Cell cell, ImmutableBytesPtr colKey) {
+    if (cell.getTimestamp() == changeTimestamp) {
+      rawAtChange.putIfAbsent(colKey, cell);
+    } else if (isOlderThanChange(cell)) {
+      Long colDeleteTs = rawDeletedColumnsBeforeChange.get(colKey);
+      if (
+        (colDeleteTs == null || cell.getTimestamp() > colDeleteTs)
+          && !rawLatestBeforeChange.containsKey(colKey)
+      ) {
+        rawLatestBeforeChange.put(colKey, cell);
+      }
+    }
+  }
+
+  public void registerRawDeleteColumn(Cell cell, ImmutableBytesPtr colKey) {
+    if (cell.getTimestamp() == changeTimestamp) {
+      rawDeletedColumnsAtChange.add(colKey);
+    } else if (isOlderThanChange(cell)) {
+      rawDeletedColumnsBeforeChange.putIfAbsent(colKey, cell.getTimestamp());
+    }
+  }
+
+  public boolean hasValidDataRowStateChanges() {
+    return isFullRowDelete || !rawAtChange.isEmpty() || !rawDeletedColumnsAtChange.isEmpty();
+  }
+
+  public boolean isFullRowDelete() {
+    return isFullRowDelete;
+  }
+
+  public Map<ImmutableBytesPtr, Cell> getRawLatestBeforeChange() {
+    return rawLatestBeforeChange;
+  }
+
+  public Map<ImmutableBytesPtr, Cell> getRawAtChange() {
+    return rawAtChange;
+  }
+
+  public Set<ImmutableBytesPtr> getRawDeletedColumnsAtChange() {
+    return rawDeletedColumnsAtChange;
   }
 
   public boolean isPreImageInScope() {
     return isPreImageInScope;
   }
+
+  public boolean isPostImageInScope() {
+    return isPostImageInScope;
+  }
+
+  public boolean isChangeImageInScope() {
+    return isChangeImageInScope;
+  }
+
+  public boolean isIdxMutationsInScope() {
+    return isIdxMutationsInScope;
+  }
+
+  public boolean isDataRowStateInScope() {
+    return isDataRowStateInScope;
+  }
+
 }
