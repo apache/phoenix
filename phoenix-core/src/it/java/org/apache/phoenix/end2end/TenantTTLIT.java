@@ -550,17 +550,23 @@ public class TenantTTLIT extends BaseTest {
   }
 
   /**
-   * Exercises every branch of the tenant-view-conflict check in CreateTableCompiler:
+   * Exercises every branch of the tenant-view-conflict check in CreateTableCompiler. The check only
+   * applies to no-WHERE tenant views; views with WHERE clauses are out of scope.
    * <ol>
-   * <li>Non-TTL view as first view for a tenant: allowed.</li>
-   * <li>Another non-TTL view for the same tenant: allowed (both without TTL).</li>
-   * <li>TTL view added to a tenant that already has non-TTL views: rejected (new has TTL, existing
-   * siblings exist).</li>
-   * <li>Different tenant on the same base creates a TTL view: allowed (per-tenant scope).</li>
-   * <li>Same tenant tries to add a second TTL view: rejected (existing has TTL).</li>
-   * <li>Same tenant tries to add a non-TTL view when a TTL view already exists: rejected (existing
+   * <li>No-WHERE non-TTL view as first view for a tenant: allowed.</li>
+   * <li>Another no-WHERE non-TTL view for the same tenant: allowed (both without TTL).</li>
+   * <li>No-WHERE TTL view added to a tenant that already has no-WHERE non-TTL siblings: rejected
+   * (new has TTL, existing no-WHERE siblings exist).</li>
+   * <li>Different tenant on the same base creates a no-WHERE TTL view: allowed (per-tenant
+   * scope).</li>
+   * <li>Same tenant tries to add a second no-WHERE TTL view: rejected (existing no-WHERE sibling
    * has TTL).</li>
-   * <li>Tenant view with WHERE clause is allowed when only non-TTL views exist.</li>
+   * <li>Same tenant tries to add a no-WHERE non-TTL view when a no-WHERE TTL view already exists:
+   * rejected (existing no-WHERE sibling has TTL).</li>
+   * <li>WHERE-scoped view creation is out of scope for this check: always allowed by the
+   * coexistence rule (even when no-WHERE TTL siblings exist).</li>
+   * <li>Multiple WHERE-scoped TTL views for the same tenant are allowed (WHERE views are out of
+   * scope for this check, even with prefix-related row key matchers).</li>
    * </ol>
    */
   @Test
@@ -605,17 +611,44 @@ public class TenantTTLIT extends BaseTest {
       conn.setAutoCommit(true);
       conn.createStatement()
         .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s", org2NoTTLView, fullTableName));
-      fail("Expected TENANT_TTL_VIEW_CONFLICT when adding non-TTL view to tenant with TTL view");
+      fail("Expected TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT when adding non-TTL view to tenant "
+        + "with TTL view");
     } catch (SQLException e) {
-      assertEquals(SQLExceptionCode.TENANT_TTL_VIEW_CONFLICT.getErrorCode(), e.getErrorCode());
+      assertEquals(SQLExceptionCode.TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT.getErrorCode(),
+        e.getErrorCode());
     }
 
-    // Case 7: org1 with only non-TTL siblings can still create a WHERE-scoped non-TTL view.
+    // Case 7: org1 with only non-TTL no-WHERE siblings can still create a WHERE-scoped non-TTL
+    // view (WHERE views are out of scope for the check).
     String org1WhereView = generateUniqueName();
     try (Connection conn = getTenantConnection("org1")) {
       conn.setAutoCommit(true);
       conn.createStatement().execute(String.format(
         "CREATE VIEW %s AS SELECT * FROM %s WHERE ID1 = 'x'", org1WhereView, fullTableName));
+    }
+
+    // Case 8: org2 has a no-WHERE TTL view; a WHERE-scoped TTL view is still allowed because
+    // WHERE views are out of scope for this check.
+    String org2WhereTTLView = generateUniqueName();
+    try (Connection conn = getTenantConnection("org2")) {
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ID1 = 'y' TTL = 50",
+          org2WhereTTLView, fullTableName));
+    }
+
+    // Case 9: a fresh tenant can create multiple WHERE-scoped TTL views with different WHEREs
+    // (WHERE views are out of scope for this check).
+    String org3WhereTTLView1 = generateUniqueName();
+    String org3WhereTTLView2 = generateUniqueName();
+    try (Connection conn = getTenantConnection("org3")) {
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ID1 = 'p' TTL = 10",
+          org3WhereTTLView1, fullTableName));
+      conn.createStatement()
+        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s WHERE ID1 = 'q' TTL = 20",
+          org3WhereTTLView2, fullTableName));
     }
   }
 
@@ -649,9 +682,11 @@ public class TenantTTLIT extends BaseTest {
     try (Connection t1 = getTenantConnection("org1")) {
       t1.setAutoCommit(true);
       t1.createStatement().execute(String.format("ALTER VIEW %s SET TTL = 10", view1Name));
-      fail("Expected TENANT_TTL_VIEW_CONFLICT when altering TTL while sibling view exists");
+      fail("Expected TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT when altering TTL while sibling view "
+        + "exists");
     } catch (SQLException e) {
-      assertEquals(SQLExceptionCode.TENANT_TTL_VIEW_CONFLICT.getErrorCode(), e.getErrorCode());
+      assertEquals(SQLExceptionCode.TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT.getErrorCode(),
+        e.getErrorCode());
     }
 
     // Drop sibling then alter succeeds.
@@ -659,6 +694,43 @@ public class TenantTTLIT extends BaseTest {
       t1.setAutoCommit(true);
       t1.createStatement().execute(String.format("DROP VIEW %s", view2Name));
       t1.createStatement().execute(String.format("ALTER VIEW %s SET TTL = 10", view1Name));
+    }
+  }
+
+  /**
+   * Verifies that ALTER VIEW SET TTL on a WHERE-scoped tenant view is allowed even when other
+   * tenant views exist (WHERE views are out of scope for the coexistence check).
+   */
+  @Test
+  public void testAlterTTLOnWhereScopedTenantViewIsAllowed() throws Exception {
+    String schemaName = generateUniqueName();
+    String baseTableName = generateUniqueName();
+    String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
+    String noWhereView = generateUniqueName();
+    String whereView = generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute(String.format(
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+          fullTableName));
+    }
+
+    // A no-WHERE non-TTL view and a WHERE non-TTL view coexist for org1.
+    createTenantViewNoTTL("org1", fullTableName, noWhereView);
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      t1.createStatement().execute(String
+        .format("CREATE VIEW %s AS SELECT * FROM %s WHERE ID1 = 'x'", whereView, fullTableName));
+    }
+
+    // Altering the WHERE view to add TTL is allowed (WHERE views are out of scope).
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      t1.createStatement().execute(String.format("ALTER VIEW %s SET TTL = 10", whereView));
     }
   }
 
@@ -989,9 +1061,11 @@ public class TenantTTLIT extends BaseTest {
       conn.setAutoCommit(true);
       conn.createStatement().execute(String.format("CREATE VIEW %s AS SELECT * FROM %s TTL = %d",
         viewName, baseTable, ttlSeconds));
-      fail("Expected TENANT_TTL_VIEW_CONFLICT for tenant=" + tenantId + ", view=" + viewName);
+      fail("Expected TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT for tenant=" + tenantId + ", view="
+        + viewName);
     } catch (SQLException e) {
-      assertEquals(SQLExceptionCode.TENANT_TTL_VIEW_CONFLICT.getErrorCode(), e.getErrorCode());
+      assertEquals(SQLExceptionCode.TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT.getErrorCode(),
+        e.getErrorCode());
     }
   }
 

@@ -6548,19 +6548,22 @@ public class MetaDataClient {
         boolean isStrictTTL =
           metaProperties.isStrictTTL() != null ? metaProperties.isStrictTTL : table.isStrictTTL();
         newTTL.validateTTLOnAlter(connection, table, isStrictTTL);
-        // For a tenant view on a multi-tenant base table, prevent setting TTL when any sibling
-        // view exists for the same tenant (to avoid ROW_KEY_MATCHER prefix conflicts in the
-        // compaction trie).
+        // For a no-WHERE tenant view on a multi-tenant base table, prevent setting TTL when any
+        // other no-WHERE sibling view exists for the same tenant (to avoid ROW_KEY_MATCHER
+        // conflicts in the compaction trie).
+        String currentViewStmt = table.getViewStatement();
+        boolean currentIsNoWhere = currentViewStmt == null || currentViewStmt.isEmpty();
         if (
           !newTTL.equals(TTL_EXPRESSION_NOT_DEFINED) && table.getType() == PTableType.VIEW
-            && table.getTenantId() != null
+            && table.getTenantId() != null && currentIsNoWhere
         ) {
           PTable parent = resolveParentTable(table);
           if (parent != null) {
             String selfFullName = SchemaUtil.getTableName(
               table.getSchemaName() == null ? null : table.getSchemaName().getString(),
               table.getTableName().getString());
-            ViewUtil.validateTenantTTLViewCoexistence(connection, parent, true, selfFullName);
+            ViewUtil.validateTenantViewWithoutWhereTTLCoexistence(connection, parent, true,
+              selfFullName);
           }
         }
         metaPropertiesEvaluated.setTTL(getCompatibleTTLExpression(metaProperties.getTTL(),

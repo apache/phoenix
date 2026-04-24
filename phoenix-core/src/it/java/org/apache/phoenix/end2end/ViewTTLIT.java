@@ -1211,13 +1211,8 @@ public class ViewTTLIT extends BaseViewTTLIT {
       .withOtherOptions(testCaseWhenAllCFMatchAndAllDefault);
 
     for (int view : Arrays.asList(new Integer[] { 1, 2, 3 })) {
-      // Reset tenant id and build with a fresh tenant so each iteration gets its own tenant,
-      // avoiding TENANT_TTL_VIEW_CONFLICT from multiple TTL views sharing the same tenant on
-      // the multi-tenant base table.
-      if (schemaBuilder.getDataOptions() != null) {
-        schemaBuilder.getDataOptions().setTenantId(null);
-      }
-      schemaBuilder.buildWithNewTenant();
+      // build schema for new view
+      schemaBuilder.buildNewView();
 
       // Define the test data.
       DataSupplier dataSupplier = new DataSupplier() {

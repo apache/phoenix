@@ -437,11 +437,13 @@ public class ViewUtil {
   }
 
   /**
-   * Validates tenant TTL view coexistence rules on a multi-tenant base table. For a given tenant on
-   * such a base table we allow EITHER multiple tenant views without TTL, OR exactly one tenant view
-   * with TTL (WHERE or no-WHERE). A TTL view coexisting with any other view for the same tenant
-   * causes ROW_KEY_MATCHER prefix conflicts in the compaction RowKeyMatcher trie (the tenant-id
-   * bytes are a prefix of any WHERE-scoped pattern).
+   * Validates tenant TTL view coexistence rules for NO-WHERE tenant views on a multi-tenant base
+   * table. For a given tenant on such a base table, among that tenant's no-WHERE views we allow
+   * EITHER any number of no-WHERE views without TTL, OR exactly one no-WHERE view with TTL.
+   * Multiple no-WHERE TTL views share the same ROW_KEY_MATCHER (tenant-id bytes) and conflict in
+   * the compaction RowKeyMatcher trie. Views with WHERE clauses are outside the scope of this check
+   * and are ignored (prefix conflicts involving WHERE-scoped matchers are a separate pre-existing
+   * concern).
    * <p>
    * This is a no-op when:
    * <ul>
@@ -456,11 +458,12 @@ public class ViewUtil {
    * @param viewToExcludeFullName full name of the view to skip from sibling iteration (used on the
    *                              ALTER path to exclude the view being altered itself); pass
    *                              {@code null} on the CREATE path
-   * @throws SQLException {@link SQLExceptionCode#TENANT_TTL_VIEW_CONFLICT} if the operation would
-   *                      create a TTL / non-TTL coexistence conflict
+   * @throws SQLException {@link SQLExceptionCode#TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT} if the
+   *                      operation would create a TTL / non-TTL coexistence conflict among no-WHERE
+   *                      tenant views
    */
-  public static void validateTenantTTLViewCoexistence(PhoenixConnection connection, PTable parent,
-    boolean newViewHasTTL, String viewToExcludeFullName) throws SQLException {
+  public static void validateTenantViewWithoutWhereTTLCoexistence(PhoenixConnection connection,
+    PTable parent, boolean newViewHasTTL, String viewToExcludeFullName) throws SQLException {
     if (connection.getTenantId() == null) {
       return;
     }
@@ -482,7 +485,7 @@ public class ViewUtil {
       // Skip validation rather than fail the DDL.
       return;
     }
-    boolean foundAnyExisting = false;
+    boolean foundAnyNoWhere = false;
     for (TableInfo info : childViews.getLinks()) {
       if (!Arrays.equals(info.getTenantId(), myTenantIdBytes)) {
         continue;
@@ -495,23 +498,29 @@ public class ViewUtil {
       }
       try {
         PTable existing = connection.getTable(childFullName);
-        foundAnyExisting = true;
+        String existingViewStmt = existing.getViewStatement();
+        boolean existingIsNoWhere = existingViewStmt == null || existingViewStmt.isEmpty();
+        if (!existingIsNoWhere) {
+          // Views with WHERE clauses are outside the scope of this check.
+          continue;
+        }
+        foundAnyNoWhere = true;
         boolean existingHasTTL = existing.getTTLExpression() != null
           && !existing.getTTLExpression().equals(TTL_EXPRESSION_NOT_DEFINED);
         if (existingHasTTL) {
-          // An existing TTL view blocks any additional view (TTL or not).
-          throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANT_TTL_VIEW_CONFLICT).build()
-            .buildException();
+          // An existing no-WHERE TTL view blocks any additional no-WHERE view (TTL or not).
+          throw new SQLExceptionInfo.Builder(
+            SQLExceptionCode.TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT).build().buildException();
         }
       } catch (TableNotFoundException e) {
         // Orphan child link, ignore.
       }
     }
-    if (newViewHasTTL && foundAnyExisting) {
-      // The new / altered view has TTL but sibling views already exist; the TTL view's trie
-      // entry would silently apply to the existing views' rows.
-      throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANT_TTL_VIEW_CONFLICT).build()
-        .buildException();
+    if (newViewHasTTL && foundAnyNoWhere) {
+      // The new / altered no-WHERE view has TTL but sibling no-WHERE views already exist; the TTL
+      // view's trie entry would silently apply to the existing views' rows.
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT)
+        .build().buildException();
     }
   }
 

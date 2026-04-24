@@ -236,14 +236,14 @@ public class CreateTableCompiler {
       } else if (viewTypeToBe == ViewType.UPDATABLE) {
         rowKeyMatcher =
           WhereOptimizer.getRowKeyMatcher(context, create.getTableName(), parentToBe, where);
-        // On a multi-tenant base table, for a given tenant we allow EITHER
-        // (a) any number of tenant views without TTL, OR
-        // (b) exactly one tenant view with TTL (WHERE or no-WHERE).
-        // A TTL view coexisting with any other view for the same tenant causes
-        // ROW_KEY_MATCHER prefix conflicts in the compaction RowKeyMatcher trie (the tenant-id
-        // bytes are a prefix of any scoped pattern).
-        ViewUtil.validateTenantTTLViewCoexistence(connection, parentToBe, hasTTLProperty(create),
-          null);
+        // For no-WHERE tenant views on a multi-tenant base table, for a given tenant we allow
+        // EITHER any number of no-WHERE views without TTL, OR exactly one no-WHERE view with
+        // TTL. Multiple no-WHERE TTL views share the same ROW_KEY_MATCHER (tenant-id bytes)
+        // and conflict in the compaction RowKeyMatcher trie.
+        if (where == null) {
+          ViewUtil.validateTenantViewWithoutWhereTTLCoexistence(connection, parentToBe,
+            hasTTLProperty(create), null);
+        }
       }
       verifyIfAnyParentHasIndexesAndViewExtendsPk(parentToBe, columnDefs, pkConstraint);
     }
