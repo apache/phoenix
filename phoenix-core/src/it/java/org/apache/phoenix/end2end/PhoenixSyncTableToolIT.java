@@ -209,7 +209,7 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
-  public void testSyncTableWithConditionalTTLExpiredRowsCompact() throws Exception {
+  public void testSyncTableWithHBaseTTLExpiredRows() throws Exception {
     String ddl = "CREATE TABLE IF NOT EXISTS %s (" + "ID INTEGER NOT NULL PRIMARY KEY, "
       + "NAME VARCHAR(50), NAME_VALUE BIGINT, UPDATED_DATE TIMESTAMP"
       + ") REPLICATION_SCOPE=%d, UPDATE_CACHE_FREQUENCY=0, " + "TTL=1 SPLIT ON (5, 7, 9)";
@@ -222,22 +222,13 @@ public class PhoenixSyncTableToolIT {
     // Wait 2 seconds for TTL expiration (TTL=1 second)
     Thread.sleep(2000);
 
-    // Run sync tool - all rows should still be visible before compaction
+    // Run sync tool — TTLRegionScanner masks expired rows on both sides,
+    // so both see 0 live rows and report verified with nothing to process
     Job job = runSyncTool(uniqueTableName);
     SyncCountersResult counters = getSyncCounters(job);
 
-    validateSyncCounters(counters, 10, 10, 10, 0);
-    validateMapperCounters(counters, 4, 0);
-
-    // Flush and major compact target - this will physically remove expired rows
-    flushAndMajorCompact(CLUSTERS.getHBaseCluster2(), uniqueTableName);
-
-    // Run sync tool after compaction - should detect mismatch (source has rows, target doesn't)
-    Job job2 = runSyncTool(uniqueTableName);
-    SyncCountersResult counters2 = getSyncCounters(job2);
-
-    validateSyncCounters(counters2, 10, 0, 0, 10);
-    validateMapperCounters(counters2, 0, 4);
+    validateSyncCounters(counters, 0, 0, 0, 0);
+    validateMapperCounters(counters, 0, 0);
   }
 
   @Test

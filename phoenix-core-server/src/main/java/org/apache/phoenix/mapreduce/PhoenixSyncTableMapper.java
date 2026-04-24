@@ -45,12 +45,13 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.KeyRange;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SHA256DigestUtil;
-import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -395,7 +396,7 @@ public class PhoenixSyncTableMapper
     scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_FORMATION, TRUE_BYTES);
     scan.setAttribute(BaseScannerRegionObserverConstants.SKIP_REGION_BOUNDARY_CHECK, TRUE_BYTES);
     scan.setAttribute(BaseScannerRegionObserverConstants.UNGROUPED_AGG, TRUE_BYTES);
-    ScanUtil.setScanAttributesForPhoenixTTL(scan, pTable, phoenixConn);
+    ensureEmptyColumnAttributesForTTL(scan);
     if (continuedDigestState != null && continuedDigestState.length > 0) {
       scan.setAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CONTINUED_DIGEST_STATE,
         continuedDigestState);
@@ -414,6 +415,23 @@ public class PhoenixSyncTableMapper
       Bytes.toBytes(syncTablePageTimeoutMs));
     ResultScanner scanner = hTable.getScanner(scan);
     return new ChunkScannerContext(hTable, scanner);
+  }
+
+  /**
+   * Sets empty column scan attributes so that TTLRegionScanner is included in the server-side
+   * scanner chain. Without these, expired rows pass through unfiltered — causing false mismatches
+   * when one cluster has compacted away expired data but the other hasn't. TTLRegionScanner reads
+   * the actual TTL from the HBase column family descriptor and becomes a no-op when TTL is FOREVER,
+   * so this is safe for all tables.
+   */
+  private void ensureEmptyColumnAttributesForTTL(Scan scan) {
+    scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
+      SchemaUtil.getEmptyColumnFamily(pTable));
+    byte[] emptyCQ =
+      pTable.getEncodingScheme() == PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS
+        ? QueryConstants.EMPTY_COLUMN_BYTES
+        : pTable.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+    scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
   }
 
   /**
