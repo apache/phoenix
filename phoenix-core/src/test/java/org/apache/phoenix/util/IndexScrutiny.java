@@ -39,7 +39,22 @@ public class IndexScrutiny {
   public static long scrutinizeIndex(Connection conn, String fullTableName, String fullIndexName)
     throws SQLException {
     PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
-    PTable ptable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
+    String schemaName = SchemaUtil.getSchemaNameFromFullName(fullTableName);
+    String tableName = SchemaUtil.getTableNameFromFullName(fullTableName);
+    String indexName = SchemaUtil.getTableNameFromFullName(fullIndexName);
+    PTable ptable;
+    PTable pindex;
+    if (schemaName != null && !schemaName.isEmpty()) {
+      ptable =
+        pconn.getTable(new PTableKey(pconn.getTenantId(), SchemaUtil.normalizeIdentifier(schemaName)
+          + "." + SchemaUtil.normalizeIdentifier(tableName)));
+      pindex =
+        pconn.getTable(new PTableKey(pconn.getTenantId(), SchemaUtil.normalizeIdentifier(schemaName)
+          + "." + SchemaUtil.normalizeIdentifier(indexName)));
+    } else {
+      ptable = pconn.getTable(new PTableKey(pconn.getTenantId(), fullTableName));
+      pindex = pconn.getTable(new PTableKey(pconn.getTenantId(), fullIndexName));
+    }
     int tableColumnOffset = 0;
     List<PColumn> tableColumns = ptable.getColumns();
     List<PColumn> tablePKColumns = ptable.getPKColumns();
@@ -48,7 +63,6 @@ public class IndexScrutiny {
       tableColumns = tableColumns.subList(tableColumnOffset, tableColumns.size());
       tablePKColumns = tablePKColumns.subList(tableColumnOffset, tablePKColumns.size());
     }
-    PTable pindex = pconn.getTable(new PTableKey(pconn.getTenantId(), fullIndexName));
     List<PColumn> indexColumns = pindex.getColumns();
     int indexColumnOffset = 0;
     if (pindex.getBucketNum() != null) {
