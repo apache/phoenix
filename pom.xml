@@ -77,10 +77,10 @@
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.4.runtime.version>2.5.10-hadoop3</hbase-2.5.4.runtime.version>
-    <hbase-2.5.runtime.version>2.5.13-hadoop3</hbase-2.5.runtime.version>
+    <hbase-2.5.runtime.version>2.5.14-hadoop3</hbase-2.5.runtime.version>
     <hbase-2.6.0.runtime.version>2.6.1-hadoop3</hbase-2.6.0.runtime.version>
     <hbase-2.6.3.runtime.version>2.6.3-hadoop3</hbase-2.6.3.runtime.version>
-    <hbase-2.6.runtime.version>2.6.4-hadoop3</hbase-2.6.runtime.version>
+    <hbase-2.6.runtime.version>2.6.5-hadoop3</hbase-2.6.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
