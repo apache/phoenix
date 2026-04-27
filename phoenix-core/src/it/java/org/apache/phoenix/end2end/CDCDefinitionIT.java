@@ -26,6 +26,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
@@ -57,6 +58,7 @@ import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
+import org.mockito.verification.VerificationMode;
 
 @RunWith(Parameterized.class)
 @Category(ParallelStatsDisabledTest.class)
@@ -494,46 +496,77 @@ public class CDCDefinitionIT extends CDCBaseIT {
   }
 
   /**
-   * Verifies that UPDATE_CACHE_FREQUENCY supplied to CREATE CDC is persisted on the CDC virtual
-   * table in SYSTEM.CATALOG, and that subsequent SELECTs against the CDC object do not issue a
-   * getTable RPC for it once the client cache is warm.
+   * Verifies CDC honors UPDATE_CACHE_FREQUENCY when set on CREATE CDC, and falls back to the
+   * connection default when not. With UCF set, a warmed-cache SELECT against the CDC object must
+   * issue zero getTable RPCs for it; without UCF, atleast one per query.
    */
   @Test
   public void testCreateCDCWithUpdateCacheFrequency() throws Exception {
     final long ucfMillis = 300000L;
-    String dataTableName = generateUniqueName();
-    String parentName = dataTableName;
-    String cdcName = generateUniqueName();
-    String fullCdcName = SchemaUtil.getTableName(null, cdcName);
 
+    // parent has UCF, CREATE CDC does not - CDC keeps the connection default and every SELECT
+    // against it RPCs. Phoenix's compilation pipeline resolves the FROM table multiple times
+    // per query
+    String tableA = generateUniqueName();
+    String cdcA = generateUniqueName();
     try (Connection conn = newConnection()) {
-      conn.createStatement().execute("CREATE TABLE " + dataTableName
-        + " (k INTEGER PRIMARY KEY, v INTEGER) " + "UPDATE_CACHE_FREQUENCY=" + ucfMillis);
-      if (forView) {
-        String viewName = generateUniqueName();
-        conn.createStatement()
-          .execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + dataTableName);
-        parentName = viewName;
-      }
-      createCDC(conn,
-        "CREATE CDC " + cdcName + " ON " + parentName + " UPDATE_CACHE_FREQUENCY=" + ucfMillis);
-
-      // Drive at least one row through CDC so cache state is non-trivial. Always upsert into
-      // the underlying data table so this works for read-only views too.
-      conn.createStatement().execute("UPSERT INTO " + dataTableName + " VALUES (1, 1)");
-      conn.commit();
-
-      // UPDATE_CACHE_FREQUENCY must be persisted on the CDC virtual table row.
-      try (ResultSet rs = conn.createStatement()
-        .executeQuery("SELECT UPDATE_CACHE_FREQUENCY FROM SYSTEM.CATALOG WHERE TABLE_NAME = '"
-          + cdcName + "' AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL")) {
-        assertTrue("CDC row not found in SYSTEM.CATALOG for " + cdcName, rs.next());
-        assertEquals("CREATE CDC ... UPDATE_CACHE_FREQUENCY was not persisted on the CDC table",
-          ucfMillis, rs.getLong(1));
-      }
+      createTableAndCDC(conn, tableA, cdcA, "UPDATE_CACHE_FREQUENCY=" + ucfMillis,
+        /* cdcUcf */ null);
+      assertCdcUpdateCacheFrequency(conn, cdcA, 0L);
     }
+    assertGetTableRpcModeForCdc(SchemaUtil.getTableName(null, cdcA), atLeast(1));
 
-    // with UCF set, repeated SELECTs against the CDC object should not RPC for it.
+    // CREATE CDC sets UCF - it must be persisted and suppress getTable RPCs.
+    String tableB = generateUniqueName();
+    String cdcB = generateUniqueName();
+    try (Connection conn = newConnection()) {
+      createTableAndCDC(conn, tableB, cdcB, /* tableProps */ null,
+        "UPDATE_CACHE_FREQUENCY=" + ucfMillis);
+      assertCdcUpdateCacheFrequency(conn, cdcB, ucfMillis);
+    }
+    assertGetTableRpcModeForCdc(SchemaUtil.getTableName(null, cdcB), times(0));
+  }
+
+  /**
+   * Create {@code dataTable}, optionally with a view on it (when {@link #forView} is true), a CDC
+   * over the resulting parent, and upsert one row.
+   */
+  private void createTableAndCDC(Connection conn, String dataTable, String cdcName,
+    String tablePropsSuffix, String cdcPropsSuffix) throws Exception {
+    String tableSql = "CREATE TABLE " + dataTable + " (k INTEGER PRIMARY KEY, v INTEGER)"
+      + (tablePropsSuffix == null ? "" : " " + tablePropsSuffix);
+    conn.createStatement().execute(tableSql);
+    String parentName = dataTable;
+    if (forView) {
+      String viewName = generateUniqueName();
+      conn.createStatement().execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + dataTable);
+      parentName = viewName;
+    }
+    String cdcSql = "CREATE CDC " + cdcName + " ON " + parentName
+      + (cdcPropsSuffix == null ? "" : " " + cdcPropsSuffix);
+    createCDC(conn, cdcSql);
+    conn.createStatement().execute("UPSERT INTO " + dataTable + " VALUES (1, 1)");
+    conn.commit();
+  }
+
+  private void assertCdcUpdateCacheFrequency(Connection conn, String cdcName, long expected)
+    throws SQLException {
+    try (ResultSet rs = conn.createStatement()
+      .executeQuery("SELECT UPDATE_CACHE_FREQUENCY FROM SYSTEM.CATALOG WHERE TABLE_NAME = '"
+        + cdcName + "' AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL")) {
+      assertTrue("CDC row not found in SYSTEM.CATALOG for " + cdcName, rs.next());
+      assertEquals("Unexpected UPDATE_CACHE_FREQUENCY on CDC virtual table " + cdcName, expected,
+        rs.getLong(1));
+    }
+  }
+
+  /**
+   * Open a fresh spied {@link ConnectionQueryServices}, run a CDC select once to warm the client
+   * metadata cache, reset the spy, run the same select again, and assert that {@code getTable(...)}
+   * for the CDC virtual table was invoked according to {@code mode}.
+   */
+  private void assertGetTableRpcModeForCdc(String fullCdcName, VerificationMode mode)
+    throws SQLException {
     ConnectionQueryServices spied =
       spy(driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)));
     Properties cprops = new Properties();
@@ -541,7 +574,6 @@ public class CDCDefinitionIT extends CDCBaseIT {
     String selectSql = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + fullCdcName + " LIMIT 1";
 
     try (Connection conn = spied.connect(getUrl(), cprops)) {
-      // Warm the client metadata cache.
       try (PreparedStatement ps = conn.prepareStatement(selectSql);
         ResultSet rs = ps.executeQuery()) {
         while (rs.next()) {
@@ -549,7 +581,6 @@ public class CDCDefinitionIT extends CDCBaseIT {
       }
       reset(spied);
 
-      // Second query - everything should be served from the client metadata cache.
       try (PreparedStatement ps = conn.prepareStatement(selectSql);
         ResultSet rs = ps.executeQuery()) {
         while (rs.next()) {
@@ -558,7 +589,7 @@ public class CDCDefinitionIT extends CDCBaseIT {
 
       String cdcSchema = SchemaUtil.getSchemaNameFromFullName(fullCdcName);
       String cdcTableNameOnly = SchemaUtil.getTableNameFromFullName(fullCdcName);
-      verify(spied, times(0)).getTable((PName) any(), eq(PVarchar.INSTANCE.toBytes(cdcSchema)),
+      verify(spied, mode).getTable((PName) any(), eq(PVarchar.INSTANCE.toBytes(cdcSchema)),
         eq(PVarchar.INSTANCE.toBytes(cdcTableNameOnly)), anyLong(), anyLong());
     }
   }
