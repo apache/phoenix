@@ -18,13 +18,22 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
@@ -33,10 +42,15 @@ import java.util.List;
 import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
+import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
+import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Assert;
 import org.junit.Test;
@@ -476,6 +490,76 @@ public class CDCDefinitionIT extends CDCBaseIT {
     } catch (SQLException e) {
       assertEquals(SQLExceptionCode.UNKNOWN_INCLUDE_CHANGE_SCOPE.getErrorCode(), e.getErrorCode());
       assertTrue(e.getMessage().endsWith("DUMMY"));
+    }
+  }
+
+  /**
+   * Verifies that UPDATE_CACHE_FREQUENCY supplied to CREATE CDC is persisted on the CDC virtual
+   * table in SYSTEM.CATALOG, and that subsequent SELECTs against the CDC object do not issue a
+   * getTable RPC for it once the client cache is warm.
+   */
+  @Test
+  public void testCreateCDCWithUpdateCacheFrequency() throws Exception {
+    final long ucfMillis = 300000L;
+    String dataTableName = generateUniqueName();
+    String parentName = dataTableName;
+    String cdcName = generateUniqueName();
+    String fullCdcName = SchemaUtil.getTableName(null, cdcName);
+
+    try (Connection conn = newConnection()) {
+      conn.createStatement().execute("CREATE TABLE " + dataTableName
+        + " (k INTEGER PRIMARY KEY, v INTEGER) " + "UPDATE_CACHE_FREQUENCY=" + ucfMillis);
+      if (forView) {
+        String viewName = generateUniqueName();
+        conn.createStatement()
+          .execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + dataTableName);
+        parentName = viewName;
+      }
+      createCDC(conn,
+        "CREATE CDC " + cdcName + " ON " + parentName + " UPDATE_CACHE_FREQUENCY=" + ucfMillis);
+
+      // Drive at least one row through CDC so cache state is non-trivial. Always upsert into
+      // the underlying data table so this works for read-only views too.
+      conn.createStatement().execute("UPSERT INTO " + dataTableName + " VALUES (1, 1)");
+      conn.commit();
+
+      // UPDATE_CACHE_FREQUENCY must be persisted on the CDC virtual table row.
+      try (ResultSet rs = conn.createStatement()
+        .executeQuery("SELECT UPDATE_CACHE_FREQUENCY FROM SYSTEM.CATALOG WHERE TABLE_NAME = '"
+          + cdcName + "' AND COLUMN_NAME IS NULL AND COLUMN_FAMILY IS NULL")) {
+        assertTrue("CDC row not found in SYSTEM.CATALOG for " + cdcName, rs.next());
+        assertEquals("CREATE CDC ... UPDATE_CACHE_FREQUENCY was not persisted on the CDC table",
+          ucfMillis, rs.getLong(1));
+      }
+    }
+
+    // with UCF set, repeated SELECTs against the CDC object should not RPC for it.
+    ConnectionQueryServices spied =
+      spy(driver.getConnectionQueryServices(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES)));
+    Properties cprops = new Properties();
+    cprops.putAll(PhoenixEmbeddedDriver.DEFAULT_PROPS.asMap());
+    String selectSql = "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + fullCdcName + " LIMIT 1";
+
+    try (Connection conn = spied.connect(getUrl(), cprops)) {
+      // Warm the client metadata cache.
+      try (PreparedStatement ps = conn.prepareStatement(selectSql);
+        ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+        }
+      }
+      reset(spied);
+
+      // Second query - everything should be served from the client metadata cache.
+      try (PreparedStatement ps = conn.prepareStatement(selectSql);
+        ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+        }
+      }
+
+      String cdcSchema = SchemaUtil.getSchemaNameFromFullName(fullCdcName);
+      String cdcTableNameOnly = SchemaUtil.getTableNameFromFullName(fullCdcName);
+      verify(spied, times(0)).getTable((PName) any(), eq(PVarchar.INSTANCE.toBytes(cdcSchema)),
+        eq(PVarchar.INSTANCE.toBytes(cdcTableNameOnly)), anyLong(), anyLong());
     }
   }
 }
