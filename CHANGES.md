@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.3.1 - Unreleased (as of 2026-04-22)
+## Release 5.3.1 - Unreleased (as of 2026-04-28)
 
 
 
@@ -35,6 +35,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7276](https://issues.apache.org/jira/browse/PHOENIX-7276) | Add REGEXP\_LIKE built-in function |  Major | . |
 | [PHOENIX-7746](https://issues.apache.org/jira/browse/PHOENIX-7746) | Fix flapper test MetaDataCacheMetricsIT.testGlobalClientCacheMetricsOfCreateAndDropTable |  Major | . |
 | [PHOENIX-7766](https://issues.apache.org/jira/browse/PHOENIX-7766) | Generate point lookups while using IS NULL on trailing PK columns |  Major | . |
 | [PHOENIX-7777](https://issues.apache.org/jira/browse/PHOENIX-7777) | Disable default configuration for View TTL |  Major | . |
@@ -62,6 +63,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7811](https://issues.apache.org/jira/browse/PHOENIX-7811) | CREATE CDC silently drops user-supplied table properties (like UPDATE\_CACHE\_FREQUENCY) on the CDC virtual table |  Major | . |
 | [PHOENIX-7718](https://issues.apache.org/jira/browse/PHOENIX-7718) | Drop CDC fails with TNFE when there is a schema name |  Major | . |
 | [PHOENIX-7743](https://issues.apache.org/jira/browse/PHOENIX-7743) | IndexTool server-side build fails with TableNotFoundException for case-sensitive table/schema/index names |  Major | . |
 | [PHOENIX-7758](https://issues.apache.org/jira/browse/PHOENIX-7758) | Read repair with DistinctPrefixFilter can give incorrect results |  Major | . |
@@ -86,6 +88,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7751](https://issues.apache.org/jira/browse/PHOENIX-7751) | Feature to validate table data using PhoenixSyncTable tool b/w source and target cluster |  Major | . |
 | [PHOENIX-7426](https://issues.apache.org/jira/browse/PHOENIX-7426) | Generating index mutations for immutable tables on the server side |  Major | . |
 
 
@@ -93,6 +96,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7806](https://issues.apache.org/jira/browse/PHOENIX-7806) | Upgrade hbase versions to 2.5.14 and 2.6.5 |  Major | . |
 | [PHOENIX-7739](https://issues.apache.org/jira/browse/PHOENIX-7739) | Update Default HBase 2.5 version to 2.5.13 |  Major | core |
 
 
