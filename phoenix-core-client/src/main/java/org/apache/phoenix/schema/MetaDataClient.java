@@ -2024,7 +2024,6 @@ public class MetaDataClient {
     columnDefs.add(FACTORY.columnDef(FACTORY.columnName(QueryConstants.CDC_JSON_COL_NAME),
       PVarchar.INSTANCE.getSqlTypeName(), false, null, true, null, null, false,
       SortOrder.getDefault(), "", null, false));
-    tableProps = new HashMap<>();
     if (dataTable.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
       // CDC table doesn't need SINGLE_CELL_ARRAY_WITH_OFFSETS encoding, so override it.
       tableProps.put(TableProperty.IMMUTABLE_STORAGE_SCHEME.getPropertyName(),
