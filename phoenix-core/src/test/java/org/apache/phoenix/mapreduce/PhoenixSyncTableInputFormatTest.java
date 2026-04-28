@@ -26,7 +26,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -436,44 +435,123 @@ public class PhoenixSyncTableInputFormatTest {
     assertEquals("Should have 1 KeyRange", 1, resultSplit.getKeyRanges().size());
   }
 
-  @Test(expected = IOException.class)
-  public void testCoalesceSplitsWithNullRegionLocation() throws Exception {
-    // ConnectionQueryServices returns null
+  @Test
+  public void testCoalesceSplitsWithNullRegionLocationFallsBackToUnknownServer() throws Exception {
+    // Null location (e.g. region in transition) — split should be placed in UNKNOWN_SERVER bucket.
     List<InputSplit> splits = new ArrayList<>();
     splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
 
-    // Mock ConnectionQueryServices to return null (region not found)
     when(mockQueryServices.getTableRegionLocation(any(byte[].class), any(byte[].class)))
       .thenReturn(null);
 
-    // Should throw IOException with message about null region location
-    inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
-  }
+    List<InputSplit> result =
+      inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
 
-  @Test(expected = IOException.class)
-  public void testCoalesceSplitsWithNullServerName() throws Exception {
-    // RegionLocation has null ServerName
-    List<InputSplit> splits = new ArrayList<>();
-    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
-
-    // Create mock region location with null ServerName
-    HRegionLocation mockRegionLocation = mock(HRegionLocation.class);
-    when(mockRegionLocation.getServerName()).thenReturn(null);
-
-    when(mockQueryServices.getTableRegionLocation(any(byte[].class), any(byte[].class)))
-      .thenReturn(mockRegionLocation);
-
-    // Should throw IOException with message about null server name
-    inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
+    assertEquals("Should return 1 split assigned to UNKNOWN_SERVER bucket", 1, result.size());
+    PhoenixInputSplit resultSplit = (PhoenixInputSplit) result.get(0);
+    // The split is coalesced under UNKNOWN_SERVER — location reflects that server name.
+    assertEquals("Split location should be UNKNOWN_SERVER",
+      PhoenixSyncTableInputFormat.UNKNOWN_SERVER, resultSplit.getLocations()[0]);
   }
 
   @Test
-  public void testCoalesceSplitsFailureThrowsIOExceptionWithMessage() throws Exception {
-    // coalescing failures throw SQLException directly when called from tests
+  public void testCoalesceSplitsWithNullServerNameFallsBackToUnknownServer() throws Exception {
+    // Location present but serverName is null (e.g. region in transition) — same fallback.
     List<InputSplit> splits = new ArrayList<>();
     splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
 
-    // Mock ConnectionQueryServices to throw SQLException (simulating cluster issue)
+    HRegionLocation nullServerLocation = mock(HRegionLocation.class);
+    when(nullServerLocation.getServerName()).thenReturn(null);
+    when(mockQueryServices.getTableRegionLocation(any(byte[].class), any(byte[].class)))
+      .thenReturn(nullServerLocation);
+
+    List<InputSplit> result =
+      inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
+
+    assertEquals("Should return 1 split assigned to UNKNOWN_SERVER bucket", 1, result.size());
+    PhoenixInputSplit resultSplit = (PhoenixInputSplit) result.get(0);
+    assertEquals("Split location should be UNKNOWN_SERVER",
+      PhoenixSyncTableInputFormat.UNKNOWN_SERVER, resultSplit.getLocations()[0]);
+  }
+
+  @Test
+  public void testCoalesceSplitsMultipleNullLocationsCoalescedIntoOneUnknownSplit()
+    throws Exception {
+    // Multiple splits with unavailable region location — all grouped into one UNKNOWN_SERVER split.
+    List<InputSplit> splits = new ArrayList<>();
+    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
+    splits.add(createSplit(Bytes.toBytes("d"), Bytes.toBytes("g")));
+    splits.add(createSplit(Bytes.toBytes("g"), Bytes.toBytes("j")));
+
+    when(mockQueryServices.getTableRegionLocation(any(byte[].class), any(byte[].class)))
+      .thenReturn(null);
+
+    List<InputSplit> result =
+      inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
+
+    assertEquals("All RIT splits should be coalesced into one UNKNOWN_SERVER split", 1,
+      result.size());
+    PhoenixInputSplit coalescedSplit = (PhoenixInputSplit) result.get(0);
+    assertTrue("UNKNOWN_SERVER split should be marked as coalesced", coalescedSplit.isCoalesced());
+    assertEquals("Should contain all 3 KeyRanges", 3, coalescedSplit.getKeyRanges().size());
+  }
+
+  @Test
+  public void testCoalesceSplitsMixedValidAndNullLocations() throws Exception {
+    // Scenario: 2 splits on server1, 2 splits with null location (RIT).
+    // Expected: 2 output splits — 1 coalesced on server1, 1 coalesced on UNKNOWN_SERVER.
+    // This is the most realistic production scenario: a region split mid-job affects only a
+    // subset of regions while the rest are healthy.
+    List<InputSplit> splits = new ArrayList<>();
+    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
+    splits.add(createSplit(Bytes.toBytes("d"), Bytes.toBytes("g")));
+    splits.add(createSplit(Bytes.toBytes("g"), Bytes.toBytes("j")));
+    splits.add(createSplit(Bytes.toBytes("j"), Bytes.toBytes("m")));
+
+    HRegionLocation mockRegion = createMockRegionLocation("server1:16020", Bytes.toBytes("a"));
+    when(mockQueryServices.getTableRegionLocation(physicalTableName, Bytes.toBytes("a")))
+      .thenReturn(mockRegion);
+    when(mockQueryServices.getTableRegionLocation(physicalTableName, Bytes.toBytes("d")))
+      .thenReturn(mockRegion);
+    when(mockQueryServices.getTableRegionLocation(physicalTableName, Bytes.toBytes("g")))
+      .thenReturn(null);
+    when(mockQueryServices.getTableRegionLocation(physicalTableName, Bytes.toBytes("j")))
+      .thenReturn(null);
+
+    List<InputSplit> result =
+      inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
+
+    assertEquals("Should produce 2 splits: server1 bucket + UNKNOWN_SERVER bucket", 2,
+      result.size());
+
+    // Collect split locations
+    List<String> locations = new ArrayList<>();
+    for (InputSplit s : result) {
+      locations.add(((PhoenixInputSplit) s).getLocations()[0]);
+    }
+
+    assertTrue("Should have a server1 split", locations.contains("server1:16020"));
+    assertTrue("Should have an UNKNOWN_SERVER split",
+      locations.contains(PhoenixSyncTableInputFormat.UNKNOWN_SERVER));
+
+    // Verify key range counts: server1 gets 2, UNKNOWN_SERVER gets 2
+    for (InputSplit s : result) {
+      PhoenixInputSplit ps = (PhoenixInputSplit) s;
+      String loc = ps.getLocations()[0];
+      if ("server1:16020".equals(loc)) {
+        assertEquals("server1 bucket should have 2 KeyRanges", 2, ps.getKeyRanges().size());
+      } else {
+        assertEquals("UNKNOWN_SERVER bucket should have 2 KeyRanges", 2, ps.getKeyRanges().size());
+      }
+    }
+  }
+
+  @Test
+  public void testCoalesceSplitsFailureThrowsForGenuineClusterError() throws Exception {
+    // A real cluster error (SQLException) should still propagate — not be swallowed.
+    List<InputSplit> splits = new ArrayList<>();
+    splits.add(createSplit(Bytes.toBytes("a"), Bytes.toBytes("d")));
+
     SQLException simulatedFailure =
       new SQLException("Simulated RegionServer communication failure");
     when(mockQueryServices.getTableRegionLocation(any(byte[].class), any(byte[].class)))
@@ -481,10 +559,9 @@ public class PhoenixSyncTableInputFormatTest {
 
     try {
       inputFormat.coalesceSplits(splits, mockQueryServices, physicalTableName);
-      fail("Expected SQLException to be thrown for coalescing failure");
+      fail("Expected SQLException to be thrown for a genuine cluster error");
     } catch (SQLException e) {
-      // Verify exception message is informative
-      assertTrue("Exception message should mention coalescing failure",
+      assertTrue("Exception message should be preserved",
         e.getMessage().contains("Simulated RegionServer communication failure"));
     }
   }

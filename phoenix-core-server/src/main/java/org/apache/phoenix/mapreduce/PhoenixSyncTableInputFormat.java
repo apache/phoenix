@@ -53,6 +53,13 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
 
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixSyncTableInputFormat.class);
 
+  // Sentinel server name used when a region location lookup returns null or has a null server.
+  // This can happen transiently during a region-in-transition (RIT) event (e.g. a split).
+  // Splits that cannot be placed on a specific server are coalesced together under this key
+  // rather than failing the job, since split coalescing is an optimisation, not a correctness
+  // requirement.
+  static final String UNKNOWN_SERVER = "UNKNOWN_SERVER";
+
   public PhoenixSyncTableInputFormat() {
     super();
   }
@@ -273,6 +280,11 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
   /**
    * Groups splits by RegionServer location for locality-aware coalescing. Uses
    * ConnectionQueryServices to determine which server hosts each region.
+   * <p>
+   * If the region location is unavailable (null location or null server name), which can happen
+   * transiently during a region-in-transition (RIT) event such as a split, the split is assigned to
+   * {@link #UNKNOWN_SERVER} rather than failing the job. Since split coalescing is an optimisation,
+   * a transient lookup failure should degrade gracefully, not abort the MR job.
    * @param splits            List of splits to group
    * @param queryServices     ConnectionQueryServices for querying region locations
    * @param physicalTableName Physical HBase table name
@@ -287,15 +299,16 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
       KeyRange keyRange = pSplit.getKeyRange();
       HRegionLocation regionLocation =
         queryServices.getTableRegionLocation(physicalTableName, keyRange.getLowerRange());
-      if (regionLocation == null) {
-        throw new IOException("Could not determine region location for key: "
-          + Bytes.toStringBinary(keyRange.getLowerRange()));
+      String serverName;
+      if (regionLocation == null || regionLocation.getServerName() == null) {
+        LOGGER.warn(
+          "Could not determine region server for key: {}. "
+            + "Region may be in transition. Assigning split to {} bucket.",
+          Bytes.toStringBinary(keyRange.getLowerRange()), UNKNOWN_SERVER);
+        serverName = UNKNOWN_SERVER;
+      } else {
+        serverName = regionLocation.getServerName().getAddress().toString();
       }
-      if (regionLocation.getServerName() == null) {
-        throw new IOException("Could not determine server name for region at key: "
-          + Bytes.toStringBinary(keyRange.getLowerRange()));
-      }
-      String serverName = regionLocation.getServerName().getAddress().toString();
       splitsByServer.computeIfAbsent(serverName, k -> new ArrayList<>()).add(pSplit);
       if (LOGGER.isDebugEnabled()) {
         LOGGER.debug("Split {} assigned to server {}",
