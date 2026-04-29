@@ -54,6 +54,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.MRJobConfig;
+import org.apache.hadoop.mapreduce.TaskCounter;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -160,6 +161,7 @@ public class PhoenixSyncTableToolIT {
 
     validateSyncCounters(counters, 10, 10, 1, 3);
     validateMapperCounters(counters, 1, 3);
+    assertEquals("Expected 4 mapper task to be created", 4, counters.taskCreated);
 
     List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
       queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
@@ -206,6 +208,8 @@ public class PhoenixSyncTableToolIT {
 
     validateSyncCounters(counters, 10, 7, 7, 3);
     validateMapperCounters(counters, 1, 3);
+    assertEquals("Should have only 1 Mapper task created with coalescing", 4, counters.taskCreated);
+
   }
 
   @Test
@@ -1192,10 +1196,8 @@ public class PhoenixSyncTableToolIT {
 
     // Configure paging with aggressive timeouts to force mid-chunk timeouts
     Configuration conf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
-
-    long aggressiveRpcTimeout = 2L;
-    conf.setLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB, aggressiveRpcTimeout);
-    conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, aggressiveRpcTimeout);
+    conf.setBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB, true);
+    conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 1);
 
     int chunkSize = 10240;
 
@@ -1255,15 +1257,10 @@ public class PhoenixSyncTableToolIT {
 
     // Configure paging with aggressive timeouts to force mid-chunk timeouts
     Configuration conf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
-
-    // Enable server-side paging
     conf.setBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB, true);
-    // Set extremely short rpc timeout to force frequent paging
-    long aggressiveRpcTimeout = 1L; // 1ms RPC timeout
-    conf.setLong(QueryServices.SYNC_TABLE_RPC_TIMEOUT_ATTRIB, aggressiveRpcTimeout);
-    conf.setLong(HConstants.HBASE_RPC_TIMEOUT_KEY, aggressiveRpcTimeout);
+    conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 1);
 
-    int chunkSize = 102400; // 100KB
+    int chunkSize = 10240;
 
     // Create a thread that will perform splits on source cluster during sync
     Thread sourceSplitThread = new Thread(() -> {
@@ -1697,6 +1694,29 @@ public class PhoenixSyncTableToolIT {
     assertTrue("Second run with all versions should succeed", job3.isSuccessful());
     validateSyncCounters(counters3, 10, 10, 9, 1);
     validateMapperCounters(counters3, 3, 1);
+  }
+
+  @Test
+  public void testSyncTableValidateWithSplitCoalescing() throws Exception {
+    setupStandardTestWithReplication(uniqueTableName, 1, 10);
+
+    introduceAndVerifyTargetDifferences(uniqueTableName);
+
+    // Enable split coalescing via command-line parameter, all regions will be coalesced into one
+    // mapper
+    Job job = runSyncTool(uniqueTableName, "--coalesce-split");
+    SyncCountersResult counters = getSyncCounters(job);
+
+    assertEquals("Should have only 1 Mapper task created with coalescing", 1, counters.taskCreated);
+
+    validateSyncCounters(counters, 10, 10, 7, 3);
+    validateMapperCounters(counters, 1, 3);
+
+    // Verify checkpoint entries are created correctly
+    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
+    validateCheckpointEntries(checkpointEntries, uniqueTableName, targetZkQuorum, 10, 10, 7, 3, 4,
+      3, null);
   }
 
   /**
@@ -2587,6 +2607,7 @@ public class PhoenixSyncTableToolIT {
     public final long chunksVerified;
     public final long mappersVerified;
     public final long mappersMismatched;
+    public final long taskCreated;
 
     SyncCountersResult(Counters counters) {
       this.sourceRowsProcessed =
@@ -2597,6 +2618,7 @@ public class PhoenixSyncTableToolIT {
       this.chunksVerified = counters.findCounter(SyncCounters.CHUNKS_VERIFIED).getValue();
       this.mappersVerified = counters.findCounter(SyncCounters.MAPPERS_VERIFIED).getValue();
       this.mappersMismatched = counters.findCounter(SyncCounters.MAPPERS_MISMATCHED).getValue();
+      this.taskCreated = counters.findCounter(TaskCounter.MAP_INPUT_RECORDS).getValue();
     }
 
     public void logCounters(String testName) {
