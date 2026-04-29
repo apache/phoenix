@@ -77,10 +77,10 @@
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.4.runtime.version>2.5.10-hadoop3</hbase-2.5.4.runtime.version>
-    <hbase-2.5.runtime.version>2.5.13-hadoop3</hbase-2.5.runtime.version>
+    <hbase-2.5.runtime.version>2.5.14-hadoop3</hbase-2.5.runtime.version>
     <hbase-2.6.0.runtime.version>2.6.1-hadoop3</hbase-2.6.0.runtime.version>
     <hbase-2.6.3.runtime.version>2.6.3-hadoop3</hbase-2.6.3.runtime.version>
-    <hbase-2.6.runtime.version>2.6.4-hadoop3</hbase-2.6.runtime.version>
+    <hbase-2.6.runtime.version>2.6.5-hadoop3</hbase-2.6.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -136,6 +136,7 @@
     <junit.version>4.13.1</junit.version>
     <hdrhistogram.version>2.1.12</hdrhistogram.version>
     <byte-buddy.version>1.15.11</byte-buddy.version>
+    <bcprov-jdk18on.version>1.79</bcprov-jdk18on.version>
 
     <!-- These are only used for exclusion when shading, and the exact version is completely
     irrelevant, but we need to keep them up to date to appease static checkers. While Phoenix does
@@ -1371,6 +1372,11 @@
         <groupId>org.jruby.jcodings</groupId>
         <artifactId>jcodings</artifactId>
         <version>${jcodings.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk18on</artifactId>
+        <version>${bcprov-jdk18on.version}</version>
       </dependency>
       <dependency>
         <groupId>org.hdrhistogram</groupId>

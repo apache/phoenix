@@ -31,6 +31,7 @@ import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
 import org.apache.hadoop.hbase.security.UserProvider;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
+import org.apache.hadoop.mapreduce.JobCounter;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
@@ -115,6 +116,8 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   private static final Option READ_ALL_VERSIONS_OPTION = new Option("rav", "read-all-versions",
     false,
     "Enable reading all cell versions (optional, disabled by default, reads only latest version)");
+  private static final Option COALESCE_SPLIT_OPTION = new Option("coal", "coalesce-split", false,
+    "Enable split coalescing to reduce mapper count (optional, disabled by default)");
   private static final Option HELP_OPTION = new Option("h", "help", false, "Help");
 
   public static final String PHOENIX_SYNC_TABLE_NAME = "phoenix.sync.table.table.name";
@@ -124,7 +127,10 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   public static final String PHOENIX_SYNC_TABLE_DRY_RUN = "phoenix.sync.table.dry.run";
   public static final String PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES =
     "phoenix.sync.table.chunk.size.bytes";
-  public static final long DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES = 1024 * 1024 * 1024; // 1GB
+  public static final long DEFAULT_PHOENIX_SYNC_TABLE_CHUNK_SIZE_BYTES = 1024 * 1024 * 1024; // 1 GB
+  public static final String PHOENIX_SYNC_TABLE_SPLIT_COALESCING =
+    "phoenix.sync.table.split.coalescing";
+  public static final boolean DEFAULT_PHOENIX_SYNC_TABLE_SPLIT_COALESCING = false;
   public static final String PHOENIX_SYNC_TABLE_RAW_SCAN = "phoenix.sync.table.raw.scan";
   public static final String PHOENIX_SYNC_TABLE_READ_ALL_VERSIONS =
     "phoenix.sync.table.read.all.versions";
@@ -140,6 +146,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   private String tenantId;
   private boolean isRawScan = false;
   private boolean isReadAllVersions = false;
+  private boolean isCoalesceSplit = false;
 
   private String qTable;
   private String qSchemaName;
@@ -218,6 +225,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     setPhoenixSyncTableDryRun(configuration, isDryRun);
     setPhoenixSyncTableRawScan(configuration, isRawScan);
     setPhoenixSyncTableReadAllVersions(configuration, isReadAllVersions);
+    setPhoenixSyncTableSplitCoalescing(configuration, isCoalesceSplit);
     PhoenixConfigurationUtil.setSplitByStats(configuration, false);
     if (chunkSizeBytes != null) {
       setPhoenixSyncTableChunkSizeBytes(configuration, chunkSizeBytes);
@@ -292,6 +300,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     options.addOption(TENANT_ID_OPTION);
     options.addOption(RAW_SCAN_OPTION);
     options.addOption(READ_ALL_VERSIONS_OPTION);
+    options.addOption(COALESCE_SPLIT_OPTION);
     options.addOption(HELP_OPTION);
     return options;
   }
@@ -307,7 +316,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     formatter.printHelp(cmdLineSyntax,
       "Synchronize a Phoenix table between source and target clusters", options,
       "\nExample:\n" + cmdLineSyntax + " \\\n" + "  --table-name MY_TABLE \\\n"
-        + "  --target-cluster <zk_quorum>:2181 \\\n" + "  --dry-run\n",
+        + "  --target-cluster <zk_quorum>:2181 \\\n" + "  --dry-run \\\n" + "  --coalesce-split\n",
       true);
     System.exit(exitCode);
   }
@@ -344,15 +353,16 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
     isRawScan = cmdLine.hasOption(RAW_SCAN_OPTION.getOpt());
     isReadAllVersions = cmdLine.hasOption(READ_ALL_VERSIONS_OPTION.getOpt());
+    isCoalesceSplit = cmdLine.hasOption(COALESCE_SPLIT_OPTION.getOpt());
     qTable = SchemaUtil.getQualifiedTableName(schemaName, tableName);
     qSchemaName = SchemaUtil.normalizeIdentifier(schemaName);
     PhoenixMapReduceUtil.validateTimeRange(startTime, endTime, qTable);
     LOGGER.info(
       "PhoenixSyncTableTool configured - Table: {}, Schema: {}, Target: {}, "
         + "StartTime: {}, EndTime: {}, DryRun: {}, ChunkSize: {}, Foreground: {}, TenantId: {}, "
-        + "RawScan: {}, ReadAllVersions: {}",
+        + "RawScan: {}, ReadAllVersions: {}, CoalesceSplit: {}",
       qTable, qSchemaName, targetZkQuorum, startTime, endTime, isDryRun, chunkSizeBytes,
-      isForeground, tenantId, isRawScan, isReadAllVersions);
+      isForeground, tenantId, isRawScan, isReadAllVersions, isCoalesceSplit);
   }
 
   /**
@@ -396,6 +406,7 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     }
     Counters counters = job.getCounters();
     if (counters != null) {
+      long taskCreated = counters.findCounter(JobCounter.TOTAL_LAUNCHED_MAPS).getValue();
       long verifiedMappers =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_VERIFIED).getValue();
       long mismatchedMappers =
@@ -409,11 +420,11 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
       long targetRowsProcessed =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED).getValue();
       LOGGER.info(
-        "PhoenixSyncTable job completed, gathered counters are \n Verified Mappers: {}, \n"
+        "PhoenixSyncTable job completed, gathered counters are \n Task Created: {}, \n Verified Mappers: {}, \n"
           + "Mismatched Mappers: {}, \n Chunks Verified: {}, \n"
           + "Chunks Mismatched: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}",
-        verifiedMappers, mismatchedMappers, chunksVerified, chunksMismatched, sourceRowsProcessed,
-        targetRowsProcessed);
+        taskCreated, verifiedMappers, mismatchedMappers, chunksVerified, chunksMismatched,
+        sourceRowsProcessed, targetRowsProcessed);
     } else {
       LOGGER.warn("Unable to retrieve job counters for table {} - job may have failed "
         + "during initialization", qTable);
@@ -533,6 +544,18 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   public static boolean getPhoenixSyncTableReadAllVersions(Configuration conf) {
     Preconditions.checkNotNull(conf);
     return conf.getBoolean(PHOENIX_SYNC_TABLE_READ_ALL_VERSIONS, false);
+  }
+
+  public static void setPhoenixSyncTableSplitCoalescing(Configuration conf,
+    boolean splitCoalescing) {
+    Preconditions.checkNotNull(conf);
+    conf.setBoolean(PHOENIX_SYNC_TABLE_SPLIT_COALESCING, splitCoalescing);
+  }
+
+  public static boolean getPhoenixSyncTableSplitCoalescing(Configuration conf) {
+    Preconditions.checkNotNull(conf);
+    return conf.getBoolean(PHOENIX_SYNC_TABLE_SPLIT_COALESCING,
+      DEFAULT_PHOENIX_SYNC_TABLE_SPLIT_COALESCING);
   }
 
   public Job getJob() {

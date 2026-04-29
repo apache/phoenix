@@ -186,6 +186,16 @@ public abstract class BasePermissionsIT extends BaseTest {
     configureNamespacesOnServer(config, isNamespaceMapped);
     configureStatsConfigurations(config);
     config.setBoolean(LocalHBaseCluster.ASSIGN_RANDOM_PORTS, true);
+    // Restore pre-2.5.14 RPC scheduling defaults to avoid circular RPC deadlock
+    // where RS handler -> Master (getUserPermissions) -> RS (Get on hbase:acl)
+    // HBASE-29837 changed MetaRWQueueRpcExecutor defaults causing handler starvation
+    config.setFloat("hbase.ipc.server.metacallqueue.scan.ratio", 0f);
+    config.setFloat("hbase.ipc.server.metacallqueue.read.ratio", 0.9f);
+    config.setFloat("hbase.ipc.server.metacallqueue.handler.factor", 0.1f);
+    // HBASE-29141 changed queue length defaults to -1 (per-handler calculation),
+    // restore explicit queue length to avoid undersized queues with few handlers
+    config.setInt("hbase.ipc.server.max.callqueue.length", 1024);
+    config.setInt("hbase.ipc.server.priority.max.callqueue.length", 1024);
     BaseTest.setPhoenixRegionServerEndpoint(config);
 
     testUtil.startMiniCluster(1);
