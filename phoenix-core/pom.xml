@@ -392,7 +392,6 @@
     <dependency>
       <groupId>org.bouncycastle</groupId>
       <artifactId>bcprov-jdk18on</artifactId>
-      <version>1.79</version>
       <scope>test</scope>
     </dependency>
     <!-- logging end -->
