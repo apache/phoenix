@@ -68,7 +68,7 @@ public abstract class ReplicationLogDiscovery {
   /**
    * Default interval in seconds between replay operations
    */
-  private static final long DEFAULT_REPLAY_INTERVAL_SECONDS = 10;
+  private static final long DEFAULT_REPLAY_INTERVAL_SECONDS = 60;
 
   /**
    * Default timeout in seconds for graceful shutdown of the executor service
@@ -150,13 +150,17 @@ public abstract class ReplicationLogDiscovery {
       // Initialize and schedule the executors
       scheduler = Executors.newScheduledThreadPool(getExecutorThreadCount(),
         new ThreadFactoryBuilder().setNameFormat(getExecutorThreadNameFormat()).build());
+      long initialDelayMs = computeAlignedInitialDelay();
+      long replayIntervalMs = getReplayIntervalSeconds() * 1000L;
+      LOG.info("Scheduling replay for haGroup: {} with initialDelay={}ms, interval={}ms",
+        haGroupName, initialDelayMs, replayIntervalMs);
       scheduler.scheduleAtFixedRate(() -> {
         try {
           replay();
         } catch (Exception e) {
           LOG.error("Error during replay", e);
         }
-      }, 0, getReplayIntervalSeconds(), TimeUnit.SECONDS);
+      }, initialDelayMs, replayIntervalMs, TimeUnit.MILLISECONDS);
 
       isRunning = true;
       LOG.info("ReplicationLogDiscovery started for haGroup: {}", haGroupName);
@@ -505,6 +509,20 @@ public abstract class ReplicationLogDiscovery {
    */
   public double getWaitingBufferPercentage() {
     return DEFAULT_WAITING_BUFFER_PERCENTAGE;
+  }
+
+  /**
+   * Computes initial delay to align the scheduler to round-eligible boundaries so all RS wake up
+   * at the same wall-clock moment. A round becomes eligible when currentTime >= roundEndTime +
+   * bufferMillis, and rounds repeat every roundTimeMills. This gives a universal grid of eligible
+   * ticks at bufferMillis, bufferMillis + roundTimeMills, bufferMillis + 2*roundTimeMills, etc.
+   * from epoch. All RS compute the same grid regardless of when start() is called.
+   * @return the initial delay in milliseconds until the next round-eligible tick
+   */
+  protected long computeAlignedInitialDelay() {
+    long now = EnvironmentEdgeManager.currentTime();
+    long elapsed = (now - bufferMillis) % roundTimeMills;
+    return (elapsed == 0) ? 0 : roundTimeMills - elapsed;
   }
 
   public int getInProgressFileMaxRetries() {

@@ -139,7 +139,7 @@ public class ReplicationLogDiscoveryTest {
 
     // Verify replay interval
     long replayInterval = discovery.getReplayIntervalSeconds();
-    assertEquals("Replay interval should be 10 seconds", 10L, replayInterval);
+    assertEquals("Replay interval should be 60 seconds", 60L, replayInterval);
 
     // 6. Ensure starting again does not create a new scheduler (and also should not throw any
     // exception)
@@ -157,6 +157,153 @@ public class ReplicationLogDiscoveryTest {
 
     // 9. Ensure isRunning is false
     assertFalse("Discovery should not be running after stop", discovery.isRunning());
+  }
+
+  @Test
+  public void testComputeAlignedInitialDelay() {
+    long roundTimeMs = discovery.roundTimeMills;
+    long bufferMs = discovery.bufferMillis;
+
+    // RS initialize at different times within the same round window.
+    // All should align to the same next tick.
+    // With roundTimeMs=60000 and bufferMs=9000, ticks are at 9000, 69000, 129000, ...
+    // Place all 3 RS between tick 69000 and tick 129000 so they all target 129000.
+    AtomicLong mockTime = new AtomicLong();
+    EnvironmentEdgeManager.injectEdge(new EnvironmentEdge() {
+      @Override
+      public long currentTime() {
+        return mockTime.get();
+      }
+    });
+
+    try {
+      // RS-1 starts early in the window (10s after previous tick at 69000)
+      mockTime.set(79_000L);
+      long delay1 = discovery.computeAlignedInitialDelay();
+      long tick1 = mockTime.get() + delay1;
+
+      // RS-2 starts 30s later
+      mockTime.set(109_000L);
+      long delay2 = discovery.computeAlignedInitialDelay();
+      long tick2 = mockTime.get() + delay2;
+
+      // RS-3 starts 50s after RS-1 (just before the tick)
+      mockTime.set(128_000L);
+      long delay3 = discovery.computeAlignedInitialDelay();
+      long tick3 = mockTime.get() + delay3;
+
+      // All should align to the same tick (129000)
+      assertEquals("RS-1 and RS-2 should align to the same tick", tick1, tick2);
+      assertEquals("RS-2 and RS-3 should align to the same tick", tick2, tick3);
+      assertEquals("All should target tick at 129000", 129_000L, tick1);
+
+      // Delay should always be > 0 and <= roundTimeMs
+      assertTrue("Delay should be positive", delay1 > 0);
+      assertTrue("Delay should not exceed round time", delay1 <= roundTimeMs);
+      assertTrue("Delay should be positive", delay2 > 0);
+      assertTrue("Delay should not exceed round time", delay2 <= roundTimeMs);
+
+      // The aligned tick should be at a multiple of roundTimeMs offset by bufferMs
+      assertEquals("Tick should be aligned to round-eligible boundary",
+        0, (tick1 - bufferMs) % roundTimeMs);
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
+  }
+
+  @Test
+  public void testComputeAlignedInitialDelayExactlyOnTick() {
+    long roundTimeMs = discovery.roundTimeMills;
+    long bufferMs = discovery.bufferMillis;
+
+    AtomicLong mockTime = new AtomicLong();
+    EnvironmentEdgeManager.injectEdge(new EnvironmentEdge() {
+      @Override
+      public long currentTime() {
+        return mockTime.get();
+      }
+    });
+
+    try {
+      // Set time to exactly on a round-eligible tick boundary
+      long exactTick = roundTimeMs * 5 + bufferMs;
+      mockTime.set(exactTick);
+      long delay = discovery.computeAlignedInitialDelay();
+      assertEquals("Delay should be 0 when exactly on a tick", 0, delay);
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
+  }
+
+  @Test
+  public void testComputeAlignedInitialDelaySlightlyBeyondBuffer() {
+    // Time is 12 seconds into the round (past the 9s buffer) — the tick has already passed,
+    // so we should wait until the next round-eligible tick
+    long roundTimeMs = discovery.roundTimeMills;
+    long bufferMs = discovery.bufferMillis;
+
+    AtomicLong mockTime = new AtomicLong();
+    EnvironmentEdgeManager.injectEdge(new EnvironmentEdge() {
+      @Override
+      public long currentTime() {
+        return mockTime.get();
+      }
+    });
+
+    try {
+      // Round-eligible tick is at roundTimeMs * 5 + bufferMs
+      // Set time to 3s past that tick (12s into the round, buffer is 9s)
+      long tick = roundTimeMs * 5 + bufferMs;
+      long now = tick + 3_000L;
+      mockTime.set(now);
+      long delay = discovery.computeAlignedInitialDelay();
+
+      // Should wait until the next tick: tick + roundTimeMs
+      long expectedDelay = roundTimeMs - 3_000L;
+      assertEquals("Should wait until next round-eligible tick", expectedDelay, delay);
+
+      // Verify the target tick is correct
+      long targetTick = now + delay;
+      assertEquals("Target should be next tick", tick + roundTimeMs, targetTick);
+      assertEquals("Target should be aligned", 0, (targetTick - bufferMs) % roundTimeMs);
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
+  }
+
+  @Test
+  public void testComputeAlignedInitialDelaySlightlyBeforeBuffer() {
+    // Time is 6 seconds into the round (before the 9s buffer) — the tick hasn't arrived yet,
+    // so we should wait for it
+    long roundTimeMs = discovery.roundTimeMills;
+    long bufferMs = discovery.bufferMillis;
+
+    AtomicLong mockTime = new AtomicLong();
+    EnvironmentEdgeManager.injectEdge(new EnvironmentEdge() {
+      @Override
+      public long currentTime() {
+        return mockTime.get();
+      }
+    });
+
+    try {
+      // Round-eligible tick is at roundTimeMs * 5 + bufferMs
+      // Set time to 3s before that tick (6s into the round, buffer is 9s)
+      long tick = roundTimeMs * 5 + bufferMs;
+      long now = tick - 3_000L;
+      mockTime.set(now);
+      long delay = discovery.computeAlignedInitialDelay();
+
+      // Should wait 3s until the upcoming tick
+      assertEquals("Should wait until upcoming round-eligible tick", 3_000L, delay);
+
+      // Verify the target tick is correct
+      long targetTick = now + delay;
+      assertEquals("Target should be the upcoming tick", tick, targetTick);
+      assertEquals("Target should be aligned", 0, (targetTick - bufferMs) % roundTimeMs);
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
   }
 
   @Test
