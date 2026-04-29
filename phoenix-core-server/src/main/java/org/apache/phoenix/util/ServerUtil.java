@@ -291,4 +291,33 @@ public class ServerUtil {
     }
     return t;
   }
+
+  /**
+   * Derives a safe row key for empty result sets based on scan or region boundaries. Used when
+   * constructing KeyValues for aggregate results or OFFSET responses when no actual data rows were
+   * scanned.
+   * @param scan   The scan being executed
+   * @param region The region being scanned
+   * @return A valid row key derived from scan or region boundaries
+   */
+  public static byte[] deriveRowKeyFromScanOrRegionBoundaries(Scan scan, Region region) {
+    byte[] startKey =
+      scan.getStartRow().length > 0 ? scan.getStartRow() : region.getRegionInfo().getStartKey();
+    byte[] endKey =
+      scan.getStopRow().length > 0 ? scan.getStopRow() : region.getRegionInfo().getEndKey();
+
+    byte[] rowKey = ByteUtil.getLargestPossibleRowKeyInRange(startKey, endKey);
+
+    if (rowKey == null) {
+      if (scan.includeStartRow()) {
+        rowKey = startKey;
+      } else if (scan.includeStopRow()) {
+        rowKey = endKey;
+      } else {
+        rowKey = HConstants.EMPTY_END_ROW;
+      }
+    }
+
+    return rowKey;
+  }
 }
