@@ -22,11 +22,13 @@ import java.io.InterruptedIOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
-import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -39,6 +41,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
@@ -47,6 +50,13 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFac
  * This class implements the functionality for managing the replication log including log rotation
  * based on time or size, retries on file operations and the lifecycle of the underlying
  * LogFileWriter.
+ * </p>
+ * <p>
+ * All rotation (scheduled round-boundary ticks, on-demand size, and error recovery) is handled by
+ * {@link LogRotationTask} which creates a new writer on a background thread and stages it in
+ * {@code pendingWriter}. The disruptor consumer thread drains the staged writer inside
+ * {@link #apply} before each attempt, swaps the pointer, replays any unsynced appends, and submits
+ * the old writer to {@code closeExecutor} for async close.
  * </p>
  */
 @edu.umd.cs.findbugs.annotations.SuppressWarnings(
@@ -59,22 +69,24 @@ public class ReplicationLog {
   protected final long rotationSizeBytes;
   protected final int maxRotationRetries;
   protected final Compression.Algorithm compression;
-  protected final ReentrantLock lock = new ReentrantLock();
-  protected final int maxAttempts; // Configurable max attempts for sync
-  protected final long retryDelayMs; // Configurable delay between attempts
-  // Underlying file writer
+  protected final int maxAttempts;
+  protected final long retryDelayMs;
+  // Underlying file writer — only mutated by the disruptor consumer thread.
   protected volatile LogFileWriter currentWriter;
-  protected final AtomicLong lastRotationTime = new AtomicLong();
   protected final AtomicLong writerGeneration = new AtomicLong();
   protected final AtomicLong rotationFailures = new AtomicLong(0);
+  // Staged writer created by the background LogRotationTask, drained by checkAndReplaceWriter().
+  private final AtomicReference<LogFileWriter> pendingWriter = new AtomicReference<>();
+  private final AtomicBoolean closed = new AtomicBoolean(false);
+  private final AtomicBoolean rotationRequested = new AtomicBoolean(false);
+  private final ExecutorService closeExecutor;
   protected ScheduledExecutorService rotationExecutor;
-  protected volatile boolean closed = false;
   // Manages the creation of the actual log file in the shard directory
   protected ReplicationShardDirectoryManager replicationShardDirectoryManager;
   // List of in-flight appends which are successful but haven't been synced yet
   private final List<Record> currentBatch = new ArrayList<>();
-  // Current version of the writer being used for file operations. It is needed for detecting
-  // when the writer changes because of rotation while we are in the middle of a write operation.
+  // Tracks the generation of the writer that currentBatch was appended to.
+  // Used to detect writer swaps and trigger replay of unsynced appends.
   private long generation;
 
   public ReplicationLog(ReplicationLogGroup logGroup,
@@ -85,8 +97,7 @@ public class ReplicationLog {
       ReplicationLogGroup.DEFAULT_REPLICATION_LOG_SYNC_RETRIES) + 1;
     this.retryDelayMs = conf.getLong(ReplicationLogGroup.REPLICATION_LOG_RETRY_DELAY_MS_KEY,
       ReplicationLogGroup.DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS);
-    this.rotationTimeMs = conf.getLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_TIME_MS_KEY,
-      ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS);
+    this.rotationTimeMs = shardManager.getReplicationRoundDurationSeconds() * 1000L;
     long rotationSize = conf.getLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY,
       ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_SIZE_BYTES);
     double rotationSizePercent =
@@ -104,29 +115,18 @@ public class ReplicationLog {
       try {
         compression = Compression.getCompressionAlgorithmByName(compressionName);
       } catch (IllegalArgumentException e) {
-        LOG.warn("Unknown compression type " + compressionName + ", using NONE", e);
+        LOG.warn("Unknown compression type {}, using NONE", compressionName, e);
       }
     }
     this.compression = compression;
     this.replicationShardDirectoryManager = shardManager;
-  }
-
-  /** The reason for requesting a log rotation. */
-  protected enum RotationReason {
-    /** Rotation requested due to time threshold being exceeded. */
-    TIME,
-    /** Rotation requested due to size threshold being exceeded. */
-    SIZE,
-    /** Rotation requested due to an error condition. */
-    ERROR
+    this.closeExecutor = Executors.newCachedThreadPool(new ThreadFactoryBuilder().setDaemon(true)
+      .setNameFormat("Close-ReplicationLog-Writer-" + logGroup.getHAGroupName() + "-%d").build());
   }
 
   /** Initialize the writer. */
   public void init() throws IOException {
-    // Start time based rotation.
-    lastRotationTime.set(EnvironmentEdgeManager.currentTimeMillis());
     startRotationExecutor();
-    // Create the initial writer
     currentWriter = createNewWriter();
     generation = currentWriter.getGeneration();
   }
@@ -146,18 +146,25 @@ public class ReplicationLog {
   }
 
   protected void startRotationExecutor() {
-    long rotationCheckInterval = getRotationCheckInterval(rotationTimeMs);
+    long now = EnvironmentEdgeManager.currentTimeMillis();
+    long currentRoundStart = replicationShardDirectoryManager.getNearestRoundStartTimestamp(now);
+    long initialDelay = computeInitialDelay(now, currentRoundStart, rotationTimeMs);
+    startRotationExecutor(initialDelay);
+  }
+
+  protected void startRotationExecutor(long initialDelay) {
     rotationExecutor = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
       .setNameFormat("ReplicationLogRotation-" + logGroup.getHAGroupName() + "-%d").setDaemon(true)
       .build());
-    rotationExecutor.scheduleAtFixedRate(new LogRotationTask(), rotationCheckInterval,
-      rotationCheckInterval, TimeUnit.MILLISECONDS);
-    LOG.debug("Started rotation executor with interval {}ms", rotationCheckInterval);
+    rotationExecutor.scheduleAtFixedRate(new LogRotationTask(), initialDelay, rotationTimeMs,
+      TimeUnit.MILLISECONDS);
+    LOG.info("Started rotation executor with initial delay {}ms and interval {}ms", initialDelay,
+      rotationTimeMs);
   }
 
-  protected long getRotationCheckInterval(long rotationTimeMs) {
-    long interval = Math.max(10 * 1000L, Math.min(60 * 1000L, rotationTimeMs / 10));
-    return interval;
+  @VisibleForTesting
+  static long computeInitialDelay(long now, long currentRoundStart, long rotationTimeMs) {
+    return currentRoundStart + rotationTimeMs - now;
   }
 
   protected void stopRotationExecutor() {
@@ -174,114 +181,79 @@ public class ReplicationLog {
     }
   }
 
-  /** Gets the current writer, rotating it if necessary based on size thresholds. */
-  protected LogFileWriter getWriter() throws IOException {
-    lock.lock();
-    try {
-      if (shouldRotate()) {
-        rotateLog(RotationReason.SIZE);
-      }
-      return currentWriter;
-    } finally {
-      lock.unlock();
-    }
-  }
-
   /**
-   * Checks if the current log file needs to be rotated based on time or size. Must be called under
-   * lock.
+   * Checks if the current log file needs to be rotated based on size.
    * @return true if rotation is needed, false otherwise.
    * @throws IOException If an error occurs checking the file size.
    */
-  protected boolean shouldRotate() throws IOException {
+  protected boolean shouldRotateForSize() throws IOException {
     if (currentWriter == null) {
       LOG.warn("Current writer is null, forcing rotation.");
       return true;
     }
-    // Check time threshold
-    long now = EnvironmentEdgeManager.currentTimeMillis();
-    long last = lastRotationTime.get();
-    if (now - last >= rotationTimeMs) {
-      LOG.debug("Rotating log file due to time threshold ({} ms elapsed, threshold {} ms)",
-        now - last, rotationTimeMs);
-      return true;
-    }
-
-    // Check size threshold (using actual file size for accuracy)
     long currentSize = currentWriter.getLength();
     if (currentSize >= rotationSizeBytes) {
-      LOG.debug("Rotating log file due to size threshold ({} bytes, threshold {} bytes)",
-        currentSize, rotationSizeBytes);
+      LOG.info("Rotating log file {} due to size threshold ({} bytes, threshold {} bytes)",
+        currentWriter, currentSize, rotationSizeBytes);
       return true;
     }
-
     return false;
   }
 
-  /**
-   * Closes the current log writer and opens a new one, updating rotation metrics.
-   * <p>
-   * This method handles the rotation of log files, which can be triggered by:
-   * <ul>
-   * <li>Time threshold exceeded (TIME)</li>
-   * <li>Size threshold exceeded (SIZE)</li>
-   * <li>Error condition requiring rotation (ERROR)</li>
-   * </ul>
-   * <p>
-   * The method implements retry logic for handling rotation failures. If rotation fails, it retries
-   * up to maxRotationRetries times. If the number of failures exceeds maxRotationRetries, an
-   * exception is thrown. Otherwise, it logs a warning and continues with the current writer.
-   * <p>
-   * The method is thread-safe and uses a lock to ensure atomic rotation operations.
-   * @param reason The reason for requesting log rotation
-   * @return The new LogFileWriter instance if rotation succeeded, or the current writer if rotation
-   *         failed
-   * @throws IOException if rotation fails after exceeding maxRotationRetries
-   */
-  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "UL_UNRELEASED_LOCK",
-      justification = "False positive")
-  protected LogFileWriter rotateLog(RotationReason reason) throws IOException {
-    lock.lock();
-    try {
-      // Try to get the new writer first. If it fails we continue using the current writer.
-      // Increment the writer generation
-      LogFileWriter newWriter = createNewWriter();
-      LOG.debug("Created new writer: {}", newWriter);
-      // Close the current writer
-      closeWriter(currentWriter);
-      currentWriter = newWriter;
-      lastRotationTime.set(EnvironmentEdgeManager.currentTimeMillis());
-      rotationFailures.set(0);
-      logGroup.getMetrics().incrementRotationCount();
-      switch (reason) {
-        case TIME:
-          logGroup.getMetrics().incrementTimeBasedRotationCount();
-          break;
-        case SIZE:
-          logGroup.getMetrics().incrementSizeBasedRotationCount();
-          break;
-        case ERROR:
-          logGroup.getMetrics().incrementErrorBasedRotationCount();
-          break;
-      }
-    } catch (IOException e) {
-      // If we fail to rotate the log, we increment the failure counter. If we have exceeded
-      // the maximum number of retries, we close the log and throw the exception. Otherwise
-      // we log a warning and continue.
-      logGroup.getMetrics().incrementRotationFailureCount();
-      long numFailures = rotationFailures.getAndIncrement();
-      if (numFailures >= maxRotationRetries) {
-        LOG.warn("Failed to rotate log (attempt {}/{}), closing log", numFailures,
-          maxRotationRetries, e);
-        closeOnError();
-        throw e;
-      }
-      LOG.warn("Failed to rotate log (attempt {}/{}), retrying...", numFailures, maxRotationRetries,
-        e);
-    } finally {
-      lock.unlock();
-    }
+  @VisibleForTesting
+  protected LogFileWriter getWriter() {
+    checkAndReplaceWriter(false);
     return currentWriter;
+  }
+
+  /**
+   * Drains any staged pendingWriter, swapping it in as currentWriter.
+   * @param asyncClose if true, old writer is submitted to closeExecutor for async close; if false,
+   *                   old writer is closed synchronously on the calling thread.
+   */
+  protected void checkAndReplaceWriter(boolean asyncClose) {
+    LogFileWriter newWriter = pendingWriter.getAndSet(null);
+    if (newWriter != null) {
+      LogFileWriter oldWriter = currentWriter;
+      currentWriter = newWriter;
+      LOG.info("Swapped writer from {} to {}, asyncClose={}", oldWriter, newWriter, asyncClose);
+      if (asyncClose) {
+        submitClose(oldWriter);
+      } else {
+        closeWriter(oldWriter);
+      }
+    }
+  }
+
+  /**
+   * Submits an on-demand {@link LogRotationTask} to the executor. The compareAndSet avoids
+   * submitting duplicate tasks — if the flag is already set, a task is already queued.
+   */
+  private void requestRotation() {
+    if (rotationRequested.compareAndSet(false, true)) {
+      try {
+        rotationExecutor.execute(new LogRotationTask());
+      } catch (java.util.concurrent.RejectedExecutionException e) {
+        LOG.info("Rotation executor shut down, skipping on-demand rotation", e);
+        rotationRequested.set(false);
+      }
+    }
+  }
+
+  /**
+   * Requests an on-demand rotation if the current writer exceeds the size threshold.
+   */
+  private void requestRotationIfNeeded() throws IOException {
+    if (shouldRotateForSize()) {
+      requestRotation();
+    }
+  }
+
+  private void submitClose(LogFileWriter writer) {
+    if (writer == null) {
+      return;
+    }
+    closeExecutor.execute(() -> closeWriter(writer));
   }
 
   /** Closes the given writer, logging any errors that occur during close. */
@@ -289,12 +261,11 @@ public class ReplicationLog {
     if (writer == null) {
       return;
     }
-    LOG.debug("Closing writer: {}", writer);
+    LOG.info("Closing writer: {}", writer);
     try {
       writer.close();
     } catch (IOException e) {
-      // For now, just log and continue
-      LOG.error("Error closing log writer: " + writer, e);
+      LOG.error("Error closing log writer: {}", writer, e);
     }
   }
 
@@ -303,49 +274,55 @@ public class ReplicationLog {
    * @return true if closed, false otherwise
    */
   public boolean isClosed() {
-    return closed;
+    return closed.get();
   }
 
   private interface Action {
     void action(LogFileWriter writer) throws IOException;
   }
 
+  private void replayCurrentBatch() throws IOException {
+    if (currentBatch.isEmpty()) {
+      return;
+    }
+    LOG.info("Replaying {} unsynced records into new writer {}", currentBatch.size(),
+      currentWriter);
+    for (Record r : currentBatch) {
+      currentWriter.append(r.tableName, r.commitId, r.mutation);
+    }
+  }
+
   private void apply(Action action) throws IOException {
-    LogFileWriter writer = getWriter();
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      checkAndReplaceWriter(true);
       if (isClosed()) {
         throw new IOException("Closed");
       }
       try {
-        if (writer.getGeneration() > generation) {
-          generation = writer.getGeneration();
-          // If the writer has been rotated, we need to replay the current batch of
-          // in-flight appends into the new writer.
-          if (!currentBatch.isEmpty()) {
-            LOG.trace("Writer has been rotated, replaying in-flight batch");
-            for (Record r : currentBatch) {
-              writer.append(r.tableName, r.commitId, r.mutation);
-            }
-          }
+        if (currentWriter.getGeneration() > generation) {
+          replayCurrentBatch();
+          generation = currentWriter.getGeneration();
         }
-        action.action(writer);
+        action.action(currentWriter);
+        requestRotationIfNeeded();
         break;
       } catch (IOException e) {
-        // IO exception, force a rotation.
-        LOG.debug("Attempt " + attempt + "/" + maxAttempts + " failed", e);
+        LOG.debug("Attempt {}/{} failed", attempt, maxAttempts, e);
         if (attempt == maxAttempts) {
-          // TODO: Add log
           closeOnError();
           throw e;
         }
-        // Add delay before retrying to prevent tight loops
+        // First failure retries on the same writer (transient). Second failure
+        // requests a new writer to recover from non-transient stream errors.
+        if (attempt > 1) {
+          requestRotation();
+        }
         try {
           Thread.sleep(retryDelayMs);
         } catch (InterruptedException ie) {
           Thread.currentThread().interrupt();
           throw new InterruptedIOException("Interrupted during retry delay");
         }
-        writer = rotateLog(RotationReason.ERROR);
       }
     }
   }
@@ -361,8 +338,7 @@ public class ReplicationLog {
   }
 
   protected void sync() throws IOException {
-    apply(writer -> writer.sync());
-    // Sync completed, clear the list of in-flight appends.
+    apply(LogFileWriter::sync);
     currentBatch.clear();
   }
 
@@ -381,79 +357,81 @@ public class ReplicationLog {
    * attempted on a log that has encountered a critical error.
    */
   protected void closeOnError() {
-    lock.lock();
-    try {
-      if (closed) {
-        return;
-      }
-      closed = true;
-    } finally {
-      lock.unlock();
+    if (!closed.compareAndSet(false, true)) {
+      return;
     }
-    // Stop the time based rotation check.
     stopRotationExecutor();
-    // We expect a final sync will not work. Just close the inner writer.
+    closeExecutor.shutdownNow();
+    LogFileWriter staged = pendingWriter.getAndSet(null);
+    if (staged != null) {
+      closeWriter(staged);
+    }
     closeWriter(currentWriter);
   }
 
   /** Closes the log. */
   public void close() {
-    lock.lock();
-    try {
-      if (closed) {
-        return;
-      }
-      closed = true;
-    } finally {
-      lock.unlock();
+    if (!closed.compareAndSet(false, true)) {
+      return;
     }
-    // Stop the time based rotation check.
     stopRotationExecutor();
-    // We must for the disruptor before closing the current writer.
+    closeExecutor.shutdown();
+    try {
+      if (!closeExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+        closeExecutor.shutdownNow();
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      closeExecutor.shutdownNow();
+    }
+    LogFileWriter staged = pendingWriter.getAndSet(null);
+    if (staged != null) {
+      closeWriter(staged);
+    }
     closeWriter(currentWriter);
+  }
+
+  @VisibleForTesting
+  protected void forceRotation() {
+    new LogRotationTask().run();
+    checkAndReplaceWriter(false);
   }
 
   protected FileSystem getFileSystem(URI uri) throws IOException {
     return FileSystem.get(uri, logGroup.getConfiguration());
   }
 
-  /** Implements time based rotation independent of in-line checking. */
+  /**
+   * Creates a new writer on a background thread and stages it in {@code pendingWriter} for the
+   * consumer thread to drain inside {@link #apply}. Invoked both by the scheduled rotation executor
+   * at round boundaries and on-demand via {@link #requestRotation()}.
+   */
   protected class LogRotationTask implements Runnable {
     @Override
     public void run() {
-      if (closed) {
+      if (closed.get()) {
         return;
       }
-      // Use tryLock with a timeout to avoid blocking indefinitely if another thread holds
-      // the lock for an unexpectedly long time (e.g., during a problematic rotation).
-      boolean acquired = false;
+      rotationRequested.compareAndSet(true, false);
+
       try {
-        // Wait a short time for the lock
-        acquired = lock.tryLock(1, TimeUnit.SECONDS);
-        if (acquired) {
-          // Check only the time condition here, size is handled by getWriter
-          long now = EnvironmentEdgeManager.currentTimeMillis();
-          long last = lastRotationTime.get();
-          if (!closed && now - last >= rotationTimeMs) {
-            LOG.debug("Time based rotation needed ({} ms elapsed, threshold {} ms).", now - last,
-              rotationTimeMs);
-            try {
-              rotateLog(RotationReason.TIME); // rotateLog updates lastRotationTime
-            } catch (IOException e) {
-              LOG.error("Failed to rotate log, currentWriter is {}", currentWriter, e);
-              // More robust error handling goes here once the store-and-forward
-              // fallback is implemented. For now we just log the error and continue.
-            }
-          }
-        } else {
-          LOG.warn("LogRotationTask could not acquire lock, skipping check this time.");
+        LogFileWriter newWriter = createNewWriter();
+        LogFileWriter undrained = pendingWriter.getAndSet(newWriter);
+        if (undrained != null) {
+          closeWriter(undrained);
         }
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt(); // Preserve interrupt status
-        LOG.warn("LogRotationTask interrupted while trying to acquire lock.");
-      } finally {
-        if (acquired) {
-          lock.unlock();
+        rotationFailures.set(0);
+        logGroup.getMetrics().incrementRotationCount();
+      } catch (IOException e) {
+        logGroup.getMetrics().incrementRotationFailureCount();
+        long numFailures = rotationFailures.incrementAndGet();
+        if (numFailures >= maxRotationRetries) {
+          LOG.error("Too many rotation failures ({}/{}), closing log", numFailures,
+            maxRotationRetries, e);
+          closeOnError();
+        } else {
+          LOG.info("Failed to create new writer for rotation (attempt {}/{}), retrying...",
+            numFailures, maxRotationRetries, e);
         }
       }
     }

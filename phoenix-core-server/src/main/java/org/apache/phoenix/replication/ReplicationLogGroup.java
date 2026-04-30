@@ -412,6 +412,7 @@ public class ReplicationLogGroup {
    * @throws IOException if initialization fails
    */
   protected void init() throws IOException {
+    LOG.info("Initializing ReplicationLogGroup {}", haGroupName);
     Optional<HAGroupStoreRecord> haRecord = haGroupStoreManager.getHAGroupStoreRecord(haGroupName);
     if (!haRecord.isPresent()) {
       String message =

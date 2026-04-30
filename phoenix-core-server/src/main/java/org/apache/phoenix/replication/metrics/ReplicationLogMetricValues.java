@@ -20,9 +20,6 @@ package org.apache.phoenix.replication.metrics;
 /** Class to hold the values of all metrics tracked by the ReplicationLog metrics source. */
 public class ReplicationLogMetricValues {
 
-  private final long timeBasedRotationCount;
-  private final long sizeBasedRotationCount;
-  private final long errorBasedRotationCount;
   private final long rotationCount;
   private final long rotationFailuresCount;
   private final long appendTime;
@@ -30,30 +27,14 @@ public class ReplicationLogMetricValues {
   private final long rotationTime;
   private final long ringBufferTime;
 
-  public ReplicationLogMetricValues(long timeBasedRotationCount, long sizeBasedRotationCount,
-    long errorBasedRotationCount, long rotationCount, long rotationFailuresCount, long appendTime,
+  public ReplicationLogMetricValues(long rotationCount, long rotationFailuresCount, long appendTime,
     long syncTime, long rotationTime, long ringBufferTime) {
-    this.timeBasedRotationCount = timeBasedRotationCount;
-    this.sizeBasedRotationCount = sizeBasedRotationCount;
-    this.errorBasedRotationCount = errorBasedRotationCount;
     this.rotationCount = rotationCount;
     this.rotationFailuresCount = rotationFailuresCount;
     this.appendTime = appendTime;
     this.syncTime = syncTime;
     this.rotationTime = rotationTime;
     this.ringBufferTime = ringBufferTime;
-  }
-
-  public long getTimeBasedRotationCount() {
-    return timeBasedRotationCount;
-  }
-
-  public long getSizeBasedRotationCount() {
-    return sizeBasedRotationCount;
-  }
-
-  public long getErrorBasedRotationCount() {
-    return errorBasedRotationCount;
   }
 
   public long getRotationCount() {

@@ -26,9 +26,6 @@ import org.apache.hadoop.metrics2.lib.MutableHistogram;
 public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
   implements MetricsReplicationLogGroupSource {
 
-  private final MutableFastCounter timeBasedRotationCount;
-  private final MutableFastCounter sizeBasedRotationCount;
-  private final MutableFastCounter errorBasedRotationCount;
   private final MutableFastCounter rotationCount;
   private final MutableFastCounter rotationFailuresCount;
   private final MutableHistogram appendTime;
@@ -44,12 +41,6 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
     String metricsContext, String metricsJmxContext, String haGroupName) {
     super(metricsName, metricsDescription, metricsContext,
       metricsJmxContext + ",haGroup=" + haGroupName);
-    timeBasedRotationCount = getMetricsRegistry().newCounter(TIME_BASED_ROTATION_COUNT,
-      TIME_BASED_ROTATION_COUNT_DESC, 0L);
-    sizeBasedRotationCount = getMetricsRegistry().newCounter(SIZE_BASED_ROTATION_COUNT,
-      SIZE_BASED_ROTATION_COUNT_DESC, 0L);
-    errorBasedRotationCount = getMetricsRegistry().newCounter(ERROR_BASED_ROTATION_COUNT,
-      ERROR_BASED_ROTATION_COUNT_DESC, 0L);
     rotationCount = getMetricsRegistry().newCounter(ROTATION_COUNT, ROTATION_COUNT_DESC, 0L);
     rotationFailuresCount =
       getMetricsRegistry().newCounter(ROTATION_FAILURES, ROTATION_FAILURES_DESC, 0L);
@@ -62,21 +53,6 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
   @Override
   public void close() {
     DefaultMetricsSystem.instance().unregisterSource(metricsJmxContext);
-  }
-
-  @Override
-  public void incrementTimeBasedRotationCount() {
-    timeBasedRotationCount.incr();
-  }
-
-  @Override
-  public void incrementSizeBasedRotationCount() {
-    sizeBasedRotationCount.incr();
-  }
-
-  @Override
-  public void incrementErrorBasedRotationCount() {
-    errorBasedRotationCount.incr();
   }
 
   @Override
@@ -111,10 +87,8 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
 
   @Override
   public ReplicationLogMetricValues getCurrentMetricValues() {
-    return new ReplicationLogMetricValues(timeBasedRotationCount.value(),
-      sizeBasedRotationCount.value(), errorBasedRotationCount.value(), rotationCount.value(),
-      rotationFailuresCount.value(), appendTime.getMax(), syncTime.getMax(), rotationTime.getMax(),
-      ringBufferTime.getMax());
+    return new ReplicationLogMetricValues(rotationCount.value(), rotationFailuresCount.value(),
+      appendTime.getMax(), syncTime.getMax(), rotationTime.getMax(), ringBufferTime.getMax());
   }
 
   @Override

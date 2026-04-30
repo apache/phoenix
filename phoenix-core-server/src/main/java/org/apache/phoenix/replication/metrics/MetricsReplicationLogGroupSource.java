@@ -27,15 +27,6 @@ public interface MetricsReplicationLogGroupSource extends BaseSource {
   String METRICS_DESCRIPTION = "Metrics about Replication Log Operations for an HA Group";
   String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
-  String TIME_BASED_ROTATION_COUNT = "timeBasedRotationCount";
-  String TIME_BASED_ROTATION_COUNT_DESC = "Number of time-based log rotations";
-
-  String SIZE_BASED_ROTATION_COUNT = "sizeBasedRotationCount";
-  String SIZE_BASED_ROTATION_COUNT_DESC = "Number of size-based log rotations";
-
-  String ERROR_BASED_ROTATION_COUNT = "errorBasedRotationCount";
-  String ERROR_BASED_ROTATION_COUNT_DESC = "Number of times rotateLog was called due to errors";
-
   String ROTATION_COUNT = "rotationCount";
   String ROTATION_COUNT_DESC = "Total number of times rotateLog was called";
 
@@ -53,24 +44,6 @@ public interface MetricsReplicationLogGroupSource extends BaseSource {
 
   String RING_BUFFER_TIME = "ringBufferTime";
   String RING_BUFFER_TIME_DESC = "Time events spend in the ring buffer";
-
-  /**
-   * Increments the counter for time-based log rotations. This counter tracks the number of times
-   * the log was rotated due to time threshold.
-   */
-  void incrementTimeBasedRotationCount();
-
-  /**
-   * Increments the counter for size-based log rotations. This counter tracks the number of times
-   * the log was rotated due to size threshold.
-   */
-  void incrementSizeBasedRotationCount();
-
-  /**
-   * Increments the counter for error-based log rotations. This counter tracks the number of times
-   * the log was rotated due to errors.
-   */
-  void incrementErrorBasedRotationCount();
 
   /**
    * Increments the counter for total log rotations. This counter tracks the total number of times

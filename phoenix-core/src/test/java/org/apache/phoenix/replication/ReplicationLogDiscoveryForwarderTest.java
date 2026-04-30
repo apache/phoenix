@@ -19,6 +19,7 @@ package org.apache.phoenix.replication;
 
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
+import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -33,11 +34,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode;
 import org.apache.phoenix.replication.log.LogFileTestUtil;
-import org.junit.After;
+import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -55,14 +57,15 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
     super(HAGroupState.ACTIVE_NOT_IN_SYNC);
   }
 
+  @Override
+  protected void overrideConf(Configuration conf) {
+    conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, 20);
+  }
+
   @Before
   public void setUp() throws IOException {
     ReplicationMode mode = logGroup.getMode();
     Assert.assertTrue(mode.equals(STORE_AND_FORWARD));
-  }
-
-  @After
-  public void tearDown() throws IOException {
   }
 
   @Test
@@ -143,7 +146,6 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
   @Test
   public void testSyncModeUpdateWaitTime() throws Exception {
     final long[] waitTime = { 8L };
-    int roundDurationSeconds = logGroup.getLocalShardManager().getReplicationRoundDurationSeconds();
 
     doAnswer(new Answer<Object>() {
       @Override
@@ -165,9 +167,11 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
         return ret;
       }
     }).when(haGroupStoreManager).setHAGroupStatusToSync(haGroupName);
-    Thread.sleep(roundDurationSeconds * 3 * 1000);
-    LOG.info("Coming out of sleep");
-    // we should have switched back to the SYNC mode
+
+    long deadline = EnvironmentEdgeManager.currentTimeMillis() + 120_000;
+    while (logGroup.getMode() != SYNC && EnvironmentEdgeManager.currentTimeMillis() < deadline) {
+      Thread.sleep(500);
+    }
     assertEquals(SYNC, logGroup.getMode());
   }
 }

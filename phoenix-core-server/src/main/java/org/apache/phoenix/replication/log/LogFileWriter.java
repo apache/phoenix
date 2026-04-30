@@ -35,7 +35,7 @@ public class LogFileWriter implements LogFile.Writer {
 
   private LogFileWriterContext context;
   private LogFileFormatWriter writer;
-  private boolean closed = false;
+  private volatile boolean closed = false;
   /**
    * A monotonically increasing sequence number that identifies this writer instance, used to detect
    * log file rotations and ensure proper handling of in-flight operations. Higher layers will get a
@@ -124,8 +124,8 @@ public class LogFileWriter implements LogFile.Writer {
 
   @Override
   public String toString() {
-    return "LogFileWriter [writerContext=" + context + ", formatWriter=" + writer + ", closed="
-      + closed + ", generation=" + generation + "]";
+    return "LogFileWriter [formatWriter=" + writer + ", closed=" + closed + ", generation="
+      + generation + "]";
   }
 
 }

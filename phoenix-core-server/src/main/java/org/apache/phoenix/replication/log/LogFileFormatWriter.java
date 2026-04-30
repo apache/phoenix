@@ -211,9 +211,8 @@ public class LogFileFormatWriter implements Closeable {
 
   @Override
   public String toString() {
-    return "LogFileFormatWriter [writerContext=" + context + ", currentBlockUncompressedBytes="
-      + currentBlockBytes + ", recordCount=" + recordCount + ", blockCount=" + blockCount
-      + ", blocksStartOffset=" + blocksStartOffset + "]";
+    return "LogFileFormatWriter [writerContext=" + context + ", recordCount=" + recordCount
+      + ", blockCount=" + blockCount + ", blocksStartOffset=" + blocksStartOffset + "]";
   }
 
 }
