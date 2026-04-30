@@ -19,6 +19,7 @@ package org.apache.phoenix.replication;
 
 import static java.lang.Thread.sleep;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
+import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -40,16 +41,13 @@ import static org.mockito.Mockito.verify;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.phoenix.replication.ReplicationLog.RotationReason;
 import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
@@ -109,8 +107,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
-   * Tests the behavior when a sync operation fails. Verifies that the system properly handles sync
-   * failures by rolling to a new writer and retrying the operation.
+   * Tests the behavior when a sync operation fails transiently. Verifies that the system retries
+   * with the same writer and succeeds on the next attempt.
    */
   @Test
   public void testSyncFailureAndRetry() throws Exception {
@@ -118,27 +116,25 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     final long commitId = 1L;
     final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
 
+    ReplicationLog activeLog = logGroup.getActiveLog();
     // Get the inner writer
-    LogFileWriter writerBeforeRoll = logGroup.getActiveLog().getWriter();
-    assertNotNull("Initial writer should not be null", writerBeforeRoll);
+    LogFileWriter writer = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", writer);
 
-    // Configure writerBeforeRoll to fail on the first sync call
-    doThrow(new IOException("Simulated sync failure")).when(writerBeforeRoll).sync();
+    // Keep returning the same writer so a rotation tick can't swap in a different one
+    doAnswer(invocation -> writer).when(activeLog).createNewWriter();
+
+    // Configure writer to fail on the first sync call, then succeed
+    doThrow(new IOException("Simulated sync failure")).doCallRealMethod().when(writer).sync();
 
     // Append data
     logGroup.append(tableName, commitId, put);
     logGroup.sync();
 
-    // Get the inner writer we rolled to.
-    LogFileWriter writerAfterRoll = logGroup.getActiveLog().getWriter();
-    assertNotNull("Initial writer should not be null", writerBeforeRoll);
-
-    // Verify the sequence: append, sync (fail), rotate, append (retry), sync (succeed)
-    InOrder inOrder = Mockito.inOrder(writerBeforeRoll, writerAfterRoll);
-    inOrder.verify(writerBeforeRoll, times(1)).append(eq(tableName), eq(commitId), eq(put));
-    inOrder.verify(writerBeforeRoll, times(1)).sync(); // Failed
-    inOrder.verify(writerAfterRoll, times(1)).append(eq(tableName), eq(commitId), eq(put)); // Replay
-    inOrder.verify(writerAfterRoll, times(1)).sync(); // Succeeded
+    // Verify the sequence: append, sync (fail), sync (succeed on retry with same writer)
+    InOrder inOrder = Mockito.inOrder(writer);
+    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    inOrder.verify(writer, times(2)).sync(); // First fails, second succeeds
   }
 
   /**
@@ -346,13 +342,18 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
   /**
    * Tests time-based log rotation. Verifies that the log file is rotated after the configured
-   * rotation time period and that operations continue correctly with the new log file.
+   * rotation time period and that operations continue correctly with the new log file. The writer
+   * swap happens pre-action in apply(), so the second append+sync go directly to the new writer.
    */
   @Test
   public void testTimeBasedRotation() throws Exception {
     final String tableName = "TBLTBR";
     final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
     final long commitId = 1L;
+    final int roundDurationSeconds = 5;
+
+    conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, roundDurationSeconds);
+    recreateLogGroup();
 
     // Get the initial writer
     LogFileWriter writerBeforeRotation = logGroup.getActiveLog().getWriter();
@@ -362,42 +363,31 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
     logGroup.sync();
 
-    // Wait for rotation time to elapse
-    sleep((long) (TEST_ROTATION_TIME * 1.25));
+    // Wait for rotation time to elapse so LogRotationTask stages a pendingWriter
+    waitForRotationTick(roundDurationSeconds);
 
-    // Append more data to trigger rotation check
+    // This append's apply() drains pendingWriter before the append, so it goes to new writer
     logGroup.append(tableName, commitId + 1, put);
     logGroup.sync();
 
-    // Get the new writer after rotation
+    // Verify we have a new writer
     LogFileWriter writerAfterRotation = logGroup.getActiveLog().getWriter();
     assertNotNull("New writer should not be null", writerAfterRotation);
     assertTrue("Writer should have been rotated", writerAfterRotation != writerBeforeRotation);
 
     // Verify the sequence of operations
     InOrder inOrder = Mockito.inOrder(writerBeforeRotation, writerAfterRotation);
-    inOrder.verify(writerBeforeRotation, times(1)).append(eq(tableName), eq(commitId), eq(put)); // First
-                                                                                                 // append
-                                                                                                 // to
-                                                                                                 // initial
-                                                                                                 // writer
+    inOrder.verify(writerBeforeRotation, times(1)).append(eq(tableName), eq(commitId), eq(put));
     inOrder.verify(writerBeforeRotation, times(1)).sync();
-    inOrder.verify(writerAfterRotation, times(0)).append(eq(tableName), eq(commitId), eq(put)); // First
-                                                                                                // append
-                                                                                                // is
-                                                                                                // not
-                                                                                                // replayed
-    inOrder.verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + 1), eq(put)); // Second
-                                                                                                    // append
-                                                                                                    // to
-                                                                                                    // new
-                                                                                                    // writer
+    inOrder.verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + 1), eq(put));
     inOrder.verify(writerAfterRotation, times(1)).sync();
   }
 
   /**
    * Tests size-based log rotation. Verifies that the log file is rotated when it exceeds the
-   * configured size threshold and that operations continue correctly with the new log file.
+   * configured size threshold and that operations continue correctly with the new log file. After
+   * the first sync, requestRotationIfNeeded submits an on-demand LogRotationTask which creates the
+   * new writer immediately on the executor thread.
    */
   @Test
   public void testSizeBasedRotation() throws Exception {
@@ -405,34 +395,31 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     final Mutation put = LogFileTestUtil.newPut("row", 1, 10);
     long commitId = 1L;
 
-    LogFileWriter writerBeforeRotation = logGroup.getActiveLog().getWriter();
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter writerBeforeRotation = activeLog.getWriter();
     assertNotNull("Initial writer should not be null", writerBeforeRotation);
 
     // Append enough data so that we exceed the size threshold.
     for (int i = 0; i < 100; i++) {
       logGroup.append(tableName, commitId++, put);
     }
-    logGroup.sync(); // Should trigger a sized based rotation
+    // Sync: data goes to old writer. requestRotationIfNeeded submits on-demand rotation task.
+    logGroup.sync();
 
-    // Get the new writer after the expected rotation.
-    LogFileWriter writerAfterRotation = logGroup.getActiveLog().getWriter();
-    assertNotNull("New writer should not be null", writerAfterRotation);
-    assertTrue("Writer should have been rotated", writerAfterRotation != writerBeforeRotation);
+    // Wait for the on-demand rotation task to create a new writer on the background thread
+    Thread.sleep(100);
 
-    // Append one more mutation to verify we're using the new writer.
+    // Next append's apply() drains pending writer → goes to new writer
     logGroup.append(tableName, commitId, put);
     logGroup.sync();
 
-    // Verify the sequence of operations
-    InOrder inOrder = Mockito.inOrder(writerBeforeRotation, writerAfterRotation);
-    // Verify all appends before rotation went to the first writer.
-    for (int i = 1; i < commitId; i++) {
-      inOrder.verify(writerBeforeRotation, times(1)).append(eq(tableName), eq((long) i), eq(put));
-    }
-    inOrder.verify(writerBeforeRotation, times(1)).sync();
-    // Verify the final append went to the new writer.
-    inOrder.verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId), eq(put));
-    inOrder.verify(writerAfterRotation, times(1)).sync();
+    LogFileWriter writerAfterRotation = activeLog.getWriter();
+    assertNotNull("New writer should not be null", writerAfterRotation);
+    assertTrue("Writer should have been rotated", writerAfterRotation != writerBeforeRotation);
+
+    // Verify the final append went to the new writer
+    verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    verify(writerAfterRotation, times(1)).sync();
   }
 
   /**
@@ -480,13 +467,18 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
   /**
    * Tests the automatic rotation task. Verifies that the background rotation task correctly rotates
-   * log files based on the configured rotation time.
+   * log files based on the configured rotation time. The writer swap happens pre-action in apply(),
+   * and the old writer is closed asynchronously via closeExecutor.
    */
   @Test
   public void testRotationTask() throws Exception {
     final String tableName = "TBLRT";
     final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
     long commitId = 1L;
+    final int roundDurationSeconds = 5;
+
+    conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, roundDurationSeconds);
+    recreateLogGroup();
 
     LogFileWriter writerBeforeRotation = logGroup.getActiveLog().getWriter();
     assertNotNull("Initial writer should not be null", writerBeforeRotation);
@@ -494,34 +486,31 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // Append some data and wait for the rotation time to elapse plus a small buffer.
     logGroup.append(tableName, commitId, put);
     logGroup.sync();
-    sleep((long) (TEST_ROTATION_TIME * 1.25));
+    waitForRotationTick(roundDurationSeconds);
+
+    // The LogRotationTask has staged a pendingWriter. Next append's apply() drains it.
+    logGroup.append(tableName, commitId + 1, put);
+    logGroup.sync();
 
     // Get the new writer after the rotation.
     LogFileWriter writerAfterRotation = logGroup.getActiveLog().getWriter();
     assertNotNull("New writer should not be null", writerAfterRotation);
     assertTrue("Writer should have been rotated", writerAfterRotation != writerBeforeRotation);
 
-    // Verify first append and sync went to initial writer
+    // Verify first batch went to initial writer
     verify(writerBeforeRotation, times(1)).append(eq(tableName), eq(1L), eq(put));
     verify(writerBeforeRotation, times(1)).sync();
-    // Verify the initial writer was closed
-    verify(writerBeforeRotation, times(1)).close();
+    // Verify second batch went to new writer (swap happened before append)
+    verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + 1), eq(put));
+    verify(writerAfterRotation, times(1)).sync();
+    // Verify the initial writer was closed asynchronously
+    verify(writerBeforeRotation, timeout(5000).times(1)).close();
   }
 
   /**
-   * Tests behavior when log rotation fails temporarily but eventually succeeds. Verifies that:
-   * <ul>
-   * <li>The system can handle temporary rotation failures</li>
-   * <li>After failing twice, the third rotation attempt succeeds</li>
-   * <li>Operations continue correctly with the new writer after successful rotation</li>
-   * <li>The metrics for rotation failures are properly tracked</li>
-   * <li>Operations can continue with the current writer while rotation attempts are failing</li>
-   * </ul>
-   * <p>
-   * This test simulates a scenario where the first two rotation attempts fail (e.g., due to
-   * temporary HDFS issues) but the third attempt succeeds. This is a common real-world scenario
-   * where transient failures occur but the system eventually recovers. During the failed rotation
-   * attempts, the system should continue to operate normally with the current writer.
+   * Tests behavior when log rotation fails temporarily but eventually succeeds. The rotation task
+   * fails to create a new writer on the first attempt, but succeeds on the second. During the
+   * failure, operations continue normally with the current writer.
    */
   @Test
   public void testFailedRotation() throws Exception {
@@ -531,7 +520,6 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     ReplicationLog activeLog = logGroup.getActiveLog();
 
-    // Get the initial writer
     LogFileWriter initialWriter = activeLog.getWriter();
     assertNotNull("Initial writer should not be null", initialWriter);
 
@@ -548,38 +536,37 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
     logGroup.sync();
 
-    // Rotate the log.
-    LogFileWriter writerAfterFailedRotate = activeLog.rotateLog(RotationReason.TIME);
-    assertEquals("Should still be using the initial writer", initialWriter,
-      writerAfterFailedRotate);
+    // Force rotation — first attempt will fail
+    activeLog.forceRotation();
 
-    // While rotation is failing, verify we can continue to use the current writer.
+    // Verify we can still use the current writer after the failed rotation
     logGroup.append(tableName, commitId + 1, put);
     logGroup.sync();
+    assertEquals("Should still be using the initial writer", initialWriter, activeLog.getWriter());
 
-    LogFileWriter writerAfterRotate = activeLog.rotateLog(RotationReason.TIME);
-    assertNotEquals("Should be using a new writer", initialWriter, writerAfterRotate);
+    // Force rotation again — this one should succeed
+    activeLog.forceRotation();
 
-    // Try to append more data. This should work with the new writer after successful rotation.
+    // Trigger swap by appending and syncing
     logGroup.append(tableName, commitId + 2, put);
     logGroup.sync();
 
+    LogFileWriter writerAfterRotate = activeLog.getWriter();
+    assertNotEquals("Should be using a new writer", initialWriter, writerAfterRotate);
+
     // Verify operations went to the writers in the correct order
     InOrder inOrder = Mockito.inOrder(initialWriter, writerAfterRotate);
-    // First append and sync on initial writer.
     inOrder.verify(initialWriter).append(eq(tableName), eq(commitId), eq(put));
     inOrder.verify(initialWriter).sync();
-    // Second append and sync on initial writer after failed rotation.
     inOrder.verify(initialWriter).append(eq(tableName), eq(commitId + 1), eq(put));
     inOrder.verify(initialWriter).sync();
-    // Final append and sync on new writer after successful rotation.
     inOrder.verify(writerAfterRotate).append(eq(tableName), eq(commitId + 2), eq(put));
     inOrder.verify(writerAfterRotate).sync();
   }
 
   /**
-   * This test simulates a scenario where rotation consistently fails and verifies that the system
-   * properly propagates an exception after exhausting all retry attempts.
+   * Tests that too many consecutive rotation failures cause the log to close via closeOnError().
+   * The LogRotationTask tracks failures across attempts and fail-stops after maxRotationRetries.
    */
   @Test
   public void testTooManyRotationFailures() throws Exception {
@@ -589,7 +576,6 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     ReplicationLog activeLog = logGroup.getActiveLog();
 
-    // Get the initial writer
     LogFileWriter initialWriter = activeLog.getWriter();
     assertNotNull("Initial writer should not be null", initialWriter);
 
@@ -601,25 +587,14 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
     logGroup.sync();
 
-    // Try to rotate the log multiple times until we exceed the retry limit
+    // Force rotation repeatedly until it exceeds maxRotationRetries and calls closeOnError
     for (int i = 0; i <= ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES; i++) {
-      try {
-        activeLog.rotateLog(RotationReason.TIME);
-      } catch (IOException e) {
-        if (i < ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES) {
-          // Not the last attempt yet, continue
-          continue;
-        }
-        // This was the last attempt, verify the exception
-        assertTrue("Expected IOException", e instanceof IOException);
-        assertTrue("Expected our mocked failure cause",
-          e.getMessage().contains("Simulated failure"));
-
-      }
+      activeLog.forceRotation();
     }
 
-    // Verify subsequent operations will fail because the log is closed and then trigger
-    // a mode switch to STORE_AND_FORWARD
+    assertTrue("Log should be closed after too many rotation failures", activeLog.isClosed());
+
+    // Verify subsequent operations trigger a mode switch to STORE_AND_FORWARD
     logGroup.append(tableName, commitId + 1, put);
     logGroup.sync();
     assertEquals(STORE_AND_FORWARD, logGroup.getMode());
@@ -682,19 +657,23 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     LogFileWriter initialWriter = activeLog.getWriter();
     assertNotNull("Initial writer should not be null", initialWriter);
 
-    // Configure initial writer to fail on sync
+    // Configure initial writer to always fail on sync
     doThrow(new IOException("Simulated sync failure")).when(initialWriter).sync();
 
-    // createNewWriter should keep returning the bad writer
-    doAnswer(invocation -> initialWriter).when(activeLog).createNewWriter();
+    // Make any new writers also fail on sync so a rotation can't rescue the retry loop
+    doAnswer(invocation -> {
+      LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
+      doThrow(new IOException("Simulated sync failure")).when(w).sync();
+      return w;
+    }).when(activeLog).createNewWriter();
 
     // Append data
     logGroup.append(tableName, commitId, put);
     // Try to sync. Should fail after exhausting retries and then switch to STORE_AND_FORWARD
     logGroup.sync();
 
-    // Each retry creates a new writer, so that is at least 1 create + 4 retries.
-    verify(activeLog, atLeast(5)).createNewWriter();
+    // All retries use the same writer — verify sync was attempted maxAttempts times
+    verify(initialWriter, atLeast(2)).sync();
     assertEquals(STORE_AND_FORWARD, logGroup.getMode());
   }
 
@@ -714,11 +693,15 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     LogFileWriter initialWriter = activeLog.getWriter();
     assertNotNull("Initial writer should not be null", initialWriter);
 
-    // Configure initial writer to fail on sync
+    // Configure initial writer to always fail on sync
     doThrow(new IOException("Simulated sync failure")).when(initialWriter).sync();
 
-    // createNewWriter should keep returning the bad writer
-    doAnswer(invocation -> initialWriter).when(activeLog).createNewWriter();
+    // Make any new writers also fail on sync so a rotation can't rescue the retry loop
+    doAnswer(invocation -> {
+      LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
+      doThrow(new IOException("Simulated sync failure")).when(w).sync();
+      return w;
+    }).when(activeLog).createNewWriter();
 
     doThrow(new IOException("Simulated failure to update HAGroupStore state"))
       .when(haGroupStoreManager).setHAGroupStatusToStoreAndForward(haGroupName);
@@ -732,13 +715,14 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     } catch (RuntimeException ex) {
       assertTrue(ex.getMessage().contains("Simulated sync failure"));
     }
-    // wait for the even processor thread to clean up
+    // wait for the event processor thread to clean up
     Thread.sleep(3);
   }
 
   /**
-   * Tests log rotation behavior during batch operations. Verifies that the system correctly handles
-   * rotation when there are pending batch operations, ensuring no data loss.
+   * Tests rotation during an in-flight batch. When a pending writer is staged by the rotation task
+   * while appends are in flight, the sync's apply() drains the pending writer, replays the 5
+   * unsynced records into the new writer, then syncs the new writer.
    */
   @Test
   public void testRotationDuringBatch() throws Exception {
@@ -750,42 +734,38 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     LogFileWriter writerBeforeRotation = logGroup.getActiveLog().getWriter();
     assertNotNull("Initial writer should not be null", writerBeforeRotation);
 
-    // Append several items to fill currentBatch but don't sync yet
+    // Append several items but don't sync yet
     for (int i = 0; i < 5; i++) {
       logGroup.append(tableName, commitId + i, put);
     }
 
-    // Force a rotation by waiting for rotation time to elapse
-    sleep((long) (TEST_ROTATION_TIME * 1.25));
+    // Stage a pending writer via forced rotation
+    logGroup.getActiveLog().forceRotation();
 
-    // Get the new writer after rotation
+    // Sync — apply() drains pendingWriter, replays 5 records into new writer, then syncs
+    logGroup.sync();
+
+    // The swap happened before sync action
     LogFileWriter writerAfterRotation = logGroup.getActiveLog().getWriter();
     assertNotNull("New writer should not be null", writerAfterRotation);
     assertTrue("Writer should have been rotated", writerAfterRotation != writerBeforeRotation);
 
-    // Now trigger a sync which should replay the currentBatch to the new writer
-    logGroup.sync();
-
-    // Verify the sequence of operations
     InOrder inOrder = Mockito.inOrder(writerBeforeRotation, writerAfterRotation);
-
-    // Verify all appends before rotation went to the first writer
+    // 5 appends went to old writer (processed before rotation task fired)
     for (int i = 0; i < 5; i++) {
       inOrder.verify(writerBeforeRotation, times(1)).append(eq(tableName), eq(commitId + i),
         eq(put));
     }
-
-    // Verify the currentBatch was replayed to the new writer
+    // Swap happens before sync action: 5 records replayed into new writer
     for (int i = 0; i < 5; i++) {
       inOrder.verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + i),
         eq(put));
     }
-
-    // Verify sync happened on the new writer
+    // Sync goes to new writer
     inOrder.verify(writerAfterRotation, times(1)).sync();
 
-    // Verify the initial writer was closed
-    verify(writerBeforeRotation, times(1)).close();
+    // Verify the initial writer was closed asynchronously
+    verify(writerBeforeRotation, timeout(5000).times(1)).close();
   }
 
   /**
@@ -811,7 +791,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.sync(); // Sync to commit the appends to the current writer.
 
     // Force a rotation to close the current writer.
-    activeLog.rotateLog(RotationReason.SIZE);
+    activeLog.forceRotation();
 
     assertTrue("Log file should exist", localFs.exists(logPath));
 
@@ -869,7 +849,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       }
       logGroup.sync(); // Sync to commit the appends to the current writer.
       // Force a rotation to close the current writer.
-      activeLog.rotateLog(RotationReason.SIZE);
+      activeLog.forceRotation();
     }
 
     // Verify all log files exist
@@ -905,14 +885,14 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
-   * Tests reading records after multiple rotations with intermittent syncs. If we do not sync when
-   * we roll a file, the in-flight batch is replayed into the new writer when we do finally sync
-   * (with the new writer). Verifies that records can be correctly read even when syncs are not
-   * performed before each rotation, ensuring data consistency.
+   * Tests reading records after multiple rotations with varying batch sizes. The writer swap
+   * happens inside {@code apply} before each attempt, so unsynced appends are replayed into the new
+   * writer. This test verifies data consistency across many rotations with different record counts
+   * per file.
    */
   @Test
-  public void testReadAfterMultipleRotationsWithReplay() throws Exception {
-    final String tableName = "TBLRAMRIS";
+  public void testReadAfterMultipleRotationsWithVaryingBatchSizes() throws Exception {
+    final String tableName = "TBLRAMRVBS";
     final int NUM_RECORDS_PER_ROTATION = 100;
     final int NUM_ROTATIONS = 10;
     final int TOTAL_RECORDS = NUM_RECORDS_PER_ROTATION * NUM_ROTATIONS;
@@ -921,9 +901,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     ReplicationLog activeLog = logGroup.getActiveLog();
 
-    // Write records across multiple rotations, only syncing 50% of the time.
     for (int rotation = 0; rotation < NUM_ROTATIONS; rotation++) {
-      // Get the path of the current log file.
       Path logPath = activeLog.getWriter().getContext().getFilePath();
       logPaths.add(logPath);
 
@@ -935,13 +913,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
         logGroup.append(record.getHBaseTableName(), record.getCommitId(), record.getMutation());
       }
 
-      // Only sync 50% of the time before rotation. To ensure we sync on the last file
-      // we are going to write, use 'rotation % 2 == 1' instead of 'rotation % 2 == 0'.
-      if (rotation % 2 == 1) {
-        logGroup.sync(); // Sync to commit the appends to the current writer.
-      }
-      // Force a rotation to close the current writer.
-      activeLog.rotateLog(RotationReason.SIZE);
+      logGroup.sync();
+      activeLog.forceRotation();
     }
 
     // Verify all log files exist
@@ -949,10 +922,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       assertTrue("Log file should exist: " + logPath, localFs.exists(logPath));
     }
 
-    // Read and verify all records from each log file, tracking unique records and duplicates.
-    Set<LogFile.Record> uniqueRecords = new HashSet<>();
+    // Read and verify all records from each log file
     List<LogFile.Record> allReadRecords = new ArrayList<>();
-
     for (Path logPath : logPaths) {
       LogFileReader reader = new LogFileReader();
       LogFileReaderContext readerContext =
@@ -961,24 +932,22 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       LogFile.Record record;
       while ((record = reader.next()) != null) {
         allReadRecords.add(record);
-        uniqueRecords.add(record);
       }
       reader.close();
     }
 
-    // Print statistics about duplicates for informational purposes.
-    LOG.info("{} total records across all files", allReadRecords.size());
-    LOG.info("{} unique records", uniqueRecords.size());
-    LOG.info("{} duplicate records", allReadRecords.size() - uniqueRecords.size());
+    assertEquals("Total number of records mismatch", TOTAL_RECORDS, allReadRecords.size());
 
-    // Verify we have all the expected unique records
-    assertEquals("Number of unique records mismatch", TOTAL_RECORDS, uniqueRecords.size());
+    for (int i = 0; i < TOTAL_RECORDS; i++) {
+      LogFileTestUtil.assertRecordEquals("Record mismatch at index " + i, originalRecords.get(i),
+        allReadRecords.get(i));
+    }
   }
 
   /**
-   * Tests behavior when a RuntimeException occurs during writer.getLength() in shouldRotate().
-   * Verifies that the system properly handles critical errors by closing the log and preventing
-   * further operations.
+   * Tests behavior when a RuntimeException occurs during writer.getLength() in
+   * shouldRotateForSize(). Verifies that the system properly handles critical errors by closing the
+   * log and preventing further operations.
    */
   @Test
   public void testRuntimeExceptionDuringLengthCheck() throws Exception {
@@ -1093,6 +1062,64 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Verify that the inner writer was closed by the LogExceptionHandler
     verify(innerWriter, times(1)).close();
+  }
+
+  /**
+   * Tests that an undrained pendingWriter is closed and replaced by the rotation task. This
+   * simulates an idle system where no events flow to drain the staged writer before the next
+   * rotation tick fires. Verifies the undrained writer is actually closed by the second tick.
+   */
+  @Test
+  public void testUndrainedPendingWriterReplaced() throws Exception {
+    final String tableName = "TBLUPWR";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    final long commitId = 1L;
+    final int roundDurationSeconds = 5;
+
+    conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, roundDurationSeconds);
+    recreateLogGroup();
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
+
+    // Capture writers created by rotation ticks
+    List<LogFileWriter> rotationWriters = new ArrayList<>();
+    doAnswer(invocation -> {
+      LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
+      rotationWriters.add(w);
+      return w;
+    }).when(activeLog).createNewWriter();
+
+    // Append and sync to establish baseline
+    logGroup.append(tableName, commitId, put);
+    logGroup.sync();
+
+    // Wait for rotation tick — this stages a pending writer (W2)
+    waitForRotationTick(roundDurationSeconds);
+
+    // The pending writer is staged but not drained (no events to trigger checkAndReplaceWriter).
+    // Wait for the next rotation tick — it should close the undrained writer and stage a new one.
+    waitForRotationTick(roundDurationSeconds);
+
+    // Now drain by appending (apply() calls checkAndReplaceWriter)
+    logGroup.append(tableName, commitId + 1, put);
+    logGroup.sync();
+
+    LogFileWriter writerAfterRotation = activeLog.getWriter();
+    assertTrue("Writer should have been rotated", writerAfterRotation != initialWriter);
+
+    // W2 was created by first tick, W3 by second tick
+    assertTrue("Expected at least 2 rotation writers", rotationWriters.size() >= 2);
+    LogFileWriter undrainedWriter = rotationWriters.get(0);
+    LogFileWriter finalWriter = rotationWriters.get(rotationWriters.size() - 1);
+
+    // Undrained W2 was closed synchronously by the second rotation tick
+    verify(undrainedWriter, times(1)).close();
+
+    // Final writer is the one we're using
+    assertEquals("Active writer should be the last rotation writer", finalWriter,
+      writerAfterRotation);
   }
 
   /**
@@ -1291,6 +1318,308 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // metrics instance is the same in both the instances
     assertEquals(group1.metrics, group2.metrics);
     group2.close();
+  }
+
+  /**
+   * Tests that unsynced appends are replayed into the new writer when a swap happens mid-batch.
+   * Append 3 records (no sync), stage a pending writer, append a 4th record which triggers the swap
+   * + replay, then sync. Old writer gets 3 appends, new writer gets 3 replayed + 4th append + sync.
+   */
+  @Test
+  public void testReplayOnMidBatchSwap() throws Exception {
+    final String tableName = "TBLRMBS";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    long commitId = 1L;
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter writerBeforeRotation = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", writerBeforeRotation);
+
+    // Append 3 records without syncing — they accumulate in currentBatch
+    for (int i = 0; i < 3; i++) {
+      logGroup.append(tableName, commitId + i, put);
+    }
+
+    // Stage a pending writer via forced rotation
+    activeLog.forceRotation();
+
+    // 4th append triggers checkAndReplaceWriter + generation mismatch → replays 3 records
+    logGroup.append(tableName, commitId + 3, put);
+    logGroup.sync();
+
+    LogFileWriter writerAfterRotation = activeLog.getWriter();
+    assertTrue("Writer should have been rotated", writerAfterRotation != writerBeforeRotation);
+
+    InOrder inOrder = Mockito.inOrder(writerBeforeRotation, writerAfterRotation);
+    // 3 appends went to old writer
+    for (int i = 0; i < 3; i++) {
+      inOrder.verify(writerBeforeRotation, times(1)).append(eq(tableName), eq(commitId + i),
+        eq(put));
+    }
+    // 3 records replayed into new writer
+    for (int i = 0; i < 3; i++) {
+      inOrder.verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + i),
+        eq(put));
+    }
+    // 4th append goes to new writer
+    inOrder.verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + 3), eq(put));
+    inOrder.verify(writerAfterRotation, times(1)).sync();
+
+    // Old writer closed async
+    verify(writerBeforeRotation, timeout(5000).times(1)).close();
+  }
+
+  /**
+   * Tests the lease-recovery scenario: when the current writer's stream is broken (simulated by
+   * failing sync), a staged pending writer is picked up before the action, replays unsynced
+   * appends, and succeeds without ever calling sync on the broken writer.
+   */
+  @Test
+  public void testRetryPicksUpStagedWriter() throws Exception {
+    final String tableName = "TBLRPSW";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    final long commitId = 1L;
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
+
+    // Append a record — goes to initialWriter
+    logGroup.append(tableName, commitId, put);
+
+    // Configure initial writer's sync to fail (simulating broken stream after lease recovery)
+    doThrow(new IOException("Simulated broken stream")).when(initialWriter).sync();
+
+    // Stage a pending writer via forced rotation
+    activeLog.forceRotation();
+
+    // Sync: checkAndReplaceWriter drains pending writer before the sync action,
+    // replays 1 record into new writer, then syncs new writer. Old writer's sync is
+    // never called because the swap happens before the action.
+    logGroup.sync();
+
+    LogFileWriter newWriter = activeLog.getWriter();
+    assertTrue("Should be using new writer", newWriter != initialWriter);
+
+    // Old writer: received the append only
+    verify(initialWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
+
+    // New writer: received replayed append + successful sync
+    verify(newWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    verify(newWriter, times(1)).sync();
+  }
+
+  /**
+   * Tests the idle-then-lease-recovery scenario: after a sync clears currentBatch, the system goes
+   * idle. A rotation tick stages a pending writer. The reader performs HDFS lease recovery,
+   * breaking the old writer's stream. When events resume, apply() drains the healthy staged writer
+   * before the action — the broken writer is never touched. No replay needed (empty batch).
+   */
+  @Test
+  public void testIdleLeaseRecoveryDrainsStagedWriter() throws Exception {
+    final String tableName = "TBLILRDSW";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    final long commitId = 1L;
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
+
+    // Append + sync to establish baseline and clear currentBatch
+    logGroup.append(tableName, commitId, put);
+    logGroup.sync();
+
+    // Stage W2 in pendingWriter via forced rotation
+    activeLog.forceRotation();
+
+    // Simulate HDFS lease recovery breaking the old writer's stream
+    doThrow(new IOException("Simulated broken stream after lease recovery")).when(initialWriter)
+      .append(anyString(), anyLong(), any(Mutation.class));
+    doThrow(new IOException("Simulated broken stream after lease recovery")).when(initialWriter)
+      .sync();
+
+    // Events resume — apply() drains W2 before the action, so broken writer is never touched
+    logGroup.append(tableName, commitId + 1, put);
+    logGroup.sync();
+
+    LogFileWriter newWriter = activeLog.getWriter();
+    assertTrue("Should be using new writer after idle + lease recovery",
+      newWriter != initialWriter);
+
+    // New writer received the new append + sync (no replay — currentBatch was empty)
+    verify(newWriter, times(1)).append(eq(tableName), eq(commitId + 1), eq(put));
+    verify(newWriter, times(1)).sync();
+
+    // Old writer: only the pre-idle append + sync, nothing after the break
+    verify(initialWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    verify(initialWriter, times(1)).sync();
+  }
+
+  /**
+   * Tests that a failed replay is retried on the next attempt. The new writer's first append fails
+   * during replay, so the generation stays stale. On retry, the generation mismatch is detected
+   * again and replay succeeds.
+   */
+  @Test
+  public void testReplayFailureRetries() throws Exception {
+    final String tableName = "TBLRFR";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    long commitId = 1L;
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
+
+    // Intercept createNewWriter to capture the new writer and make its first append fail
+    final AtomicBoolean failFirstAppend = new AtomicBoolean(true);
+    doAnswer(invocation -> {
+      LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
+      doAnswer(appendInvocation -> {
+        if (failFirstAppend.getAndSet(false)) {
+          throw new IOException("Simulated transient HDFS error during replay");
+        }
+        return appendInvocation.callRealMethod();
+      }).when(w).append(anyString(), anyLong(), any(Mutation.class));
+      return w;
+    }).when(activeLog).createNewWriter();
+
+    // Append 2 records without syncing — they accumulate in currentBatch
+    logGroup.append(tableName, commitId, put);
+    logGroup.append(tableName, commitId + 1, put);
+
+    // Stage a pending writer via forced rotation (whose first append will fail)
+    activeLog.forceRotation();
+
+    // 3rd append triggers swap + replay of [r1, r2].
+    // Attempt 1: replay fails on first record → IOException → generation stays stale
+    // Attempt 2: generation mismatch still → replay retries → succeeds → r3 appended
+    logGroup.append(tableName, commitId + 2, put);
+    logGroup.sync();
+
+    LogFileWriter newWriter = activeLog.getWriter();
+    assertTrue("Should be using new writer", newWriter != initialWriter);
+
+    // New writer: attempt 1 replay failed on r1 (1 call). Attempt 2 replayed r1+r2 (2 calls)
+    // then appended r3. Total: r1 called 2x, r2 called 1x, r3 called 1x.
+    verify(newWriter, times(2)).append(eq(tableName), eq(commitId), eq(put));
+    verify(newWriter, times(1)).append(eq(tableName), eq(commitId + 1), eq(put));
+    verify(newWriter, times(1)).append(eq(tableName), eq(commitId + 2), eq(put));
+    verify(newWriter, times(1)).sync();
+  }
+
+  /**
+   * Tests error-recovery rotation: when the current writer's stream is broken, the second failure
+   * in apply() triggers requestRotation() which submits an on-demand LogRotationTask. During the
+   * retry sleep, the background thread creates a new writer. The next attempt drains it and
+   * succeeds.
+   */
+  @Test
+  public void testErrorRecoveryRequestsNewWriter() throws Exception {
+    final String tableName = "TBLERNW";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    final long commitId = 1L;
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
+
+    // Configure initial writer's append to always fail (simulating broken HDFS stream)
+    doThrow(new IOException("Simulated broken stream")).when(initialWriter).append(anyString(),
+      anyLong(), any(Mutation.class));
+
+    // Append — attempt 1 fails, attempt 2 fails + requestRotation(), during sleep the
+    // background thread creates a new writer, attempt 3 drains it and succeeds
+    logGroup.append(tableName, commitId, put);
+    logGroup.sync();
+
+    LogFileWriter newWriter = activeLog.getWriter();
+    assertTrue("Should be using a new writer after error recovery", newWriter != initialWriter);
+
+    // Old writer received failed attempts
+    verify(initialWriter, atLeast(2)).append(eq(tableName), eq(commitId), eq(put));
+    // New writer received the successful append
+    verify(newWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    verify(newWriter, times(1)).sync();
+  }
+
+  /**
+   * Tests that an on-demand size rotation mid-interval does not suppress the next scheduled tick.
+   * After size rotation creates a writer early, the scheduled tick still fires and creates another.
+   */
+  @Test
+  public void testOnDemandRotationDoesNotSuppressScheduledTick() throws Exception {
+    final String tableName = "TBLODRNST";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 10);
+    long commitId = 1L;
+    final int roundDurationSeconds = 5;
+
+    conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, roundDurationSeconds);
+    recreateLogGroup();
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
+
+    // Append enough data to trigger size rotation → requestRotation() fires
+    for (int i = 0; i < 100; i++) {
+      logGroup.append(tableName, commitId++, put);
+    }
+    logGroup.sync();
+
+    // Wait for the on-demand rotation task to create a new writer on the background thread
+    Thread.sleep(100);
+
+    // Drain W2 via next append
+    logGroup.append(tableName, commitId++, put);
+    logGroup.sync();
+
+    LogFileWriter writerAfterSizeRotation = activeLog.getWriter();
+    assertTrue("Writer should have been rotated for size",
+      writerAfterSizeRotation != initialWriter);
+
+    // Wait for the scheduled rotation tick
+    waitForRotationTick(roundDurationSeconds);
+
+    // Drain W3
+    logGroup.append(tableName, commitId, put);
+    logGroup.sync();
+
+    LogFileWriter writerAfterScheduledTick = activeLog.getWriter();
+    assertTrue("Scheduled tick should have created a new writer (not suppressed)",
+      writerAfterScheduledTick != writerAfterSizeRotation);
+  }
+
+  /**
+   * Tests that the rotation executor fires at the round boundary by verifying that after waiting
+   * for slightly more than a round, a rotation has occurred.
+   */
+  @Test
+  public void testRotationScheduleAlignsWithRoundBoundary() throws Exception {
+    final String tableName = "TBLRSARB";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    final long commitId = 1L;
+    final int roundDurationSeconds = 5;
+
+    conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, roundDurationSeconds);
+    recreateLogGroup();
+
+    LogFileWriter writerBeforeRotation = logGroup.getActiveLog().getWriter();
+    assertNotNull("Initial writer should not be null", writerBeforeRotation);
+
+    // Append and sync so we have data
+    logGroup.append(tableName, commitId, put);
+    logGroup.sync();
+
+    // Wait for slightly more than one round duration — the rotation task should have fired
+    waitForRotationTick(roundDurationSeconds);
+
+    // Trigger drain
+    logGroup.append(tableName, commitId + 1, put);
+    logGroup.sync();
+
+    LogFileWriter writerAfterRotation = logGroup.getActiveLog().getWriter();
+    assertTrue("Rotation should have happened at round boundary",
+      writerAfterRotation != writerBeforeRotation);
   }
 
   // @Test
