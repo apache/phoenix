@@ -292,7 +292,7 @@ public abstract class ReplicationLogDiscovery {
     long startTime = EnvironmentEdgeManager.currentTime();
     List<Path> files = replicationLogTracker.getNewFilesForRound(replicationRound);
     LOG.info("Number of new files for round {} is {}", replicationRound, files.size());
-    while (!files.isEmpty()) {
+    while (!files.isEmpty() && isRunning()) {
       processOneRandomFile(files);
       files = replicationLogTracker.getNewFilesForRound(replicationRound);
     }
@@ -322,7 +322,7 @@ public abstract class ReplicationLogDiscovery {
     LOG.info("Number of {} files with renameTimestampThreshold {} is {} for haGroup: {}",
       replicationLogTracker.getInProgressLogSubDirectoryName(), renameTimestampThreshold,
       files.size(), haGroupName);
-    while (!files.isEmpty()) {
+    while (!files.isEmpty() && isRunning()) {
       Optional<Path> failedFile = processOneRandomFile(files);
       if (failedFile.isPresent()) {
         String prefix = replicationLogTracker.getFilePrefix(failedFile.get());

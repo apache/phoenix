@@ -95,6 +95,7 @@ public class ReplicationLogDiscoveryTest {
     conf.setInt(ReplicationLogDiscovery.REPLICATION_IN_PROGRESS_FILE_MIN_AGE_SECONDS_KEY, 0);
     discovery = Mockito.spy(new TestableReplicationLogDiscovery(fileTracker));
     Mockito.doReturn(metricsLogDiscovery).when(discovery).getMetrics();
+    Mockito.doReturn(true).when(discovery).isRunning();
   }
 
   @After
@@ -115,6 +116,7 @@ public class ReplicationLogDiscoveryTest {
    */
   @Test
   public void testStartAndStop() throws IOException {
+    Mockito.doCallRealMethod().when(discovery).isRunning();
     // 1. Validate that it's not running initially
     assertFalse("Discovery should not be running initially", discovery.isRunning());
 
