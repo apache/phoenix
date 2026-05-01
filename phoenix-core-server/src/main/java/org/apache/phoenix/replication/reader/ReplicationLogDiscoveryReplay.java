@@ -88,6 +88,12 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     "phoenix.replication.replay.waiting.buffer.percentage";
 
   /**
+   * Configuration key for new file age buffer percentage for replay
+   */
+  public static final String REPLICATION_REPLAY_NEW_FILE_AGE_BUFFER_PERCENTAGE_KEY =
+    "phoenix.replication.replay.new.file.age.buffer.percentage";
+
+  /**
    * Default replay interval in seconds. Controls how frequently the replay process runs.
    */
   public static final long DEFAULT_REPLAY_INTERVAL_SECONDS = 60;
@@ -450,6 +456,12 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
   public double getWaitingBufferPercentage() {
     return getConf().getDouble(REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY,
       DEFAULT_WAITING_BUFFER_PERCENTAGE);
+  }
+
+  @Override
+  public double getNewFileAgeBufferPercentage() {
+    return getConf().getDouble(REPLICATION_REPLAY_NEW_FILE_AGE_BUFFER_PERCENTAGE_KEY,
+      DEFAULT_NEW_FILE_AGE_BUFFER_PERCENTAGE);
   }
 
   protected ReplicationRound getLastRoundInSync() {
