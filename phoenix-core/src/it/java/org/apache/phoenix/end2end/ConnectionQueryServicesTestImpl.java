@@ -58,6 +58,12 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
   // indexed by ordinal.
   private final PhoenixTransactionService[] txServices =
     new PhoenixTransactionService[TransactionFactory.Provider.values().length];
+  // All connection services in the JVM share one test transaction service for each provider.
+  // The provider is a singleton, and each region keeps the commit table client that is current
+  // when the region opens. A second service replaces that client, and readers can then miss
+  // commits. The connection service that starts a shared service owns it and closes it.
+  private static final PhoenixTransactionService[] SHARED_TX_SERVICES =
+    new PhoenixTransactionService[TransactionFactory.Provider.values().length];
 
   public ConnectionQueryServicesTestImpl(QueryServices services, ConnectionInfo info,
     Properties props) throws SQLException {
@@ -90,13 +96,20 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
         connections = new ArrayList<>(this.connections);
         this.connections = Sets.newHashSet();
 
-        // shut down the tx client service if we created one to support transactions
-        for (PhoenixTransactionService service : txServices) {
+        // Shut down the transaction services that this instance owns. Release the shared slot
+        // in the same step, so that the next connection service starts a new service.
+        for (int i = 0; i < txServices.length; i++) {
+          PhoenixTransactionService service = txServices[i];
           if (service != null) {
-            try {
-              service.close();
-            } catch (IOException e) {
-              LOGGER.warn(e.getMessage(), e);
+            synchronized (SHARED_TX_SERVICES) {
+              if (SHARED_TX_SERVICES[i] == service) {
+                SHARED_TX_SERVICES[i] = null;
+              }
+              try {
+                service.close();
+              } catch (IOException e) {
+                LOGGER.warn(e.getMessage(), e);
+              }
             }
           }
         }
@@ -113,11 +126,16 @@ public class ConnectionQueryServicesTestImpl extends ConnectionQueryServicesImpl
   @Override
   public synchronized PhoenixTransactionClient initTransactionClient(Provider provider)
     throws SQLException {
-    PhoenixTransactionService txService = txServices[provider.ordinal()];
-    if (txService == null) {
-      int port = TestUtil.getRandomPort();
-      txService = txServices[provider.ordinal()] =
-        TransactionServiceManager.startTransactionService(provider, config, connectionInfo, port);
+    int i = provider.ordinal();
+    if (txServices[i] == null) {
+      // Start a service only when no other connection service owns a live one.
+      synchronized (SHARED_TX_SERVICES) {
+        if (SHARED_TX_SERVICES[i] == null) {
+          int port = TestUtil.getRandomPort();
+          txServices[i] = SHARED_TX_SERVICES[i] = TransactionServiceManager
+            .startTransactionService(provider, config, connectionInfo, port);
+        }
+      }
     }
     return super.initTransactionClient(provider);
   }
