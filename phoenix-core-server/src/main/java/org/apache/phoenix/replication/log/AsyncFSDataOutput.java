@@ -31,9 +31,11 @@ import org.apache.hadoop.hbase.util.Bytes;
 public class AsyncFSDataOutput implements SyncableDataOutput {
 
   private final AsyncFSOutput delegate;
+  private final boolean useHsync;
 
-  public AsyncFSDataOutput(AsyncFSOutput delegate) {
+  public AsyncFSDataOutput(AsyncFSOutput delegate, boolean useHsync) {
     this.delegate = delegate;
+    this.useHsync = useHsync;
   }
 
   @Override
@@ -158,7 +160,11 @@ public class AsyncFSDataOutput implements SyncableDataOutput {
 
   @Override
   public void sync() throws IOException {
-    hsync();
+    if (useHsync) {
+      hsync();
+    } else {
+      hflush();
+    }
   }
 
 }

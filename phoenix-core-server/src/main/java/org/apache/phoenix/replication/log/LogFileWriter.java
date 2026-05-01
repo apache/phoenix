@@ -68,7 +68,7 @@ public class LogFileWriter implements LogFile.Writer {
     // config. For now we overwrite.
     FileSystem fs = context.getFileSystem();
     FSDataOutputStream out = fs.create(context.getFilePath(), true);
-    this.writer.init(context, new HDFSDataOutput(out));
+    this.writer.init(context, new HDFSDataOutput(out, context.getUseHsync()));
     LOG.debug("Initialized LogFileWriter for path {}", context.getFilePath());
   }
 

@@ -665,7 +665,7 @@ public class LogFileFormatTest {
       public void hsync() throws IOException {
         writerDos.flush();
       }
-    });
+    }, false);
     writer.init(writerContext, output);
   }
 
