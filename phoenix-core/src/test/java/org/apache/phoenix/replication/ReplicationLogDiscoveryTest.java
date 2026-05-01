@@ -206,8 +206,8 @@ public class ReplicationLogDiscoveryTest {
       assertTrue("Delay should not exceed round time", delay2 <= roundTimeMs);
 
       // The aligned tick should be at a multiple of roundTimeMs offset by bufferMs
-      assertEquals("Tick should be aligned to round-eligible boundary",
-        0, (tick1 - bufferMs) % roundTimeMs);
+      assertEquals("Tick should be aligned to round-eligible boundary", 0,
+        (tick1 - bufferMs) % roundTimeMs);
     } finally {
       EnvironmentEdgeManager.reset();
     }

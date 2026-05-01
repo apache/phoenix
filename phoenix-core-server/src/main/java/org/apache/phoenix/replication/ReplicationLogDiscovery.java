@@ -507,8 +507,8 @@ public abstract class ReplicationLogDiscovery {
   }
 
   /**
-   * Computes initial delay to align the scheduler to round-eligible boundaries so all RS wake up
-   * at the same wall-clock moment. A round becomes eligible when currentTime >= roundEndTime +
+   * Computes initial delay to align the scheduler to round-eligible boundaries so all RS wake up at
+   * the same wall-clock moment. A round becomes eligible when currentTime >= roundEndTime +
    * bufferMillis, and rounds repeat every roundTimeMills. This gives a universal grid of eligible
    * ticks at bufferMillis, bufferMillis + roundTimeMills, bufferMillis + 2*roundTimeMills, etc.
    * from epoch. All RS compute the same grid regardless of when start() is called.

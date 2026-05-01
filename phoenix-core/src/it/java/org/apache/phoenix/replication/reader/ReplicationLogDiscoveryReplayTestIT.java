@@ -124,17 +124,21 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
     long expectedRoundMillis =
       fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds()
         * 1000L;
-    assertEquals("Replay interval should match round duration",
-      expectedRoundMillis, discovery.getReplayIntervalMillis());
+    assertEquals("Replay interval should match round duration", expectedRoundMillis,
+      discovery.getReplayIntervalMillis());
 
     // Test with custom round duration
     conf1.setInt(ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY,
       120);
-    TestableReplicationLogTracker fileTracker2 =
-      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
-    ReplicationLogDiscoveryReplay discovery2 = new ReplicationLogDiscoveryReplay(fileTracker2);
-    assertEquals("Replay interval should match custom round duration",
-      120_000L, discovery2.getReplayIntervalMillis());
+    try {
+      TestableReplicationLogTracker fileTracker2 =
+        createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+      ReplicationLogDiscoveryReplay discovery2 = new ReplicationLogDiscoveryReplay(fileTracker2);
+      assertEquals("Replay interval should match custom round duration", 120_000L,
+        discovery2.getReplayIntervalMillis());
+    } finally {
+      conf1.unset(ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY);
+    }
   }
 
   /**
