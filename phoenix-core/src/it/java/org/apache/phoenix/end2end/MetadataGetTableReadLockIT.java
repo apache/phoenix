@@ -23,6 +23,8 @@ import java.sql.DriverManager;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CountDownLatch;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.MetaDataEndpointImpl;
@@ -72,6 +74,7 @@ public class MetadataGetTableReadLockIT extends BaseTest {
       BlockingMetaDataEndpointImpl.setSleepSignal(sleepSignal);
       BlockingMetaDataEndpointImpl.setSleepDuration(SLEEP_DURATION);
       TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", BlockingMetaDataEndpointImpl.class);
+      waitForCoprocessorOnSystemCatalog(BlockingMetaDataEndpointImpl.class);
 
       // start thread-1 and wait for signal before it starts sleeping
       Thread t1 = getQueryThread(tableName);
@@ -92,6 +95,23 @@ public class MetadataGetTableReadLockIT extends BaseTest {
       Assert.assertTrue("Second thread should not have been blocked by the first thread.",
         end - start < SLEEP_DURATION);
     }
+  }
+
+  private static void waitForCoprocessorOnSystemCatalog(Class<?> coprocessorClass) throws Exception {
+    final TableName sysCatalog = TableName.valueOf("SYSTEM.CATALOG");
+    utility.waitFor(10000, 100, () -> {
+      List<HRegion> regions = utility.getHBaseCluster().getRegions(sysCatalog);
+      if (regions.isEmpty()) {
+        return false;
+      }
+      for (HRegion region : regions) {
+        if (region.getCoprocessorHost()
+            .findCoprocessor(coprocessorClass.getName()) == null) {
+          return false;
+        }
+      }
+      return true;
+    });
   }
 
   private static Thread getQueryThread(String tableName) {
