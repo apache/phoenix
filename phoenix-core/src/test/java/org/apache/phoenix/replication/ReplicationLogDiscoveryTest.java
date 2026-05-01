@@ -138,8 +138,8 @@ public class ReplicationLogDiscoveryTest {
       threadName.contains("ReplicationLogDiscovery"));
 
     // Verify replay interval
-    long replayInterval = discovery.getReplayIntervalSeconds();
-    assertEquals("Replay interval should be 60 seconds", 60L, replayInterval);
+    long replayInterval = discovery.getReplayIntervalMillis();
+    assertEquals("Replay interval should be 60000 milliseconds", 60_000L, replayInterval);
 
     // 6. Ensure starting again does not create a new scheduler (and also should not throw any
     // exception)

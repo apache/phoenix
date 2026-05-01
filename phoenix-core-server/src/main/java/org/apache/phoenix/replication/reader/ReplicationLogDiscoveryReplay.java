@@ -58,12 +58,6 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     "Phoenix-ReplicationLogDiscoveryReplay-%d";
 
   /**
-   * Configuration key for replay interval in seconds
-   */
-  public static final String REPLICATION_REPLAY_INTERVAL_SECONDS_KEY =
-    "phoenix.replication.replay.interval.seconds";
-
-  /**
    * Configuration key for shutdown timeout in seconds
    */
   public static final String REPLICATION_REPLAY_SHUTDOWN_TIMEOUT_SECONDS_KEY =
@@ -86,11 +80,6 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
    */
   public static final String REPLICATION_REPLAY_WAITING_BUFFER_PERCENTAGE_KEY =
     "phoenix.replication.replay.waiting.buffer.percentage";
-
-  /**
-   * Default replay interval in seconds. Controls how frequently the replay process runs.
-   */
-  public static final long DEFAULT_REPLAY_INTERVAL_SECONDS = 60;
 
   /**
    * Default shutdown timeout in seconds. Maximum time to wait for executor service to shutdown
@@ -420,12 +409,6 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
   @Override
   public String getExecutorThreadNameFormat() {
     return EXECUTOR_THREAD_NAME_FORMAT;
-  }
-
-  @Override
-  public long getReplayIntervalSeconds() {
-    return getConf().getLong(REPLICATION_REPLAY_INTERVAL_SECONDS_KEY,
-      DEFAULT_REPLAY_INTERVAL_SECONDS);
   }
 
   @Override

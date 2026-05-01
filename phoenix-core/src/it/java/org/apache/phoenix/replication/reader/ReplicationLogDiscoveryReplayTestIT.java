@@ -113,24 +113,28 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
   }
 
   /**
-   * Tests the replay interval configuration with default and custom values.
+   * Tests that replay interval always matches the configured round duration.
    */
   @Test
-  public void testGetReplayIntervalSeconds() throws IOException {
-    // Create ReplicationLogDiscoveryReplay instance
+  public void testGetReplayIntervalMillis() throws IOException {
+    // Test with default round duration
     TestableReplicationLogTracker fileTracker =
       createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
     ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
+    long expectedRoundMillis =
+      fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds()
+        * 1000L;
+    assertEquals("Replay interval should match round duration",
+      expectedRoundMillis, discovery.getReplayIntervalMillis());
 
-    // Test default value when no custom config is set
-    long defaultResult = discovery.getReplayIntervalSeconds();
-    assertEquals("Should return default value when no custom config is set",
-      ReplicationLogDiscoveryReplay.DEFAULT_REPLAY_INTERVAL_SECONDS, defaultResult);
-
-    // Test custom value when config is set
-    conf1.setLong(ReplicationLogDiscoveryReplay.REPLICATION_REPLAY_INTERVAL_SECONDS_KEY, 120L);
-    long customResult = discovery.getReplayIntervalSeconds();
-    assertEquals("Should return custom value when config is set", 120L, customResult);
+    // Test with custom round duration
+    conf1.setInt(ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY,
+      120);
+    TestableReplicationLogTracker fileTracker2 =
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+    ReplicationLogDiscoveryReplay discovery2 = new ReplicationLogDiscoveryReplay(fileTracker2);
+    assertEquals("Replay interval should match custom round duration",
+      120_000L, discovery2.getReplayIntervalMillis());
   }
 
   /**

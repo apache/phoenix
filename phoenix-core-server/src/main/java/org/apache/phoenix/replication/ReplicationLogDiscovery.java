@@ -66,11 +66,6 @@ public abstract class ReplicationLogDiscovery {
   private static final String DEFAULT_EXECUTOR_THREAD_NAME_FORMAT = "ReplicationLogDiscovery-%d";
 
   /**
-   * Default interval in seconds between replay operations
-   */
-  private static final long DEFAULT_REPLAY_INTERVAL_SECONDS = 60;
-
-  /**
    * Default timeout in seconds for graceful shutdown of the executor service
    */
   private static final long DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 30;
@@ -151,7 +146,7 @@ public abstract class ReplicationLogDiscovery {
       scheduler = Executors.newScheduledThreadPool(getExecutorThreadCount(),
         new ThreadFactoryBuilder().setNameFormat(getExecutorThreadNameFormat()).build());
       long initialDelayMs = computeAlignedInitialDelay();
-      long replayIntervalMs = getReplayIntervalSeconds() * 1000L;
+      long replayIntervalMs = getReplayIntervalMillis();
       LOG.info("Scheduling replay for haGroup: {} with initialDelay={}ms, interval={}ms",
         haGroupName, initialDelayMs, replayIntervalMs);
       scheduler.scheduleAtFixedRate(() -> {
@@ -476,12 +471,12 @@ public abstract class ReplicationLogDiscovery {
   }
 
   /**
-   * Returns the replay interval in seconds. Subclasses can override this method to provide custom
-   * intervals.
-   * @return The replay interval in seconds (default: 10 seconds).
+   * Returns the replay interval in milliseconds. Subclasses can override this method to provide
+   * custom intervals. Defaults to the round duration.
+   * @return The replay interval in milliseconds.
    */
-  public long getReplayIntervalSeconds() {
-    return DEFAULT_REPLAY_INTERVAL_SECONDS;
+  public long getReplayIntervalMillis() {
+    return roundTimeMills;
   }
 
   /**
