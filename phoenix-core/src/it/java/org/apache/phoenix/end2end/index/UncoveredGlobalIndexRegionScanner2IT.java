@@ -38,6 +38,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
@@ -930,7 +931,14 @@ public class UncoveredGlobalIndexRegionScanner2IT extends BaseTest {
 
   @Test
   public void testCount() throws Exception {
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    // testCount upserts 100k rows and then runs an aggregate count whose region scans are
+    // forced to go through the post-dummy region-move callback. On slower CI/dev hardware the
+    // 5-minute default phoenix.query.timeoutMs from QueryServicesTestImpl is not enough to
+    // complete the scan, especially for the uncovered=false,salted=true parameterization.
+    // Allow a longer timeout for this individual test connection.
+    Properties props = new Properties();
+    props.setProperty(QueryServices.THREAD_TIMEOUT_MS_ATTRIB, Long.toString(20L * 60L * 1000L));
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String dataTableName = generateUniqueName();
       conn.createStatement().execute(
         "CREATE TABLE " + dataTableName + "(k1 BIGINT NOT NULL, k2 BIGINT NOT NULL, v1 INTEGER, "
