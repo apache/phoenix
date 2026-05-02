@@ -70,6 +70,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -143,6 +144,14 @@ public class CDCQueryIT extends CDCBaseIT {
     EnvironmentEdgeManager.reset();
     injectEdge = new ManualEnvironmentEdge();
     injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+  }
+
+  @After
+  public void afterTest() {
+    // CDCBaseIT.applyMutations intentionally leaves the manual edge installed so
+    // SCN-bounded reads in the test body remain inside the max-lookback window.
+    // Restore the real clock here so per-test isolation is preserved.
+    EnvironmentEdgeManager.reset();
   }
 
   private void cdcIndexShouldNotBeUsedForDataTableQueries(Connection conn, String dataTableName,
