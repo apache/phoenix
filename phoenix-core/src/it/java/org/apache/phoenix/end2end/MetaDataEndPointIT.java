@@ -39,7 +39,26 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
-@Category(ParallelStatsDisabledTest.class)
+/**
+ * The metric tests in this class assert against the process-global
+ * {@link MetricsMetadataSourceFactory#getMetadataMetricsSource()} singleton, whose counters
+ * (CREATE_TABLE_COUNT, METADATA_CACHE_ESTIMATED_USED_SIZE, METADATA_CACHE_ADD_COUNT, ...) are
+ * incremented by every server-side metadata operation in the same JVM. Running this test class in
+ * the {@link ParallelStatsDisabledTest} group lets parallel tests in other classes in the same
+ * fork mutate those counters between this test's "capture baseline" and "verify after CREATE
+ * TABLE" calls, producing intermittent strict-equality assertion failures such as:
+ *
+ * <pre>
+ *   testMetadataMetricsOfCreateTable
+ *     expected:&lt;232498&gt; but was:&lt;240491&gt;
+ * </pre>
+ *
+ * Categorize as {@link NeedsOwnMiniClusterTest} so failsafe runs this class in its own forked JVM
+ * (reuseForks=false), guaranteeing exclusive ownership of the metric singleton for the duration
+ * of the suite. Tests within this class still run sequentially in that fork, which is sufficient
+ * because each individual test captures and verifies its own counter deltas in a single thread.
+ */
+@Category(NeedsOwnMiniClusterTest.class)
 public class MetaDataEndPointIT extends ParallelStatsDisabledIT {
   @Test
   public void testUpdateIndexState() throws Throwable {
