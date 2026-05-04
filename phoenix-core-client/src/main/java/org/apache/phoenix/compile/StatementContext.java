@@ -80,6 +80,7 @@ public class StatementContext {
 
   private long currentTime = QueryConstants.UNSET_TIMESTAMP;
   private ScanRanges scanRanges = ScanRanges.EVERYTHING;
+  private org.apache.phoenix.compile.keyspace.scan.V2ScanArtifact v2ScanArtifact;
   private final SequenceManager sequences;
 
   private TableRef currentTable;
@@ -307,6 +308,20 @@ public class StatementContext {
   public void setScanRanges(ScanRanges scanRanges) {
     this.scanRanges = scanRanges;
     scanRanges.initializeScan(scan);
+  }
+
+  /**
+   * V2-owned metadata attached by the V2 scan-construction path; null under the V1 path
+   * ({@code WHERE_OPTIMIZER_V2_ENABLED=false}). Consumers (currently the explain-plan
+   * formatter) prefer this when present; others are unaffected.
+   */
+  public org.apache.phoenix.compile.keyspace.scan.V2ScanArtifact getV2ScanArtifact() {
+    return this.v2ScanArtifact;
+  }
+
+  public void setV2ScanArtifact(
+    org.apache.phoenix.compile.keyspace.scan.V2ScanArtifact artifact) {
+    this.v2ScanArtifact = artifact;
   }
 
   public PhoenixConnection getConnection() {

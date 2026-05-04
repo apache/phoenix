@@ -504,7 +504,9 @@ public abstract class ExplainTable {
     boolean isLocalIndex = ScanUtil.isLocalIndex(context.getScan());
     boolean forceSkipScan = this.hint.hasHint(Hint.SKIP_SCAN);
     int nRanges = forceSkipScan ? scanRanges.getRanges().size() : scanRanges.getBoundSlotCount();
+    int[] slotSpans = scanRanges.getSlotSpans();
     for (int i = 0, minPos = 0; minPos < nRanges || minMaxIterator.hasNext(); i++) {
+      int slotIdx = minPos;
       List<KeyRange> ranges = minPos >= nRanges ? EVERYTHING : scanRanges.getRanges().get(minPos++);
       KeyRange range = bound == Bound.LOWER ? ranges.get(0) : ranges.get(ranges.size() - 1);
       byte[] b = range.getRange(bound);
@@ -522,6 +524,51 @@ public abstract class ExplainTable {
           minMaxIterator = Collections.emptyIterator();
         }
       }
+      // Compound-emitted slot with slotSpan > 0: decompose the byte[] into per-PK-column
+      // pieces so the explain output shows one value per PK column (matching V1's
+      // per-slot emission shape). Without this, the compound bytes are decoded as a
+      // single value of the leading column's type, producing garbled output.
+      //
+      // The decomposition relies on the RowKeySchema iterator to walk per-column widths.
+      // When the compound bytes don't align cleanly with the schema (e.g. trailing
+      // columns have unbounded bounds so their bytes are truncated, or DESC encoding
+      // introduces different widths), the schema iteration can report an expected width
+      // that overshoots the remaining bytes. In that case fall through to the legacy
+      // path (emit the whole byte[] as if it were the first column's value) — garbled
+      // output for those edge cases is preferable to an exception.
+      int span = (slotSpans != null && slotIdx < slotSpans.length && isNull == null
+        && b != null && b.length > 0) ? slotSpans[slotIdx] : 0;
+      if (span > 0) {
+        RowKeySchema schema = scanRanges.getSchema();
+        try {
+          ImmutableBytesWritable ptr = new ImmutableBytesWritable(b);
+          int maxOffset = schema.iterator(b, ptr);
+          StringBuilder compoundBuf = new StringBuilder();
+          int emitted = 0;
+          for (int d = 0; d <= span; d++) {
+            if (schema.next(ptr, i + d, maxOffset) == null) break;
+            byte[] colBytes = ptr.copyBytes();
+            if (isLocalIndex && i + d == 0) {
+              appendPKColumnValue(compoundBuf, colBytes, null, i + d, true);
+            } else {
+              appendPKColumnValue(compoundBuf, colBytes, null, i + d, false);
+            }
+            compoundBuf.append(',');
+            emitted++;
+          }
+          // Pad trailing PK columns with '*' when the compound ended before all spanned
+          // dims were consumed (last dim's bound is unbounded so its bytes are absent).
+          for (int d = emitted; d <= span; d++) {
+            compoundBuf.append("*,");
+          }
+          buf.append(compoundBuf);
+          i += span;
+          continue;
+        } catch (RuntimeException e) {
+          // Schema iteration couldn't parse the compound bytes (mixed encodings / DESC
+          // with variable widths); fall through to the legacy per-slot emission.
+        }
+      }
       if (isLocalIndex && i == 0) {
         appendPKColumnValue(buf, b, isNull, i, true);
       } else {
@@ -536,6 +583,20 @@ public abstract class ExplainTable {
     ScanRanges scanRanges = context.getScanRanges();
     if (scanRanges.isDegenerate() || scanRanges.isEverything()) {
       return "";
+    }
+    // Under V2, the optimizer attaches a V2ScanArtifact carrying the pre-encoding
+    // KeySpaceList. V2ExplainFormatter reads from that directly so inclusive-upper
+    // ranges render as `[*, 1]` rather than the post-bump `[*, 2)`. Returns null to
+    // signal "not my shape" — fall through to the legacy byte-decoding path for cases
+    // V2ExplainFormatter doesn't handle yet (currently: multi-space KeySpaceLists).
+    org.apache.phoenix.compile.keyspace.scan.V2ScanArtifact v2Artifact =
+      context.getV2ScanArtifact();
+    if (v2Artifact != null) {
+      String v2Formatted = org.apache.phoenix.compile.keyspace.scan.V2ExplainFormatter
+        .appendKeyRanges(context, tableRef, v2Artifact);
+      if (v2Formatted != null) {
+        return v2Formatted;
+      }
     }
     buf.append(" [");
     StringBuilder buf1 = new StringBuilder();
