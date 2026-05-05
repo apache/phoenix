@@ -66,11 +66,6 @@ public abstract class ReplicationLogDiscovery {
   private static final String DEFAULT_EXECUTOR_THREAD_NAME_FORMAT = "ReplicationLogDiscovery-%d";
 
   /**
-   * Default interval in seconds between replay operations
-   */
-  private static final long DEFAULT_REPLAY_INTERVAL_SECONDS = 10;
-
-  /**
    * Default timeout in seconds for graceful shutdown of the executor service
    */
   private static final long DEFAULT_SHUTDOWN_TIMEOUT_SECONDS = 30;
@@ -150,13 +145,17 @@ public abstract class ReplicationLogDiscovery {
       // Initialize and schedule the executors
       scheduler = Executors.newScheduledThreadPool(getExecutorThreadCount(),
         new ThreadFactoryBuilder().setNameFormat(getExecutorThreadNameFormat()).build());
+      long initialDelayMs = computeAlignedInitialDelay();
+      long replayIntervalMs = getReplayIntervalMillis();
+      LOG.info("Scheduling replay for haGroup: {} with initialDelay={}ms, interval={}ms",
+        haGroupName, initialDelayMs, replayIntervalMs);
       scheduler.scheduleAtFixedRate(() -> {
         try {
           replay();
         } catch (Exception e) {
           LOG.error("Error during replay", e);
         }
-      }, 0, getReplayIntervalSeconds(), TimeUnit.SECONDS);
+      }, initialDelayMs, replayIntervalMs, TimeUnit.MILLISECONDS);
 
       isRunning = true;
       LOG.info("ReplicationLogDiscovery started for haGroup: {}", haGroupName);
@@ -293,7 +292,7 @@ public abstract class ReplicationLogDiscovery {
     long startTime = EnvironmentEdgeManager.currentTime();
     List<Path> files = replicationLogTracker.getNewFilesForRound(replicationRound);
     LOG.info("Number of new files for round {} is {}", replicationRound, files.size());
-    while (!files.isEmpty()) {
+    while (!files.isEmpty() && isRunning()) {
       processOneRandomFile(files);
       files = replicationLogTracker.getNewFilesForRound(replicationRound);
     }
@@ -323,7 +322,7 @@ public abstract class ReplicationLogDiscovery {
     LOG.info("Number of {} files with renameTimestampThreshold {} is {} for haGroup: {}",
       replicationLogTracker.getInProgressLogSubDirectoryName(), renameTimestampThreshold,
       files.size(), haGroupName);
-    while (!files.isEmpty()) {
+    while (!files.isEmpty() && isRunning()) {
       Optional<Path> failedFile = processOneRandomFile(files);
       if (failedFile.isPresent()) {
         String prefix = replicationLogTracker.getFilePrefix(failedFile.get());
@@ -472,12 +471,12 @@ public abstract class ReplicationLogDiscovery {
   }
 
   /**
-   * Returns the replay interval in seconds. Subclasses can override this method to provide custom
-   * intervals.
-   * @return The replay interval in seconds (default: 10 seconds).
+   * Returns the replay interval in milliseconds. Subclasses can override this method to provide
+   * custom intervals. Defaults to the round duration.
+   * @return The replay interval in milliseconds.
    */
-  public long getReplayIntervalSeconds() {
-    return DEFAULT_REPLAY_INTERVAL_SECONDS;
+  public long getReplayIntervalMillis() {
+    return roundTimeMills;
   }
 
   /**
@@ -505,6 +504,20 @@ public abstract class ReplicationLogDiscovery {
    */
   public double getWaitingBufferPercentage() {
     return DEFAULT_WAITING_BUFFER_PERCENTAGE;
+  }
+
+  /**
+   * Computes initial delay to align the scheduler to round-eligible boundaries so all RS wake up at
+   * the same wall-clock moment. A round becomes eligible when currentTime >= roundEndTime +
+   * bufferMillis, and rounds repeat every roundTimeMills. This gives a universal grid of eligible
+   * ticks at bufferMillis, bufferMillis + roundTimeMills, bufferMillis + 2*roundTimeMills, etc.
+   * from epoch. All RS compute the same grid regardless of when start() is called.
+   * @return the initial delay in milliseconds until the next round-eligible tick
+   */
+  protected long computeAlignedInitialDelay() {
+    long now = EnvironmentEdgeManager.currentTime();
+    long elapsed = (now - bufferMillis) % roundTimeMills;
+    return (elapsed == 0) ? 0 : roundTimeMills - elapsed;
   }
 
   public int getInProgressFileMaxRetries() {
