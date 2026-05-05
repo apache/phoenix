@@ -69,6 +69,25 @@ and optionally, to just skip all the tests and build the jars:
 
 Note: javadocs are generated in target/apidocs
 
+Faster builds
+-------------
+
+The following options can dramatically reduce wall-clock time:
+
+* The four shade modules are reactor-siblings and the shade plugin is thread-safe, so they can build concurrently:
+
+  `$ mvn -T 1C clean package -DskipTests`
+
+  (`-T 1C` uses one build thread per CPU core. `-T 4` is also fine.)
+
+* Skip the shaded artifacts and assembly when you are iterating on `phoenix-core*` and do not need the shaded uberjars or the binary tarball. Pass `-DPhoenixPatchProcess` to deactivate the `shade-and-assembly` profile entirely (this is what the ASF Yetus precommit and the Jenkinsfile use):
+
+  `$ mvn package -DskipTests -DPhoenixPatchProcess`
+
+* By default the shade executions do not also re-shade the dependency source artifacts. The `release` profile re-enables it for RC / publish builds. To force it on outside of `-Prelease`, pass `-DshadeSources=true`.
+
+* The `phoenix-mapreduce-byo-shaded-hbase` module is built only under `-Prelease`, which bundles its uberjar into the release binary tarball.
+
 HBase version compatibility
 ---------------------------
 

@@ -92,7 +92,10 @@
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}/..</top.dir>
     <test.tmp.dir>${project.build.directory}</test.tmp.dir>
-    <shadeSources>true</shadeSources>
+    <!-- Sources-jar shading roughly doubles the time of every shade execution.
+         Default it OFF here; the `release` profile re-enables it so RC / publish
+         builds still produce shaded sources jars. -->
+    <shadeSources>false</shadeSources>
 
     <!-- Dependency versions -->
     <jackson-bom.version>2.18.4.1</jackson-bom.version>
@@ -161,7 +164,7 @@
     <lifecycle-mapping.version>1.0.0</lifecycle-mapping.version>
     <maven-bundle-plugin.version>5.1.9</maven-bundle-plugin.version>
     <exec-maven-plugin.version>3.1.1</exec-maven-plugin.version>
-    <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
+    <maven-shade-plugin.version>3.6.2</maven-shade-plugin.version>
     <!-- This overrides the property in the ASF parent project-->
     <version.maven-site-plugin>3.21.0</version.maven-site-plugin>
     <spotless.version>2.30.0</spotless.version>
@@ -2092,13 +2095,22 @@
         <module>phoenix-client-parent/phoenix-client-embedded</module>
         <module>phoenix-client-parent/phoenix-client-lite</module>
         <module>phoenix-server</module>
-        <module>phoenix-mapreduce-byo-shaded-hbase</module>
         <module>phoenix-assembly</module>
       </modules>
     </profile>
     <!-- this profile should be activated for release builds -->
     <profile>
       <id>release</id>
+      <!-- The byo-shaded-hbase mapreduce uberjar is a release-only artifact.
+           It costs several minutes to shade and is not needed for normal
+           dev builds, so we only add it to the reactor under -Prelease. -->
+      <modules>
+        <module>phoenix-mapreduce-byo-shaded-hbase</module>
+      </modules>
+      <properties>
+        <!-- Re-enable shaded sources jars for RC / publish builds. -->
+        <shadeSources>true</shadeSources>
+      </properties>
       <build>
         <plugins>
           <plugin>

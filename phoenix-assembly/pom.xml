@@ -32,6 +32,11 @@
     <source.skip>true</source.skip>
     <jacocoArgLine/>
     <main.basedir>${project.parent.basedir}</main.basedir>
+    <!-- Selects the (otherwise unused) component descriptor referenced by
+         src/build/package-to-tar-all.xml. Default = no-op. The release
+         profile overrides this to add the byo-shaded-hbase mapreduce uberjar
+         to the binary tarball. -->
+    <assembly.mapreduce.componentDescriptor>src/build/components/assembly-noop.xml</assembly.mapreduce.componentDescriptor>
   </properties>
 
   <dependencies>
@@ -40,10 +45,8 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-server-${hbase.suffix}</artifactId>
     </dependency>
-    <dependency>
-      <groupId>org.apache.phoenix</groupId>
-      <artifactId>phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}</artifactId>
-    </dependency>
+    <!-- phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix} is added under
+         the `release` profile, since it is built only for releases. -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-client-embedded-${hbase.suffix}</artifactId>
@@ -139,25 +142,9 @@
               </arguments>
             </configuration>
           </execution>
-          <execution>
-            <id>mapreduce without version</id>
-            <goals>
-              <goal>exec</goal>
-            </goals>
-            <phase>compile</phase>
-            <configuration>
-              <executable>ln</executable>
-              <workingDirectory>${project.basedir}/../phoenix-mapreduce-byo-shaded-hbase/target</workingDirectory>
-              <arguments>
-                <argument>-fnsv</argument>
-                <argument>phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}-${project.version}.jar</argument>
-                <argument>
-                  <!-- We are overwriting the unshaded  JAR, but we don't care -->
-                  phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}.jar
-                </argument>
-              </arguments>
-            </configuration>
-          </execution>
+          <!-- The mapreduce-byo-shaded-hbase exec execution lives in the
+               `release` profile below, since the byo-shaded-hbase mapreduce
+               uberjar is only built for releases. -->
           <execution>
             <id>pherf without version</id>
             <goals>
@@ -214,6 +201,51 @@
   </build>
 
   <profiles>
+    <profile>
+      <!-- Release-only artifacts. The byo-shaded-hbase mapreduce uberjar is
+           expensive to shade and is not needed for normal dev builds, so it
+           is built only when -Prelease is active (see root pom.xml). This
+           profile wires the resulting jar into the binary tarball. -->
+      <id>release</id>
+      <properties>
+        <assembly.mapreduce.componentDescriptor>src/build/components/release-only-jars.xml</assembly.mapreduce.componentDescriptor>
+      </properties>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.phoenix</groupId>
+          <artifactId>phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}</artifactId>
+        </dependency>
+      </dependencies>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>exec-maven-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>mapreduce-byo-shaded-hbase</id>
+                <goals>
+                  <goal>exec</goal>
+                </goals>
+                <phase>compile</phase>
+                <configuration>
+                  <executable>ln</executable>
+                  <workingDirectory>${project.basedir}/../phoenix-mapreduce-byo-shaded-hbase/target</workingDirectory>
+                  <arguments>
+                    <argument>-fnsv</argument>
+                    <argument>phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}-${project.version}.jar</argument>
+                    <argument>
+                      <!-- We are overwriting the unshaded JAR, but we don't care -->
+                      phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}.jar
+                    </argument>
+                  </arguments>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
     <profile>
       <id>coverage</id>
       <dependencies>
