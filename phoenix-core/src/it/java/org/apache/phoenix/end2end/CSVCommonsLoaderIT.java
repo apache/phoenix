@@ -117,7 +117,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(STOCK_CSV_VALUES_WITH_HEADER), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_CSV_VALUES_WITH_HEADER)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -161,7 +162,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         tenantConn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableMultiName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(STOCK_CSV_VALUES_WITH_HEADER), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_CSV_VALUES_WITH_HEADER)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -200,7 +202,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(STOCK_TDV_VALUES_WITH_HEADER), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_TDV_VALUES_WITH_HEADER)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -239,8 +242,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser =
-        new CSVParser(new StringReader(STOCK_CSV_VALUES_WITH_DELIMITER), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_CSV_VALUES_WITH_DELIMITER)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -279,7 +282,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(STOCK_CSV_VALUES), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_CSV_VALUES)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -317,7 +321,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(STOCK_CSV_VALUES), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_CSV_VALUES)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -356,7 +361,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(STOCK_CSV_VALUES), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_CSV_VALUES)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         assertEquals(record.get(0), phoenixResultSet.getString(1));
@@ -483,7 +489,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         "SELECT CKEY, CVARCHAR, CCHAR, CINTEGER, CDECIMAL, CUNSIGNED_INT, CBOOLEAN, CBIGINT, CUNSIGNED_LONG, CTIME, CDATE FROM "
           + DATATYPE_TABLE);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(DATATYPES_CSV_VALUES), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(DATATYPES_CSV_VALUES)).get();
 
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
@@ -531,8 +538,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT MYKEY, MYVALUE FROM " + ENCAPSULATED_CHARS_TABLE);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(CSV_VALUES_ENCAPSULATED_CONTROL_CHARS_WITH_HEADER),
-        csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(CSV_VALUES_ENCAPSULATED_CONTROL_CHARS_WITH_HEADER)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -567,11 +574,48 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         csvUtil.upsert(new StringReader(CSV_VALUES_BAD_ENCAPSULATED_CONTROL_CHARS_WITH_HEADER));
         fail();
       } catch (RuntimeException e) {
+        // With commons-csv >= 1.5, parse errors during iteration are wrapped as
+        // UncheckedIOException which UpsertExecutor re-wraps as RuntimeException.
+        // The original error is in the cause.
         assertTrue(e.getMessage(),
-          e.getMessage().contains("invalid char between encapsulated token and delimiter"));
+          e.getMessage().contains("IO error while iterating over records"));
+        assertTrue(e.getCause().getMessage(), e.getCause().getMessage()
+          .contains("invalid char between encapsulated token and delimiter"));
       }
     } finally {
       if (parser != null) parser.close();
+      if (conn != null) conn.close();
+    }
+  }
+
+  @Test
+  public void testCSVCommonsUpsertEOFInEncapsulatedToken() throws Exception {
+    // PHOENIX-7267: CsvBulkLoadTool fails job due to a bad record with
+    // "(startline 1) EOF reached before encapsulated token finished"
+    PhoenixConnection conn = null;
+    try {
+      String tableName = generateUniqueName();
+      String statements = "CREATE TABLE IF NOT EXISTS " + tableName
+        + "(MYKEY VARCHAR NOT NULL PRIMARY KEY, MYVALUE VARCHAR);";
+      conn = DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class);
+      PhoenixRuntime.executeStatements(conn, new StringReader(statements), null);
+
+      CSVCommonsLoader csvUtil =
+        new CSVCommonsLoader(conn, tableName, Collections.<String> emptyList(), true);
+      try {
+        // The last field's opening quote is never closed — EOF is reached mid-token
+        csvUtil
+          .upsert(new StringReader("MYKEY,MYVALUE\n" + "KEY1,\"This value never closes its quote"));
+        fail("Upserting a CSV with an unclosed quote should throw an exception");
+      } catch (RuntimeException e) {
+        // UpsertExecutor catches UncheckedIOException from the CSV iterator and
+        // re-throws as RuntimeException("IO error while iterating over records", cause)
+        assertTrue(e.getMessage(),
+          e.getMessage().contains("IO error while iterating over records"));
+        assertTrue(e.getCause().getMessage(),
+          e.getCause().getMessage().contains("EOF reached before encapsulated token finished"));
+      }
+    } finally {
       if (conn != null) conn.close();
     }
   }

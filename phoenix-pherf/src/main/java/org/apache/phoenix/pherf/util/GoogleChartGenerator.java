@@ -92,7 +92,8 @@ public class GoogleChartGenerator {
       + label + ResultFileDetails.CSV_AGGREGATE_PERFORMANCE.getExtension();
 
     FileReader in = new FileReader(resultFileName);
-    final CSVParser parser = new CSVParser(in, CSVFormat.DEFAULT.withHeader());
+    final CSVParser parser = CSVParser.builder()
+      .setFormat(CSVFormat.DEFAULT.builder().setHeader().get()).setReader(in).get();
 
     for (CSVRecord record : parser) {
       String group = record.get("QUERY_GROUP");

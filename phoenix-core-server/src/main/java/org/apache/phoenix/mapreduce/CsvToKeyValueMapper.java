@@ -19,6 +19,7 @@ package org.apache.phoenix.mapreduce;
 
 import java.io.IOException;
 import java.io.StringReader;
+import java.io.UncheckedIOException;
 import java.util.List;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
@@ -89,8 +90,8 @@ public class CsvToKeyValueMapper extends FormatToBytesWritableMapper<CSVRecord> 
     private final CSVFormat csvFormat;
 
     CsvLineParser(Character fieldDelimiter, Character quote, Character escape) {
-      this.csvFormat = CSVFormat.DEFAULT.withIgnoreEmptyLines(true).withDelimiter(fieldDelimiter)
-        .withEscape(escape).withQuote(quote);
+      this.csvFormat = CSVFormat.DEFAULT.builder().setIgnoreEmptyLines(true)
+        .setDelimiter(fieldDelimiter).setEscape(escape).setQuote(quote).get();
     }
 
     @Override
@@ -98,8 +99,13 @@ public class CsvToKeyValueMapper extends FormatToBytesWritableMapper<CSVRecord> 
       // TODO Creating a new parser for each line seems terribly inefficient but
       // there's no public way to parse single lines via commons-csv. We should update
       // it to create a LineParser class like this one.
-      CSVParser csvParser = new CSVParser(new StringReader(input), csvFormat);
-      return Iterables.getFirst(csvParser, null);
+      try {
+        CSVParser csvParser =
+          CSVParser.builder().setFormat(csvFormat).setReader(new StringReader(input)).get();
+        return Iterables.getFirst(csvParser, null);
+      } catch (UncheckedIOException e) {
+        throw new IOException(e.getMessage(), e.getCause());
+      }
     }
   }
 }

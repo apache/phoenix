@@ -19,6 +19,7 @@ package org.apache.phoenix.util;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -124,8 +125,12 @@ public abstract class UpsertExecutor<RECORD, FIELD> implements Closeable {
     if (!initFinished) {
       finishInit();
     }
-    for (RECORD record : records) {
-      execute(record);
+    try {
+      for (RECORD record : records) {
+        execute(record);
+      }
+    } catch (UncheckedIOException e) {
+      throw new RuntimeException("IO error while iterating over records", e.getCause());
     }
   }
 
