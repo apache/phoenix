@@ -818,9 +818,11 @@ public class QueryOptimizer {
     java.util.List<java.util.List<org.apache.phoenix.query.KeyRange>> ranges =
       scanRanges.getRanges();
     int[] slotSpan = scanRanges.getSlotSpans();
+    org.apache.phoenix.schema.RowKeySchema schema = scanRanges.getSchema();
     int count = 0;
     boolean hasUnbound = false;
     int nRanges = ranges.size();
+    int schemaCursor = 0;
     for (int i = 0; i < nRanges && !hasUnbound; i++) {
       java.util.List<org.apache.phoenix.query.KeyRange> orRanges = ranges.get(i);
       boolean slotHasUnbound = false;
@@ -845,21 +847,85 @@ public class QueryOptimizer {
       // For cost ranking we want to count only columns genuinely narrowed by the scan
       // bounds, so discount that shape to 1.
       //
-      // Discriminator: the extension path ALWAYS has >=2 slots (at least one leading
-      // concretely-narrowed slot plus the last bumped slot). A single-slot shape with
-      // {@code slotSpan > 0} is the compound-emission path — a genuine multi-col range
-      // whose bytes concatenate {@code span+1} columns — and keeps {@code span + 1}.
-      // See CostBasedDecisionIT.testCostOverridesStaticPlanOrdering3 (multi-slot shape
-      // must discount) vs. RowTimestampIT.testAutomaticallySettingRowTimestampWith*
-      // (single-slot compound must not discount).
-      boolean isArtificialExtension = nRanges > 1 && i == nRanges - 1;
-      if (span > 0 && slotAllBoundedNonPoint && !slotHasUnbound && isArtificialExtension) {
-        count += 1;
+      // Discriminator: decode the range's bytes against the schema at the slot's
+      // starting PK position and count how many fields they consume. A genuine compound
+      // range (from V2's compound-emission path) concatenates {@code span+1} fields so
+      // the byte decode yields {@code span+1} columns. The V1-compat extension leaves
+      // the bytes covering a single column and only bumps {@code slotSpan} to satisfy
+      // SkipScanFilter's per-region cursor stepping — the byte decode yields 1 column.
+      //
+      // Checked on {@code slotAllBoundedNonPoint && !slotHasUnbound} with {@code
+      // span > 0}: point keys and unbounded ranges still count as {@code span+1}
+      // (they represent real multi-col narrowing — see
+      // QueryOptimizerTest.testQueryOptimizerShouldSelectThePlanWithMoreNumberOfPKColumns).
+      if (span > 0 && slotAllBoundedNonPoint && !slotHasUnbound) {
+        int effectiveCols = span + 1;
+        if (schema != null && !orRanges.isEmpty()) {
+          org.apache.phoenix.query.KeyRange r = orRanges.get(0);
+          int decoded = countColsInKey(schema, r.getLowerRange(), schemaCursor, span + 1);
+          if (decoded == 0) {
+            decoded = countColsInKey(schema, r.getUpperRange(), schemaCursor, span + 1);
+          }
+          if (decoded > 0) {
+            effectiveCols = decoded;
+          }
+        }
+        count += effectiveCols;
       } else {
         count += span + 1;
       }
+      schemaCursor += span + 1;
     }
     return count;
+  }
+
+  /**
+   * Count the PK fields actually consumed when decoding {@code key} against {@code schema}
+   * starting at {@code startField}. Mirrors {@code KeyRangeExtractor.countColsInKey};
+   * duplicated here to keep the visibility scoped and avoid exposing an internal helper.
+   */
+  private static int countColsInKey(org.apache.phoenix.schema.RowKeySchema schema,
+      byte[] key, int startField, int maxFields) {
+    if (
+      key == null || key == org.apache.phoenix.query.KeyRange.UNBOUND || key.length == 0
+    ) {
+      return 0;
+    }
+    int offset = 0;
+    int cols = 0;
+    for (
+      int f = startField;
+      f < startField + maxFields && f < schema.getMaxFields();
+      f++
+    ) {
+      if (offset >= key.length) break;
+      org.apache.phoenix.schema.ValueSchema.Field field = schema.getField(f);
+      int fieldLen;
+      if (field.getDataType().isFixedWidth()) {
+        Integer maxCol = field.getMaxLength();
+        fieldLen = (maxCol != null) ? maxCol
+          : (field.getDataType().getByteSize() != null
+            ? field.getDataType().getByteSize()
+            : 0);
+      } else {
+        int end = offset;
+        while (
+          end < key.length
+            && key[end] != org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE
+            && key[end] != org.apache.phoenix.query.QueryConstants.DESC_SEPARATOR_BYTE
+        ) {
+          end++;
+        }
+        fieldLen = end - offset;
+      }
+      offset += fieldLen;
+      cols++;
+      if (offset >= key.length) break;
+      if (!field.getDataType().isFixedWidth() && offset < key.length) {
+        offset++;
+      }
+    }
+    return cols;
   }
 
   private static class WhereConditionRewriter extends AndRewriterBooleanParseNodeVisitor {
