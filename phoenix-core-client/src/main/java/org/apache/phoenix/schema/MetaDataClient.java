@@ -6619,6 +6619,24 @@ public class MetaDataClient {
         boolean isStrictTTL =
           metaProperties.isStrictTTL() != null ? metaProperties.isStrictTTL : table.isStrictTTL();
         newTTL.validateTTLOnAlter(connection, table, isStrictTTL);
+        // For a no-WHERE tenant view on a multi-tenant base table, prevent setting TTL when any
+        // other no-WHERE sibling view exists for the same tenant (to avoid ROW_KEY_MATCHER
+        // conflicts in the compaction trie).
+        String currentViewStmt = table.getViewStatement();
+        boolean currentIsNoWhere = currentViewStmt == null || currentViewStmt.isEmpty();
+        if (
+          !newTTL.equals(TTL_EXPRESSION_NOT_DEFINED) && table.getType() == PTableType.VIEW
+            && table.getTenantId() != null && currentIsNoWhere
+        ) {
+          PTable parent = resolveParentTable(table);
+          if (parent != null) {
+            String selfFullName = SchemaUtil.getTableName(
+              table.getSchemaName() == null ? null : table.getSchemaName().getString(),
+              table.getTableName().getString());
+            ViewUtil.validateTenantViewWithoutWhereTTLCoexistence(connection, parent, true,
+              selfFullName);
+          }
+        }
         metaPropertiesEvaluated.setTTL(getCompatibleTTLExpression(metaProperties.getTTL(),
           table.getType(), table.getViewType(), table.getName().toString()));
         changingPhoenixTableProperty = true;
@@ -6666,6 +6684,27 @@ public class MetaDataClient {
     }
 
     return changingPhoenixTableProperty;
+  }
+
+  /**
+   * Resolves the immediate parent {@link PTable} of the given view, or {@code null} if it cannot be
+   * resolved.
+   */
+  private PTable resolveParentTable(PTable view) {
+    PName parentName = view.getParentTableName();
+    if (parentName == null) {
+      return null;
+    }
+    PName parentSchema = view.getParentSchemaName();
+    String parentFullName = SchemaUtil
+      .getTableName(parentSchema == null ? null : parentSchema.getString(), parentName.getString());
+    try {
+      return connection.getTable(parentFullName);
+    } catch (TableNotFoundException e) {
+      return null;
+    } catch (SQLException e) {
+      return null;
+    }
   }
 
   public static class MetaProperties {

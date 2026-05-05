@@ -27,6 +27,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.schema.PTableImpl.getColumnsToClone;
 import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -67,11 +68,14 @@ import org.apache.phoenix.coprocessorclient.MetaDataEndpointImplConstants;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.coprocessorclient.TableInfo;
 import org.apache.phoenix.coprocessorclient.WhereConstantParser;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SQLParser;
+import org.apache.phoenix.query.ConnectionlessQueryServicesImpl;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PColumn;
@@ -430,6 +434,94 @@ public class ViewUtil {
       }
     }
     return childViewsResult;
+  }
+
+  /**
+   * Validates tenant TTL view coexistence rules for NO-WHERE tenant views on a multi-tenant base
+   * table. For a given tenant on such a base table, among that tenant's no-WHERE views we allow
+   * EITHER any number of no-WHERE views without TTL, OR exactly one no-WHERE view with TTL.
+   * Multiple no-WHERE TTL views share the same ROW_KEY_MATCHER (tenant-id bytes) and conflict in
+   * the compaction RowKeyMatcher trie. Views with WHERE clauses are outside the scope of this check
+   * and are ignored (prefix conflicts involving WHERE-scoped matchers are a separate pre-existing
+   * concern).
+   * <p>
+   * This is a no-op when:
+   * <ul>
+   * <li>the connection has no tenant id,</li>
+   * <li>query services are connectionless (unit test mode),</li>
+   * <li>the parent is not a multi-tenant base {@link PTableType#TABLE}.</li>
+   * </ul>
+   * @param connection            phoenix connection (must be a tenant connection for the check to
+   *                              fire)
+   * @param parent                the parent table the view is being created/altered against
+   * @param newViewHasTTL         true if the view being created or altered will have TTL
+   * @param viewToExcludeFullName full name of the view to skip from sibling iteration (used on the
+   *                              ALTER path to exclude the view being altered itself); pass
+   *                              {@code null} on the CREATE path
+   * @throws SQLException {@link SQLExceptionCode#TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT} if the
+   *                      operation would create a TTL / non-TTL coexistence conflict among no-WHERE
+   *                      tenant views
+   */
+  public static void validateTenantViewWithoutWhereTTLCoexistence(PhoenixConnection connection,
+    PTable parent, boolean newViewHasTTL, String viewToExcludeFullName) throws SQLException {
+    if (connection.getTenantId() == null) {
+      return;
+    }
+    if (connection.getQueryServices() instanceof ConnectionlessQueryServicesImpl) {
+      return;
+    }
+    if (parent.getType() != PTableType.TABLE || !parent.isMultiTenant()) {
+      return;
+    }
+    byte[] myTenantIdBytes = connection.getTenantId().getBytes();
+    TableViewFinderResult childViews;
+    try {
+      childViews = findChildViews(connection,
+        parent.getTenantId() == null ? null : parent.getTenantId().getString(),
+        parent.getSchemaName() == null ? null : parent.getSchemaName().getString(),
+        parent.getTableName().getString());
+    } catch (IOException e) {
+      // CHILD_LINK may be unavailable (namespace mapping edge cases, partial setup, etc.).
+      // Skip validation rather than fail the DDL.
+      return;
+    }
+    boolean foundAnyNoWhere = false;
+    for (TableInfo info : childViews.getLinks()) {
+      if (!Arrays.equals(info.getTenantId(), myTenantIdBytes)) {
+        continue;
+      }
+      String childFullName = SchemaUtil.getTableName(
+        info.getSchemaName() == null ? null : Bytes.toString(info.getSchemaName()),
+        Bytes.toString(info.getTableName()));
+      if (childFullName.equals(viewToExcludeFullName)) {
+        continue;
+      }
+      try {
+        PTable existing = connection.getTable(childFullName);
+        String existingViewStmt = existing.getViewStatement();
+        boolean existingIsNoWhere = existingViewStmt == null || existingViewStmt.isEmpty();
+        if (!existingIsNoWhere) {
+          // Views with WHERE clauses are outside the scope of this check.
+          continue;
+        }
+        foundAnyNoWhere = true;
+        boolean existingHasTTL = existing.getTTLExpression() != null
+          && !existing.getTTLExpression().equals(TTL_EXPRESSION_NOT_DEFINED);
+        if (existingHasTTL) {
+          // An existing no-WHERE TTL view blocks any additional no-WHERE view (TTL or not).
+          throw new SQLExceptionInfo.Builder(
+            SQLExceptionCode.TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT).build().buildException();
+        }
+      } catch (TableNotFoundException e) {
+        // Orphan child link, ignore.
+      }
+    }
+    if (newViewHasTTL && foundAnyNoWhere) {
+      // The new / altered no-WHERE view has TTL but sibling no-WHERE views already exist; the TTL
+      // view's trie entry would silently apply to the existing views' rows.
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT)
+        .build().buildException();
+    }
   }
 
   /**

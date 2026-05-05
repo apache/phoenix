@@ -38,6 +38,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.execute.MutationState;
@@ -52,6 +53,7 @@ import org.apache.phoenix.expression.RowKeyColumnExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.visitor.StatelessTraverseNoExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.parse.BindParseNode;
@@ -231,9 +233,17 @@ public class CreateTableCompiler {
       }
       if (viewTypeToBe == ViewType.MAPPED && parentToBe.getPKColumns().isEmpty()) {
         validateCreateViewCompilation(connection, parentToBe, columnDefs, pkConstraint);
-      } else if (where != null && viewTypeToBe == ViewType.UPDATABLE) {
+      } else if (viewTypeToBe == ViewType.UPDATABLE) {
         rowKeyMatcher =
           WhereOptimizer.getRowKeyMatcher(context, create.getTableName(), parentToBe, where);
+        // For no-WHERE tenant views on a multi-tenant base table, for a given tenant we allow
+        // EITHER any number of no-WHERE views without TTL, OR exactly one no-WHERE view with
+        // TTL. Multiple no-WHERE TTL views share the same ROW_KEY_MATCHER (tenant-id bytes)
+        // and conflict in the compaction RowKeyMatcher trie.
+        if (where == null) {
+          ViewUtil.validateTenantViewWithoutWhereTTLCoexistence(connection, parentToBe,
+            hasTTLProperty(create), null);
+        }
       }
       verifyIfAnyParentHasIndexesAndViewExtendsPk(parentToBe, columnDefs, pkConstraint);
     }
@@ -433,6 +443,18 @@ public class CreateTableCompiler {
         }
       }
     }
+  }
+
+  /**
+   * Returns true if the {@code CREATE VIEW} statement has a {@code TTL} property set.
+   */
+  private boolean hasTTLProperty(CreateTableStatement create) {
+    for (Pair<String, Object> prop : create.getProps().values()) {
+      if (PhoenixDatabaseMetaData.TTL.equalsIgnoreCase(prop.getFirst())) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
