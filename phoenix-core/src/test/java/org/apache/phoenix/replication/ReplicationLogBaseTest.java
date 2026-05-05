@@ -113,8 +113,7 @@ public class ReplicationLogBaseTest {
     storeRecord = initHAGroupStoreRecord();
     doReturn(Optional.of(storeRecord)).when(haGroupStoreManager).getHAGroupStoreRecord(anyString());
 
-    logGroup = new TestableLogGroup(conf, serverName, haGroupName, haGroupStoreManager);
-    logGroup.init();
+    logGroup = createAndInitLogGroup();
   }
 
   @After
@@ -133,8 +132,14 @@ public class ReplicationLogBaseTest {
     if (logGroup != null) {
       logGroup.close();
     }
-    logGroup = new TestableLogGroup(conf, serverName, haGroupName, haGroupStoreManager);
-    logGroup.init();
+    logGroup = createAndInitLogGroup();
+  }
+
+  private ReplicationLogGroup createAndInitLogGroup() throws Exception {
+    ReplicationLogGroup group =
+      spy(new TestableLogGroup(conf, serverName, haGroupName, haGroupStoreManager));
+    group.init();
+    return group;
   }
 
   protected static void waitForRotationTick(int roundDurationSeconds) throws InterruptedException {

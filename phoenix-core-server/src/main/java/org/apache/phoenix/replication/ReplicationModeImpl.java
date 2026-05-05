@@ -86,17 +86,9 @@ public abstract class ReplicationModeImpl {
     getReplicationLog().sync();
   }
 
-  /** Graceful close */
-  void closeReplicationLog() {
+  void closeReplicationLog(boolean graceful) {
     if (log != null) {
-      log.close();
-    }
-  }
-
-  /** Forced close */
-  void closeReplicationLogOnError() {
-    if (log != null) {
-      log.closeOnError();
+      log.close(graceful);
     }
   }
 }

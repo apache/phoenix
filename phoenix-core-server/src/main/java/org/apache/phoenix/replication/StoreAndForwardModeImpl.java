@@ -105,11 +105,7 @@ public class StoreAndForwardModeImpl extends ReplicationModeImpl {
   void onExit(boolean gracefulShutdown) {
     LOG.info("HAGroup {} exiting mode {} graceful={}", logGroup, this, gracefulShutdown);
     stopHAGroupStoreUpdateTask();
-    if (gracefulShutdown) {
-      closeReplicationLog();
-    } else {
-      closeReplicationLogOnError();
-    }
+    closeReplicationLog(gracefulShutdown);
   }
 
   @Override

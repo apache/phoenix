@@ -57,7 +57,6 @@ import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hdfs.DFSConfigKeys;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
@@ -159,14 +158,15 @@ public class ReplicationLogGroup {
     "phoenix.replication.log.sync.timeout.ms";
   public static final String REPLICATION_LOG_SYNC_RETRIES_KEY =
     "phoenix.replication.log.sync.retries";
-  public static final int DEFAULT_REPLICATION_LOG_SYNC_RETRIES = 4;
+  public static final int DEFAULT_REPLICATION_LOG_SYNC_RETRIES = 1;
   public static final String REPLICATION_LOG_ROTATION_RETRIES_KEY =
     "phoenix.replication.log.rotation.retries";
   public static final int DEFAULT_REPLICATION_LOG_ROTATION_RETRIES = 5;
   public static final String REPLICATION_LOG_RETRY_DELAY_MS_KEY =
     "phoenix.replication.log.retry.delay.ms";
   public static final long DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS = 100L;
-  private static final long DEFAULT_HDFS_WRITE_RPC_TIMEOUT_MS = 30 * 1000;
+  public static final String WAL_SYNC_TIMEOUT_MS_KEY = "hbase.regionserver.wal.sync.timeout";
+  public static final long DEFAULT_WAL_SYNC_TIMEOUT_MS = 5 * 60 * 1000L;
 
   public static final String STANDBY_DIR = "in";
   public static final String FALLBACK_DIR = "out";
@@ -438,22 +438,16 @@ public class ReplicationLogGroup {
   }
 
   /**
-   * Calculate how long the application thread should wait for a sync to finish. The application
-   * thread here is the write rpc handler thread. It takes into account the number of retries, pause
-   * between successive attempts, dfs write timeout and zk session timeouts.
+   * Calculate how long the application thread should wait for a sync to finish. Uses the SAF sync
+   * timeout as the base — the consumer thread must have time to attempt SYNC retries, flip to SAF,
+   * attempt SAF retries, and either succeed or abort before the RPC handler gives up.
    * @return sync timeout in ms
    */
   protected long calculateSyncTimeout() {
-    int maxAttempts =
-      conf.getInt(REPLICATION_LOG_SYNC_RETRIES_KEY, DEFAULT_REPLICATION_LOG_SYNC_RETRIES) + 1;
-    long retryDelayMs =
-      conf.getLong(REPLICATION_LOG_RETRY_DELAY_MS_KEY, DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS);
-    long wrtiteRpcTimeout = conf.getLong(DFSConfigKeys.DFS_DATANODE_SOCKET_WRITE_TIMEOUT_KEY,
-      DEFAULT_HDFS_WRITE_RPC_TIMEOUT_MS);
+    long walSyncTimeout = conf.getLong(WAL_SYNC_TIMEOUT_MS_KEY, DEFAULT_WAL_SYNC_TIMEOUT_MS);
     // account for HAGroupStore update when we switch replication mode
     long zkTimeoutMs = conf.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT);
-    long totalRpcTimeout = maxAttempts * wrtiteRpcTimeout + (maxAttempts - 1) * retryDelayMs;
-    return 2 * totalRpcTimeout + zkTimeoutMs;
+    return walSyncTimeout + zkTimeoutMs;
   }
 
   /**
@@ -583,10 +577,11 @@ public class ReplicationLogGroup {
       LOG.error(message, e);
       abort(message, e);
     } catch (TimeoutException e) {
-      String message = String.format("HAGroup %s sync operation timed out", this);
-      LOG.error(message);
-      // sync timeout is a fatal error
-      abort(message, e);
+      String message =
+        String.format("HAGroup %s replication log sync timed out after %d ms", this, syncTimeoutMs);
+      LOG.error(message, e);
+      PhoenixWALSyncTimeoutException timeoutEx = new PhoenixWALSyncTimeoutException(message, e);
+      abort(message, timeoutEx);
     }
   }
 
@@ -914,7 +909,7 @@ public class ReplicationLogGroup {
         future.complete(null);
       }
       pendingSyncFutures.clear();
-      LOG.info("Sync operation completed successfully up to sequence {}", sequence);
+      LOG.debug("Sync operation completed successfully up to sequence {}", sequence);
       // after a successful sync check the mode set on the replication group
       // Doing the mode check on sync points makes the implementation more robust
       // since we can guarantee that all unsynced appends have been flushed to the
@@ -1053,6 +1048,10 @@ public class ReplicationLogGroup {
           // and got an exception. This is a fatal exception so halt the disruptor
           // fail the pending sync events with the original exception
           failPendingSyncs(sequence, e);
+          // Both SYNC and SAF writes failed. The local HBase WAL has the mutation but neither
+          // replication pipeline does, so the SAF forwarder cannot reconcile it. Abort the RS
+          // so region reassignment + preWALRestore re-ships the orphaned edits.
+          abort("Both SYNC and SAF replication writes failed", fatalEx);
           // halt the disruptor with the fatal exception
           throw fatalEx;
         }

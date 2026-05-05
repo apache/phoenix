@@ -30,9 +30,9 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
@@ -42,12 +42,15 @@ import static org.mockito.Mockito.verify;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.phoenix.jdbc.HAGroupStoreRecord;
+import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
+import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
@@ -259,12 +262,14 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // Append some data
     logGroup.append(tableName, commitId, put);
 
-    // sync on the writer will timeout
+    // sync on the writer will timeout — syncInternal wraps in PhoenixWALSyncTimeoutException
+    // and calls abort() which throws RuntimeException
     try {
       logGroup.sync();
       fail("Should have thrown RuntimeException because sync timed out");
     } catch (RuntimeException e) {
-      assertTrue("Expected timeout exception", e.getCause() instanceof TimeoutException);
+      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
+        e.getCause() instanceof PhoenixWALSyncTimeoutException);
     }
     // reset
     doNothing().when(innerWriter).sync();
@@ -619,12 +624,14 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       anyLong(), any(Mutation.class));
 
     // Append data. This should trigger the LogExceptionHandler, which will close logWriter.
+    // The sync future times out, syncInternal wraps in PhoenixWALSyncTimeoutException and aborts.
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown Runtime because sync timed out");
+      fail("Should have thrown RuntimeException because sync timed out");
     } catch (RuntimeException e) {
-      assertTrue("Expected timeout exception", e.getCause() instanceof TimeoutException);
+      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
+        e.getCause() instanceof PhoenixWALSyncTimeoutException);
     }
 
     // Verify that subsequent operations fail because the log is closed
@@ -672,8 +679,9 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // Try to sync. Should fail after exhausting retries and then switch to STORE_AND_FORWARD
     logGroup.sync();
 
-    // All retries use the same writer — verify sync was attempted maxAttempts times
-    verify(initialWriter, atLeast(2)).sync();
+    // Attempt 1 syncs on initialWriter (fails), rotation creates a new writer (also fails),
+    // attempt 2 syncs on the rotated writer (fails). Both SYNC attempts exhausted → SAF flip.
+    verify(initialWriter, times(1)).sync();
     assertEquals(STORE_AND_FORWARD, logGroup.getMode());
   }
 
@@ -963,12 +971,14 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     doThrow(new RuntimeException("Simulated critical error")).when(innerWriter).getLength();
 
     // Append data. This should trigger the LogExceptionHandler, which will close logWriter.
+    // The sync future times out, syncInternal wraps in PhoenixWALSyncTimeoutException and aborts.
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
       fail("Should have thrown RuntimeException because sync timed out");
     } catch (RuntimeException e) {
-      assertTrue("Expected timeout exception", e.getCause() instanceof TimeoutException);
+      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
+        e.getCause() instanceof PhoenixWALSyncTimeoutException);
     }
 
     // Verify that subsequent operations fail because the log is closed
@@ -1008,7 +1018,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       logGroup.sync();
       fail("Should have thrown RuntimeException because sync timed out");
     } catch (RuntimeException e) {
-      assertTrue("Expected timeout exception", e.getCause() instanceof TimeoutException);
+      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
+        e.getCause() instanceof PhoenixWALSyncTimeoutException);
     }
 
     // Verify that subsequent append operations fail because the log is closed
@@ -1048,7 +1059,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       logGroup.sync();
       fail("Should have thrown RuntimeException because sync timed out");
     } catch (RuntimeException e) {
-      assertTrue("Expected timeout exception", e.getCause() instanceof TimeoutException);
+      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
+        e.getCause() instanceof PhoenixWALSyncTimeoutException);
     }
 
     // Verify that subsequent sync operations fail because the log is closed
@@ -1263,15 +1275,21 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     ReplicationLog activeLog = logGroup.getActiveLog();
     LogFileWriter writer = activeLog.getWriter();
     assertNotNull("Writer should not be null", writer);
-    // keep returning the same writer
-    doAnswer(invocation -> writer).when(activeLog).createNewWriter();
+
+    // Rotated writers must also fail on the 5th append so the retry doesn't rescue the loop.
+    doAnswer(invocation -> {
+      LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
+      doThrow(new IOException("Simulate append failure")).when(w).append(tableName, commitId5,
+        put5);
+      return w;
+    }).when(activeLog).createNewWriter();
 
     logGroup.append(tableName, commitId1, put1);
     logGroup.append(tableName, commitId2, put2);
     logGroup.append(tableName, commitId3, put3);
     logGroup.append(tableName, commitId4, put4);
 
-    // configure writer to throw IOException on the 5th append
+    // configure initial writer to throw IOException on the 5th append
     doThrow(new IOException("Simulate append failure")).when(writer).append(tableName, commitId5,
       put5);
 
@@ -1456,9 +1474,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
-   * Tests that a failed replay is retried on the next attempt. The new writer's first append fails
-   * during replay, so the generation stays stale. On retry, the generation mismatch is detected
-   * again and replay succeeds.
+   * Tests that a failed replay is retried on a fresh writer. The first rotated writer's append
+   * fails during replay. Rotation creates a second fresh writer; replay succeeds on it.
    */
   @Test
   public void testReplayFailureRetries() throws Exception {
@@ -1491,27 +1508,25 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     activeLog.forceRotation();
 
     // 3rd append triggers swap + replay of [r1, r2].
-    // Attempt 1: replay fails on first record → IOException → generation stays stale
-    // Attempt 2: generation mismatch still → replay retries → succeeds → r3 appended
+    // Attempt 1 on W2: replay fails on r1 → IOException → request rotation → creates W3
+    // Attempt 2 on W3: replay r1+r2 succeeds → r3 appended → sync succeeds
     logGroup.append(tableName, commitId + 2, put);
     logGroup.sync();
 
-    LogFileWriter newWriter = activeLog.getWriter();
-    assertTrue("Should be using new writer", newWriter != initialWriter);
+    LogFileWriter finalWriter = activeLog.getWriter();
+    assertTrue("Should be using a fresh writer", finalWriter != initialWriter);
 
-    // New writer: attempt 1 replay failed on r1 (1 call). Attempt 2 replayed r1+r2 (2 calls)
-    // then appended r3. Total: r1 called 2x, r2 called 1x, r3 called 1x.
-    verify(newWriter, times(2)).append(eq(tableName), eq(commitId), eq(put));
-    verify(newWriter, times(1)).append(eq(tableName), eq(commitId + 1), eq(put));
-    verify(newWriter, times(1)).append(eq(tableName), eq(commitId + 2), eq(put));
-    verify(newWriter, times(1)).sync();
+    // Final writer (W3): replayed r1+r2 then appended r3 — each exactly once.
+    verify(finalWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    verify(finalWriter, times(1)).append(eq(tableName), eq(commitId + 1), eq(put));
+    verify(finalWriter, times(1)).append(eq(tableName), eq(commitId + 2), eq(put));
+    verify(finalWriter, times(1)).sync();
   }
 
   /**
-   * Tests error-recovery rotation: when the current writer's stream is broken, the second failure
-   * in apply() triggers requestRotation() which submits an on-demand LogRotationTask. During the
-   * retry sleep, the background thread creates a new writer. The next attempt drains it and
-   * succeeds.
+   * Tests error-recovery rotation: when the current writer's stream is broken, the first failure in
+   * apply() triggers requestRotation() which submits an on-demand LogRotationTask. During the latch
+   * wait, the background thread creates a new writer. The next attempt drains it and succeeds.
    */
   @Test
   public void testErrorRecoveryRequestsNewWriter() throws Exception {
@@ -1527,16 +1542,16 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     doThrow(new IOException("Simulated broken stream")).when(initialWriter).append(anyString(),
       anyLong(), any(Mutation.class));
 
-    // Append — attempt 1 fails, attempt 2 fails + requestRotation(), during sleep the
-    // background thread creates a new writer, attempt 3 drains it and succeeds
+    // Append — attempt 1 fails on initialWriter, rotation requested, attempt 2 drains the
+    // rotated writer and succeeds
     logGroup.append(tableName, commitId, put);
     logGroup.sync();
 
     LogFileWriter newWriter = activeLog.getWriter();
     assertTrue("Should be using a new writer after error recovery", newWriter != initialWriter);
 
-    // Old writer received failed attempts
-    verify(initialWriter, atLeast(2)).append(eq(tableName), eq(commitId), eq(put));
+    // Old writer received 1 failed attempt
+    verify(initialWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
     // New writer received the successful append
     verify(newWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
     verify(newWriter, times(1)).sync();
@@ -1622,38 +1637,160 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       writerAfterRotation != writerBeforeRotation);
   }
 
-  // @Test
-  public void testAppendTimeoutWhileSyncPending() throws Exception {
-    final String tableName = "TESTTBL";
-    final long commitId1 = 1L;
-    final Mutation put1 = LogFileTestUtil.newPut("row1", 1, 1);
+  /**
+   * Tests that a RuntimeException in LogRotationTask does not suppress future scheduled ticks.
+   * Prior to the Throwable catch fix, an unchecked exception would kill the
+   * ScheduledExecutorService silently.
+   */
+  @Test
+  public void testRuntimeExceptionInRotationDoesNotSuppressFutureTicks() throws Exception {
+    final String tableName = "TBLRERT";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    final long commitId = 1L;
+    final int roundDurationSeconds = 5;
 
-    // Get the inner writer
+    conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, roundDurationSeconds);
+    recreateLogGroup();
+
     ReplicationLog activeLog = logGroup.getActiveLog();
-    LogFileWriter writer = activeLog.getWriter();
-    assertNotNull("Writer should not be null", writer);
-    // keep returning the same writer
-    // doAnswer(invocation -> writer).when(activeLog).createNewWriter();
-    doAnswer(new Answer<Object>() {
-      @Override
-      public Object answer(InvocationOnMock invocation) throws Throwable {
-        // Thread.sleep((long)(TEST_SYNC_TIMEOUT * 1.25)); // Simulate slow append processing
-        // throw new CallTimeoutException("Simulate append timeout");
-        Object result = invocation.callRealMethod();
-        sleep((long) (TEST_SYNC_TIMEOUT * 1.25)); // Simulate slow but successful append
-        return result;
-      }
-    }).when(writer).append(anyString(), anyLong(), any(Mutation.class));
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
 
-    logGroup.append(tableName, commitId1, put1);
+    // First rotation tick throws RuntimeException, subsequent ones succeed
+    AtomicBoolean shouldThrow = new AtomicBoolean(true);
+    doAnswer(invocation -> {
+      if (shouldThrow.getAndSet(false)) {
+        throw new RuntimeException("Simulated NPE in rotation");
+      }
+      return invocation.callRealMethod();
+    }).when(activeLog).createNewWriter();
+
+    // Append and sync to establish baseline
+    logGroup.append(tableName, commitId, put);
     logGroup.sync();
 
-    LogFileWriter storeAndForwardWriter = logGroup.getActiveLog().getWriter();
-    assertTrue("After switching mode we should have a new writer", writer != storeAndForwardWriter);
-    InOrder inOrder = Mockito.inOrder(storeAndForwardWriter);
-    // verify that all the in-flight appends and syncs are replayed on the new store and forward
-    // writer
-    inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId1), eq(put1));
-    inOrder.verify(storeAndForwardWriter, times(1)).sync();
+    // Wait for first tick — RuntimeException, rotation fails
+    waitForRotationTick(roundDurationSeconds);
+
+    assertTrue("rotationFailures should be incremented", activeLog.rotationFailures.get() >= 1);
+
+    // Wait for second tick — should succeed (scheduler not suppressed)
+    waitForRotationTick(roundDurationSeconds);
+
+    // Drain the staged writer
+    logGroup.append(tableName, commitId + 1, put);
+    logGroup.sync();
+
+    LogFileWriter writerAfterRotation = activeLog.getWriter();
+    assertTrue("Second tick should have created a new writer",
+      writerAfterRotation != initialWriter);
+    assertEquals("rotationFailures should be reset after success", 0,
+      activeLog.rotationFailures.get());
+  }
+
+  /**
+   * Tests that when both SYNC attempts and both SAF attempts fail, the abort path fires via
+   * LogEventHandler's fatal catch block
+   */
+  @Test
+  public void testBothSyncAndSafFailuresTriggersAbort() throws Exception {
+    final String tableName = "TBLBSSF";
+    final long commitId = 1L;
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+
+    // Poison every writer created by any ReplicationLog (SYNC or SAF) to fail on sync
+    Answer<Object> poisonNewWriter = invocation -> {
+      LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
+      doThrow(new IOException("Simulated sync failure")).when(w).sync();
+      return w;
+    };
+    Answer<Object> poisonLog = invocation -> {
+      ReplicationLog log = (ReplicationLog) invocation.callRealMethod();
+      doAnswer(poisonNewWriter).when(log).createNewWriter();
+      return log;
+    };
+    doAnswer(poisonLog).when(logGroup).createFallbackLog();
+
+    // Poison the already-initialized SYNC log
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    doThrow(new IOException("Simulated sync failure")).when(initialWriter).sync();
+    doAnswer(poisonNewWriter).when(activeLog).createNewWriter();
+
+    logGroup.append(tableName, commitId, put);
+    try {
+      logGroup.sync();
+      fail("Should have thrown RuntimeException from abort");
+    } catch (RuntimeException e) {
+      assertTrue("Abort message should mention both SYNC and SAF",
+        e.getMessage().contains("Both SYNC and SAF replication writes failed")
+          || e.getMessage().contains("ABORTING"));
+    }
+  }
+
+  /**
+   * Tests that when already in SAF mode and both SAF attempts fail,
+   * StoreAndForwardModeImpl.onFailure() triggers abort.
+   */
+  @Test
+  public void testSafBothAttemptsFailTriggersAbort() throws Exception {
+    final String tableName = "TBLSAFBA";
+    final long commitId = 1L;
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+
+    // Start in SAF mode
+    initialState = HAGroupState.ACTIVE_NOT_IN_SYNC;
+    storeRecord = new HAGroupStoreRecord(null, haGroupName, initialState, 0,
+      HighAvailabilityPolicy.FAILOVER.toString(), "peerZKUrl", "clusterUrl", "peerClusterUrl",
+      localUri.toString(), peerUri.toString(), 0L);
+    doReturn(Optional.of(storeRecord)).when(haGroupStoreManager).getHAGroupStoreRecord(anyString());
+    recreateLogGroup();
+    assertEquals(STORE_AND_FORWARD, logGroup.getMode());
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
+
+    // All SAF writers fail on sync
+    doThrow(new IOException("Simulated SAF sync failure")).when(initialWriter).sync();
+    doAnswer(invocation -> {
+      LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
+      doThrow(new IOException("Simulated SAF sync failure")).when(w).sync();
+      return w;
+    }).when(activeLog).createNewWriter();
+
+    logGroup.append(tableName, commitId, put);
+    try {
+      logGroup.sync();
+      fail("Should have thrown RuntimeException from abort");
+    } catch (RuntimeException e) {
+      assertTrue("Abort should fire from SAF failure path",
+        e.getMessage().contains("ABORTING") || e.getMessage().contains("got error"));
+    }
+  }
+
+  /**
+   * Tests that calculateSyncTimeout derives from hbase.regionserver.wal.sync.timeout and that the
+   * explicit phoenix override still wins.
+   */
+  @Test
+  public void testCalculateSyncTimeout() throws Exception {
+    // Remove the explicit override so calculateSyncTimeout is used
+    conf.unset(ReplicationLogGroup.REPLICATION_LOG_SYNC_TIMEOUT_KEY);
+
+    // Set the HBase WAL sync timeout to a known value
+    conf.setLong("hbase.regionserver.wal.sync.timeout", 120000L);
+    recreateLogGroup();
+
+    // syncTimeoutMs should be walSyncTimeout + zkTimeout
+    long expectedZkTimeout = conf.getLong("hbase.zookeeper.session.timeout", 90000);
+    long expected = 120000L + expectedZkTimeout;
+    assertEquals("syncTimeoutMs should derive from WAL sync timeout", expected,
+      logGroup.syncTimeoutMs);
+
+    // Now set the explicit Phoenix override — it should win
+    conf.setLong(ReplicationLogGroup.REPLICATION_LOG_SYNC_TIMEOUT_KEY, 5000L);
+    recreateLogGroup();
+    assertEquals("Explicit override should take precedence", 5000L, logGroup.syncTimeoutMs);
   }
 }

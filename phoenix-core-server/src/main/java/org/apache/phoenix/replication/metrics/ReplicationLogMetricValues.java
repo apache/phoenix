@@ -22,15 +22,18 @@ public class ReplicationLogMetricValues {
 
   private final long rotationCount;
   private final long rotationFailuresCount;
+  private final long syncToSafTransitions;
   private final long appendTime;
   private final long syncTime;
   private final long rotationTime;
   private final long ringBufferTime;
 
-  public ReplicationLogMetricValues(long rotationCount, long rotationFailuresCount, long appendTime,
-    long syncTime, long rotationTime, long ringBufferTime) {
+  public ReplicationLogMetricValues(long rotationCount, long rotationFailuresCount,
+    long syncToSafTransitions, long appendTime, long syncTime, long rotationTime,
+    long ringBufferTime) {
     this.rotationCount = rotationCount;
     this.rotationFailuresCount = rotationFailuresCount;
+    this.syncToSafTransitions = syncToSafTransitions;
     this.appendTime = appendTime;
     this.syncTime = syncTime;
     this.rotationTime = rotationTime;
@@ -43,6 +46,10 @@ public class ReplicationLogMetricValues {
 
   public long getRotationFailuresCount() {
     return rotationFailuresCount;
+  }
+
+  public long getSyncToSafTransitions() {
+    return syncToSafTransitions;
   }
 
   public long getAppendTime() {

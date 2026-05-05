@@ -59,6 +59,9 @@ public class LogFileFormatWriter implements Closeable {
     this.encoder = context.getCodec().getEncoder(blockDataStream);
     // Write header immediately when file is created
     writeFileHeader();
+    // Sync the header to force the first HDFS block allocation on the caller's thread (the
+    // rotation thread). Without this, addBlock fires on the consumer thread's first sync().
+    output.sync();
   }
 
   private void writeFileHeader() throws IOException {
