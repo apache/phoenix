@@ -19,6 +19,7 @@ package org.apache.phoenix.replication.log;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -69,8 +70,11 @@ public class LogFileWriterSyncTest {
     // Create the writer instance to be tested
     writer = new LogFileWriter();
 
-    // Initialize the writer - this will call fs.create() and set up internal writers
+    // Initialize the writer - this will call fs.create() and set up internal writers.
+    // Init syncs the header to force HDFS block allocation; clear that from invocation history
+    // so tests only verify sync behavior during append/sync operations.
     writer.init(writerContext);
+    clearInvocations(internalOutput);
   }
 
   @After
@@ -205,6 +209,7 @@ public class LogFileWriterSyncTest {
       new LogFileWriterContext(hflushConf).setFileSystem(hflushMockFs);
     LogFileWriter hflushWriter = new LogFileWriter();
     hflushWriter.init(hflushContext);
+    clearInvocations(hflushOutput);
 
     try {
       Mutation m1 = LogFileTestUtil.newPut("row1", 1L, 1);

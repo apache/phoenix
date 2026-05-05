@@ -19,6 +19,7 @@ package org.apache.phoenix.replication.log;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.hbase.client.Mutation;
@@ -35,7 +36,7 @@ public class LogFileWriter implements LogFile.Writer {
 
   private LogFileWriterContext context;
   private LogFileFormatWriter writer;
-  private volatile boolean closed = false;
+  private final AtomicBoolean closed = new AtomicBoolean(false);
   /**
    * A monotonically increasing sequence number that identifies this writer instance, used to detect
    * log file rotations and ensure proper handling of in-flight operations. Higher layers will get a
@@ -72,9 +73,13 @@ public class LogFileWriter implements LogFile.Writer {
     LOG.debug("Initialized LogFileWriter for path {}", context.getFilePath());
   }
 
+  public boolean isClosed() {
+    return closed.get();
+  }
+
   @Override
   public void append(String tableName, long commitId, Mutation mutation) throws IOException {
-    if (closed) {
+    if (isClosed()) {
       throw new IOException("Writer has been closed");
     }
     writer.append(
@@ -83,7 +88,7 @@ public class LogFileWriter implements LogFile.Writer {
 
   @Override
   public void sync() throws IOException {
-    if (closed) {
+    if (isClosed()) {
       throw new IOException("Writer has been closed");
     }
     writer.sync();
@@ -91,7 +96,7 @@ public class LogFileWriter implements LogFile.Writer {
 
   @Override
   public long getLength() throws IOException {
-    if (closed) {
+    if (isClosed()) {
       // Attempt to get length from filesystem if stream is closed
       if (context.getFileSystem().exists(context.getFilePath())) {
         return context.getFileSystem().getFileStatus(context.getFilePath()).getLen();
@@ -108,23 +113,19 @@ public class LogFileWriter implements LogFile.Writer {
 
   @Override
   public void close() throws IOException {
-    if (closed) {
+    if (!closed.compareAndSet(false, true)) {
       return;
     }
-    try {
-      // Close the final block and write the trailer
-      if (writer != null) {
-        writer.close();
-      }
-    } finally {
-      closed = true;
-      LOG.debug("Closed LogFileWriter for path {}", context.getFilePath());
+    // Close the final block and write the trailer
+    if (writer != null) {
+      writer.close();
     }
+    LOG.debug("Closed LogFileWriter {}", this);
   }
 
   @Override
   public String toString() {
-    return "LogFileWriter [formatWriter=" + writer + ", closed=" + closed + ", generation="
+    return "LogFileWriter [formatWriter=" + writer + ", closed=" + isClosed() + ", generation="
       + generation + "]";
   }
 

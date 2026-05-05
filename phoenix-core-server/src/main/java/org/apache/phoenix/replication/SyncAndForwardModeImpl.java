@@ -55,16 +55,13 @@ public class SyncAndForwardModeImpl extends ReplicationModeImpl {
     LOG.info("HAGroup {} exiting mode {} graceful={}", logGroup, this, gracefulShutdown);
     // stop the replication log forwarding
     logGroup.getLogForwarder().stop();
-    if (gracefulShutdown) {
-      closeReplicationLog();
-    } else {
-      closeReplicationLogOnError();
-    }
+    closeReplicationLog(gracefulShutdown);
   }
 
   @Override
   ReplicationMode onFailure(Throwable e) throws IOException {
     LOG.info("HAGroup {} mode={} got error", logGroup, this, e);
+    logGroup.getMetrics().incrementSyncToSafTransitions();
     try {
       logGroup.setHAGroupStatusToStoreAndForward();
     } catch (Exception ex) {

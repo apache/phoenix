@@ -22,6 +22,7 @@ import java.io.InterruptedIOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -77,6 +78,9 @@ public class ReplicationLog {
   protected final AtomicLong rotationFailures = new AtomicLong(0);
   // Staged writer created by the background LogRotationTask, drained by checkAndReplaceWriter().
   private final AtomicReference<LogFileWriter> pendingWriter = new AtomicReference<>();
+  // Latch set by apply() before requesting an on-demand rotation; counted down by LogRotationTask
+  // in a finally block so apply() can wait (with timeout) for a fresh writer to be staged.
+  private volatile CountDownLatch rotationStagedLatch;
   private final AtomicBoolean closed = new AtomicBoolean(false);
   private final AtomicBoolean rotationRequested = new AtomicBoolean(false);
   private final ExecutorService closeExecutor;
@@ -98,12 +102,19 @@ public class ReplicationLog {
     this.retryDelayMs = conf.getLong(ReplicationLogGroup.REPLICATION_LOG_RETRY_DELAY_MS_KEY,
       ReplicationLogGroup.DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS);
     this.rotationTimeMs = shardManager.getReplicationRoundDurationSeconds() * 1000L;
-    long rotationSize = conf.getLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY,
-      ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_SIZE_BYTES);
+    long configuredRotationSize =
+      conf.getLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY,
+        ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_SIZE_BYTES);
     double rotationSizePercent =
       conf.getDouble(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE_KEY,
         ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE);
-    this.rotationSizeBytes = (long) (rotationSize * rotationSizePercent);
+    long blockSize = shardManager.getFileSystem().getDefaultBlockSize();
+    if (configuredRotationSize > blockSize) {
+      LOG.warn("Configured rotation size {} exceeds HDFS block size {}; clamping to block size",
+        configuredRotationSize, blockSize);
+    }
+    long effectiveRotationSize = Math.min(configuredRotationSize, blockSize);
+    this.rotationSizeBytes = (long) (effectiveRotationSize * rotationSizePercent);
     this.maxRotationRetries = conf.getInt(ReplicationLogGroup.REPLICATION_LOG_ROTATION_RETRIES_KEY,
       ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES);
     String compressionName = conf.get(ReplicationLogGroup.REPLICATION_LOG_COMPRESSION_ALGORITHM_KEY,
@@ -142,6 +153,7 @@ public class ReplicationLog {
     LogFileWriter newWriter = new LogFileWriter();
     newWriter.init(writerContext);
     newWriter.setGeneration(writerGeneration.incrementAndGet());
+    LOG.info("Created new writer: {}", newWriter);
     return newWriter;
   }
 
@@ -309,16 +321,15 @@ public class ReplicationLog {
       } catch (IOException e) {
         LOG.debug("Attempt {}/{} failed", attempt, maxAttempts, e);
         if (attempt == maxAttempts) {
-          closeOnError();
           throw e;
         }
-        // First failure retries on the same writer (transient). Second failure
-        // requests a new writer to recover from non-transient stream errors.
-        if (attempt > 1) {
-          requestRotation();
-        }
+        // Each retry runs on a fresh writer. Stage a latch, request rotation, and wait briefly
+        // for the LogRotationTask to count the latch down after staging a new pendingWriter.
+        CountDownLatch latch = new CountDownLatch(1);
+        rotationStagedLatch = latch;
+        requestRotation();
         try {
-          Thread.sleep(retryDelayMs);
+          latch.await(retryDelayMs, TimeUnit.MILLISECONDS);
         } catch (InterruptedException ie) {
           Thread.currentThread().interrupt();
           throw new InterruptedIOException("Interrupted during retry delay");
@@ -351,44 +362,31 @@ public class ReplicationLog {
   }
 
   /**
-   * Force closes the log upon an unrecoverable internal error. This is a fail-stop behavior: once
-   * called, the log is marked as closed, the Disruptor is halted, and all subsequent append() and
-   * sync() calls will throw an IOException("Closed"). This ensures that no further operations are
-   * attempted on a log that has encountered a critical error.
+   * Closes the log with a bounded duration. Subsequent append() and sync() calls will throw
+   * IOException("Closed"). Safe to call multiple times — only the first invocation performs
+   * cleanup.
+   * @param graceful true for graceful shutdown, false for error/forced shutdown
    */
-  protected void closeOnError() {
+  public void close(boolean graceful) {
     if (!closed.compareAndSet(false, true)) {
       return;
     }
     stopRotationExecutor();
-    closeExecutor.shutdownNow();
     LogFileWriter staged = pendingWriter.getAndSet(null);
     if (staged != null) {
-      closeWriter(staged);
+      submitClose(staged);
     }
-    closeWriter(currentWriter);
-  }
-
-  /** Closes the log. */
-  public void close() {
-    if (!closed.compareAndSet(false, true)) {
-      return;
-    }
-    stopRotationExecutor();
+    submitClose(currentWriter);
     closeExecutor.shutdown();
     try {
-      if (!closeExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
+      if (!closeExecutor.awaitTermination(10, TimeUnit.SECONDS)) {
+        LOG.warn("Close executor did not terminate in 10s, abandoning writer closes");
         closeExecutor.shutdownNow();
       }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       closeExecutor.shutdownNow();
     }
-    LogFileWriter staged = pendingWriter.getAndSet(null);
-    if (staged != null) {
-      closeWriter(staged);
-    }
-    closeWriter(currentWriter);
   }
 
   @VisibleForTesting
@@ -422,16 +420,22 @@ public class ReplicationLog {
         }
         rotationFailures.set(0);
         logGroup.getMetrics().incrementRotationCount();
-      } catch (IOException e) {
+      } catch (Throwable t) {
         logGroup.getMetrics().incrementRotationFailureCount();
         long numFailures = rotationFailures.incrementAndGet();
         if (numFailures >= maxRotationRetries) {
           LOG.error("Too many rotation failures ({}/{}), closing log", numFailures,
-            maxRotationRetries, e);
-          closeOnError();
+            maxRotationRetries, t);
+          close(false);
         } else {
-          LOG.info("Failed to create new writer for rotation (attempt {}/{}), retrying...",
-            numFailures, maxRotationRetries, e);
+          LOG.error("Failed to create new writer for rotation (attempt {}/{}), retrying...",
+            numFailures, maxRotationRetries, t);
+        }
+      } finally {
+        CountDownLatch latch = rotationStagedLatch;
+        if (latch != null) {
+          latch.countDown();
+          rotationStagedLatch = null;
         }
       }
     }

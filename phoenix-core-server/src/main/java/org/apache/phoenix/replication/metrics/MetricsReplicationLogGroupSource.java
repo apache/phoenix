@@ -45,6 +45,9 @@ public interface MetricsReplicationLogGroupSource extends BaseSource {
   String RING_BUFFER_TIME = "ringBufferTime";
   String RING_BUFFER_TIME_DESC = "Time events spend in the ring buffer";
 
+  String SYNC_TO_SAF_TRANSITIONS = "syncToSafTransitions";
+  String SYNC_TO_SAF_TRANSITIONS_DESC = "Number of SYNC to STORE_AND_FORWARD mode transitions";
+
   /**
    * Increments the counter for total log rotations. This counter tracks the total number of times
    * the log was rotated, regardless of reason.
@@ -80,6 +83,9 @@ public interface MetricsReplicationLogGroupSource extends BaseSource {
    * rotation has failed.
    */
   void incrementRotationFailureCount();
+
+  /** Increment the SYNC to STORE_AND_FORWARD transition counter. */
+  void incrementSyncToSafTransitions();
 
   /**
    * Unregister this metrics source.

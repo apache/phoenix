@@ -50,16 +50,13 @@ public class SyncModeImpl extends ReplicationModeImpl {
   @Override
   void onExit(boolean gracefulShutdown) {
     LOG.info("HAGroup {} exiting mode {} graceful={}", logGroup, this, gracefulShutdown);
-    if (gracefulShutdown) {
-      closeReplicationLog();
-    } else {
-      closeReplicationLogOnError();
-    }
+    closeReplicationLog(gracefulShutdown);
   }
 
   @Override
   ReplicationMode onFailure(Throwable e) throws IOException {
     LOG.info("HAGroup {} mode={} got error", logGroup, this, e);
+    logGroup.getMetrics().incrementSyncToSafTransitions();
     try {
       // first update the HAGroupStore state
       logGroup.setHAGroupStatusToStoreAndForward();

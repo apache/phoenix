@@ -28,6 +28,7 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
 
   private final MutableFastCounter rotationCount;
   private final MutableFastCounter rotationFailuresCount;
+  private final MutableFastCounter syncToSafTransitions;
   private final MutableHistogram appendTime;
   private final MutableHistogram syncTime;
   private final MutableHistogram rotationTime;
@@ -44,6 +45,8 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
     rotationCount = getMetricsRegistry().newCounter(ROTATION_COUNT, ROTATION_COUNT_DESC, 0L);
     rotationFailuresCount =
       getMetricsRegistry().newCounter(ROTATION_FAILURES, ROTATION_FAILURES_DESC, 0L);
+    syncToSafTransitions =
+      getMetricsRegistry().newCounter(SYNC_TO_SAF_TRANSITIONS, SYNC_TO_SAF_TRANSITIONS_DESC, 0L);
     appendTime = getMetricsRegistry().newHistogram(APPEND_TIME, APPEND_TIME_DESC);
     syncTime = getMetricsRegistry().newHistogram(SYNC_TIME, SYNC_TIME_DESC);
     rotationTime = getMetricsRegistry().newHistogram(ROTATION_TIME, ROTATION_TIME_DESC);
@@ -63,6 +66,11 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
   @Override
   public void incrementRotationFailureCount() {
     rotationFailuresCount.incr();
+  }
+
+  @Override
+  public void incrementSyncToSafTransitions() {
+    syncToSafTransitions.incr();
   }
 
   @Override
@@ -88,7 +96,8 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
   @Override
   public ReplicationLogMetricValues getCurrentMetricValues() {
     return new ReplicationLogMetricValues(rotationCount.value(), rotationFailuresCount.value(),
-      appendTime.getMax(), syncTime.getMax(), rotationTime.getMax(), ringBufferTime.getMax());
+      syncToSafTransitions.value(), appendTime.getMax(), syncTime.getMax(), rotationTime.getMax(),
+      ringBufferTime.getMax());
   }
 
   @Override
