@@ -529,13 +529,19 @@ public abstract class ExplainTable {
       // per-slot emission shape). Without this, the compound bytes are decoded as a
       // single value of the leading column's type, producing garbled output.
       //
-      // The decomposition relies on the RowKeySchema iterator to walk per-column widths.
-      // When the compound bytes don't align cleanly with the schema (e.g. trailing
-      // columns have unbounded bounds so their bytes are truncated, or DESC encoding
-      // introduces different widths), the schema iteration can report an expected width
-      // that overshoots the remaining bytes. In that case fall through to the legacy
-      // path (emit the whole byte[] as if it were the first column's value) — garbled
-      // output for those edge cases is preferable to an exception.
+      // When the schema iterator reports fewer columns than {@code span+1}, the slot is
+      // the {@code emitV1Projection} slotSpan-extension shape: bytes cover a single PK
+      // column, but {@code slotSpan} was extended as a V1-compat marker so SkipScanFilter
+      // steps the schema cursor through the trailing unconstrained PK columns. V1's
+      // original formatter stopped at the last constrained slot via
+      // {@code getBoundSlotCount} and never displayed those trailing columns; preserve
+      // that by emitting only the columns the bytes actually cover and advancing
+      // {@code i} by {@code emitted - 1} so the loop's own increment lands on the next
+      // unread column.
+      //
+      // On schema-iterator failure (mixed encodings / DESC with variable widths), fall
+      // through to the legacy per-slot emission — garbled output is preferable to an
+      // exception.
       int span = (slotSpans != null && slotIdx < slotSpans.length && isNull == null
         && b != null && b.length > 0) ? slotSpans[slotIdx] : 0;
       if (span > 0) {
@@ -556,14 +562,13 @@ public abstract class ExplainTable {
             compoundBuf.append(',');
             emitted++;
           }
-          // Pad trailing PK columns with '*' when the compound ended before all spanned
-          // dims were consumed (last dim's bound is unbounded so its bytes are absent).
-          for (int d = emitted; d <= span; d++) {
-            compoundBuf.append("*,");
+          if (emitted > 0) {
+            buf.append(compoundBuf);
+            i += emitted - 1;
+            continue;
           }
-          buf.append(compoundBuf);
-          i += span;
-          continue;
+          // emitted == 0 → schema iteration produced nothing. Fall through to the
+          // legacy single-slot emission below.
         } catch (RuntimeException e) {
           // Schema iteration couldn't parse the compound bytes (mixed encodings / DESC
           // with variable widths); fall through to the legacy per-slot emission.

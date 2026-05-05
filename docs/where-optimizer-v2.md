@@ -32,7 +32,7 @@ V2 replaces the range-enumeration core with a **mathematical model** (N-dimensio
 
 A query's WHERE clause, for optimization purposes, is a predicate over rows. Each row has a primary key with `N` columns. We model the primary-key space as `N`-dimensional: dimension `i` is the domain of PK column `i`.
 
-A **KeySpace** is an `N`-dimensional axis-aligned box: one `KeyRange` per dimension. The predicate `PK1 = 'a' AND PK2 > 3` (on a 3-PK table with columns PK1, PK2, PK3) is a KeySpace `[{a, a}, (3, +∞), (-∞, +∞)]`. A dimension with no active constraint is `EVERYTHING_RANGE`.
+A **KeySpace** is an `N`-dimensional axis-aligned box: one `KeyRange` per dimension. The predicate `PK1 = 'a' AND PK2 > 3` (on a 3-PK table with columns PK1, PK2, PK3) is a KeySpace `[[a, a], (3, +∞), (-∞, +∞)]`. A dimension with no active constraint is `EVERYTHING_RANGE`.
 
 A **KeySpaceList** is a disjunction of KeySpaces — the scan region is the union of the boxes. A single box covers conjunctive predicates directly; OR shows up as multiple boxes.
 
@@ -416,6 +416,14 @@ if (lastSlotHasRange) {
 ```
 
 All-single-key last slots don't need the extension — point keys don't carry trailing-col encodings in their bytes, and `SkipScanFilter` doesn't step through trailing cols for them.
+
+**Consumer-side adjustments for the extension.** Extending `slotSpan` affects two consumers that read `ScanRanges` for purposes other than filter navigation, and both have to discount the extension to match V1's observable behavior:
+
+1. **Cost comparator** (`QueryOptimizer.effectiveBoundPkColumnCount`). The plan-ranking tiebreaker primarily uses `getBoundPkColumnCount()`, which adds `slotSpan[i]+1` per slot. When the trailing range is a bounded scalar (e.g. `BETWEEN a AND b` on a single PK col), the extension is a V1-compat marker for SkipScanFilter — not real multi-col byte-level narrowing. Counting it would let a plan with a narrow bounded range on one PK col tie with a plan whose compound range genuinely covers multiple PK cols, flipping the choice via weaker tiebreakers.
+
+   The discriminator between the two shapes is output arity: `emitV1Projection` only extends the last slot of a **multi-slot** output (there's at least one leading concretely-narrowed slot plus the bumped last slot). A **single-slot** shape with `slotSpan > 0` comes from the compound-emission path — the range bytes genuinely concatenate `span+1` PK columns. The helper discounts `slotSpan[i]` to `1` only when `nRanges > 1` **and** `i == nRanges - 1` **and** the slot is a non-point bounded range; otherwise it honors `slotSpan[i]+1` unchanged. See `CostBasedDecisionIT.testCostOverridesStaticPlanOrdering3` (multi-slot shape must discount) vs. `RowTimestampIT.testAutomaticallySettingRowTimestampWith*` (single-slot compound on a `PK1=v AND PK2 BETWEEN a AND b` data-table scan — must not discount).
+
+2. **Explain-plan formatter** (`ExplainTable.appendScanRow`, legacy fallback path). The formatter decomposes a slot's compound bytes via the `RowKeySchema` iterator, emitting one value per PK column consumed. When the slotSpan-extension shape applies, the bytes cover only the constrained range's column — the iterator stops early. The formatter emits only what the bytes cover and advances its loop counter by the number emitted; it does **not** pad with `*` for the unvisited trailing PK columns. Padding would diverge from V1's display (V1 stopped at `getBoundSlotCount`, never displaying those trailing columns). See `ChildViewsUseParentViewIndexIT.testIndexOnParentViewWithTenantSpecificConnection`.
 
 ---
 
