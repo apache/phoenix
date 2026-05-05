@@ -15,16 +15,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compile.keyspace.oracle;
+package org.apache.phoenix.compile.keyspace.algebra;
 
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.Op.EQ;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.Op.GE;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.Op.GT;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.Op.LE;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.Op.LT;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.and;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.or;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.pred;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.EQ;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.GE;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.GT;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.LE;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.LT;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.and;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.or;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.pred;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -56,7 +56,7 @@ import org.junit.Test;
  * <ol>
  * <li>Compiles the query with V2 enabled → captures {@link ScanRanges}.</li>
  * <li>Decodes {@link ScanRanges} → {@link AbstractKeySpaceList} (V2 view).</li>
- * <li>Runs {@link Oracle#extract} on the hand-authored expression → oracle view.</li>
+ * <li>Runs {@link Reference#extract} on the hand-authored expression → oracle view.</li>
  * <li>Enumerates every row in the candidate grid and checks:
  *   <ul>
  *   <li><b>Oracle soundness</b>: every row the expression matches is in the oracle's
@@ -209,7 +209,7 @@ public class DifferentialHarnessTest extends BaseConnectionlessQueryTest {
         return;
       }
 
-      AbstractKeySpaceList oracleView = Oracle.extract(expr, perDim.size());
+      AbstractKeySpaceList oracleView = Reference.extract(expr, perDim.size());
 
       List<HarnessAssertions.Row> rows = HarnessAssertions.enumerateRows(perDim);
       HarnessAssertions.Report report =

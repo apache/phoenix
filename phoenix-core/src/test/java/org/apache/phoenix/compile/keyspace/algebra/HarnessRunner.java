@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compile.keyspace.oracle;
+package org.apache.phoenix.compile.keyspace.algebra;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -185,7 +185,7 @@ public final class HarnessRunner {
       }
 
       // 6. Run oracle.
-      AbstractKeySpaceList oracleView = Oracle.extract(abstractExpr, nPk);
+      AbstractKeySpaceList oracleView = Reference.extract(abstractExpr, nPk);
 
       // 7. Evaluate.
       List<HarnessAssertions.Row> rows = HarnessAssertions.enumerateRows(grid);

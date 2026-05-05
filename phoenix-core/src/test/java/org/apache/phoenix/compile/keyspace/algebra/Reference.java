@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compile.keyspace.oracle;
+package org.apache.phoenix.compile.keyspace.algebra;
 
 /**
  * Reference implementation (oracle) of the key-space model's key-range extraction
@@ -43,9 +43,9 @@ package org.apache.phoenix.compile.keyspace.oracle;
  * satisfying the expression — are permitted because the production residual filter
  * re-evaluates the original predicate at scan time.
  */
-public final class Oracle {
+public final class Reference {
 
-  private Oracle() {}
+  private Reference() {}
 
   /**
    * Default cartesian bound used by {@link #extract(AbstractExpression, int)}. Matches

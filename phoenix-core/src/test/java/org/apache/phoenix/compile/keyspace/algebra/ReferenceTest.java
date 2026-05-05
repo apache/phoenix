@@ -15,16 +15,16 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compile.keyspace.oracle;
+package org.apache.phoenix.compile.keyspace.algebra;
 
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.and;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.or;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.pred;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.Op.EQ;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.Op.GE;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.Op.GT;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.Op.LE;
-import static org.apache.phoenix.compile.keyspace.oracle.AbstractExpression.Op.LT;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.and;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.or;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.pred;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.EQ;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.GE;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.GT;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.LE;
+import static org.apache.phoenix.compile.keyspace.algebra.AbstractExpression.Op.LT;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -36,7 +36,7 @@ import java.util.Random;
 import org.junit.Test;
 
 /**
- * Unit tests for {@link Oracle}. Three groups:
+ * Unit tests for {@link Reference}. Three groups:
  * <ul>
  * <li><b>Algebra</b> — AND/OR identity, idempotence, commutativity on the list algebra.</li>
  * <li><b>Worked examples</b> — specific scenarios that exercise the merge rules.</li>
@@ -45,23 +45,23 @@ import org.junit.Test;
  * guarantee.</li>
  * </ul>
  */
-public class OracleTest {
+public class ReferenceTest {
 
   // ---------- algebra ----------
 
   @Test
   public void andIsIdempotent() {
     AbstractExpression e = pred(0, EQ, 5L);
-    AbstractKeySpaceList once = Oracle.extract(e, 3);
-    AbstractKeySpaceList twice = Oracle.extract(and(e, e), 3);
+    AbstractKeySpaceList once = Reference.extract(e, 3);
+    AbstractKeySpaceList twice = Reference.extract(and(e, e), 3);
     assertEquals(once, twice);
   }
 
   @Test
   public void orIsIdempotent() {
     AbstractExpression e = pred(0, EQ, 5L);
-    AbstractKeySpaceList once = Oracle.extract(e, 3);
-    AbstractKeySpaceList twice = Oracle.extract(or(e, e), 3);
+    AbstractKeySpaceList once = Reference.extract(e, 3);
+    AbstractKeySpaceList twice = Reference.extract(or(e, e), 3);
     assertEquals(once, twice);
   }
 
@@ -69,7 +69,7 @@ public class OracleTest {
   public void andCommutes() {
     AbstractExpression a = pred(0, EQ, 5L);
     AbstractExpression b = pred(1, GT, 10L);
-    assertEquals(Oracle.extract(and(a, b), 3), Oracle.extract(and(b, a), 3));
+    assertEquals(Reference.extract(and(a, b), 3), Reference.extract(and(b, a), 3));
   }
 
   @Test
@@ -77,22 +77,22 @@ public class OracleTest {
     // Commutativity preserves the set of spaces, not the list order. Compare as sets.
     AbstractExpression a = pred(0, EQ, 5L);
     AbstractExpression b = pred(0, EQ, 7L);
-    AbstractKeySpaceList la = Oracle.extract(or(a, b), 3);
-    AbstractKeySpaceList lb = Oracle.extract(or(b, a), 3);
+    AbstractKeySpaceList la = Reference.extract(or(a, b), 3);
+    AbstractKeySpaceList lb = Reference.extract(or(b, a), 3);
     assertEquals(new java.util.HashSet<>(la.spaces()), new java.util.HashSet<>(lb.spaces()));
   }
 
   @Test
   public void unsatisfiableAndAnythingIsUnsatisfiable() {
     AbstractExpression a = and(pred(0, GE, 10L), pred(0, LT, 5L));
-    AbstractKeySpaceList result = Oracle.extract(a, 3);
+    AbstractKeySpaceList result = Reference.extract(a, 3);
     assertTrue(result.isUnsatisfiable());
   }
 
   @Test
   public void tautologyOnSingleDim() {
     AbstractExpression a = or(pred(0, LT, 10L), pred(0, GE, 10L));
-    AbstractKeySpaceList result = Oracle.extract(a, 3);
+    AbstractKeySpaceList result = Reference.extract(a, 3);
     assertTrue(result.isEverything());
   }
 
@@ -100,7 +100,7 @@ public class OracleTest {
   public void containmentMergesUnderOr() {
     // `x >= 5 OR x = 7` — the point is contained in the range; should merge to `x >= 5`.
     AbstractExpression a = or(pred(0, GE, 5L), pred(0, EQ, 7L));
-    AbstractKeySpaceList result = Oracle.extract(a, 1);
+    AbstractKeySpaceList result = Reference.extract(a, 1);
     assertEquals(1, result.size());
     assertEquals(AbstractRange.atLeast(5L), result.spaces().get(0).get(0));
   }
@@ -109,7 +109,7 @@ public class OracleTest {
   public void adjacentRangesMergeUnderOr() {
     // `x >= 5 AND x <= 7` merges trivially; `x <= 4 OR x > 4` is the tautology case.
     AbstractExpression a = or(pred(0, LE, 4L), pred(0, GT, 4L));
-    AbstractKeySpaceList result = Oracle.extract(a, 1);
+    AbstractKeySpaceList result = Reference.extract(a, 1);
     assertTrue(result.isEverything());
   }
 
@@ -164,7 +164,7 @@ public class OracleTest {
       pred(0, EQ, "cat_0"),
       pred(1, LE, 5000L),
       rvcExpanded);
-    AbstractKeySpaceList result = Oracle.extract(full, 4);
+    AbstractKeySpaceList result = Reference.extract(full, 4);
     assertEquals(3, result.size());
     // Every space should carry category = 'cat_0' on dim 0.
     for (AbstractKeySpace ks : result.spaces()) {
@@ -179,7 +179,7 @@ public class OracleTest {
     Random rnd = new Random(42);
     for (int trial = 0; trial < 50; trial++) {
       AbstractExpression expr = randomExpression(rnd, 3, /*maxDepth=*/3, /*valueRange=*/5);
-      AbstractKeySpaceList extracted = Oracle.extract(expr, 3);
+      AbstractKeySpaceList extracted = Reference.extract(expr, 3);
       // Enumerate all (a, b, c) ∈ [0..10)³ and check: if expr is true, extracted matches.
       for (long a = 0; a < 10; a++) {
         for (long b = 0; b < 10; b++) {
@@ -206,7 +206,7 @@ public class OracleTest {
       branches[i] = and(pred(0, EQ, (long) i), pred(1, GE, (long) i));
     }
     AbstractExpression expr = or(branches);
-    AbstractKeySpaceList wide = Oracle.extract(expr, 2, /*cartesianBound=*/10);
+    AbstractKeySpaceList wide = Reference.extract(expr, 2, /*cartesianBound=*/10);
     // Post-widening size should be at most the bound (or 1 if widened all the way down).
     assertTrue("widened list should fit the bound, got " + wide.size(), wide.size() <= 50);
     // Soundness: every row that matches expr must also match wide.
@@ -223,14 +223,14 @@ public class OracleTest {
     // PHOENIX-6669: a contradiction on a non-leading PK dim should still produce
     // unsatisfiable. The per-dim intersection rule handles this uniformly.
     AbstractExpression expr = and(pred(0, EQ, 1L), pred(2, GE, 10L), pred(2, LT, 5L));
-    AbstractKeySpaceList result = Oracle.extract(expr, 3);
+    AbstractKeySpaceList result = Reference.extract(expr, 3);
     assertTrue(result.isUnsatisfiable());
   }
 
   @Test
   public void equalityOnSameDimTwiceCollapses() {
     AbstractExpression expr = and(pred(0, EQ, 5L), pred(0, EQ, 5L));
-    AbstractKeySpaceList result = Oracle.extract(expr, 2);
+    AbstractKeySpaceList result = Reference.extract(expr, 2);
     assertEquals(1, result.size());
     assertEquals(AbstractRange.point(5L), result.spaces().get(0).get(0));
   }
@@ -238,7 +238,7 @@ public class OracleTest {
   @Test
   public void conflictingEqualitiesCollapseToUnsatisfiable() {
     AbstractExpression expr = and(pred(0, EQ, 5L), pred(0, EQ, 7L));
-    AbstractKeySpaceList result = Oracle.extract(expr, 2);
+    AbstractKeySpaceList result = Reference.extract(expr, 2);
     assertTrue(result.isUnsatisfiable());
   }
 
@@ -264,7 +264,7 @@ public class OracleTest {
   public void listHasNoDuplicates() {
     // After merge-to-fixpoint, no two spaces in the list should be equal.
     AbstractExpression expr = or(pred(0, EQ, 1L), pred(0, EQ, 1L), pred(0, EQ, 2L));
-    AbstractKeySpaceList result = Oracle.extract(expr, 1);
+    AbstractKeySpaceList result = Reference.extract(expr, 1);
     assertEquals(2, result.size());
   }
 
@@ -272,7 +272,7 @@ public class OracleTest {
   public void singleDimOrCoalesces() {
     // `d0 >= 5 OR d0 < 3 OR d0 = 4` should coalesce to two adjacent ranges merged at 4.
     AbstractExpression expr = or(pred(0, GE, 5L), pred(0, LT, 3L), pred(0, EQ, 4L));
-    AbstractKeySpaceList result = Oracle.extract(expr, 1);
+    AbstractKeySpaceList result = Reference.extract(expr, 1);
     // [lt 3] and [=4] are disjoint (gap at 3). [=4] and [>=5] are adjacent (4 vs 5 gap).
     // All three are non-mergeable as pairs: so 3 spaces... let me reason carefully.
     // Actually [=4] and [>=5]: shared endpoint? [=4] is [4,4]; [>=5] is [5,+∞). 4 and 5
@@ -290,7 +290,7 @@ public class OracleTest {
         and(pred(0, EQ, 1L), pred(1, EQ, 5L)),
         and(pred(0, EQ, 2L), pred(1, EQ, 5L))
       ));
-    AbstractKeySpaceList result = Oracle.extract(expr, 3);
+    AbstractKeySpaceList result = Reference.extract(expr, 3);
     // 2 spaces: (d0=1, d1=5, *), (d0=2, d1=5, *)
     assertEquals(2, result.size());
     // ... each with d1 pinned to 5.

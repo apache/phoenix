@@ -15,7 +15,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.compile.keyspace.oracle;
+package org.apache.phoenix.compile.keyspace.algebra;
 
 import java.sql.SQLException;
 import java.util.ArrayList;

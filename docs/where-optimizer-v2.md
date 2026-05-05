@@ -19,7 +19,7 @@ V2 replaces the range-enumeration core with a **mathematical model** (N-dimensio
 
 ## 2. Scope and boundaries
 
-**In scope.** Only the WHERE-optimizer and Expression-level normalization are redesigned. Specifically: a new `compile.keyspace` package; a new driver `WhereOptimizerV2` invoked in `WhereOptimizer.pushKeyExpressionsToScan`; a feature flag; parameterized tests; new unit tests for the algebra; an oracle-based differential harness.
+**In scope.** Only the WHERE-optimizer and Expression-level normalization are redesigned. Specifically: a new `compile.keyspace` package; a new driver `WhereOptimizerV2` invoked in `WhereOptimizer.pushKeyExpressionsToScan`; a feature flag; parameterized tests; new unit tests for the algebra; a reference-model-based differential harness (`compile.keyspace.algebra`).
 
 **Out of scope — intentionally unchanged.**
 - `SkipScanFilter` — consumes the same per-slot `List<List<KeyRange>>` shape as today.
@@ -76,12 +76,9 @@ compile/keyspace/
 ├── RemoveExtractedNodesVisitorV2.java    Walks the normalized tree and drops nodes fully consumed by
 │                                         the key ranges, producing the residual filter.
 ├── WhereOptimizerV2.java                 Driver: entry point that orchestrates the pipeline.
-└── oracle/                               Reference model for differential testing. Pure-Java, no
-                                         Phoenix types. Independently implements the algorithm per the
-                                         design doc; the production code is tested against it.
 ```
 
-Tests live alongside in `phoenix-core/src/test/java/org/apache/phoenix/compile/keyspace/`.
+Tests live alongside in `phoenix-core/src/test/java/org/apache/phoenix/compile/keyspace/`. A separate `compile.keyspace.algebra` package under `phoenix-core/src/test/java` holds a pure-Java reference model of the algebra for differential testing — see §8.
 
 ---
 
@@ -427,15 +424,15 @@ All-single-key last slots don't need the extension — point keys don't carry tr
 
 ---
 
-## 8. The Oracle — Differential Testing
+## 8. Reference Algebra — Differential Testing
 
-`compile/keyspace/oracle/` is a reference implementation of the key-space algorithm over a pure-Java abstract expression tree. It's 1000 lines of self-contained code with no Phoenix types: `AbstractRange<T extends Comparable<T>>` for 1-D intervals, `AbstractKeySpace` for N-dim boxes, `AbstractKeySpaceList` for the disjunction, `AbstractExpression` for leaf/And/Or nodes, and `Oracle.extract(expr, nPk)` as the entry point.
+`compile.keyspace.algebra` (test-only, under `phoenix-core/src/test/java`) is a reference implementation of the key-space algorithm over a pure-Java abstract expression tree. It's 1000 lines of self-contained code with no Phoenix types: `AbstractRange<T extends Comparable<T>>` for 1-D intervals, `AbstractKeySpace` for N-dim boxes, `AbstractKeySpaceList` for the disjunction, `AbstractExpression` for leaf/And/Or nodes, and `Reference.extract(expr, nPk)` as the entry point. It's a **test oracle** in the differential-testing sense — the production code is compared against it.
 
-The oracle intentionally ignores Phoenix's byte encoding, DESC inversion, separator bytes, salt/tenant prefixes, null semantics, and scalar-function wrappers. Its job is the set-algebra: given a predicate over `N` abstract dimensions, what is the emitted `KeySpaceList`?
+The reference implementation intentionally ignores Phoenix's byte encoding, DESC inversion, separator bytes, salt/tenant prefixes, null semantics, and scalar-function wrappers. Its job is the set-algebra: given a predicate over `N` abstract dimensions, what is the emitted `KeySpaceList`?
 
-`compile/keyspace/oracle/HarnessCorpusTest.java` (invoked from unit tests under `phoenix-core/src/test/java/.../keyspace/oracle/`) runs a library of Expression shapes through both the production pipeline and the oracle, decodes the production `ScanRanges` back to an `AbstractKeySpaceList`-comparable form with `ScanRangesDecoder`, and asserts soundness: every row the original predicate matches must be in the emitted scan region. False positives (rows in the scan region that don't satisfy the predicate) are acceptable because the residual filter rejects them at scan time; false negatives are correctness bugs and fail the test.
+`HarnessCorpusTest.java` in the same package runs a library of Expression shapes through both the production pipeline and the reference, decodes the production `ScanRanges` back to an `AbstractKeySpaceList`-comparable form with `ScanRangesDecoder`, and asserts soundness: every row the original predicate matches must be in the emitted scan region. False positives (rows in the scan region that don't satisfy the predicate) are acceptable because the residual filter rejects them at scan time; false negatives are correctness bugs and fail the test.
 
-This was a significant debugging accelerator. When the production emission diverged from the oracle, the divergence was almost always a bug; when it didn't, we had confidence in the algorithm.
+This was a significant debugging accelerator. When the production emission diverged from the reference, the divergence was almost always a bug; when it didn't, we had confidence in the algorithm.
 
 ---
 
@@ -642,4 +639,4 @@ From the prior work tracking in `WhereOptimizerV2Test`, several legacy-parity fa
 
 V2 replaces the legacy optimizer's mutable per-slot concatenation with a mathematical model (N-dim key-space algebra with containment / N−1-agreement merge rules) and a clear pipeline: normalize → visit → extract → emit. The extractor defaults to emitting the V1 projection of the final `KeySpaceList` (one slot per PK column), so downstream code (`ScanRanges`, `SkipScanFilter`) receives the exact shape it was designed for. Compound emission is an optional optimization for shapes where a tighter compound byte form gives a narrower scan; it is gated by a handful of routing rules (§7.2) that fall back to the V1 projection when compound would trip V1-era downstream quirks. Once V1 is deprecated and those quirks are fixed, the V1 projection fallback can be removed and compound emission becomes the sole path.
 
-The algorithm is provably bounded (O(N²) via cartesian widening), equivalence-respecting (logically equivalent inputs produce equal `KeySpaceList`s after normalization), and tested against an independent oracle.
+The algorithm is provably bounded (O(N²) via cartesian widening), equivalence-respecting (logically equivalent inputs produce equal `KeySpaceList`s after normalization), and tested against an independent reference implementation in `compile.keyspace.algebra`.
