@@ -478,6 +478,10 @@
             <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-1.2-api</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.slf4j:jul-to-slf4j</ignoredUnusedDeclaredDependency>
             <ignoredUnusedDeclaredDependency>org.slf4j:jcl-over-slf4j</ignoredUnusedDeclaredDependency>
+            <!-- Annotation processor for @Benchmark in WhereOptimizerBenchmark; used at
+                 compile time to emit BenchmarkList / JMH runner classes, so static import
+                 analysis doesn't see it. -->
+            <ignoredUnusedDeclaredDependency>org.openjdk.jmh:jmh-generator-annprocess</ignoredUnusedDeclaredDependency>
           </ignoredUnusedDeclaredDependencies>
           <ignoredNonTestScopedDependencies>
             <ignoredNonTestScopedDependency>org.apache.phoenix:phoenix-core-client</ignoredNonTestScopedDependency>
