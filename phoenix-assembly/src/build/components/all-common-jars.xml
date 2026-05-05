@@ -47,14 +47,8 @@
         <include>phoenix-server-${hbase.suffix}.jar</include>
       </includes>
     </fileSet>
-    <fileSet>
-      <directory>${project.basedir}/../phoenix-mapreduce-byo-shaded-hbase/target</directory>
-      <outputDirectory>/</outputDirectory>
-      <includes>
-        <include>phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}-${project.version}.jar</include>
-        <include>phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}.jar</include>
-      </includes>
-    </fileSet>
+    <!-- The byo-shaded-hbase mapreduce uberjar is added only under -Prelease via
+         components/release-only-jars.xml (see phoenix-assembly/pom.xml). -->
     <fileSet>
       <directory>${project.basedir}/../phoenix-pherf/target</directory>
       <outputDirectory>/</outputDirectory>
