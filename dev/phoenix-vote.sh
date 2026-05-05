@@ -146,16 +146,35 @@ function verify_signatures() {
     done
 }
 
+function _sha512_hex() {
+    # Pull just the lowercase hex digest out of a `gpg --print-md SHA512`
+    # output (or a Phoenix .sha512 file produced by the same tool). The file
+    # is wrapped across N lines and the wrap width can differ between gpg
+    # versions, so we strip the leading "<filename>: " prefix on line 1 and
+    # then drop all whitespace before lower-casing.
+    sed -e '1s/^[^:]*: //' "$1" | tr -d '[:space:]' | tr 'A-F' 'a-f'
+}
+
 function verify_checksums() {
     rm -f "${OUTPUT_PATH_PREFIX}"_verify_checksums
     SHA_EXT=$(find . -name "*.sha*" | awk -F '.' '{ print $NF }' | head -n 1)
     CHECKSUM_PASSED=1
     for file in *.tar.gz; do
-        gpg --print-md SHA512 "${file}" > "${file}"."${SHA_EXT}".tmp
-        if ! diff "${file}"."${SHA_EXT}".tmp "${file}"."${SHA_EXT}" 2>&1 | tee -a "${OUTPUT_PATH_PREFIX}"_verify_checksums; then
+        local_tmp="${file}.${SHA_EXT}.tmp"
+        gpg --print-md SHA512 "${file}" > "${local_tmp}"
+        local_hex=$(_sha512_hex "${local_tmp}")
+        dist_hex=$(_sha512_hex "${file}.${SHA_EXT}")
+        rm -f "${local_tmp}"
+        if [ -n "${local_hex}" ] && [ "${local_hex}" = "${dist_hex}" ]; then
+            echo "${file}: SHA512 OK" | tee -a "${OUTPUT_PATH_PREFIX}"_verify_checksums
+        else
+            {
+                echo "${file}: SHA512 MISMATCH"
+                echo "  expected: ${dist_hex}"
+                echo "  actual:   ${local_hex}"
+            } | tee -a "${OUTPUT_PATH_PREFIX}"_verify_checksums
             CHECKSUM_PASSED=0
         fi
-        rm -f "${file}"."${SHA_EXT}".tmp
     done
 }
 
