@@ -550,10 +550,10 @@
             </goals>
             <phase>package</phase>
             <configuration>
+              <promoteTransitiveDependencies>true</promoteTransitiveDependencies>
               <shadeTestJar>false</shadeTestJar>
               <createSourcesJar>${shadeSources}</createSourcesJar>
-              <!-- Nothing consumes a dep-reduced POM for this uberjar. -->
-              <createDependencyReducedPom>false</createDependencyReducedPom>
+              <dependencyReducedPomLocation>${basedir}/target/pom.xml</dependencyReducedPomLocation>
               <artifactSet>
                 <includes>
                   <include>*:*</include>
