@@ -307,6 +307,14 @@ public class StatementContext {
 
   public void setScanRanges(ScanRanges scanRanges) {
     this.scanRanges = scanRanges;
+    // V2ScanArtifact is tied to the specific ScanRanges produced alongside it by
+    // WhereOptimizerV2 (the artifact's KeySpaceList is the pre-encoding view of
+    // those same scan ranges). Clear it on replacement so downstream consumers —
+    // notably ExplainTable.appendKeyRanges — never read stale V2 metadata against
+    // a freshly-installed scanRanges. Callers that attach an artifact must do so
+    // via setV2ScanArtifact(...) after setScanRanges(...); that ordering is what
+    // WhereOptimizerV2.run already uses.
+    this.v2ScanArtifact = null;
     scanRanges.initializeScan(scan);
   }
 
