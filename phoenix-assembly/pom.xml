@@ -45,8 +45,9 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-server-${hbase.suffix}</artifactId>
     </dependency>
-    <!-- phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix} is added under
-         the `release` profile, since it is built only for releases. -->
+    <!-- See the `release` profile below for
+         phoenix-mapreduce-byo-shaded-hbase-${hbase.suffix}. It is built only for
+         releases. -->
     <dependency>
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-client-embedded-${hbase.suffix}</artifactId>
@@ -142,9 +143,8 @@
               </arguments>
             </configuration>
           </execution>
-          <!-- The mapreduce-byo-shaded-hbase exec execution lives in the
-               `release` profile below, since the byo-shaded-hbase mapreduce
-               uberjar is only built for releases. -->
+          <!-- See the `release` profile below for the mapreduce-byo-shaded-hbase
+               symlink exec. That uberjar is only built for releases. -->
           <execution>
             <id>pherf without version</id>
             <goals>

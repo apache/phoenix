@@ -24,5 +24,8 @@
   release-only jars (mapreduce byo-shaded-hbase) are not produced.
   Selected by the `assembly.mapreduce.componentDescriptor` property
   defined in phoenix-assembly/pom.xml.
+
+  An empty `<component/>` is a valid component descriptor per the assembly
+  plugin schema. Every child of <component> is optional.
 -->
 <component/>
