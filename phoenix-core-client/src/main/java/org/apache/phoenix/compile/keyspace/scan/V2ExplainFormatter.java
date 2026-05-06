@@ -79,6 +79,12 @@ public final class V2ExplainFormatter {
     }
     KeySpace space = list.spaces().get(0);
     boolean isLocalIndex = org.apache.phoenix.util.ScanUtil.isLocalIndex(context.getScan());
+    // On a local index the viewIndexId slot is the leading user-prefix slot, which is
+    // slot 0 on an unsalted table and slot 1 on a salted table (the salt byte sits in
+    // slot 0). Using a hardcoded d==0 check mis-attributes the salt byte as a viewIndexId
+    // and leaves the real viewIndexId unshifted.
+    boolean scanIsSalted = context.getScanRanges() != null && context.getScanRanges().isSalted();
+    int viewIndexIdSlot = scanIsSalted ? 1 : 0;
 
     // KeySpace indexing is by absolute PK position ({@link KeySpaceExpressionVisitor}
     // emits ranges via {@code KeySpace.single(pkPos, ...)} with {@code pkPos} being the
@@ -157,7 +163,7 @@ public final class V2ExplainFormatter {
         // shifted-value format ({@code Short.MIN_VALUE + 1 → "1"}) so the explain-plan
         // matches V1's output. Without this flag, the raw stored bytes display as
         // {@code -32768}, diverging from V1 on every local-index explain assertion.
-        boolean changeViewIndexId = isLocalIndex && d == 0;
+        boolean changeViewIndexId = isLocalIndex && d == viewIndexIdSlot;
         appendPKColumnValue(lower, context, table, lb, null, d, changeViewIndexId);
         lower.append(',');
         appendPKColumnValue(upper, context, table, ub, null, d, changeViewIndexId);
@@ -174,7 +180,7 @@ public final class V2ExplainFormatter {
           : kr == KeyRange.IS_NOT_NULL_RANGE ? Boolean.FALSE : null;
       byte[] lb = kr.getRange(KeyRange.Bound.LOWER);
       byte[] ub = kr.getRange(KeyRange.Bound.UPPER);
-      boolean changeViewIndexId = isLocalIndex && d == 0;
+      boolean changeViewIndexId = isLocalIndex && d == viewIndexIdSlot;
       appendPKColumnValue(lower, context, table, lb, isNull, d, changeViewIndexId);
       lower.append(',');
       appendPKColumnValue(upper, context, table, ub, isNull, d, changeViewIndexId);
@@ -217,6 +223,12 @@ public final class V2ExplainFormatter {
       return "";
     }
     boolean isLocalIndex = org.apache.phoenix.util.ScanUtil.isLocalIndex(context.getScan());
+    // On a local index the viewIndexId slot is the leading user-prefix slot, which is
+    // slot 0 on an unsalted table and slot 1 on a salted table (the salt byte sits in
+    // slot 0). Using a hardcoded d==0 check mis-attributes the salt byte as a viewIndexId
+    // and leaves the real viewIndexId unshifted.
+    boolean scanIsSalted = context.getScanRanges() != null && context.getScanRanges().isSalted();
+    int viewIndexIdSlot = scanIsSalted ? 1 : 0;
     java.util.List<java.util.List<KeyRange>> ranges = context.getScanRanges().getRanges();
     StringBuilder lower = new StringBuilder();
     StringBuilder upper = new StringBuilder();
@@ -226,7 +238,7 @@ public final class V2ExplainFormatter {
       java.util.List<KeyRange> slot = ranges.get(d);
       byte[] lb = slot.get(0).getRange(KeyRange.Bound.LOWER);
       byte[] ub = slot.get(slot.size() - 1).getRange(KeyRange.Bound.UPPER);
-      boolean changeViewIndexId = isLocalIndex && d == 0;
+      boolean changeViewIndexId = isLocalIndex && d == viewIndexIdSlot;
       appendPKColumnValue(lower, context, table, lb, null, d, changeViewIndexId);
       lower.append(',');
       appendPKColumnValue(upper, context, table, ub, null, d, changeViewIndexId);

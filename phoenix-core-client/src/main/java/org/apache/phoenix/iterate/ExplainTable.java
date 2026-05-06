@@ -502,6 +502,11 @@ public abstract class ExplainTable {
     ScanRanges scanRanges = context.getScanRanges();
     Iterator<byte[]> minMaxIterator = Collections.emptyIterator();
     boolean isLocalIndex = ScanUtil.isLocalIndex(context.getScan());
+    // On a local index the viewIndexId slot is the leading user-prefix slot: slot 0 on
+    // an unsalted table, slot 1 on a salted table (the salt byte sits in slot 0).
+    // Hardcoding i==0 mis-attributes the salt byte as a viewIndexId and leaves the
+    // real viewIndexId unshifted in the explain output.
+    int viewIndexIdSlot = scanRanges.isSalted() ? 1 : 0;
     boolean forceSkipScan = this.hint.hasHint(Hint.SKIP_SCAN);
     int nRanges = forceSkipScan ? scanRanges.getRanges().size() : scanRanges.getBoundSlotCount();
     int[] slotSpans = scanRanges.getSlotSpans();
@@ -554,7 +559,7 @@ public abstract class ExplainTable {
           for (int d = 0; d <= span; d++) {
             if (schema.next(ptr, i + d, maxOffset) == null) break;
             byte[] colBytes = ptr.copyBytes();
-            if (isLocalIndex && i + d == 0) {
+            if (isLocalIndex && i + d == viewIndexIdSlot) {
               appendPKColumnValue(compoundBuf, colBytes, null, i + d, true);
             } else {
               appendPKColumnValue(compoundBuf, colBytes, null, i + d, false);
@@ -574,7 +579,7 @@ public abstract class ExplainTable {
           // with variable widths); fall through to the legacy per-slot emission.
         }
       }
-      if (isLocalIndex && i == 0) {
+      if (isLocalIndex && i == viewIndexIdSlot) {
         appendPKColumnValue(buf, b, isNull, i, true);
       } else {
         appendPKColumnValue(buf, b, isNull, i, false);
