@@ -115,6 +115,27 @@ public class KeySpaceTest {
     assertFalse(inner.contains(outer));
   }
 
+  /**
+   * Regression: raw {@link KeyRange#intersect} collapses EVERYTHING ∩ IS_NULL to EMPTY
+   * because IS_NULL's empty-byte sentinel coincides with EVERYTHING's UNBOUND. Without
+   * the EVERYTHING-aware intersect in {@link KeySpace#contains}, a space with EVERYTHING
+   * on a dim would falsely report not containing a space with IS_NULL on that dim, and
+   * {@link KeySpace#unionIfMergeable} would fail to merge by containment — leaving the
+   * disjunction larger than necessary and skewing widening / skip-scan decisions.
+   */
+  @Test
+  public void containsHandlesEverythingVersusIsNull() {
+    KeySpace outer =
+      KeySpace.of(new KeyRange[] { pt("a"), KeyRange.EVERYTHING_RANGE });
+    KeySpace innerNull =
+      KeySpace.of(new KeyRange[] { pt("a"), KeyRange.IS_NULL_RANGE });
+    assertTrue("EVERYTHING must contain IS_NULL", outer.contains(innerNull));
+
+    Optional<KeySpace> merged = outer.unionIfMergeable(innerNull);
+    assertTrue("containment-based merge must fire", merged.isPresent());
+    assertEquals(outer, merged.get());
+  }
+
   @Test
   public void unionMergesWhenOneContainsOther() {
     KeySpace big = KeySpace.of(

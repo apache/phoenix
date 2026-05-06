@@ -253,7 +253,12 @@ public final class KeySpace {
       return false;
     }
     for (int i = 0; i < dims.length; i++) {
-      KeyRange inter = this.dims[i].intersect(other.dims[i]);
+      // Use the EVERYTHING-aware intersect: raw KeyRange.intersect() collapses
+      // EVERYTHING ∩ IS_NULL to EMPTY because IS_NULL's empty-byte sentinel and
+      // EVERYTHING's UNBOUND both read as empty byte arrays. Without this,
+      // [EVERYTHING,...] would falsely report it does not contain [IS_NULL,...],
+      // breaking OR-merge containment for IS_NULL predicates.
+      KeyRange inter = intersectRange(this.dims[i], other.dims[i]);
       if (!inter.equals(other.dims[i])) {
         return false;
       }
