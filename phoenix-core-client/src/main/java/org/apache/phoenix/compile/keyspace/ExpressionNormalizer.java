@@ -33,20 +33,28 @@ import org.apache.phoenix.expression.RowValueConstructorExpression;
 
 /**
  * Rewrites a WHERE {@link Expression} into the canonical AND/OR form the v2 key-space model
- * operates on. Two rewrites are applied bottom-up:
+ * operates on. One rewrite is applied bottom-up:
  * <ul>
  * <li><b>RVC inequality</b>: {@code (c1,...,cK) OP (v1,...,vK)} for OP in
  * {@code <, ≤, >, ≥} expands to the lexicographic OR of ANDs. Example:
  * {@code (c1,c2,c3) > (v1,v2,v3)} becomes
  * {@code (c1>v1) OR (c1=v1 AND c2>v2) OR (c1=v1 AND c2=v2 AND c3>v3)}. Equality is already
  * expanded upstream by {@link ComparisonExpression#create}.</li>
- * <li><b>IN list on a scalar</b>: {@code a IN (v1,...,vK)} expands to
- * {@code a=v1 OR ... OR a=vK}. IN with an RVC LHS is left intact; the visitor handles
- * that shape directly by producing one KeySpace per row value.</li>
  * </ul>
  * This rewrite is load-bearing: by replacing RVC inequality with an equivalent AND/OR tree
  * we guarantee that per-dim intersection composes correctly with any other scalar predicate,
- * matching the design's key-space model. BETWEEN is lowered at parse time by
+ * matching the design's key-space model.
+ * <p>
+ * <b>IN lists are not rewritten here.</b> Scalar {@code a IN (v1,...,vK)} and RVC
+ * {@code (c1,...,cK) IN ((r11,...,r1K), ...)} are both left intact; the visitor consumes
+ * them directly via
+ * {@link KeySpaceExpressionVisitor#visitLeave(InListExpression, java.util.List)}.
+ * An earlier draft rewrote scalar IN into an OR chain of equalities here, but that
+ * reshaped the Expression tree in ways downstream consumers (HavingCompiler, WhereCompiler
+ * tree-equality assertions) didn't expect and wrapped literals in spurious TO_VARCHAR
+ * coercions. See {@code rewriteScalarInList}'s comment for the history.
+ * <p>
+ * BETWEEN is lowered at parse time by
  * {@link org.apache.phoenix.compile.StatementNormalizer} and does not reach this pass.
  */
 public final class ExpressionNormalizer {
