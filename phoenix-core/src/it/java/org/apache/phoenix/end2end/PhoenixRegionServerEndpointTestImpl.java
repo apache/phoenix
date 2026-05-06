@@ -17,10 +17,6 @@
  */
 package org.apache.phoenix.end2end;
 
-import java.io.IOException;
-import org.apache.hadoop.hbase.CoprocessorEnvironment;
-import org.apache.hadoop.hbase.ServerName;
-import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
 
@@ -29,13 +25,6 @@ import org.apache.phoenix.coprocessor.PhoenixRegionServerEndpoint;
  * support keeping multiple cache instances.
  */
 public class PhoenixRegionServerEndpointTestImpl extends PhoenixRegionServerEndpoint {
-  protected ServerName serverName;
-
-  @Override
-  public void start(CoprocessorEnvironment env) throws IOException {
-    super.start(env);
-    this.serverName = ((RegionServerCoprocessorEnvironment) env).getServerName();
-  }
 
   @Override
   public ServerMetadataCache getServerMetadataCache() {
