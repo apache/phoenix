@@ -449,8 +449,18 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     // leading slot. With no leading-PK constraint and only a prefix-function predicate
     // on entity_id, V2 leaves the whole predicate in a RowKeyComparisonFilter (matches
     // V1 for this shape).
+    //
+    // Pin both the filter class and the residual predicate's rendered shape. V1's
+    // earlier strict {@code assertEquals} checked the full filter-expression subtree
+    // (exact SubstrFunction wrapping + empty-column-family marker); V2's normalized
+    // residual may differ in internal coercion wrappers or child ordering while
+    // producing the same SQL-level predicate. The toString() comparison is narrower
+    // than strict structural equality but broader than a bare {@code instanceof}
+    // check: it catches a regression where V2 starts emitting a wrong predicate
+    // inside a structurally-correct RowKeyComparisonFilter.
     assertTrue("expected RowKeyComparisonFilter, got " + filter.getClass().getSimpleName(),
       filter instanceof org.apache.phoenix.filter.RowKeyComparisonFilter);
+    assertEquals("SUBSTR(ENTITY_ID, 1, 3) = '" + keyPrefix + "'", filter.toString());
   }
 
   @Test
