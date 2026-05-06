@@ -695,11 +695,17 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       conn.createStatement().execute("ALTER VIEW " + viewName + " DROP COLUMN s4");
-      // i2 cannot be used since s4 has been dropped from the view, so i1 will be used
+      // i2 cannot be used since s4 has been dropped from the view, so i1 will be used.
+      // V2 extracts the {@code S1='foo'} equality into the index scan bounds (S1 is a
+      // trailing PK of the index after the viewIndexId), producing
+      // {@code SKIP SCAN ON 1 KEY OVER ... [1,*,*,'foo']} with only the concatenation
+      // predicate remaining as a server filter. V1 left S1='foo' in the filter and
+      // emitted a RANGE SCAN. Both execute the same query; V2's scan is strictly
+      // tighter (narrows on S1 in the scan bounds).
       rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       String queryPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName1 + " [1]\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY AND ((\"S2\" || '_' || \"S3\") = 'abc_cab' AND \"S1\" = 'foo')",
+      assertEquals("CLIENT PARALLEL 1-WAY SKIP SCAN ON 1 KEY OVER " + indexName1 + " [1,*,*,'foo']\n"
+        + "    SERVER FILTER BY FIRST KEY ONLY AND (\"S2\" || '_' || \"S3\") = 'abc_cab'",
         queryPlan);
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());

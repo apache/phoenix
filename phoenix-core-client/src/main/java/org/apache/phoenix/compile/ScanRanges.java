@@ -758,7 +758,42 @@ public class ScanRanges {
     for (int i = 0; i < nRanges; i++) {
       if (pkOffset + slotSpan[i] >= pkPosition) {
         List<KeyRange> range = ranges.get(i);
-        return range.size() == 1 && range.get(0).isSingleKey();
+        if (range.size() != 1) {
+          return false;
+        }
+        KeyRange r = range.get(0);
+        if (r.isSingleKey()) {
+          // Whole slot is a single key — any position within the slot has equality.
+          return true;
+        }
+        // Compound slot (slotSpan > 0) with a range bound: the slot as a whole isn't a
+        // single key, but one or more sub-positions packed into the compound may still
+        // be pinned. For each sub-position, the bound bytes at that field's offset are
+        // pinned iff both the lower and upper bytes are identical at that field in the
+        // compound. Walk the schema starting from the slot's leading PK column to
+        // extract the byte range for pkPosition in both bounds, then compare.
+        if (slotSpan[i] == 0 || schema == null) {
+          return false;
+        }
+        byte[] lower = r.getLowerRange();
+        byte[] upper = r.getUpperRange();
+        if (lower == KeyRange.UNBOUND || upper == KeyRange.UNBOUND
+          || lower == null || upper == null) {
+          return false;
+        }
+        int slotLeadingPk = pkOffset;
+        org.apache.hadoop.hbase.io.ImmutableBytesWritable lowerPtr =
+          new org.apache.hadoop.hbase.io.ImmutableBytesWritable(lower, 0, lower.length);
+        if (!schema.position(lowerPtr, slotLeadingPk, pkPosition)) {
+          return false;
+        }
+        org.apache.hadoop.hbase.io.ImmutableBytesWritable upperPtr =
+          new org.apache.hadoop.hbase.io.ImmutableBytesWritable(upper, 0, upper.length);
+        if (!schema.position(upperPtr, slotLeadingPk, pkPosition)) {
+          return false;
+        }
+        return Bytes.equals(lowerPtr.get(), lowerPtr.getOffset(), lowerPtr.getLength(),
+          upperPtr.get(), upperPtr.getOffset(), upperPtr.getLength());
       }
       pkOffset += slotSpan[i] + 1;
     }

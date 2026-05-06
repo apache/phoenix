@@ -726,8 +726,8 @@ public class QueryOptimizer {
       public int compare(QueryPlan plan1, QueryPlan plan2) {
         PTable table1 = plan1.getTableRef().getTable();
         PTable table2 = plan2.getTableRef().getTable();
-        int boundCount1 = plan1.getContext().getScanRanges().getBoundPkColumnCount();
-        int boundCount2 = plan2.getContext().getScanRanges().getBoundPkColumnCount();
+        int boundCount1 = effectiveBoundPkColumnCount(plan1.getContext().getScanRanges());
+        int boundCount2 = effectiveBoundPkColumnCount(plan2.getContext().getScanRanges());
         // For shared indexes (i.e. indexes on views and local indexes),
         // a) add back any view constants as these won't be in the index, and
         // b) ignore the viewIndexId which will be part of the row key columns.
@@ -790,6 +790,142 @@ public class QueryOptimizer {
     });
 
     return stopAtBestPlan ? bestCandidates.subList(0, 1) : bestCandidates;
+  }
+
+  /**
+   * Variant of {@link org.apache.phoenix.compile.ScanRanges#getBoundPkColumnCount} for the cost
+   * comparator: only honors the extra span reported by {@code slotSpan[i]} when the slot's ranges
+   * genuinely span multiple PK columns via byte-level encoding. A slot whose only ranges are
+   * non-point finite-bounded scalars (e.g. {@code BETWEEN a AND b} on a single PK col) under V2
+   * can carry an artificial {@code slotSpan[i] > 0} set by
+   * {@link org.apache.phoenix.compile.keyspace.KeyRangeExtractor#emitV1Projection} as a
+   * V1-compat marker for {@link org.apache.phoenix.filter.SkipScanFilter}'s per-region cursor
+   * stepping. That marker is needed for SkipScanFilter correctness on CDC-style scans but
+   * would inflate the PK-col count the cost comparator ranks plans by, letting a plan with a
+   * narrow bounded range on one PK col tie with a plan whose compound range genuinely covers
+   * multiple PK cols. Tie on primary key falls through to weaker tiebreakers that flip the
+   * plan choice (see CostBasedDecisionIT.testCostOverridesStaticPlanOrdering3 and its
+   * Upsert/Delete variants).
+   * <p>
+   * Rule: {@code slotSpan[i]} is honored unless every range in the slot is a non-point
+   * finite-bounded scalar. Point keys (single-key compound bytes encoding multiple PK cols,
+   * e.g. from RVC-IN or tuple equality) and ranges with an UNBOUND side (where trailing cols
+   * inherit the unbounded side's min/max at the byte level) both represent genuine multi-col
+   * narrowing and are counted as {@code slotSpan[i]+1}.
+   */
+  private static int effectiveBoundPkColumnCount(
+      org.apache.phoenix.compile.ScanRanges scanRanges) {
+    java.util.List<java.util.List<org.apache.phoenix.query.KeyRange>> ranges =
+      scanRanges.getRanges();
+    int[] slotSpan = scanRanges.getSlotSpans();
+    org.apache.phoenix.schema.RowKeySchema schema = scanRanges.getSchema();
+    int count = 0;
+    boolean hasUnbound = false;
+    int nRanges = ranges.size();
+    int schemaCursor = 0;
+    for (int i = 0; i < nRanges && !hasUnbound; i++) {
+      java.util.List<org.apache.phoenix.query.KeyRange> orRanges = ranges.get(i);
+      boolean slotHasUnbound = false;
+      boolean slotAllBoundedNonPoint = true;
+      for (org.apache.phoenix.query.KeyRange range : orRanges) {
+        if (range == org.apache.phoenix.query.KeyRange.EVERYTHING_RANGE) {
+          return count;
+        }
+        if (range.isUnbound()) {
+          slotHasUnbound = true;
+          hasUnbound = true;
+        }
+        if (range.isSingleKey() || range.isUnbound()) {
+          slotAllBoundedNonPoint = false;
+        }
+      }
+      int span = (slotSpan != null && i < slotSpan.length) ? slotSpan[i] : 0;
+      // V2-only artificial extension: {@code KeyRangeExtractor.emitV1Projection} bumps
+      // {@code slotSpan[last]} to span trailing unconstrained PK cols for
+      // {@link SkipScanFilter} cursor stepping, even when the slot holds a single-column
+      // finite-bounded scalar range whose bytes don't actually encode trailing cols.
+      // For cost ranking we want to count only columns genuinely narrowed by the scan
+      // bounds, so discount that shape to 1.
+      //
+      // Discriminator: decode the range's bytes against the schema at the slot's
+      // starting PK position and count how many fields they consume. A genuine compound
+      // range (from V2's compound-emission path) concatenates {@code span+1} fields so
+      // the byte decode yields {@code span+1} columns. The V1-compat extension leaves
+      // the bytes covering a single column and only bumps {@code slotSpan} to satisfy
+      // SkipScanFilter's per-region cursor stepping — the byte decode yields 1 column.
+      //
+      // Checked on {@code slotAllBoundedNonPoint && !slotHasUnbound} with {@code
+      // span > 0}: point keys and unbounded ranges still count as {@code span+1}
+      // (they represent real multi-col narrowing — see
+      // QueryOptimizerTest.testQueryOptimizerShouldSelectThePlanWithMoreNumberOfPKColumns).
+      if (span > 0 && slotAllBoundedNonPoint && !slotHasUnbound) {
+        int effectiveCols = span + 1;
+        if (schema != null && !orRanges.isEmpty()) {
+          org.apache.phoenix.query.KeyRange r = orRanges.get(0);
+          int decoded = countColsInKey(schema, r.getLowerRange(), schemaCursor, span + 1);
+          if (decoded == 0) {
+            decoded = countColsInKey(schema, r.getUpperRange(), schemaCursor, span + 1);
+          }
+          if (decoded > 0) {
+            effectiveCols = decoded;
+          }
+        }
+        count += effectiveCols;
+      } else {
+        count += span + 1;
+      }
+      schemaCursor += span + 1;
+    }
+    return count;
+  }
+
+  /**
+   * Count the PK fields actually consumed when decoding {@code key} against {@code schema}
+   * starting at {@code startField}. Mirrors {@code KeyRangeExtractor.countColsInKey};
+   * duplicated here to keep the visibility scoped and avoid exposing an internal helper.
+   */
+  private static int countColsInKey(org.apache.phoenix.schema.RowKeySchema schema,
+      byte[] key, int startField, int maxFields) {
+    if (
+      key == null || key == org.apache.phoenix.query.KeyRange.UNBOUND || key.length == 0
+    ) {
+      return 0;
+    }
+    int offset = 0;
+    int cols = 0;
+    for (
+      int f = startField;
+      f < startField + maxFields && f < schema.getMaxFields();
+      f++
+    ) {
+      if (offset >= key.length) break;
+      org.apache.phoenix.schema.ValueSchema.Field field = schema.getField(f);
+      int fieldLen;
+      if (field.getDataType().isFixedWidth()) {
+        Integer maxCol = field.getMaxLength();
+        fieldLen = (maxCol != null) ? maxCol
+          : (field.getDataType().getByteSize() != null
+            ? field.getDataType().getByteSize()
+            : 0);
+      } else {
+        int end = offset;
+        while (
+          end < key.length
+            && key[end] != org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE
+            && key[end] != org.apache.phoenix.query.QueryConstants.DESC_SEPARATOR_BYTE
+        ) {
+          end++;
+        }
+        fieldLen = end - offset;
+      }
+      offset += fieldLen;
+      cols++;
+      if (offset >= key.length) break;
+      if (!field.getDataType().isFixedWidth() && offset < key.length) {
+        offset++;
+      }
+    }
+    return cols;
   }
 
   private static class WhereConditionRewriter extends AndRewriterBooleanParseNodeVisitor {

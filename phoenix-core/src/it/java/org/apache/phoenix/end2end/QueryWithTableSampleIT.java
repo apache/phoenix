@@ -236,6 +236,11 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
         + " tablesample (2) where i2<6000";
       ResultSet rs = conn.createStatement().executeQuery(query);
 
+      // The `i2 < 6000` predicate is on a non-leading PK column with no leading-PK
+      // constraint. SkipScanFilter can't be installed for this shape (its seek-hint
+      // invariant requires a concrete lower on the leading user slot); V2 keeps the
+      // predicate in the residual BooleanExpressionFilter, matching V1's scan-level
+      // behavior. ExplainTable renders the residual as the `AND I2 < 6000` suffix.
       assertEquals(
         "UNION ALL OVER 2 QUERIES\n" + "    CLIENT PARALLEL 1-WAY 1.0-SAMPLED RANGE SCAN OVER "
           + tableName + " [*] - [2]\n" + "        SERVER FILTER BY FIRST KEY ONLY\n"
