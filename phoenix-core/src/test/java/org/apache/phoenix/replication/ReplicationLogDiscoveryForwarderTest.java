@@ -62,6 +62,11 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
     conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, 20);
   }
 
+  @Override
+  protected boolean useAlignedRotation() {
+    return true;
+  }
+
   @Before
   public void setUp() throws IOException {
     ReplicationMode mode = logGroup.getMode();

@@ -1082,67 +1082,77 @@ public class ReplicationLogDiscoveryTest {
       .when(discovery)
       .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file3Prefix)));
 
-    // Process in-progress directory
-    discovery.processInProgressDirectory();
+    // Inject an advancing clock so that rename timestamps from markInProgress are always
+    // strictly before the renameTimestampThreshold computed on the next loop iteration
+    AtomicLong clock = new AtomicLong(EnvironmentEdgeManager.currentTime());
+    EnvironmentEdgeManager.injectEdge(clock::getAndIncrement);
 
-    // Verify that markInProgress was called 7 times (5 initially + 2 for retries)
-    Mockito.verify(fileTracker, Mockito.times(7)).markInProgress(Mockito.any(Path.class));
+    try {
+      // Process in-progress directory
+      discovery.processInProgressDirectory();
 
-    // Verify that markInProgress was called for each expected file
-    // Files 1 and 3 are called twice (initial attempt + retry), others once
-    for (int i = 0; i < allInProgressFiles.size(); i++) {
-      Path expectedFile = allInProgressFiles.get(i);
-      String expectedPrefix = extractPrefix(expectedFile.getName());
-      int expectedTimes = (i == 1 || i == 3) ? 2 : 1; // Files 1 and 3 are retried
-      Mockito.verify(fileTracker, Mockito.times(expectedTimes)).markInProgress(
-        Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
-    }
+      // Verify that markInProgress was called 7 times (5 initially + 2 for retries)
+      Mockito.verify(fileTracker, Mockito.times(7)).markInProgress(Mockito.any(Path.class));
 
-    // Verify that processFile was called for each file in the directory (i.e. 5 + 2 times for
-    // failed once that would succeed in next retry)
-    Mockito.verify(discovery, Mockito.times(7)).processFile(Mockito.any(Path.class));
+      // Verify that markInProgress was called for each expected file
+      // Files 1 and 3 are called twice (initial attempt + retry), others once
+      for (int i = 0; i < allInProgressFiles.size(); i++) {
+        Path expectedFile = allInProgressFiles.get(i);
+        String expectedPrefix = extractPrefix(expectedFile.getName());
+        int expectedTimes = (i == 1 || i == 3) ? 2 : 1; // Files 1 and 3 are retried
+        Mockito.verify(fileTracker, Mockito.times(expectedTimes)).markInProgress(
+          Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+      }
 
-    // Verify that processFile was called for each specific file (using prefix matching)
-    // Files 1 and 3 should be called twice (fail once, succeed on retry), others once
-    for (int i = 0; i < allInProgressFiles.size(); i++) {
-      Path expectedFile = allInProgressFiles.get(i);
-      String expectedPrefix = extractPrefix(expectedFile.getName());
-      int expectedTimes = (i == 1 || i == 3) ? 2 : 1; // Files 1 and 3 are called twice (fail +
-                                                      // retry success)
-      Mockito.verify(discovery, Mockito.times(expectedTimes))
-        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
-    }
+      // Verify that processFile was called for each file in the directory (i.e. 5 + 2 times for
+      // failed once that would succeed in next retry)
+      Mockito.verify(discovery, Mockito.times(7)).processFile(Mockito.any(Path.class));
 
-    // Verify that markCompleted was called for each successfully processed file
-    Mockito.verify(fileTracker, Mockito.times(5)).markCompleted(Mockito.any(Path.class));
+      // Verify that processFile was called for each specific file (using prefix matching)
+      // Files 1 and 3 should be called twice (fail once, succeed on retry), others once
+      for (int i = 0; i < allInProgressFiles.size(); i++) {
+        Path expectedFile = allInProgressFiles.get(i);
+        String expectedPrefix = extractPrefix(expectedFile.getName());
+        int expectedTimes = (i == 1 || i == 3) ? 2 : 1; // Files 1 and 3 are called twice (fail +
+                                                        // retry success)
+        Mockito.verify(discovery, Mockito.times(expectedTimes)).processFile(
+          Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+      }
 
-    // Verify that markCompleted was called for 2 intermittent failed processed file
-    Mockito.verify(fileTracker, Mockito.times(2)).markFailed(Mockito.any(Path.class));
+      // Verify that markCompleted was called for each successfully processed file
+      Mockito.verify(fileTracker, Mockito.times(5)).markCompleted(Mockito.any(Path.class));
 
-    // Verify that markFailed was called once ONLY for failed files
-    String failedPrefix1 = extractPrefix(allInProgressFiles.get(1).getName());
-    Mockito.verify(fileTracker, Mockito.times(1))
-      .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(failedPrefix1)));
-    String failedPrefix3 = extractPrefix(allInProgressFiles.get(3).getName());
-    Mockito.verify(fileTracker, Mockito.times(1))
-      .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(failedPrefix3)));
+      // Verify that markCompleted was called for 2 intermittent failed processed file
+      Mockito.verify(fileTracker, Mockito.times(2)).markFailed(Mockito.any(Path.class));
 
-    // Verify that markFailed was NOT called for files processed successfully in first iteration
-    String successPrefix0 = extractPrefix(allInProgressFiles.get(0).getName());
-    Mockito.verify(fileTracker, Mockito.never())
-      .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(successPrefix0)));
-    String successPrefix2 = extractPrefix(allInProgressFiles.get(2).getName());
-    Mockito.verify(fileTracker, Mockito.never())
-      .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(successPrefix2)));
-    String successPrefix4 = extractPrefix(allInProgressFiles.get(4).getName());
-    Mockito.verify(fileTracker, Mockito.never())
-      .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(successPrefix4)));
+      // Verify that markFailed was called once ONLY for failed files
+      String failedPrefix1 = extractPrefix(allInProgressFiles.get(1).getName());
+      Mockito.verify(fileTracker, Mockito.times(1))
+        .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(failedPrefix1)));
+      String failedPrefix3 = extractPrefix(allInProgressFiles.get(3).getName());
+      Mockito.verify(fileTracker, Mockito.times(1))
+        .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(failedPrefix3)));
 
-    // Verify that markCompleted was called for each successfully processed file with correct paths
-    for (Path expectedFile : allInProgressFiles) {
-      String expectedPrefix = extractPrefix(expectedFile.getName());
-      Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
-        Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+      // Verify that markFailed was NOT called for files processed successfully in first iteration
+      String successPrefix0 = extractPrefix(allInProgressFiles.get(0).getName());
+      Mockito.verify(fileTracker, Mockito.never())
+        .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(successPrefix0)));
+      String successPrefix2 = extractPrefix(allInProgressFiles.get(2).getName());
+      Mockito.verify(fileTracker, Mockito.never())
+        .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(successPrefix2)));
+      String successPrefix4 = extractPrefix(allInProgressFiles.get(4).getName());
+      Mockito.verify(fileTracker, Mockito.never())
+        .markFailed(Mockito.argThat(path -> extractPrefix(path.getName()).equals(successPrefix4)));
+
+      // Verify that markCompleted was called for each successfully processed file with correct
+      // paths
+      for (Path expectedFile : allInProgressFiles) {
+        String expectedPrefix = extractPrefix(expectedFile.getName());
+        Mockito.verify(fileTracker, Mockito.times(1)).markCompleted(
+          Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+      }
+    } finally {
+      EnvironmentEdgeManager.reset();
     }
   }
 

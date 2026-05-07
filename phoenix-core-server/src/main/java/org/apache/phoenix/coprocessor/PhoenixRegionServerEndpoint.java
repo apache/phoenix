@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.query.QueryServices.SYNCHRONOUS_REPLICATION_ENABLED;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED;
+
 import com.google.protobuf.ByteString;
 import com.google.protobuf.RpcCallback;
 import com.google.protobuf.RpcController;
@@ -30,7 +33,9 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerMetadataCache;
 import org.apache.phoenix.cache.ServerMetadataCacheImpl;
@@ -46,6 +51,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.reader.ReplicationLogReplayService;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.SchemaUtil;
@@ -61,6 +67,7 @@ public class PhoenixRegionServerEndpoint extends
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRegionServerEndpoint.class);
   private MetricsMetadataCachingSource metricsSource;
   protected Configuration conf;
+  protected ServerName serverName;
   private ExecutorService prewarmExecutor;
 
   // regionserver level thread pool used by Uncovered Indexes to scan data table rows
@@ -69,6 +76,9 @@ public class PhoenixRegionServerEndpoint extends
   @Override
   public void start(CoprocessorEnvironment env) throws IOException {
     this.conf = env.getConfiguration();
+    if (env instanceof RegionServerCoprocessorEnvironment) {
+      this.serverName = ((RegionServerCoprocessorEnvironment) env).getServerName();
+    }
     this.metricsSource =
       MetricsPhoenixCoprocessorSourceFactory.getInstance().getMetadataCachingSource();
     initUncoveredIndexThreadPool(this.conf);
@@ -89,6 +99,10 @@ public class PhoenixRegionServerEndpoint extends
   public void stop(CoprocessorEnvironment env) throws IOException {
     // Stop replication log replay
     ReplicationLogReplayService.getInstance(conf).stop();
+    // Close all ReplicationLogGroup instances belonging to this server
+    if (serverName != null) {
+      ReplicationLogGroup.closeAll(serverName);
+    }
     RegionServerCoprocessor.super.stop(env);
     if (uncoveredIndexThreadPool != null) {
       uncoveredIndexThreadPool
@@ -282,6 +296,9 @@ public class PhoenixRegionServerEndpoint extends
       }
 
       // Phase 2: Prewarm individual HAGroupStoreClients with retry
+      // and eagerly initialize ReplicationLogGroup instances
+      boolean shouldInitReplicationLogGroup = serverName != null && conf
+        .getBoolean(SYNCHRONOUS_REPLICATION_ENABLED, DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED);
       try {
         while (!pending.isEmpty()) {
           Iterator<String> iterator = pending.iterator();
@@ -289,6 +306,16 @@ public class PhoenixRegionServerEndpoint extends
             String haGroup = iterator.next();
             try {
               manager.getClusterRoleRecord(haGroup);
+              if (shouldInitReplicationLogGroup) {
+                try {
+                  ReplicationLogGroup.get(conf, serverName, haGroup);
+                  LOGGER.info("Eagerly initialized ReplicationLogGroup {} on server {}", haGroup,
+                    serverName);
+                } catch (Exception e) {
+                  LOGGER.warn("Failed to eagerly initialize ReplicationLogGroup for HA group: {}."
+                    + " Will be lazily initialized on first mutation.", haGroup, e);
+                }
+              }
               iterator.remove();
               LOGGER.info("Prewarmed HAGroupStoreClient: {} ({} remaining)", haGroup,
                 pending.size());

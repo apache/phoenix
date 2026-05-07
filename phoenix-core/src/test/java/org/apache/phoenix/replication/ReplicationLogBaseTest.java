@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.replication;
 
-import static org.apache.phoenix.replication.ReplicationLogDiscoveryForwarder.REPLICATION_FORWARDER_WAITING_BUFFER_PERCENTAGE_KEY;
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doReturn;
@@ -106,7 +105,6 @@ public class ReplicationLogBaseTest {
     // small value of replication round duration
     conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY,
       TEST_REPLICATION_ROUND_DURATION_SECONDS);
-    conf.setDouble(REPLICATION_FORWARDER_WAITING_BUFFER_PERCENTAGE_KEY, 0.0);
     overrideConf(conf);
 
     // initialize the group store record
@@ -136,10 +134,14 @@ public class ReplicationLogBaseTest {
   }
 
   private ReplicationLogGroup createAndInitLogGroup() throws Exception {
-    ReplicationLogGroup group =
-      spy(new TestableLogGroup(conf, serverName, haGroupName, haGroupStoreManager));
+    ReplicationLogGroup group = spy(new TestableLogGroup(conf, serverName, haGroupName,
+      haGroupStoreManager, useAlignedRotation()));
     group.init();
     return group;
+  }
+
+  protected boolean useAlignedRotation() {
+    return false;
   }
 
   protected static void waitForRotationTick(int roundDurationSeconds) throws InterruptedException {
@@ -154,41 +156,48 @@ public class ReplicationLogBaseTest {
   }
 
   static class TestableLogGroup extends ReplicationLogGroup {
+    private final boolean useAlignedRotation;
 
     public TestableLogGroup(Configuration conf, ServerName serverName, String haGroupName,
-      HAGroupStoreManager haGroupStoreManager) {
+      HAGroupStoreManager haGroupStoreManager, boolean useAlignedRotation) {
       super(conf, serverName, haGroupName, haGroupStoreManager);
+      this.useAlignedRotation = useAlignedRotation;
     }
 
     @Override
     protected ReplicationLog createStandbyLog() throws IOException {
-      return spy(new TestableLog(this, peerShardManager));
+      return spy(new TestableLog(this, peerShardManager, useAlignedRotation));
     }
 
     @Override
     protected ReplicationLog createFallbackLog() throws IOException {
-      return spy(new TestableLog(this, localShardManager));
+      return spy(new TestableLog(this, localShardManager, useAlignedRotation));
     }
 
   }
 
   /**
    * Testable version of ReplicationLog that allows spying on the log. Overrides
-   * startRotationExecutor to always use a full round as initial delay so that the rotation task
-   * never fires unexpectedly when a test happens to start near a round boundary.
+   * startRotationExecutor to use a configurable initial delay. By default uses a full round
+   * duration so the rotation task never fires early when the test happens to start near a round
+   * boundary. Set {@code useAlignedRotation} to true to use the production-aligned delay.
    */
   static class TestableLog extends ReplicationLog {
+    private final boolean useAlignedRotation;
 
-    public TestableLog(ReplicationLogGroup logGroup,
-      ReplicationShardDirectoryManager shardManager) {
+    public TestableLog(ReplicationLogGroup logGroup, ReplicationShardDirectoryManager shardManager,
+      boolean useAlignedRotation) {
       super(logGroup, shardManager);
+      this.useAlignedRotation = useAlignedRotation;
     }
 
     @Override
     protected void startRotationExecutor() {
-      // Use a full round as the initial delay so the rotation task never fires early when the
-      // test happens to start close to a round boundary (e.g. initialDelay of 852ms on a 60s round)
-      super.startRotationExecutor(rotationTimeMs);
+      if (useAlignedRotation) {
+        super.startRotationExecutor();
+      } else {
+        super.startRotationExecutor(rotationTimeMs);
+      }
     }
 
     @Override

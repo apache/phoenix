@@ -630,6 +630,7 @@ public class ReplicationLogGroup {
       if (closed) {
         return;
       }
+      LOG.info("Closing HAGroup {}", this);
       // setting closed to true prevents future producers to add events to the ring buffer
       closed = true;
       // Remove from instances cache
@@ -649,6 +650,25 @@ public class ReplicationLogGroup {
       shutdownDisruptorExecutor();
       metrics.close();
       LOG.info("HAGroup {} closed", this);
+    }
+  }
+
+  /**
+   * Close all ReplicationLogGroup instances belonging to the given server. Called during
+   * RegionServer shutdown.
+   */
+  public static void closeAll(ServerName serverName) {
+    LOG.info("Closing all ReplicationLogGroup instances for server {}, total count={}", serverName,
+      INSTANCES.size());
+    List<ReplicationLogGroup> groups = new ArrayList<>(INSTANCES.values());
+    for (ReplicationLogGroup group : groups) {
+      if (group.serverName.equals(serverName)) {
+        try {
+          group.close();
+        } catch (Exception e) {
+          LOG.warn("Error closing ReplicationLogGroup for HA group: {}", group.haGroupName, e);
+        }
+      }
     }
   }
 
