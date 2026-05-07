@@ -25,6 +25,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 
 import java.io.IOException;
 import java.util.concurrent.Callable;
@@ -173,6 +174,58 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
       }
     }).when(haGroupStoreManager).setHAGroupStatusToSync(haGroupName);
 
+    long deadline = EnvironmentEdgeManager.currentTimeMillis() + 120_000;
+    while (logGroup.getMode() != SYNC && EnvironmentEdgeManager.currentTimeMillis() < deadline) {
+      Thread.sleep(500);
+    }
+    assertEquals(SYNC, logGroup.getMode());
+  }
+
+  /**
+   * Tests that the forwarder retries peer shard manager creation when the peer is initially
+   * unavailable. On the first attempt, createPeerShardManager throws; the file is marked failed and
+   * retried via in-progress processing. On the retry the peer becomes available and forwarding
+   * succeeds.
+   */
+  @Test
+  public void testForwarderRetriesPeerCreation() throws Exception {
+    final String tableName = "TBLFWDRETRY";
+    final long count = 10L;
+
+    // Ensure in-progress files are immediately eligible for retry and always processed
+    conf.setInt(ReplicationLogDiscovery.REPLICATION_IN_PROGRESS_FILE_MIN_AGE_SECONDS_KEY, 0);
+    conf.setDouble(
+      ReplicationLogDiscoveryForwarder.REPLICATION_FORWARDER_IN_PROGRESS_PROCESSING_PROBABILITY_KEY,
+      100.0);
+    // Recreate the log group with the updated config
+    recreateLogGroup();
+    assertEquals(STORE_AND_FORWARD, logGroup.getMode());
+
+    // Make createPeerShardManager fail on the first call, then succeed on subsequent calls
+    doThrow(new IOException("Peer namenode unavailable")).doCallRealMethod().when(logGroup)
+      .createPeerShardManager();
+
+    doAnswer(new Answer<Object>() {
+      @Override
+      public Object answer(InvocationOnMock invocation) {
+        logGroup.setMode(SYNC);
+        try {
+          logGroup.sync();
+        } catch (IOException e) {
+          throw new RuntimeException(e);
+        }
+        return 0L;
+      }
+    }).when(haGroupStoreManager).setHAGroupStatusToSync(haGroupName);
+
+    // Write some data so the forwarder has files to process
+    for (long id = 1; id <= count; ++id) {
+      Mutation put = LogFileTestUtil.newPut("row_" + id, id, 2);
+      logGroup.append(tableName, id, put);
+    }
+    logGroup.sync();
+
+    // Wait for the forwarder to eventually succeed after retrying peer creation
     long deadline = EnvironmentEdgeManager.currentTimeMillis() + 120_000;
     while (logGroup.getMode() != SYNC && EnvironmentEdgeManager.currentTimeMillis() < deadline) {
       Thread.sleep(500);

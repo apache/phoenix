@@ -1709,7 +1709,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       doAnswer(poisonNewWriter).when(log).createNewWriter();
       return log;
     };
-    doAnswer(poisonLog).when(logGroup).createFallbackLog();
+    doAnswer(poisonLog).when(logGroup)
+      .createReplicationLog(any(ReplicationShardDirectoryManager.class));
 
     // Poison the already-initialized SYNC log
     ReplicationLog activeLog = logGroup.getActiveLog();
@@ -1792,5 +1793,49 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     conf.setLong(ReplicationLogGroup.REPLICATION_LOG_SYNC_TIMEOUT_KEY, 5000L);
     recreateLogGroup();
     assertEquals("Explicit override should take precedence", 5000L, logGroup.syncTimeoutMs);
+  }
+
+  /**
+   * Tests that when the peer cluster is unavailable at startup, the group degrades from SYNC to
+   * STORE_AND_FORWARD and remains functional (append/sync work).
+   */
+  @Test
+  public void testInitDegradesToSafWhenPeerUnavailable() throws Exception {
+    final String tableName = "TBLDEG";
+    final long commitId = 1L;
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+
+    ReplicationLogGroup group = spy(new TestableLogGroup(conf, serverName, haGroupName,
+      haGroupStoreManager, useAlignedRotation()));
+    doThrow(new IOException("Standby namenode unavailable")).when(group).createPeerShardManager();
+    group.init();
+
+    try {
+      // Should have degraded to STORE_AND_FORWARD
+      assertEquals(STORE_AND_FORWARD, group.getMode());
+
+      // Verify the group is functional — append and sync should work via local shard manager
+      group.append(tableName, commitId, put);
+      group.sync();
+    } finally {
+      group.close();
+    }
+  }
+
+  /**
+   * Tests that when the local cluster is unavailable at startup, init fails with IOException.
+   * Neither SYNC nor SAF mode can operate without a local shard manager.
+   */
+  @Test
+  public void testInitFailsWhenLocalUnavailable() throws Exception {
+    ReplicationLogGroup group = spy(new TestableLogGroup(conf, serverName, haGroupName,
+      haGroupStoreManager, useAlignedRotation()));
+    doThrow(new IOException("Local namenode unavailable")).when(group).createLocalShardManager();
+    try {
+      group.init();
+      fail("Should have thrown IOException when local shard manager is unavailable");
+    } catch (IOException e) {
+      assertTrue(e.getMessage().contains("Local namenode unavailable"));
+    }
   }
 }

@@ -180,7 +180,7 @@ public class ReplicationLogGroup {
   protected final String haGroupName;
   protected final HAGroupStoreManager haGroupStoreManager;
   protected final MetricsReplicationLogGroupSource metrics;
-  protected ReplicationShardDirectoryManager peerShardManager;
+  protected HAGroupStoreRecord haGroupStoreRecord;
   protected ReplicationShardDirectoryManager localShardManager;
   protected ReplicationLogDiscoveryForwarder logForwarder;
   protected long syncTimeoutMs;
@@ -331,20 +331,28 @@ public class ReplicationLogGroup {
    * @param serverName  The server name
    * @param haGroupName The HA Group name
    * @return ReplicationLogGroup instance
-   * @throws RuntimeException if initialization fails
+   * @throws IOException if initialization fails
    */
   public static ReplicationLogGroup get(Configuration conf, ServerName serverName,
-    String haGroupName) {
-    return INSTANCES.computeIfAbsent(haGroupName, k -> {
-      try {
-        ReplicationLogGroup group = new ReplicationLogGroup(conf, serverName, haGroupName);
-        group.init();
-        return group;
-      } catch (IOException e) {
-        LOG.error("Failed to create ReplicationLogGroup for HA Group: {}", haGroupName, e);
-        throw new RuntimeException(e);
+    String haGroupName) throws IOException {
+    try {
+      return INSTANCES.computeIfAbsent(haGroupName, k -> {
+        try {
+          ReplicationLogGroup group = new ReplicationLogGroup(conf, serverName, haGroupName);
+          group.init();
+          return group;
+        } catch (IOException e) {
+          LOG.error("Failed to create ReplicationLogGroup for HA Group: {}", haGroupName, e);
+          // computeIfAbsent does not allow checked exceptions; unwrapped in the outer catch
+          throw new RuntimeException(e);
+        }
+      });
+    } catch (RuntimeException e) {
+      if (e.getCause() instanceof IOException) {
+        throw (IOException) e.getCause();
       }
-    });
+      throw e;
+    }
   }
 
   /**
@@ -354,21 +362,29 @@ public class ReplicationLogGroup {
    * @param haGroupName         The HA Group name
    * @param haGroupStoreManager HA Group Store Manager instance
    * @return ReplicationLogGroup instance
-   * @throws RuntimeException if initialization fails
+   * @throws IOException if initialization fails
    */
   public static ReplicationLogGroup get(Configuration conf, ServerName serverName,
-    String haGroupName, HAGroupStoreManager haGroupStoreManager) {
-    return INSTANCES.computeIfAbsent(haGroupName, k -> {
-      try {
-        ReplicationLogGroup group =
-          new ReplicationLogGroup(conf, serverName, haGroupName, haGroupStoreManager);
-        group.init();
-        return group;
-      } catch (IOException e) {
-        LOG.error("Failed to create ReplicationLogGroup for HA Group: {}", haGroupName, e);
-        throw new RuntimeException(e);
+    String haGroupName, HAGroupStoreManager haGroupStoreManager) throws IOException {
+    try {
+      return INSTANCES.computeIfAbsent(haGroupName, k -> {
+        try {
+          ReplicationLogGroup group =
+            new ReplicationLogGroup(conf, serverName, haGroupName, haGroupStoreManager);
+          group.init();
+          return group;
+        } catch (IOException e) {
+          LOG.error("Failed to create ReplicationLogGroup for HA Group: {}", haGroupName, e);
+          // computeIfAbsent does not allow checked exceptions; unwrapped in the outer catch
+          throw new RuntimeException(e);
+        }
+      });
+    } catch (RuntimeException e) {
+      if (e.getCause() instanceof IOException) {
+        throw (IOException) e.getCause();
       }
-    });
+      throw e;
+    }
   }
 
   /**
@@ -421,9 +437,8 @@ public class ReplicationLogGroup {
       throw new IOException(message);
     }
     HAGroupStoreRecord record = haRecord.get();
-    // First initialize the shard managers
-    this.peerShardManager = createPeerShardManager(record);
-    this.localShardManager = createLocalShardManager(record);
+    this.haGroupStoreRecord = record;
+    this.localShardManager = createLocalShardManager();
     // Initialize the replication log forwarder. The log forwarder is only activated when
     // we switch to STORE_AND_FORWARD or SYNC_AND_FORWARD mode
     this.logForwarder = new ReplicationLogDiscoveryForwarder(this);
@@ -783,21 +798,14 @@ public class ReplicationLogGroup {
     }
   }
 
-  /** create shard manager for the standby cluster */
-  protected ReplicationShardDirectoryManager createPeerShardManager(HAGroupStoreRecord record)
-    throws IOException {
-    return createShardManager(record.getPeerHdfsUrl(), STANDBY_DIR);
-  }
-
   /** create shard manager for the fallback cluster */
-  protected ReplicationShardDirectoryManager createLocalShardManager(HAGroupStoreRecord record)
-    throws IOException {
-    return createShardManager(record.getHdfsUrl(), FALLBACK_DIR);
+  protected ReplicationShardDirectoryManager createLocalShardManager() throws IOException {
+    return createShardManager(haGroupStoreRecord.getHdfsUrl(), FALLBACK_DIR);
   }
 
-  /** return shard manager for the standby cluster */
-  protected ReplicationShardDirectoryManager getPeerShardManager() {
-    return peerShardManager;
+  /** create shard manager for the standby cluster using stored record */
+  protected ReplicationShardDirectoryManager createPeerShardManager() throws IOException {
+    return createShardManager(haGroupStoreRecord.getPeerHdfsUrl(), STANDBY_DIR);
   }
 
   /** return shard manager for the fallback cluster */
@@ -809,14 +817,10 @@ public class ReplicationLogGroup {
     return FileSystem.get(uri, conf);
   }
 
-  /** Create the standby(synchronous) writer */
-  protected ReplicationLog createStandbyLog() throws IOException {
-    return new ReplicationLog(this, peerShardManager);
-  }
-
-  /** Create the fallback writer */
-  protected ReplicationLog createFallbackLog() throws IOException {
-    return new ReplicationLog(this, localShardManager);
+  /** Create a replication log using the given shard manager */
+  protected ReplicationLog createReplicationLog(ReplicationShardDirectoryManager shardManager)
+    throws IOException {
+    return new ReplicationLog(this, shardManager);
   }
 
   /** Returns the log forwarder for this replication group */
