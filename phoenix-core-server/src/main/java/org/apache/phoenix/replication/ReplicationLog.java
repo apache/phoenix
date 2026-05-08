@@ -339,9 +339,16 @@ public class ReplicationLog {
   }
 
   protected void append(Record r) throws IOException {
-    apply(writer -> writer.append(r.tableName, r.commitId, r.mutation));
+    final boolean[] blockSynced = { false };
+    apply(writer -> {
+      blockSynced[0] = writer.append(r.tableName, r.commitId, r.mutation);
+    });
     // Add to current batch only after we succeed at appending
     currentBatch.add(r);
+    if (blockSynced[0]) {
+      // The block-full sync included this record — all records up to here are durable
+      currentBatch.clear();
+    }
   }
 
   protected void append(String tableName, long commitId, Mutation mutation) throws IOException {

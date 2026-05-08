@@ -74,7 +74,7 @@ public class LogFileFormatWriter implements Closeable {
     return blocksStartOffset;
   }
 
-  public void append(LogFile.Record record) throws IOException {
+  public boolean append(LogFile.Record record) throws IOException {
     if (blockDataStream == null) {
       startBlock(); // Start the block if needed
     }
@@ -86,7 +86,9 @@ public class LogFileFormatWriter implements Closeable {
       // To close the block, we do a sync(), which not only closes the block and opens a
       // new one, it syncs the finalized block.
       sync();
+      return true;
     }
+    return false;
   }
 
   // Should be called before writing the first record.
