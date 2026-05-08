@@ -183,9 +183,9 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
 
   /**
    * Tests that the forwarder retries peer shard manager creation when the peer is initially
-   * unavailable. On the first attempt, createPeerShardManager throws; the file is marked failed and
-   * retried via in-progress processing. On the retry the peer becomes available and forwarding
-   * succeeds.
+   * unavailable. On the first attempt, getOrCreatePeerShardManager throws; the file is marked
+   * failed and retried via in-progress processing. On the retry the peer becomes available and
+   * forwarding succeeds.
    */
   @Test
   public void testForwarderRetriesPeerCreation() throws Exception {
@@ -201,9 +201,9 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
     recreateLogGroup();
     assertEquals(STORE_AND_FORWARD, logGroup.getMode());
 
-    // Make createPeerShardManager fail on the first call, then succeed on subsequent calls
+    // Make getOrCreatePeerShardManager fail on the first call, then succeed on subsequent calls
     doThrow(new IOException("Peer namenode unavailable")).doCallRealMethod().when(logGroup)
-      .createPeerShardManager();
+      .getOrCreatePeerShardManager();
 
     doAnswer(new Answer<Object>() {
       @Override

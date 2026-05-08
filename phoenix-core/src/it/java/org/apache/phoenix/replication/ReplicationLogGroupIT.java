@@ -124,7 +124,7 @@ public class ReplicationLogGroupIT extends HABaseIT {
     LogFileAnalyzer analyzer = new LogFileAnalyzer();
     // use peer cluster conf
     analyzer.setConf(conf2);
-    Path standByLogDir = logGroup.createPeerShardManager().getRootDirectoryPath();
+    Path standByLogDir = logGroup.getOrCreatePeerShardManager().getRootDirectoryPath();
     LOG.info("Analyzing log files at {}", standByLogDir);
     String[] args = { "--check", standByLogDir.toString() };
     assertEquals(0, analyzer.run(args));

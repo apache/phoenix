@@ -67,7 +67,6 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
   private final double copyThroughputThresholdBytesPerMs;
   // the timestamp (in future) at which we will attempt to set the HAGroup state to SYNC
   private long syncUpdateTS;
-  private ReplicationShardDirectoryManager peerShardManager;
 
   /**
    * Create a tracker for the replication logs in the fallback cluster.
@@ -136,19 +135,12 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, ClusterType.LOCAL, activeInSync);
   }
 
-  private ReplicationShardDirectoryManager getOrCreatePeerShardManager() throws IOException {
-    if (peerShardManager == null) {
-      peerShardManager = logGroup.createPeerShardManager();
-    }
-    return peerShardManager;
-  }
-
   @Override
   protected void processFile(Path src) throws IOException {
     FileSystem srcFS = replicationLogTracker.getFileSystem();
     FileStatus srcStat = srcFS.getFileStatus(src);
     long ts = replicationLogTracker.getFileTimestamp(srcStat.getPath());
-    ReplicationShardDirectoryManager remoteShardManager = getOrCreatePeerShardManager();
+    ReplicationShardDirectoryManager remoteShardManager = logGroup.getOrCreatePeerShardManager();
     Path dst = remoteShardManager.getWriterPath(ts, logGroup.getServerName().getServerName());
     long startTime = EnvironmentEdgeManager.currentTimeMillis();
     FileUtil.copy(srcFS, srcStat, remoteShardManager.getFileSystem(), dst, false, false, conf);

@@ -36,6 +36,7 @@ import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
 import java.io.IOException;
 import java.io.InterruptedIOException;
+import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
@@ -165,6 +166,9 @@ public class ReplicationLogGroup {
   public static final String REPLICATION_LOG_RETRY_DELAY_MS_KEY =
     "phoenix.replication.log.retry.delay.ms";
   public static final long DEFAULT_REPLICATION_LOG_RETRY_DELAY_MS = 100L;
+  public static final String REPLICATION_LOG_PEER_INIT_TIMEOUT_MS_KEY =
+    "phoenix.replication.log.peer.init.timeout.ms";
+  public static final long DEFAULT_REPLICATION_LOG_PEER_INIT_TIMEOUT_MS = 10_000L;
   public static final String WAL_SYNC_TIMEOUT_MS_KEY = "hbase.regionserver.wal.sync.timeout";
   public static final long DEFAULT_WAL_SYNC_TIMEOUT_MS = 5 * 60 * 1000L;
 
@@ -180,10 +184,14 @@ public class ReplicationLogGroup {
   protected final String haGroupName;
   protected final HAGroupStoreManager haGroupStoreManager;
   protected final MetricsReplicationLogGroupSource metrics;
+  // Cached at init time — HDFS URLs (local and peer) are fixed for the lifetime of this group.
+  // URL changes require RS restart.
   protected HAGroupStoreRecord haGroupStoreRecord;
   protected ReplicationShardDirectoryManager localShardManager;
+  protected volatile ReplicationShardDirectoryManager peerShardManager;
   protected ReplicationLogDiscoveryForwarder logForwarder;
   protected long syncTimeoutMs;
+  protected long peerInitTimeoutMs;
   protected volatile boolean closed = false;
 
   /**
@@ -343,15 +351,11 @@ public class ReplicationLogGroup {
           return group;
         } catch (IOException e) {
           LOG.error("Failed to create ReplicationLogGroup for HA Group: {}", haGroupName, e);
-          // computeIfAbsent does not allow checked exceptions; unwrapped in the outer catch
-          throw new RuntimeException(e);
+          throw new UncheckedIOException(e);
         }
       });
-    } catch (RuntimeException e) {
-      if (e.getCause() instanceof IOException) {
-        throw (IOException) e.getCause();
-      }
-      throw e;
+    } catch (UncheckedIOException e) {
+      throw e.getCause();
     }
   }
 
@@ -375,15 +379,11 @@ public class ReplicationLogGroup {
           return group;
         } catch (IOException e) {
           LOG.error("Failed to create ReplicationLogGroup for HA Group: {}", haGroupName, e);
-          // computeIfAbsent does not allow checked exceptions; unwrapped in the outer catch
-          throw new RuntimeException(e);
+          throw new UncheckedIOException(e);
         }
       });
-    } catch (RuntimeException e) {
-      if (e.getCause() instanceof IOException) {
-        throw (IOException) e.getCause();
-      }
-      throw e;
+    } catch (UncheckedIOException e) {
+      throw e.getCause();
     }
   }
 
@@ -439,6 +439,8 @@ public class ReplicationLogGroup {
     HAGroupStoreRecord record = haRecord.get();
     this.haGroupStoreRecord = record;
     this.localShardManager = createLocalShardManager();
+    this.peerInitTimeoutMs = conf.getLong(REPLICATION_LOG_PEER_INIT_TIMEOUT_MS_KEY,
+      DEFAULT_REPLICATION_LOG_PEER_INIT_TIMEOUT_MS);
     // Initialize the replication log forwarder. The log forwarder is only activated when
     // we switch to STORE_AND_FORWARD or SYNC_AND_FORWARD mode
     this.logForwarder = new ReplicationLogDiscoveryForwarder(this);
@@ -803,7 +805,51 @@ public class ReplicationLogGroup {
     return createShardManager(haGroupStoreRecord.getHdfsUrl(), FALLBACK_DIR);
   }
 
-  /** create shard manager for the standby cluster using stored record */
+  /**
+   * Get or create the peer shard manager. Thread-safe and idempotent — the first successful
+   * creation is cached; subsequent calls return the cached instance. Bounded by
+   * {@link #REPLICATION_LOG_PEER_INIT_TIMEOUT_MS_KEY} to prevent blocking the disruptor handler
+   * thread on a peer NN outage.
+   */
+  protected ReplicationShardDirectoryManager getOrCreatePeerShardManager() throws IOException {
+    ReplicationShardDirectoryManager cached = peerShardManager;
+    if (cached != null) {
+      return cached;
+    }
+    synchronized (this) {
+      if (peerShardManager != null) {
+        return peerShardManager;
+      }
+      CompletableFuture<ReplicationShardDirectoryManager> future =
+        CompletableFuture.supplyAsync(() -> {
+          try {
+            return createPeerShardManager();
+          } catch (IOException e) {
+            throw new UncheckedIOException(e);
+          }
+        });
+      try {
+        peerShardManager = future.get(peerInitTimeoutMs, TimeUnit.MILLISECONDS);
+        return peerShardManager;
+      } catch (UncheckedIOException e) {
+        throw e.getCause();
+      } catch (ExecutionException e) {
+        if (e.getCause() instanceof IOException) {
+          throw (IOException) e.getCause();
+        }
+        throw new IOException("Failed to create peer shard manager", e.getCause());
+      } catch (TimeoutException e) {
+        future.cancel(true);
+        throw new IOException("Timed out creating peer shard manager after " + peerInitTimeoutMs
+          + "ms for " + haGroupName, e);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new IOException("Interrupted while creating peer shard manager", e);
+      }
+    }
+  }
+
+  /** Create a new peer shard manager for the standby cluster */
   protected ReplicationShardDirectoryManager createPeerShardManager() throws IOException {
     return createShardManager(haGroupStoreRecord.getPeerHdfsUrl(), STANDBY_DIR);
   }

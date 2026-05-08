@@ -1807,7 +1807,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     ReplicationLogGroup group = spy(new TestableLogGroup(conf, serverName, haGroupName,
       haGroupStoreManager, useAlignedRotation()));
-    doThrow(new IOException("Standby namenode unavailable")).when(group).createPeerShardManager();
+    doThrow(new IOException("Standby namenode unavailable")).when(group)
+      .getOrCreatePeerShardManager();
     group.init();
 
     try {
@@ -1836,6 +1837,40 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       fail("Should have thrown IOException when local shard manager is unavailable");
     } catch (IOException e) {
       assertTrue(e.getMessage().contains("Local namenode unavailable"));
+    }
+  }
+
+  /**
+   * Tests that when peer shard manager creation exceeds the configured timeout, the group degrades
+   * to STORE_AND_FORWARD instead of blocking the disruptor handler thread indefinitely.
+   */
+  @Test
+  public void testInitDegradesToSafWhenPeerInitTimesOut() throws Exception {
+    final String tableName = "TBLTIMEOUT";
+    final long commitId = 1L;
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+
+    // Set a very short peer init timeout
+    conf.setLong(ReplicationLogGroup.REPLICATION_LOG_PEER_INIT_TIMEOUT_MS_KEY, 100L);
+
+    ReplicationLogGroup group = spy(new TestableLogGroup(conf, serverName, haGroupName,
+      haGroupStoreManager, useAlignedRotation()));
+    // Make createPeerShardManager block longer than the configured timeout
+    doAnswer(invocation -> {
+      Thread.sleep(5000);
+      return invocation.callRealMethod();
+    }).when(group).createPeerShardManager();
+    group.init();
+
+    try {
+      // Should have degraded to STORE_AND_FORWARD due to timeout
+      assertEquals(STORE_AND_FORWARD, group.getMode());
+
+      // Verify the group is functional
+      group.append(tableName, commitId, put);
+      group.sync();
+    } finally {
+      group.close();
     }
   }
 }
