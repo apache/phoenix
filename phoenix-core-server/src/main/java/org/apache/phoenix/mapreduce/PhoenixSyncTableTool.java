@@ -134,6 +134,9 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
   public static final String PHOENIX_SYNC_TABLE_RAW_SCAN = "phoenix.sync.table.raw.scan";
   public static final String PHOENIX_SYNC_TABLE_READ_ALL_VERSIONS =
     "phoenix.sync.table.read.all.versions";
+  public static final String PHOENIX_SYNC_TABLE_REPAIR_BATCH_SIZE =
+    "phoenix.sync.table.repair.batch.size";
+  public static final int DEFAULT_PHOENIX_SYNC_TABLE_REPAIR_BATCH_SIZE = 1000;
 
   private String schemaName;
   private String tableName;
@@ -233,7 +236,6 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     if (tenantId != null) {
       PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
     }
-    PhoenixConfigurationUtil.setCurrentScnValue(configuration, endTime);
     configuration
       .setBooleanIfUnset(PhoenixConfigurationUtil.MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER, true);
   }
@@ -411,20 +413,35 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_VERIFIED).getValue();
       long mismatchedMappers =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_MISMATCHED).getValue();
+      long repairedMappers =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_REPAIRED).getValue();
+      long repairFailedMappers = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_REPAIR_FAILED).getValue();
       long chunksVerified =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_VERIFIED).getValue();
       long chunksMismatched =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED).getValue();
+      long chunksRepaired =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_REPAIRED).getValue();
+      long chunksRepairFailed = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_REPAIR_FAILED).getValue();
       long sourceRowsProcessed =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
       long targetRowsProcessed =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED).getValue();
+      long rowsPutToTarget =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_PUT_TO_TARGET).getValue();
+      long rowsDeletedFromTarget = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_DELETED_FROM_TARGET).getValue();
       LOGGER.info(
         "PhoenixSyncTable job completed, gathered counters are \n Task Created: {}, \n Verified Mappers: {}, \n"
-          + "Mismatched Mappers: {}, \n Chunks Verified: {}, \n"
-          + "Chunks Mismatched: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}",
-        taskCreated, verifiedMappers, mismatchedMappers, chunksVerified, chunksMismatched,
-        sourceRowsProcessed, targetRowsProcessed);
+          + "Mismatched Mappers: {}, \n Repaired Mappers: {}, \n Repair Failed Mappers: {}, \n"
+          + "Chunks Verified: {}, \n Chunks Mismatched: {}, \n Chunks Repaired: {}, \n"
+          + "Chunks Repair Failed: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}, \n"
+          + "Rows Put To Target: {}, \n Rows Deleted From Target: {}",
+        taskCreated, verifiedMappers, mismatchedMappers, repairedMappers, repairFailedMappers,
+        chunksVerified, chunksMismatched, chunksRepaired, chunksRepairFailed, sourceRowsProcessed,
+        targetRowsProcessed, rowsPutToTarget, rowsDeletedFromTarget);
     } else {
       LOGGER.warn("Unable to retrieve job counters for table {} - job may have failed "
         + "during initialization", qTable);
@@ -556,6 +573,17 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
     Preconditions.checkNotNull(conf);
     return conf.getBoolean(PHOENIX_SYNC_TABLE_SPLIT_COALESCING,
       DEFAULT_PHOENIX_SYNC_TABLE_SPLIT_COALESCING);
+  }
+
+  public static void setPhoenixSyncTableRepairBatchSize(Configuration conf, int batchSize) {
+    Preconditions.checkNotNull(conf);
+    conf.setInt(PHOENIX_SYNC_TABLE_REPAIR_BATCH_SIZE, batchSize);
+  }
+
+  public static int getPhoenixSyncTableRepairBatchSize(Configuration conf) {
+    Preconditions.checkNotNull(conf);
+    return conf.getInt(PHOENIX_SYNC_TABLE_REPAIR_BATCH_SIZE,
+      DEFAULT_PHOENIX_SYNC_TABLE_REPAIR_BATCH_SIZE);
   }
 
   public Job getJob() {

@@ -37,7 +37,9 @@ public class PhoenixSyncTableCheckpointOutputRow {
 
   public enum Status {
     VERIFIED,
-    MISMATCHED
+    MISMATCHED,
+    REPAIRED,
+    REPAIR_FAILED
   }
 
   private String tableName;
@@ -156,19 +158,27 @@ public class PhoenixSyncTableCheckpointOutputRow {
    * contract to ensure consistency between formatting (in mapper) and parsing (in tests).
    */
   public static class CounterFormatter {
-    private static final String FORMAT_CHUNK = "%s=%d,%s=%d";
+    private static final String FORMAT_CHUNK = "%s=%d,%s=%d,%s=%d,%s=%d";
     private static final String FORMAT_MAPPER = "%s=%d,%s=%d,%s=%d,%s=%d";
 
     /**
-     * Formats chunk counters as comma-separated key=value pairs.
-     * @param sourceRows Source rows processed
-     * @param targetRows Target rows processed
-     * @return Formatted string: "SOURCE_ROWS_PROCESSED=123,TARGET_ROWS_PROCESSED=456"
+     * Formats chunk counters as comma-separated key=value pairs. Always emits all four
+     * counters; for verify-only chunks (no repair) {@code rowsPut} and {@code rowsDeleted}
+     * are 0 so operators querying the checkpoint table see a uniform format.
+     * @param sourceRows  Source rows processed
+     * @param targetRows  Target rows processed
+     * @param rowsPut     Rows put to target during repair (0 if not repaired)
+     * @param rowsDeleted Rows deleted from target during repair (0 if not repaired)
+     * @return Formatted string: "SOURCE_ROWS_PROCESSED=...,TARGET_ROWS_PROCESSED=...,
+     *         ROWS_PUT_TO_TARGET=...,ROWS_DELETED_FROM_TARGET=..."
      */
-    public static String formatChunk(long sourceRows, long targetRows) {
+    public static String formatChunk(long sourceRows, long targetRows, long rowsPut,
+      long rowsDeleted) {
       return String.format(FORMAT_CHUNK,
         PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRows,
-        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows);
+        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_PUT_TO_TARGET.name(), rowsPut,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_DELETED_FROM_TARGET.name(), rowsDeleted);
     }
 
     /**

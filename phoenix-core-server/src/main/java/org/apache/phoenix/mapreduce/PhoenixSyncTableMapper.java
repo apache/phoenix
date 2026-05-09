@@ -29,8 +29,11 @@ import java.util.Arrays;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
@@ -65,10 +68,16 @@ public class PhoenixSyncTableMapper
   public enum SyncCounters {
     MAPPERS_VERIFIED,
     MAPPERS_MISMATCHED,
+    MAPPERS_REPAIRED,
+    MAPPERS_REPAIR_FAILED,
     CHUNKS_VERIFIED,
     CHUNKS_MISMATCHED,
+    CHUNKS_REPAIRED,
+    CHUNKS_REPAIR_FAILED,
     SOURCE_ROWS_PROCESSED,
-    TARGET_ROWS_PROCESSED
+    TARGET_ROWS_PROCESSED,
+    ROWS_PUT_TO_TARGET,
+    ROWS_DELETED_FROM_TARGET
   }
 
   private String tableName;
@@ -80,6 +89,7 @@ public class PhoenixSyncTableMapper
   private long chunkSizeBytes;
   private boolean isRawScan;
   private boolean isReadAllVersions;
+  private int repairBatchSize;
   private Configuration conf;
   private Connection sourceConnection;
   private Connection targetConnection;
@@ -103,6 +113,7 @@ public class PhoenixSyncTableMapper
       chunkSizeBytes = PhoenixSyncTableTool.getPhoenixSyncTableChunkSizeBytes(conf);
       isRawScan = PhoenixSyncTableTool.getPhoenixSyncTableRawScan(conf);
       isReadAllVersions = PhoenixSyncTableTool.getPhoenixSyncTableReadAllVersions(conf);
+      repairBatchSize = PhoenixSyncTableTool.getPhoenixSyncTableRepairBatchSize(conf);
       extractRegionBoundariesFromSplit(context);
       sourceConnection = ConnectionUtil.getInputConnection(conf);
       pTable = sourceConnection.unwrap(PhoenixConnection.class).getTable(tableName);
@@ -153,7 +164,6 @@ public class PhoenixSyncTableMapper
   private Connection createGlobalConnection(Configuration conf) throws SQLException {
     Configuration globalConf = new Configuration(conf);
     globalConf.unset(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
-    globalConf.unset(PhoenixRuntime.CURRENT_SCN_ATTRIB);
     return ConnectionUtil.getInputConnection(globalConf);
   }
 
@@ -176,7 +186,7 @@ public class PhoenixSyncTableMapper
           Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd), tableName);
         processRegion(regionStart, regionEnd, context);
       }
-    } catch (SQLException e) {
+    } catch (SQLException | IOException e) {
       tryClosingResources();
       throw new RuntimeException("Error processing PhoenixSyncTableMapper", e);
     }
@@ -196,7 +206,7 @@ public class PhoenixSyncTableMapper
     // Get processed chunks for this specific region
     List<PhoenixSyncTableCheckpointOutputRow> processedChunks =
       syncTableOutputRepository.getProcessedChunks(tableName, targetZkQuorum, fromTime, toTime,
-        tenantId, regionStart, regionEnd);
+        tenantId, regionStart, regionEnd, isDryRun);
 
     // Calculate unprocessed ranges within this region
     List<KeyRange> unprocessedRanges =
@@ -205,6 +215,7 @@ public class PhoenixSyncTableMapper
     // Track counters before processing this region
     long verifiedBefore = context.getCounter(SyncCounters.CHUNKS_VERIFIED).getValue();
     long mismatchedBefore = context.getCounter(SyncCounters.CHUNKS_MISMATCHED).getValue();
+    long repairFailedBefore = context.getCounter(SyncCounters.CHUNKS_REPAIR_FAILED).getValue();
     long sourceRowsBefore = context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
     long targetRowsBefore = context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).getValue();
 
@@ -221,6 +232,8 @@ public class PhoenixSyncTableMapper
       context.getCounter(SyncCounters.CHUNKS_VERIFIED).getValue() - verifiedBefore;
     long mismatchedChunks =
       context.getCounter(SyncCounters.CHUNKS_MISMATCHED).getValue() - mismatchedBefore;
+    long repairFailedChunks =
+      context.getCounter(SyncCounters.CHUNKS_REPAIR_FAILED).getValue() - repairFailedBefore;
     long sourceRowsProcessed =
       context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).getValue() - sourceRowsBefore;
     long targetRowsProcessed =
@@ -231,7 +244,7 @@ public class PhoenixSyncTableMapper
       .formatMapper(verifiedChunks, mismatchedChunks, sourceRowsProcessed, targetRowsProcessed);
     if (sourceRowsProcessed > 0) {
       recordRegionCompletion(regionStart, regionEnd, regionStartTime, regionEndTime, verifiedChunks,
-        mismatchedChunks, counters, context);
+        mismatchedChunks, repairFailedChunks, counters, context);
     } else {
       LOGGER.info(
         "No rows pending to process. All region boundaries are covered for startKey:{}, endKey: {}",
@@ -242,39 +255,62 @@ public class PhoenixSyncTableMapper
   /**
    * Records region completion by updating counters, recording checkpoint, and logging result.
    * Consolidates all region completion logic to eliminate duplication.
-   * @param regionStart      Region start key
-   * @param regionEnd        Region end key
-   * @param regionStartTime  Region processing start time
-   * @param regionEndTime    Region processing end time
-   * @param verifiedChunks   Number of verified chunks
-   * @param mismatchedChunks Number of mismatched chunks
-   * @param counters         Formatted counter string
-   * @param context          Mapper context
+   * @param regionStart        Region start key
+   * @param regionEnd          Region end key
+   * @param regionStartTime    Region processing start time
+   * @param regionEndTime      Region processing end time
+   * @param verifiedChunks     Number of verified chunks
+   * @param mismatchedChunks   Number of mismatched chunks
+   * @param repairFailedChunks Number of chunks whose repair threw an IOException; if > 0 the
+   *                           region rolls up to MISMATCHED (drift remains, re-run will retry)
+   * @param counters           Formatted counter string
+   * @param context            Mapper context
    */
   private void recordRegionCompletion(byte[] regionStart, byte[] regionEnd,
     Timestamp regionStartTime, Timestamp regionEndTime, long verifiedChunks, long mismatchedChunks,
-    String counters, Context context) throws SQLException {
+    long repairFailedChunks, String counters, Context context) throws SQLException {
 
-    boolean isVerified = mismatchedChunks == 0;
-    PhoenixSyncTableCheckpointOutputRow.Status status = isVerified
-      ? PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED
-      : PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED;
+    // Region rolls up its child chunks' outcomes into one of four statuses:
+    //   VERIFIED      — every chunk matched; no drift in this region.
+    //   MISMATCHED    — drift was detected but repair was not attempted (dry-run mode).
+    //   REPAIRED      — drift was detected and every chunk's repair succeeded.
+    //   REPAIR_FAILED — drift was detected, repair was attempted, and at least one chunk
+    //                   threw during merge-scan or flush. The failed chunks remain as
+    //                   CHUNK/REPAIR_FAILED rows; a re-run will re-attempt them via the
+    //                   Phase 2 STATUS-IN filter that excludes REPAIR_FAILED.
+    PhoenixSyncTableCheckpointOutputRow.Status status;
+    SyncCounters mapperCounter;
+    if (mismatchedChunks == 0) {
+      status = PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED;
+      mapperCounter = SyncCounters.MAPPERS_VERIFIED;
+    } else if (isDryRun) {
+      status = PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED;
+      mapperCounter = SyncCounters.MAPPERS_MISMATCHED;
+    } else if (repairFailedChunks == 0) {
+      status = PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED;
+      mapperCounter = SyncCounters.MAPPERS_REPAIRED;
+    } else {
+      status = PhoenixSyncTableCheckpointOutputRow.Status.REPAIR_FAILED;
+      mapperCounter = SyncCounters.MAPPERS_REPAIR_FAILED;
+    }
 
-    context.getCounter(isVerified ? SyncCounters.MAPPERS_VERIFIED : SyncCounters.MAPPERS_MISMATCHED)
-      .increment(1);
+    context.getCounter(mapperCounter).increment(1);
 
     recordRegionCheckpoint(regionStart, regionEnd, status, regionStartTime, regionEndTime,
       counters);
 
     String logMessage = String.format(
-      "PhoenixSyncTable region [%s, %s) completed with %s: %d verified chunks, %d mismatched chunks",
+      "PhoenixSyncTable region [%s, %s) completed with %s: %d verified, %d mismatched, %d repair-failed",
       Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd),
-      isVerified ? "verified" : "mismatch", verifiedChunks, mismatchedChunks);
+      status.name().toLowerCase(), verifiedChunks, mismatchedChunks, repairFailedChunks);
 
-    if (isVerified) {
-      LOGGER.info(logMessage);
-    } else {
+    if (
+      status == PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED
+        || status == PhoenixSyncTableCheckpointOutputRow.Status.REPAIR_FAILED
+    ) {
       LOGGER.warn(logMessage);
+    } else {
+      LOGGER.info(logMessage);
     }
   }
 
@@ -354,10 +390,15 @@ public class PhoenixSyncTableMapper
         if (nextSourceChunk == null) {
           isLastChunkOfRegion = true;
         }
-        ChunkInfo targetChunk = getTargetChunkWithSourceBoundary(targetConnection,
-          previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey,
-          isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey, isTargetStartKeyInclusive,
-          !isLastChunkOfRegion);
+        // Target scan boundary: covers extra-on-target rows that fall before the first
+        // source chunk, between consecutive source chunks, or after the last. Both verify
+        // and repair use the same range so repair sees the same cells the verifier hashed.
+        byte[] targetStart =
+          previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey;
+        byte[] targetEnd = isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey;
+        boolean targetEndInclusive = !isLastChunkOfRegion;
+        ChunkInfo targetChunk = getTargetChunkWithSourceBoundary(targetConnection, targetStart,
+          targetEnd, isTargetStartKeyInclusive, targetEndInclusive);
         context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).increment(sourceChunk.rowCount);
         context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).increment(targetChunk.rowCount);
         boolean matched = MessageDigest.isEqual(sourceChunk.hash, targetChunk.hash);
@@ -367,22 +408,25 @@ public class PhoenixSyncTableMapper
               + "isTargetEndKeyInclusive: {}, isFirstChunkOfRegion: {}, isLastChunkOfRegion: {}."
               + "Chunk comparison source {}, {}. Key range passed to target chunk: {}, {}."
               + "target chunk returned {}, {}: source={} rows, target={} rows, matched={}",
-            isSourceStartKeyInclusive, isTargetStartKeyInclusive, !isLastChunkOfRegion,
+            isSourceStartKeyInclusive, isTargetStartKeyInclusive, targetEndInclusive,
             previousSourceChunk == null, isLastChunkOfRegion,
             Bytes.toStringBinary(sourceChunk.startKey), Bytes.toStringBinary(sourceChunk.endKey),
-            Bytes.toStringBinary(
-              previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey),
-            Bytes.toStringBinary(isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey),
+            Bytes.toStringBinary(targetStart), Bytes.toStringBinary(targetEnd),
             Bytes.toStringBinary(targetChunk.startKey), Bytes.toStringBinary(targetChunk.endKey),
             sourceChunk.rowCount, targetChunk.rowCount, matched);
         }
         sourceChunk.executionEndTime = new Timestamp(System.currentTimeMillis());
         String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
-          .formatChunk(sourceChunk.rowCount, targetChunk.rowCount);
+          .formatChunk(sourceChunk.rowCount, targetChunk.rowCount, 0L, 0L);
         if (matched) {
           handleVerifiedChunk(sourceChunk, context, counters);
         } else {
           handleMismatchedChunk(sourceChunk, context, counters);
+          if (!isDryRun) {
+            repairChunk(sourceChunk.startKey, sourceChunk.endKey, targetStart, targetEnd,
+              isTargetStartKeyInclusive, targetEndInclusive, sourceChunk.rowCount,
+              targetChunk.rowCount, sourceChunk.executionStartTime, context);
+          }
         }
         previousSourceChunk = sourceChunk;
         sourceChunk = nextSourceChunk;
@@ -556,11 +600,13 @@ public class PhoenixSyncTableMapper
   }
 
   /**
-   * Creates an HBase scan for a chunk range. Can be configured to use raw scan mode and read all
-   * cell versions based on command-line options.
+   * Builds the common Scan shape used by both verification and repair: same key range,
+   * inclusivity, time window, raw-scan, and all-versions semantics. Callers layer on their
+   * own caching, limits, and coprocessor attributes. Keeping the base shared guarantees that
+   * the cells visited by repair are exactly the cells the verifier hashed.
    */
-  private Scan createChunkScan(byte[] startKey, byte[] endKey, boolean isStartKeyInclusive,
-    boolean isEndKeyInclusive, boolean isTargetScan) throws IOException {
+  private Scan createBaseScan(byte[] startKey, byte[] endKey, boolean isStartKeyInclusive,
+    boolean isEndKeyInclusive) throws IOException {
     Scan scan = new Scan();
     scan.withStartRow(startKey, isStartKeyInclusive);
     scan.withStopRow(endKey, isEndKeyInclusive);
@@ -570,6 +616,16 @@ public class PhoenixSyncTableMapper
     }
     scan.setCacheBlocks(false);
     scan.setTimeRange(fromTime, toTime);
+    return scan;
+  }
+
+  /**
+   * Creates an HBase scan for a chunk range. Can be configured to use raw scan mode and read all
+   * cell versions based on command-line options.
+   */
+  private Scan createChunkScan(byte[] startKey, byte[] endKey, boolean isStartKeyInclusive,
+    boolean isEndKeyInclusive, boolean isTargetScan) throws IOException {
+    Scan scan = createBaseScan(startKey, endKey, isStartKeyInclusive, isEndKeyInclusive);
     // Set limit and caching to 1 for sequential partial digest retrieval from target.
     // Enables digest continuation: each target chunk's digest feeds into the next until scanning
     // completes
@@ -689,6 +745,304 @@ public class PhoenixSyncTableMapper
       return true;
     }
     return Bytes.compareTo(processedChunks.get(0).getStartRowKey(), mapperRegionStart) > 0;
+  }
+
+  /**
+   * Builds a row-level HBase scan for repair. Differs from {@link #createChunkScan} in that it
+   * does NOT set {@code SYNC_TABLE_CHUNK_FORMATION} or {@code SYNC_TABLE_CHUNK_SIZE_BYTES}, so
+   * the scanner returns actual {@link Result} rows rather than coprocessor chunk metadata.
+   * Shares the {@link #createBaseScan} core (time range, raw-scan, all-versions, inclusivity)
+   * with verification so the cells visited here are the same cells that produced the chunk
+   * hash. Adds bulk caching plus Phoenix TTL / {@code IS_STRICT_TTL} attributes.
+   */
+  private Scan createRepairScan(byte[] startKey, byte[] endKey, boolean isStartKeyInclusive,
+    boolean isEndKeyInclusive, PhoenixConnection phoenixConn) throws IOException, SQLException {
+    Scan scan = createBaseScan(startKey, endKey, isStartKeyInclusive, isEndKeyInclusive);
+    scan.setCaching(1000);
+    ScanUtil.setScanAttributesForPhoenixTTL(scan, pTable, phoenixConn);
+    scan.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL, TRUE_BYTES);
+    return scan;
+  }
+
+  /**
+   * Returns true if both Results carry identical cell arrays. Walks the two arrays in
+   * lock-step using {@link CellComparator} for coordinate ordering and {@link CellUtil#matchingValue}
+   * for value equality (CellComparator does not compare values). Both scanners use the same
+   * configuration on byte-ordered storage, so cells come back in canonical KV order.
+   */
+  private boolean rowCellsEqual(Result sourceResult, Result targetResult) {
+    Cell[] sourceCells = sourceResult.rawCells();
+    Cell[] targetCells = targetResult.rawCells();
+    if (sourceCells.length != targetCells.length) {
+      return false;
+    }
+    CellComparator comparator = CellComparator.getInstance();
+    for (int i = 0; i < sourceCells.length; i++) {
+      if (
+        comparator.compare(sourceCells[i], targetCells[i]) != 0
+          || !CellUtil.matchingValue(sourceCells[i], targetCells[i])
+      ) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /**
+   * Builds a Put preserving the original cell timestamps from the source row. Used when an
+   * entire row is missing on target.
+   */
+  private Put buildPutFromResult(Result result) throws IOException {
+    Put put = new Put(result.getRow());
+    for (Cell cell : result.rawCells()) {
+      put.add(cell);
+    }
+    return put;
+  }
+
+  /**
+   * Builds a Delete for every cell in the target row. The repair scan's time range
+   * {@code [fromTime, toTime]} guarantees the cells we read here are within the sync window;
+   * cells outside the window are never read, therefore never deleted.
+   */
+  private Delete buildDeleteFromResult(Result result) {
+    Delete delete = new Delete(result.getRow());
+    for (Cell cell : result.rawCells()) {
+      delete.addColumn(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell),
+        cell.getTimestamp());
+    }
+    return delete;
+  }
+
+  /**
+   * Computes cell-level diffs for a row that exists on both clusters but with a different
+   * cell set. Cells present in source but missing from target are added to a single Put for
+   * the row; cells present in target but missing from source are added to a single Delete.
+   */
+  private void addRepairMutations(Result sourceResult, Result targetResult,
+    List<Put> pendingPuts, List<Delete> pendingDeletes) throws IOException {
+    byte[] rowKey = sourceResult.getRow();
+    Cell[] sourceCells = sourceResult.rawCells();
+    Cell[] targetCells = targetResult.rawCells();
+    CellComparator comparator = CellComparator.getInstance();
+
+    Put put = null;
+    Delete delete = null;
+
+    int sourceIdx = 0;
+    int targetIdx = 0;
+    while (sourceIdx < sourceCells.length && targetIdx < targetCells.length) {
+      Cell sourceCell = sourceCells[sourceIdx];
+      Cell targetCell = targetCells[targetIdx];
+      int cmp = comparator.compare(sourceCell, targetCell);
+      if (cmp == 0) {
+        // Same coordinates (family/qualifier/timestamp/type) on both sides. CellComparator
+        // does NOT compare values, so check value separately. If values differ, Put the
+        // source cell — it overwrites the target cell at the same timestamp.
+        if (!CellUtil.matchingValue(sourceCell, targetCell)) {
+          if (put == null) {
+            put = new Put(rowKey);
+          }
+          put.add(sourceCell);
+        }
+        sourceIdx++;
+        targetIdx++;
+      } else if (cmp < 0) {
+        // Source-only cell, Put on target.
+        if (put == null) {
+          put = new Put(rowKey);
+        }
+        put.add(sourceCell);
+        sourceIdx++;
+      } else {
+        // Target-only cell, Delete from target.
+        if (delete == null) {
+          delete = new Delete(rowKey);
+        }
+        delete.addColumn(CellUtil.cloneFamily(targetCell), CellUtil.cloneQualifier(targetCell),
+          targetCell.getTimestamp());
+        targetIdx++;
+      }
+    }
+    // Tail: any remaining source cells are source-only.
+    while (sourceIdx < sourceCells.length) {
+      if (put == null) {
+        put = new Put(rowKey);
+      }
+      put.add(sourceCells[sourceIdx++]);
+    }
+    // Tail: any remaining target cells are target-only.
+    while (targetIdx < targetCells.length) {
+      Cell targetCell = targetCells[targetIdx++];
+      if (delete == null) {
+        delete = new Delete(rowKey);
+      }
+      delete.addColumn(CellUtil.cloneFamily(targetCell), CellUtil.cloneQualifier(targetCell),
+        targetCell.getTimestamp());
+    }
+
+    if (put != null) {
+      pendingPuts.add(put);
+    }
+    if (delete != null) {
+      pendingDeletes.add(delete);
+    }
+  }
+
+  /**
+   * Flushes the accumulated Put and Delete batches to the target HTable and clears both
+   * lists. Called every {@code repairBatchSize} rows and once more at the end of a chunk.
+   */
+  private void flushRepairMutations(Table targetHTable, List<Put> puts, List<Delete> deletes)
+    throws IOException {
+    if (!puts.isEmpty()) {
+      targetHTable.put(puts);
+      puts.clear();
+    }
+    if (!deletes.isEmpty()) {
+      targetHTable.delete(deletes);
+      deletes.clear();
+    }
+  }
+
+  /**
+   * Performs row-level repair for a mismatched chunk by merge-scanning source and target
+   * cluster data and applying targeted mutations to target. The two scan ranges may differ:
+   * the verifier reads target over a wider range than source (covers extra-on-target rows
+   * that fall between consecutive source chunks); repair must mirror the same boundaries so
+   * those extras are visible here as {@code cmp > 0} rows and get deleted.
+   *
+   * Merge-scan contract: both scanners return rows in ascending key order (HBase guarantee).
+   *   cmp == 0 (same row): compare cells; repair if different.
+   *   cmp <  0 (source-only): Put all source cells.
+   *   cmp >  0 (target-only): Delete target cells within [fromTime, toTime].
+   *
+   * Cells outside [fromTime, toTime] are never read (scan time range), so never mutated.
+   *
+   * Only called when isDryRun == false.
+   *
+   * @param sourceStart           Source chunk start key (also the checkpoint PK) — inclusive
+   * @param sourceEnd             Source chunk end key (also the checkpoint PK) — inclusive
+   * @param targetStart           Target scan start (matches verifier-side boundary)
+   * @param targetEnd             Target scan end (matches verifier-side boundary)
+   * @param targetStartInclusive  Inclusivity of target scan start — matches verify side
+   * @param targetEndInclusive    Inclusivity of target scan end — matches verify side
+   * @param verifyStartTime       When the verify pass began for this chunk; reused as the
+   *                              REPAIRED row's START_TIME so the row spans the full
+   *                              verify+repair lifecycle that overwrites the MISMATCHED row.
+   */
+  private void repairChunk(byte[] sourceStart, byte[] sourceEnd, byte[] targetStart,
+    byte[] targetEnd, boolean targetStartInclusive, boolean targetEndInclusive,
+    long verifySourceRows, long verifyTargetRows, Timestamp verifyStartTime, Context context)
+    throws IOException, SQLException {
+    long rowsPut = 0;
+    long rowsDeleted = 0;
+
+    LOGGER.info(
+      "Starting repair for chunk source=[{}, {}] target=[{}{}, {}{} on table {}",
+      Bytes.toStringBinary(sourceStart), Bytes.toStringBinary(sourceEnd),
+      targetStartInclusive ? "[" : "(", Bytes.toStringBinary(targetStart),
+      Bytes.toStringBinary(targetEnd), targetEndInclusive ? "]" : ")", tableName);
+
+    PhoenixConnection sourcePhoenixConn = sourceConnection.unwrap(PhoenixConnection.class);
+    PhoenixConnection targetPhoenixConn = targetConnection.unwrap(PhoenixConnection.class);
+
+    Scan sourceScan = createRepairScan(sourceStart, sourceEnd, true, true, sourcePhoenixConn);
+    Scan targetScan = createRepairScan(targetStart, targetEnd, targetStartInclusive,
+      targetEndInclusive, targetPhoenixConn);
+
+    List<Put> pendingPuts = new ArrayList<>();
+    List<Delete> pendingDeletes = new ArrayList<>();
+
+    try (Table sourceHTable = sourcePhoenixConn.getQueryServices().getTable(physicalTableName);
+      Table targetHTable = targetPhoenixConn.getQueryServices().getTable(physicalTableName);
+      ResultScanner sourceScanner = sourceHTable.getScanner(sourceScan);
+      ResultScanner targetScanner = targetHTable.getScanner(targetScan)) {
+
+      Result sourceResult = sourceScanner.next();
+      Result targetResult = targetScanner.next();
+
+      while (sourceResult != null || targetResult != null) {
+        int cmp;
+        if (sourceResult == null) {
+          cmp = 1;
+        } else if (targetResult == null) {
+          cmp = -1;
+        } else {
+          cmp = Bytes.compareTo(sourceResult.getRow(), targetResult.getRow());
+        }
+
+        if (cmp == 0) {
+          // Same row key on both clusters — diff at cell level and repair only if cells differ.
+          if (!rowCellsEqual(sourceResult, targetResult)) {
+            addRepairMutations(sourceResult, targetResult, pendingPuts, pendingDeletes);
+            rowsPut++;
+          }
+          sourceResult = sourceScanner.next();
+          targetResult = targetScanner.next();
+        } else if (cmp < 0) {
+          // Source-only row (target is missing it, or target has advanced past) — Put it on target.
+          pendingPuts.add(buildPutFromResult(sourceResult));
+          rowsPut++;
+          sourceResult = sourceScanner.next();
+        } else {
+          // Target-only row (source has no such row in this range) — Delete it from target.
+          pendingDeletes.add(buildDeleteFromResult(targetResult));
+          rowsDeleted++;
+          targetResult = targetScanner.next();
+        }
+
+        if (pendingPuts.size() + pendingDeletes.size() >= repairBatchSize) {
+          flushRepairMutations(targetHTable, pendingPuts, pendingDeletes);
+        }
+        context.progress();
+      }
+      flushRepairMutations(targetHTable, pendingPuts, pendingDeletes);
+    } catch (IOException e) {
+      // Per-chunk fault isolation. Mark this chunk REPAIR_FAILED, increment the counter,
+      // and return so the mapper continues with the next chunk. Phase 2's STATUS filter
+      // (VERIFIED, REPAIRED) excludes REPAIR_FAILED, so a re-run will re-attempt this chunk
+      // as an unprocessed gap.
+      LOGGER.error("Repair failed for chunk source=[{}, {}] on table {}: {}",
+        Bytes.toStringBinary(sourceStart), Bytes.toStringBinary(sourceEnd), tableName,
+        e.getMessage(), e);
+      context.getCounter(SyncCounters.CHUNKS_REPAIR_FAILED).increment(1);
+
+      Timestamp failedAt = new Timestamp(System.currentTimeMillis());
+      // Capture partial progress in the COUNTERS column for triage.
+      String failedCounters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
+        .formatChunk(verifySourceRows, verifyTargetRows, rowsPut, rowsDeleted);
+      syncTableOutputRepository
+        .checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+          .setTableName(tableName).setTargetCluster(targetZkQuorum)
+          .setType(PhoenixSyncTableCheckpointOutputRow.Type.CHUNK).setFromTime(fromTime)
+          .setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun)
+          .setStartRowKey(sourceStart).setEndRowKey(sourceEnd)
+          .setStatus(PhoenixSyncTableCheckpointOutputRow.Status.REPAIR_FAILED)
+          .setExecutionStartTime(verifyStartTime).setExecutionEndTime(failedAt)
+          .setCounters(failedCounters).build());
+      return;
+    }
+
+    context.getCounter(SyncCounters.ROWS_PUT_TO_TARGET).increment(rowsPut);
+    context.getCounter(SyncCounters.ROWS_DELETED_FROM_TARGET).increment(rowsDeleted);
+    context.getCounter(SyncCounters.CHUNKS_REPAIRED).increment(1);
+
+    Timestamp repairEndTime = new Timestamp(System.currentTimeMillis());
+    String repairCounters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
+      .formatChunk(verifySourceRows, verifyTargetRows, rowsPut, rowsDeleted);
+
+    syncTableOutputRepository
+      .checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+        .setTableName(tableName).setTargetCluster(targetZkQuorum)
+        .setType(PhoenixSyncTableCheckpointOutputRow.Type.CHUNK).setFromTime(fromTime)
+        .setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun).setStartRowKey(sourceStart)
+        .setEndRowKey(sourceEnd).setStatus(PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED)
+        .setExecutionStartTime(verifyStartTime).setExecutionEndTime(repairEndTime)
+        .setCounters(repairCounters).build());
+
+    LOGGER.info("Completed repair for chunk source=[{}, {}]: rowsPut={}, rowsDeleted={}",
+      Bytes.toStringBinary(sourceStart), Bytes.toStringBinary(sourceEnd), rowsPut, rowsDeleted);
   }
 
   @Override

@@ -100,10 +100,11 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
     }
     LOGGER.info("Total splits generated {} of table {} for PhoenixSyncTable ", allSplits.size(),
       tableName);
+    boolean isDryRun = PhoenixSyncTableTool.getPhoenixSyncTableDryRun(conf);
     List<KeyRange> completedRegions;
     try {
       completedRegions =
-        queryCompletedMapperRegions(conf, tableName, targetZkQuorum, fromTime, toTime);
+        queryCompletedMapperRegions(conf, tableName, targetZkQuorum, fromTime, toTime, isDryRun);
     } catch (SQLException e) {
       throw new RuntimeException(e);
     }
@@ -136,16 +137,21 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
   }
 
   /**
-   * Queries Sync checkpoint table for completed mapper regions
+   * Queries Sync checkpoint table for completed mapper regions.
+   *
+   * @param isDryRun When false (repair mode), only VERIFIED and REPAIRED regions are filtered
+   *                 out as completed; MISMATCHED regions are re-entered as splits so their
+   *                 chunks can be repaired. When true (dry-run), all REGION rows regardless
+   *                 of status are treated as completed.
    */
   private List<KeyRange> queryCompletedMapperRegions(Configuration conf, String tableName,
-    String targetZkQuorum, Long fromTime, Long toTime) throws SQLException {
+    String targetZkQuorum, Long fromTime, Long toTime, boolean isDryRun) throws SQLException {
     String tenantId = PhoenixConfigurationUtil.getTenantId(conf);
     List<KeyRange> completedRegions = new ArrayList<>();
     try (Connection conn = ConnectionUtil.getInputConnection(conf)) {
       PhoenixSyncTableOutputRepository repository = new PhoenixSyncTableOutputRepository(conn);
-      List<PhoenixSyncTableCheckpointOutputRow> completedRows =
-        repository.getProcessedMapperRegions(tableName, targetZkQuorum, fromTime, toTime, tenantId);
+      List<PhoenixSyncTableCheckpointOutputRow> completedRows = repository.getProcessedMapperRegions(
+        tableName, targetZkQuorum, fromTime, toTime, tenantId, isDryRun);
       for (PhoenixSyncTableCheckpointOutputRow row : completedRows) {
         KeyRange keyRange = KeyRange.getKeyRange(row.getStartRowKey(), row.getEndRowKey());
         completedRegions.add(keyRange);

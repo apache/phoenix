@@ -55,6 +55,7 @@ import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.MRJobConfig;
 import org.apache.hadoop.mapreduce.TaskCounter;
+import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDriver;
@@ -155,7 +156,17 @@ public class PhoenixSyncTableToolIT {
 
     introduceAndVerifyTargetDifferences(uniqueTableName);
 
-    Job job = runSyncToolWithLargeChunks(uniqueTableName);
+    // Pin the time window so both runs share the same checkpoint PK
+    // (TABLE_NAME, TARGET_CLUSTER, TYPE, FROM_TIME, TO_TIME, TENANT_ID, START_ROW_KEY).
+    // Without this, runSyncToolWithLargeChunks would assign a fresh System.currentTimeMillis()
+    // to --to-time on each call and the repair pass would append new rows instead of
+    // overwriting the dry-run pass's MISMATCHED rows.
+    String fromTime = "0";
+    String toTime = String.valueOf(System.currentTimeMillis());
+
+    // First run: --dry-run, only detect mismatches.
+    Job job = runSyncToolWithLargeChunks(uniqueTableName, "--dry-run", "--from-time", fromTime,
+      "--to-time", toTime);
     SyncCountersResult counters = getSyncCounters(job);
 
     validateSyncCounters(counters, 10, 10, 1, 3);
@@ -166,6 +177,60 @@ public class PhoenixSyncTableToolIT {
       queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
     validateCheckpointEntries(checkpointEntries, uniqueTableName, targetZkQuorum, 10, 10, 1, 3, 4,
       3, null);
+
+    // Second run: no --dry-run, repair the mismatched chunks. Same time window so the
+    // PK matches and CHUNK/REPAIRED overwrites CHUNK/MISMATCHED in place.
+    Job repairJob =
+      runSyncToolWithLargeChunks(uniqueTableName, "--from-time", fromTime, "--to-time", toTime);
+    Counters repairCounters = repairJob.getCounters();
+
+    // The repair re-verifies the previously MISMATCHED chunks (excluded by Phase 2 filter)
+    // and now repairs them, producing CHUNK/REPAIRED + REGION/REPAIRED checkpoint rows.
+    long chunksRepaired = repairCounters.findCounter(SyncCounters.CHUNKS_REPAIRED).getValue();
+    long chunksRepairFailed =
+      repairCounters.findCounter(SyncCounters.CHUNKS_REPAIR_FAILED).getValue();
+    long mappersRepaired = repairCounters.findCounter(SyncCounters.MAPPERS_REPAIRED).getValue();
+    long mappersRepairFailed =
+      repairCounters.findCounter(SyncCounters.MAPPERS_REPAIR_FAILED).getValue();
+    long rowsPutToTarget = repairCounters.findCounter(SyncCounters.ROWS_PUT_TO_TARGET).getValue();
+    long rowsDeletedFromTarget =
+      repairCounters.findCounter(SyncCounters.ROWS_DELETED_FROM_TARGET).getValue();
+    assertEquals("All 3 mismatched chunks should be repaired", 3, chunksRepaired);
+    assertEquals("No chunk repair should fail", 0, chunksRepairFailed);
+    assertEquals("All 3 mismatched mapper regions should be repaired", 3, mappersRepaired);
+    assertEquals("No mapper repair should fail", 0, mappersRepairFailed);
+    assertEquals("Three rows on target should be Put back to source values", 3, rowsPutToTarget);
+    assertEquals("No rows should be deleted from target (only value diffs, not extras)", 0,
+      rowsDeletedFromTarget);
+
+    // Target rows should now match source.
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+
+    // Checkpoint table now has 3 CHUNK/REPAIRED + 3 REGION/REPAIRED in addition to the
+    // VERIFIED rows. Phase 2's STATUS-IN filter caused the MISMATCHED rows to be re-entered
+    // as gaps and repair overwrote them in place.
+    List<PhoenixSyncTableCheckpointOutputRow> postRepairEntries =
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
+    int chunkRepairedRows = 0;
+    int regionRepairedRows = 0;
+    int mismatchedRows = 0;
+    for (PhoenixSyncTableCheckpointOutputRow entry : postRepairEntries) {
+      if (PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED.equals(entry.getStatus())) {
+        if (PhoenixSyncTableCheckpointOutputRow.Type.CHUNK.equals(entry.getType())) {
+          chunkRepairedRows++;
+        } else if (PhoenixSyncTableCheckpointOutputRow.Type.REGION.equals(entry.getType())) {
+          regionRepairedRows++;
+        }
+      } else if (
+        PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED.equals(entry.getStatus())
+      ) {
+        mismatchedRows++;
+      }
+    }
+    assertEquals("Expected 3 CHUNK/REPAIRED rows after repair", 3, chunkRepairedRows);
+    assertEquals("Expected 3 REGION/REPAIRED rows after repair", 3, regionRepairedRows);
+    assertEquals("MISMATCHED rows should be overwritten in place — none should remain", 0,
+      mismatchedRows);
   }
 
   @Test
@@ -1772,6 +1837,69 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
+   * Verifies that the sync job completes successfully when {@code endTime} (--to-time) is older
+   * than {@code phoenix.max.lookback.age.seconds}.
+   *
+   * <p>Root cause without fix: {@link PhoenixSyncTableTool} sets {@code CURRENT_SCN_VALUE =
+   * endTime} in the MR job configuration. During split generation, {@code
+   * PhoenixInputFormat.getQueryPlan()} creates a Phoenix connection with that SCN. {@code
+   * QueryCompiler.verifySCN()} (client-side) then throws {@code ERROR 538} when {@code endTime} is
+   * older than {@code phoenix.max.lookback.age.seconds}.
+   *
+   * <p>Fix: {@link PhoenixSyncTableInputFormat#getQueryPlan} overrides the parent to strip {@code
+   * CURRENT_SCN_VALUE} before creating the query plan for split generation. With SCN absent, {@code
+   * verifySCN()} returns early (SCN == null), so no exception is thrown.
+   *
+   * <p>Data access correctness: The mapper uses raw HBase {@code Scan.setTimeRange(fromTime,
+   * toTime)}, which does NOT go through {@code QueryCompiler.compile()} or {@code verifySCN()}, so
+   * data within [fromTime, toTime] is always accessible regardless of max lookback age.
+   */
+  @Test
+  public void testSyncTableSucceedsWhenEndTimeOlderThanMaxLookbackAge() throws Exception {
+    // Setup: create tables on both clusters and replicate 10 rows
+    createTableOnBothClusters(sourceConnection, targetConnection, uniqueTableName);
+    insertTestData(sourceConnection, uniqueTableName, 1, 10);
+    waitForReplication(targetConnection, uniqueTableName, 10);
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+
+    // Capture toTime BEFORE the lookback window will expire
+    long toTime = System.currentTimeMillis();
+
+    // Configure a short max lookback age (5 seconds) in the MR job configuration.
+    // QueryCompiler.verifySCN() reads PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY from
+    // conn.getQueryServices().getConfiguration(), which is the client-side MR conf.
+    long maxLookbackAgeSeconds = 5;
+    Configuration conf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
+    conf.setLong(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
+      maxLookbackAgeSeconds);
+
+    // Wait until toTime is older than the lookback age.
+    // After this sleep: (now - maxLookbackAgeMillis) > toTime  → verifySCN would throw ERROR 538
+    Thread.sleep((maxLookbackAgeSeconds + 2) * 1000L);
+
+    // Run the sync tool with the now-stale toTime.
+    // Without PhoenixSyncTableInputFormat.getQueryPlan() override:
+    //   getSplits() → PhoenixInputFormat.getQueryPlan() sets SCN=toTime on Phoenix connection
+    //   → QueryCompiler.verifySCN() → ERROR 538 (toTime older than maxLookbackAge)
+    // With the fix:
+    //   getSplits() → overridden getQueryPlan() strips CURRENT_SCN_VALUE from conf copy
+    //   → verifySCN() sees scn == null → returns early → no exception thrown
+    // The mapper still uses raw HBase Scan.setTimeRange(0, toTime), bypassing verifySCN entirely,
+    // so all 10 rows within [0, toTime] are accessible and compared correctly.
+    Job job = runSyncToolWithChunkSize(uniqueTableName, 1, conf, "--from-time", "0", "--to-time",
+      String.valueOf(toTime));
+
+    assertTrue(
+      "Sync job should complete successfully even when endTime is older than maxLookbackAge",
+      job.isSuccessful());
+
+    // Verify the mapper processed all 10 rows via raw HBase scan (bypasses verifySCN)
+    SyncCountersResult counters = getSyncCounters(job);
+    validateSyncCounters(counters, 10, 10, 10, 0);
+    validateMapperCounters(counters, 4, 0);
+  }
+
+  /**
    * Helper class to hold separated mapper and chunk entries.
    */
   private static class SeparatedCheckpointEntries {
@@ -1857,7 +1985,7 @@ public class PhoenixSyncTableToolIT {
     PhoenixSyncTableCheckpointOutputRow mapper) throws SQLException {
     PhoenixSyncTableOutputRepository repository = new PhoenixSyncTableOutputRepository(conn);
     return repository.getProcessedChunks(tableName, targetCluster, fromTime, toTime, tenantId,
-      mapper.getStartRowKey(), mapper.getEndRowKey());
+      mapper.getStartRowKey(), mapper.getEndRowKey(), true);
   }
 
   /**
