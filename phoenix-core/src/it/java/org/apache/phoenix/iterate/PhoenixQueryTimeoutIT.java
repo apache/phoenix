@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -191,6 +192,22 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
       DelayedRegionObserver.setDelay(5);
       // Add delay on the server so that the query times out
       TestUtil.addCoprocessor(conn, tableName, DelayedRegionObserver.class);
+      // modifyTable updates the master descriptor but region servers reopen
+      // asynchronously. Poll until the coprocessor is actually loaded.
+      final TableName tn = TableName.valueOf(tableName);
+      getUtility().waitFor(10000, 100, () -> {
+        List<HRegion> regions = getUtility().getHBaseCluster().getRegions(tn);
+        if (regions.isEmpty()) {
+          return false;
+        }
+        for (HRegion region : regions) {
+          if (region.getCoprocessorHost().findCoprocessor(
+              DelayedRegionObserver.class.getName()) == null) {
+            return false;
+          }
+        }
+        return true;
+      });
       // Do not let BaseResultIterators throw Timeout Exception Let ScanningResultIterator handle
       // it.
       BaseResultIterators.setForTestingSetTimeoutToMaxToLetQueryPassHere(true);
