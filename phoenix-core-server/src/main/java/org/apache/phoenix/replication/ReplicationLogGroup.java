@@ -189,6 +189,7 @@ public class ReplicationLogGroup {
   protected HAGroupStoreRecord haGroupStoreRecord;
   protected ReplicationShardDirectoryManager localShardManager;
   protected volatile ReplicationShardDirectoryManager peerShardManager;
+  private CompletableFuture<ReplicationShardDirectoryManager> peerShardManagerFuture;
   protected ReplicationLogDiscoveryForwarder logForwarder;
   protected long syncTimeoutMs;
   protected long peerInitTimeoutMs;
@@ -820,26 +821,29 @@ public class ReplicationLogGroup {
       if (peerShardManager != null) {
         return peerShardManager;
       }
-      CompletableFuture<ReplicationShardDirectoryManager> future =
-        CompletableFuture.supplyAsync(() -> {
+      if (peerShardManagerFuture == null || peerShardManagerFuture.isCompletedExceptionally()) {
+        // retry
+        peerShardManagerFuture = CompletableFuture.supplyAsync(() -> {
           try {
             return createPeerShardManager();
           } catch (IOException e) {
             throw new UncheckedIOException(e);
           }
         });
+      }
       try {
-        peerShardManager = future.get(peerInitTimeoutMs, TimeUnit.MILLISECONDS);
+        peerShardManager = peerShardManagerFuture.get(peerInitTimeoutMs, TimeUnit.MILLISECONDS);
         return peerShardManager;
-      } catch (UncheckedIOException e) {
-        throw e.getCause();
       } catch (ExecutionException e) {
-        if (e.getCause() instanceof IOException) {
-          throw (IOException) e.getCause();
+        Throwable cause = e.getCause();
+        if (cause instanceof UncheckedIOException) {
+          throw ((UncheckedIOException) cause).getCause();
         }
-        throw new IOException("Failed to create peer shard manager", e.getCause());
+        if (cause instanceof IOException) {
+          throw (IOException) cause;
+        }
+        throw new IOException("Failed to create peer shard manager", cause);
       } catch (TimeoutException e) {
-        future.cancel(true);
         throw new IOException("Timed out creating peer shard manager after " + peerInitTimeoutMs
           + "ms for " + haGroupName, e);
       } catch (InterruptedException e) {
