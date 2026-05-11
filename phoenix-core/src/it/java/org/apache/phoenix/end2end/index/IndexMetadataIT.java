@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_OR_ALTER_UPDATE_CACHE_FREQ_FOR_INDEX;
-import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -750,8 +749,11 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
       conn.createStatement()
         .execute("ALTER INDEX " + indexName + " ON " + testTable + " REBUILD ALL ASYNC");
 
+      String taskFilter = " WHERE " + PhoenixDatabaseMetaData.TASK_TYPE + " = "
+        + PTable.TaskType.INDEX_REBUILD.getSerializedValue() + " AND "
+        + PhoenixDatabaseMetaData.TABLE_NAME + " = '" + testTable + "'";
       ResultSet resultSet = conn.createStatement()
-        .executeQuery("SELECT * FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME);
+        .executeQuery("SELECT * FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME + taskFilter);
       assertTrue(resultSet.next());
       assertEquals("2", resultSet.getString(1));
       assertNull(resultSet.getString(3));
@@ -761,11 +763,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
       assertEquals("4", resultSet.getString(8));
       assertEquals("{\"IndexName\":\"" + indexName + "\",\"RebuildAll\":true}",
         resultSet.getString(9));
-      String queryTaskTable = "SELECT * FROM " + PhoenixDatabaseMetaData.SYSTEM_TASK_NAME;
-      ResultSet rs = conn.createStatement().executeQuery(queryTaskTable);
-      assertTrue(rs.next());
-      assertEquals(testTable, rs.getString(TABLE_NAME));
-      assertFalse(rs.next());
+      assertFalse(resultSet.next());
 
       TestUtil.waitForIndexState(conn, indexName, PIndexState.ACTIVE);
 
@@ -775,7 +773,7 @@ public class IndexMetadataIT extends ParallelStatsDisabledIT {
         + PTable.TaskType.INDEX_REBUILD.getSerializedValue() + " AND "
         + PhoenixDatabaseMetaData.TABLE_NAME + " = '" + testTable + "'";
 
-      rs = conn.createStatement().executeQuery(query);
+      ResultSet rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       String taskStatus = rs.getString(PhoenixDatabaseMetaData.TASK_STATUS);
       assertEquals(PTable.TaskStatus.COMPLETED.toString(), taskStatus);
