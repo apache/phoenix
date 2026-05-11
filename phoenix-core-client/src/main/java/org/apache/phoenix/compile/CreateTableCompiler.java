@@ -21,6 +21,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES;
 import static org.apache.phoenix.query.QueryServices.DEFAULT_PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_UPDATABLE_VIEW_RESTRICTION_ENABLED;
+import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 
 import java.io.IOException;
 import java.sql.SQLException;
@@ -78,6 +79,7 @@ import org.apache.phoenix.schema.PTable.ViewType;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
+import org.apache.phoenix.schema.TableProperty;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -241,8 +243,21 @@ public class CreateTableCompiler {
         // TTL. Multiple no-WHERE TTL views share the same ROW_KEY_MATCHER (tenant-id bytes)
         // and conflict in the compaction RowKeyMatcher trie.
         if (where == null) {
+          boolean newViewHasTTL = hasTTLProperty(create);
+          // Fail fast if we can't produce a usable ROW_KEY_MATCHER for a TTL view on a
+          // multi-tenant base table. The most common cause is the tenant-id couldn't be
+          // encoded against the parent's row key schema (e.g., incompatible tenant-id type).
+          // Without a matcher, the view would be stored with a null ROW_KEY_MATCHER and crash
+          // the compaction RowKeyMatcher trie with a NullPointerException.
+          if (
+            newViewHasTTL && rowKeyMatcher.length == 0 && parentToBe.isMultiTenant()
+              && connection.getTenantId() != null
+          ) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.TENANTID_IS_OF_WRONG_TYPE).build()
+              .buildException();
+          }
           ViewUtil.validateTenantViewWithoutWhereTTLCoexistence(connection, parentToBe,
-            hasTTLProperty(create), null);
+            newViewHasTTL, null);
         }
       }
       verifyIfAnyParentHasIndexesAndViewExtendsPk(parentToBe, columnDefs, pkConstraint);
@@ -446,12 +461,15 @@ public class CreateTableCompiler {
   }
 
   /**
-   * Returns true if the {@code CREATE VIEW} statement has a {@code TTL} property set.
+   * Returns true if the {@code CREATE VIEW} statement has a {@code TTL} property whose value
+   * resolves to a defined TTL. {@code TTL = NONE} and {@code TTL = 0} resolve to
+   * {@code TTL_EXPRESSION_NOT_DEFINED} and are treated as "no TTL".
    */
   private boolean hasTTLProperty(CreateTableStatement create) {
     for (Pair<String, Object> prop : create.getProps().values()) {
       if (PhoenixDatabaseMetaData.TTL.equalsIgnoreCase(prop.getFirst())) {
-        return true;
+        Object resolved = TableProperty.TTL.getValue(prop.getSecond());
+        return resolved != null && !resolved.equals(TTL_EXPRESSION_NOT_DEFINED);
       }
     }
     return false;

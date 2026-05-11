@@ -735,6 +735,127 @@ public class TenantTTLIT extends BaseTest {
   }
 
   /**
+   * Verifies that creating a no-WHERE view with {@code TTL = NONE} or {@code TTL = 0} (both resolve
+   * to TTL_EXPRESSION_NOT_DEFINED) is allowed alongside an existing no-WHERE non-TTL sibling.
+   * {@code hasTTLProperty} must parse the value, not just check for the key.
+   */
+  @Test
+  public void testCreateNoWhereViewWithTTLNoneAllowedWithSibling() throws Exception {
+    String schemaName = generateUniqueName();
+    String baseTableName = generateUniqueName();
+    String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
+    String view1 = generateUniqueName();
+    String view2 = generateUniqueName();
+    String view3 = generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute(String.format(
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+          fullTableName));
+    }
+
+    // Existing no-WHERE non-TTL view.
+    createTenantViewNoTTL("org1", fullTableName, view1);
+
+    // TTL=NONE resolves to TTL_EXPRESSION_NOT_DEFINED -> treated as no-TTL -> allowed.
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      t1.createStatement().execute(
+        String.format("CREATE VIEW %s AS SELECT * FROM %s TTL = 'NONE'", view2, fullTableName));
+    }
+
+    // TTL=0 resolves to TTL_EXPRESSION_NOT_DEFINED -> treated as no-TTL -> allowed.
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      t1.createStatement()
+        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s TTL = 0", view3, fullTableName));
+    }
+  }
+
+  /**
+   * Verifies that ALTER VIEW ... SET TTL = NONE on a tenant view with an existing no-WHERE sibling
+   * is allowed (the new TTL value resolves to TTL_EXPRESSION_NOT_DEFINED, so there is no conflict).
+   */
+  @Test
+  public void testAlterTTLToNoneAllowedWithSibling() throws Exception {
+    String schemaName = generateUniqueName();
+    String baseTableName = generateUniqueName();
+    String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
+    String view1 = generateUniqueName();
+    String view2 = generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute(String.format(
+          "CREATE TABLE %s (" + "ORGID VARCHAR NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (ORGID, ID1)"
+            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+          fullTableName));
+    }
+
+    // Two no-WHERE non-TTL siblings.
+    createTenantViewNoTTL("org1", fullTableName, view1);
+    createTenantViewNoTTL("org1", fullTableName, view2);
+
+    // ALTER ... TTL = NONE is allowed even with a sibling (new TTL resolves to not-defined).
+    try (Connection t1 = getTenantConnection("org1")) {
+      t1.setAutoCommit(true);
+      t1.createStatement().execute(String.format("ALTER VIEW %s SET TTL = 'NONE'", view1));
+    }
+  }
+
+  /**
+   * Verifies that creating a no-WHERE TTL tenant view from a connection whose tenant-id cannot be
+   * encoded against the base table's tenant-id column type fails fast with
+   * {@code TENANTID_IS_OF_WRONG_TYPE} at DDL time, rather than silently storing an empty
+   * ROW_KEY_MATCHER that would crash compaction with a NullPointerException in the RowKeyMatcher
+   * trie.
+   */
+  @Test
+  public void testCreateNoWhereTTLViewFailsForInconvertibleTenantId() throws Exception {
+    String schemaName = generateUniqueName();
+    String baseTableName = generateUniqueName();
+    String fullTableName = SchemaUtil.getTableName(schemaName, baseTableName);
+    String view1 = generateUniqueName();
+    String view2 = generateUniqueName();
+
+    // INTEGER tenant-id column: a string tenant-id like "abc" cannot be encoded.
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute(String.format(
+          "CREATE TABLE %s (" + "TID INTEGER NOT NULL, ID1 VARCHAR NOT NULL, COL1 VARCHAR "
+            + "CONSTRAINT PK PRIMARY KEY (TID, ID1)"
+            + ") MULTI_TENANT=true, COLUMN_ENCODED_BYTES=0, DEFAULT_COLUMN_FAMILY='0'",
+          fullTableName));
+    }
+
+    // Tenant-id "abc" cannot be encoded -> rowKeyMatcher is empty -> DDL must fail because the
+    // view has TTL.
+    try (Connection conn = getTenantConnection("abc")) {
+      conn.setAutoCommit(true);
+      conn.createStatement().execute(
+        String.format("CREATE VIEW %s AS SELECT * FROM %s TTL = 10", view1, fullTableName));
+      fail("Expected TENANTID_IS_OF_WRONG_TYPE for inconvertible tenant-id with TTL view");
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.TENANTID_IS_OF_WRONG_TYPE.getErrorCode(), e.getErrorCode());
+    }
+
+    // Sanity: creating a view WITHOUT TTL still succeeds (preserves existing Phoenix behavior
+    // for tenant views that won't participate in TTL compaction; see TenantIdTypeIT).
+    try (Connection conn = getTenantConnection("abc")) {
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute(String.format("CREATE VIEW %s AS SELECT * FROM %s", view2, fullTableName));
+    }
+  }
+
+  /**
    * Creates a tenant view without TTL, inserts rows, then alters the view to add TTL. Verifies read
    * masking and compaction honor the new TTL after the ALTER.
    */
