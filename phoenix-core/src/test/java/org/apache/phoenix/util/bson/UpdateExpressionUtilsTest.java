@@ -1264,4 +1264,238 @@ public class UpdateExpressionUtilsTest {
     Assert.assertEquals(25, bsonDocument.getInt32("fieldB").getValue());
   }
 
+  private static BsonDocument seedListAppendDoc() {
+    return BsonDocument
+      .parse("{" + "\"events\": [\"a\", \"b\"]," + "\"numeric\": 42," + "\"text\": \"hello\","
+        + "\"colors\": {\"$set\": [\"red\", \"blue\"]}," + "\"nested\": {\"queue\": [\"x\"]},"
+        + "\"matrix\": [[\"row0\"], [\"row1\"]]," + "\"counter\": 0" + "}");
+  }
+
+  @Test
+  public void testListAppend_op1PathToExistingList() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"events\": {\"$LIST_APPEND\": [\"events\", [\"c\", \"d\"]]}}}";
+    UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+    org.bson.BsonArray events = doc.getArray("events");
+    Assert.assertEquals(4, events.size());
+    Assert.assertEquals("a", events.get(0).asString().getValue());
+    Assert.assertEquals("b", events.get(1).asString().getValue());
+    Assert.assertEquals("c", events.get(2).asString().getValue());
+    Assert.assertEquals("d", events.get(3).asString().getValue());
+  }
+
+  @Test
+  public void testListAppend_op1LiteralArrayPrepend() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"events\": {\"$LIST_APPEND\": [[\"z\"], \"events\"]}}}";
+    UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+    org.bson.BsonArray events = doc.getArray("events");
+    Assert.assertEquals("z", events.get(0).asString().getValue());
+    Assert.assertEquals("a", events.get(1).asString().getValue());
+    Assert.assertEquals("b", events.get(2).asString().getValue());
+  }
+
+  @Test
+  public void testListAppend_op1IfNotExistsMissingEmptyFallback() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"newQueue\": {\"$LIST_APPEND\": ["
+      + "{\"$IF_NOT_EXISTS\": {\"newQueue\": []}}," + "[\"first\", \"second\"]" + "]}}}";
+    UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+    org.bson.BsonArray q = doc.getArray("newQueue");
+    Assert.assertEquals(2, q.size());
+    Assert.assertEquals("first", q.get(0).asString().getValue());
+    Assert.assertEquals("second", q.get(1).asString().getValue());
+  }
+
+  @Test
+  public void testListAppend_op1IfNotExistsExistingList() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"events\": {\"$LIST_APPEND\": ["
+      + "{\"$IF_NOT_EXISTS\": {\"events\": []}}," + "[\"c\"]" + "]}}}";
+    UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+    org.bson.BsonArray events = doc.getArray("events");
+    Assert.assertEquals(3, events.size());
+    Assert.assertEquals("c", events.get(2).asString().getValue());
+  }
+
+  @Test
+  public void testListAppend_op1PathToMissing_throws() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"events\": {\"$LIST_APPEND\": [\"missing\", [\"c\"]]}}}";
+    try {
+      UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+      Assert.fail("expected BsonUpdateInvalidArgumentException for missing path");
+    } catch (org.apache.phoenix.expression.util.bson.BsonUpdateInvalidArgumentException e) {
+      Assert.assertTrue(e.getMessage(), e.getMessage().contains("does not exist"));
+    }
+  }
+
+  @Test
+  public void testListAppend_op1PathToNumber_throws() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"numeric\": {\"$LIST_APPEND\": [\"numeric\", [\"c\"]]}}}";
+    try {
+      UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+      Assert.fail("expected BsonUpdateInvalidArgumentException for number operand");
+    } catch (org.apache.phoenix.expression.util.bson.BsonUpdateInvalidArgumentException e) {
+      Assert.assertTrue(e.getMessage(), e.getMessage().contains("incorrect data type"));
+    }
+  }
+
+  @Test
+  public void testListAppend_op1PathToString_throws() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"text\": {\"$LIST_APPEND\": [\"text\", [\"c\"]]}}}";
+    try {
+      UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+      Assert.fail("expected BsonUpdateInvalidArgumentException for string operand");
+    } catch (org.apache.phoenix.expression.util.bson.BsonUpdateInvalidArgumentException e) {
+      Assert.assertTrue(e.getMessage(), e.getMessage().contains("incorrect data type"));
+    }
+  }
+
+  @Test
+  public void testListAppend_op1PathToSet_throws() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"colors\": {\"$LIST_APPEND\": [\"colors\", [\"green\"]]}}}";
+    try {
+      UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+      Assert.fail("expected BsonUpdateInvalidArgumentException for set operand (set != list)");
+    } catch (org.apache.phoenix.expression.util.bson.BsonUpdateInvalidArgumentException e) {
+      Assert.assertTrue(e.getMessage(), e.getMessage().contains("incorrect data type"));
+    }
+  }
+
+  @Test
+  public void testListAppend_op1LiteralNumber_throws() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"events\": {\"$LIST_APPEND\": [7, \"events\"]}}}";
+    try {
+      UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+      Assert.fail("expected BsonUpdateInvalidArgumentException for non-array operand");
+    } catch (org.apache.phoenix.expression.util.bson.BsonUpdateInvalidArgumentException e) {
+      Assert.assertTrue(e.getMessage(), e.getMessage().contains("Invalid operand"));
+    }
+  }
+
+  @Test
+  public void testListAppend_op1IfNotExistsMissingNonListFallback_throws() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"newQueue\": {\"$LIST_APPEND\": ["
+      + "{\"$IF_NOT_EXISTS\": {\"newQueue\": 0}}," + "[\"a\"]" + "]}}}";
+    try {
+      UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+      Assert.fail("expected BsonUpdateInvalidArgumentException for non-list fallback");
+    } catch (org.apache.phoenix.expression.util.bson.BsonUpdateInvalidArgumentException e) {
+      Assert.assertTrue(e.getMessage(), e.getMessage().contains("incorrect data type"));
+    }
+  }
+
+  @Test
+  public void testListAppend_chainedNested_throws() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"events\": {\"$LIST_APPEND\": ["
+      + "{\"$LIST_APPEND\": [\"events\", [\"m\"]]}," + "[\"t\"]" + "]}}}";
+    try {
+      UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+      Assert.fail("expected BsonUpdateInvalidArgumentException for chained $LIST_APPEND");
+    } catch (org.apache.phoenix.expression.util.bson.BsonUpdateInvalidArgumentException e) {
+      Assert.assertTrue(e.getMessage(), e.getMessage().contains("Invalid operand"));
+    }
+  }
+
+  @Test
+  public void testListAppend_op2PathSelfAppend() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"events\": {\"$LIST_APPEND\": [\"events\", \"events\"]}}}";
+    UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+    org.bson.BsonArray events = doc.getArray("events");
+    Assert.assertEquals(4, events.size());
+    Assert.assertEquals("a", events.get(0).asString().getValue());
+    Assert.assertEquals("b", events.get(1).asString().getValue());
+    Assert.assertEquals("a", events.get(2).asString().getValue());
+    Assert.assertEquals("b", events.get(3).asString().getValue());
+  }
+
+  @Test
+  public void testListAppend_resultSemantics() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"events\": {\"$LIST_APPEND\": [" + "\"events\","
+      + "[\"a\", 3.14, true, null, {\"nested\": 1}]" + "]}}}";
+    UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+    org.bson.BsonArray events = doc.getArray("events");
+    Assert.assertEquals(7, events.size());
+    Assert.assertTrue(events.get(2).isString());
+    Assert.assertTrue(events.get(3).isDouble());
+    Assert.assertTrue(events.get(4).isBoolean());
+    Assert.assertTrue(events.get(5).isNull());
+    Assert.assertTrue(events.get(6).isDocument());
+  }
+
+  @Test
+  public void testListAppend_bothEmpty() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"newQueue\": {\"$LIST_APPEND\": [[], []]}}}";
+    UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+    Assert.assertEquals(0, doc.getArray("newQueue").size());
+  }
+
+  @Test
+  public void testListAppend_nestedDocumentPathTarget() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr =
+      "{\"$SET\": {\"nested.queue\": {\"$LIST_APPEND\": [" + "\"nested.queue\", [\"y\"]" + "]}}}";
+    UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+    org.bson.BsonArray q = doc.getDocument("nested").getArray("queue");
+    Assert.assertEquals(2, q.size());
+    Assert.assertEquals("x", q.get(0).asString().getValue());
+    Assert.assertEquals("y", q.get(1).asString().getValue());
+  }
+
+  @Test
+  public void testListAppend_arrayIndexPathTarget() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr =
+      "{\"$SET\": {\"matrix[0]\": {\"$LIST_APPEND\": [" + "\"matrix[0]\", [\"appended\"]" + "]}}}";
+    UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+    org.bson.BsonArray row0 = doc.getArray("matrix").get(0).asArray();
+    Assert.assertEquals(2, row0.size());
+    Assert.assertEquals("row0", row0.get(0).asString().getValue());
+    Assert.assertEquals("appended", row0.get(1).asString().getValue());
+  }
+
+  @Test
+  public void testListAppend_combinedWithArithmetic() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {" + "\"events\": {\"$LIST_APPEND\": ["
+      + "  {\"$IF_NOT_EXISTS\": {\"events\": []}}," + "  [\"ev1\"]" + "]},"
+      + "\"counter\": {\"$ADD\": [\"counter\", 1]}" + "}}";
+    UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+    Assert.assertEquals(3, doc.getArray("events").size());
+    Assert.assertEquals("ev1", doc.getArray("events").get(2).asString().getValue());
+    Assert.assertEquals(1, doc.getInt32("counter").getValue());
+  }
+
+  @Test
+  public void testListAppend_wrongArity_throws() {
+    BsonDocument doc = seedListAppendDoc();
+    String exprThree =
+      "{\"$SET\": {\"events\": {\"$LIST_APPEND\": [\"events\", [\"c\"], [\"d\"]]}}}";
+    try {
+      UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(exprThree), doc);
+      Assert.fail("expected BsonUpdateInvalidArgumentException for arity 3");
+    } catch (org.apache.phoenix.expression.util.bson.BsonUpdateInvalidArgumentException e) {
+      Assert.assertTrue(e.getMessage(), e.getMessage().contains("Incorrect number of operands"));
+    }
+
+    BsonDocument doc2 = seedListAppendDoc();
+    String exprOne = "{\"$SET\": {\"events\": {\"$LIST_APPEND\": [\"events\"]}}}";
+    try {
+      UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(exprOne), doc2);
+      Assert.fail("expected BsonUpdateInvalidArgumentException for arity 1");
+    } catch (org.apache.phoenix.expression.util.bson.BsonUpdateInvalidArgumentException e) {
+      Assert.assertTrue(e.getMessage(), e.getMessage().contains("Incorrect number of operands"));
+    }
+  }
+
 }

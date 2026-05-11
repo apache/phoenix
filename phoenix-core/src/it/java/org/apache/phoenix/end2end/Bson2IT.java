@@ -26,9 +26,12 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.util.Arrays;
 import java.util.Properties;
 import org.apache.phoenix.util.PropertiesUtil;
+import org.bson.BsonArray;
 import org.bson.BsonDocument;
+import org.bson.BsonInt32;
 import org.bson.BsonString;
 import org.bson.RawBsonDocument;
 import org.junit.Test;
@@ -1085,6 +1088,80 @@ public class Bson2IT extends ParallelStatsDisabledIT {
     // }
     // }
     return RawBsonDocument.parse(json);
+  }
+
+  @Test
+  public void testListAppendUpdateExpression() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    String tableName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      String ddl = "CREATE TABLE " + tableName
+        + " (PK1 VARCHAR NOT NULL, COL BSON CONSTRAINT pk PRIMARY KEY(PK1))";
+      conn.createStatement().execute(ddl);
+
+      BsonDocument initial = new BsonDocument()
+        .append("events", new BsonArray(Arrays.asList(new BsonString("a"), new BsonString("b"))))
+        .append("counter", new BsonInt32(0));
+
+      PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?)");
+      stmt.setString(1, "pk1");
+      stmt.setObject(2, initial);
+      stmt.executeUpdate();
+      conn.commit();
+
+      BsonDocument appendExisting = new BsonDocument().append("$SET",
+        new BsonDocument().append("events",
+          new BsonDocument().append("$LIST_APPEND",
+            new BsonArray(Arrays.asList(new BsonString("events"),
+              new BsonArray(Arrays.asList(new BsonString("c"))))))));
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+        + " VALUES (?) ON DUPLICATE KEY UPDATE COL = BSON_UPDATE_EXPRESSION(COL, '" + appendExisting
+        + "')");
+      stmt.setString(1, "pk1");
+      stmt.executeUpdate();
+      conn.commit();
+
+      ResultSet rs =
+        conn.createStatement().executeQuery("SELECT COL FROM " + tableName + " WHERE PK1 = 'pk1'");
+      assertTrue(rs.next());
+      BsonDocument afterAppend = (BsonDocument) rs.getObject(1);
+      BsonArray events = afterAppend.getArray("events");
+      assertEquals(3, events.size());
+      assertEquals("a", events.get(0).asString().getValue());
+      assertEquals("b", events.get(1).asString().getValue());
+      assertEquals("c", events.get(2).asString().getValue());
+
+      BsonDocument createOrAppend = new BsonDocument().append("$SET",
+        new BsonDocument()
+          .append("newQueue",
+            new BsonDocument().append("$LIST_APPEND",
+              new BsonArray(Arrays.asList(
+                new BsonDocument().append("$IF_NOT_EXISTS",
+                  new BsonDocument().append("newQueue", new BsonArray())),
+                new BsonArray(Arrays.asList(new BsonString("ev1"), new BsonString("ev2")))))))
+          .append("counter", new BsonDocument().append("$ADD",
+            new BsonArray(Arrays.asList(new BsonString("counter"), new BsonInt32(1))))));
+
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+        + " VALUES (?) ON DUPLICATE KEY UPDATE COL = BSON_UPDATE_EXPRESSION(COL, '" + createOrAppend
+        + "')");
+      stmt.setString(1, "pk1");
+      stmt.executeUpdate();
+      conn.commit();
+
+      rs =
+        conn.createStatement().executeQuery("SELECT COL FROM " + tableName + " WHERE PK1 = 'pk1'");
+      assertTrue(rs.next());
+      BsonDocument afterCreate = (BsonDocument) rs.getObject(1);
+
+      assertEquals(3, afterCreate.getArray("events").size());
+      BsonArray queue = afterCreate.getArray("newQueue");
+      assertEquals(2, queue.size());
+      assertEquals("ev1", queue.get(0).asString().getValue());
+      assertEquals("ev2", queue.get(1).asString().getValue());
+      assertEquals(1, afterCreate.getInt32("counter").getValue());
+    }
   }
 
 }
