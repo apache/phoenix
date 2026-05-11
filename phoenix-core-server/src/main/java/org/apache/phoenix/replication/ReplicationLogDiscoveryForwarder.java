@@ -57,6 +57,12 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
   public static final String REPLICATION_FORWARDER_WAITING_BUFFER_PERCENTAGE_KEY =
     "phoenix.replication.forwarder.waiting.buffer.percentage";
 
+  /**
+   * Configuration key for in-progress directory processing probability (percentage)
+   */
+  public static final String REPLICATION_FORWARDER_IN_PROGRESS_PROCESSING_PROBABILITY_KEY =
+    "phoenix.replication.forwarder.in.progress.processing.probability";
+
   private final ReplicationLogGroup logGroup;
   private final double copyThroughputThresholdBytesPerMs;
   // the timestamp (in future) at which we will attempt to set the HAGroup state to SYNC
@@ -134,7 +140,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
     FileSystem srcFS = replicationLogTracker.getFileSystem();
     FileStatus srcStat = srcFS.getFileStatus(src);
     long ts = replicationLogTracker.getFileTimestamp(srcStat.getPath());
-    ReplicationShardDirectoryManager remoteShardManager = logGroup.getPeerShardManager();
+    ReplicationShardDirectoryManager remoteShardManager = logGroup.getOrCreatePeerShardManager();
     Path dst = remoteShardManager.getWriterPath(ts, logGroup.getServerName().getServerName());
     long startTime = EnvironmentEdgeManager.currentTimeMillis();
     FileUtil.copy(srcFS, srcStat, remoteShardManager.getFileSystem(), dst, false, false, conf);
@@ -226,5 +232,11 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
   public double getWaitingBufferPercentage() {
     return getConf().getDouble(REPLICATION_FORWARDER_WAITING_BUFFER_PERCENTAGE_KEY,
       DEFAULT_WAITING_BUFFER_PERCENTAGE);
+  }
+
+  @Override
+  public double getInProgressDirectoryProcessProbability() {
+    return getConf().getDouble(REPLICATION_FORWARDER_IN_PROGRESS_PROCESSING_PROBABILITY_KEY,
+      super.getInProgressDirectoryProcessProbability());
   }
 }

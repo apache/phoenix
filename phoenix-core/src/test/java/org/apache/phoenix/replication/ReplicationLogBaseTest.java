@@ -165,13 +165,9 @@ public class ReplicationLogBaseTest {
     }
 
     @Override
-    protected ReplicationLog createStandbyLog() throws IOException {
-      return spy(new TestableLog(this, peerShardManager, useAlignedRotation));
-    }
-
-    @Override
-    protected ReplicationLog createFallbackLog() throws IOException {
-      return spy(new TestableLog(this, localShardManager, useAlignedRotation));
+    protected ReplicationLog createReplicationLog(ReplicationShardDirectoryManager shardManager)
+      throws IOException {
+      return spy(new TestableLog(this, shardManager, useAlignedRotation));
     }
 
   }

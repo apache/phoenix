@@ -683,7 +683,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * @return HA group if present or empty if missing
    */
   private Optional<ReplicationLogGroup> getHAGroupFromBatch(RegionCoprocessorEnvironment env,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
     if (miniBatchOp.size() > 0) {
       Mutation m = miniBatchOp.getOperation(0);
       byte[] haGroupName = m.getAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
@@ -702,7 +702,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * @return HA group if present or empty if missing
    */
   private Optional<ReplicationLogGroup> getHAGroupFromWALKey(RegionCoprocessorEnvironment env,
-    org.apache.hadoop.hbase.wal.WALKey logKey) {
+    org.apache.hadoop.hbase.wal.WALKey logKey) throws IOException {
     byte[] haGroupName =
       logKey.getExtendedAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
     if (haGroupName != null) {
