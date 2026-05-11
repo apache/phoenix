@@ -1161,6 +1161,30 @@ public class Bson2IT extends ParallelStatsDisabledIT {
       assertEquals("ev1", queue.get(0).asString().getValue());
       assertEquals("ev2", queue.get(1).asString().getValue());
       assertEquals(1, afterCreate.getInt32("counter").getValue());
+
+      // Re-apply the same create-or-append. newQueue now exists, so $IF_NOT_EXISTS resolves
+      // to the existing array (not the empty-array fallback) and the same elements are
+      // appended again, producing duplicates. counter advances once more.
+      stmt = conn.prepareStatement("UPSERT INTO " + tableName
+        + " VALUES (?) ON DUPLICATE KEY UPDATE COL = BSON_UPDATE_EXPRESSION(COL, '" + createOrAppend
+        + "')");
+      stmt.setString(1, "pk1");
+      stmt.executeUpdate();
+      conn.commit();
+
+      rs =
+        conn.createStatement().executeQuery("SELECT COL FROM " + tableName + " WHERE PK1 = 'pk1'");
+      assertTrue(rs.next());
+      BsonDocument afterRepeat = (BsonDocument) rs.getObject(1);
+
+      assertEquals(3, afterRepeat.getArray("events").size());
+      BsonArray queueRepeat = afterRepeat.getArray("newQueue");
+      assertEquals(4, queueRepeat.size());
+      assertEquals("ev1", queueRepeat.get(0).asString().getValue());
+      assertEquals("ev2", queueRepeat.get(1).asString().getValue());
+      assertEquals("ev1", queueRepeat.get(2).asString().getValue());
+      assertEquals("ev2", queueRepeat.get(3).asString().getValue());
+      assertEquals(2, afterRepeat.getInt32("counter").getValue());
     }
   }
 

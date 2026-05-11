@@ -1392,6 +1392,19 @@ public class UpdateExpressionUtilsTest {
   }
 
   @Test
+  public void testListAppend_op1IfNotExistsExistingNonList_throws() {
+    BsonDocument doc = seedListAppendDoc();
+    String expr = "{\"$SET\": {\"numeric\": {\"$LIST_APPEND\": ["
+      + "{\"$IF_NOT_EXISTS\": {\"numeric\": []}}," + "[\"a\"]" + "]}}}";
+    try {
+      UpdateExpressionUtils.updateExpression(RawBsonDocument.parse(expr), doc);
+      Assert.fail("expected BsonUpdateInvalidArgumentException for non-list existing value");
+    } catch (org.apache.phoenix.expression.util.bson.BsonUpdateInvalidArgumentException e) {
+      Assert.assertTrue(e.getMessage(), e.getMessage().contains("incorrect data type"));
+    }
+  }
+
+  @Test
   public void testListAppend_chainedNested_throws() {
     BsonDocument doc = seedListAppendDoc();
     String expr = "{\"$SET\": {\"events\": {\"$LIST_APPEND\": ["
