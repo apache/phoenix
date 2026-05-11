@@ -94,6 +94,7 @@ opts = os.getenv('PHOENIX_OPTS') or os.getenv('HBASE_OPTS') or ''
 
 java_cmd = phoenix_utils.java + ' ' + phoenix_utils.jvm_module_flags + \
     ' ' + opts + \
+    ' ' + getattr(phoenix_utils, "zk_tls_args", "") + \
     ' -cp "' + phoenix_utils.hbase_conf_dir + os.pathsep + \
     phoenix_utils.hadoop_conf + os.pathsep + \
     phoenix_utils.sqlline_with_deps_jar + os.pathsep + \

@@ -25,6 +25,7 @@ import fnmatch
 import re
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 def find(pattern, classPaths):
     paths = classPaths.split(os.pathsep)
@@ -125,6 +126,21 @@ def setPath():
         else:
             # Try to provide something valid
             hbase_conf_dir = '.'
+
+    global zk_tls_args
+    root = ET.parse(os.path.join(hbase_conf_dir, "hbase-site.xml")).getroot()
+    zk_hbase_prefix = "hbase.zookeeper.property."
+    zkcfg = {
+        prop.find("name").text[len(zk_hbase_prefix):]: prop.find("value").text
+        for prop in root.findall("property")
+        if prop.find("name").text.startswith(zk_hbase_prefix)
+    }
+    if zkcfg.get('client.secure').lower() == 'true':
+        zk_tls_args = '-Dzookeeper.client.secure=true ' + \
+            '-Dzookeeper.clientCnxnSocket=' + zkcfg['clientCnxnSocket'] + ' ' + \
+            '-Dzookeeper.ssl.trustStore.location=' + zkcfg['ssl.trustStore.location'] + ' ' + \
+            '-Dzookeeper.ssl.trustStore.type=' + zkcfg['ssl.trustStore.type'] + ' ' + \
+            '-Dzookeeper.ssl.trustStore.password=' + zkcfg['ssl.trustStore.password'] + ' '
 
     global current_dir
     current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -316,6 +332,7 @@ if __name__ == "__main__":
     setPath()
     print("phoenix_class_path:", phoenix_class_path)
     print("hbase_conf_dir:", hbase_conf_dir)
+    print("zk_tls_args:", zk_tls_args)
     print("current_dir:", current_dir)
     print("phoenix_embedded_jar_path:", phoenix_embedded_jar_path)
     print("phoenix_client_embedded_jar:", phoenix_client_embedded_jar)
