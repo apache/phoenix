@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.3.1 - Unreleased (as of 2026-04-28)
+## Release 5.3.1 - Unreleased (as of 2026-05-12)
 
 
 
@@ -35,6 +35,9 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7849](https://issues.apache.org/jira/browse/PHOENIX-7849) | Support LIST\_APPEND operator in BSON UpdateExpression SET |  Major | . |
+| [PHOENIX-7850](https://issues.apache.org/jira/browse/PHOENIX-7850) | Unblock Phoenix PR validation builds |  Blocker | . |
+| [PHOENIX-7844](https://issues.apache.org/jira/browse/PHOENIX-7844) | Add Pull Request template with guidelines for generative AI tools |  Minor | . |
 | [PHOENIX-7276](https://issues.apache.org/jira/browse/PHOENIX-7276) | Add REGEXP\_LIKE built-in function |  Major | . |
 | [PHOENIX-7746](https://issues.apache.org/jira/browse/PHOENIX-7746) | Fix flapper test MetaDataCacheMetricsIT.testGlobalClientCacheMetricsOfCreateAndDropTable |  Major | . |
 | [PHOENIX-7766](https://issues.apache.org/jira/browse/PHOENIX-7766) | Generate point lookups while using IS NULL on trailing PK columns |  Major | . |
