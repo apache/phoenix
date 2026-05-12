@@ -59,14 +59,13 @@ public class SyncModeImpl extends ReplicationModeImpl {
     LOG.info("HAGroup {} mode={} got error", logGroup, this, e);
     logGroup.getMetrics().incrementSyncToSafTransitions();
     try {
-      // first update the HAGroupStore state
       logGroup.setHAGroupStatusToStoreAndForward();
     } catch (Exception ex) {
-      // Fatal error when we can't update the HAGroup status
+      // Fatal — can't transition to SAF; throw to let the event handler abort
       String message =
         String.format("HAGroup %s could not update status to STORE_AND_FORWARD", logGroup);
       LOG.error(message, ex);
-      logGroup.abort(message, ex);
+      throw ReplicationLogGroup.asIOException(message, ex);
     }
     return STORE_AND_FORWARD;
   }

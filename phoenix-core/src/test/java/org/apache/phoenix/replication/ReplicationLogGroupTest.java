@@ -263,13 +263,12 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
 
     // sync on the writer will timeout — syncInternal wraps in PhoenixWALSyncTimeoutException
-    // and calls abort() which throws RuntimeException
+    // and calls abort() which rethrows the IOException cause directly
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException because sync timed out");
-    } catch (RuntimeException e) {
-      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
-        e.getCause() instanceof PhoenixWALSyncTimeoutException);
+      fail("Should have thrown PhoenixWALSyncTimeoutException because sync timed out");
+    } catch (PhoenixWALSyncTimeoutException e) {
+      // expected
     }
     // reset
     doNothing().when(innerWriter).sync();
@@ -628,10 +627,9 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException because sync timed out");
-    } catch (RuntimeException e) {
-      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
-        e.getCause() instanceof PhoenixWALSyncTimeoutException);
+      fail("Should have thrown PhoenixWALSyncTimeoutException because sync timed out");
+    } catch (PhoenixWALSyncTimeoutException e) {
+      // expected
     }
 
     // Verify that subsequent operations fail because the log is closed
@@ -719,12 +717,10 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // Try to sync. Should fail after exhausting retries and then switch to STORE_AND_FORWARD
     try {
       logGroup.sync();
-      fail("Should have thrown exception because of failure to update mode");
-    } catch (RuntimeException ex) {
+      fail("Should have thrown IOException because of failure to update mode");
+    } catch (IOException ex) {
       assertTrue(ex.getMessage().contains("Simulated sync failure"));
     }
-    // wait for the event processor thread to clean up
-    Thread.sleep(3);
   }
 
   /**
@@ -975,10 +971,9 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException because sync timed out");
-    } catch (RuntimeException e) {
-      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
-        e.getCause() instanceof PhoenixWALSyncTimeoutException);
+      fail("Should have thrown PhoenixWALSyncTimeoutException because sync timed out");
+    } catch (PhoenixWALSyncTimeoutException e) {
+      // expected
     }
 
     // Verify that subsequent operations fail because the log is closed
@@ -1016,10 +1011,9 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException because sync timed out");
-    } catch (RuntimeException e) {
-      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
-        e.getCause() instanceof PhoenixWALSyncTimeoutException);
+      fail("Should have thrown PhoenixWALSyncTimeoutException because sync timed out");
+    } catch (PhoenixWALSyncTimeoutException e) {
+      // expected
     }
 
     // Verify that subsequent append operations fail because the log is closed
@@ -1057,10 +1051,9 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException because sync timed out");
-    } catch (RuntimeException e) {
-      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
-        e.getCause() instanceof PhoenixWALSyncTimeoutException);
+      fail("Should have thrown PhoenixWALSyncTimeoutException because sync timed out");
+    } catch (PhoenixWALSyncTimeoutException e) {
+      // expected
     }
 
     // Verify that subsequent sync operations fail because the log is closed
@@ -1721,11 +1714,10 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException from abort");
-    } catch (RuntimeException e) {
-      assertTrue("Abort message should mention both SYNC and SAF",
-        e.getMessage().contains("Both SYNC and SAF replication writes failed")
-          || e.getMessage().contains("ABORTING"));
+      fail("Should have thrown IOException from abort");
+    } catch (IOException e) {
+      assertTrue("Abort message should contain sync failure",
+        e.getMessage().contains("Simulated sync failure"));
     }
   }
 
@@ -1763,10 +1755,10 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException from abort");
-    } catch (RuntimeException e) {
+      fail("Should have thrown IOException from abort");
+    } catch (IOException e) {
       assertTrue("Abort should fire from SAF failure path",
-        e.getMessage().contains("ABORTING") || e.getMessage().contains("got error"));
+        e.getMessage().contains("Simulated SAF sync failure"));
     }
   }
 
