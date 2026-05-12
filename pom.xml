@@ -1915,6 +1915,8 @@
             <!-- tmp files -->
             <exclude>dev/work/**</exclude>
             <exclude>dev/artifacts/**</exclude>
+            <!-- GitHub templates -->
+            <exclude>.github/PULL_REQUEST_TEMPLATE</exclude>
           </excludes>
         </configuration>
       </plugin>
