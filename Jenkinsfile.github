@@ -31,7 +31,7 @@ pipeline {
             numToKeepStr: '2',
             artifactNumToKeepStr: '2'
         ))
-        rateLimitBuilds(throttle: [count: 1, durationName: 'day', userBoost: false])
+        rateLimitBuilds(throttle: [count: 1, durationName: 'day', userBoost: true])
         timeout (time: 11, unit: 'HOURS')
         timestamps()
         skipDefaultCheckout()
