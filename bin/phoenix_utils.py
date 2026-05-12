@@ -27,6 +27,8 @@ import subprocess
 import sys
 import xml.etree.ElementTree as ET
 
+zk_tls_args = ""
+
 def find(pattern, classPaths):
     paths = classPaths.split(os.pathsep)
 
