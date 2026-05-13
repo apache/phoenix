@@ -129,20 +129,27 @@ def setPath():
             # Try to provide something valid
             hbase_conf_dir = '.'
 
-    global zk_tls_args
-    root = ET.parse(os.path.join(hbase_conf_dir, "hbase-site.xml")).getroot()
-    zk_hbase_prefix = "hbase.zookeeper.property."
-    zkcfg = {
-        prop.find("name").text[len(zk_hbase_prefix):]: prop.find("value").text
-        for prop in root.findall("property")
-        if prop.find("name").text.startswith(zk_hbase_prefix)
-    }
-    if zkcfg.get('client.secure').lower() == 'true':
-        zk_tls_args = '-Dzookeeper.client.secure=true ' + \
-            '-Dzookeeper.clientCnxnSocket=' + zkcfg['clientCnxnSocket'] + ' ' + \
-            '-Dzookeeper.ssl.trustStore.location=' + zkcfg['ssl.trustStore.location'] + ' ' + \
-            '-Dzookeeper.ssl.trustStore.type=' + zkcfg['ssl.trustStore.type'] + ' ' + \
-            '-Dzookeeper.ssl.trustStore.password=' + zkcfg['ssl.trustStore.password'] + ' '
+    hbase_site_file = os.path.join(hbase_conf_dir, "hbase-site.xml")
+    try:
+        global zk_tls_args
+        root = ET.parse(hbase_site_file).getroot()
+        zk_hbase_prefix = "hbase.zookeeper.property."
+        zkcfg = {
+            prop.find("name").text[len(zk_hbase_prefix):]: prop.find("value").text
+            for prop in root.findall("property")
+            if prop.find("name").text.startswith(zk_hbase_prefix)
+        }
+        if 'client.secure' in zkcfg and zkcfg.get('client.secure').lower() == 'true':
+            zk_tls_args = '-Dzookeeper.client.secure=true ' + \
+                '-Dzookeeper.clientCnxnSocket=' + zkcfg['clientCnxnSocket'] + ' ' + \
+                '-Dzookeeper.ssl.trustStore.location=' + zkcfg['ssl.trustStore.location'] + ' ' + \
+                '-Dzookeeper.ssl.trustStore.type=' + zkcfg['ssl.trustStore.type'] + ' ' + \
+                '-Dzookeeper.ssl.trustStore.password=' + zkcfg['ssl.trustStore.password'] + ' '
+    except Exception as e:
+        sys.exit(
+            "ERROR: Failed to parse ZooKeeper TLS properties from '%s': %s"
+            % (hbase_site_file, repr(e))
+        )
 
     global current_dir
     current_dir = os.path.dirname(os.path.abspath(__file__))
