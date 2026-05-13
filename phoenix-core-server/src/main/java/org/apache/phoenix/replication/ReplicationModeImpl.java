@@ -20,6 +20,8 @@ package org.apache.phoenix.replication;
 import java.io.IOException;
 import org.apache.phoenix.replication.ReplicationLogGroup.Record;
 import org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
@@ -31,6 +33,7 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * </p>
  */
 public abstract class ReplicationModeImpl {
+  private static final Logger LOG = LoggerFactory.getLogger(ReplicationModeImpl.class);
   protected final ReplicationLogGroup logGroup;
 
   // The mode manages the underlying log to which the append and sync events will be sent
@@ -90,5 +93,18 @@ public abstract class ReplicationModeImpl {
     if (log != null) {
       log.close(graceful);
     }
+  }
+
+  protected ReplicationLogGroup.ReplicationMode transitionToStoreAndForward() throws IOException {
+    logGroup.getMetrics().incrementSyncToSafTransitions();
+    try {
+      logGroup.setHAGroupStatusToStoreAndForward();
+    } catch (Exception ex) {
+      String message =
+        String.format("HAGroup %s could not update status to STORE_AND_FORWARD", logGroup);
+      LOG.error(message, ex);
+      throw ReplicationLogGroup.asIOException(message, ex);
+    }
+    return ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
   }
 }

@@ -366,8 +366,8 @@ public class ReplicationLogGroup {
     try {
       return INSTANCES.computeIfAbsent(haGroupName, k -> {
         try {
-          ReplicationLogGroup group =
-            new ReplicationLogGroup(conf, serverName, haGroupName, abortable);
+          ReplicationLogGroup group = new ReplicationLogGroup(conf, serverName, haGroupName,
+            HAGroupStoreManager.getInstance(conf), abortable);
           group.init();
           return group;
         } catch (IOException e) {
@@ -406,28 +406,6 @@ public class ReplicationLogGroup {
     } catch (UncheckedIOException e) {
       throw e.getCause();
     }
-  }
-
-  /**
-   * Protected constructor for ReplicationLogGroup.
-   * @param conf        Configuration object
-   * @param serverName  The server name
-   * @param haGroupName The HA Group name
-   */
-  protected ReplicationLogGroup(Configuration conf, ServerName serverName, String haGroupName) {
-    this(conf, serverName, haGroupName, HAGroupStoreManager.getInstance(conf), null);
-  }
-
-  /**
-   * Protected constructor for ReplicationLogGroup.
-   * @param conf        Configuration object
-   * @param serverName  The server name
-   * @param haGroupName The HA Group name
-   * @param abortable   Abortable to invoke on fatal errors (may be null)
-   */
-  protected ReplicationLogGroup(Configuration conf, ServerName serverName, String haGroupName,
-    Abortable abortable) {
-    this(conf, serverName, haGroupName, HAGroupStoreManager.getInstance(conf), abortable);
   }
 
   /**

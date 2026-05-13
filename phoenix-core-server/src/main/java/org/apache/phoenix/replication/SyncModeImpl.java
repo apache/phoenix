@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.replication;
 
-import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
 
 import java.io.IOException;
@@ -57,17 +56,7 @@ public class SyncModeImpl extends ReplicationModeImpl {
   @Override
   ReplicationMode onFailure(Throwable e) throws IOException {
     LOG.info("HAGroup {} mode={} got error", logGroup, this, e);
-    logGroup.getMetrics().incrementSyncToSafTransitions();
-    try {
-      logGroup.setHAGroupStatusToStoreAndForward();
-    } catch (Exception ex) {
-      // Fatal — can't transition to SAF; throw to let the event handler abort
-      String message =
-        String.format("HAGroup %s could not update status to STORE_AND_FORWARD", logGroup);
-      LOG.error(message, ex);
-      throw ReplicationLogGroup.asIOException(message, ex);
-    }
-    return STORE_AND_FORWARD;
+    return transitionToStoreAndForward();
   }
 
   @Override
