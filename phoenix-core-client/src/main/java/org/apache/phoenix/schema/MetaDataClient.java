@@ -195,6 +195,7 @@ import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.phoenix.compile.BsonPathCanonicalizer;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexExpressionCompiler;
@@ -293,6 +294,7 @@ import org.apache.phoenix.transaction.PhoenixTransactionContext;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.transaction.TransactionFactory.Provider;
+import org.apache.phoenix.util.BsonIndexUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.ClientUtil;
@@ -1725,6 +1727,17 @@ public class MetaDataClient {
         ParseNode parseNode = pair.getFirst();
         // normalize the parse node
         parseNode = StatementNormalizer.normalize(parseNode, resolver);
+        if (BsonIndexUtil.containsBsonExpression(parseNode)) {
+          if (
+            !connection.getQueryServices().getProps().getBoolean(
+              QueryServices.BSON_INDEX_ENABLED_ATTRIB,
+              QueryServicesOptions.DEFAULT_BSON_INDEX_ENABLED)
+          ) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.BSON_INDEX_DISABLED).build()
+              .buildException();
+          }
+          parseNode = BsonPathCanonicalizer.rewrite(parseNode);
+        }
         // compile the parseNode to get an expression
         expressionIndexCompiler.reset();
         Expression expression = parseNode.accept(expressionIndexCompiler);
