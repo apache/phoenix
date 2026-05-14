@@ -125,6 +125,7 @@ import static org.apache.phoenix.query.QueryServices.TRANSACTIONS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING;
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.BSON_INDEX_ENABLED_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.BSON_INDEX_REWRITE_ENABLED_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
@@ -179,6 +180,7 @@ public class QueryServicesOptions {
   public static final int DEFAULT_HBASE_CLIENT_KEYVALUE_MAXSIZE = 10485760; // 10 Mb
   public static final boolean DEFAULT_USE_INDEXES = true; // Use indexes
   public static final boolean DEFAULT_BSON_INDEX_ENABLED = true;
+  public static final boolean DEFAULT_BSON_INDEX_REWRITE_ENABLED = true;
   public static final boolean DEFAULT_IMMUTABLE_ROWS = false; // Tables rows may be updated
   public static final boolean DEFAULT_DROP_METADATA = true; // Drop meta data also.
   public static final long DEFAULT_DRIVER_SHUTDOWN_TIMEOUT_MS = 5 * 1000; // Time to wait in
@@ -817,6 +819,11 @@ public class QueryServicesOptions {
 
   public boolean isBsonIndexEnabled() {
     return config.getBoolean(BSON_INDEX_ENABLED_ATTRIB, DEFAULT_BSON_INDEX_ENABLED);
+  }
+
+  public boolean isBsonIndexRewriteEnabled() {
+    return config.getBoolean(BSON_INDEX_REWRITE_ENABLED_ATTRIB,
+      DEFAULT_BSON_INDEX_REWRITE_ENABLED);
   }
 
   public boolean isImmutableRows() {

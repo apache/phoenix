@@ -114,6 +114,8 @@ public interface QueryServices extends SQLCloseable {
 
   public static final String USE_INDEXES_ATTRIB = "phoenix.query.useIndexes";
   public static final String BSON_INDEX_ENABLED_ATTRIB = "phoenix.index.bson.enabled";
+  public static final String BSON_INDEX_REWRITE_ENABLED_ATTRIB =
+    "phoenix.index.bson.rewrite.enabled";
   @Deprecated // use the IMMUTABLE keyword while creating the table
   public static final String IMMUTABLE_ROWS_ATTRIB = "phoenix.mutate.immutableRows";
   public static final String INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB =

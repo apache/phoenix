@@ -30,6 +30,8 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.types.PDataType;
@@ -44,11 +46,15 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
 
   private final Map<ParseNode, ParseNode> indexedParseNodeToColumnParseNodeMap;
+  private final boolean canonicalizeBson;
 
   public IndexExpressionParseNodeRewriter(PTable index, String alias, PhoenixConnection connection,
     Map<String, UDFParseNode> udfParseNodes) throws SQLException {
     indexedParseNodeToColumnParseNodeMap =
       Maps.newHashMapWithExpectedSize(index.getColumns().size());
+    this.canonicalizeBson = connection.getQueryServices().getProps().getBoolean(
+      QueryServices.BSON_INDEX_REWRITE_ENABLED_ATTRIB,
+      QueryServicesOptions.DEFAULT_BSON_INDEX_REWRITE_ENABLED);
     NamedTableNode tableNode =
       NamedTableNode.create(alias, TableName.create(index.getParentSchemaName().getString(),
         index.getParentTableName().getString()), Collections.<ColumnDef> emptyList());
@@ -63,7 +69,9 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
       PColumn column = pkColumns.get(i);
       String expressionStr = IndexUtil.getIndexColumnExpressionStr(column);
       ParseNode expressionParseNode = SQLParser.parseCondition(expressionStr);
-      expressionParseNode = BsonPathCanonicalizer.rewrite(expressionParseNode);
+      if (canonicalizeBson) {
+        expressionParseNode = BsonPathCanonicalizer.rewrite(expressionParseNode);
+      }
       String colName = "\"" + column.getName().getString() + "\"";
       Expression dataExpression = expressionParseNode.accept(expressionCompiler);
       PDataType expressionDataType = dataExpression.getDataType();
@@ -83,14 +91,16 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
   protected ParseNode leaveCompoundNode(CompoundParseNode node, List<ParseNode> children,
     CompoundNodeFactory factory) {
     ParseNode candidate = node;
-    try {
-      ParseNode canonical = BsonPathCanonicalizer.rewrite(node);
-      if (canonical != null) {
-        candidate = canonical;
+    if (canonicalizeBson) {
+      try {
+        ParseNode canonical = BsonPathCanonicalizer.rewrite(node);
+        if (canonical != null) {
+          candidate = canonical;
+        }
+      } catch (SQLException ignored) {
+        // canonicalizer should not throw on well-formed input; if it does, fall back to the
+        // original node and let the existing matcher do its thing.
       }
-    } catch (SQLException ignored) {
-      // canonicalizer should not throw on well-formed input; if it does, fall back to the
-      // original node and let the existing matcher do its thing.
     }
     if (indexedParseNodeToColumnParseNodeMap.containsKey(candidate)) {
       return indexedParseNodeToColumnParseNodeMap.get(candidate);
