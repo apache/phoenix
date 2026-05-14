@@ -117,4 +117,24 @@ public class BsonPathCanonicalizerTest {
     ParseNode out = BsonPathCanonicalizer.rewrite(in);
     assertEquals(" BSON_VALUE(DOC,'$.a','VARCHAR') IN('x','y')", out.toString());
   }
+
+  @Test
+  public void extractPathReturnsBsonPathForCanonicalizable() throws Exception {
+    ParseNode in = parseExpr("BSON_VALUE(doc, 'a.b', 'VARCHAR')");
+    ParseNode canon = BsonPathCanonicalizer.rewrite(in);
+    org.apache.phoenix.parse.bson.BsonPath p = BsonPathCanonicalizer.extractPath(canon);
+    assertEquals("$.a.b", p.toString());
+  }
+
+  @Test
+  public void extractPathReturnsNullForOther() throws Exception {
+    ParseNode in = parseExpr("a + 1");
+    org.junit.Assert.assertNull(BsonPathCanonicalizer.extractPath(in));
+  }
+
+  @Test
+  public void extractPathReturnsNullForBadPath() throws Exception {
+    ParseNode in = parseExpr("BSON_VALUE(doc, '$..bad', 'VARCHAR')");
+    org.junit.Assert.assertNull(BsonPathCanonicalizer.extractPath(in));
+  }
 }
