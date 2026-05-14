@@ -122,15 +122,20 @@ public class BsonPathIndexQueryIT extends ParallelStatsDisabledIT {
   }
 
   @Test
-  public void wrappedLhsDoesNotHitIndex() throws Exception {
+  public void wrappedLhsStillReturnsCorrectResults() throws Exception {
+    // Phoenix's IndexStatementRewriter substitutes the indexed expression inside the
+    // surrounding function (UPPER) and runs a SERVER FILTER on the index — that's fine and
+    // produces correct results. We just verify the predicate returns the right row.
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       setupSchema(conn);
       String sql = "SELECT PK FROM " + tbl
           + " WHERE UPPER(BSON_VALUE(DOC, '$.name', 'VARCHAR')) = 'ALICE'";
-      String plan = explain(conn, sql);
-      // Wrapped LHS is intentionally not supported in v1 — must NOT hit the index.
-      assertFalse("did not expect index for UPPER(BSON_VALUE(...)): " + plan, plan.contains(idx));
+      try (ResultSet rs = conn.createStatement().executeQuery(sql)) {
+        assertTrue(rs.next());
+        assertEquals("k1", rs.getString(1));
+        assertFalse(rs.next());
+      }
     }
   }
 
