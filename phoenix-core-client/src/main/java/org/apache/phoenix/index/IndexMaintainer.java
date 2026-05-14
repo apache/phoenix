@@ -863,6 +863,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
             if (BsonIndexUtil.isBsonPathExpressionMissing(expression)) {
               // Sparse BSON-path index: missing path -> no index entry for this row.
+              org.apache.phoenix.monitoring.BsonPathMetrics.incrementSparseSkips();
               return null;
             }
           }
