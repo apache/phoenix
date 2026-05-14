@@ -72,4 +72,25 @@ public class BsonPathCanonicalizerTest {
     ParseNode out = BsonPathCanonicalizer.rewrite(in);
     assertEquals(in.toString(), out.toString());
   }
+
+  @Test
+  public void jsonValueRewritesToBsonValueVarchar() throws Exception {
+    ParseNode in = parseExpr("JSON_VALUE(doc, '$.a.b')");
+    ParseNode out = BsonPathCanonicalizer.rewrite(in);
+    assertEquals(" BSON_VALUE(DOC,'$.a.b','VARCHAR')", out.toString());
+  }
+
+  @Test
+  public void jsonValueWithBarePath() throws Exception {
+    ParseNode in = parseExpr("JSON_VALUE(doc, 'a.b')");
+    ParseNode out = BsonPathCanonicalizer.rewrite(in);
+    assertEquals(" BSON_VALUE(DOC,'$.a.b','VARCHAR')", out.toString());
+  }
+
+  @Test
+  public void jsonValueWithUnsupportedPathLeftAlone() throws Exception {
+    ParseNode in = parseExpr("JSON_VALUE(doc, '$.*')");
+    ParseNode out = BsonPathCanonicalizer.rewrite(in);
+    assertEquals(in.toString(), out.toString());
+  }
 }

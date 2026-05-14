@@ -62,6 +62,30 @@ public final class BsonPathCanonicalizer {
     @Override
     public ParseNode visitLeave(FunctionParseNode node, List<ParseNode> children)
         throws SQLException {
+      if ("JSON_VALUE".equalsIgnoreCase(node.getName())) {
+        if (children.size() != 2) {
+          return super.visitLeave(node, children);
+        }
+        ParseNode pathArg = children.get(1);
+        if (!(pathArg instanceof LiteralParseNode)) {
+          return super.visitLeave(node, children);
+        }
+        Object pathVal = ((LiteralParseNode) pathArg).getValue();
+        if (!(pathVal instanceof String)) {
+          return super.visitLeave(node, children);
+        }
+        BsonPath path;
+        try {
+          path = BsonPathParser.parse((String) pathVal);
+        } catch (BsonPathSyntaxException unsupported) {
+          return super.visitLeave(node, children);
+        }
+        List<ParseNode> rewritten = new ArrayList<>(BSON_VALUE_INDEXABLE_ARITY);
+        rewritten.add(children.get(0));
+        rewritten.add(new LiteralParseNode(path.toString(), PVarchar.INSTANCE));
+        rewritten.add(new LiteralParseNode("VARCHAR", PVarchar.INSTANCE));
+        return FACTORY.function(BSON_VALUE_NAME, rewritten);
+      }
       if (!BSON_VALUE_NAME.equalsIgnoreCase(node.getName())) {
         return super.visitLeave(node, children);
       }
