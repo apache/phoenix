@@ -269,16 +269,27 @@ public class DeleteCompiler {
           PTable otherTable = otherTableRefs.get(i).getTable();
           ImmutableBytesPtr otherRowKeyPtr = new ImmutableBytesPtr(); // allocate new as this is a
                                                                       // key in a Map
+          byte[] computedKey;
           // Translate the data table row to the index table row
           if (table.getType() == PTableType.INDEX) {
             otherRowKeyPtr.set(scannedIndexMaintainer.buildDataRowKey(rowKeyPtr, viewConstants));
             if (otherTable.getType() == PTableType.INDEX) {
-              otherRowKeyPtr.set(maintainers[i].buildRowKey(getter, otherRowKeyPtr, null, null,
-                rs.getCurrentRow().getValue(0).getTimestamp()));
+              computedKey = maintainers[i].buildRowKey(getter, otherRowKeyPtr, null, null,
+                rs.getCurrentRow().getValue(0).getTimestamp());
+              if (computedKey == null) {
+                // Sparse BSON-path index: no index entry exists for this data row, skip delete.
+                continue;
+              }
+              otherRowKeyPtr.set(computedKey);
             }
           } else {
-            otherRowKeyPtr.set(maintainers[i].buildRowKey(getter, rowKeyPtr, null, null,
-              rs.getCurrentRow().getValue(0).getTimestamp()));
+            computedKey = maintainers[i].buildRowKey(getter, rowKeyPtr, null, null,
+              rs.getCurrentRow().getValue(0).getTimestamp());
+            if (computedKey == null) {
+              // Sparse BSON-path index: no index entry exists for this data row, skip delete.
+              continue;
+            }
+            otherRowKeyPtr.set(computedKey);
           }
           otherMutations.get(i).put(otherRowKeyPtr,
             new RowMutationState(PRow.DELETE_MARKER, 0,

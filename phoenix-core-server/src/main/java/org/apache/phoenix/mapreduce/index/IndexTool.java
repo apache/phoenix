@@ -1126,6 +1126,10 @@ public class IndexTool extends Configured implements Tool {
         // regionStart/EndKey only needed for local indexes, so we pass null
         byte[] indexRowKey = maintainer.buildRowKey(getter, dataRowKeyPtr, null, null,
           rs.getCurrentRow().getValue(0).getTimestamp());
+        if (indexRowKey == null) {
+          // Sparse BSON-path index: skip rows that have no index entry.
+          continue;
+        }
         histo.addValue(indexRowKey);
       }
       List<Bucket> buckets = histo.computeBuckets();

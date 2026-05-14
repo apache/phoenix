@@ -1258,6 +1258,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     ValueGetter dataRowVG = new IndexUtil.SimpleValueGetter(dataRowState);
     byte[] indexRowKey =
       indexMaintainer.buildRowKey(dataRowVG, rowKeyPtr, null, null, ts, encodedRegionName);
+    if (indexRowKey == null) {
+      // Sparse BSON-path index: prior data row had no index entry, so nothing to delete.
+      return null;
+    }
     return indexMaintainer.buildRowDeleteMutation(indexRowKey,
       IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
   }
@@ -1275,25 +1279,33 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
           nextDataRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName);
+        boolean sparseSkippedNewRow = false;
         if (indexPut == null) {
-          // No covered column. Just prepare an index row with the empty column
+          // Either (a) no covered column => synthesise an empty-column-only index row, or
+          // (b) sparse BSON-path index => no index entry for this data row.
           byte[] indexRowKey = indexMaintainer.buildRowKey(nextDataRowVG, rowKeyPtr, null, null, ts,
             encodedRegionName);
-          indexPut = new Put(indexRowKey);
+          if (indexRowKey == null) {
+            sparseSkippedNewRow = true;
+          } else {
+            indexPut = new Put(indexRowKey);
+          }
         } else {
           IndexUtil.removeEmptyColumn(indexPut,
             indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
             indexMaintainer.getEmptyKeyValueQualifier());
         }
-        byte[] finalEmptyColumnValue =
-          indexMaintainer.isUncovered() ? QueryConstants.UNVERIFIED_BYTES : emptyColumnValue;
-        indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
-          indexMaintainer.getEmptyKeyValueQualifier(), ts, finalEmptyColumnValue);
-        indexUpdates.put(hTableInterfaceReference, indexPut);
-        if (!ignoreWritingDeleteColumnsToIndex) {
-          Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
-          if (deleteColumn != null) {
-            indexUpdates.put(hTableInterfaceReference, deleteColumn);
+        if (!sparseSkippedNewRow) {
+          byte[] finalEmptyColumnValue =
+            indexMaintainer.isUncovered() ? QueryConstants.UNVERIFIED_BYTES : emptyColumnValue;
+          indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+            indexMaintainer.getEmptyKeyValueQualifier(), ts, finalEmptyColumnValue);
+          indexUpdates.put(hTableInterfaceReference, indexPut);
+          if (!ignoreWritingDeleteColumnsToIndex) {
+            Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
+            if (deleteColumn != null) {
+              indexUpdates.put(hTableInterfaceReference, deleteColumn);
+            }
           }
         }
         // Delete the current index row if the new index key is different from the
@@ -1302,9 +1314,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
           byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG,
             rowKeyPtr, null, null, ts, encodedRegionName);
-          if (
+          if (indexRowKeyForCurrentDataRow == null) {
+            // Prior data row had no index entry (sparse skip); nothing to delete.
+          } else if (
             !indexMaintainer.isCDCIndex()
-              && Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0
+              && (sparseSkippedNewRow
+                || Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0)
           ) {
             Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
               IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
@@ -1322,11 +1337,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           Put cdcDataRowState = new Put(currentDataRowState.getRow());
           cdcDataRowState.addColumn(indexMaintainer.getDataEmptyKeyValueCF(),
             indexMaintainer.getEmptyKeyValueQualifierForDataTable(), ts, ByteUtil.EMPTY_BYTE_ARRAY);
-          indexUpdates.put(hTableInterfaceReference, getDeleteIndexMutation(cdcDataRowState,
-            indexMaintainer, ts, rowKeyPtr, encodedRegionName));
+          Mutation cdcDel = getDeleteIndexMutation(cdcDataRowState, indexMaintainer, ts, rowKeyPtr,
+            encodedRegionName);
+          if (cdcDel != null) {
+            indexUpdates.put(hTableInterfaceReference, cdcDel);
+          }
         } else {
-          indexUpdates.put(hTableInterfaceReference, getDeleteIndexMutation(currentDataRowState,
-            indexMaintainer, ts, rowKeyPtr, encodedRegionName));
+          Mutation del = getDeleteIndexMutation(currentDataRowState, indexMaintainer, ts, rowKeyPtr,
+            encodedRegionName);
+          if (del != null) {
+            indexUpdates.put(hTableInterfaceReference, del);
+          }
         }
       }
     }

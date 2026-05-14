@@ -584,6 +584,10 @@ public class TransformMaintainer extends IndexMaintainer {
     boolean verified, byte[] encodedRegionName) throws IOException {
     byte[] newRowKey = this.buildRowKey(valueGetter, oldRowKeyPtr, regionStartKey, regionEndKey, ts,
       encodedRegionName);
+    if (newRowKey == null) {
+      // Sparse BSON-path index: no entry for this row.
+      return null;
+    }
     return buildUpdateMutation(kvBuilder, valueGetter, oldRowKeyPtr, ts, regionStartKey,
       regionEndKey, newRowKey, this.getEmptyKeyValueFamily(), coveredColumnsMap,
       newTableEmptyKeyValueRef, newTableWALDisabled, oldTableImmutableStorageScheme,

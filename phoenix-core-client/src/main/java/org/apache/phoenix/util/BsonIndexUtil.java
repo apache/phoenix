@@ -51,4 +51,15 @@ public final class BsonIndexUtil {
   public static boolean isBsonPathExpression(Expression expression) {
     return expression instanceof BsonValueFunction;
   }
+
+  /**
+   * After {@link Expression#evaluate} has been called on the given expression, returns true if the
+   * expression is a BSON-path expression whose path resolved to a missing field. Used by the index
+   * write path to implement sparse-skip semantics. Returns false for non-BSON expressions or when
+   * the path resolved to a value.
+   */
+  public static boolean isBsonPathExpressionMissing(Expression expression) {
+    return expression instanceof BsonValueFunction
+        && ((BsonValueFunction) expression).lastEvaluationWasMissingPath();
+  }
 }

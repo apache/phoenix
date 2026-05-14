@@ -77,6 +77,14 @@ public class BsonValueFunction extends ScalarFunction {
 
   static final String DEFAULT_VALUE = "null";
 
+  /**
+   * True iff the most recent {@link #evaluate(Tuple, ImmutableBytesWritable)} call resolved the
+   * path to a missing field — i.e. it took the {@code bsonValue == null} branch and returned the
+   * default value. Consumers (notably the IndexMaintainer write path) consult this to implement
+   * sparse-index semantics.
+   */
+  private transient boolean lastMissing;
+
   public BsonValueFunction() {
     // no-op
   }
@@ -85,6 +93,14 @@ public class BsonValueFunction extends ScalarFunction {
     super(children);
     Preconditions.checkNotNull(getChildren().get(1));
     Preconditions.checkNotNull(getChildren().get(2));
+  }
+
+  /**
+   * Returns whether the previous {@link #evaluate(Tuple, ImmutableBytesWritable)} call observed a
+   * missing BSON path. Resets on each {@code evaluate} call.
+   */
+  public boolean lastEvaluationWasMissingPath() {
+    return lastMissing;
   }
 
   private PDataType<?> getPDataType() {
@@ -99,6 +115,7 @@ public class BsonValueFunction extends ScalarFunction {
 
   @Override
   public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+    lastMissing = false;
     if (!getChildren().get(0).evaluate(tuple, ptr)) {
       return false;
     }
@@ -126,6 +143,7 @@ public class BsonValueFunction extends ScalarFunction {
     BsonValue bsonValue =
       CommonComparisonExpressionUtils.getFieldFromDocument(documentFieldKey, rawBsonDocument);
     if (bsonValue == null) {
+      lastMissing = true;
       returnDefaultValue(ptr, bsonValueDataType);
       return true;
     }

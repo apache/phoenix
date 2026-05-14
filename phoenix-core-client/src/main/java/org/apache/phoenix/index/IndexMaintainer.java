@@ -114,6 +114,7 @@ import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.BitSet;
+import org.apache.phoenix.util.BsonIndexUtil;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
@@ -860,6 +861,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             ptr.set(encodedRegionName);
           } else {
             expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
+            if (BsonIndexUtil.isBsonPathExpressionMissing(expression)) {
+              // Sparse BSON-path index: missing path -> no index entry for this row.
+              return null;
+            }
           }
         } else {
           Field field = dataRowKeySchema.getField(dataPkPosition[i]);
@@ -1086,6 +1091,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       return false;
     }
     byte[] builtIndexRowKey = getIndexRowKey(dataRow);
+    if (builtIndexRowKey == null) {
+      // Sparse BSON-path index: this data row has no index entry, so it cannot match.
+      return false;
+    }
     if (
       Bytes.compareTo(builtIndexRowKey, 0, builtIndexRowKey.length, indexRowKey, 0,
         indexRowKey.length) != 0
@@ -1328,6 +1337,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     boolean verified, byte[] encodedRegionName) throws IOException {
     byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey,
       ts, encodedRegionName);
+    if (indexRowKey == null) {
+      // Sparse BSON-path index: no index entry for this data row.
+      return null;
+    }
     return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey,
       regionEndKey, indexRowKey, this.getEmptyKeyValueFamily(), coveredColumnsMap,
       indexEmptyKeyValueRef, indexWALDisabled, dataImmutableStorageScheme, immutableStorageScheme,
@@ -1728,6 +1741,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     byte[] regionStartKey, byte[] regionEndKey, byte[] encodedRegionName) throws IOException {
     byte[] indexRowKey = this.buildRowKey(oldState, dataRowKeyPtr, regionStartKey, regionEndKey, ts,
       encodedRegionName);
+    if (indexRowKey == null) {
+      // Sparse BSON-path index: prior data row had no index entry, so nothing to delete.
+      return null;
+    }
     // Delete the entire row if any of the indexed columns changed
     DeleteType deleteType = null;
     if (

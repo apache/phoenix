@@ -1223,6 +1223,10 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
       // No covered column. Just prepare an index row with the empty column
       byte[] indexRowKey =
         indexMaintainer.buildRowKey(mergedRowVG, rowKeyPtr, null, null, ts, encodedRegionName);
+      if (indexRowKey == null) {
+        // Sparse BSON-path index: skip emitting a row for this data row.
+        return null;
+      }
       indexPut = new Put(indexRowKey);
     } else {
       IndexUtil.removeEmptyColumn(indexPut,
@@ -1374,6 +1378,18 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
           ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRow);
           Put indexPut = prepareIndexPutForRebuild(indexMaintainer, rowKeyPtr, nextDataRowVG, ts,
             encodedRegionName);
+          if (indexPut == null) {
+            // Sparse BSON-path index: no index entry for this data row. If the previous data row
+            // had one, emit a delete to remove it; otherwise just advance and continue.
+            if (indexRowKeyForCurrentDataRow != null) {
+              Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+                IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+              indexMutations.add(del);
+            }
+            currentDataRowState = nextDataRow;
+            indexRowKeyForCurrentDataRow = null;
+            continue;
+          }
           indexMutations.add(indexPut);
           Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
           if (deleteColumn != null) {
@@ -1416,8 +1432,11 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
               // CDC Index needs two delete markers one for deleting the index row,
               // and the other for referencing the data table delete mutation with
               // the right index row key, that is, the index row key starting with ts
-              indexMutations.add(IndexRegionObserver.getDeleteIndexMutation(currentDataRowState,
-                indexMaintainer, ts, rowKeyPtr, encodedRegionName));
+              Mutation cdcDel = IndexRegionObserver.getDeleteIndexMutation(currentDataRowState,
+                indexMaintainer, ts, rowKeyPtr, encodedRegionName);
+              if (cdcDel != null) {
+                indexMutations.add(cdcDel);
+              }
             }
           }
           currentDataRowState = null;
@@ -1434,6 +1453,17 @@ public abstract class GlobalIndexRegionScanner extends BaseRegionScanner {
           ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
           Put indexPut = prepareIndexPutForRebuild(indexMaintainer, rowKeyPtr, nextDataRowVG, ts,
             encodedRegionName);
+          if (indexPut == null) {
+            // Sparse BSON-path index: post-delete data row has no index entry. Drop the prior
+            // index row if there was one.
+            if (indexRowKeyForCurrentDataRow != null) {
+              Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+                IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+              indexMutations.add(del);
+              indexRowKeyForCurrentDataRow = null;
+            }
+            continue;
+          }
           indexMutations.add(indexPut);
           Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
           if (deleteColumn != null) {
