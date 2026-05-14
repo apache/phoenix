@@ -158,27 +158,55 @@ public class PhoenixSyncTableCheckpointOutputRow {
    * contract to ensure consistency between formatting (in mapper) and parsing (in tests).
    */
   public static class CounterFormatter {
-    private static final String FORMAT_CHUNK = "%s=%d,%s=%d,%s=%d,%s=%d";
+    private static final String FORMAT_CHUNK =
+      "%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d";
     private static final String FORMAT_MAPPER = "%s=%d,%s=%d,%s=%d,%s=%d";
 
     /**
-     * Formats chunk counters as comma-separated key=value pairs. Always emits all four
-     * counters; for verify-only chunks (no repair) {@code rowsPut} and {@code rowsDeleted}
-     * are 0 so operators querying the checkpoint table see a uniform format.
-     * @param sourceRows  Source rows processed
-     * @param targetRows  Target rows processed
-     * @param rowsPut     Rows put to target during repair (0 if not repaired)
-     * @param rowsDeleted Rows deleted from target during repair (0 if not repaired)
-     * @return Formatted string: "SOURCE_ROWS_PROCESSED=...,TARGET_ROWS_PROCESSED=...,
-     *         ROWS_PUT_TO_TARGET=...,ROWS_DELETED_FROM_TARGET=..."
+     * Formats chunk counters as comma-separated key=value pairs. Always emits all eight
+     * counters; for verify-only chunks (no repair) the six drift counters are 0 so
+     * operators querying the checkpoint table see a uniform format.
+     *
+     * Drift signals partition into two layers:
+     *   row-level  — whole row missing or extra on target, or unrepairable (target row is
+     *                entirely tombstones — HBase cannot remove tombstones, only major
+     *                compaction does)
+     *   cell-level — for rows present on both clusters, individual cells missing, extra,
+     *                or differing in value at matching coordinates
+     * The two layers are disjoint per row: a row drift case contributes only to row
+     * counters; a cell drift case contributes only to cell counters.
+     *
+     * @param sourceRows         Source rows processed
+     * @param targetRows         Target rows processed
+     * @param rowsMissingOnTarget Rows present on source but missing on target (0 if not
+     *                            repaired)
+     * @param rowsExtraOnTarget  Rows present on target but missing on source whose live
+     *                           cells repair tombstoned (0 if not repaired)
+     * @param rowsCannotRepair   Rows present on target but missing on source whose contents
+     *                           are entirely tombstones — repair cannot act on them and an
+     *                           operator-driven major compaction is required to make the
+     *                           verifier converge under {@code --raw-scan}
+     * @param cellsMissingOnTarget Cells (across rows present on both sides) that source had
+     *                             at coordinates target lacked (0 if not repaired)
+     * @param cellsExtraOnTarget  Cells (across rows present on both sides) that target had
+     *                            at coordinates source lacked (0 if not repaired)
+     * @param cellsDifferentOnTarget Cells (across rows present on both sides) at matching
+     *                               coordinates whose values differed (0 if not repaired)
+     * @return Formatted string with all eight counters
      */
-    public static String formatChunk(long sourceRows, long targetRows, long rowsPut,
-      long rowsDeleted) {
+    public static String formatChunk(long sourceRows, long targetRows, long rowsMissingOnTarget,
+      long rowsExtraOnTarget, long rowsCannotRepair, long cellsMissingOnTarget,
+      long cellsExtraOnTarget, long cellsDifferentOnTarget) {
       return String.format(FORMAT_CHUNK,
         PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRows,
         PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows,
-        PhoenixSyncTableMapper.SyncCounters.ROWS_PUT_TO_TARGET.name(), rowsPut,
-        PhoenixSyncTableMapper.SyncCounters.ROWS_DELETED_FROM_TARGET.name(), rowsDeleted);
+        PhoenixSyncTableMapper.SyncCounters.ROWS_MISSING_ON_TARGET.name(), rowsMissingOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_EXTRA_ON_TARGET.name(), rowsExtraOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_CANNOT_REPAIR.name(), rowsCannotRepair,
+        PhoenixSyncTableMapper.SyncCounters.CELLS_MISSING_ON_TARGET.name(), cellsMissingOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.CELLS_EXTRA_ON_TARGET.name(), cellsExtraOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.CELLS_DIFFERENT_ON_TARGET.name(),
+        cellsDifferentOnTarget);
     }
 
     /**

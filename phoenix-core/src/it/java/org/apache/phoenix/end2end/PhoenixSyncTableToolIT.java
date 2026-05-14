@@ -192,16 +192,39 @@ public class PhoenixSyncTableToolIT {
     long mappersRepaired = repairCounters.findCounter(SyncCounters.MAPPERS_REPAIRED).getValue();
     long mappersRepairFailed =
       repairCounters.findCounter(SyncCounters.MAPPERS_REPAIR_FAILED).getValue();
-    long rowsPutToTarget = repairCounters.findCounter(SyncCounters.ROWS_PUT_TO_TARGET).getValue();
-    long rowsDeletedFromTarget =
-      repairCounters.findCounter(SyncCounters.ROWS_DELETED_FROM_TARGET).getValue();
+    long rowsMissingOnTarget =
+      repairCounters.findCounter(SyncCounters.ROWS_MISSING_ON_TARGET).getValue();
+    long rowsExtraOnTarget =
+      repairCounters.findCounter(SyncCounters.ROWS_EXTRA_ON_TARGET).getValue();
+    long rowsCannotRepair =
+      repairCounters.findCounter(SyncCounters.ROWS_CANNOT_REPAIR).getValue();
+    long cellsMissingOnTarget =
+      repairCounters.findCounter(SyncCounters.CELLS_MISSING_ON_TARGET).getValue();
+    long cellsExtraOnTarget =
+      repairCounters.findCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).getValue();
+    long cellsDifferentOnTarget =
+      repairCounters.findCounter(SyncCounters.CELLS_DIFFERENT_ON_TARGET).getValue();
     assertEquals("All 3 mismatched chunks should be repaired", 3, chunksRepaired);
     assertEquals("No chunk repair should fail", 0, chunksRepairFailed);
     assertEquals("All 3 mismatched mapper regions should be repaired", 3, mappersRepaired);
     assertEquals("No mapper repair should fail", 0, mappersRepairFailed);
-    assertEquals("Three rows on target should be Put back to source values", 3, rowsPutToTarget);
-    assertEquals("No rows should be deleted from target (only value diffs, not extras)", 0,
-      rowsDeletedFromTarget);
+    // The three drifted rows exist on both clusters (only NAME values were modified on
+    // target via separate upserts, producing cells at different timestamps), so all drift
+    // is cell-level — no whole-row missing or extra signals.
+    assertEquals("No whole rows should be missing on target", 0, rowsMissingOnTarget);
+    assertEquals("No whole rows should be extra on target", 0, rowsExtraOnTarget);
+    assertEquals("No rows should be unrepairable (target has no all-tombstone rows)", 0,
+      rowsCannotRepair);
+    // Each modified row contributes at least one missing cell (source's original NAME at
+    // its original timestamp) and one extra cell (target's modified NAME at the new
+    // timestamp). cellsDifferent stays 0 because the modifications wrote at new timestamps
+    // rather than overwriting at the same coordinates.
+    assertTrue("Source-only cells across the 3 drifted rows should be detected, got "
+      + cellsMissingOnTarget, cellsMissingOnTarget >= 3);
+    assertTrue("Target-only cells across the 3 drifted rows should be detected, got "
+      + cellsExtraOnTarget, cellsExtraOnTarget >= 3);
+    assertEquals("No same-coord value diffs (modifications wrote at new timestamps)", 0,
+      cellsDifferentOnTarget);
 
     // Target rows should now match source.
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);

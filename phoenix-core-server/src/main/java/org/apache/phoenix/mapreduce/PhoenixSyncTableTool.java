@@ -429,19 +429,31 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
       long targetRowsProcessed =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED).getValue();
-      long rowsPutToTarget =
-        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_PUT_TO_TARGET).getValue();
-      long rowsDeletedFromTarget = counters
-        .findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_DELETED_FROM_TARGET).getValue();
+      long rowsMissingOnTarget = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_MISSING_ON_TARGET).getValue();
+      long rowsExtraOnTarget = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_EXTRA_ON_TARGET).getValue();
+      long rowsCannotRepair = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_CANNOT_REPAIR).getValue();
+      long cellsMissingOnTarget = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.CELLS_MISSING_ON_TARGET).getValue();
+      long cellsExtraOnTarget = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.CELLS_EXTRA_ON_TARGET).getValue();
+      long cellsDifferentOnTarget = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.CELLS_DIFFERENT_ON_TARGET).getValue();
       LOGGER.info(
         "PhoenixSyncTable job completed, gathered counters are \n Task Created: {}, \n Verified Mappers: {}, \n"
           + "Mismatched Mappers: {}, \n Repaired Mappers: {}, \n Repair Failed Mappers: {}, \n"
           + "Chunks Verified: {}, \n Chunks Mismatched: {}, \n Chunks Repaired: {}, \n"
           + "Chunks Repair Failed: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}, \n"
-          + "Rows Put To Target: {}, \n Rows Deleted From Target: {}",
+          + "Rows Missing On Target: {}, \n Rows Extra On Target: {}, \n"
+          + "Rows Cannot Repair: {}, \n"
+          + "Cells Missing On Target: {}, \n Cells Extra On Target: {}, \n"
+          + "Cells Different On Target: {}",
         taskCreated, verifiedMappers, mismatchedMappers, repairedMappers, repairFailedMappers,
         chunksVerified, chunksMismatched, chunksRepaired, chunksRepairFailed, sourceRowsProcessed,
-        targetRowsProcessed, rowsPutToTarget, rowsDeletedFromTarget);
+        targetRowsProcessed, rowsMissingOnTarget, rowsExtraOnTarget, rowsCannotRepair,
+        cellsMissingOnTarget, cellsExtraOnTarget, cellsDifferentOnTarget);
     } else {
       LOGGER.warn("Unable to retrieve job counters for table {} - job may have failed "
         + "during initialization", qTable);
