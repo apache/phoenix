@@ -93,4 +93,28 @@ public class BsonPathCanonicalizerTest {
     ParseNode out = BsonPathCanonicalizer.rewrite(in);
     assertEquals(in.toString(), out.toString());
   }
+
+  @Test
+  public void canonicalizesInsideEquality() throws Exception {
+    ParseNode in = parseExpr("BSON_VALUE(doc, 'a.b', 'varchar') = 'x'");
+    ParseNode out = BsonPathCanonicalizer.rewrite(in);
+    assertEquals(" BSON_VALUE(DOC,'$.a.b','VARCHAR') = 'x'", out.toString());
+  }
+
+  @Test
+  public void canonicalizesInsideAnd() throws Exception {
+    ParseNode in = parseExpr(
+        "BSON_VALUE(doc, 'a', 'varchar') = 'x' AND BSON_VALUE(doc, 'b', 'bigint') > 5");
+    ParseNode out = BsonPathCanonicalizer.rewrite(in);
+    assertEquals(
+        "( BSON_VALUE(DOC,'$.a','VARCHAR') = 'x' AND  BSON_VALUE(DOC,'$.b','BIGINT') > 5)",
+        out.toString());
+  }
+
+  @Test
+  public void canonicalizesInsideIn() throws Exception {
+    ParseNode in = parseExpr("BSON_VALUE(doc, 'a', 'varchar') IN ('x', 'y')");
+    ParseNode out = BsonPathCanonicalizer.rewrite(in);
+    assertEquals(" BSON_VALUE(DOC,'$.a','VARCHAR') IN('x','y')", out.toString());
+  }
 }
