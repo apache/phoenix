@@ -234,6 +234,8 @@ import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.parse.AddJarsStatement;
 import org.apache.phoenix.parse.ExplainType;
+import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.exception.SQLExceptionInfo;
 }
 
 @lexer::header {
@@ -567,6 +569,7 @@ create_view_node returns [CreateTableStatement ret]
 // Parse a create index statement.
 create_index_node returns [CreateIndexStatement ret]
     :   CREATE u=UNCOVERED? l=LOCAL? INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
+        (using=USING usingPath=NAME)?
         (LPAREN ik=ik_constraint RPAREN)
         (in=INCLUDE (LPAREN icrefs=column_names RPAREN))?
         (WHERE where=expression)?
@@ -574,6 +577,14 @@ create_index_node returns [CreateIndexStatement ret]
         (p=fam_properties)?
         (SPLIT ON v=value_expression_list)?
         {
+            if (using != null) {
+                if (usingPath != null && "PATH".equalsIgnoreCase(usingPath.getText())) {
+                    throw new RuntimeException(new SQLExceptionInfo.Builder(
+                        SQLExceptionCode.BSON_PATH_INDEX_NOT_SUPPORTED).build().buildException());
+                }
+                throw new RuntimeException("Unsupported USING clause on CREATE INDEX: "
+                    + (usingPath != null ? usingPath.getText() : ""));
+            }
             if (u !=null && in != null) {
                 throw new RuntimeException("UNCOVERED indexes cannot have the INCLUDE clause");
             }
