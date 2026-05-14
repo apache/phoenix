@@ -124,6 +124,7 @@ import static org.apache.phoenix.query.QueryServices.TRACING_TRACE_BUFFER_SIZE;
 import static org.apache.phoenix.query.QueryServices.TRANSACTIONS_ENABLED;
 import static org.apache.phoenix.query.QueryServices.UPLOAD_BINARY_DATA_TYPE_ENCODING;
 import static org.apache.phoenix.query.QueryServices.USE_BYTE_BASED_REGEX_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.BSON_INDEX_ENABLED_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_INDEXES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
@@ -177,6 +178,7 @@ public class QueryServicesOptions {
   public static final boolean DEFAULT_PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED = false;
   public static final int DEFAULT_HBASE_CLIENT_KEYVALUE_MAXSIZE = 10485760; // 10 Mb
   public static final boolean DEFAULT_USE_INDEXES = true; // Use indexes
+  public static final boolean DEFAULT_BSON_INDEX_ENABLED = true;
   public static final boolean DEFAULT_IMMUTABLE_ROWS = false; // Tables rows may be updated
   public static final boolean DEFAULT_DROP_METADATA = true; // Drop meta data also.
   public static final long DEFAULT_DRIVER_SHUTDOWN_TIMEOUT_MS = 5 * 1000; // Time to wait in
@@ -559,6 +561,7 @@ public class QueryServicesOptions {
       .setIfUnset(MAX_MUTATION_SIZE_ATTRIB, DEFAULT_MAX_MUTATION_SIZE)
       .setIfUnset(ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, DEFAULT_FORCE_ROW_KEY_ORDER)
       .setIfUnset(USE_INDEXES_ATTRIB, DEFAULT_USE_INDEXES)
+      .setIfUnset(BSON_INDEX_ENABLED_ATTRIB, DEFAULT_BSON_INDEX_ENABLED)
       .setIfUnset(IMMUTABLE_ROWS_ATTRIB, DEFAULT_IMMUTABLE_ROWS)
       .setIfUnset(INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB,
         DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD)
@@ -812,6 +815,10 @@ public class QueryServicesOptions {
     return config.getBoolean(USE_INDEXES_ATTRIB, DEFAULT_USE_INDEXES);
   }
 
+  public boolean isBsonIndexEnabled() {
+    return config.getBoolean(BSON_INDEX_ENABLED_ATTRIB, DEFAULT_BSON_INDEX_ENABLED);
+  }
+
   public boolean isImmutableRows() {
     return config.getBoolean(IMMUTABLE_ROWS_ATTRIB, DEFAULT_IMMUTABLE_ROWS);
   }
@@ -949,6 +956,10 @@ public class QueryServicesOptions {
 
   public QueryServicesOptions setUseIndexes(boolean useIndexes) {
     return set(USE_INDEXES_ATTRIB, useIndexes);
+  }
+
+  public QueryServicesOptions setBsonIndexEnabled(boolean enabled) {
+    return set(BSON_INDEX_ENABLED_ATTRIB, enabled);
   }
 
   public QueryServicesOptions setImmutableRows(boolean isImmutableRows) {
