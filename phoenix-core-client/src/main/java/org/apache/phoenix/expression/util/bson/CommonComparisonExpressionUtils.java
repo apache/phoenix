@@ -103,6 +103,13 @@ public class CommonComparisonExpressionUtils {
    */
   public static BsonValue getFieldFromDocument(final String documentFieldKey,
     final BsonDocument rawBsonDocument) {
+    // Canonical JSONPath form (produced by BsonPathCanonicalizer for indexed expressions and
+    // canonicalized predicates) starts with `$`. Dispatch to the canonical-aware walker so
+    // both forms resolve identically — otherwise the legacy walker would treat `$` as a
+    // top-level field name and incorrectly return null for any indexed lookup.
+    if (!documentFieldKey.isEmpty() && documentFieldKey.charAt(0) == '$') {
+      return getFieldFromDocumentCanonical(documentFieldKey, rawBsonDocument);
+    }
     if (documentFieldKey.contains(".") || documentFieldKey.contains("[")) {
       StringBuilder sb = new StringBuilder();
       for (int i = 0; i < documentFieldKey.length(); i++) {
@@ -126,6 +133,112 @@ public class CommonComparisonExpressionUtils {
       return rawBsonDocument.get(documentFieldKey);
     }
     return null;
+  }
+
+  /**
+   * Resolve a canonical JSONPath of the form {@code $.a.b[0]} or {@code $['weird key'].b} into a
+   * value within {@code rawBsonDocument}. Returns null if any intermediate segment is missing or
+   * type-incompatible. Does not throw on malformed paths produced upstream — those are filtered
+   * by {@code BsonPathParser} during DDL/predicate compile.
+   */
+  private static BsonValue getFieldFromDocumentCanonical(final String path,
+    final BsonDocument rawBsonDocument) {
+    // Path always starts with `$`. Walk segments from index 1.
+    int len = path.length();
+    int i = 1;
+    BsonValue current = rawBsonDocument;
+    while (i < len) {
+      char c = path.charAt(i);
+      if (c == '.') {
+        // .field — read until next '.' or '['
+        i++;
+        if (i < len && path.charAt(i) == '[') {
+          // Treat ".[..." as a structural error; bail out.
+          return null;
+        }
+        int start = i;
+        while (i < len && path.charAt(i) != '.' && path.charAt(i) != '[') {
+          i++;
+        }
+        String field = path.substring(start, i);
+        if (current == null || !current.isDocument()) {
+          return null;
+        }
+        current = ((BsonDocument) current).get(field);
+        if (current == null) {
+          return null;
+        }
+      } else if (c == '[') {
+        // Either [<int>] or ['<quoted-field>']
+        if (i + 1 < len && path.charAt(i + 1) == '\'') {
+          // Bracket-quoted field name: consume escaped chars until closing '.
+          i += 2;
+          StringBuilder name = new StringBuilder();
+          while (i < len) {
+            char ch = path.charAt(i);
+            if (ch == '\\' && i + 1 < len) {
+              name.append(path.charAt(i + 1));
+              i += 2;
+              continue;
+            }
+            if (ch == '\'') {
+              break;
+            }
+            name.append(ch);
+            i++;
+          }
+          // Skip closing quote and `]`.
+          if (i >= len || path.charAt(i) != '\'') {
+            return null;
+          }
+          i++;
+          if (i >= len || path.charAt(i) != ']') {
+            return null;
+          }
+          i++;
+          if (current == null || !current.isDocument()) {
+            return null;
+          }
+          current = ((BsonDocument) current).get(name.toString());
+          if (current == null) {
+            return null;
+          }
+        } else {
+          // Numeric array index.
+          i++;
+          int start = i;
+          while (i < len && path.charAt(i) != ']') {
+            i++;
+          }
+          if (i >= len) {
+            return null;
+          }
+          int arrayIdx;
+          try {
+            arrayIdx = Integer.parseInt(path.substring(start, i));
+          } catch (NumberFormatException e) {
+            return null;
+          }
+          i++; // skip ']'
+          if (current == null || !current.isArray()) {
+            return null;
+          }
+          BsonArray arr = (BsonArray) current;
+          if (arrayIdx < 0 || arrayIdx >= arr.size()) {
+            return null;
+          }
+          current = arr.get(arrayIdx);
+          if (current == null) {
+            return null;
+          }
+        }
+      } else {
+        // Unexpected character in canonical path.
+        return null;
+      }
+    }
+    // If the path was just "$" (empty after prefix), return the root document.
+    return current;
   }
 
   /**
