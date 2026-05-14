@@ -32,12 +32,17 @@ public final class BsonPathParser {
 
   private BsonPath parsePath() throws BsonPathSyntaxException {
     List<Segment> segments = new ArrayList<>();
+    boolean hadDollar = false;
     if (peek() == '$') {
       pos++;
+      hadDollar = true;
       // After '$', either end (illegal — empty path), '.', or '['.
       if (pos == input.length()) {
         throw new BsonPathSyntaxException("path must have at least one segment after '$'", pos);
       }
+    }
+    if (!hadDollar && peek() == '.') {
+      throw new BsonPathSyntaxException("bare path must not start with '.'", pos);
     }
     boolean first = true;
     while (pos < input.length()) {

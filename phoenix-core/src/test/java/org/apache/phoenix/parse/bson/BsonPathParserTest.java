@@ -65,4 +65,40 @@ public class BsonPathParserTest {
     org.junit.Assert.assertEquals("$.a[3].b['x y']",
         BsonPathParser.parse("$.a[3].b['x y']").toString());
   }
+
+  // ----- negative cases -----
+
+  private static void expectFail(String s) {
+    try {
+      BsonPathParser.parse(s);
+      org.junit.Assert.fail("expected BsonPathSyntaxException for input: " + s);
+    } catch (BsonPathSyntaxException ok) {
+      // expected
+    }
+  }
+
+  @Test public void rejectsEmpty() { expectFail(""); }
+  @Test public void rejectsNullThrows() {
+    try {
+      BsonPathParser.parse(null);
+      org.junit.Assert.fail("expected exception for null");
+    } catch (BsonPathSyntaxException ok) {
+      // expected
+    }
+  }
+  @Test public void rejectsLeadingDot() { expectFail("."); }
+  @Test public void rejectsTrailingDot() { expectFail("$.a."); }
+  @Test public void rejectsBareLeadingDot() { expectFail(".a"); }
+  @Test public void rejectsDoubleDot() { expectFail("$..a"); }
+  @Test public void rejectsRecursiveDescent() { expectFail("$..b"); }
+  @Test public void rejectsWildcardField() { expectFail("$.*"); }
+  @Test public void rejectsWildcardBracket() { expectFail("$[*]"); }
+  @Test public void rejectsFilter() { expectFail("$[?(@.x>1)]"); }
+  @Test public void rejectsSlice() { expectFail("$[0:2]"); }
+  @Test public void rejectsUnterminatedBracket() { expectFail("$.a["); }
+  @Test public void rejectsUnterminatedQuoted() { expectFail("$['oops"); }
+  @Test public void rejectsBadIdentifier() { expectFail("$.1bad"); }
+  @Test public void rejectsLoneDollar() { expectFail("$"); }
+  @Test public void rejectsTrailingChars() { expectFail("$.a junk"); }
+  @Test public void rejectsNegativeIndexLooksLikeWildcard() { expectFail("$.a[-1]"); }
 }
