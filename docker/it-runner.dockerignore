@@ -1,0 +1,6 @@
+**/target
+.git
+.idea
+*.iml
+docs/superpowers
+*.txt
