@@ -70,10 +70,13 @@ public class BsonPathIndexQueryIT extends ParallelStatsDisabledIT {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       setupSchema(conn);
+      long before = org.apache.phoenix.monitoring.BsonPathMetrics.getRewriteHits();
       String sql = "SELECT PK FROM " + tbl
           + " WHERE BSON_VALUE(DOC, '$.name', 'VARCHAR') = 'alice'";
       String plan = explain(conn, sql);
       assertTrue("expected index in plan: " + plan, plan.contains(idx));
+      long after = org.apache.phoenix.monitoring.BsonPathMetrics.getRewriteHits();
+      assertTrue("expected rewrite hit counter to increase", after > before);
     }
   }
 

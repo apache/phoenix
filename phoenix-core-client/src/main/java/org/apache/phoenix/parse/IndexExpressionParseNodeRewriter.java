@@ -103,7 +103,15 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
       }
     }
     if (indexedParseNodeToColumnParseNodeMap.containsKey(candidate)) {
+      if (canonicalizeBson) {
+        org.apache.phoenix.monitoring.BsonPathMetrics.incrementRewriteHits();
+      }
       return indexedParseNodeToColumnParseNodeMap.get(candidate);
+    }
+    if (canonicalizeBson && org.apache.phoenix.util.BsonIndexUtil.containsBsonExpression(node)) {
+      // Tracked only when the user-facing predicate names a BSON path; otherwise we'd flood
+      // the counter on every non-BSON expression in the tree.
+      org.apache.phoenix.monitoring.BsonPathMetrics.incrementRewriteMisses();
     }
     return super.leaveCompoundNode(node, children, factory);
   }
