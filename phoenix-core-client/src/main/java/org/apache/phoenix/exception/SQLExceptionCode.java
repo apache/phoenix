@@ -239,6 +239,8 @@ public enum SQLExceptionCode {
     "Functions returning JSON fragments are not allowed in Index Expression."),
   BSON_INDEX_DISABLED(545, "42921",
     "BSON path indexes are disabled. Set phoenix.index.bson.enabled=true to allow."),
+  BSON_PATH_INDEX_NOT_SUPPORTED(546, "42922",
+    "Multi-valued BSON path indexes (USING PATH) are reserved for a future release."),
   AGGREGATE_EXPRESSION_NOT_ALLOWED_IN_CONDITIONAL_TTL(542, "42918",
     "Aggregate expression not allowed in a conditional TTL expression."),
   CANNOT_SET_CONDITIONAL_TTL_ON_TABLE_WITH_MULTIPLE_COLUMN_FAMILIES(543, "42919",
