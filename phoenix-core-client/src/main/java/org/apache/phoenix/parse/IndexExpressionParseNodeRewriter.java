@@ -82,9 +82,20 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
   @Override
   protected ParseNode leaveCompoundNode(CompoundParseNode node, List<ParseNode> children,
     CompoundNodeFactory factory) {
-    return indexedParseNodeToColumnParseNodeMap.containsKey(node)
-      ? indexedParseNodeToColumnParseNodeMap.get(node)
-      : super.leaveCompoundNode(node, children, factory);
+    ParseNode candidate = node;
+    try {
+      ParseNode canonical = BsonPathCanonicalizer.rewrite(node);
+      if (canonical != null) {
+        candidate = canonical;
+      }
+    } catch (SQLException ignored) {
+      // canonicalizer should not throw on well-formed input; if it does, fall back to the
+      // original node and let the existing matcher do its thing.
+    }
+    if (indexedParseNodeToColumnParseNodeMap.containsKey(candidate)) {
+      return indexedParseNodeToColumnParseNodeMap.get(candidate);
+    }
+    return super.leaveCompoundNode(node, children, factory);
   }
 
 }
