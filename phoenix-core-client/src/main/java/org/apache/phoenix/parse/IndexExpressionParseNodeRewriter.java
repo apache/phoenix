@@ -21,6 +21,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import org.apache.phoenix.compile.BsonPathCanonicalizer;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExpressionCompiler;
 import org.apache.phoenix.compile.FromCompiler;
@@ -62,6 +63,7 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
       PColumn column = pkColumns.get(i);
       String expressionStr = IndexUtil.getIndexColumnExpressionStr(column);
       ParseNode expressionParseNode = SQLParser.parseCondition(expressionStr);
+      expressionParseNode = BsonPathCanonicalizer.rewrite(expressionParseNode);
       String colName = "\"" + column.getName().getString() + "\"";
       Expression dataExpression = expressionParseNode.accept(expressionCompiler);
       PDataType expressionDataType = dataExpression.getDataType();
