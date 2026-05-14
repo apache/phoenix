@@ -101,4 +101,28 @@ public class BsonPathParserTest {
   @Test public void rejectsLoneDollar() { expectFail("$"); }
   @Test public void rejectsTrailingChars() { expectFail("$.a junk"); }
   @Test public void rejectsNegativeIndexLooksLikeWildcard() { expectFail("$.a[-1]"); }
+
+  @Test
+  public void fuzzNoCrashes() {
+    java.util.Random rng = new java.util.Random(0xCAFEBABEL);
+    String alphabet = "$.[]'\"_abcXY0123456789* ?\\:";
+    int n = 5000;
+    int crashes = 0;
+    for (int i = 0; i < n; i++) {
+      int len = rng.nextInt(20);
+      StringBuilder sb = new StringBuilder(len);
+      for (int j = 0; j < len; j++) {
+        sb.append(alphabet.charAt(rng.nextInt(alphabet.length())));
+      }
+      try {
+        BsonPathParser.parse(sb.toString());
+      } catch (BsonPathSyntaxException ok) {
+        // expected for most random inputs
+      } catch (RuntimeException re) {
+        crashes++;
+      }
+    }
+    org.junit.Assert.assertEquals("parser must reject only via BsonPathSyntaxException", 0,
+        crashes);
+  }
 }
