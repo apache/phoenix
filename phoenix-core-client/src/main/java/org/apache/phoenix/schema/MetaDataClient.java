@@ -1637,6 +1637,11 @@ public class MetaDataClient {
         asyncCreatedDate = new Date(tableRef.getCurrentTime());
       }
       dataTable = tableRef.getTable();
+      // Promote any DYNAMIC index columns to virtual PColumns on the data table.
+      // Catalog mutations are queued on the connection and flushed atomically by
+      // createTableInternal alongside the index-create RPC.
+      dataTable = promoteDynamicColumnsForIndex(dataTable, ik);
+      tableRef.setTable(dataTable);
       boolean isTenantConnection = connection.getTenantId() != null;
       if (isTenantConnection) {
         if (dataTable.getType() != PTableType.VIEW) {
@@ -1965,6 +1970,109 @@ public class MetaDataClient {
         dataTable.getTimeStamp());
     }
     return state;
+  }
+
+  /**
+   * For each DYNAMIC entry in the index-key constraint, promote the column to a virtual
+   * PColumn in SYSTEM.CATALOG. Returns an updated PTable with the virtual columns appended
+   * so the index-build phase resolves them. The catalog mutations are queued on the
+   * connection's mutation buffer and flushed by createTableInternal in the same RPC as
+   * the index-create, giving a single LastDDLTimestamp bump on the base table.
+   *
+   * If the column already exists and is virtual with the same type, skip silently.
+   * If the column already exists and is virtual with a different type, throw
+   * PHOENIX_DYNAMIC_TYPE_CONFLICT. If the column already exists and is non-virtual, throw
+   * DYNAMIC_INDEX_NAME_CONFLICTS_WITH_REGULAR_COLUMN.
+   */
+  private PTable promoteDynamicColumnsForIndex(PTable dataTable, IndexKeyConstraint ik)
+    throws SQLException {
+    if (
+      !connection.getQueryServices().getProps().getBoolean(
+        QueryServices.PHOENIX_INDEX_DYNAMIC_ENABLED,
+        QueryServicesOptions.DEFAULT_PHOENIX_INDEX_DYNAMIC_ENABLED)
+    ) {
+      for (IndexKeyConstraint.Entry e : ik.getEntries()) {
+        if (e.isDynamic()) {
+          throw new SQLFeatureNotSupportedException(
+            "Dynamic-column indexes are disabled (phoenix.index.dynamic.enabled=false)");
+        }
+      }
+      return dataTable;
+    }
+
+    boolean hasDynamic = false;
+    for (IndexKeyConstraint.Entry e : ik.getEntries()) {
+      if (e.isDynamic()) {
+        hasDynamic = true;
+        break;
+      }
+    }
+    if (!hasDynamic) {
+      return dataTable;
+    }
+    if (
+      dataTable.getEncodingScheme() != null
+        && dataTable.getEncodingScheme() != PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS
+    ) {
+      throw new SQLExceptionInfo.Builder(
+        SQLExceptionCode.DYNAMIC_INDEX_NOT_ALLOWED_ON_ENCODED_TABLE)
+          .setTableName(dataTable.getName().getString()).build().buildException();
+    }
+
+    List<PColumn> newCols = new ArrayList<>(dataTable.getColumns());
+    int position = newCols.size();
+
+    PName defaultFam = dataTable.getDefaultFamilyName() != null ? dataTable.getDefaultFamilyName()
+      : PNameFactory.newName(QueryConstants.DEFAULT_COLUMN_FAMILY);
+
+    for (IndexKeyConstraint.Entry e : ik.getEntries()) {
+      if (!e.isDynamic()) {
+        continue;
+      }
+
+      ColumnDef cd = e.getColumnDef();
+      if (cd == null || cd.getDataType() == null) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.DYNAMIC_INDEX_REQUIRES_TYPE).build()
+          .buildException();
+      }
+      String name = cd.getColumnDefName().getColumnName();
+
+      PColumn existing = null;
+      for (PColumn c : dataTable.getColumns()) {
+        if (c.getName().getString().equals(name)) {
+          existing = c;
+          break;
+        }
+      }
+      if (existing != null) {
+        if (!existing.isVirtual()) {
+          throw new SQLExceptionInfo.Builder(
+            SQLExceptionCode.DYNAMIC_INDEX_NAME_CONFLICTS_WITH_REGULAR_COLUMN).setColumnName(name)
+              .build().buildException();
+        }
+        if (!existing.getDataType().equals(cd.getDataType())) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.PHOENIX_DYNAMIC_TYPE_CONFLICT)
+            .setColumnName(name).build().buildException();
+        }
+        // virtual + same type — skip silently.
+        continue;
+      }
+
+      PColumnImpl virtualCol = new PColumnImpl(PNameFactory.newName(name), defaultFam,
+        cd.getDataType(), cd.getMaxLength(), cd.getScale(), true /* nullable */, position++,
+        e.getSortOrder(), null, null, false, null, false, false, Bytes.toBytes(name),
+        EnvironmentEdgeManager.currentTimeMillis(), false, /* isVirtual = */ true);
+      newCols.add(virtualCol);
+
+      // Emit catalog mutation — same path that ALTER TABLE ADD COLUMN uses. The mutation
+      // is queued on the connection and drained by createTableInternal alongside the
+      // index-create mutations.
+      addColumnMutation(connection, dataTable.getSchemaName().getString(),
+        dataTable.getTableName().getString(), virtualCol, null /* parentTableName */,
+        null /* pkName */, null /* keySeq */, dataTable.getBucketNum() != null);
+    }
+
+    return PTableImpl.builderWithColumns(dataTable, newCols).build();
   }
 
   public MutationState createCDC(CreateCDCStatement statement) throws SQLException {
