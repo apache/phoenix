@@ -1640,7 +1640,8 @@ public class MetaDataClient {
       // Promote any DYNAMIC index columns to virtual PColumns on the data table.
       // Catalog mutations are queued on the connection and flushed atomically by
       // createTableInternal alongside the index-create RPC.
-      dataTable = promoteDynamicColumnsForIndex(dataTable, ik);
+      List<String> promotedNames = Lists.newArrayList();
+      dataTable = promoteDynamicColumnsForIndex(dataTable, ik, promotedNames);
       tableRef.setTable(dataTable);
       boolean isTenantConnection = connection.getTenantId() != null;
       if (isTenantConnection) {
@@ -1924,9 +1925,27 @@ public class MetaDataClient {
       CreateTableStatement tableStatement = FACTORY.createTable(indexTableName,
         statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX,
         statement.ifNotExists(), null, statement.getWhere(), statement.getBindCount(), null);
-      table = createTableInternal(tableStatement, splits, dataTable, null, null,
-        getViewIndexDataType(), null, null, null, allocateIndexId, statement.getIndexType(),
-        statement.getIndexConsistency(), asyncCreatedDate, null, tableProps, commonFamilyProps);
+      try {
+        table = createTableInternal(tableStatement, splits, dataTable, null, null,
+          getViewIndexDataType(), null, null, null, allocateIndexId, statement.getIndexType(),
+          statement.getIndexConsistency(), asyncCreatedDate, null, tableProps, commonFamilyProps);
+      } catch (SQLException createEx) {
+        // Compensating drop for any DYNAMIC columns we freshly promoted in this call.
+        // Each drop is isolated so a cleanup failure doesn't mask the original error.
+        String baseTableFullName = SchemaUtil.getTableName(
+          dataTable.getSchemaName().getString(), dataTable.getTableName().getString());
+        for (String promoted : promotedNames) {
+          try {
+            connection.createStatement().execute(
+              "ALTER TABLE " + baseTableFullName + " DROP COLUMN \"" + promoted + "\"");
+          } catch (SQLException cleanupEx) {
+            LOGGER.warn("Failed to un-promote DYNAMIC column '" + promoted + "' on "
+              + baseTableFullName + " after CREATE INDEX failure; original error will be rethrown",
+              cleanupEx);
+          }
+        }
+        throw createEx;
+      }
     } finally {
       deleteMutexCells(physicalSchemaName, physicalTableName, acquiredColumnMutexSet);
     }
@@ -1984,8 +2003,8 @@ public class MetaDataClient {
    * PHOENIX_DYNAMIC_TYPE_CONFLICT. If the column already exists and is non-virtual, throw
    * DYNAMIC_INDEX_NAME_CONFLICTS_WITH_REGULAR_COLUMN.
    */
-  private PTable promoteDynamicColumnsForIndex(PTable dataTable, IndexKeyConstraint ik)
-    throws SQLException {
+  private PTable promoteDynamicColumnsForIndex(PTable dataTable, IndexKeyConstraint ik,
+    List<String> promotedNames) throws SQLException {
     if (
       !connection.getQueryServices().getProps().getBoolean(
         QueryServices.PHOENIX_INDEX_DYNAMIC_ENABLED,
@@ -2065,6 +2084,9 @@ public class MetaDataClient {
         EnvironmentEdgeManager.currentTimeMillis(), false, /* isVirtual = */ true);
       newCols.add(virtualCol);
       addedCols.add(virtualCol);
+      if (promotedNames != null) {
+        promotedNames.add(name);
+      }
     }
 
     if (addedCols.isEmpty()) {

@@ -162,6 +162,40 @@ public class DynamicColumnIndexCreationIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  public void failedCreateIndexUnpromotesColumn() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection c = conn()) {
+      createBaseTable(c, table);
+      // First CREATE INDEX succeeds.
+      c.createStatement().execute(
+          "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      // Second CREATE with the SAME index name must fail (duplicate).
+      try {
+        c.createStatement().execute(
+            "CREATE INDEX " + index + " ON " + table + " (other VARCHAR DYNAMIC)");
+        fail("expected SQLException for duplicate index name");
+      } catch (SQLException ex) {
+        // Expected — index name conflict.
+      }
+      // Verify "other" was un-promoted (rolled back).
+      PhoenixConnection pc = c.unwrap(PhoenixConnection.class);
+      PTable t = pc.getTable(SchemaUtil.normalizeIdentifier(table));
+      boolean otherFound = false;
+      for (PColumn col : t.getColumns()) {
+        if (col.getName().getString().equals("OTHER")) { otherFound = true; break; }
+      }
+      assertFalse("'other' must be unpromoted on failed CREATE INDEX", otherFound);
+      // Verify "extra" (from successful first call) is still there.
+      boolean extraFound = false;
+      for (PColumn col : t.getColumns()) {
+        if (col.getName().getString().equals("EXTRA")) { extraFound = true; break; }
+      }
+      assertTrue("'extra' from first CREATE INDEX must persist", extraFound);
+    }
+  }
+
+  @Test
   public void multipleDynamicColumnsInOneIndex() throws Exception {
     String table = generateUniqueName();
     String index = generateUniqueName();
