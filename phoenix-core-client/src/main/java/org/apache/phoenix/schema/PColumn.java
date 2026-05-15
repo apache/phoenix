@@ -56,5 +56,13 @@ public interface PColumn extends PDatum {
 
   boolean isDynamic();
 
+  /**
+   * @return true if this column was registered in SYSTEM.CATALOG solely
+   * to support a secondary index on a previously dynamic column.
+   * Virtual columns are excluded from {@code SELECT *} expansion but are
+   * indexable and resolvable by explicit name.
+   */
+  boolean isVirtual();
+
   byte[] getColumnQualifierBytes();
 }

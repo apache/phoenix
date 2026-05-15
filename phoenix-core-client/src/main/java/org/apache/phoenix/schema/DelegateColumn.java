@@ -106,6 +106,11 @@ public class DelegateColumn extends DelegateDatum implements PColumn {
   }
 
   @Override
+  public boolean isVirtual() {
+    return getDelegate().isVirtual();
+  }
+
+  @Override
   public int hashCode() {
     return getDelegate().hashCode();
   }

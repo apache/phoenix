@@ -259,6 +259,11 @@ public class PColumnImpl implements PColumn {
   }
 
   @Override
+  public boolean isVirtual() {
+    return false;
+  }
+
+  @Override
   public byte[] getColumnQualifierBytes() {
     // Needed for backward compatibility
     if (!SchemaUtil.isPKColumn(this) && columnQualifierBytes == null) {
