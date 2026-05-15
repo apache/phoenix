@@ -410,11 +410,17 @@ public class UpsertCompiler {
     // so we surface the typed error instead of the resolver's COLUMN_EXIST_IN_DEF.
     List<ColumnDef> upsertColumnDefs = tableNode.getDynamicColumns();
     if (upsertColumnDefs != null && !upsertColumnDefs.isEmpty()) {
+      // Refresh the cached PTable from the metadata service before reading
+      // virtual columns. A connection whose cache predates a CREATE INDEX from
+      // another connection would otherwise miss the registered virtual column,
+      // letting the type-conflict check no-op and risking server-side index
+      // corruption from a divergent inline ColumnDef.
       PTable cachedTable = null;
       try {
+        new MetaDataClient(connection).updateCache(schemaName, tableName);
         cachedTable = connection.getTable(SchemaUtil.getTableName(schemaName, tableName));
       } catch (TableNotFoundException e) {
-        // No cached table — first-touch UPSERT will be resolved by FromCompiler.
+        // No table — first-touch UPSERT will be resolved by FromCompiler.
       }
       if (cachedTable != null) {
         List<ColumnDef> filteredDynamicColumns = new ArrayList<>(upsertColumnDefs.size());
