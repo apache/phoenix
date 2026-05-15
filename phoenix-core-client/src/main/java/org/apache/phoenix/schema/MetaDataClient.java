@@ -2140,7 +2140,6 @@ public class MetaDataClient {
     for (PColumn col : addedCols) {
       addColumnMutation(connection, schemaName, tableName, col, null /* parentTableName */,
         null /* pkName */, null /* keySeq */, isSalted);
-      DynamicColumnIndexMetrics.incrementPromotions();
     }
     // Drain the column mutations.
     columnMetaData
@@ -2174,6 +2173,11 @@ public class MetaDataClient {
     // processMutationResult throws on real errors and returns the code on success paths
     // (NO_OP, COLUMN_ALREADY_EXISTS, COLUMN_NOT_FOUND, TABLE_ALREADY_EXISTS).
     processMutationResult(schemaName, tableName, result);
+    // Increment promotion counter only after the addColumn RPC succeeded — mirrors the
+    // post-success pattern in unpromoteOrphanedVirtualColumns.
+    for (int i = 0; i < addedCols.size(); i++) {
+      DynamicColumnIndexMetrics.incrementPromotions();
+    }
     if (result.getTable() != null) {
       addTableToCache(result, false);
       updatedTable = result.getTable();
