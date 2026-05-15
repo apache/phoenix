@@ -92,6 +92,6 @@ Tip: pass `--no-install` after the first run to skip the install warm-up step (~
 
 ## Feature C (dynamic-column indexing)
 - [x] Phase 0 — isVirtual plumbing (commit 3fd09f9d1d)
-- [ ] Phase 1 — DDL grammar + promotion
+- [x] Phase 1 — DDL grammar + promotion
 - [ ] Phase 2 — write path
 - [ ] Phase 3 — drop + observability
