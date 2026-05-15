@@ -29,6 +29,7 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.monitoring.DynamicColumnIndexMetrics;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -204,6 +205,29 @@ public class DynamicColumnIndexCreationIT extends ParallelStatsDisabledIT {
         if (col.getName().getString().equals("EXTRA")) { extraFound = true; break; }
       }
       assertTrue("'extra' from first CREATE INDEX must persist", extraFound);
+    }
+  }
+
+  @Test
+  public void typeConflictAtCreateIndexIncrementsCounter() throws Exception {
+    String table = generateUniqueName();
+    try (Connection c = conn()) {
+      createBaseTable(c, table);
+      // First CREATE INDEX promotes "extra" as VARCHAR.
+      c.createStatement().execute(
+          "CREATE INDEX " + generateUniqueName() + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      DynamicColumnIndexMetrics.resetForTesting();
+      // Second CREATE INDEX uses the same name with a different declared type.
+      try {
+        c.createStatement().execute(
+            "CREATE INDEX " + generateUniqueName() + " ON " + table + " (extra BIGINT DYNAMIC)");
+        fail("expected PHOENIX_DYNAMIC_TYPE_CONFLICT");
+      } catch (SQLException ex) {
+        assertEquals(SQLExceptionCode.PHOENIX_DYNAMIC_TYPE_CONFLICT.getErrorCode(),
+            ex.getErrorCode());
+      }
+      assertEquals("CREATE INDEX type conflict must increment typeConflictRejects",
+          1, DynamicColumnIndexMetrics.getTypeConflictRejects());
     }
   }
 

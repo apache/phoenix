@@ -60,7 +60,9 @@ Three JVM-local counters live in
 
 - `getPromotions()` — virtual columns added to `SYSTEM.CATALOG`.
 - `getUnpromotions()` — virtual columns removed via DROP INDEX.
-- `getTypeConflictRejects()` — UPSERTs rejected with `PHOENIX_DYNAMIC_TYPE_CONFLICT`.
+- `getTypeConflictRejects()` — UPSERTs and CREATE INDEX statements rejected
+  with `PHOENIX_DYNAMIC_TYPE_CONFLICT` (mismatch with the registered virtual
+  column's declared type).
 
 These are best-effort, JVM-local AtomicLongs. Use for ad-hoc diagnostics
 during development and migration; not aggregated reporting.

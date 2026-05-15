@@ -2084,6 +2084,7 @@ public class MetaDataClient {
               .build().buildException();
         }
         if (!existing.getDataType().equals(cd.getDataType())) {
+          DynamicColumnIndexMetrics.incrementTypeConflictRejects();
           throw new SQLExceptionInfo.Builder(SQLExceptionCode.PHOENIX_DYNAMIC_TYPE_CONFLICT)
             .setColumnName(name).build().buildException();
         }
