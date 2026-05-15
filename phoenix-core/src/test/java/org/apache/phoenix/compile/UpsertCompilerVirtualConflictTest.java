@@ -18,6 +18,7 @@
 package org.apache.phoenix.compile;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
@@ -62,9 +63,16 @@ public class UpsertCompilerVirtualConflictTest extends BaseConnectionlessQueryTe
           "CREATE TABLE t2 (pk VARCHAR PRIMARY KEY, regular VARCHAR)");
       VirtualColumnTestUtil.injectVirtualColumn(c, "T2", "EXTRA", "VARCHAR");
 
-      // Compiles cleanly — connectionless driver doesn't actually execute against HBase.
-      c.prepareStatement(
-          "UPSERT INTO t2 (pk, extra VARCHAR) VALUES ('a', 'hi')");
+      // Compile must succeed (no PHOENIX_DYNAMIC_TYPE_CONFLICT). Execution may
+      // throw a different error (connectionless driver), which we ignore.
+      try {
+        c.prepareStatement(
+            "UPSERT INTO t2 (pk, extra VARCHAR) VALUES ('a', 'hi')").executeUpdate();
+      } catch (SQLException ex) {
+        assertNotEquals("must NOT be PHOENIX_DYNAMIC_TYPE_CONFLICT",
+            SQLExceptionCode.PHOENIX_DYNAMIC_TYPE_CONFLICT.getErrorCode(),
+            ex.getErrorCode());
+      }
     }
   }
 
@@ -77,8 +85,14 @@ public class UpsertCompilerVirtualConflictTest extends BaseConnectionlessQueryTe
       VirtualColumnTestUtil.injectVirtualColumn(c, "T3", "EXTRA", "VARCHAR");
 
       // No reference to extra at all — should compile.
-      c.prepareStatement(
-          "UPSERT INTO t3 (pk, regular) VALUES ('a', 'hi')");
+      try {
+        c.prepareStatement(
+            "UPSERT INTO t3 (pk, regular) VALUES ('a', 'hi')").executeUpdate();
+      } catch (SQLException ex) {
+        assertNotEquals("must NOT be PHOENIX_DYNAMIC_TYPE_CONFLICT",
+            SQLExceptionCode.PHOENIX_DYNAMIC_TYPE_CONFLICT.getErrorCode(),
+            ex.getErrorCode());
+      }
     }
   }
 
@@ -91,7 +105,14 @@ public class UpsertCompilerVirtualConflictTest extends BaseConnectionlessQueryTe
           "CREATE TABLE t4 (pk VARCHAR PRIMARY KEY, regular VARCHAR)");
       VirtualColumnTestUtil.injectVirtualColumn(c, "T4", "EXTRA", "VARCHAR");
 
-      c.prepareStatement("UPSERT INTO t4 (pk, extra) VALUES ('a', 'hi')");
+      try {
+        c.prepareStatement(
+            "UPSERT INTO t4 (pk, extra) VALUES ('a', 'hi')").executeUpdate();
+      } catch (SQLException ex) {
+        assertNotEquals("must NOT be PHOENIX_DYNAMIC_TYPE_CONFLICT",
+            SQLExceptionCode.PHOENIX_DYNAMIC_TYPE_CONFLICT.getErrorCode(),
+            ex.getErrorCode());
+      }
     }
   }
 }
