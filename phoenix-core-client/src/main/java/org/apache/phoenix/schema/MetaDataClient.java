@@ -1975,9 +1975,9 @@ public class MetaDataClient {
   /**
    * For each DYNAMIC entry in the index-key constraint, promote the column to a virtual
    * PColumn in SYSTEM.CATALOG. Returns an updated PTable with the virtual columns appended
-   * so the index-build phase resolves them. The catalog mutations are queued on the
-   * connection's mutation buffer and flushed by createTableInternal in the same RPC as
-   * the index-create, giving a single LastDDLTimestamp bump on the base table.
+   * so the index-build phase resolves them. Catalog mutations are sent to the metadata
+   * endpoint as an addColumn RPC before the index-create RPC, so that the virtual columns
+   * are visible when the index is built.
    *
    * If the column already exists and is virtual with the same type, skip silently.
    * If the column already exists and is virtual with a different type, throw
@@ -2021,6 +2021,7 @@ public class MetaDataClient {
 
     List<PColumn> newCols = new ArrayList<>(dataTable.getColumns());
     int position = newCols.size();
+    List<PColumn> addedCols = new ArrayList<>();
 
     PName defaultFam = dataTable.getDefaultFamilyName() != null ? dataTable.getDefaultFamilyName()
       : PNameFactory.newName(QueryConstants.DEFAULT_COLUMN_FAMILY);
@@ -2063,16 +2064,79 @@ public class MetaDataClient {
         e.getSortOrder(), null, null, false, null, false, false, Bytes.toBytes(name),
         EnvironmentEdgeManager.currentTimeMillis(), false, /* isVirtual = */ true);
       newCols.add(virtualCol);
-
-      // Emit catalog mutation — same path that ALTER TABLE ADD COLUMN uses. The mutation
-      // is queued on the connection and drained by createTableInternal alongside the
-      // index-create mutations.
-      addColumnMutation(connection, dataTable.getSchemaName().getString(),
-        dataTable.getTableName().getString(), virtualCol, null /* parentTableName */,
-        null /* pkName */, null /* keySeq */, dataTable.getBucketNum() != null);
+      addedCols.add(virtualCol);
     }
 
-    return PTableImpl.builderWithColumns(dataTable, newCols).build();
+    if (addedCols.isEmpty()) {
+      return dataTable;
+    }
+
+    // Ensure SYSTEM.CATALOG has the IS_VIRTUAL column (idempotent — backfill from Phase 0).
+    UpgradeUtil.addIsVirtualColumnIfMissing(connection);
+
+    // Drain any prior pending mutations so we don't accidentally include them.
+    connection.rollback();
+
+    String schemaName = dataTable.getSchemaName().getString();
+    String tableName = dataTable.getTableName().getString();
+    boolean isSalted = dataTable.getBucketNum() != null;
+    long timestamp = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : connection.getSCN();
+    List<Mutation> tableMetaData = Lists.newArrayList();
+    List<Mutation> columnMetaData = Lists.newArrayList();
+
+    // Step 1: Queue the table-header sequence-number bump and drain it into tableMetaData
+    // (which is then reversed to put the header row first, matching the MetaDataEndpoint
+    // addColumn RPC's expectation).
+    incrementTableSeqNum(dataTable, dataTable.getType(), addedCols.size(),
+      null /* isTransactional */, null /* updateCacheFrequency */, null /* physicalTableName */,
+      null /* schemaVersion */, null /* columnEncodedBytes */);
+    tableMetaData
+      .addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
+    connection.rollback();
+    Collections.reverse(tableMetaData);
+
+    // Step 2: Queue catalog UPSERTs for each new virtual column and drain into columnMetaData.
+    for (PColumn col : addedCols) {
+      addColumnMutation(connection, schemaName, tableName, col, null /* parentTableName */,
+        null /* pkName */, null /* keySeq */, isSalted);
+    }
+    // Drain the column mutations.
+    columnMetaData
+      .addAll(connection.getMutationState().toMutations(timestamp).next().getSecond());
+    connection.rollback();
+
+    // Step 2b: addColumnMutation does not write IS_VIRTUAL. Add an IS_VIRTUAL=TRUE Put on the
+    // same column-row rowkey so the cell ends up on the same SYSTEM.CATALOG row.
+    String tenantIdStr =
+      connection.getTenantId() == null ? null : connection.getTenantId().getString();
+    byte[] isVirtualQualifier = Bytes.toBytes("IS_VIRTUAL");
+    byte[] tableFamilyBytes = org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
+    for (PColumn col : addedCols) {
+      String famName = col.getFamilyName() == null ? null : col.getFamilyName().getString();
+      byte[] rowKey = SchemaUtil.getColumnKey(tenantIdStr, schemaName == null ? "" : schemaName,
+        tableName, col.getName().getString(), famName);
+      org.apache.hadoop.hbase.client.Put isVirtualPut =
+        new org.apache.hadoop.hbase.client.Put(rowKey);
+      isVirtualPut.addColumn(tableFamilyBytes, isVirtualQualifier, timestamp,
+        org.apache.phoenix.schema.types.PBoolean.INSTANCE.toBytes(Boolean.TRUE));
+      columnMetaData.add(isVirtualPut);
+    }
+    tableMetaData.addAll(columnMetaData);
+
+    Set<String> colFamilies = new LinkedHashSet<>();
+    colFamilies.add(defaultFam.getString());
+    PTable updatedTable = PTableImpl.builderWithColumns(dataTable, newCols).build();
+    MetaDataMutationResult result = connection.getQueryServices().addColumn(tableMetaData,
+      updatedTable, getParentTable(updatedTable), null /* transformingNewTable */,
+      java.util.Collections.<String, List<Pair<String, Object>>> emptyMap(), colFamilies, addedCols);
+    // processMutationResult throws on real errors and returns the code on success paths
+    // (NO_OP, COLUMN_ALREADY_EXISTS, COLUMN_NOT_FOUND, TABLE_ALREADY_EXISTS).
+    processMutationResult(schemaName, tableName, result);
+    if (result.getTable() != null) {
+      addTableToCache(result, false);
+      updatedTable = result.getTable();
+    }
+    return updatedTable;
   }
 
   public MutationState createCDC(CreateCDCStatement statement) throws SQLException {

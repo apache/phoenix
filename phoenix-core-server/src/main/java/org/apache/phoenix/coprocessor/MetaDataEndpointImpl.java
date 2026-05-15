@@ -533,13 +533,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   // storing a value of LinkType.EXCLUDED_COLUMN)
   private static final KeyValue LINK_TYPE_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, LINK_TYPE_BYTES);
+  private static final byte[] IS_VIRTUAL_BYTES = Bytes.toBytes("IS_VIRTUAL");
+  private static final KeyValue IS_VIRTUAL_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, IS_VIRTUAL_BYTES);
 
   private static final List<Cell> COLUMN_KV_COLUMNS =
     Lists.newArrayList(DECIMAL_DIGITS_KV, COLUMN_SIZE_KV, NULLABLE_KV, DATA_TYPE_KV,
       ORDINAL_POSITION_KV, SORT_ORDER_KV, DATA_TABLE_NAME_KV, // included in both column and table
                                                               // row for metadata APIs
       ARRAY_SIZE_KV, VIEW_CONSTANT_KV, IS_VIEW_REFERENCED_KV, COLUMN_DEF_KV, IS_ROW_TIMESTAMP_KV,
-      COLUMN_QUALIFIER_KV, LINK_TYPE_KV);
+      COLUMN_QUALIFIER_KV, LINK_TYPE_KV, IS_VIRTUAL_KV);
 
   static {
     COLUMN_KV_COLUMNS.sort(CellComparator.getInstance());
@@ -559,6 +562,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   private static final int COLUMN_DEF_INDEX = COLUMN_KV_COLUMNS.indexOf(COLUMN_DEF_KV);
   private static final int IS_ROW_TIMESTAMP_INDEX = COLUMN_KV_COLUMNS.indexOf(IS_ROW_TIMESTAMP_KV);
   private static final int COLUMN_QUALIFIER_INDEX = COLUMN_KV_COLUMNS.indexOf(COLUMN_QUALIFIER_KV);
+  private static final int IS_VIRTUAL_INDEX = COLUMN_KV_COLUMNS.indexOf(IS_VIRTUAL_KV);
   // the index of the key value is used to represent a column derived from a parent that was
   // deleted (by storing a value of LinkType.EXCLUDED_COLUMN)
   private static final int EXCLUDED_COLUMN_LINK_TYPE_KV_INDEX =
@@ -1044,9 +1048,13 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       ? Arrays.copyOfRange(columnQualifierKV.getValueArray(), columnQualifierKV.getValueOffset(),
         columnQualifierKV.getValueOffset() + columnQualifierKV.getValueLength())
       : (isPkColumn ? null : colName.getBytes());
+    Cell isVirtualKV = colKeyValues[IS_VIRTUAL_INDEX];
+    boolean isVirtual = isVirtualKV != null
+      && Boolean.TRUE.equals(PBoolean.INSTANCE.toObject(isVirtualKV.getValueArray(),
+        isVirtualKV.getValueOffset(), isVirtualKV.getValueLength()));
     PColumn column = new PColumnImpl(colName, famName, dataType, maxLength, scale, isNullable,
       position - 1, sortOrder, arraySize, viewConstant, isViewReferenced, expressionStr,
-      isRowTimestamp, false, columnQualifierBytes, timestamp);
+      isRowTimestamp, false, columnQualifierBytes, timestamp, false /* derived */, isVirtual);
     columns.add(column);
   }
 
