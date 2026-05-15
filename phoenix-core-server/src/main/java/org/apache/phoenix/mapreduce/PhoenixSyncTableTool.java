@@ -415,6 +415,8 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_MISMATCHED).getValue();
       long repairedMappers =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_REPAIRED).getValue();
+      long unrepairableMappers = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_UNREPAIRABLE).getValue();
       long repairFailedMappers = counters
         .findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_REPAIR_FAILED).getValue();
       long chunksVerified =
@@ -423,6 +425,8 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED).getValue();
       long chunksRepaired =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_REPAIRED).getValue();
+      long chunksUnrepairable = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_UNREPAIRABLE).getValue();
       long chunksRepairFailed = counters
         .findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_REPAIR_FAILED).getValue();
       long sourceRowsProcessed =
@@ -441,19 +445,35 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
         .findCounter(PhoenixSyncTableMapper.SyncCounters.CELLS_EXTRA_ON_TARGET).getValue();
       long cellsDifferentOnTarget = counters
         .findCounter(PhoenixSyncTableMapper.SyncCounters.CELLS_DIFFERENT_ON_TARGET).getValue();
+      long checkpointWriteFailed = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.CHECKPOINT_WRITE_FAILED).getValue();
       LOGGER.info(
         "PhoenixSyncTable job completed, gathered counters are \n Task Created: {}, \n Verified Mappers: {}, \n"
-          + "Mismatched Mappers: {}, \n Repaired Mappers: {}, \n Repair Failed Mappers: {}, \n"
+          + "Mismatched Mappers: {}, \n Repaired Mappers: {}, \n Unrepairable Mappers: {}, \n"
+          + "Repair Failed Mappers: {}, \n"
           + "Chunks Verified: {}, \n Chunks Mismatched: {}, \n Chunks Repaired: {}, \n"
-          + "Chunks Repair Failed: {}, \n Source Rows Processed: {}, \n Target Rows Processed: {}, \n"
+          + "Chunks Unrepairable: {}, \n Chunks Repair Failed: {}, \n"
+          + "Source Rows Processed: {}, \n Target Rows Processed: {}, \n"
           + "Rows Missing On Target: {}, \n Rows Extra On Target: {}, \n"
           + "Rows Cannot Repair: {}, \n"
           + "Cells Missing On Target: {}, \n Cells Extra On Target: {}, \n"
-          + "Cells Different On Target: {}",
-        taskCreated, verifiedMappers, mismatchedMappers, repairedMappers, repairFailedMappers,
-        chunksVerified, chunksMismatched, chunksRepaired, chunksRepairFailed, sourceRowsProcessed,
-        targetRowsProcessed, rowsMissingOnTarget, rowsExtraOnTarget, rowsCannotRepair,
-        cellsMissingOnTarget, cellsExtraOnTarget, cellsDifferentOnTarget);
+          + "Cells Different On Target: {}, \n"
+          + "Checkpoint Write Failed: {}",
+        taskCreated, verifiedMappers, mismatchedMappers, repairedMappers, unrepairableMappers,
+        repairFailedMappers, chunksVerified, chunksMismatched, chunksRepaired, chunksUnrepairable,
+        chunksRepairFailed, sourceRowsProcessed, targetRowsProcessed, rowsMissingOnTarget,
+        rowsExtraOnTarget, rowsCannotRepair, cellsMissingOnTarget, cellsExtraOnTarget,
+        cellsDifferentOnTarget, checkpointWriteFailed);
+      if (checkpointWriteFailed > 0) {
+        LOGGER.error(
+          "{} chunk(s) had a successful repair attempt but FAILED to write a checkpoint row "
+            + "for table {}. Target data was mutated but the audit trail is incomplete. "
+            + "Investigate the checkpoint table state before relying on it; affected chunks "
+            + "will be re-attempted on the next invocation since they have no terminal "
+            + "checkpoint status.",
+          checkpointWriteFailed, qTable);
+        return false;
+      }
     } else {
       LOGGER.warn("Unable to retrieve job counters for table {} - job may have failed "
         + "during initialization", qTable);

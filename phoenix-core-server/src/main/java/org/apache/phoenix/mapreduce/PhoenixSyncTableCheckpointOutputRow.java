@@ -39,6 +39,7 @@ public class PhoenixSyncTableCheckpointOutputRow {
     VERIFIED,
     MISMATCHED,
     REPAIRED,
+    UNREPAIRABLE,
     REPAIR_FAILED
   }
 
