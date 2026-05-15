@@ -631,6 +631,14 @@ public enum SQLExceptionCode {
     "Cannot truncate tables of type" + PTableType.SYSTEM),
   TRUNCATE_MUST_PRESERVE_SPLITS_FOR_SALTED_TABLE(1161, "XCL61",
     "Truncate must preserve splits for salted tables."),
+  DYNAMIC_INDEX_REQUIRES_TYPE(1330, "44A30",
+    "Dynamic-column index requires an explicit type: CREATE INDEX ... (col TYPE DYNAMIC)."),
+  DYNAMIC_INDEX_NAME_CONFLICTS_WITH_REGULAR_COLUMN(1331, "44A31",
+    "Cannot use DYNAMIC for a column name that already exists as a regular column."),
+  DYNAMIC_INDEX_NOT_ALLOWED_ON_ENCODED_TABLE(1332, "44A32",
+    "Dynamic-column indexes are not supported on tables with encoded column qualifiers."),
+  PHOENIX_DYNAMIC_TYPE_CONFLICT(1333, "44A33",
+    "UPSERT specifies a different type for a registered dynamic-column index than its declared type."),
 
   /**
    * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
