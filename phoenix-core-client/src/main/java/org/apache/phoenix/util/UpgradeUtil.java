@@ -3147,4 +3147,16 @@ public class UpgradeUtil {
     return tableDesc.getColumnFamily(SchemaUtil.getEmptyColumnFamily(table)).getMaxVersions() > 1;
   }
 
+  /**
+   * Adds the IS_VIRTUAL column to SYSTEM.CATALOG. Existing PColumn rows have no
+   * IS_VIRTUAL cell; PColumnImpl.createFromProto treats absent isVirtual as false,
+   * so no explicit backfill UPSERT is required.
+   */
+  public static void addIsVirtualColumnIfMissing(PhoenixConnection conn) throws SQLException {
+    String addCol = "ALTER TABLE " + SYSTEM_CATALOG_NAME
+        + " ADD IF NOT EXISTS " + IS_VIRTUAL + " BOOLEAN";
+    conn.createStatement().execute(addCol);
+  }
+
+  private static final String IS_VIRTUAL = "IS_VIRTUAL";
 }

@@ -4832,6 +4832,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(metaConnection);
       UpgradeUtil.bootstrapLastDDLTimestampForTablesAndViews(metaConnection);
       UpgradeUtil.bootstrapLastDDLTimestampForIndexes(metaConnection);
+      UpgradeUtil.addIsVirtualColumnIfMissing(metaConnection);
     }
     return metaConnection;
   }
