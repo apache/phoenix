@@ -1510,6 +1510,11 @@ public class CompactionScanner implements InternalScanner {
           }
 
           @Override
+          public boolean isVirtual() {
+            return false;
+          }
+
+          @Override
           public byte[] getColumnQualifierBytes() {
             return new byte[0];
           }

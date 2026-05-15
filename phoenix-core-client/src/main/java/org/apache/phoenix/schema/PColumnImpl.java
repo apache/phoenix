@@ -45,6 +45,7 @@ public class PColumnImpl implements PColumn {
   private byte[] columnQualifierBytes;
   private boolean derived;
   private long timestamp;
+  private boolean isVirtual;
 
   public PColumnImpl() {
   }
@@ -58,7 +59,7 @@ public class PColumnImpl implements PColumn {
       column.getScale(), column.isNullable(), column.getPosition(), column.getSortOrder(),
       column.getArraySize(), viewConstant, isViewReferenced, column.getExpressionStr(),
       column.isRowTimestamp(), column.isDynamic(), column.getColumnQualifierBytes(),
-      column.getTimestamp(), column.isDerived());
+      column.getTimestamp(), column.isDerived(), column.isVirtual());
   }
 
   public PColumnImpl(PColumn column, boolean derivedColumn, int position) {
@@ -70,7 +71,7 @@ public class PColumnImpl implements PColumn {
       column.getScale(), column.isNullable(), position, column.getSortOrder(),
       column.getArraySize(), viewConstant, column.isViewReferenced(), column.getExpressionStr(),
       column.isRowTimestamp(), column.isDynamic(), column.getColumnQualifierBytes(),
-      column.getTimestamp(), derivedColumn);
+      column.getTimestamp(), derivedColumn, column.isVirtual());
   }
 
   public PColumnImpl(PName name, PName familyName, PDataType dataType, Integer maxLength,
@@ -86,9 +87,19 @@ public class PColumnImpl implements PColumn {
     Integer scale, boolean nullable, int position, SortOrder sortOrder, Integer arrSize,
     byte[] viewConstant, boolean isViewReferenced, String expressionStr, boolean isRowTimestamp,
     boolean isDynamic, byte[] columnQualifierBytes, long timestamp, boolean derived) {
+    this(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize,
+      viewConstant, isViewReferenced, expressionStr, isRowTimestamp, isDynamic,
+      columnQualifierBytes, timestamp, derived, false);
+  }
+
+  public PColumnImpl(PName name, PName familyName, PDataType dataType, Integer maxLength,
+    Integer scale, boolean nullable, int position, SortOrder sortOrder, Integer arrSize,
+    byte[] viewConstant, boolean isViewReferenced, String expressionStr, boolean isRowTimestamp,
+    boolean isDynamic, byte[] columnQualifierBytes, long timestamp, boolean derived,
+    boolean isVirtual) {
     init(name, familyName, dataType, maxLength, scale, nullable, position, sortOrder, arrSize,
       viewConstant, isViewReferenced, expressionStr, isRowTimestamp, isDynamic,
-      columnQualifierBytes, timestamp, derived);
+      columnQualifierBytes, timestamp, derived, isVirtual);
   }
 
   private PColumnImpl(PName familyName, PName columnName, Long timestamp) {
@@ -110,7 +121,8 @@ public class PColumnImpl implements PColumn {
   private void init(PName name, PName familyName, PDataType dataType, Integer maxLength,
     Integer scale, boolean nullable, int position, SortOrder sortOrder, Integer arrSize,
     byte[] viewConstant, boolean isViewReferenced, String expressionStr, boolean isRowTimestamp,
-    boolean isDynamic, byte[] columnQualifierBytes, long timestamp, boolean derived) {
+    boolean isDynamic, byte[] columnQualifierBytes, long timestamp, boolean derived,
+    boolean isVirtualVal) {
     Preconditions.checkNotNull(sortOrder);
     this.dataType = dataType;
     if (familyName == null) {
@@ -138,6 +150,7 @@ public class PColumnImpl implements PColumn {
     this.columnQualifierBytes = columnQualifierBytes;
     this.timestamp = timestamp;
     this.derived = derived;
+    this.isVirtual = isVirtualVal;
   }
 
   @Override
@@ -260,7 +273,7 @@ public class PColumnImpl implements PColumn {
 
   @Override
   public boolean isVirtual() {
-    return false;
+    return isVirtual;
   }
 
   @Override
@@ -328,9 +341,13 @@ public class PColumnImpl implements PColumn {
     if (column.hasDerived()) {
       derived = column.getDerived();
     }
+    boolean isVirtual = false;
+    if (column.hasIsVirtual()) {
+      isVirtual = column.getIsVirtual();
+    }
     return new PColumnImpl(columnName, familyName, dataType, maxLength, scale, nullable, position,
       sortOrder, arraySize, viewConstant, isViewReferenced, expressionStr, isRowTimestamp,
-      isDynamic, columnQualifierBytes, timestamp, derived);
+      isDynamic, columnQualifierBytes, timestamp, derived, isVirtual);
   }
 
   public static PTableProtos.PColumn toProto(PColumn column) {
@@ -372,6 +389,7 @@ public class PColumnImpl implements PColumn {
       builder.setTimestamp(column.getTimestamp());
     }
     builder.setDerived(column.isDerived());
+    builder.setIsVirtual(column.isVirtual());
     return builder.build();
   }
 

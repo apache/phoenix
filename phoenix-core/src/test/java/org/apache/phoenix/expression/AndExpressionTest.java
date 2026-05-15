@@ -118,6 +118,11 @@ public class AndExpressionTest {
       }
 
       @Override
+      public boolean isVirtual() {
+        return false;
+      }
+
+      @Override
       public byte[] getColumnQualifierBytes() {
         return null;
       }

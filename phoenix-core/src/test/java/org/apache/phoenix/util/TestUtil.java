@@ -809,6 +809,11 @@ public class TestUtil {
           }
 
           @Override
+          public boolean isVirtual() {
+            return false;
+          }
+
+          @Override
           public byte[] getColumnQualifierBytes() {
             return SINGLE_COLUMN_NAME.getBytes();
           }
