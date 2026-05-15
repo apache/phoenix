@@ -2102,7 +2102,12 @@ public class MetaDataClient {
     String schemaName = dataTable.getSchemaName().getString();
     String tableName = dataTable.getTableName().getString();
     boolean isSalted = dataTable.getBucketNum() != null;
-    long timestamp = connection.getSCN() == null ? HConstants.LATEST_TIMESTAMP : connection.getSCN();
+    // Single timestamp value reused for both addColumnMutation drain and the IS_VIRTUAL Put
+    // so all cells on a given column row share the same HBase cell timestamp.
+    long mutationTimestamp = connection.getSCN() == null
+      ? EnvironmentEdgeManager.currentTimeMillis()
+      : connection.getSCN();
+    long timestamp = mutationTimestamp;
     List<Mutation> tableMetaData = Lists.newArrayList();
     List<Mutation> columnMetaData = Lists.newArrayList();
 
@@ -2139,7 +2144,7 @@ public class MetaDataClient {
         tableName, col.getName().getString(), famName);
       org.apache.hadoop.hbase.client.Put isVirtualPut =
         new org.apache.hadoop.hbase.client.Put(rowKey);
-      isVirtualPut.addColumn(tableFamilyBytes, isVirtualQualifier, timestamp,
+      isVirtualPut.addColumn(tableFamilyBytes, isVirtualQualifier, mutationTimestamp,
         org.apache.phoenix.schema.types.PBoolean.INSTANCE.toBytes(Boolean.TRUE));
       columnMetaData.add(isVirtualPut);
     }
