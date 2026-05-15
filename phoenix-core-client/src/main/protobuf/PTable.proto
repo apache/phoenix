@@ -52,6 +52,7 @@ message PColumn {
   optional bytes columnQualifierBytes = 15;
   optional int64 timestamp = 16;
   optional bool derived = 17 [default = false];
+  optional bool isVirtual = 18 [default = false];
 }
 
 message PTableStats {
