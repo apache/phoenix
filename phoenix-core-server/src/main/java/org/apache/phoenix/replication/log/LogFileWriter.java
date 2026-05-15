@@ -78,11 +78,11 @@ public class LogFileWriter implements LogFile.Writer {
   }
 
   @Override
-  public void append(String tableName, long commitId, Mutation mutation) throws IOException {
+  public boolean append(String tableName, long commitId, Mutation mutation) throws IOException {
     if (isClosed()) {
       throw new IOException("Writer has been closed");
     }
-    writer.append(
+    return writer.append(
       new LogFileRecord().setHBaseTableName(tableName).setCommitId(commitId).setMutation(mutation));
   }
 

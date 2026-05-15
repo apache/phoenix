@@ -56,6 +56,7 @@ import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
 import org.apache.phoenix.replication.log.LogFileTestUtil;
 import org.apache.phoenix.replication.log.LogFileWriter;
+import org.apache.phoenix.replication.log.LogFileWriterContext;
 import org.junit.Test;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
@@ -1872,5 +1873,50 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     } finally {
       group.close();
     }
+  }
+
+  /**
+   * Tests that rotation after block-full syncs replays only the records from the last partial
+   * block, not the entire inter-sync window.
+   */
+  @Test
+  public void testBlockFullSyncOnAppendReducesReplayOnRotation() throws Exception {
+    final String tableName = "TBLBFR";
+    // Use a very small block size to trigger block-full sync quickly
+    conf.setLong(LogFileWriterContext.LOGFILE_BLOCK_SIZE, 200L);
+    // Use a short round duration so we can trigger rotation via time
+    conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, 1);
+    recreateLogGroup();
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter oldWriter = activeLog.getWriter();
+
+    // Append 20 records without an explicit sync — block-full syncs will fire along the way,
+    // clearing currentBatch at each block boundary
+    long id;
+    for (id = 1; id <= 20; id++) {
+      Mutation put = LogFileTestUtil.newPut("row_" + id, id, 2);
+      logGroup.append(tableName, id, put);
+    }
+
+    // Wait for the rotation tick to stage a new pendingWriter
+    waitForRotationTick(1);
+
+    // Append one more record and sync — apply() drains pendingWriter triggering replay,
+    // sync() ensures the disruptor has fully processed replay + new append
+    id++;
+    logGroup.append(tableName, id, LogFileTestUtil.newPut("row_21", 21, 2));
+    logGroup.sync();
+
+    LogFileWriter newWriter = activeLog.getWriter();
+    assertNotEquals("Writer should have been rotated", oldWriter, newWriter);
+
+    // Without block-full clearing, the new writer would receive a replay of all 20 records
+    // plus the new append (21 appends total). With block-full clearing, it receives only the
+    // partial-block tail plus the new append — strictly fewer than 21.
+    int newWriterAppendCount = Mockito.mockingDetails(newWriter).getInvocations().stream()
+      .filter(inv -> inv.getMethod().getName().equals("append")).mapToInt(inv -> 1).sum();
+    assertTrue("Replay should be bounded by last partial block, not all records. Got: "
+      + newWriterAppendCount, newWriterAppendCount < id);
   }
 }

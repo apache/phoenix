@@ -328,9 +328,10 @@ public interface LogFile {
      * @param tableName The HBase table name
      * @param commitId  The commit identifier
      * @param mutation  The mutation to append.
+     * @return true if an implicit sync happened (block full), false if buffered only
      * @throws IOException if an I/O error occurs during append.
      */
-    void append(String tableName, long commitId, Mutation mutation) throws IOException;
+    boolean append(String tableName, long commitId, Mutation mutation) throws IOException;
 
     /**
      * Flushes any buffered data to the underlying storage and ensures it is durable (e.g., by
