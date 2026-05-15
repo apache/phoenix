@@ -417,6 +417,8 @@ public class UpsertCompiler {
         // No cached table — first-touch UPSERT will be resolved by FromCompiler.
       }
       if (cachedTable != null) {
+        List<ColumnDef> filteredDynamicColumns = new ArrayList<>(upsertColumnDefs.size());
+        boolean droppedAny = false;
         for (ColumnDef cd : upsertColumnDefs) {
           String name = cd.getColumnDefName().getColumnName();
           PColumn registered = null;
@@ -427,6 +429,7 @@ public class UpsertCompiler {
             }
           }
           if (registered == null) {
+            filteredDynamicColumns.add(cd);
             continue;
           }
           if (!registered.getDataType().equals(cd.getDataType())) {
@@ -436,6 +439,19 @@ public class UpsertCompiler {
                 + " does not match supplied " + cd.getDataType().getSqlTypeName())
               .build().buildException();
           }
+          // Matching type — drop the inline def. The column is already in the
+          // schema; leaving it would trigger COLUMN_EXIST_IN_DEF in the
+          // resolver's addDynamicColumns path.
+          droppedAny = true;
+        }
+        if (droppedAny) {
+          NamedTableNode replacement = NamedTableNode.create(
+            tableNode.getAlias(), tableNode.getName(), filteredDynamicColumns);
+          upsert = new UpsertStatement(replacement, upsert.getHint(), upsert.getColumns(),
+            upsert.getValues(), upsert.getSelect(), upsert.getBindCount(),
+            upsert.getUdfParseNodes(), upsert.getOnDupKeyPairs(), upsert.getOnDupKeyType(),
+            upsert.isReturningRow());
+          tableNode = upsert.getTable();
         }
       }
     }

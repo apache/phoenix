@@ -117,6 +117,27 @@ public class DynamicColumnIndexWriteIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  public void upsertWithInlineMatchingTypeSucceeds() throws Exception {
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection c = conn()) {
+      c.createStatement().execute(
+          "CREATE TABLE " + table + " (pk VARCHAR PRIMARY KEY, regular VARCHAR) "
+              + "COLUMN_ENCODED_BYTES=0");
+      c.createStatement().execute(
+          "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
+
+      // Inline (extra VARCHAR) matches the registered virtual VARCHAR — must succeed.
+      c.prepareStatement(
+          "UPSERT INTO " + table + " (pk, extra VARCHAR) VALUES ('row1', 'hello')")
+          .executeUpdate();
+      c.commit();
+
+      assertEquals(1L, countIndexRows(c, index));
+    }
+  }
+
+  @Test
   public void rejectsConflictingTypeAtUpsert() throws Exception {
     String table = generateUniqueName();
     String index = generateUniqueName();
