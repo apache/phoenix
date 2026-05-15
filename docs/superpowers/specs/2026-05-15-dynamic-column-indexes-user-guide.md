@@ -70,3 +70,29 @@ during development and migration; not aggregated reporting.
 | Property | Default | Effect |
 |---|---|---|
 | `phoenix.index.dynamic.enabled` | `true` | Master switch. When false, `CREATE INDEX … DYNAMIC` is rejected. Already-promoted columns remain readable. |
+
+## Known limitations
+
+- **Mixed-version cluster — sparse-skip on old servers.** The sparse-skip
+  semantics (no index entry for rows that omit the indexed virtual column)
+  rely on a new `IndexMaintainer` proto field (tag 34, optional repeated)
+  introduced with this feature. Old region servers receiving an
+  `IndexMaintainer` from a new client silently ignore the field and emit
+  a regular index entry for every UPSERT — including ones that don't
+  supply the virtual column. The result is correct (queries still work)
+  but indexes are denser than expected during a rolling upgrade. Wait for
+  all region servers to upgrade before relying on sparse-skip economics.
+- **`SYSTEM.CATALOG` `IS_VIRTUAL` column backfill on upgrade.** The first
+  client connecting to an upgraded cluster runs an
+  `ALTER TABLE SYSTEM.CATALOG ADD IF NOT EXISTS IS_VIRTUAL BOOLEAN`. The
+  ALTER is idempotent and adds the column lazily; until that first connect
+  has run, `CREATE INDEX … DYNAMIC` will fail with a column-not-found
+  error against `SYSTEM.CATALOG`. Reconnect once and retry.
+- **Atomicity of CREATE INDEX … DYNAMIC.** Promotion and index-create are
+  two RPCs: column promotion lands in `SYSTEM.CATALOG` first, then the
+  index-create RPC fires. On failure of the second RPC, a compensating
+  `ALTER TABLE … DROP COLUMN` runs to un-promote. If the client crashes
+  between RPCs, the virtual column is left orphaned until the next
+  `CREATE INDEX` (which is idempotent for already-promoted matching-type
+  columns) or until the user manually drops it.
+
