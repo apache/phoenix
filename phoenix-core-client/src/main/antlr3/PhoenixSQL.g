@@ -669,7 +669,31 @@ col_name_with_sort_order_rowtimestamp returns [ColumnDefInPkConstraint ret]
 ;
 
 ik_constraint returns [IndexKeyConstraint ret]
-    :   x = expression_with_sort_order_list {$ret = factory.indexKey(x); }
+@init{ List<IndexKeyConstraint.Entry> entries = new ArrayList<IndexKeyConstraint.Entry>(); }
+    :   x=ik_index_column { entries.add(x); }
+        (COMMA y=ik_index_column { entries.add(y); })*
+        {$ret = factory.indexKey(entries); }
+;
+
+ik_index_column returns [IndexKeyConstraint.Entry ret]
+    :   // Dynamic form: <name> <TYPE> DYNAMIC [ASC|DESC]
+        // Use a syntactic+semantic predicate so we only enter this alt when the
+        // third token is the identifier 'DYNAMIC'.
+        ({ input.LT(3) != null && "DYNAMIC".equalsIgnoreCase(input.LT(3).getText()) }?
+         c=column_name dt=identifier dyn=identifier (order=ASC|order=DESC)?
+         { $ret = IndexKeyConstraint.Entry.dynamic(
+              factory.column(null, c.getColumnName(), c.getColumnName()),
+              factory.columnDef(c, dt, false, null, Boolean.TRUE, null, null,
+                  false, SortOrder.getDefault(), null, null, false),
+              order == null ? SortOrder.getDefault()
+                            : SortOrder.fromDDLValue(order.getText())); })
+        |
+        // Regular form: <expression> [ASC|DESC]  (existing behavior)
+        x=expression (order=ASC|order=DESC)?
+        { $ret = IndexKeyConstraint.Entry.regular(
+              x,
+              order == null ? SortOrder.getDefault()
+                            : SortOrder.fromDDLValue(order.getText())); }
 ;
 
 expression_with_sort_order_list returns [List<Pair<ParseNode, SortOrder>> ret]

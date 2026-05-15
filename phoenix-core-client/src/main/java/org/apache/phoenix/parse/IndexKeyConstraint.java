@@ -17,8 +17,10 @@
  */
 package org.apache.phoenix.parse;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.schema.SortOrder;
 
@@ -26,28 +28,72 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 public class IndexKeyConstraint {
   public static final IndexKeyConstraint EMPTY =
-    new IndexKeyConstraint(Collections.<Pair<ParseNode, SortOrder>> emptyList());
+    new IndexKeyConstraint(Collections.<Entry> emptyList());
 
-  private final List<Pair<ParseNode, SortOrder>> columnNameToSortOrder;
+  /** One column entry in an index-key constraint. */
+  public static class Entry {
+    private final ParseNode parseNode;
+    private final SortOrder sortOrder;
+    private final boolean dynamic;
+    private final ColumnDef columnDef; // non-null iff dynamic
 
-  IndexKeyConstraint(List<Pair<ParseNode, SortOrder>> parseNodeAndSortOrder) {
-    this.columnNameToSortOrder = ImmutableList.copyOf(parseNodeAndSortOrder);
+    private Entry(ParseNode parseNode, ColumnDef columnDef, SortOrder sortOrder,
+        boolean dynamic) {
+      this.parseNode = parseNode;
+      this.columnDef = columnDef;
+      this.sortOrder = sortOrder;
+      this.dynamic = dynamic;
+    }
+
+    public static Entry regular(ParseNode parseNode, SortOrder sortOrder) {
+      return new Entry(parseNode, null, sortOrder, false);
+    }
+
+    public static Entry dynamic(ParseNode parseNode, ColumnDef columnDef, SortOrder sortOrder) {
+      if (columnDef == null) {
+        throw new IllegalArgumentException("dynamic Entry requires a ColumnDef");
+      }
+      return new Entry(parseNode, columnDef, sortOrder, true);
+    }
+
+    public ParseNode getParseNode() { return parseNode; }
+    public SortOrder getSortOrder() { return sortOrder; }
+    public boolean isDynamic() { return dynamic; }
+    public ColumnDef getColumnDef() { return columnDef; }
   }
 
+  private final List<Entry> entries;
+
+  IndexKeyConstraint(List<Entry> entries) {
+    this.entries = ImmutableList.copyOf(entries);
+  }
+
+  public List<Entry> getEntries() {
+    return entries;
+  }
+
+  /** Backwards-compatible accessor used by older callers. */
   public List<Pair<ParseNode, SortOrder>> getParseNodeAndSortOrderList() {
-    return columnNameToSortOrder;
+    List<Pair<ParseNode, SortOrder>> out = new ArrayList<>(entries.size());
+    for (Entry e : entries) {
+      out.add(Pair.newPair(e.getParseNode(), e.getSortOrder()));
+    }
+    return out;
   }
+
+  public boolean isDynamic(int index) { return entries.get(index).isDynamic(); }
+  public ColumnDef getColumnDef(int index) { return entries.get(index).getColumnDef(); }
 
   @Override
   public String toString() {
     StringBuffer sb = new StringBuffer();
-    for (Pair<ParseNode, SortOrder> entry : columnNameToSortOrder) {
+    for (Entry entry : entries) {
       if (sb.length() != 0) {
         sb.append(", ");
       }
-      sb.append(entry.getFirst().toString());
-      if (entry.getSecond() != SortOrder.getDefault()) {
-        sb.append(" " + entry.getSecond());
+      sb.append(entry.getParseNode().toString());
+      if (entry.getSortOrder() != SortOrder.getDefault()) {
+        sb.append(" " + entry.getSortOrder());
       }
     }
     return sb.toString();

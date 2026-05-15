@@ -20,6 +20,7 @@ package org.apache.phoenix.parse;
 import java.lang.reflect.Constructor;
 import java.math.BigDecimal;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -349,8 +350,17 @@ public class ParseNodeFactory {
     return new PrimaryKeyConstraint(name, columnDefs);
   }
 
-  public IndexKeyConstraint indexKey(List<Pair<ParseNode, SortOrder>> parseNodeAndSortOrder) {
-    return new IndexKeyConstraint(parseNodeAndSortOrder);
+  public IndexKeyConstraint indexKey(List<IndexKeyConstraint.Entry> entries) {
+    return new IndexKeyConstraint(entries);
+  }
+
+  /** Backwards-compatible factory used by tests / older call sites. */
+  public IndexKeyConstraint indexKeyLegacy(List<Pair<ParseNode, SortOrder>> pairs) {
+    List<IndexKeyConstraint.Entry> entries = new ArrayList<>(pairs.size());
+    for (Pair<ParseNode, SortOrder> p : pairs) {
+      entries.add(IndexKeyConstraint.Entry.regular(p.getFirst(), p.getSecond()));
+    }
+    return new IndexKeyConstraint(entries);
   }
 
   public CreateTableStatement createTable(TableName tableName,
