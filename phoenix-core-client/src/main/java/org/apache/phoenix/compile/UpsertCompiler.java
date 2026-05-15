@@ -463,8 +463,12 @@ public class UpsertCompiler {
           droppedAny = true;
         }
         if (droppedAny) {
+          // Forward the table sampling rate via the 4-arg factory; the 3-arg
+          // overload defaults to no sampling and would silently drop a
+          // user-supplied TABLESAMPLE clause.
           NamedTableNode replacement = NamedTableNode.create(
-            tableNode.getAlias(), tableNode.getName(), filteredDynamicColumns);
+            tableNode.getAlias(), tableNode.getName(), filteredDynamicColumns,
+            tableNode.getTableSamplingRate());
           // Use withTable to forward every other UpsertStatement field
           // unchanged; manual reconstruction here would silently drop fields
           // that future contributors add (hints, ON DUP KEY, returningRow, ...).

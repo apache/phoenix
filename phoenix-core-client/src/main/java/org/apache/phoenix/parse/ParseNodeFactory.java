@@ -354,15 +354,6 @@ public class ParseNodeFactory {
     return new IndexKeyConstraint(entries);
   }
 
-  /** Backwards-compatible factory used by tests / older call sites. */
-  public IndexKeyConstraint indexKeyLegacy(List<Pair<ParseNode, SortOrder>> pairs) {
-    List<IndexKeyConstraint.Entry> entries = new ArrayList<>(pairs.size());
-    for (Pair<ParseNode, SortOrder> p : pairs) {
-      entries.add(IndexKeyConstraint.Entry.regular(p.getFirst(), p.getSecond()));
-    }
-    return new IndexKeyConstraint(entries);
-  }
-
   public CreateTableStatement createTable(TableName tableName,
     ListMultimap<String, Pair<String, Object>> props, List<ColumnDef> columns,
     PrimaryKeyConstraint pkConstraint, List<ParseNode> splits, PTableType tableType,

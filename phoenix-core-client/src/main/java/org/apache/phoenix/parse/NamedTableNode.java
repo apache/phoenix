@@ -36,6 +36,12 @@ public class NamedTableNode extends ConcreteTableNode {
     return new NamedTableNode(alias, name, dynColumns);
   }
 
+  /** Factory that preserves the table sampling rate alongside dynamic columns. */
+  public static NamedTableNode create(String alias, TableName name, List<ColumnDef> dynColumns,
+    Double tableSamplingRate) {
+    return new NamedTableNode(alias, name, dynColumns, tableSamplingRate);
+  }
+
   public static NamedTableNode create(TableName name) {
     return new NamedTableNode(null, name, Collections.<ColumnDef> emptyList());
   }
