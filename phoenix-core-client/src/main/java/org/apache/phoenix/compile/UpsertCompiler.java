@@ -85,6 +85,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.ColumnRef;
+import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.schema.ConstraintViolationException;
 import org.apache.phoenix.schema.DelegateColumn;
 import org.apache.phoenix.schema.IllegalDataException;
@@ -102,6 +103,7 @@ import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.ReadOnlyTableException;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.UpsertColumnsValuesMismatchException;
@@ -401,6 +403,42 @@ public class UpsertCompiler {
         QueryServicesOptions.DEFAULT_ENABLE_SERVER_SIDE_UPSERT_MUTATIONS);
     UpsertingParallelIteratorFactory parallelIteratorFactoryToBe = null;
     boolean useServerTimestampToBe = false;
+
+    // Guard: reject inline ColumnDef whose type conflicts with a registered
+    // virtual (dynamic-index-promoted) column. Type stability across UPSERTs
+    // is the contract of dynamic-column indexes. Run before resolver assembly
+    // so we surface the typed error instead of the resolver's COLUMN_EXIST_IN_DEF.
+    List<ColumnDef> upsertColumnDefs = tableNode.getDynamicColumns();
+    if (upsertColumnDefs != null && !upsertColumnDefs.isEmpty()) {
+      PTable cachedTable = null;
+      try {
+        cachedTable = connection.getTable(SchemaUtil.getTableName(schemaName, tableName));
+      } catch (TableNotFoundException e) {
+        // No cached table — first-touch UPSERT will be resolved by FromCompiler.
+      }
+      if (cachedTable != null) {
+        for (ColumnDef cd : upsertColumnDefs) {
+          String name = cd.getColumnDefName().getColumnName();
+          PColumn registered = null;
+          for (PColumn pc : cachedTable.getColumns()) {
+            if (pc.isVirtual() && pc.getName().getString().equals(name)) {
+              registered = pc;
+              break;
+            }
+          }
+          if (registered == null) {
+            continue;
+          }
+          if (!registered.getDataType().equals(cd.getDataType())) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.PHOENIX_DYNAMIC_TYPE_CONFLICT)
+              .setColumnName(name)
+              .setMessage("Registered type " + registered.getDataType().getSqlTypeName()
+                + " does not match supplied " + cd.getDataType().getSqlTypeName())
+              .build().buildException();
+          }
+        }
+      }
+    }
 
     resolver = FromCompiler.getResolverForMutation(upsert, connection);
     tableRefToBe = resolver.getTables().get(0);
