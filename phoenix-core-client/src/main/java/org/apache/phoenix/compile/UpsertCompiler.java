@@ -67,6 +67,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
+import org.apache.phoenix.monitoring.DynamicColumnIndexMetrics;
 import org.apache.phoenix.optimize.QueryOptimizer;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BindParseNode;
@@ -449,6 +450,7 @@ public class UpsertCompiler {
             continue;
           }
           if (!registered.getDataType().equals(cd.getDataType())) {
+            DynamicColumnIndexMetrics.incrementTypeConflictRejects();
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.PHOENIX_DYNAMIC_TYPE_CONFLICT)
               .setColumnName(name)
               .setMessage("Registered type " + registered.getDataType().getSqlTypeName()

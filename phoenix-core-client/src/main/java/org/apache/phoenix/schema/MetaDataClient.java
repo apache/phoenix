@@ -225,6 +225,7 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.monitoring.DynamicColumnIndexMetrics;
 import org.apache.phoenix.monitoring.TableMetricsManager;
 import org.apache.phoenix.parse.AddColumnStatement;
 import org.apache.phoenix.parse.AlterIndexStatement;
@@ -2138,6 +2139,7 @@ public class MetaDataClient {
     for (PColumn col : addedCols) {
       addColumnMutation(connection, schemaName, tableName, col, null /* parentTableName */,
         null /* pkName */, null /* keySeq */, isSalted);
+      DynamicColumnIndexMetrics.incrementPromotions();
     }
     // Drain the column mutations.
     columnMetaData
