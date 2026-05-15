@@ -73,6 +73,15 @@ public class DynamicColumnIndexCreationIT extends ParallelStatsDisabledIT {
       assertNotNull("EXTRA must be promoted into base table catalog", extra);
       assertTrue("promoted column must be virtual", extra.isVirtual());
       assertFalse("promoted column must NOT be marked dynamic-runtime", extra.isDynamic());
+
+      String indexFullName = SchemaUtil.normalizeIdentifier(index);
+      PTable indexTable = pc.getTable(indexFullName);
+      boolean indexHasExtra = false;
+      for (PColumn col : indexTable.getColumns()) {
+        // Phoenix stores indexed columns with a prefix (":EXTRA" or "0:EXTRA").
+        if (col.getName().getString().endsWith("EXTRA")) { indexHasExtra = true; break; }
+      }
+      assertTrue("Index must include EXTRA in its columns", indexHasExtra);
     }
   }
 
@@ -117,8 +126,11 @@ public class DynamicColumnIndexCreationIT extends ParallelStatsDisabledIT {
             "CREATE INDEX " + generateUniqueName() + " ON " + table + " (extra DYNAMIC)");
         fail("expected SQLException");
       } catch (SQLException ex) {
-        // Either the grammar threw, or our DYNAMIC_INDEX_REQUIRES_TYPE fires.
-        // Either way we just want a SQLException, not a successful CREATE.
+        // Either grammar rejects (parser error) or DYNAMIC_INDEX_REQUIRES_TYPE fires.
+        // Both are acceptable; just verify we got a SQLException with non-zero error code.
+        assertTrue("expected SQLException with error code, got " + ex.getMessage(),
+            ex.getErrorCode() != 0 || ex.getMessage().toUpperCase().contains("DYNAMIC")
+            || ex.getMessage().toUpperCase().contains("MISSING"));
       }
     }
   }
@@ -205,11 +217,17 @@ public class DynamicColumnIndexCreationIT extends ParallelStatsDisabledIT {
           "CREATE INDEX " + index + " ON " + table + " (a VARCHAR DYNAMIC, b BIGINT DYNAMIC)");
       PhoenixConnection pc = c.unwrap(PhoenixConnection.class);
       PTable t = pc.getTable(SchemaUtil.normalizeIdentifier(table));
-      int virtualCount = 0;
+      PColumn a = null, b = null;
       for (PColumn col : t.getColumns()) {
-        if (col.isVirtual()) virtualCount++;
+        if (col.getName().getString().equals("A")) a = col;
+        if (col.getName().getString().equals("B")) b = col;
       }
-      assertEquals(2, virtualCount);
+      assertNotNull("A must be promoted", a);
+      assertTrue("A must be virtual", a.isVirtual());
+      assertEquals("VARCHAR", a.getDataType().getSqlTypeName());
+      assertNotNull("B must be promoted", b);
+      assertTrue("B must be virtual", b.isVirtual());
+      assertEquals("BIGINT", b.getDataType().getSqlTypeName());
     }
   }
 }
