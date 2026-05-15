@@ -94,4 +94,4 @@ Tip: pass `--no-install` after the first run to skip the install warm-up step (~
 - [x] Phase 0 — isVirtual plumbing (commit 3fd09f9d1d)
 - [x] Phase 1 — DDL grammar + promotion
 - [x] Phase 2 — write path
-- [ ] Phase 3 — drop + observability
+- [x] Phase 3 — drop + observability — Feature C v1 complete
