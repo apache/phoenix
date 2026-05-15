@@ -97,4 +97,20 @@ during development and migration; not aggregated reporting.
   between RPCs, the virtual column is left orphaned until the next
   `CREATE INDEX` (which is idempotent for already-promoted matching-type
   columns) or until the user manually drops it.
+- **CDC streams.** Virtual-column cells appear in CDC change images like
+  any other cell. There is no special "sparse-aware" CDC behavior in v1.
+  If you rely on CDC and add a virtual-column index, expect change
+  records for every UPSERT that supplies the column. Not tested in v1.
+- **Multi-tenant views.** Views inherit virtual columns from their base
+  table and the inherited column remains `isVirtual=true`. Tenants cannot
+  promote new virtual columns through a view (CREATE INDEX … DYNAMIC on
+  a view is not yet validated). Not tested in v1.
+- **Transactional tables.** Feature C is not tested against transactional
+  tables. CREATE INDEX … DYNAMIC against a transactional table may behave
+  unpredictably. Recommend non-transactional tables until v2.
+- **ALTER TABLE ADD COLUMN collision.** If a user runs `ALTER TABLE t ADD
+  extra VARCHAR` against a table where `extra` is already a promoted
+  virtual column, Phoenix's standard `IF NOT EXISTS` semantics apply: the
+  ALTER is a no-op and the column remains virtual. Use `DROP INDEX … ON t`
+  first to un-promote, then re-add as a regular column.
 
