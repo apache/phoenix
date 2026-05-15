@@ -4459,12 +4459,89 @@ public class MetaDataClient {
     return dropFunction(statement.getFunctionName(), statement.ifExists());
   }
 
+  /**
+   * After an index drop, remove from SYSTEM.CATALOG any virtual PColumn that was
+   * indexed by the dropped index and is no longer referenced by any remaining
+   * index on the base table. Cells in HBase are NOT deleted — only the catalog
+   * row is removed, making the column unresolvable from SQL going forward.
+   */
+  private void unpromoteOrphanedVirtualColumns(PTable parentTable, PTable droppedIndex)
+    throws SQLException {
+
+    // 1. Collect names of base-table columns referenced as keys of the dropped index.
+    Set<String> droppedIndexKeyNames = new HashSet<>();
+    for (PColumn idxCol : droppedIndex.getPKColumns()) {
+      String dataColName = IndexUtil.getDataColumnName(idxCol.getName().getString());
+      droppedIndexKeyNames.add(dataColName);
+    }
+
+    // 2. Of those, keep only the ones that are virtual on the base table.
+    Set<String> candidateForDrop = new HashSet<>();
+    for (String name : droppedIndexKeyNames) {
+      try {
+        PColumn col = parentTable.getColumnForColumnName(name);
+        if (col.isVirtual()) {
+          candidateForDrop.add(name);
+        }
+      } catch (ColumnNotFoundException e) {
+        // Already gone — skip.
+      }
+    }
+    if (candidateForDrop.isEmpty()) {
+      return;
+    }
+
+    // 3. Re-resolve the (now updated) PTable and discard any name still referenced
+    // by another remaining index.
+    PTable freshParent = connection.getTable(parentTable.getName().getString());
+    for (PTable remaining : freshParent.getIndexes()) {
+      for (PColumn ic : remaining.getPKColumns()) {
+        String dn = IndexUtil.getDataColumnName(ic.getName().getString());
+        candidateForDrop.remove(dn);
+      }
+    }
+
+    if (candidateForDrop.isEmpty()) {
+      return;
+    }
+
+    // 4. Drop the orphaned virtual columns via the existing ALTER TABLE DROP COLUMN path.
+    for (String orphan : candidateForDrop) {
+      String drop = "ALTER TABLE " + freshParent.getName().getString()
+        + " DROP COLUMN \"" + orphan + "\"";
+      connection.createStatement().execute(drop);
+      DynamicColumnIndexMetrics.incrementUnpromotions();
+    }
+  }
+
   public MutationState dropIndex(DropIndexStatement statement) throws SQLException {
     String schemaName = statement.getTableName().getSchemaName();
     String tableName = statement.getIndexName().getName();
     String parentTableName = statement.getTableName().getTableName();
-    return dropTable(schemaName, tableName, parentTableName, PTableType.INDEX, statement.ifExists(),
-      false, false);
+
+    // Snapshot the parent and dropped index PTables before mutation so we can
+    // un-promote any virtual columns that become orphaned by the drop.
+    PTable parent = null;
+    PTable indexBeforeDrop = null;
+    try {
+      parent = connection.getTable(SchemaUtil.getTableName(schemaName, parentTableName));
+      for (PTable idx : parent.getIndexes()) {
+        if (idx.getTableName().getString().equalsIgnoreCase(tableName)) {
+          indexBeforeDrop = idx;
+          break;
+        }
+      }
+    } catch (TableNotFoundException e) {
+      // Let dropTable raise the canonical exception (or honor IF EXISTS).
+    }
+
+    MutationState result = dropTable(schemaName, tableName, parentTableName, PTableType.INDEX,
+      statement.ifExists(), false, false);
+
+    if (parent != null && indexBeforeDrop != null) {
+      unpromoteOrphanedVirtualColumns(parent, indexBeforeDrop);
+    }
+    return result;
   }
 
   public MutationState dropCDC(DropCDCStatement statement) throws SQLException {
