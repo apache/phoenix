@@ -18,19 +18,19 @@
 package org.apache.phoenix.end2end.index.dyncol;
 
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.Types;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
-import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.UpgradeUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -41,12 +41,10 @@ public class IsVirtualBackfillIT extends ParallelStatsDisabledIT {
   public void systemCatalogHasIsVirtualColumn() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-      // Idempotent — adds IS_VIRTUAL if a fresh cluster created the catalog without it.
-      UpgradeUtil.addIsVirtualColumnIfMissing(conn.unwrap(PhoenixConnection.class));
-
       DatabaseMetaData md = conn.getMetaData();
       ResultSet rs = md.getColumns(null, "SYSTEM", "CATALOG", "IS_VIRTUAL");
       assertTrue("IS_VIRTUAL column should exist on SYSTEM.CATALOG", rs.next());
+      assertEquals("IS_VIRTUAL column should be BOOLEAN", Types.BOOLEAN, rs.getInt("DATA_TYPE"));
     }
   }
 }
