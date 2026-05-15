@@ -2088,8 +2088,33 @@ public class MetaDataClient {
           throw new SQLExceptionInfo.Builder(SQLExceptionCode.PHOENIX_DYNAMIC_TYPE_CONFLICT)
             .setColumnName(name).build().buildException();
         }
-        // virtual + same type — skip silently.
-        continue;
+        // virtual + same type — silent-skip is only safe if the column still
+        // exists on the parent. Re-validate against the latest catalog state
+        // to close the drop/create race: a concurrent DROP INDEX may have
+        // un-promoted this virtual column between resolver-fetch and here.
+        // If concurrently dropped, surface a transient/concurrency error so
+        // the caller can retry with fresh state — silently building an
+        // index over a phantom column would corrupt the index.
+        PTable freshParent = connection.getTable(dataTable.getName().getString());
+        PColumn currentCol;
+        try {
+          currentCol = freshParent.getColumnForColumnName(name);
+        } catch (ColumnNotFoundException cnfe) {
+          currentCol = null;
+        }
+        if (
+          currentCol != null && currentCol.isVirtual()
+            && currentCol.getDataType().equals(cd.getDataType())
+        ) {
+          continue;
+        }
+        throw new SQLExceptionInfo.Builder(
+          SQLExceptionCode.CONCURRENT_TABLE_MUTATION).setColumnName(name)
+            .setMessage("Virtual column " + name + " was concurrently modified on "
+              + dataTable.getName().getString()
+              + " (likely DROP INDEX between resolver fetch and CREATE INDEX). "
+              + "Retry the CREATE INDEX statement.")
+            .build().buildException();
       }
 
       PColumnImpl virtualCol = new PColumnImpl(PNameFactory.newName(name), defaultFam,

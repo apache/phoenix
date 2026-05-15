@@ -33,6 +33,8 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import static org.junit.Assert.assertNotNull;
+
 @Category(ParallelStatsDisabledTest.class)
 public class DynamicColumnIndexDropIT extends ParallelStatsDisabledIT {
 
@@ -109,6 +111,56 @@ public class DynamicColumnIndexDropIT extends ParallelStatsDisabledIT {
       assertFalse("now orphaned, must be unpromoted",
         hasColumn(c, table, "extra"));
       assertEquals(1, DynamicColumnIndexMetrics.getUnpromotions());
+    }
+  }
+
+  @Test
+  public void concurrentCreateAfterDropPromotesFresh() throws Exception {
+    // Simulate the drop-then-create race using two connections sequenced
+    // explicitly. Conn A creates an index (promotes EXTRA virtual), drops
+    // the index (un-promotes EXTRA). Conn B — which had a stale view of the
+    // table — then creates a new index with the same column. After we clear
+    // B's metadata cache (production observes invalidation via
+    // LastDDLTimestamp), B must promote a fresh virtual column rather than
+    // silently reusing the dropped one.
+    String table = generateUniqueName();
+    String i1 = generateUniqueName();
+    String i2 = generateUniqueName();
+    try (Connection c1 = conn(); Connection c2 = conn()) {
+      c1.createStatement().execute(
+        "CREATE TABLE " + table + " (pk VARCHAR PRIMARY KEY, regular VARCHAR) "
+          + "COLUMN_ENCODED_BYTES=0");
+      c1.createStatement().execute(
+        "CREATE INDEX " + i1 + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      // Prime c2's cache with the post-create view.
+      c2.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+      assertTrue(hasColumn(c2, table, "extra"));
+
+      c1.createStatement().execute("DROP INDEX " + i1 + " ON " + table);
+      assertFalse(hasColumn(c1, table, "extra"));
+
+      // Do NOT clear c2's cache — this is the race window: c2 still believes
+      // EXTRA exists as a virtual column (silent-skip branch on the type-match
+      // path). The promote logic must re-validate against the latest catalog
+      // state and either promote fresh or error out — it must not silently
+      // build i2 over a phantom column.
+      c2.createStatement().execute(
+        "CREATE INDEX " + i2 + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      assertTrue(hasColumn(c2, table, "extra"));
+
+      // The new column must be a fresh promotion — virtual on the parent.
+      PhoenixConnection pc = c2.unwrap(PhoenixConnection.class);
+      pc.getQueryServices().clearCache();
+      PTable t = pc.getTable(SchemaUtil.normalizeIdentifier(table));
+      PColumn extra = null;
+      for (PColumn col : t.getColumns()) {
+        if (col.getName().getString().equals("EXTRA")) {
+          extra = col;
+          break;
+        }
+      }
+      assertNotNull("EXTRA must exist after fresh promotion", extra);
+      assertTrue("EXTRA must be virtual after fresh promotion", extra.isVirtual());
     }
   }
 
