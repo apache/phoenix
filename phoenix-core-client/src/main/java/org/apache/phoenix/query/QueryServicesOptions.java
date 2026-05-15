@@ -181,6 +181,7 @@ public class QueryServicesOptions {
   public static final boolean DEFAULT_USE_INDEXES = true; // Use indexes
   public static final boolean DEFAULT_BSON_INDEX_ENABLED = true;
   public static final boolean DEFAULT_BSON_INDEX_REWRITE_ENABLED = true;
+  public static final boolean DEFAULT_PHOENIX_INDEX_DYNAMIC_ENABLED = true;
   public static final boolean DEFAULT_IMMUTABLE_ROWS = false; // Tables rows may be updated
   public static final boolean DEFAULT_DROP_METADATA = true; // Drop meta data also.
   public static final long DEFAULT_DRIVER_SHUTDOWN_TIMEOUT_MS = 5 * 1000; // Time to wait in
@@ -564,6 +565,8 @@ public class QueryServicesOptions {
       .setIfUnset(ROW_KEY_ORDER_SALTED_TABLE_ATTRIB, DEFAULT_FORCE_ROW_KEY_ORDER)
       .setIfUnset(USE_INDEXES_ATTRIB, DEFAULT_USE_INDEXES)
       .setIfUnset(BSON_INDEX_ENABLED_ATTRIB, DEFAULT_BSON_INDEX_ENABLED)
+      .setIfUnset(QueryServices.PHOENIX_INDEX_DYNAMIC_ENABLED,
+        DEFAULT_PHOENIX_INDEX_DYNAMIC_ENABLED)
       .setIfUnset(IMMUTABLE_ROWS_ATTRIB, DEFAULT_IMMUTABLE_ROWS)
       .setIfUnset(INDEX_MUTATE_BATCH_SIZE_THRESHOLD_ATTRIB,
         DEFAULT_INDEX_MUTATE_BATCH_SIZE_THRESHOLD)
