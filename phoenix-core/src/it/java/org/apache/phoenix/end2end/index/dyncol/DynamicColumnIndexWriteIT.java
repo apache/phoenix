@@ -41,17 +41,32 @@ public class DynamicColumnIndexWriteIT extends ParallelStatsDisabledIT {
   }
 
   private long countIndexRows(Connection c, String index) throws SQLException {
-    ResultSet rs = c.createStatement().executeQuery(
-        "SELECT COUNT(*) FROM " + index);
-    rs.next();
-    return rs.getLong(1);
+    String sql = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + index;
+    try (Statement s = c.createStatement(); ResultSet rs = s.executeQuery(sql)) {
+      rs.next();
+      return rs.getLong(1);
+    }
   }
 
   private String createBaseTable(Connection conn, String table) throws SQLException {
-    conn.createStatement().execute(
-        "CREATE TABLE " + table + " (pk VARCHAR PRIMARY KEY, regular VARCHAR) "
-            + "COLUMN_ENCODED_BYTES=0");
+    try (Statement s = conn.createStatement()) {
+      s.execute(
+          "CREATE TABLE " + table + " (pk VARCHAR PRIMARY KEY, regular VARCHAR) "
+              + "COLUMN_ENCODED_BYTES=0");
+    }
     return table;
+  }
+
+  private static void exec(Connection c, String sql) throws SQLException {
+    try (Statement s = c.createStatement()) {
+      s.execute(sql);
+    }
+  }
+
+  private static void upsert(Connection c, String sql) throws SQLException {
+    try (PreparedStatement ps = c.prepareStatement(sql)) {
+      ps.executeUpdate();
+    }
   }
 
   @Test
@@ -60,13 +75,10 @@ public class DynamicColumnIndexWriteIT extends ParallelStatsDisabledIT {
     String index = generateUniqueName();
     try (Connection c = conn()) {
       createBaseTable(c, table);
-      c.createStatement().execute(
-          "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      exec(c, "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
 
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, extra) VALUES ('row1', 'hello')").executeUpdate();
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, extra) VALUES ('row2', 'world')").executeUpdate();
+      upsert(c, "UPSERT INTO " + table + " (pk, extra) VALUES ('row1', 'hello')");
+      upsert(c, "UPSERT INTO " + table + " (pk, extra) VALUES ('row2', 'world')");
       c.commit();
 
       assertEquals(2L, countIndexRows(c, index));
@@ -79,13 +91,10 @@ public class DynamicColumnIndexWriteIT extends ParallelStatsDisabledIT {
     String index = generateUniqueName();
     try (Connection c = conn()) {
       createBaseTable(c, table);
-      c.createStatement().execute(
-          "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      exec(c, "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
 
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, regular) VALUES ('row1', 'r1')").executeUpdate();
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, regular) VALUES ('row2', 'r2')").executeUpdate();
+      upsert(c, "UPSERT INTO " + table + " (pk, regular) VALUES ('row1', 'r1')");
+      upsert(c, "UPSERT INTO " + table + " (pk, regular) VALUES ('row2', 'r2')");
       c.commit();
 
       assertEquals("rows omitting the indexed column must be sparse-skipped",
@@ -99,19 +108,13 @@ public class DynamicColumnIndexWriteIT extends ParallelStatsDisabledIT {
     String index = generateUniqueName();
     try (Connection c = conn()) {
       createBaseTable(c, table);
-      c.createStatement().execute(
-          "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      exec(c, "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
 
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, extra) VALUES ('a', '1')").executeUpdate();
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, extra) VALUES ('b', '2')").executeUpdate();
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, regular) VALUES ('c', 'r')").executeUpdate();
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, extra) VALUES ('d', '3')").executeUpdate();
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, regular) VALUES ('e', 'r')").executeUpdate();
+      upsert(c, "UPSERT INTO " + table + " (pk, extra) VALUES ('a', '1')");
+      upsert(c, "UPSERT INTO " + table + " (pk, extra) VALUES ('b', '2')");
+      upsert(c, "UPSERT INTO " + table + " (pk, regular) VALUES ('c', 'r')");
+      upsert(c, "UPSERT INTO " + table + " (pk, extra) VALUES ('d', '3')");
+      upsert(c, "UPSERT INTO " + table + " (pk, regular) VALUES ('e', 'r')");
       c.commit();
 
       assertEquals(3L, countIndexRows(c, index));
@@ -123,16 +126,12 @@ public class DynamicColumnIndexWriteIT extends ParallelStatsDisabledIT {
     String table = generateUniqueName();
     String index = generateUniqueName();
     try (Connection c = conn()) {
-      c.createStatement().execute(
-          "CREATE TABLE " + table + " (pk VARCHAR PRIMARY KEY, regular VARCHAR) "
-              + "COLUMN_ENCODED_BYTES=0");
-      c.createStatement().execute(
-          "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      exec(c, "CREATE TABLE " + table + " (pk VARCHAR PRIMARY KEY, regular VARCHAR) "
+          + "COLUMN_ENCODED_BYTES=0");
+      exec(c, "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
 
       // Inline (extra VARCHAR) matches the registered virtual VARCHAR — must succeed.
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, extra VARCHAR) VALUES ('row1', 'hello')")
-          .executeUpdate();
+      upsert(c, "UPSERT INTO " + table + " (pk, extra VARCHAR) VALUES ('row1', 'hello')");
       c.commit();
 
       assertEquals(1L, countIndexRows(c, index));
@@ -145,12 +144,11 @@ public class DynamicColumnIndexWriteIT extends ParallelStatsDisabledIT {
     String index = generateUniqueName();
     try (Connection c = conn()) {
       createBaseTable(c, table);
-      c.createStatement().execute(
-          "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      exec(c, "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
 
-      try {
-        c.prepareStatement(
-            "UPSERT INTO " + table + " (pk, extra INTEGER) VALUES ('row1', 42)").executeUpdate();
+      try (PreparedStatement ps = c.prepareStatement(
+          "UPSERT INTO " + table + " (pk, extra INTEGER) VALUES ('row1', 42)")) {
+        ps.executeUpdate();
         fail("expected PHOENIX_DYNAMIC_TYPE_CONFLICT");
       } catch (SQLException ex) {
         assertEquals(
@@ -206,16 +204,13 @@ public class DynamicColumnIndexWriteIT extends ParallelStatsDisabledIT {
     String index = generateUniqueName();
     try (Connection c = conn()) {
       createBaseTable(c, table);
-      c.createStatement().execute(
-          "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, extra) VALUES ('a', '1')").executeUpdate();
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, extra) VALUES ('b', '2')").executeUpdate();
+      exec(c, "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      upsert(c, "UPSERT INTO " + table + " (pk, extra) VALUES ('a', '1')");
+      upsert(c, "UPSERT INTO " + table + " (pk, extra) VALUES ('b', '2')");
       c.commit();
       assertEquals(2L, countIndexRows(c, index));
 
-      c.createStatement().execute("DELETE FROM " + table + " WHERE pk='a'");
+      exec(c, "DELETE FROM " + table + " WHERE pk='a'");
       c.commit();
       assertEquals(1L, countIndexRows(c, index));
     }
@@ -227,25 +222,26 @@ public class DynamicColumnIndexWriteIT extends ParallelStatsDisabledIT {
     String index = generateUniqueName();
     try (Connection c = conn()) {
       createBaseTable(c, table);
-      c.createStatement().execute(
-          "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, extra) VALUES ('a', 'v1')").executeUpdate();
+      exec(c, "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      upsert(c, "UPSERT INTO " + table + " (pk, extra) VALUES ('a', 'v1')");
       c.commit();
 
-      c.prepareStatement(
-          "UPSERT INTO " + table + " (pk, extra) VALUES ('a', 'v2')").executeUpdate();
+      upsert(c, "UPSERT INTO " + table + " (pk, extra) VALUES ('a', 'v2')");
       c.commit();
 
-      ResultSet rs = c.createStatement().executeQuery(
-          "SELECT pk FROM " + table + " WHERE extra='v2'");
-      assertTrue(rs.next());
-      assertEquals("a", rs.getString(1));
-      assertFalse(rs.next());
+      try (Statement s = c.createStatement();
+          ResultSet rs = s.executeQuery(
+              "SELECT pk FROM " + table + " WHERE extra='v2'")) {
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertFalse(rs.next());
+      }
 
-      rs = c.createStatement().executeQuery(
-          "SELECT pk FROM " + table + " WHERE extra='v1'");
-      assertFalse("old index entry must be gone after update", rs.next());
+      try (Statement s = c.createStatement();
+          ResultSet rs = s.executeQuery(
+              "SELECT pk FROM " + table + " WHERE extra='v1'")) {
+        assertFalse("old index entry must be gone after update", rs.next());
+      }
     }
   }
 }

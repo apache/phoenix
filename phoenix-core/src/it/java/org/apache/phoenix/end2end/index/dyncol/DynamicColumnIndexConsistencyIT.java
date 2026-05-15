@@ -18,6 +18,8 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Properties;
@@ -53,27 +55,28 @@ public class DynamicColumnIndexConsistencyIT extends ParallelStatsDisabledIT {
     Random rng = new Random(SEED);
 
     try (Connection c = conn()) {
-      c.createStatement().execute(
-          "CREATE TABLE " + table + " (pk VARCHAR PRIMARY KEY, regular VARCHAR) "
-              + "COLUMN_ENCODED_BYTES=0");
-      c.createStatement().execute(
-          "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      try (Statement s = c.createStatement()) {
+        s.execute("CREATE TABLE " + table + " (pk VARCHAR PRIMARY KEY, regular VARCHAR) "
+            + "COLUMN_ENCODED_BYTES=0");
+        s.execute("CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
+      }
 
-      for (int i = 0; i < N_ROWS; i++) {
-        String pk = String.format("p%05d", i);
-        if (rng.nextInt(100) < 60) {
-          String v = "v" + rng.nextInt(20);
-          PreparedStatement ps = c.prepareStatement(
+      try (PreparedStatement psExtra = c.prepareStatement(
               "UPSERT INTO " + table + " (pk, extra) VALUES (?, ?)");
-          ps.setString(1, pk);
-          ps.setString(2, v);
-          ps.executeUpdate();
-        } else {
-          PreparedStatement ps = c.prepareStatement(
-              "UPSERT INTO " + table + " (pk, regular) VALUES (?, ?)");
-          ps.setString(1, pk);
-          ps.setString(2, "r" + i);
-          ps.executeUpdate();
+          PreparedStatement psRegular = c.prepareStatement(
+              "UPSERT INTO " + table + " (pk, regular) VALUES (?, ?)")) {
+        for (int i = 0; i < N_ROWS; i++) {
+          String pk = String.format("p%05d", i);
+          if (rng.nextInt(100) < 60) {
+            String v = "v" + rng.nextInt(20);
+            psExtra.setString(1, pk);
+            psExtra.setString(2, v);
+            psExtra.executeUpdate();
+          } else {
+            psRegular.setString(1, pk);
+            psRegular.setString(2, "r" + i);
+            psRegular.executeUpdate();
+          }
         }
       }
       c.commit();
@@ -90,13 +93,17 @@ public class DynamicColumnIndexConsistencyIT extends ParallelStatsDisabledIT {
     }
   }
 
-  private static List<String> collect(Connection c, String sql, String v) throws Exception {
-    PreparedStatement ps = c.prepareStatement(sql);
-    ps.setString(1, v);
-    ResultSet rs = ps.executeQuery();
-    List<String> out = new ArrayList<>();
-    while (rs.next()) out.add(rs.getString(1));
-    java.util.Collections.sort(out);
-    return out;
+  private static List<String> collect(Connection c, String sql, String v) throws SQLException {
+    try (PreparedStatement ps = c.prepareStatement(sql)) {
+      ps.setString(1, v);
+      try (ResultSet rs = ps.executeQuery()) {
+        List<String> out = new ArrayList<>();
+        while (rs.next()) {
+          out.add(rs.getString(1));
+        }
+        java.util.Collections.sort(out);
+        return out;
+      }
+    }
   }
 }
