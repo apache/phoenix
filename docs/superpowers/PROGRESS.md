@@ -89,3 +89,9 @@ Tip: pass `--no-install` after the first run to skip the install warm-up step (~
 - Run the **full** IT suite in CI once. We sampled 238 tests across the highest-risk surfaces — all green.
 - JMX MBean wiring for `BsonPathMetrics` counters (called out as optional in the user guide).
 - Final code review across the full diff.
+
+## Feature C (dynamic-column indexing)
+- [x] Phase 0 — isVirtual plumbing (commit 3fd09f9d1d)
+- [ ] Phase 1 — DDL grammar + promotion
+- [ ] Phase 2 — write path
+- [ ] Phase 3 — drop + observability
