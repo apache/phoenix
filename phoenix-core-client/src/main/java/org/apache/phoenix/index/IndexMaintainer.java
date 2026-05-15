@@ -881,14 +881,26 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             if (
               !virtualIndexedColumns.isEmpty()
                 && expression instanceof KeyValueColumnExpression
-                && (!evaluated || ptr.getLength() == 0)
             ) {
+              // Sparse virtual-column index: skip the index entry only when the
+              // cell is genuinely absent. KeyValueColumnExpression.evaluate goes
+              // through Tuple.getValue, which synthesizes a length-0 KV when the
+              // cell is missing (so length==0 with evaluated==true is ambiguous
+              // with an explicit empty value). Probe the value-getter directly:
+              // getLatestValue returns null only when the cell is absent.
               KeyValueColumnExpression kvce = (KeyValueColumnExpression) expression;
               ColumnReference ref =
                 new ColumnReference(kvce.getColumnFamily(), kvce.getColumnQualifier());
               if (virtualIndexedColumns.contains(ref)) {
-                // Sparse virtual-column index: column absent -> skip this index entry.
-                return null;
+                ImmutableBytesWritable latest;
+                try {
+                  latest = valueGetter.getLatestValue(ref, ts);
+                } catch (IOException e) {
+                  throw new RuntimeException(e);
+                }
+                if (latest == null) {
+                  return null;
+                }
               }
             }
           }

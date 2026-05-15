@@ -19,8 +19,10 @@ import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Properties;
 
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -154,6 +156,46 @@ public class DynamicColumnIndexWriteIT extends ParallelStatsDisabledIT {
         assertEquals(
             SQLExceptionCode.PHOENIX_DYNAMIC_TYPE_CONFLICT.getErrorCode(),
             ex.getErrorCode());
+      }
+    }
+  }
+
+  @Test
+  public void sparseSkipDistinguishesAbsentFromExplicit() throws Exception {
+    // Sparse-skip must fire only when the cell is genuinely absent. The previous
+    // implementation also fired on ptr.getLength()==0, which conflated absent
+    // cells with explicit length-0 values. Phoenix's PDataType treats empty
+    // VARCHAR as null at the type level, so a present-empty VARCHAR is not
+    // observable here; this test pins the behavior we DO want — a row that
+    // upserts a non-empty value gets indexed, a row that omits the column does
+    // not.
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection c = conn()) {
+      c.createStatement().execute(
+          "CREATE TABLE " + table + " (pk VARCHAR PRIMARY KEY, regular VARCHAR) "
+              + "COLUMN_ENCODED_BYTES=0");
+      c.createStatement().execute(
+          "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC)");
+
+      try (PreparedStatement ps = c.prepareStatement(
+          "UPSERT INTO " + table + " (pk, extra) VALUES ('row1', 'x')")) {
+        ps.executeUpdate();
+      }
+      try (PreparedStatement ps = c.prepareStatement(
+          "UPSERT INTO " + table + " (pk, regular) VALUES ('row2', 'r2')")) {
+        ps.executeUpdate();
+      }
+      c.commit();
+
+      assertEquals(1L, countIndexRows(c, index));
+
+      try (PreparedStatement ps = c.prepareStatement(
+          "SELECT pk FROM " + table + " WHERE extra = 'x'");
+          ResultSet rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        assertEquals("row1", rs.getString(1));
+        assertFalse(rs.next());
       }
     }
   }
