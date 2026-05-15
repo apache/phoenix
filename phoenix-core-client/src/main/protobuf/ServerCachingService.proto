@@ -74,6 +74,7 @@ message IndexMaintainer {
   optional bool isCDCIndex = 31;
   optional int32 dataTableSaltBuckets = 32;
   optional string indexConsistency = 33;
+  repeated ColumnReference virtualIndexedColumns = 34;
 }
 
 message TransformMaintainer {

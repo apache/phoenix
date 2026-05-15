@@ -480,6 +480,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   private Set<ColumnReference> indexWhereColumns;
   private boolean isCDCIndex;
   private IndexConsistency indexConsistency;
+  // Set of data-table column references that correspond to virtual columns
+  // (dynamic-index-promoted). Empty for non-dynamic-column indexes. Used to
+  // sparse-skip index entries when the virtual column is absent from a row.
+  private Set<ColumnReference> virtualIndexedColumns = Collections.emptySet();
 
   protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
     this.dataRowKeySchema = dataRowKeySchema;
@@ -660,6 +664,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             this.indexedExpressions.add(expression);
             indexedColumnsInfo
               .add(new Pair<>(column.getFamilyName().getString(), column.getName().getString()));
+            if (column.isVirtual()) {
+              if (this.virtualIndexedColumns.isEmpty()) {
+                this.virtualIndexedColumns = new HashSet<>();
+              }
+              this.virtualIndexedColumns.add(new ColumnReference(
+                column.getFamilyName().getBytes(), column.getColumnQualifierBytes()));
+            }
           } catch (SQLException e) {
             throw new RuntimeException(e); // Impossible
           }
@@ -860,11 +871,25 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             }
             ptr.set(encodedRegionName);
           } else {
-            expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
+            boolean evaluated =
+              expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
             if (BsonIndexUtil.isBsonPathExpressionMissing(expression)) {
               // Sparse BSON-path index: missing path -> no index entry for this row.
               org.apache.phoenix.monitoring.BsonPathMetrics.incrementSparseSkips();
               return null;
+            }
+            if (
+              !virtualIndexedColumns.isEmpty()
+                && expression instanceof KeyValueColumnExpression
+                && (!evaluated || ptr.getLength() == 0)
+            ) {
+              KeyValueColumnExpression kvce = (KeyValueColumnExpression) expression;
+              ColumnReference ref =
+                new ColumnReference(kvce.getColumnFamily(), kvce.getColumnQualifier());
+              if (virtualIndexedColumns.contains(ref)) {
+                // Sparse virtual-column index: column absent -> skip this index entry.
+                return null;
+              }
             }
           }
         } else {
@@ -2098,6 +2123,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     maintainer.nDataTableSaltBuckets =
       proto.hasDataTableSaltBuckets() ? proto.getDataTableSaltBuckets() : -1;
+    List<ServerCachingProtos.ColumnReference> virtualIndexedColumnsList =
+      proto.getVirtualIndexedColumnsList();
+    if (!virtualIndexedColumnsList.isEmpty()) {
+      maintainer.virtualIndexedColumns = new HashSet<>(virtualIndexedColumnsList.size());
+      for (ServerCachingProtos.ColumnReference colRefFromProto : virtualIndexedColumnsList) {
+        maintainer.virtualIndexedColumns
+          .add(new ColumnReference(colRefFromProto.getFamily().toByteArray(),
+            colRefFromProto.getQualifier().toByteArray()));
+      }
+    }
     maintainer.initCachedState();
     return maintainer;
   }
@@ -2256,6 +2291,13 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     if (maintainer.isDataTableSalted) {
       builder.setDataTableSaltBuckets(maintainer.nDataTableSaltBuckets);
+    }
+    for (ColumnReference vcRef : maintainer.virtualIndexedColumns) {
+      ServerCachingProtos.ColumnReference.Builder cRefBuilder =
+        ServerCachingProtos.ColumnReference.newBuilder();
+      cRefBuilder.setFamily(ByteStringer.wrap(vcRef.getFamily()));
+      cRefBuilder.setQualifier(ByteStringer.wrap(vcRef.getQualifier()));
+      builder.addVirtualIndexedColumns(cRefBuilder.build());
     }
     return builder.build();
   }
