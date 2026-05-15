@@ -4465,10 +4465,14 @@ public class MetaDataClient {
   }
 
   /**
-   * After an index drop, remove from SYSTEM.CATALOG any virtual PColumn that was
-   * indexed by the dropped index and is no longer referenced by any remaining
-   * index on the base table. Cells in HBase are NOT deleted — only the catalog
-   * row is removed, making the column unresolvable from SQL going forward.
+   * After an index drop, remove from SYSTEM.CATALOG any virtual PColumn
+   * that was indexed by the dropped index and is no longer referenced
+   * by any remaining index on the base table.
+   *
+   * Best-effort: if an individual orphan drop fails (e.g., concurrent
+   * schema mutation), the failure is logged and remaining orphans are
+   * still attempted. The DROP INDEX itself is not failed. Users can
+   * manually clean up via ALTER TABLE … DROP COLUMN if needed.
    */
   private void unpromoteOrphanedVirtualColumns(PTable parentTable, PTable droppedIndex)
     throws SQLException {
@@ -4512,10 +4516,17 @@ public class MetaDataClient {
 
     // 4. Drop the orphaned virtual columns via the existing ALTER TABLE DROP COLUMN path.
     for (String orphan : candidateForDrop) {
-      String drop = "ALTER TABLE " + freshParent.getName().getString()
-        + " DROP COLUMN \"" + orphan + "\"";
-      connection.createStatement().execute(drop);
-      DynamicColumnIndexMetrics.incrementUnpromotions();
+      // quote both identifiers — preserves case-sensitivity if the table or column was quoted at creation time.
+      String drop = "ALTER TABLE \"" + freshParent.getName().getString()
+        + "\" DROP COLUMN \"" + orphan + "\"";
+      try {
+        connection.createStatement().execute(drop);
+        DynamicColumnIndexMetrics.incrementUnpromotions();
+      } catch (SQLException e) {
+        LOGGER.warn("Best-effort un-promotion of orphan virtual column {} on table {} failed; "
+          + "DROP INDEX itself succeeded. Manual ALTER TABLE … DROP COLUMN may be required.",
+          orphan, freshParent.getName().getString(), e);
+      }
     }
   }
 

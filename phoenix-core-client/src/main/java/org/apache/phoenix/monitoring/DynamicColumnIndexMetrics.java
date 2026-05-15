@@ -19,6 +19,8 @@ package org.apache.phoenix.monitoring;
 
 import java.util.concurrent.atomic.AtomicLong;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+
 /**
  * Lightweight client-side counters for dynamic-column secondary indexes.
  * Mirrors BsonPathMetrics. Counters are best-effort, JVM-local, and
@@ -41,6 +43,7 @@ public final class DynamicColumnIndexMetrics {
   public static long getTypeConflictRejects() { return TYPE_CONFLICT_REJECTS.get(); }
 
   /** Test-only. Not part of the public API. */
+  @VisibleForTesting
   public static void resetForTesting() {
     PROMOTIONS.set(0);
     UNPROMOTIONS.set(0);

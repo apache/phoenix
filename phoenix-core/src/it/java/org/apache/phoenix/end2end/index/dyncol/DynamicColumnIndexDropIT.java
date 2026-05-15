@@ -48,6 +48,11 @@ public class DynamicColumnIndexDropIT extends ParallelStatsDisabledIT {
 
   private boolean hasColumn(Connection c, String table, String col) throws Exception {
     PhoenixConnection pc = c.unwrap(PhoenixConnection.class);
+    // clearCache() forces a fresh metadata fetch — the same connection
+    // that ran DROP INDEX has the parent's cached PTable invalidated via
+    // LastDDLTimestamp, but our hasColumn lookup races the invalidation
+    // in the test JVM. Production code observes the invalidation through
+    // MetaDataClient's normal refresh path.
     pc.getQueryServices().clearCache();
     PTable t = pc.getTable(SchemaUtil.normalizeIdentifier(table));
     try {
