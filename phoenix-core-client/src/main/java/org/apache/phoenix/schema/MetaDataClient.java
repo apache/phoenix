@@ -1637,9 +1637,12 @@ public class MetaDataClient {
         asyncCreatedDate = new Date(tableRef.getCurrentTime());
       }
       dataTable = tableRef.getTable();
-      // Promote any DYNAMIC index columns to virtual PColumns on the data table.
-      // Catalog mutations are queued on the connection and flushed atomically by
-      // createTableInternal alongside the index-create RPC.
+      // Promote any DYNAMIC index columns BEFORE creating the index. Promotion
+      // is a separate addColumn RPC; a subsequent createIndex failure triggers
+      // compensating drops below to restore catalog state. Atomicity is best-
+      // effort: a crash between the two RPCs leaves the virtual column orphaned
+      // until the user re-runs CREATE INDEX (which is idempotent for the
+      // virtual-column-already-promoted case).
       List<String> promotedNames = Lists.newArrayList();
       dataTable = promoteDynamicColumnsForIndex(dataTable, ik, promotedNames);
       tableRef.setTable(dataTable);
@@ -2036,6 +2039,15 @@ public class MetaDataClient {
       throw new SQLExceptionInfo.Builder(
         SQLExceptionCode.DYNAMIC_INDEX_NOT_ALLOWED_ON_ENCODED_TABLE)
           .setTableName(dataTable.getName().getString()).build().buildException();
+    }
+    // Refuse to drain pending mutations (rollback below) while user data is queued.
+    if (connection.getMutationState().getNumRows() > 0) {
+      throw new SQLExceptionInfo.Builder(
+        SQLExceptionCode.CANNOT_INDEX_BUILD_PENDING_MUTATIONS)
+          .setMessage(
+            "Cannot CREATE INDEX with DYNAMIC columns while pending mutations exist; "
+              + "commit or rollback first.")
+          .build().buildException();
     }
 
     List<PColumn> newCols = new ArrayList<>(dataTable.getColumns());

@@ -639,6 +639,8 @@ public enum SQLExceptionCode {
     "Dynamic-column indexes are not supported on tables with encoded column qualifiers."),
   PHOENIX_DYNAMIC_TYPE_CONFLICT(1333, "44A33",
     "UPSERT specifies a different type for a registered dynamic-column index than its declared type."),
+  CANNOT_INDEX_BUILD_PENDING_MUTATIONS(1334, "44A34",
+    "Cannot CREATE INDEX with DYNAMIC columns while pending mutations exist."),
 
   /**
    * Implementation defined class. Phoenix internal error. (errorcode 20, sqlstate INT).
