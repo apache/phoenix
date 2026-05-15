@@ -80,4 +80,19 @@ public class UpsertStatement extends DMLStatement implements RowReturningDMLStat
   public boolean isReturningRow() {
     return returningRow;
   }
+
+  /**
+   * Return a copy of this UpsertStatement with a different target NamedTableNode and every other
+   * field forwarded unchanged. Use this in compile-time rewrites that need to change only the
+   * table reference (e.g., filtering inline ColumnDefs) so that no field is silently dropped.
+   *
+   * <p>
+   * IMPORTANT: when adding a new field to UpsertStatement, update this method so the rewritten
+   * statement carries the new field through.
+   */
+  public UpsertStatement withTable(NamedTableNode newTable) {
+    return new UpsertStatement(newTable, this.hint, this.columns, this.values, this.select,
+      this.getBindCount(), this.getUdfParseNodes(), this.onDupKeyPairs, this.onDupKeyType,
+      this.returningRow);
+  }
 }

@@ -463,10 +463,10 @@ public class UpsertCompiler {
         if (droppedAny) {
           NamedTableNode replacement = NamedTableNode.create(
             tableNode.getAlias(), tableNode.getName(), filteredDynamicColumns);
-          upsert = new UpsertStatement(replacement, upsert.getHint(), upsert.getColumns(),
-            upsert.getValues(), upsert.getSelect(), upsert.getBindCount(),
-            upsert.getUdfParseNodes(), upsert.getOnDupKeyPairs(), upsert.getOnDupKeyType(),
-            upsert.isReturningRow());
+          // Use withTable to forward every other UpsertStatement field
+          // unchanged; manual reconstruction here would silently drop fields
+          // that future contributors add (hints, ON DUP KEY, returningRow, ...).
+          upsert = upsert.withTable(replacement);
           tableNode = upsert.getTable();
         }
       }
