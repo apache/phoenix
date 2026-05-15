@@ -144,6 +144,10 @@ public class ProjectionCompiler {
     int minPKOffset = getMinPKOffset(table, context.getConnection().getTenantId());
     for (int i = posOffset, j = posOffset; i < table.getColumns().size(); i++) {
       PColumn column = table.getColumns().get(i);
+      // virtual columns are excluded from SELECT *
+      if (column.isVirtual()) {
+        continue;
+      }
       // Skip tenant ID column (which may not be the first column, but is the first PK column)
       if (SchemaUtil.isPKColumn(column) && j++ < minPKOffset) {
         posOffset++;
