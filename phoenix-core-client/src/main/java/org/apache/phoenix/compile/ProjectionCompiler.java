@@ -237,6 +237,10 @@ public class ProjectionCompiler {
       new TableRef(resolver.getTables().get(0), tableRef.getTableAlias());
     for (int i = tableOffset, j = tableOffset; i < dataTable.getColumns().size(); i++) {
       PColumn column = dataTable.getColumns().get(i);
+      // virtual columns are excluded from SELECT *, mirroring projectAllTableColumns
+      if (column.isVirtual()) {
+        continue;
+      }
       // Skip tenant ID column (which may not be the first column, but is the first PK column)
       if (SchemaUtil.isPKColumn(column) && j++ < minTablePKOffset) {
         tableOffset++;

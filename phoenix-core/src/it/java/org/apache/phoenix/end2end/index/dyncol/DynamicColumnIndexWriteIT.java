@@ -21,6 +21,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Properties;
@@ -241,6 +242,42 @@ public class DynamicColumnIndexWriteIT extends ParallelStatsDisabledIT {
           ResultSet rs = s.executeQuery(
               "SELECT pk FROM " + table + " WHERE extra='v1'")) {
         assertFalse("old index entry must be gone after update", rs.next());
+      }
+    }
+  }
+
+  @Test
+  public void selectStarWithIndexHintExcludesVirtualColumn() throws Exception {
+    // SELECT * must never project virtual columns, even when the optimizer
+    // routes the query through an index that covers the virtual column.
+    // This pins behavior for the projectAllIndexColumns path.
+    String table = generateUniqueName();
+    String index = generateUniqueName();
+    try (Connection c = conn()) {
+      exec(c, "CREATE TABLE " + table + " (pk VARCHAR PRIMARY KEY, regular VARCHAR) "
+          + "COLUMN_ENCODED_BYTES=0");
+      exec(c, "CREATE INDEX " + index + " ON " + table + " (extra VARCHAR DYNAMIC) "
+          + "INCLUDE (regular)");
+      upsert(c,
+          "UPSERT INTO " + table + " (pk, extra, regular) VALUES ('row1', 'x', 'r1')");
+      c.commit();
+
+      // Force the query through the index so projectAllIndexColumns is exercised
+      // (the wildcard-rewrite path: SELECT * on a base table, optimizer/hint
+      // routes the rewritten WildcardParseNode through the INDEX type table).
+      try (PreparedStatement ps = c.prepareStatement(
+          "SELECT /*+ INDEX(" + table + " " + index + ") */ * FROM " + table
+              + " WHERE extra = 'x'");
+          ResultSet rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        ResultSetMetaData md = rs.getMetaData();
+        // EXTRA is virtual and must be absent. PK + REGULAR remain.
+        assertEquals(2, md.getColumnCount());
+        for (int i = 1; i <= md.getColumnCount(); i++) {
+          assertFalse("EXTRA must not appear in SELECT *",
+              "EXTRA".equalsIgnoreCase(md.getColumnName(i)));
+        }
+        assertFalse(rs.next());
       }
     }
   }
