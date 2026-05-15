@@ -84,6 +84,8 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.AmbiguousColumnException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ColumnRef;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.schema.ConstraintViolationException;
@@ -427,14 +429,22 @@ public class UpsertCompiler {
         boolean droppedAny = false;
         for (ColumnDef cd : upsertColumnDefs) {
           String name = cd.getColumnDefName().getColumnName();
-          PColumn registered = null;
-          for (PColumn pc : cachedTable.getColumns()) {
-            if (pc.isVirtual() && pc.getName().getString().equals(name)) {
-              registered = pc;
-              break;
-            }
+          PColumn registered;
+          try {
+            // O(1) lookup; surfaces AmbiguousColumnException rather than silently
+            // picking one if a regular and virtual column share a name. Phase 1
+            // should have rejected such collisions at CREATE INDEX time.
+            registered = cachedTable.getColumnForColumnName(name);
+          } catch (ColumnNotFoundException e) {
+            // Not registered — pure dynamic column, allowed.
+            filteredDynamicColumns.add(cd);
+            continue;
+          } catch (AmbiguousColumnException e) {
+            throw e;
           }
-          if (registered == null) {
+          if (!registered.isVirtual()) {
+            // Regular column — leave existing semantics alone (resolver will
+            // reject duplicate inline defs via COLUMN_EXIST_IN_DEF).
             filteredDynamicColumns.add(cd);
             continue;
           }
