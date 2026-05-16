@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
 import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_ROLE_1;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_ROLE_2;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_URL_1;
@@ -34,7 +35,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ZK_URL_2;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_SYNC_INTERVAL_SECONDS;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_HA_LEGACY_CRR_RECONCILIATION_INTERVAL_SECONDS;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_HA_LEGACY_CRR_RECONCILIATION_INTERVAL_SECONDS;
+import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
 
@@ -62,11 +67,13 @@ import java.util.concurrent.TimeUnit;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.curator.framework.recipes.cache.ChildData;
+import org.apache.curator.framework.recipes.cache.NodeCache;
 import org.apache.curator.framework.recipes.cache.PathChildrenCache;
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheListener;
 import org.apache.curator.utils.ZKPaths;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
+import org.apache.phoenix.exception.StaleClusterRoleRecordVersionException;
 import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
@@ -80,6 +87,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
+import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.MoreExecutors;
 
 /**
  * Main implementation of HAGroupStoreClient with peer support. Write-through cache for HAGroupStore
@@ -98,8 +106,13 @@ public class HAGroupStoreClient implements Closeable {
   public static final double ZK_SESSION_TIMEOUT_MULTIPLIER = 1.1;
   // Maximum jitter in seconds for sync job start time (10 seconds)
   private static final long SYNC_JOB_MAX_JITTER_SECONDS = 10;
+  // Exclusive upper bound for initial-delay jitter on the periodic reconciler (0..30s).
+  private static final long LEGACY_CRR_SYNC_JOB_MAX_JITTER_SECONDS = 31;
   private PhoenixHAAdmin phoenixHaAdmin;
   private PhoenixHAAdmin peerPhoenixHaAdmin;
+  // Admin + NodeCache on /phoenix/ha; null when feature disabled.
+  private volatile PhoenixHAAdmin legacyHaAdmin;
+  private volatile NodeCache legacyCrrNodeCache;
   private static final Logger LOGGER = LoggerFactory.getLogger(HAGroupStoreClient.class);
   // Map of <ZKUrl, <HAGroupName, HAGroupStoreClientInstance>>
   private static final Map<String, ConcurrentHashMap<String, HAGroupStoreClient>> instances =
@@ -132,6 +145,12 @@ public class HAGroupStoreClient implements Closeable {
     CopyOnWriteArraySet<HAGroupStateListener>> targetStateSubscribers = new ConcurrentHashMap<>();
   // Scheduled executor for periodic sync job
   private ScheduledExecutorService syncExecutor;
+  // Legacy CRR sync state. All invocations of syncLegacyCRRIfRoleChanged go through the
+  // single-threaded legacyCrrSyncExecutor (initial sync, periodic, and event-driven), so
+  // calls are naturally serialized; close races are handled via local snapshots of mutable
+  // fields inside the method. No additional lock is needed.
+  private final boolean legacyCrrSyncEnabled;
+  private volatile ScheduledExecutorService legacyCrrSyncExecutor;
 
   public static HAGroupStoreClient getInstance(Configuration conf, String haGroupName)
     throws SQLException {
@@ -224,6 +243,8 @@ public class HAGroupStoreClient implements Closeable {
       conf.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT) * ZK_SESSION_TIMEOUT_MULTIPLIER);
     this.rotationTimeMs = conf.getLong(QueryServices.REPLICATION_LOG_ROTATION_TIME_MS_KEY,
       QueryServicesOptions.DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS);
+    this.legacyCrrSyncEnabled = conf.getBoolean(PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED,
+      DEFAULT_PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED);
     // Custom Event Listener
     this.peerCustomPathChildrenCacheListener = peerPathChildrenCacheListener;
     try {
@@ -245,6 +266,12 @@ public class HAGroupStoreClient implements Closeable {
       }
       // Start periodic sync job
       startPeriodicSyncJob();
+
+      // Opt-in legacy /phoenix/ha sync. Setup failures propagate so the client is marked
+      // unhealthy rather than silently dropping the legacy znode out of sync.
+      if (legacyCrrSyncEnabled && this.isHealthy) {
+        setupLegacyCrrSync();
+      }
 
     } catch (Exception e) {
       this.isHealthy = false;
@@ -886,9 +913,16 @@ public class HAGroupStoreClient implements Closeable {
             if (cacheType == ClusterType.LOCAL) {
               maybeInitializePeerPathChildrenCache();
             }
+            // Offload the legacy CRR sync (it does ZK + JDBC I/O) so we don't block
+            // Curator's per-namespace event dispatcher.
+            ScheduledExecutorService syncExec = legacyCrrSyncExecutor;
+            if (syncExec != null) {
+              syncExec.execute(this::syncLegacyCRRIfRoleChanged);
+            }
           }
           break;
         case CHILD_REMOVED:
+          // No-op: the legacy /phoenix/ha znode is never deleted by this client.
           break;
         case INITIALIZED:
           latch.countDown();
@@ -983,18 +1017,35 @@ public class HAGroupStoreClient implements Closeable {
   /**
    * Shuts down the periodic sync executor gracefully.
    */
+  /**
+   * Remove this instance from the static {@link #instances} map. Idempotent. Uses value-based
+   * remove so that, if a concurrent {@link #getInstanceForZkUrl} has already swapped in a fresh
+   * replacement, the replacement is preserved.
+   */
+  private void deregisterFromInstances() {
+    final String key = (this.zkUrl != null) ? this.zkUrl : getLocalZkUrl(this.conf);
+    if (key == null) {
+      return;
+    }
+    final ConcurrentHashMap<String, HAGroupStoreClient> bucket = instances.get(key);
+    if (bucket == null) {
+      return;
+    }
+    bucket.remove(this.haGroupName, this);
+    instances.computeIfPresent(key, (k, v) -> v.isEmpty() ? null : v);
+  }
+
   private void shutdownSyncExecutor() {
     if (syncExecutor != null) {
-      syncExecutor.shutdown();
-      try {
-        if (!syncExecutor.awaitTermination(5, TimeUnit.SECONDS)) {
-          syncExecutor.shutdownNow();
-        }
-      } catch (InterruptedException e) {
-        syncExecutor.shutdownNow();
-        Thread.currentThread().interrupt();
-      }
+      MoreExecutors.shutdownAndAwaitTermination(syncExecutor, 5, TimeUnit.SECONDS);
       syncExecutor = null;
+    }
+  }
+
+  private void shutdownLegacyCrrSyncExecutor() {
+    if (legacyCrrSyncExecutor != null) {
+      MoreExecutors.shutdownAndAwaitTermination(legacyCrrSyncExecutor, 5, TimeUnit.SECONDS);
+      legacyCrrSyncExecutor = null;
     }
   }
 
@@ -1002,13 +1053,29 @@ public class HAGroupStoreClient implements Closeable {
   public void close() {
     try {
       LOGGER.info("Closing HAGroupStoreClient");
-      // Shutdown sync executor
+      // Mark unhealthy and deregister from the static cache first so any concurrent
+      // getInstanceForZkUrl() does not hand out a half-closed instance.
+      isHealthy = false;
+      deregisterFromInstances();
+      // Executors -> caches -> admins. Null-before-close on legacy resources so a racing
+      // listener sees either a live or null reference, never half-closed.
       shutdownSyncExecutor();
+      shutdownLegacyCrrSyncExecutor();
       if (pathChildrenCache != null) {
         pathChildrenCache.close();
         pathChildrenCache = null;
       }
       closePeerConnection();
+      NodeCache nodeCache = this.legacyCrrNodeCache;
+      this.legacyCrrNodeCache = null;
+      if (nodeCache != null) {
+        nodeCache.close();
+      }
+      PhoenixHAAdmin admin = this.legacyHaAdmin;
+      this.legacyHaAdmin = null;
+      if (admin != null) {
+        admin.close();
+      }
       LOGGER.info("Closed HAGroupStoreClient");
     } catch (IOException e) {
       LOGGER.error("Exception closing HAGroupStoreClient", e);
@@ -1045,6 +1112,175 @@ public class HAGroupStoreClient implements Closeable {
     }
     long remainingTime = currentHAGroupStoreRecordMtime + waitTime - System.currentTimeMillis();
     return Math.max(0, remainingTime);
+  }
+
+  // ========== Legacy /phoenix/ha CRR Sync ==========
+
+  /**
+   * Derives the combined CRR from local + peer records and CAS-writes it to {@code /phoenix/ha}.
+   * CAS losses are logged and skipped; the next consistentHA cache event or periodic cycle
+   * reconverges.
+   */
+  private void syncLegacyCRRIfRoleChanged() {
+    if (!legacyCrrSyncEnabled || !isHealthy) {
+      return;
+    }
+    // Snapshot mutable resources up front so a concurrent close() can't null them mid-method
+    // and trigger NPEs / writes through a torn-down Curator client.
+    final PhoenixHAAdmin admin = this.legacyHaAdmin;
+    final NodeCache cache = this.legacyCrrNodeCache;
+    if (admin == null || cache == null) {
+      return;
+    }
+    try {
+      HAGroupStoreRecord local = getHAGroupStoreRecord();
+      if (local == null) {
+        LOGGER.debug("Skipping legacy CRR sync for HA group {}: no local consistentHA record",
+          haGroupName);
+        return;
+      }
+      // Wait for peer URL before building the desired CRR (ctor NPEs on null url2).
+      if (StringUtils.isBlank(local.getPeerZKUrl())) {
+        LOGGER.debug("Skipping legacy CRR sync for HA group {}: peer ZK URL is blank",
+          haGroupName);
+        return;
+      }
+      HAGroupStoreRecord peer = getHAGroupStoreRecordFromPeer();
+      // NodeCache is eventually consistent; on apparent absence, fall back to an authoritative
+      // ZK read so the equality check and CAS both see consistent state.
+      Pair<ClusterRoleRecord, Stat> snapshot = readLegacyCrrSnapshot(cache);
+      if (snapshot.getRight() == null) {
+        snapshot = admin.getClusterRoleRecordAndStatInZooKeeper(haGroupName);
+      }
+      ClusterRoleRecord existing = snapshot.getLeft();
+      Stat existingStat = snapshot.getRight();
+      if (!shouldWriteLegacyCrr(existing)) {
+        return;
+      }
+      ClusterRoleRecord desired = buildDesiredLegacyCrr(local, peer, existing);
+      if (desired.isLogicallyEqualIgnoringVersionAndRegistry(existing)) {
+        LOGGER.debug("Legacy CRR for HA group {} already up to date at version {}", haGroupName,
+          existing.getVersion());
+        return;
+      }
+      try {
+        if (existingStat == null) {
+          admin.createOrUpdateClusterRoleRecordWithCAS(haGroupName, desired,
+            PhoenixHAAdmin.LegacyCrrWriteMode.CREATE_NEW, /* ignored */ 0);
+        } else {
+          admin.createOrUpdateClusterRoleRecordWithCAS(haGroupName, desired,
+            PhoenixHAAdmin.LegacyCrrWriteMode.CAS_WITH_VERSION, existingStat.getVersion());
+        }
+        LOGGER.info("Synced legacy CRR for HA group {} (version {} -> {})", haGroupName,
+          existing != null ? existing.getVersion() : -1L, desired.getVersion());
+      } catch (StaleClusterRoleRecordVersionException stale) {
+        // CAS lost; next event/periodic cycle reconverges.
+        LOGGER.info("Legacy CRR CAS lost for HA group {} at expected stat version {}",
+          haGroupName, existingStat != null ? existingStat.getVersion() : -1);
+      }
+    } catch (Exception e) {
+      LOGGER.warn(
+        "Legacy CRR sync failed for HA group {}; will be retried by next event/periodic cycle",
+        haGroupName, e);
+    }
+  }
+
+  /**
+   * Policy gate before issuing a CAS write to the legacy CRR. Returns {@code false} when the
+   * existing record must not be overwritten by this client.
+   */
+  private boolean shouldWriteLegacyCrr(ClusterRoleRecord existing) {
+    // Refuse to overwrite a non-ZK (admin-managed RPC) legacy CRR; live readers use its
+    // registryType to build connection strings, so swapping form would break them.
+    if (existing != null && existing.getRegistryType() != RegistryType.ZK) {
+      LOGGER.warn("Skipping legacy CRR sync for HA group {}: existing registryType={} "
+        + "(requires admin migration to ZK form)", haGroupName, existing.getRegistryType());
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Builds the desired legacy CRR, always stamped {@link RegistryType#ZK}. When the local
+   * client's peer view is unavailable, preserves the {@code existing} record's {@code role2}
+   * rather than downgrading it to {@link ClusterRole#UNKNOWN} — another RS with peer visibility
+   * would otherwise keep flipping it back, and the equality check naturally short-circuits
+   * when no other field changed.
+   */
+  private ClusterRoleRecord buildDesiredLegacyCrr(HAGroupStoreRecord local, HAGroupStoreRecord peer,
+    ClusterRoleRecord existing) {
+    final ClusterRole role2;
+    if (peer != null) {
+      role2 = peer.getClusterRole();
+    } else if (existing != null) {
+      role2 = existing.getRole2();
+    } else {
+      role2 = ClusterRole.UNKNOWN;
+    }
+    long peerAdminVersion = (peer != null) ? peer.getAdminCRRVersion() : 0L;
+    long baseVersion = Math.max(existing != null ? existing.getVersion() : 0L,
+      Math.max(local.getAdminCRRVersion(), peerAdminVersion));
+    return new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.valueOf(local.getPolicy()),
+      RegistryType.ZK, this.zkUrl, local.getClusterRole(), local.getPeerZKUrl(), role2,
+      baseVersion + 1);
+  }
+
+  /**
+   * NodeCache snapshot of the legacy CRR. {@code (null, null)} on cache miss; callers must confirm
+   * absence with an authoritative ZK read since the cache is eventually consistent. Caller passes
+   * the cache from a local snapshot, never the mutable field (which {@link #close()} may null at
+   * any time).
+   */
+  private Pair<ClusterRoleRecord, Stat> readLegacyCrrSnapshot(NodeCache cache) {
+    ChildData current = cache.getCurrentData();
+    if (current == null) {
+      return Pair.of(null, null);
+    }
+    ClusterRoleRecord record = ClusterRoleRecord.fromJson(current.getData()).orElse(null);
+    return Pair.of(record, current.getStat());
+  }
+
+  /**
+   * Initialize legacy {@code /phoenix/ha} sync: admin handle, NodeCache, single-thread executor,
+   * an off-lock initial sync, and the periodic reconciler. Called only when the feature is
+   * enabled and the client is healthy.
+   */
+  private void setupLegacyCrrSync() throws Exception {
+    this.legacyHaAdmin = new PhoenixHAAdmin(this.zkUrl, conf, PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE);
+    this.legacyCrrNodeCache =
+      new NodeCache(this.legacyHaAdmin.getCurator(), toPath(haGroupName));
+    this.legacyCrrNodeCache.start(true);
+    this.legacyCrrSyncExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
+      Thread t = new Thread(r, "HAGroupStoreClient-LegacyCRRSync-" + haGroupName);
+      t.setDaemon(true);
+      return t;
+    });
+    // Run the initial sync off-thread so we don't block the static HAGroupStoreClient.class
+    // monitor held by getInstanceForZkUrl on JDBC/ZK I/O.
+    this.legacyCrrSyncExecutor.execute(this::syncLegacyCRRIfRoleChanged);
+    startLegacyCrrReconciliation();
+  }
+
+  /** Schedules the periodic reconciler; no-op when {@code intervalSec <= 0}. */
+  private void startLegacyCrrReconciliation() {
+    long intervalSec = conf.getLong(PHOENIX_HA_LEGACY_CRR_RECONCILIATION_INTERVAL_SECONDS,
+      DEFAULT_PHOENIX_HA_LEGACY_CRR_RECONCILIATION_INTERVAL_SECONDS);
+    if (intervalSec <= 0) {
+      LOGGER.info("Legacy CRR periodic reconciliation disabled (interval={}s) for HA group {}",
+        intervalSec, haGroupName);
+      return;
+    }
+    long jitterSec =
+      ThreadLocalRandom.current().nextLong(0, LEGACY_CRR_SYNC_JOB_MAX_JITTER_SECONDS);
+    LOGGER.info("Starting legacy CRR reconciliation for HA group {} with initial delay {}s, "
+      + "then every {}s", haGroupName, jitterSec, intervalSec);
+    legacyCrrSyncExecutor.scheduleAtFixedRate(() -> {
+      try {
+        syncLegacyCRRIfRoleChanged();
+      } catch (Throwable t) {
+        LOGGER.warn("Periodic legacy CRR reconciliation failed for HA group {}", haGroupName, t);
+      }
+    }, jitterSec, intervalSec, TimeUnit.SECONDS);
   }
 
   // ========== HA Group State Change Subscription Methods ==========

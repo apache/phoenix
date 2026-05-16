@@ -92,6 +92,8 @@ import static org.apache.phoenix.query.QueryServices.MIN_STATS_UPDATE_FREQ_MS_AT
 import static org.apache.phoenix.query.QueryServices.MUTATE_BATCH_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.NUM_RETRIES_FOR_SCHEMA_UPDATE_CHECK;
 import static org.apache.phoenix.query.QueryServices.PHOENIX_ACLS_ENABLED;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_HA_LEGACY_CRR_RECONCILIATION_INTERVAL_SECONDS;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED;
 import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
 import static org.apache.phoenix.query.QueryServices.QUEUE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.REGIONSERVER_INFO_PORT_ATTRIB;
@@ -517,6 +519,13 @@ public class QueryServicesOptions {
   // Default HA Group Store sync job interval in seconds (15 minutes = 900 seconds)
   public static final int DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS = 900;
 
+  // Legacy /phoenix/ha CRR sync is opt-in (default off).
+  public static final boolean DEFAULT_PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED = false;
+
+  // Periodic reconciliation interval for legacy /phoenix/ha CRR sync, in seconds.
+  // 0 disables the periodic loop only; event-driven sync still runs.
+  public static final long DEFAULT_PHOENIX_HA_LEGACY_CRR_RECONCILIATION_INTERVAL_SECONDS = 60L;
+
   public static final long DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS = 60 * 1000L;
 
   private final Configuration config;
@@ -643,7 +652,10 @@ public class QueryServicesOptions {
       .setIfUnset(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS,
         DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS)
       .setIfUnset(HA_GROUP_STORE_CLIENT_PREWARM_ENABLED,
-        DEFAULT_HA_GROUP_STORE_CLIENT_PREWARM_ENABLED);
+        DEFAULT_HA_GROUP_STORE_CLIENT_PREWARM_ENABLED)
+      .setIfUnset(PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED, DEFAULT_PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED)
+      .setIfUnset(PHOENIX_HA_LEGACY_CRR_RECONCILIATION_INTERVAL_SECONDS,
+        DEFAULT_PHOENIX_HA_LEGACY_CRR_RECONCILIATION_INTERVAL_SECONDS);
 
     // HBase sets this to 1, so we reset it to something more appropriate.
     // Hopefully HBase will change this, because we can't know if a user set

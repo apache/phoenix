@@ -647,6 +647,16 @@ public interface QueryServices extends SQLCloseable {
   // HA Group Store sync job interval in seconds
   String HA_GROUP_STORE_SYNC_INTERVAL_SECONDS = "phoenix.ha.group.store.sync.interval.seconds";
 
+  // "CRR" = Cluster Role Record. Master switch for syncing the legacy /phoenix/ha cluster
+  // role record from /phoenix/consistentHA. When false, no legacy znode is read, written, or
+  // deleted by HAGroupStoreClient.
+  String PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED = "phoenix.ha.legacy.crr.sync.enabled";
+
+  // Periodic reconciliation interval for the legacy /phoenix/ha cluster role record sync, in
+  // seconds. 0 disables the periodic loop only; event-driven sync still runs.
+  String PHOENIX_HA_LEGACY_CRR_RECONCILIATION_INTERVAL_SECONDS =
+    "phoenix.ha.legacy.crr.reconciliation.interval.seconds";
+
   String REPLICATION_LOG_ROTATION_TIME_MS_KEY = "phoenix.replication.log.rotation.time.ms";
 
   /**
