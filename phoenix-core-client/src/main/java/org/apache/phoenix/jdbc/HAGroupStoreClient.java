@@ -1202,10 +1202,14 @@ public class HAGroupStoreClient implements Closeable {
 
   /**
    * Builds the desired legacy CRR, always stamped {@link RegistryType#ZK}. When the local
-   * client's peer view is unavailable, preserves the {@code existing} record's {@code role2}
+   * client's peer view is unavailable, preserves the {@code existing} record's peer role
    * rather than downgrading it to {@link ClusterRole#UNKNOWN} — another RS with peer visibility
    * would otherwise keep flipping it back, and the equality check naturally short-circuits
    * when no other field changed.
+   * <p>
+   * Look up the preserved role by the peer URL (not by {@code getRole2()}) since
+   * {@link ClusterRoleRecord} canonicalizes {@code url1}/{@code url2} by alphabetical order;
+   * the peer URL may end up in either slot depending on lexical comparison.
    */
   private ClusterRoleRecord buildDesiredLegacyCrr(HAGroupStoreRecord local, HAGroupStoreRecord peer,
     ClusterRoleRecord existing) {
@@ -1213,7 +1217,8 @@ public class HAGroupStoreClient implements Closeable {
     if (peer != null) {
       role2 = peer.getClusterRole();
     } else if (existing != null) {
-      role2 = existing.getRole2();
+      role2 = existing.getRole(
+        JDBCUtil.formatUrl(local.getPeerZKUrl(), RegistryType.ZK));
     } else {
       role2 = ClusterRole.UNKNOWN;
     }
