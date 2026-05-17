@@ -575,7 +575,7 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         fail();
       } catch (RuntimeException e) {
         assertTrue(e.getMessage(),
-          e.getMessage().contains("invalid char between encapsulated token and delimiter"));
+          e.getMessage().contains("Invalid character between encapsulated token and delimiter"));
       }
     } finally {
       if (parser != null) parser.close();
