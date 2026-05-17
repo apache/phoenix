@@ -117,7 +117,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(STOCK_CSV_VALUES_WITH_HEADER), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_CSV_VALUES_WITH_HEADER)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -161,7 +162,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         tenantConn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableMultiName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(STOCK_CSV_VALUES_WITH_HEADER), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_CSV_VALUES_WITH_HEADER)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -200,7 +202,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(STOCK_TDV_VALUES_WITH_HEADER), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_TDV_VALUES_WITH_HEADER)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -239,8 +242,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser =
-        new CSVParser(new StringReader(STOCK_CSV_VALUES_WITH_DELIMITER), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_CSV_VALUES_WITH_DELIMITER)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -279,7 +282,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(STOCK_CSV_VALUES), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_CSV_VALUES)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -317,7 +321,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(STOCK_CSV_VALUES), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_CSV_VALUES)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;
@@ -356,7 +361,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT SYMBOL, COMPANY FROM " + stockTableName);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(STOCK_CSV_VALUES), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(STOCK_CSV_VALUES)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         assertEquals(record.get(0), phoenixResultSet.getString(1));
@@ -483,7 +489,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
         "SELECT CKEY, CVARCHAR, CCHAR, CINTEGER, CDECIMAL, CUNSIGNED_INT, CBOOLEAN, CBIGINT, CUNSIGNED_LONG, CTIME, CDATE FROM "
           + DATATYPE_TABLE);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(DATATYPES_CSV_VALUES), csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(DATATYPES_CSV_VALUES)).get();
 
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
@@ -531,8 +538,8 @@ public class CSVCommonsLoaderIT extends ParallelStatsDisabledIT {
       PreparedStatement statement =
         conn.prepareStatement("SELECT MYKEY, MYVALUE FROM " + ENCAPSULATED_CHARS_TABLE);
       ResultSet phoenixResultSet = statement.executeQuery();
-      parser = new CSVParser(new StringReader(CSV_VALUES_ENCAPSULATED_CONTROL_CHARS_WITH_HEADER),
-        csvUtil.getFormat());
+      parser = CSVParser.builder().setFormat(csvUtil.getFormat())
+        .setReader(new StringReader(CSV_VALUES_ENCAPSULATED_CONTROL_CHARS_WITH_HEADER)).get();
       for (CSVRecord record : parser) {
         assertTrue(phoenixResultSet.next());
         int i = 0;

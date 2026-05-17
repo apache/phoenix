@@ -23,6 +23,8 @@ import java.io.PrintWriter;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 import org.apache.commons.csv.CSVFormat;
 import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVPrinter;
@@ -47,7 +49,8 @@ public class CSVFileResultHandler extends CSVResultHandler {
   public synchronized List<Result> read() throws IOException {
     util.ensureBaseResultDirExists();
     File file = new File(resultFileName);
-    try (CSVParser parser = CSVParser.parse(file, Charset.defaultCharset(), CSVFormat.DEFAULT)) {
+    try (CSVParser parser = CSVParser.builder().setFormat(CSVFormat.DEFAULT)
+      .setCharset(Charset.defaultCharset()).setFile(file).get()) {
       List<CSVRecord> records = parser.getRecords();
       List<Result> results = new ArrayList<>();
       String header = null;
@@ -55,11 +58,12 @@ public class CSVFileResultHandler extends CSVResultHandler {
 
         // First record is the CSV Header
         if (record.getRecordNumber() == 1) {
-          header = record.toString();
+          header = StreamSupport.stream(record.spliterator(), false)
+            .collect(Collectors.joining(PherfConstants.RESULT_FILE_DELIMETER));
           continue;
         }
         List<ResultValue> resultValues = new ArrayList<>();
-        for (String val : record.toString().split(PherfConstants.RESULT_FILE_DELIMETER)) {
+        for (String val : record) {
           resultValues.add(new ResultValue(val));
         }
         Result result = new Result(resultFileDetails, header, resultValues);
