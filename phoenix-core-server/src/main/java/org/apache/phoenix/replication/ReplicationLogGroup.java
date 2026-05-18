@@ -178,9 +178,13 @@ public class ReplicationLogGroup {
   public static final String STANDBY_DIR = "in";
   public static final String FALLBACK_DIR = "out";
 
-  /** Cache of ReplicationLogGroup instances by HA Group ID */
+  /** Cache of ReplicationLogGroup instances by server name + HA Group name */
   protected static final ConcurrentHashMap<String, ReplicationLogGroup> INSTANCES =
     new ConcurrentHashMap<>();
+
+  private static String instanceKey(ServerName serverName, String haGroupName) {
+    return serverName.getServerName() + "|" + haGroupName;
+  }
 
   protected final Configuration conf;
   protected final ServerName serverName;
@@ -362,7 +366,7 @@ public class ReplicationLogGroup {
   public static ReplicationLogGroup get(Configuration conf, ServerName serverName,
     String haGroupName, Abortable abortable) throws IOException {
     try {
-      return INSTANCES.computeIfAbsent(haGroupName, k -> {
+      return INSTANCES.computeIfAbsent(instanceKey(serverName, haGroupName), k -> {
         try {
           ReplicationLogGroup group = new ReplicationLogGroup(conf, serverName, haGroupName,
             HAGroupStoreManager.getInstance(conf), abortable);
@@ -390,7 +394,7 @@ public class ReplicationLogGroup {
   public static ReplicationLogGroup get(Configuration conf, ServerName serverName,
     String haGroupName, HAGroupStoreManager haGroupStoreManager) throws IOException {
     try {
-      return INSTANCES.computeIfAbsent(haGroupName, k -> {
+      return INSTANCES.computeIfAbsent(instanceKey(serverName, haGroupName), k -> {
         try {
           ReplicationLogGroup group =
             new ReplicationLogGroup(conf, serverName, haGroupName, haGroupStoreManager);
@@ -654,7 +658,7 @@ public class ReplicationLogGroup {
       return;
     }
     LOG.info("Closing HAGroup {}", this);
-    INSTANCES.remove(haGroupName);
+    INSTANCES.remove(instanceKey(serverName, haGroupName));
     try {
       disruptor.shutdown(shutdownTimeoutMs, TimeUnit.MILLISECONDS);
     } catch (com.lmax.disruptor.TimeoutException e) {
