@@ -546,6 +546,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       if (this.shouldReplicate) {
         this.ignoreReplicationFilter = getSynchronousReplicationFilter(tableName);
       }
+      // @CoreCoprocessor guarantees HasRegionServerServices, but guard for testability
       if (e instanceof HasRegionServerServices) {
         this.abortable = ((HasRegionServerServices) e).getRegionServerServices();
       }

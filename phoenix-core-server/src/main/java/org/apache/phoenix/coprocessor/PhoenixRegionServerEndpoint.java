@@ -84,6 +84,7 @@ public class PhoenixRegionServerEndpoint extends
     if (env instanceof RegionServerCoprocessorEnvironment) {
       this.serverName = ((RegionServerCoprocessorEnvironment) env).getServerName();
     }
+    // @CoreCoprocessor guarantees HasRegionServerServices, but guard for testability
     if (env instanceof HasRegionServerServices) {
       this.abortable = ((HasRegionServerServices) env).getRegionServerServices();
     }
