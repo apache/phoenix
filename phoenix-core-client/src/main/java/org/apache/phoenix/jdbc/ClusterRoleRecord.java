@@ -25,6 +25,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
+import java.util.Objects;
 import java.util.Optional;
 import org.apache.commons.lang3.builder.EqualsBuilder;
 import org.apache.commons.lang3.builder.HashCodeBuilder;
@@ -126,31 +127,50 @@ public class ClusterRoleRecord {
   private final long version;
 
   /**
-   * To handle backward compatibility with old ClusterRoleRecords which had zk1 and zk2 as keys for
-   * zk urls, This constructor is only being used {@link ClusterRoleRecord#fromJson} when we
-   * deserialize Cluster Role Record read from ZooKeeper ZNode. If CRR is in old format we will read
-   * zk1 and zk2 and url1 and url2 will be null and if it is in new format zk1 and zk2 will be null
-   * in both cases final url is being stored in url1 and url2 url will be stored in normalized forms
-   * which looks like zk1\\:port1,zk2\\:port2,zk3\\:port3, zk4\\:port4,zk5\\:port5::znode or
-   * master1\\:port1,master2\\:port2,master3\\:port3, master4\\:port4,master5\\:port5
+   * Convenience constructor: defaults {@code registryType} to
+   * {@link #DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE} (RPC). Use the explicit overload below to write
+   * {@link RegistryType#ZK} records for the legacy {@code /phoenix/ha} znode.
    * @param haGroupName HighAvailability Group name / CRR name
-   * @param policy      Policy used by give CRR
-   * @param url1        ZK/HMaster url based on registry type for first cluster
-   * @param role1       {@link ClusterRole} which describes the current state of first cluster
-   * @param url2        ZK/HMaster url based on registry type for second cluster
-   * @param role2       {@link ClusterRole} which describes the current state of second cluster
-   * @param version     version of a given CRR
+   * @param policy      Policy used by the given CRR
+   * @param url1        ZK/HMaster url for the first cluster
+   * @param role1       {@link ClusterRole} describing the current state of the first cluster
+   * @param url2        ZK/HMaster url for the second cluster
+   * @param role2       {@link ClusterRole} describing the current state of the second cluster
+   * @param version     monotonic version of this CRR
+   */
+  public ClusterRoleRecord(String haGroupName, HighAvailabilityPolicy policy, String url1,
+    ClusterRole role1, String url2, ClusterRole role2, long version) {
+    this(haGroupName, policy, DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE, url1, role1, url2, role2,
+      version);
+  }
+
+  /**
+   * Canonical constructor; also the {@code @JsonCreator} entry point so the persisted
+   * {@code registryType} round-trips correctly. Records persisted before {@code registryType} was
+   * added as a JSON field pass {@code null} here and default to
+   * {@link #DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE} (RPC). URLs are normalized to the
+   * {@code registryType}-specific canonical form for accurate comparisons; the resulting
+   * {@code url1}/{@code url2} are stored as {@code zk1\:port1,zk2\:port2,...::znode} for ZK or
+   * {@code master1\:port1,master2\:port2,...} for RPC/MASTER.
+   * @param haGroupName  HighAvailability Group name / CRR name
+   * @param policy       Policy used by the given CRR
+   * @param registryType {@link RegistryType} for URL normalization; {@code null} defaults to
+   *                     {@link #DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE} (RPC)
+   * @param url1         ZK/HMaster url for the first cluster
+   * @param role1        {@link ClusterRole} describing the current state of the first cluster
+   * @param url2         ZK/HMaster url for the second cluster
+   * @param role2        {@link ClusterRole} describing the current state of the second cluster
+   * @param version      monotonic version of this CRR
    */
   @JsonCreator
   public ClusterRoleRecord(@JsonProperty("haGroupName") String haGroupName,
-    @JsonProperty("policy") HighAvailabilityPolicy policy, @JsonProperty("url1") String url1,
+    @JsonProperty("policy") HighAvailabilityPolicy policy,
+    @JsonProperty("registryType") RegistryType registryType, @JsonProperty("url1") String url1,
     @JsonProperty("role1") ClusterRole role1, @JsonProperty("url2") String url2,
     @JsonProperty("role2") ClusterRole role2, @JsonProperty("version") long version) {
     this.haGroupName = haGroupName;
     this.policy = policy;
-
-    // Default registry type is RPC from Consistent Cluster Failover onwards
-    this.registryType = DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE;
+    this.registryType = registryType != null ? registryType : DEFAULT_PHOENIX_HA_CRR_REGISTRY_TYPE;
 
     // Do we really need to normalize here ?
     // We are normalizing to have urls in specific formats for each registryType for getting
@@ -219,6 +239,20 @@ public class ClusterRoleRecord {
 
   public boolean hasSameInfo(ClusterRoleRecord other) {
     return haGroupName.equals(other.haGroupName) && policy.equals(other.policy);
+  }
+
+  /**
+   * Equality on the six identity/role fields ({@code haGroupName, policy, url1, url2, role1,
+   * role2}); ignores {@code version} (always bumps) and {@code registryType} (avoids RPC->ZK
+   * thrash). Returns {@code false} if {@code other} is {@code null}.
+   */
+  public boolean isLogicallyEqualIgnoringVersionAndRegistry(ClusterRoleRecord other) {
+    if (other == null) {
+      return false;
+    }
+    return Objects.equals(haGroupName, other.haGroupName) && Objects.equals(policy, other.policy)
+      && Objects.equals(url1, other.url1) && Objects.equals(url2, other.url2)
+      && role1 == other.role1 && role2 == other.role2;
   }
 
   /** Returns true if CRR has any url in UNKNOWN role/state. */

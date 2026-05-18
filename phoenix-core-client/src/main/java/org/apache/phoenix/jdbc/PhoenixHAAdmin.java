@@ -39,6 +39,7 @@ import org.apache.curator.utils.ZKPaths;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.PairOfSameType;
+import org.apache.phoenix.exception.StaleClusterRoleRecordVersionException;
 import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.zookeeper.CreateMode;
@@ -82,6 +83,25 @@ public class PhoenixHAAdmin implements Closeable {
   }
 
   private static final Logger LOG = LoggerFactory.getLogger(PhoenixHAAdmin.class);
+
+  /** ZK's wildcard for {@code setData()/delete()}: bypasses version check. */
+  static final int ZK_MATCH_ANY_VERSION = -1;
+
+  /**
+   * Write mode for {@link #createOrUpdateClusterRoleRecordWithCAS}. The accompanying
+   * {@code expectedStatVersion} argument is interpreted only for {@link #CAS_WITH_VERSION}.
+   * <p>
+   * Phoenix-internal. Not part of any public API contract — values may be added or renamed without
+   * notice. Do not switch exhaustively from outside this module.
+   */
+  public enum LegacyCrrWriteMode {
+    /** Create the znode; no prior version expected. */
+    CREATE_NEW,
+    /** Unconditional overwrite (no CAS). For operator/migration tooling only. */
+    FORCE_OVERWRITE,
+    /** CAS update; {@code expectedStatVersion} must be {@code >= 0}. */
+    CAS_WITH_VERSION
+  }
 
   /** The fully qualified ZK URL for an HBase cluster in format host:port:/hbase */
   private final String zkUrl;
@@ -524,17 +544,18 @@ public class PhoenixHAAdmin implements Closeable {
   }
 
   /**
-   * Gets the HAGroupStoreRecord and Stat from ZooKeeper.
+   * Gets the HAGroupStoreRecord and Stat from ZooKeeper. Reads (record, stat) atomically via
+   * {@code storingStatIn} so the returned stat version always corresponds to the returned bytes.
    * @param haGroupName the HA group name
-   * @return a pair of HAGroupStoreRecord and Stat
+   * @return a pair of HAGroupStoreRecord and Stat; both {@code null} if the znode does not exist
    * @throws IOException if any error occurs during the retrieval
    */
   public Pair<HAGroupStoreRecord, Stat> getHAGroupStoreRecordInZooKeeper(String haGroupName)
     throws IOException {
     try {
-      byte[] data = getCurator().getData().forPath(toPath(haGroupName));
+      Stat stat = new Stat();
+      byte[] data = getCurator().getData().storingStatIn(stat).forPath(toPath(haGroupName));
       HAGroupStoreRecord record = HAGroupStoreRecord.fromJson(data).orElse(null);
-      Stat stat = getCurator().checkExists().forPath(toPath(haGroupName));
       return Pair.of(record, stat);
     } catch (KeeperException.NoNodeException nne) {
       LOG.warn("No HAGroupStoreRecord for HA group {} in ZK", haGroupName, nne);
@@ -556,6 +577,71 @@ public class PhoenixHAAdmin implements Closeable {
     } catch (Exception e) {
       LOG.error("Failed to delete HAGroupStoreRecord for HA group {}", haGroupName, e);
       throw new IOException("Failed to delete HAGroupStoreRecord for HA group " + haGroupName, e);
+    }
+  }
+
+  // ----- Legacy /phoenix/ha ClusterRoleRecord sync helpers -----
+
+  /**
+   * Atomic read of (record, stat) on the legacy CRR znode. Returns {@code (null, null)} if the
+   * znode does not exist.
+   */
+  public Pair<ClusterRoleRecord, Stat> getClusterRoleRecordAndStatInZooKeeper(String haGroupName)
+    throws IOException {
+    try {
+      Stat stat = new Stat();
+      byte[] data = getCurator().getData().storingStatIn(stat).forPath(toPath(haGroupName));
+      ClusterRoleRecord record = ClusterRoleRecord.fromJson(data).orElse(null);
+      return Pair.of(record, stat);
+    } catch (KeeperException.NoNodeException nne) {
+      return Pair.of(null, null);
+    } catch (Exception e) {
+      LOG.error("Failed to get ClusterRoleRecord for HA group {}", haGroupName, e);
+      throw new IOException("Failed to get ClusterRoleRecord for HA group " + haGroupName, e);
+    }
+  }
+
+  /**
+   * Writes {@code newRecord} per {@code mode}. {@code expectedStatVersion} is used only for
+   * {@link LegacyCrrWriteMode#CAS_WITH_VERSION} (must be {@code >= 0}). Both BadVersion and
+   * NodeExists surface as {@link StaleClusterRoleRecordVersionException}.
+   */
+  public void createOrUpdateClusterRoleRecordWithCAS(String haGroupName,
+    ClusterRoleRecord newRecord, LegacyCrrWriteMode mode, int expectedStatVersion)
+    throws IOException, StaleClusterRoleRecordVersionException {
+    Preconditions.checkNotNull(mode, "mode");
+    if (mode == LegacyCrrWriteMode.CAS_WITH_VERSION) {
+      Preconditions.checkArgument(expectedStatVersion >= 0,
+        "CAS_WITH_VERSION requires expectedStatVersion >= 0; got " + expectedStatVersion);
+    }
+    try {
+      byte[] data = ClusterRoleRecord.toJson(newRecord);
+      switch (mode) {
+        case CREATE_NEW:
+          getCurator().create().creatingParentsIfNeeded().withMode(CreateMode.PERSISTENT)
+            .forPath(toPath(haGroupName), data);
+          break;
+        case FORCE_OVERWRITE:
+          getCurator().setData().withVersion(ZK_MATCH_ANY_VERSION).forPath(toPath(haGroupName),
+            data);
+          break;
+        case CAS_WITH_VERSION:
+          getCurator().setData().withVersion(expectedStatVersion).forPath(toPath(haGroupName),
+            data);
+          break;
+        default:
+          throw new IllegalStateException("Unhandled LegacyCrrWriteMode: " + mode);
+      }
+    } catch (KeeperException.BadVersionException e) {
+      throw new StaleClusterRoleRecordVersionException(
+        "CAS failed for HA group " + haGroupName + " at expectedStatVersion " + expectedStatVersion,
+        e);
+    } catch (KeeperException.NodeExistsException e) {
+      throw new StaleClusterRoleRecordVersionException(
+        "Create failed for HA group " + haGroupName + ": node already exists", e);
+    } catch (Exception e) {
+      LOG.error("Failed to write ClusterRoleRecord for HA group {}", haGroupName, e);
+      throw new IOException("Failed to write ClusterRoleRecord for HA group " + haGroupName, e);
     }
   }
 

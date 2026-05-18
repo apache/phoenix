@@ -18,9 +18,12 @@
 package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_HA_LEGACY_CRR_RECONCILIATION_INTERVAL_SECONDS;
+import static org.apache.phoenix.query.QueryServices.PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED;
 import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
@@ -47,13 +50,16 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Predicate;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.curator.framework.recipes.cache.PathChildrenCacheListener;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
+import org.apache.phoenix.exception.StaleClusterRoleRecordVersionException;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
+import org.apache.phoenix.util.JDBCUtil;
 import org.apache.zookeeper.data.Stat;
 import org.junit.After;
 import org.junit.Before;
@@ -72,6 +78,8 @@ public class HAGroupStoreClientIT extends HABaseIT {
   private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 5000L;
   private PhoenixHAAdmin haAdmin;
   private PhoenixHAAdmin peerHaAdmin;
+  // Admin on the legacy /phoenix/ha namespace; used to inspect/seed/corrupt the legacy znode.
+  private PhoenixHAAdmin legacyHaAdmin;
   private String zkUrl;
   private String peerZKUrl;
   private String masterUrl;
@@ -95,8 +103,11 @@ public class HAGroupStoreClientIT extends HABaseIT {
       ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
     peerHaAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster2().getConfiguration(),
       ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
+    legacyHaAdmin = new PhoenixHAAdmin(CLUSTERS.getHBaseCluster1().getConfiguration(),
+      PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE);
     haAdmin.getCurator().delete().quietly().forPath(toPath(testName.getMethodName()));
     peerHaAdmin.getCurator().delete().quietly().forPath(toPath(testName.getMethodName()));
+    legacyHaAdmin.getCurator().delete().quietly().forPath(toPath(testName.getMethodName()));
     zkUrl = getLocalZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration());
     // Clean existing records in system table
     List<String> haGroupNames = HAGroupStoreClient.getHAGroupNames(zkUrl);
@@ -117,8 +128,10 @@ public class HAGroupStoreClientIT extends HABaseIT {
   public void after() throws Exception {
     haAdmin.getCurator().delete().quietly().forPath(toPath(testName.getMethodName()));
     peerHaAdmin.getCurator().delete().quietly().forPath(toPath(testName.getMethodName()));
+    legacyHaAdmin.getCurator().delete().quietly().forPath(toPath(testName.getMethodName()));
     haAdmin.close();
     peerHaAdmin.close();
+    legacyHaAdmin.close();
   }
 
   @Test
@@ -1202,5 +1215,503 @@ public class HAGroupStoreClientIT extends HABaseIT {
       haGroupStoreClient.close(); // Explicit close to test shutdown
       assertTrue("Sync executor should be shutdown after close", syncExecutor.isShutdown());
     }
+  }
+
+  // ============================================================================================
+  // Legacy /phoenix/ha CRR sync tests
+  // Verify feature-flag gating, derivation, monotonic version, registry-type preservation,
+  // deletion mirroring, and short-circuit behavior of HAGroupStoreClient's legacy sync path.
+  // ============================================================================================
+
+  @Test
+  public void testLegacyCrrSyncFeatureOffByDefault_NoLegacyZnodeWritten() throws Exception {
+    String haGroupName = testName.getMethodName();
+    Configuration conf = legacyCrrConf(/* legacyEnabled */ false, /* periodicSec */ 60);
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+    Pair<ClusterRoleRecord, Stat> legacy = readLegacyCrr(haGroupName);
+    assertNull("Legacy CRR must not exist when feature is off", legacy.getLeft());
+    assertNull("Legacy znode stat must be null when feature is off", legacy.getRight());
+  }
+
+  @Test
+  public void testLegacyCrrSyncFeatureOn_InitialSyncCreatesZkRegistryLegacyZnode()
+    throws Exception {
+    String haGroupName = testName.getMethodName();
+    Configuration conf = legacyCrrConf(true, 60);
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+
+    Pair<ClusterRoleRecord, Stat> legacy = awaitLegacyCrrPresent(haGroupName);
+    ClusterRoleRecord crr = legacy.getLeft();
+    assertEquals("Legacy CRR must use ZK registry type for backward compatibility",
+      ClusterRoleRecord.RegistryType.ZK, crr.getRegistryType());
+    assertEquals(haGroupName, crr.getHaGroupName());
+    assertEquals(HighAvailabilityPolicy.FAILOVER, crr.getPolicy());
+    // Local cluster role is ACTIVE per System Table seed.
+    assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE,
+      crr.getRole(formattedZkUrlFor(ClusterType.LOCAL)));
+    assertTrue("CRR version must be > 0 after initial sync", crr.getVersion() > 0);
+  }
+
+  @Test
+  public void testLegacyCrrSyncRoleChangePropagatesAndIsNewerThanWorks() throws Exception {
+    String haGroupName = testName.getMethodName();
+    Configuration conf = legacyCrrConf(true, 60);
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+
+    ClusterRoleRecord initial = awaitLegacyCrrPresent(haGroupName).getLeft();
+    long initialVersion = initial.getVersion();
+
+    // ACTIVE_IN_SYNC -> ACTIVE_IN_SYNC_TO_STANDBY (role change ACTIVE -> ACTIVE_TO_STANDBY).
+    client.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    Pair<ClusterRoleRecord, Stat> updated = awaitLegacyCrrRole(haGroupName, ClusterType.LOCAL,
+      ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY);
+    ClusterRoleRecord updatedCRR = updated.getLeft();
+    assertTrue("Version must monotonically increase after role change",
+      updatedCRR.getVersion() > initialVersion);
+    assertTrue("isNewerThan must return true for the updated record",
+      updatedCRR.isNewerThan(initial));
+    assertEquals(ClusterRoleRecord.RegistryType.ZK, updatedCRR.getRegistryType());
+  }
+
+  @Test
+  public void testLegacyCrrSyncStateOnlyChangeDoesNotRewriteLegacy() throws Exception {
+    String haGroupName = testName.getMethodName();
+    Configuration conf = legacyCrrConf(true, 60);
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+
+    Pair<ClusterRoleRecord, Stat> initial = awaitLegacyCrrPresent(haGroupName);
+    int initialZkVersion = initial.getRight().getVersion();
+    long initialCrrVersion = initial.getLeft().getVersion();
+
+    // ACTIVE_IN_SYNC -> ACTIVE_NOT_IN_SYNC: ClusterRole stays ACTIVE.
+    client.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC);
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+    Pair<ClusterRoleRecord, Stat> after = readLegacyCrr(haGroupName);
+    assertNotNull(after.getLeft());
+    assertEquals("Legacy CRR ZK stat version must not change on state-only transitions",
+      initialZkVersion, after.getRight().getVersion());
+    assertEquals("Legacy CRR logical version must not change on state-only transitions",
+      initialCrrVersion, after.getLeft().getVersion());
+  }
+
+  /** LOCAL CHILD_REMOVED on consistentHA does not delete the legacy znode. */
+  @Test
+  public void testLegacyCrrSyncLocalChildRemovedDoesNotDeleteLegacy() throws Exception {
+    String haGroupName = testName.getMethodName();
+    Configuration conf = legacyCrrConf(true, 60);
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+    Pair<ClusterRoleRecord, Stat> initial = awaitLegacyCrrPresent(haGroupName);
+    long initialVersion = initial.getLeft().getVersion();
+
+    haAdmin.deleteHAGroupStoreRecordInZooKeeper(haGroupName);
+
+    // Wait long enough for any potential event-driven delete to have fired.
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+    Pair<ClusterRoleRecord, Stat> after = readLegacyCrr(haGroupName);
+    assertNotNull("Legacy znode must NOT be deleted on LOCAL CHILD_REMOVED", after.getLeft());
+    assertTrue("Legacy CRR version must not regress after LOCAL CHILD_REMOVED",
+      after.getLeft().getVersion() >= initialVersion);
+  }
+
+  @Test
+  public void testLegacyCrrSyncPeriodicDisabledStillSyncsViaEvents() throws Exception {
+    String haGroupName = testName.getMethodName();
+    Configuration conf = legacyCrrConf(true, 0); // periodic disabled
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+    ClusterRoleRecord initial = awaitLegacyCrrPresent(haGroupName).getLeft();
+    assertEquals("Initial local role should be ACTIVE per @Before seed",
+      ClusterRoleRecord.ClusterRole.ACTIVE, initial.getRole(formattedZkUrlFor(ClusterType.LOCAL)));
+    assertEquals("Initial registry type must be ZK", ClusterRoleRecord.RegistryType.ZK,
+      initial.getRegistryType());
+
+    client.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+    ClusterRoleRecord updated = awaitLegacyCrrRole(haGroupName, ClusterType.LOCAL,
+      ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY).getLeft();
+    assertTrue("Updated version must monotonically advance past the initial version",
+      updated.getVersion() > initial.getVersion());
+    assertTrue("isNewerThan must return true for the post-event record",
+      updated.isNewerThan(initial));
+    assertEquals("Registry type must remain ZK after an event-driven sync",
+      ClusterRoleRecord.RegistryType.ZK, updated.getRegistryType());
+  }
+
+  /** PEER CHILD_REMOVED on consistentHA does not delete the legacy znode. */
+  @Test
+  public void testLegacyCrrSyncPeerChildRemovedDoesNotDeleteLegacy() throws Exception {
+    String haGroupName = testName.getMethodName();
+    // Seed a peer record so that PEER cache initializes and PEER CHILD_REMOVED can fire later.
+    HAGroupStoreRecord peerRecord =
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.zkUrl, this.peerMasterUrl, this.masterUrl,
+        CLUSTERS.getHdfsUrl2(), CLUSTERS.getHdfsUrl1(), 0L);
+    createOrUpdateHAGroupStoreRecordOnZookeeper(peerHaAdmin, haGroupName, peerRecord);
+
+    Configuration conf = legacyCrrConf(true, 0); // periodic disabled to isolate event behavior
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+
+    Pair<ClusterRoleRecord, Stat> initial = awaitLegacyCrrPresent(haGroupName);
+    long initialCrrVersion = initial.getLeft().getVersion();
+
+    peerHaAdmin.deleteHAGroupStoreRecordInZooKeeper(haGroupName);
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+    Pair<ClusterRoleRecord, Stat> after = readLegacyCrr(haGroupName);
+    assertNotNull("Legacy znode must NOT be deleted on PEER CHILD_REMOVED", after.getLeft());
+    assertTrue("Legacy CRR version must not regress after PEER CHILD_REMOVED",
+      after.getLeft().getVersion() >= initialCrrVersion);
+  }
+
+  /**
+   * Each {@link PhoenixHAAdmin.LegacyCrrWriteMode}: error mapping (BadVersion + NodeExists ->
+   * {@link StaleClusterRoleRecordVersionException}), unconditional FORCE_OVERWRITE, and
+   * CAS_WITH_VERSION rejecting negative versions. Sequential: ZK serializes versioned writes
+   * server-side, so the client retry path is identical to a real race.
+   */
+  @Test
+  public void testLegacyCrrCasErrorMappingAndModeDispatch() throws Exception {
+    String haGroupName = testName.getMethodName();
+
+    // Create.
+    ClusterRoleRecord initial = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      ClusterRoleRecord.RegistryType.ZK, this.zkUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      this.peerZKUrl, ClusterRoleRecord.ClusterRole.STANDBY, 1L);
+    legacyHaAdmin.createOrUpdateClusterRoleRecordWithCAS(haGroupName, initial,
+      PhoenixHAAdmin.LegacyCrrWriteMode.CREATE_NEW, 0);
+
+    Pair<ClusterRoleRecord, Stat> existing =
+      legacyHaAdmin.getClusterRoleRecordAndStatInZooKeeper(haGroupName);
+    assertNotNull(existing.getLeft());
+    int sharedVersion = existing.getRight().getVersion();
+
+    // CAS winner.
+    ClusterRoleRecord writerA = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      ClusterRoleRecord.RegistryType.ZK, this.zkUrl,
+      ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY, this.peerZKUrl,
+      ClusterRoleRecord.ClusterRole.STANDBY, 2L);
+    legacyHaAdmin.createOrUpdateClusterRoleRecordWithCAS(haGroupName, writerA,
+      PhoenixHAAdmin.LegacyCrrWriteMode.CAS_WITH_VERSION, sharedVersion);
+
+    // CAS loser: same expected version -> BadVersion -> StaleClusterRoleRecordVersionException.
+    ClusterRoleRecord writerB = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      ClusterRoleRecord.RegistryType.ZK, this.zkUrl, ClusterRoleRecord.ClusterRole.STANDBY,
+      this.peerZKUrl, ClusterRoleRecord.ClusterRole.ACTIVE, 2L);
+    assertThrows(StaleClusterRoleRecordVersionException.class,
+      () -> legacyHaAdmin.createOrUpdateClusterRoleRecordWithCAS(haGroupName, writerB,
+        PhoenixHAAdmin.LegacyCrrWriteMode.CAS_WITH_VERSION, sharedVersion));
+
+    Pair<ClusterRoleRecord, Stat> winner =
+      legacyHaAdmin.getClusterRoleRecordAndStatInZooKeeper(haGroupName);
+    assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+      winner.getLeft().getRole(formattedZkUrlFor(ClusterType.LOCAL)));
+    assertTrue(winner.getRight().getVersion() > sharedVersion);
+
+    // CREATE_NEW on an existing znode -> NodeExists -> StaleClusterRoleRecordVersionException.
+    ClusterRoleRecord raceCreate =
+      new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+        ClusterRoleRecord.RegistryType.ZK, this.zkUrl, ClusterRoleRecord.ClusterRole.STANDBY,
+        this.peerZKUrl, ClusterRoleRecord.ClusterRole.STANDBY, 3L);
+    assertThrows(StaleClusterRoleRecordVersionException.class,
+      () -> legacyHaAdmin.createOrUpdateClusterRoleRecordWithCAS(haGroupName, raceCreate,
+        PhoenixHAAdmin.LegacyCrrWriteMode.CREATE_NEW, 0));
+
+    // FORCE_OVERWRITE bypasses CAS and bumps the stat version.
+    Stat statBeforeOverwrite =
+      legacyHaAdmin.getClusterRoleRecordAndStatInZooKeeper(haGroupName).getRight();
+    ClusterRoleRecord overwrite =
+      new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+        ClusterRoleRecord.RegistryType.ZK, this.zkUrl, ClusterRoleRecord.ClusterRole.STANDBY,
+        this.peerZKUrl, ClusterRoleRecord.ClusterRole.STANDBY, 4L);
+    legacyHaAdmin.createOrUpdateClusterRoleRecordWithCAS(haGroupName, overwrite,
+      PhoenixHAAdmin.LegacyCrrWriteMode.FORCE_OVERWRITE, 0);
+    Pair<ClusterRoleRecord, Stat> afterOverwrite =
+      legacyHaAdmin.getClusterRoleRecordAndStatInZooKeeper(haGroupName);
+    assertEquals(ClusterRoleRecord.ClusterRole.STANDBY,
+      afterOverwrite.getLeft().getRole(formattedZkUrlFor(ClusterType.LOCAL)));
+    assertTrue(afterOverwrite.getRight().getVersion() > statBeforeOverwrite.getVersion());
+
+    // CAS_WITH_VERSION rejects negative expectedStatVersion before any ZK call.
+    ClusterRoleRecord illegalRecord =
+      new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+        ClusterRoleRecord.RegistryType.ZK, this.zkUrl, ClusterRoleRecord.ClusterRole.OFFLINE,
+        this.peerZKUrl, ClusterRoleRecord.ClusterRole.OFFLINE, 5L);
+    assertThrows(IllegalArgumentException.class,
+      () -> legacyHaAdmin.createOrUpdateClusterRoleRecordWithCAS(haGroupName, illegalRecord,
+        PhoenixHAAdmin.LegacyCrrWriteMode.CAS_WITH_VERSION, -1));
+    assertThrows(IllegalArgumentException.class,
+      () -> legacyHaAdmin.createOrUpdateClusterRoleRecordWithCAS(haGroupName, illegalRecord,
+        PhoenixHAAdmin.LegacyCrrWriteMode.CAS_WITH_VERSION, Integer.MIN_VALUE));
+  }
+
+  /** Peer-side role flip propagates to role2 in the local legacy CRR. */
+  @Test
+  public void testLegacyCrrSyncPeerRoleFlipUpdatesLegacyRole2() throws Exception {
+    String haGroupName = testName.getMethodName();
+    // Seed peer with STANDBY before client starts so the initial sync sees role2=STANDBY.
+    HAGroupStoreRecord peerStandby =
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.zkUrl, this.peerMasterUrl, this.masterUrl,
+        CLUSTERS.getHdfsUrl2(), CLUSTERS.getHdfsUrl1(), 0L);
+    createOrUpdateHAGroupStoreRecordOnZookeeper(peerHaAdmin, haGroupName, peerStandby);
+
+    Configuration conf = legacyCrrConf(true, 0); // periodic disabled to isolate event-driven path
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+    awaitLegacyCrrRole(haGroupName, ClusterType.PEER, ClusterRoleRecord.ClusterRole.STANDBY);
+
+    // Flip the peer record to a state whose cluster role is ACTIVE_TO_STANDBY.
+    HAGroupStoreRecord peerFlipped = new HAGroupStoreRecord("v1.0", haGroupName,
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 0L,
+      HighAvailabilityPolicy.FAILOVER.toString(), this.zkUrl, this.peerMasterUrl, this.masterUrl,
+      CLUSTERS.getHdfsUrl2(), CLUSTERS.getHdfsUrl1(), 0L);
+    createOrUpdateHAGroupStoreRecordOnZookeeper(peerHaAdmin, haGroupName, peerFlipped);
+
+    Pair<ClusterRoleRecord, Stat> after = awaitLegacyCrrRole(haGroupName, ClusterType.PEER,
+      ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY);
+    assertEquals("Registry type must remain ZK after a peer-driven role flip",
+      ClusterRoleRecord.RegistryType.ZK, after.getLeft().getRegistryType());
+  }
+
+  /** Absent peer record yields role2=UNKNOWN; converges when the peer record appears. */
+  @Test
+  public void testLegacyCrrSyncPeerAbsentYieldsUnknownAndConvergesOnRecovery() throws Exception {
+    String haGroupName = testName.getMethodName();
+    // No peer record seeded: peer cache is empty so getHAGroupStoreRecordFromPeer() returns null
+    // and role2 falls through to UNKNOWN.
+    Configuration conf = legacyCrrConf(true, 0);
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+    Pair<ClusterRoleRecord, Stat> initial =
+      awaitLegacyCrrRole(haGroupName, ClusterType.PEER, ClusterRoleRecord.ClusterRole.UNKNOWN);
+    long initialVersion = initial.getLeft().getVersion();
+
+    // Peer "recovers" by writing its consistentHA record. The PEER CHILD_ADDED event triggers
+    // the legacy sync to update role2.
+    HAGroupStoreRecord peerRecord =
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.zkUrl, this.peerMasterUrl, this.masterUrl,
+        CLUSTERS.getHdfsUrl2(), CLUSTERS.getHdfsUrl1(), 0L);
+    createOrUpdateHAGroupStoreRecordOnZookeeper(peerHaAdmin, haGroupName, peerRecord);
+
+    Pair<ClusterRoleRecord, Stat> recovered =
+      awaitLegacyCrrRole(haGroupName, ClusterType.PEER, ClusterRoleRecord.ClusterRole.STANDBY);
+    assertTrue("Version must bump when role2 transitions UNKNOWN -> STANDBY",
+      recovered.getLeft().getVersion() > initialVersion);
+  }
+
+  /** registryType stays ZK across multiple sync cycles (never reverts to RPC). */
+  @Test
+  public void testLegacyCrrSyncRegistryTypePreservedAcrossMultipleCycles() throws Exception {
+    String haGroupName = testName.getMethodName();
+    Configuration conf = legacyCrrConf(true, 0);
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+
+    Pair<ClusterRoleRecord, Stat> initial = awaitLegacyCrrPresent(haGroupName);
+    assertEquals(ClusterRoleRecord.RegistryType.ZK, initial.getLeft().getRegistryType());
+    assertEquals("Initial local role should be ACTIVE per @Before seed",
+      ClusterRoleRecord.ClusterRole.ACTIVE,
+      initial.getLeft().getRole(formattedZkUrlFor(ClusterType.LOCAL)));
+    long lastVersion = initial.getLeft().getVersion();
+
+    // Drive a sequence of distinct peer states; each event drives a sync that rewrites the
+    // legacy znode (or short-circuits if logically equal). Direct ZK writes intentionally
+    // bypass setHAGroupStatusIfNeeded's transition guard.
+    HAGroupStoreRecord.HAGroupState[] cycle =
+      new HAGroupStoreRecord.HAGroupState[] { HAGroupStoreRecord.HAGroupState.STANDBY,
+        HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY,
+        HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, HAGroupStoreRecord.HAGroupState.OFFLINE,
+        HAGroupStoreRecord.HAGroupState.STANDBY };
+    for (HAGroupStoreRecord.HAGroupState state : cycle) {
+      HAGroupStoreRecord peer = new HAGroupStoreRecord("v1.0", haGroupName, state, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.zkUrl, this.peerMasterUrl, this.masterUrl,
+        CLUSTERS.getHdfsUrl2(), CLUSTERS.getHdfsUrl1(), 0L);
+      createOrUpdateHAGroupStoreRecordOnZookeeper(peerHaAdmin, haGroupName, peer);
+      Pair<ClusterRoleRecord, Stat> after =
+        awaitLegacyCrrRole(haGroupName, ClusterType.PEER, state.getClusterRole());
+      assertEquals(
+        "Local role must remain ACTIVE across peer-driven cycles (peer state=" + state + ")",
+        ClusterRoleRecord.ClusterRole.ACTIVE,
+        after.getLeft().getRole(formattedZkUrlFor(ClusterType.LOCAL)));
+      assertEquals("Registry type must remain ZK after a sync cycle (peer state=" + state + ")",
+        ClusterRoleRecord.RegistryType.ZK, after.getLeft().getRegistryType());
+      assertTrue(
+        "Logical version must monotonically increase across distinct sync cycles (peer state="
+          + state + ")",
+        after.getLeft().getVersion() > lastVersion);
+      lastVersion = after.getLeft().getVersion();
+    }
+  }
+
+  /** Periodic loop repairs an external divergence with no consistentHA event. */
+  @Test
+  public void testLegacyCrrSyncPeriodicReconciliationRecoversAfterDivergence() throws Exception {
+    String haGroupName = testName.getMethodName();
+    Configuration conf = legacyCrrConf(true, 2); // 2s interval; jitter is 0-30s on first run
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+    Pair<ClusterRoleRecord, Stat> initial = awaitLegacyCrrPresent(haGroupName);
+    assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE,
+      initial.getLeft().getRole(formattedZkUrlFor(ClusterType.LOCAL)));
+
+    // Externally corrupt the legacy znode; no consistentHA event fires, so only the periodic
+    // reconciler can recover.
+    ClusterRoleRecord corrupt = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      ClusterRoleRecord.RegistryType.ZK, this.zkUrl, ClusterRoleRecord.ClusterRole.STANDBY,
+      this.peerZKUrl, ClusterRoleRecord.ClusterRole.ACTIVE, initial.getLeft().getVersion() + 10);
+    legacyHaAdmin.createOrUpdateClusterRoleRecordWithCAS(haGroupName, corrupt,
+      PhoenixHAAdmin.LegacyCrrWriteMode.CAS_WITH_VERSION, initial.getRight().getVersion());
+    Pair<ClusterRoleRecord, Stat> corrupted = readLegacyCrr(haGroupName);
+    assertEquals(ClusterRoleRecord.ClusterRole.STANDBY,
+      corrupted.getLeft().getRole(formattedZkUrlFor(ClusterType.LOCAL)));
+
+    // Worst-case wait: jitter up to 30s + 2s interval; allow 40s.
+    long deadline = System.currentTimeMillis() + 40_000L;
+    Pair<ClusterRoleRecord, Stat> after = readLegacyCrr(haGroupName);
+    while (
+      (after.getLeft() == null || after.getLeft().getRole(formattedZkUrlFor(ClusterType.LOCAL))
+          != ClusterRoleRecord.ClusterRole.ACTIVE)
+        && System.currentTimeMillis() < deadline
+    ) {
+      Thread.sleep(500);
+      after = readLegacyCrr(haGroupName);
+    }
+    assertNotNull(after.getLeft());
+    assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE,
+      after.getLeft().getRole(formattedZkUrlFor(ClusterType.LOCAL)));
+    assertTrue(after.getLeft().getVersion() > corrupted.getLeft().getVersion());
+    assertEquals(ClusterRoleRecord.RegistryType.ZK, after.getLeft().getRegistryType());
+  }
+
+  /**
+   * Peer view absent: client preserves the pre-seeded {@code role2} rather than downgrading it to
+   * UNKNOWN. Information from a prior write is more authoritative than a transient gap in the local
+   * peer cache; another RS with peer visibility (or this client once peer recovers) will overwrite
+   * when there is real news.
+   */
+  @Test
+  public void testLegacyCrrSyncPreservesPreSeededRole2WhenPeerMissing() throws Exception {
+    String haGroupName = testName.getMethodName();
+    // Pre-seed role2=OFFLINE; do NOT create a peer consistentHA record.
+    ClusterRoleRecord preSeed = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      ClusterRoleRecord.RegistryType.ZK, this.zkUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      this.peerZKUrl, ClusterRoleRecord.ClusterRole.OFFLINE, 5L);
+    legacyHaAdmin.createOrUpdateClusterRoleRecordWithCAS(haGroupName, preSeed,
+      PhoenixHAAdmin.LegacyCrrWriteMode.CREATE_NEW, 0);
+    Pair<ClusterRoleRecord, Stat> seeded = readLegacyCrr(haGroupName);
+    assertNotNull(seeded.getLeft());
+    int seededStatVersion = seeded.getRight().getVersion();
+
+    Configuration conf = legacyCrrConf(true, 0); // periodic disabled; initial sync only
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+
+    // Allow the initial async sync ample time to run. With peer absent and role2=OFFLINE
+    // already in the znode, the equality check must short-circuit and the znode must remain
+    // byte-identical.
+    Thread.sleep(3_000);
+
+    Pair<ClusterRoleRecord, Stat> after = readLegacyCrr(haGroupName);
+    assertNotNull(after.getLeft());
+    assertEquals("Pre-seeded role2 must be preserved when peer view is absent",
+      ClusterRoleRecord.ClusterRole.OFFLINE,
+      after.getLeft().getRole(formattedZkUrlFor(ClusterType.PEER)));
+    assertEquals("Znode must not be rewritten when desired record is logically equal",
+      seededStatVersion, after.getRight().getVersion());
+    assertEquals(seeded.getLeft().getVersion(), after.getLeft().getVersion());
+  }
+
+  /**
+   * Peer view present: client overwrites a pre-seeded stale {@code role2} with the live peer state
+   * on the initial sync, bumping the version.
+   */
+  @Test
+  public void testLegacyCrrSyncOverwritesPreSeededRole2WhenPeerPresent() throws Exception {
+    String haGroupName = testName.getMethodName();
+    // Pre-seed role2=OFFLINE.
+    ClusterRoleRecord preSeed = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      ClusterRoleRecord.RegistryType.ZK, this.zkUrl, ClusterRoleRecord.ClusterRole.ACTIVE,
+      this.peerZKUrl, ClusterRoleRecord.ClusterRole.OFFLINE, 5L);
+    legacyHaAdmin.createOrUpdateClusterRoleRecordWithCAS(haGroupName, preSeed,
+      PhoenixHAAdmin.LegacyCrrWriteMode.CREATE_NEW, 0);
+    Pair<ClusterRoleRecord, Stat> seeded = readLegacyCrr(haGroupName);
+    assertNotNull(seeded.getLeft());
+
+    // Create a peer consistentHA record so the sync can see real peer state.
+    HAGroupStoreRecord peerRecord =
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.zkUrl, this.peerMasterUrl, this.masterUrl,
+        CLUSTERS.getHdfsUrl2(), CLUSTERS.getHdfsUrl1(), 0L);
+    createOrUpdateHAGroupStoreRecordOnZookeeper(peerHaAdmin, haGroupName, peerRecord);
+
+    Configuration conf = legacyCrrConf(true, 0); // periodic disabled; initial sync only
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+
+    Pair<ClusterRoleRecord, Stat> after =
+      awaitLegacyCrrRole(haGroupName, ClusterType.PEER, ClusterRoleRecord.ClusterRole.STANDBY);
+    assertEquals(ClusterRoleRecord.RegistryType.ZK, after.getLeft().getRegistryType());
+    assertTrue("Version must bump when peer state replaces stale role2",
+      after.getLeft().getVersion() > seeded.getLeft().getVersion());
+  }
+
+  // ---------- Legacy CRR sync test helpers ----------
+
+  /** Configuration clone with the legacy CRR flag and reconciliation interval set. */
+  private Configuration legacyCrrConf(boolean legacyEnabled, long periodicSec) {
+    Configuration src = CLUSTERS.getHBaseCluster1().getConfiguration();
+    Configuration cloned = new Configuration(src);
+    cloned.setBoolean(PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED, legacyEnabled);
+    cloned.setLong(PHOENIX_HA_LEGACY_CRR_RECONCILIATION_INTERVAL_SECONDS, periodicSec);
+    return cloned;
+  }
+
+  private Pair<ClusterRoleRecord, Stat> readLegacyCrr(String haGroupName) throws IOException {
+    return legacyHaAdmin.getClusterRoleRecordAndStatInZooKeeper(haGroupName);
+  }
+
+  /** Polls the legacy CRR until {@code condition} matches or the propagation deadline elapses. */
+  private Pair<ClusterRoleRecord, Stat> awaitLegacyCrr(String haGroupName,
+    Predicate<ClusterRoleRecord> condition, String description) throws Exception {
+    long deadline = System.currentTimeMillis() + ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS;
+    Pair<ClusterRoleRecord, Stat> legacy = readLegacyCrr(haGroupName);
+    while (
+      (legacy.getLeft() == null || !condition.test(legacy.getLeft()))
+        && System.currentTimeMillis() < deadline
+    ) {
+      Thread.sleep(100);
+      legacy = readLegacyCrr(haGroupName);
+    }
+    assertNotNull("Legacy znode missing while awaiting: " + description, legacy.getLeft());
+    assertTrue("Legacy CRR condition not met within timeout: " + description,
+      condition.test(legacy.getLeft()));
+    return legacy;
+  }
+
+  private Pair<ClusterRoleRecord, Stat> awaitLegacyCrrPresent(String haGroupName) throws Exception {
+    return awaitLegacyCrr(haGroupName, crr -> true, "znode present");
+  }
+
+  /** Polls until the LOCAL or PEER role in the legacy CRR matches {@code expectedRole}. */
+  private Pair<ClusterRoleRecord, Stat> awaitLegacyCrrRole(String haGroupName,
+    ClusterType clusterType, ClusterRoleRecord.ClusterRole expectedRole) throws Exception {
+    String url = formattedZkUrlFor(clusterType);
+    return awaitLegacyCrr(haGroupName, crr -> crr.getRole(url) == expectedRole,
+      clusterType + " role == " + expectedRole);
+  }
+
+  /** LOCAL or PEER ZK URL in the canonical ZK-registry form used by the legacy sync. */
+  private String formattedZkUrlFor(ClusterType clusterType) {
+    String raw = (clusterType == ClusterType.LOCAL) ? zkUrl : peerZKUrl;
+    return JDBCUtil.formatUrl(raw, ClusterRoleRecord.RegistryType.ZK);
   }
 }
