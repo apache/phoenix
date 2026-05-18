@@ -32,8 +32,11 @@ import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.ServerName;
+import org.apache.hadoop.hbase.coprocessor.CoreCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.HasRegionServerServices;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionServerCoprocessorEnvironment;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -62,12 +65,14 @@ import org.slf4j.LoggerFactory;
 /**
  * This is first implementation of RegionServer coprocessor introduced by Phoenix.
  */
+@CoreCoprocessor
 public class PhoenixRegionServerEndpoint extends
   RegionServerEndpointProtos.RegionServerEndpointService implements RegionServerCoprocessor {
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixRegionServerEndpoint.class);
   private MetricsMetadataCachingSource metricsSource;
   protected Configuration conf;
   protected ServerName serverName;
+  private Abortable abortable;
   private ExecutorService prewarmExecutor;
 
   // regionserver level thread pool used by Uncovered Indexes to scan data table rows
@@ -78,6 +83,10 @@ public class PhoenixRegionServerEndpoint extends
     this.conf = env.getConfiguration();
     if (env instanceof RegionServerCoprocessorEnvironment) {
       this.serverName = ((RegionServerCoprocessorEnvironment) env).getServerName();
+    }
+    // @CoreCoprocessor guarantees HasRegionServerServices, but guard for testability
+    if (env instanceof HasRegionServerServices) {
+      this.abortable = ((HasRegionServerServices) env).getRegionServerServices();
     }
     this.metricsSource =
       MetricsPhoenixCoprocessorSourceFactory.getInstance().getMetadataCachingSource();
@@ -308,7 +317,7 @@ public class PhoenixRegionServerEndpoint extends
               manager.getClusterRoleRecord(haGroup);
               if (shouldInitReplicationLogGroup) {
                 try {
-                  ReplicationLogGroup.get(conf, serverName, haGroup);
+                  ReplicationLogGroup.get(conf, serverName, haGroup, abortable);
                   LOGGER.info("Eagerly initialized ReplicationLogGroup {} on server {}", haGroup,
                     serverName);
                 } catch (Exception e) {

@@ -110,12 +110,10 @@ public class StoreAndForwardModeImpl extends ReplicationModeImpl {
 
   @Override
   ReplicationMode onFailure(Throwable e) throws IOException {
-    // Treating failures in STORE_AND_FORWARD mode as fatal errors
+    // Failures in STORE_AND_FORWARD mode are fatal — throw to let the event handler abort
     String message = String.format("HAGroup %s mode=%s got error", logGroup, this);
     LOG.error(message, e);
-    logGroup.abort(message, e);
-    // unreachable, we remain in the same mode
-    return STORE_AND_FORWARD;
+    throw ReplicationLogGroup.asIOException(message, e);
   }
 
   @Override

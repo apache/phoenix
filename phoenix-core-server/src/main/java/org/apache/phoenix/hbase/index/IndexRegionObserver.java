@@ -53,6 +53,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellScanner;
@@ -70,6 +71,8 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.TableDescriptor;
+import org.apache.hadoop.hbase.coprocessor.CoreCoprocessor;
+import org.apache.hadoop.hbase.coprocessor.HasRegionServerServices;
 import org.apache.hadoop.hbase.coprocessor.ObserverContext;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
@@ -170,6 +173,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
  * does batch mutations.
  * <p>
  */
+@CoreCoprocessor
 public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   private static final Logger LOG = LoggerFactory.getLogger(IndexRegionObserver.class);
@@ -439,6 +443,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static final int DEFAULT_CONCURRENT_MUTATION_WAIT_DURATION_IN_MS = 100;
   private byte[] encodedRegionName;
   private boolean shouldReplicate;
+  private Abortable abortable;
 
   // Don't replicate the mutation if this attribute is set
   private static final Predicate<Mutation> IGNORE_REPLICATION =
@@ -540,6 +545,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
       if (this.shouldReplicate) {
         this.ignoreReplicationFilter = getSynchronousReplicationFilter(tableName);
+      }
+      // @CoreCoprocessor guarantees HasRegionServerServices, but guard for testability
+      if (e instanceof HasRegionServerServices) {
+        this.abortable = ((HasRegionServerServices) e).getRegionServerServices();
       }
     } catch (NoSuchMethodError ex) {
       disabled = true;
@@ -689,7 +698,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       byte[] haGroupName = m.getAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
       if (haGroupName != null) {
         ReplicationLogGroup logGroup = ReplicationLogGroup.get(env.getConfiguration(),
-          env.getServerName(), Bytes.toString(haGroupName));
+          env.getServerName(), Bytes.toString(haGroupName), abortable);
         return Optional.of(logGroup);
       }
     }
@@ -707,7 +716,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       logKey.getExtendedAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
     if (haGroupName != null) {
       ReplicationLogGroup logGroup = ReplicationLogGroup.get(env.getConfiguration(),
-        env.getServerName(), Bytes.toString(haGroupName));
+        env.getServerName(), Bytes.toString(haGroupName), abortable);
       return Optional.of(logGroup);
     }
     return Optional.empty();

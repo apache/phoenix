@@ -264,13 +264,12 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
 
     // sync on the writer will timeout — syncInternal wraps in PhoenixWALSyncTimeoutException
-    // and calls abort() which throws RuntimeException
+    // and calls abort() which rethrows the IOException cause directly
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException because sync timed out");
-    } catch (RuntimeException e) {
-      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
-        e.getCause() instanceof PhoenixWALSyncTimeoutException);
+      fail("Should have thrown PhoenixWALSyncTimeoutException because sync timed out");
+    } catch (PhoenixWALSyncTimeoutException e) {
+      // expected
     }
     // reset
     doNothing().when(innerWriter).sync();
@@ -624,27 +623,25 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     doThrow(new RuntimeException("Simulated critical error")).when(innerWriter).append(anyString(),
       anyLong(), any(Mutation.class));
 
-    // Append data. This should trigger the LogExceptionHandler, which will close logWriter.
-    // The sync future times out, syncInternal wraps in PhoenixWALSyncTimeoutException and aborts.
+    // Append publishes to the ring buffer. The event handler catches the RuntimeException via
+    // catch(Throwable), poisons itself, and fails the sync future. The producer receives
+    // ExecutionException and calls abort().
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException because sync timed out");
-    } catch (RuntimeException e) {
-      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
-        e.getCause() instanceof PhoenixWALSyncTimeoutException);
+      fail("Should have thrown IOException from abort");
+    } catch (IOException e) {
+      assertTrue(e.getMessage().contains("Unexpected error in event handler"));
     }
 
-    // Verify that subsequent operations fail because the log is closed
+    // Verify that subsequent operations fail
     try {
       logGroup.append(tableName, commitId + 1, put);
-      fail("Should have thrown IOException because log is closed");
+      fail("Should have thrown IOException because log is poisoned/closed");
     } catch (IOException e) {
-      assertTrue("Expected an IOException because log is closed",
-        e.getMessage().contains("Closed"));
+      // expected
     }
 
-    // Verify that the inner writer was closed by the LogExceptionHandler
     verify(innerWriter, times(1)).close();
   }
 
@@ -717,15 +714,14 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Append data
     logGroup.append(tableName, commitId, put);
-    // Try to sync. Should fail after exhausting retries and then switch to STORE_AND_FORWARD
+    // Sync fails, mode transition to SAF also fails because HAGroupStore update throws.
+    // The event handler poisons itself, and the producer calls abort().
     try {
       logGroup.sync();
-      fail("Should have thrown exception because of failure to update mode");
-    } catch (RuntimeException ex) {
-      assertTrue(ex.getMessage().contains("Simulated sync failure"));
+      fail("Should have thrown IOException because of failure to update mode");
+    } catch (IOException ex) {
+      assertTrue(ex.getMessage().contains("Simulated failure to update HAGroupStore state"));
     }
-    // wait for the event processor thread to clean up
-    Thread.sleep(3);
   }
 
   /**
@@ -971,33 +967,30 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // Configure writer to throw RuntimeException on getLength()
     doThrow(new RuntimeException("Simulated critical error")).when(innerWriter).getLength();
 
-    // Append data. This should trigger the LogExceptionHandler, which will close logWriter.
-    // The sync future times out, syncInternal wraps in PhoenixWALSyncTimeoutException and aborts.
+    // Append publishes to the ring buffer. The event handler catches the RuntimeException,
+    // poisons itself, and fails the sync future. The producer calls abort().
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException because sync timed out");
-    } catch (RuntimeException e) {
-      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
-        e.getCause() instanceof PhoenixWALSyncTimeoutException);
+      fail("Should have thrown IOException from abort");
+    } catch (IOException e) {
+      assertTrue(e.getMessage().contains("Unexpected error in event handler"));
     }
 
-    // Verify that subsequent operations fail because the log is closed
+    // Verify that subsequent operations fail
     try {
       logGroup.append(tableName, commitId + 1, put);
-      fail("Should have thrown IOException because log is closed");
+      fail("Should have thrown IOException because log is poisoned/closed");
     } catch (IOException e) {
-      assertTrue("Expected an IOException because log is closed",
-        e.getMessage().contains("Closed"));
+      // expected
     }
 
-    // Verify that the inner writer was closed by the LogExceptionHandler
     verify(innerWriter, times(1)).close();
   }
 
   /**
-   * Tests behavior when a RuntimeException occurs during append() after closeOnError() has been
-   * called. Verifies that the system properly rejects sync operations after being closed.
+   * Tests behavior when a RuntimeException occurs during append and subsequent appends are
+   * rejected. Verifies that the system properly rejects operations after being poisoned/closed.
    */
   @Test
   public void testAppendAfterCloseOnError() throws Exception {
@@ -1013,32 +1006,30 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     doThrow(new RuntimeException("Simulated critical error")).when(innerWriter).append(anyString(),
       anyLong(), any(Mutation.class));
 
-    // Append data to trigger closeOnError()
+    // Append publishes to the ring buffer. The event handler catches the RuntimeException,
+    // poisons itself, and fails the sync future. The producer calls abort().
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException because sync timed out");
-    } catch (RuntimeException e) {
-      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
-        e.getCause() instanceof PhoenixWALSyncTimeoutException);
+      fail("Should have thrown IOException from abort");
+    } catch (IOException e) {
+      // expected
     }
 
-    // Verify that subsequent append operations fail because the log is closed
+    // Verify that subsequent append operations fail because the log is poisoned/closed
     try {
       logGroup.append(tableName, commitId, put);
-      fail("Should have thrown IOException because log is closed");
+      fail("Should have thrown IOException because log is poisoned/closed");
     } catch (IOException e) {
-      assertTrue("Expected an IOException because log is closed",
-        e.getMessage().contains("Closed"));
+      // expected
     }
 
-    // Verify that the inner writer was closed by the LogExceptionHandler
     verify(innerWriter, times(1)).close();
   }
 
   /**
-   * Tests behavior when a RuntimeException occurs during sync() after closeOnError() has been
-   * called. Verifies that the system properly rejects sync operations after being closed.
+   * Tests behavior when a RuntimeException occurs during append and subsequent syncs are rejected.
+   * Verifies that the system properly rejects operations after being poisoned/closed.
    */
   @Test
   public void testSyncAfterCloseOnError() throws Exception {
@@ -1054,26 +1045,24 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     doThrow(new RuntimeException("Simulated critical error")).when(innerWriter).append(anyString(),
       anyLong(), any(Mutation.class));
 
-    // Append data to trigger closeOnError()
+    // Append publishes to the ring buffer. The event handler catches the RuntimeException,
+    // poisons itself, and fails the sync future. The producer calls abort().
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException because sync timed out");
-    } catch (RuntimeException e) {
-      assertTrue("Expected PhoenixWALSyncTimeoutException cause",
-        e.getCause() instanceof PhoenixWALSyncTimeoutException);
+      fail("Should have thrown IOException from abort");
+    } catch (IOException e) {
+      // expected
     }
 
-    // Verify that subsequent sync operations fail because the log is closed
+    // Verify that subsequent sync operations fail because the log is poisoned/closed
     try {
       logGroup.sync();
-      fail("Should have thrown IOException because log is closed");
+      fail("Should have thrown IOException because log is poisoned/closed");
     } catch (IOException e) {
-      assertTrue("Expected an IOException because log is closed",
-        e.getMessage().contains("Closed"));
+      // expected
     }
 
-    // Verify that the inner writer was closed by the LogExceptionHandler
     verify(innerWriter, times(1)).close();
   }
 
@@ -1722,11 +1711,10 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException from abort");
-    } catch (RuntimeException e) {
-      assertTrue("Abort message should mention both SYNC and SAF",
-        e.getMessage().contains("Both SYNC and SAF replication writes failed")
-          || e.getMessage().contains("ABORTING"));
+      fail("Should have thrown IOException from abort");
+    } catch (IOException e) {
+      assertTrue("Abort message should contain sync failure",
+        e.getMessage().contains("Simulated sync failure"));
     }
   }
 
@@ -1764,10 +1752,10 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId, put);
     try {
       logGroup.sync();
-      fail("Should have thrown RuntimeException from abort");
-    } catch (RuntimeException e) {
+      fail("Should have thrown IOException from abort");
+    } catch (IOException e) {
       assertTrue("Abort should fire from SAF failure path",
-        e.getMessage().contains("ABORTING") || e.getMessage().contains("got error"));
+        e.getMessage().contains("Simulated SAF sync failure"));
     }
   }
 

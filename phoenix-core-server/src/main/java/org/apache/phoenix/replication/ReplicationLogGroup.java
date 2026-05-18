@@ -56,6 +56,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
@@ -67,7 +68,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
@@ -171,6 +171,9 @@ public class ReplicationLogGroup {
   public static final long DEFAULT_REPLICATION_LOG_PEER_INIT_TIMEOUT_MS = 10_000L;
   public static final String WAL_SYNC_TIMEOUT_MS_KEY = "hbase.regionserver.wal.sync.timeout";
   public static final long DEFAULT_WAL_SYNC_TIMEOUT_MS = 5 * 60 * 1000L;
+  public static final String REPLICATION_LOG_GROUP_SHUTDOWN_TIMEOUT_MS_KEY =
+    "phoenix.replication.log.group.shutdown.timeout.ms";
+  public static final long DEFAULT_REPLICATION_LOG_GROUP_SHUTDOWN_TIMEOUT_MS = 30_000L;
 
   public static final String STANDBY_DIR = "in";
   public static final String FALLBACK_DIR = "out";
@@ -193,7 +196,9 @@ public class ReplicationLogGroup {
   protected ReplicationLogDiscoveryForwarder logForwarder;
   protected long syncTimeoutMs;
   protected long peerInitTimeoutMs;
-  protected volatile boolean closed = false;
+  protected final AtomicBoolean closed = new AtomicBoolean(false);
+  protected final Abortable abortable;
+  protected long shutdownTimeoutMs;
 
   /**
    * The replication mode determines how mutations are handled. Mode transitions occur automatically
@@ -331,8 +336,6 @@ public class ReplicationLogGroup {
   protected Disruptor<LogEvent> disruptor;
   protected RingBuffer<LogEvent> ringBuffer;
   protected LogEventHandler eventHandler;
-  // Used to inform the disruptor event thread whether this is a graceful or a forced shutdown
-  private final AtomicBoolean gracefulShutdownEventHandlerFlag = new AtomicBoolean();
 
   /**
    * Get or create a ReplicationLogGroup instance for the given HA Group.
@@ -344,10 +347,25 @@ public class ReplicationLogGroup {
    */
   public static ReplicationLogGroup get(Configuration conf, ServerName serverName,
     String haGroupName) throws IOException {
+    return get(conf, serverName, haGroupName, (Abortable) null);
+  }
+
+  /**
+   * Get or create a ReplicationLogGroup instance for the given HA Group.
+   * @param conf        Configuration object
+   * @param serverName  The server name
+   * @param haGroupName The HA Group name
+   * @param abortable   Abortable to invoke on fatal errors (typically RegionServerServices)
+   * @return ReplicationLogGroup instance
+   * @throws IOException if initialization fails
+   */
+  public static ReplicationLogGroup get(Configuration conf, ServerName serverName,
+    String haGroupName, Abortable abortable) throws IOException {
     try {
       return INSTANCES.computeIfAbsent(haGroupName, k -> {
         try {
-          ReplicationLogGroup group = new ReplicationLogGroup(conf, serverName, haGroupName);
+          ReplicationLogGroup group = new ReplicationLogGroup(conf, serverName, haGroupName,
+            HAGroupStoreManager.getInstance(conf), abortable);
           group.init();
           return group;
         } catch (IOException e) {
@@ -390,12 +408,14 @@ public class ReplicationLogGroup {
 
   /**
    * Protected constructor for ReplicationLogGroup.
-   * @param conf        Configuration object
-   * @param serverName  The server name
-   * @param haGroupName The HA Group name
+   * @param conf                Configuration object
+   * @param serverName          The server name
+   * @param haGroupName         The HA Group name
+   * @param haGroupStoreManager HA Group Store Manager instance
    */
-  protected ReplicationLogGroup(Configuration conf, ServerName serverName, String haGroupName) {
-    this(conf, serverName, haGroupName, HAGroupStoreManager.getInstance(conf));
+  protected ReplicationLogGroup(Configuration conf, ServerName serverName, String haGroupName,
+    HAGroupStoreManager haGroupStoreManager) {
+    this(conf, serverName, haGroupName, haGroupStoreManager, null);
   }
 
   /**
@@ -404,9 +424,10 @@ public class ReplicationLogGroup {
    * @param serverName          The server name
    * @param haGroupName         The HA Group name
    * @param haGroupStoreManager HA Group Store Manager instance
+   * @param abortable           Abortable to invoke on fatal errors (may be null)
    */
   protected ReplicationLogGroup(Configuration conf, ServerName serverName, String haGroupName,
-    HAGroupStoreManager haGroupStoreManager) {
+    HAGroupStoreManager haGroupStoreManager, Abortable abortable) {
     // conf object from coprocessor is instance of
     // org.apache.hadoop.hbase.coprocessor.ReadOnlyConfiguration and we need to modify it when
     // we send rpc to namenode so copying it
@@ -420,6 +441,9 @@ public class ReplicationLogGroup {
     this.serverName = serverName;
     this.haGroupName = haGroupName;
     this.haGroupStoreManager = haGroupStoreManager;
+    this.abortable = abortable;
+    this.shutdownTimeoutMs = clonedConf.getLong(REPLICATION_LOG_GROUP_SHUTDOWN_TIMEOUT_MS_KEY,
+      DEFAULT_REPLICATION_LOG_GROUP_SHUTDOWN_TIMEOUT_MS);
     this.metrics = createMetricsSource();
     this.mode = new AtomicReference<>(INIT);
   }
@@ -517,8 +541,12 @@ public class ReplicationLogGroup {
     if (LOG.isTraceEnabled()) {
       LOG.trace("Append: table={}, commitId={}, mutation={}", tableName, commitId, mutation);
     }
-    if (closed) {
+    if (isClosed()) {
       throw new IOException("Closed");
+    }
+    IOException fatal = eventHandler.getFatalException();
+    if (fatal != null) {
+      throw fatal;
     }
     long startTime = System.nanoTime();
     try {
@@ -557,8 +585,12 @@ public class ReplicationLogGroup {
     if (LOG.isTraceEnabled()) {
       LOG.trace("Sync");
     }
-    if (closed) {
+    if (isClosed()) {
       throw new IOException("Closed");
+    }
+    IOException fatal = eventHandler.getFatalException();
+    if (fatal != null) {
+      abort("ReplicationLogGroup has a fatal exception", fatal);
     }
     long startTime = System.nanoTime();
     try {
@@ -589,16 +621,15 @@ public class ReplicationLogGroup {
       Thread.currentThread().interrupt();
       throw new InterruptedIOException("Interrupted while waiting for sync");
     } catch (ExecutionException e) {
-      // After exhausting all attempts to sync to the standby cluster we switch mode
-      // and then retry again. If that also fails, it is a fatal error
+      Throwable cause = e.getCause();
       String message = String.format("HAGroup %s sync operation failed", this);
-      LOG.error(message, e);
-      abort(message, e);
+      LOG.error(message, cause);
+      abort(message, cause);
     } catch (TimeoutException e) {
       String message =
         String.format("HAGroup %s replication log sync timed out after %d ms", this, syncTimeoutMs);
       LOG.error(message, e);
-      PhoenixWALSyncTimeoutException timeoutEx = new PhoenixWALSyncTimeoutException(message, e);
+      PhoenixWALSyncTimeoutException timeoutEx = new PhoenixWALSyncTimeoutException(message);
       abort(message, timeoutEx);
     }
   }
@@ -608,67 +639,33 @@ public class ReplicationLogGroup {
    * @return true if closed, false otherwise
    */
   public boolean isClosed() {
-    return closed;
+    return closed.get();
   }
 
   /**
-   * Force closes the log group upon an unrecoverable internal error. This is a fail-stop behavior:
-   * once called, the log group is marked as closed, the Disruptor is halted, and all subsequent
-   * append() and sync() calls will throw an IOException("Closed"). This ensures that no further
-   * operations are attempted on a log group that has encountered a critical error.
-   */
-  protected void closeOnError() {
-    if (closed) {
-      return;
-    }
-    synchronized (this) {
-      if (closed) {
-        return;
-      }
-      // setting closed to true prevents future producers to add events to the ring buffer
-      closed = true;
-    }
-    // Directly halt the disruptor. shutdown() would wait for events to drain. We are expecting
-    // that will not work.
-    gracefulShutdownEventHandlerFlag.set(false);
-    disruptor.halt();
-    metrics.close();
-    LOG.info("HAGroup {} closed on error", this);
-  }
-
-  /**
-   * Close the ReplicationLogGroup and all associated resources. This method is thread-safe and can
-   * be called multiple times.
+   * Close the ReplicationLogGroup. Drains pending events from the Disruptor with a bounded timeout
+   * (which triggers onShutdown → modeImpl.onExit → ReplicationLog.close), then cleans up all
+   * resources. When the event handler has a fatal exception the drain completes instantly because
+   * each event hits the short-circuit path. The instance is removed from the INSTANCES cache and
+   * subsequent append()/sync() calls throw IOException.
    */
   public void close() {
-    if (closed) {
+    if (!closed.compareAndSet(false, true)) {
       return;
     }
-    synchronized (this) {
-      if (closed) {
-        return;
-      }
-      LOG.info("Closing HAGroup {}", this);
-      // setting closed to true prevents future producers to add events to the ring buffer
-      closed = true;
-      // Remove from instances cache
-      INSTANCES.remove(haGroupName);
-      // Sync before shutting down to flush all pending appends.
-      try {
-        syncInternal();
-        gracefulShutdownEventHandlerFlag.set(true);
-        // waits until all the events in the disruptor have been processed
-        disruptor.shutdown();
-      } catch (IOException e) {
-        LOG.warn("Error during final sync on close", e);
-        gracefulShutdownEventHandlerFlag.set(false);
-        disruptor.halt(); // Go directly to halt.
-      }
-      // wait for the disruptor threads to finish
-      shutdownDisruptorExecutor();
-      metrics.close();
-      LOG.info("HAGroup {} closed", this);
+    LOG.info("Closing HAGroup {}", this);
+    INSTANCES.remove(haGroupName);
+    try {
+      disruptor.shutdown(shutdownTimeoutMs, TimeUnit.MILLISECONDS);
+    } catch (com.lmax.disruptor.TimeoutException e) {
+      LOG.warn("HAGroup {} shutdown timed out after {}ms, halting", this, shutdownTimeoutMs);
+      disruptor.halt();
     }
+    shutdownDisruptorExecutor();
+    logForwarder.stop();
+    logForwarder.close();
+    metrics.close();
+    LOG.info("HAGroup {} closed", this);
   }
 
   /**
@@ -902,20 +899,33 @@ public class ReplicationLogGroup {
   }
 
   /**
-   * Abort when we hit a fatal error
+   * Throws the given cause as an IOException. If it already is one, rethrows directly; otherwise
+   * wraps it.
    */
-  protected void abort(String reason, Throwable cause) {
-    // TODO better to use abort using RegionServerServices
-    String msg = "***** ABORTING region server: " + reason + " *****";
-    if (cause != null) {
-      msg += "\nCause:\n" + Throwables.getStackTraceAsString(cause);
+  static IOException asIOException(String msg, Throwable cause) {
+    if (cause instanceof IOException) {
+      return (IOException) cause;
     }
-    LOG.error(msg);
-    if (cause != null) {
-      throw new RuntimeException(msg, cause);
-    } else {
-      throw new RuntimeException(msg);
+    return cause != null ? new IOException(msg, cause) : new IOException(msg);
+  }
+
+  /**
+   * Abort the region server due to an unrecoverable replication failure. Must be called from a
+   * producer thread (never the event handler thread). Sets the fatal exception so remaining events
+   * drain instantly, then closes all resources and invokes the Abortable to trigger RS shutdown.
+   * Always throws so the caller unwinds.
+   */
+  protected void abort(String reason, Throwable cause) throws IOException {
+    String msg = "Aborting region server due to replication failure: " + reason;
+    LOG.error(msg, cause);
+    // Idempotent; may already be set by the event handler (ExecutionException path)
+    // but is needed here for the TimeoutException path where the event handler is still alive.
+    eventHandler.setFatalException(asIOException(msg, cause));
+    close();
+    if (abortable != null) {
+      abortable.abort(msg, cause);
     }
+    throw asIOException(msg, cause);
   }
 
   /**
@@ -923,10 +933,22 @@ public class ReplicationLogGroup {
    */
   protected class LogEventHandler implements EventHandler<LogEvent>, LifecycleAware {
     private final List<CompletableFuture<Void>> pendingSyncFutures = new ArrayList<>();
-    // Current replication mode implementation which will handle the events
     private ReplicationModeImpl currentModeImpl;
+    private volatile IOException fatalException;
 
     public LogEventHandler() {
+    }
+
+    void setFatalException(IOException cause) {
+      if (fatalException != null) {
+        return;
+      }
+      LOG.error("HAGroup {} event handler hit fatal exception", ReplicationLogGroup.this, cause);
+      this.fatalException = cause;
+    }
+
+    IOException getFatalException() {
+      return fatalException;
     }
 
     public void init() throws IOException {
@@ -996,7 +1018,8 @@ public class ReplicationLogGroup {
         // is not processing any event like append/sync because this is the only thread
         // that is consuming the events from the ring buffer and handing them off to the
         // mode
-        currentModeImpl.onExit(true);
+        ReplicationModeImpl oldModeImpl = currentModeImpl;
+        disruptorExecutor.execute(() -> oldModeImpl.onExit(true));
         initializeMode(newMode);
       }
     }
@@ -1086,25 +1109,27 @@ public class ReplicationLogGroup {
      */
     @Override
     public void onEvent(LogEvent event, long sequence, boolean endOfBatch) throws Exception {
-      // Calculate time spent in ring buffer
       long currentTimeNs = System.nanoTime();
       long ringBufferTimeNs = currentTimeNs - event.timestampNs;
       metrics.updateRingBufferTime(ringBufferTimeNs);
+      if (fatalException != null) {
+        // Append events are ignored; sync futures are failed immediately
+        // so producer threads unblock without waiting for the sync timeout.
+        if (event.type == EVENT_TYPE_SYNC) {
+          event.syncFuture.completeExceptionally(fatalException);
+        }
+        return;
+      }
       try {
         switch (event.type) {
           case EVENT_TYPE_DATA:
             currentModeImpl.append(event.record);
-            // Process any pending syncs at the end of batch.
             if (endOfBatch) {
               processPendingSyncs(sequence);
             }
             return;
           case EVENT_TYPE_SYNC:
-            // Add this sync future to the pending list
-            // OK, to add the same future multiple times when we rewind the batch
-            // as completing an already completed future is a no-op
             pendingSyncFutures.add(event.syncFuture);
-            // Process any pending syncs at the end of batch.
             if (endOfBatch) {
               processPendingSyncs(sequence);
             }
@@ -1118,17 +1143,16 @@ public class ReplicationLogGroup {
             e);
           onFailure(event, sequence, e);
         } catch (Exception fatalEx) {
-          // Either we failed to switch the mode or we are in STORE_AND_FORWARD mode
-          // and got an exception. This is a fatal exception so halt the disruptor
-          // fail the pending sync events with the original exception
-          failPendingSyncs(sequence, e);
-          // Both SYNC and SAF writes failed. The local HBase WAL has the mutation but neither
-          // replication pipeline does, so the SAF forwarder cannot reconcile it. Abort the RS
-          // so region reassignment + preWALRestore re-ships the orphaned edits.
-          abort("Both SYNC and SAF replication writes failed", fatalEx);
-          // halt the disruptor with the fatal exception
-          throw fatalEx;
+          IOException fatalIOE =
+            asIOException("Both SYNC and SAF replication writes failed", fatalEx);
+          setFatalException(fatalIOE);
+          failPendingSyncs(sequence, fatalIOE);
         }
+      } catch (Throwable t) {
+        IOException wrapped =
+          new IOException("Unexpected error in event handler at sequence " + sequence, t);
+        setFatalException(wrapped);
+        failPendingSyncs(sequence, wrapped);
       }
     }
 
@@ -1139,36 +1163,35 @@ public class ReplicationLogGroup {
 
     @Override
     public void onShutdown() {
-      boolean isGracefulShutdown = gracefulShutdownEventHandlerFlag.get();
+      boolean graceful = (fatalException == null);
       LOG.info("HAGroup {} shutting down event handler graceful={}", ReplicationLogGroup.this,
-        isGracefulShutdown);
-      currentModeImpl.onExit(isGracefulShutdown);
+        graceful);
+      currentModeImpl.onExit(graceful);
     }
   }
 
   /**
-   * Handler for critical errors during the Disruptor lifecycle that closes the writer to prevent
-   * data loss.
+   * Safety-net handler for exceptions that escape the event handler. Should never fire because
+   * onEvent catches all Throwables. If it does fire, sets a fatal exception so pending futures
+   * fail.
    */
   protected class LogExceptionHandler implements ExceptionHandler<LogEvent> {
     @Override
     public void handleEventException(Throwable e, long sequence, LogEvent event) {
-      String message = "Exception processing sequence " + sequence + "  for event " + event;
-      LOG.error(message, e);
-      closeOnError();
+      LOG.error("UNEXPECTED: Exception escaped onEvent at sequence {}", sequence, e);
+      eventHandler
+        .setFatalException(new IOException("Exception escaped to LogExceptionHandler", e));
     }
 
     @Override
     public void handleOnStartException(Throwable e) {
       LOG.error("Exception during Disruptor startup", e);
-      closeOnError();
+      eventHandler.setFatalException(new IOException("Disruptor startup failed", e));
     }
 
     @Override
     public void handleOnShutdownException(Throwable e) {
-      // Should not happen, but if it does, the regionserver is aborting or shutting down.
       LOG.error("Exception during Disruptor shutdown", e);
-      closeOnError();
     }
   }
 }
