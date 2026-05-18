@@ -1593,10 +1593,10 @@ public class HAGroupStoreClientIT extends HABaseIT {
   }
 
   /**
-   * Peer view absent: client preserves the pre-seeded {@code role2} rather than downgrading it
-   * to UNKNOWN. Information from a prior write is more authoritative than a transient gap in
-   * the local peer cache; another RS with peer visibility (or this client once peer recovers)
-   * will overwrite when there is real news.
+   * Peer view absent: client preserves the pre-seeded {@code role2} rather than downgrading it to
+   * UNKNOWN. Information from a prior write is more authoritative than a transient gap in the local
+   * peer cache; another RS with peer visibility (or this client once peer recovers) will overwrite
+   * when there is real news.
    */
   @Test
   public void testLegacyCrrSyncPreservesPreSeededRole2WhenPeerMissing() throws Exception {
@@ -1631,8 +1631,8 @@ public class HAGroupStoreClientIT extends HABaseIT {
   }
 
   /**
-   * Peer view present: client overwrites a pre-seeded stale {@code role2} with the live peer
-   * state on the initial sync, bumping the version.
+   * Peer view present: client overwrites a pre-seeded stale {@code role2} with the live peer state
+   * on the initial sync, bumping the version.
    */
   @Test
   public void testLegacyCrrSyncOverwritesPreSeededRole2WhenPeerPresent() throws Exception {

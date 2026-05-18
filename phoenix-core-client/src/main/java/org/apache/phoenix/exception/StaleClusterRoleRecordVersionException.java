@@ -19,7 +19,8 @@ package org.apache.phoenix.exception;
 
 /**
  * CAS write to the legacy {@code /phoenix/ha} CRR znode failed (BadVersion or NodeExists); the
- * caller can re-read and retry if needed. Analog of {@link StaleHAGroupStoreRecordVersionException}.
+ * caller can re-read and retry if needed. Analog of
+ * {@link StaleHAGroupStoreRecordVersionException}.
  */
 public class StaleClusterRoleRecordVersionException extends Exception {
   private static final long serialVersionUID = 1L;

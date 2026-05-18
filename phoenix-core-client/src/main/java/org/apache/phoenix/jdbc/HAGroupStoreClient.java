@@ -1141,8 +1141,7 @@ public class HAGroupStoreClient implements Closeable {
       }
       // Wait for peer URL before building the desired CRR (ctor NPEs on null url2).
       if (StringUtils.isBlank(local.getPeerZKUrl())) {
-        LOGGER.debug("Skipping legacy CRR sync for HA group {}: peer ZK URL is blank",
-          haGroupName);
+        LOGGER.debug("Skipping legacy CRR sync for HA group {}: peer ZK URL is blank", haGroupName);
         return;
       }
       HAGroupStoreRecord peer = getHAGroupStoreRecordFromPeer();
@@ -1175,8 +1174,8 @@ public class HAGroupStoreClient implements Closeable {
           existing != null ? existing.getVersion() : -1L, desired.getVersion());
       } catch (StaleClusterRoleRecordVersionException stale) {
         // CAS lost; next event/periodic cycle reconverges.
-        LOGGER.info("Legacy CRR CAS lost for HA group {} at expected stat version {}",
-          haGroupName, existingStat != null ? existingStat.getVersion() : -1);
+        LOGGER.info("Legacy CRR CAS lost for HA group {} at expected stat version {}", haGroupName,
+          existingStat != null ? existingStat.getVersion() : -1);
       }
     } catch (Exception e) {
       LOGGER.warn(
@@ -1201,15 +1200,15 @@ public class HAGroupStoreClient implements Closeable {
   }
 
   /**
-   * Builds the desired legacy CRR, always stamped {@link RegistryType#ZK}. When the local
-   * client's peer view is unavailable, preserves the {@code existing} record's peer role
-   * rather than downgrading it to {@link ClusterRole#UNKNOWN} — another RS with peer visibility
-   * would otherwise keep flipping it back, and the equality check naturally short-circuits
-   * when no other field changed.
+   * Builds the desired legacy CRR, always stamped {@link RegistryType#ZK}. When the local client's
+   * peer view is unavailable, preserves the {@code existing} record's peer role rather than
+   * downgrading it to {@link ClusterRole#UNKNOWN} — another RS with peer visibility would otherwise
+   * keep flipping it back, and the equality check naturally short-circuits when no other field
+   * changed.
    * <p>
    * Look up the preserved role by the peer URL (not by {@code getRole2()}) since
-   * {@link ClusterRoleRecord} canonicalizes {@code url1}/{@code url2} by alphabetical order;
-   * the peer URL may end up in either slot depending on lexical comparison.
+   * {@link ClusterRoleRecord} canonicalizes {@code url1}/{@code url2} by alphabetical order; the
+   * peer URL may end up in either slot depending on lexical comparison.
    */
   private ClusterRoleRecord buildDesiredLegacyCrr(HAGroupStoreRecord local, HAGroupStoreRecord peer,
     ClusterRoleRecord existing) {
@@ -1217,8 +1216,7 @@ public class HAGroupStoreClient implements Closeable {
     if (peer != null) {
       role2 = peer.getClusterRole();
     } else if (existing != null) {
-      role2 = existing.getRole(
-        JDBCUtil.formatUrl(local.getPeerZKUrl(), RegistryType.ZK));
+      role2 = existing.getRole(JDBCUtil.formatUrl(local.getPeerZKUrl(), RegistryType.ZK));
     } else {
       role2 = ClusterRole.UNKNOWN;
     }
@@ -1246,14 +1244,13 @@ public class HAGroupStoreClient implements Closeable {
   }
 
   /**
-   * Initialize legacy {@code /phoenix/ha} sync: admin handle, NodeCache, single-thread executor,
-   * an off-lock initial sync, and the periodic reconciler. Called only when the feature is
-   * enabled and the client is healthy.
+   * Initialize legacy {@code /phoenix/ha} sync: admin handle, NodeCache, single-thread executor, an
+   * off-lock initial sync, and the periodic reconciler. Called only when the feature is enabled and
+   * the client is healthy.
    */
   private void setupLegacyCrrSync() throws Exception {
     this.legacyHaAdmin = new PhoenixHAAdmin(this.zkUrl, conf, PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE);
-    this.legacyCrrNodeCache =
-      new NodeCache(this.legacyHaAdmin.getCurator(), toPath(haGroupName));
+    this.legacyCrrNodeCache = new NodeCache(this.legacyHaAdmin.getCurator(), toPath(haGroupName));
     this.legacyCrrNodeCache.start(true);
     this.legacyCrrSyncExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
       Thread t = new Thread(r, "HAGroupStoreClient-LegacyCRRSync-" + haGroupName);

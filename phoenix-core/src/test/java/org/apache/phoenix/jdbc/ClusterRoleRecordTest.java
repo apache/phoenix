@@ -280,20 +280,20 @@ public class ClusterRoleRecordTest {
 
   @Test
   public void testLogicalEquality_nullOther() {
-    ClusterRoleRecord r = new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER,
-      ClusterRoleRecord.RegistryType.ZK, "zk1\\:2181::/hbase", ClusterRole.ACTIVE,
-      "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
+    ClusterRoleRecord r =
+      new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK,
+        "zk1\\:2181::/hbase", ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
     assertFalse(r.isLogicallyEqualIgnoringVersionAndRegistry(null));
   }
 
   @Test
   public void testLogicalEquality_sameFieldsDifferentVersion() {
-    ClusterRoleRecord a = new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER,
-      ClusterRoleRecord.RegistryType.ZK, "zk1\\:2181::/hbase", ClusterRole.ACTIVE,
-      "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
-    ClusterRoleRecord b = new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER,
-      ClusterRoleRecord.RegistryType.ZK, "zk1\\:2181::/hbase", ClusterRole.ACTIVE,
-      "zk2\\:2181::/hbase", ClusterRole.STANDBY, 42L);
+    ClusterRoleRecord a =
+      new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK,
+        "zk1\\:2181::/hbase", ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
+    ClusterRoleRecord b =
+      new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK,
+        "zk1\\:2181::/hbase", ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.STANDBY, 42L);
     assertTrue(a.isLogicallyEqualIgnoringVersionAndRegistry(b));
     assertTrue(b.isLogicallyEqualIgnoringVersionAndRegistry(a));
   }
@@ -302,23 +302,23 @@ public class ClusterRoleRecordTest {
   public void testLogicalEquality_zkVsRpcWithDifferentUrlForms() {
     // Same logical roles but different URL forms (different registryType normalization)
     // are NOT equal because the normalized url1/url2 differ.
-    ClusterRoleRecord zkForm = new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER,
-      ClusterRoleRecord.RegistryType.ZK, "zk1\\:2181::/hbase", ClusterRole.ACTIVE,
-      "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
+    ClusterRoleRecord zkForm =
+      new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK,
+        "zk1\\:2181::/hbase", ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
     ClusterRoleRecord rpcForm = new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER,
-      ClusterRoleRecord.RegistryType.RPC, "master1\\:16000", ClusterRole.ACTIVE,
-      "master2\\:16000", ClusterRole.STANDBY, 1L);
+      ClusterRoleRecord.RegistryType.RPC, "master1\\:16000", ClusterRole.ACTIVE, "master2\\:16000",
+      ClusterRole.STANDBY, 1L);
     assertFalse(zkForm.isLogicallyEqualIgnoringVersionAndRegistry(rpcForm));
   }
 
   @Test
   public void testLogicalEquality_differentRole() {
-    ClusterRoleRecord a = new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER,
-      ClusterRoleRecord.RegistryType.ZK, "zk1\\:2181::/hbase", ClusterRole.ACTIVE,
-      "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
-    ClusterRoleRecord b = new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER,
-      ClusterRoleRecord.RegistryType.ZK, "zk1\\:2181::/hbase", ClusterRole.ACTIVE,
-      "zk2\\:2181::/hbase", ClusterRole.OFFLINE, 1L);
+    ClusterRoleRecord a =
+      new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK,
+        "zk1\\:2181::/hbase", ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
+    ClusterRoleRecord b =
+      new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK,
+        "zk1\\:2181::/hbase", ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.OFFLINE, 1L);
     assertFalse(a.isLogicallyEqualIgnoringVersionAndRegistry(b));
   }
 

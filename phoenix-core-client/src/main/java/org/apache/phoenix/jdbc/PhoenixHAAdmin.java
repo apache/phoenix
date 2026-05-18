@@ -41,7 +41,6 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.exception.StaleClusterRoleRecordVersionException;
 import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.util.JDBCUtil;
 import org.apache.zookeeper.CreateMode;
 import org.apache.zookeeper.KeeperException;
@@ -92,8 +91,8 @@ public class PhoenixHAAdmin implements Closeable {
    * Write mode for {@link #createOrUpdateClusterRoleRecordWithCAS}. The accompanying
    * {@code expectedStatVersion} argument is interpreted only for {@link #CAS_WITH_VERSION}.
    * <p>
-   * Phoenix-internal. Not part of any public API contract — values may be added or renamed
-   * without notice. Do not switch exhaustively from outside this module.
+   * Phoenix-internal. Not part of any public API contract — values may be added or renamed without
+   * notice. Do not switch exhaustively from outside this module.
    */
   public enum LegacyCrrWriteMode {
     /** Create the znode; no prior version expected. */
