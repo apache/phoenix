@@ -595,6 +595,7 @@ public class WhereCompiler {
           break;
         case MULTIPLE:
           filter = isPossibleToUseEncodedCQFilter(encodingScheme, storageScheme)
+              && !ScanUtil.hasDynamicColumns(table)
             ? new MultiEncodedCQKeyValueComparisonFilter(whereClause, encodingScheme, allCFs,
               essentialCF)
             : (disambiguateWithFamily
