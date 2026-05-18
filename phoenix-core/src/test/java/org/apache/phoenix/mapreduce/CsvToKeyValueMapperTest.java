@@ -23,6 +23,10 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.io.StringReader;
+import java.io.UncheckedIOException;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.junit.Test;
 
@@ -132,5 +136,21 @@ public class CsvToKeyValueMapperTest {
       new CsvToKeyValueMapper.CsvLineParser(',', '"', '\\');
     // Invalid char between closing quote and delimiter: "Eve,"Bad
     lineParser.parse("5,\"Eve,\"Bad quote handling");
+  }
+
+  @Test
+  public void testCsvParserIteratorThrowsUncheckedIOException() throws IOException {
+    // Proves that the CSVParser iterator throws UncheckedIOException on malformed input.
+    // This is WHY CsvLineParser.parse() needs to catch UncheckedIOException.
+    CSVFormat format = CSVFormat.DEFAULT.builder().setIgnoreEmptyLines(true).get();
+    try (CSVParser parser = CSVParser.builder().setFormat(format)
+      .setReader(new StringReader("1,\"unterminated quote")).get()) {
+      for (CSVRecord record : parser) {
+        fail("Should have thrown UncheckedIOException");
+      }
+    } catch (UncheckedIOException e) {
+      // This is what the iterator throws — confirming Uncheck.get() wraps IOException
+      assertTrue(e.getCause() instanceof IOException);
+    }
   }
 }
