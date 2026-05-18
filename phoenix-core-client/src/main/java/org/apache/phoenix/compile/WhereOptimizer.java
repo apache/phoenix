@@ -498,11 +498,27 @@ public class WhereOptimizer {
     PName tenantId = context.getConnection().getTenantId();
     boolean isMultiTenant = tenantId != null && parentTable.isMultiTenant();
 
-    byte[] tenantIdBytes = tenantId == null
-      ? ByteUtil.EMPTY_BYTE_ARRAY
-      : ScanUtil.getTenantIdBytes(schema, isSalted, tenantId, isMultiTenant, false);
+    // Gracefully handle tenant-id encoding failures (e.g., tenant-id type mismatch)
+    // so that view creation is not blocked; the view will simply have no ROW_KEY_MATCHER.
+    byte[] tenantIdBytes;
+    try {
+      tenantIdBytes = tenantId == null
+        ? ByteUtil.EMPTY_BYTE_ARRAY
+        : ScanUtil.getTenantIdBytes(schema, isSalted, tenantId, isMultiTenant, false);
+    } catch (SQLException e) {
+      tenantIdBytes = ByteUtil.EMPTY_BYTE_ARRAY;
+    }
     if (tenantIdBytes.length != 0) {
       rowKeySlotRangesList.add(Arrays.asList(KeyRange.POINT.apply(tenantIdBytes)));
+    }
+    // For tenant views without a WHERE clause, return the tenant-id bytes as the
+    // ROW_KEY_MATCHER so that CompactionScanner can match rows to this view.
+    if (viewWhereExpression == null) {
+      if (rowKeySlotRangesList.isEmpty()) {
+        return ByteUtil.EMPTY_BYTE_ARRAY;
+      }
+      ScanRanges scanRange = ScanRanges.createSingleSpan(schema, rowKeySlotRangesList, null, false);
+      return scanRange.getScanRange().getLowerRange();
     }
     KeyExpressionVisitor visitor = new KeyExpressionVisitor(context, parentTable);
     KeyExpressionVisitor.KeySlots keySlots = viewWhereExpression.accept(visitor);
