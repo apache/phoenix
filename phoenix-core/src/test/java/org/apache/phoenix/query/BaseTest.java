@@ -193,6 +193,32 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFac
 public abstract class BaseTest {
   public static final String DRIVER_CLASS_NAME_ATTRIB = "phoenix.driver.class.name";
   protected static final String NULL_STRING = "NULL";
+
+  /**
+   * Captures the {@code -Dphoenix.where.optimizer.v2.enabled=...} value (if any) layered
+   * into the test driver via {@link #initDriver}. Tests use {@link #isV2Optimizer()} to
+   * branch their expected output between V1 and V2 forms when the optimizer's compound
+   * scan emission produces a tighter scan range or different residual filter shape.
+   */
+  private static volatile String v2OptimizerEnabledOverride;
+
+  /**
+   * True when the V2 WHERE optimizer is enabled for this test JVM (either via the
+   * {@code -Dphoenix.where.optimizer.v2.enabled=true} JVM arg or the codebase default
+   * if it has been flipped on). Returns false when the property is unset and the
+   * codebase default is V1. Use this from IT/UT tests whose expected scan-range or
+   * EXPLAIN output differs between V1 and V2.
+   */
+  protected static boolean isV2Optimizer() {
+    String prop = v2OptimizerEnabledOverride != null
+      ? v2OptimizerEnabledOverride
+      : System.getProperty(QueryServices.WHERE_OPTIMIZER_V2_ENABLED);
+    if (prop != null && !prop.isEmpty()) {
+      return Boolean.parseBoolean(prop);
+    }
+    return QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED;
+  }
+
   private static final double ZERO = 1e-9;
   private static final Map<String, String> tableDDLMap;
   private static final Logger LOGGER = LoggerFactory.getLogger(BaseTest.class);
@@ -612,6 +638,17 @@ public abstract class BaseTest {
       distPropMap.put(DROP_METADATA_ATTRIB, Boolean.TRUE.toString());
       props = new ReadOnlyProps(props, distPropMap.entrySet().iterator());
     }
+    // Layer in the V2 WHERE-optimizer flag from -D system properties so the same IT
+    // suite can be re-run under V2 with `mvn verify -Dphoenix.where.optimizer.v2
+    // .enabled=true`. The surefire/failsafe pom configurations forward the property
+    // into the forked JVM. Empty/unset means use the codebase default (V1).
+    String v2 = System.getProperty(QueryServices.WHERE_OPTIMIZER_V2_ENABLED);
+    if (v2 != null && !v2.isEmpty()) {
+      HashMap<String, String> v2PropMap = new HashMap<>(1);
+      v2PropMap.put(QueryServices.WHERE_OPTIMIZER_V2_ENABLED, v2);
+      props = new ReadOnlyProps(props, v2PropMap.entrySet().iterator());
+    }
+    BaseTest.v2OptimizerEnabledOverride = v2;
     if (driverClassName == null) {
       newDriver = new PhoenixTestDriver(props);
     } else {
