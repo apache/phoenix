@@ -136,7 +136,7 @@
     <junit.version>4.13.1</junit.version>
     <hdrhistogram.version>2.1.12</hdrhistogram.version>
     <byte-buddy.version>1.15.11</byte-buddy.version>
-    <bcprov-jdk18on.version>1.79</bcprov-jdk18on.version>
+    <bcprov-jdk18on.version>1.84</bcprov-jdk18on.version>
 
     <!-- These are only used for exclusion when shading, and the exact version is completely
     irrelevant, but we need to keep them up to date to appease static checkers. While Phoenix does
