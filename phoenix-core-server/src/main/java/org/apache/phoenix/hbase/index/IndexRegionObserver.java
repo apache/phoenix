@@ -160,6 +160,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -756,51 +757,22 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    */
   private void replicateEditOnWALRestore(ReplicationLogGroup logGroup, WALKey logKey,
     WALEdit logEdit) throws IOException {
-    ImmutableBytesPtr prevKey = null, currentKey = null;
-    Put put = null;
-    Delete del = null;
+    List<Cell> regularCells = new ArrayList<>();
     for (Cell kv : logEdit.getCells()) {
       if (kv instanceof IndexedKeyValue) {
         IndexedKeyValue ikv = (IndexedKeyValue) kv;
         logGroup.append(Bytes.toString(ikv.getIndexTable()), -1, ikv.getMutation());
       } else {
-        // While we can generate a separate mutation for every cell that is part of the
-        // WAL edit and replicate each such mutation. Doing that will not be very efficient
-        // since a mutation can have large number of cells. Instead, we first group the
-        // cells belonging to the same row into a mutation and then replicate that
-        // mutation.
-        currentKey = new ImmutableBytesPtr(kv.getRowArray(), kv.getRowOffset(), kv.getRowLength());
-        if (!currentKey.equals(prevKey)) {
-          if (put != null && !this.ignoreReplicationFilter.test(put)) {
-            logGroup.append(logKey.getTableName().getNameAsString(), -1, put);
-          }
-          if (del != null && !this.ignoreReplicationFilter.test(del)) {
-            logGroup.append(logKey.getTableName().getNameAsString(), -1, del);
-          }
-          // reset
-          put = null;
-          del = null;
-        }
-        if (kv.getType() == Cell.Type.Put) {
-          if (put == null) {
-            put = new Put(currentKey.get(), currentKey.getOffset(), currentKey.getLength());
-          }
-          put.add(kv);
-        } else {
-          if (del == null) {
-            del = new Delete(currentKey.get(), currentKey.getOffset(), currentKey.getLength());
-          }
-          del.add(kv);
-        }
-        prevKey = currentKey;
+        regularCells.add(kv);
       }
     }
-    // append the last one
-    if (put != null && !this.ignoreReplicationFilter.test(put)) {
-      logGroup.append(logKey.getTableName().getNameAsString(), -1, put);
-    }
-    if (del != null && !this.ignoreReplicationFilter.test(del)) {
-      logGroup.append(logKey.getTableName().getNameAsString(), -1, del);
+    if (!regularCells.isEmpty()) {
+      String tableName = logKey.getTableName().getNameAsString();
+      for (Mutation split : splitCellsIntoMutations(regularCells)) {
+        if (!this.ignoreReplicationFilter.test(split)) {
+          logGroup.append(tableName, -1, split);
+        }
+      }
     }
     logGroup.sync();
   }
@@ -2632,6 +2604,52 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     return status.getOperationStatusCode() == SUCCESS && status.getResult() != null;
   }
 
+  /**
+   * Splits cells into individual Put/Delete mutations grouped by (row key, put-vs-delete). HBase's
+   * checkAndMergeCPMutations merges coprocessor cells into the data mutation, so a single Put may
+   * contain Delete cells with different row keys (e.g., local index). This method recovers distinct
+   * mutations using the same grouping algorithm as HBase's ReplicationSink.
+   */
+  private static boolean isNewRowOrType(Cell previousCell, Cell cell) {
+    return previousCell == null || previousCell.getType() != cell.getType()
+      || !CellUtil.matchingRows(previousCell, cell);
+  }
+
+  static List<Mutation> splitCellsIntoMutations(Iterable<Cell> cells) throws IOException {
+    List<Mutation> result = new ArrayList<>();
+    Cell previousCell = null;
+    Mutation current = null;
+    for (Cell cell : cells) {
+      if (isNewRowOrType(previousCell, cell)) {
+        if (current != null) {
+          result.add(current);
+        }
+        if (CellUtil.isDelete(cell)) {
+          current = new Delete(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
+        } else {
+          current = new Put(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
+        }
+      }
+      if (CellUtil.isDelete(cell)) {
+        ((Delete) current).add(cell);
+      } else {
+        ((Put) current).add(cell);
+      }
+      previousCell = cell;
+    }
+    if (current != null) {
+      result.add(current);
+    }
+    return result;
+  }
+
+  static List<Mutation> splitCellsIntoMutations(Mutation merged) throws IOException {
+    if (merged.isEmpty()) {
+      return Collections.singletonList(merged);
+    }
+    return splitCellsIntoMutations(Iterables.concat(merged.getFamilyCellMap().values()));
+  }
+
   private void replicateMutations(RegionCoprocessorEnvironment env,
     MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context)
     throws IOException {
@@ -2647,17 +2665,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (!logGroup.isPresent()) {
       return;
     }
+    ReplicationLogGroup group = logGroup.get();
 
-    for (Integer i = 0; i < miniBatchOp.size(); i++) {
+    for (int i = 0; i < miniBatchOp.size(); i++) {
       Mutation m = miniBatchOp.getOperation(i);
       if (this.ignoreReplicationFilter.test(m)) {
         continue;
       }
-      logGroup.get().append(this.dataTableName, -1, m);
-      Mutation[] mutationsAddedByCP = miniBatchOp.getOperationsFromCoprocessors(i);
-      if (mutationsAddedByCP != null) {
-        for (Mutation addedMutation : mutationsAddedByCP) {
-          logGroup.get().append(this.dataTableName, -1, addedMutation);
+      // When coprocessors add cells (local index, conditional TTL, ON DUPLICATE KEY UPDATE),
+      // HBase merges them into the data mutation which can mix row keys and cell types.
+      // Split those back into individual Put/Delete mutations for correct serialization.
+      if (miniBatchOp.getOperationsFromCoprocessors(i) == null) {
+        group.append(this.dataTableName, -1, m);
+      } else {
+        for (Mutation split : splitCellsIntoMutations(m)) {
+          group.append(this.dataTableName, -1, split);
         }
       }
     }
@@ -2667,7 +2689,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         if (this.ignoreReplicationFilter.test(entry.getValue())) {
           continue;
         }
-        logGroup.get().append(entry.getKey().getTableName(), -1, entry.getValue());
+        group.append(entry.getKey().getTableName(), -1, entry.getValue());
       }
     }
     if (context.postIndexUpdates != null) {
@@ -2676,9 +2698,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         if (this.ignoreReplicationFilter.test(entry.getValue())) {
           continue;
         }
-        logGroup.get().append(entry.getKey().getTableName(), -1, entry.getValue());
+        group.append(entry.getKey().getTableName(), -1, entry.getValue());
       }
     }
-    logGroup.get().sync();
+    group.sync();
   }
 }

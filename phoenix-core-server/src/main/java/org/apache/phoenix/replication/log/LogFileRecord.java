@@ -17,9 +17,6 @@
  */
 package org.apache.phoenix.replication.log;
 
-import java.io.IOException;
-import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
@@ -114,16 +111,9 @@ public class LogFileRecord implements LogFile.Record {
 
   // Internals only below. Not for LogFile interface consumer use.
 
-  /**
-   * The Phoenix concept of HBase mutation type, which is currently a 1:1 mapping with HBase's, with
-   * different code values (they don't need to match), but may potentially diverge in the future.
-   */
   protected enum MutationType {
     PUT(1),
-    DELETE(2),
-    DELETEFAMILYVERSION(3),
-    DELETECOLUMN(4),
-    DELETEFAMILY(5);
+    DELETE(2);
 
     private int code;
 
@@ -135,33 +125,12 @@ public class LogFileRecord implements LogFile.Record {
       return code;
     }
 
-    static MutationType get(Mutation mutation) throws IOException {
+    static MutationType get(Mutation mutation) {
       if (mutation instanceof Put) {
         return PUT;
       } else if (mutation instanceof Delete) {
-        CellScanner s = mutation.cellScanner();
-        if (!s.advance()) {
-          // No cell in delete. A simple delete of a row.
-          return DELETE;
-        }
-        // This assumes that either there is only one cell in the Delete, or all cells in
-        // the delete have the same cell type, which is correct as of today. We only need
-        // to look at the first.
-        Cell cell = s.current();
-        switch (cell.getType()) {
-          case Delete:
-            return DELETE;
-          case DeleteFamilyVersion:
-            return DELETEFAMILYVERSION;
-          case DeleteColumn:
-            return DELETECOLUMN;
-          case DeleteFamily:
-            return DELETEFAMILY;
-          default:
-            // Fall through to throw the UnsupportedOperationException
-            break;
-        }
-      } // Fall through to throw the UnsupportedOperationException
+        return DELETE;
+      }
       throw new UnsupportedOperationException("Unsupported mutation type: " + mutation);
     }
 

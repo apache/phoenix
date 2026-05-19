@@ -31,6 +31,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Random;
+import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellBuilderFactory;
+import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
@@ -233,16 +236,6 @@ public class LogFileCodecTest {
   }
 
   @Test
-  public void testCodecWithEmptyFamily() throws IOException {
-    long ts = 12345L;
-    Put put = new Put(Bytes.toBytes("row"));
-    put.setTimestamp(ts);
-    put.addColumn(HConstants.EMPTY_BYTE_ARRAY, Bytes.toBytes("q"), ts, Bytes.toBytes("v"));
-    singleRecordTest(
-      new LogFileRecord().setHBaseTableName("TBLEMPTYFAM").setCommitId(1L).setMutation(put));
-  }
-
-  @Test
   public void testCodecWithEmptyQualifier() throws IOException {
     long ts = 12345L;
     Put put = new Put(Bytes.toBytes("row"));
@@ -399,6 +392,66 @@ public class LogFileCodecTest {
       assertEquals("Cell " + i + " timestamp must be preserved",
         originalCells.get(i).getTimestamp(), decodedCells.get(i).getTimestamp());
     }
+  }
+
+  @Test
+  public void testDeleteWithMixedCellTypes() throws IOException {
+    long ts = 12345L;
+    byte[] row = Bytes.toBytes("row");
+    byte[] cf = Bytes.toBytes("cf");
+    Delete delete = new Delete(row);
+    delete.setTimestamp(ts);
+    delete.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY).setRow(row).setFamily(cf)
+      .setQualifier(Bytes.toBytes("q1")).setTimestamp(ts).setType(Cell.Type.DeleteColumn).build());
+    delete.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY).setRow(row).setFamily(cf)
+      .setQualifier(HConstants.EMPTY_BYTE_ARRAY).setTimestamp(ts).setType(Cell.Type.DeleteFamily)
+      .build());
+    singleRecordTest(
+      new LogFileRecord().setHBaseTableName("TBLMIXED").setCommitId(1L).setMutation(delete));
+  }
+
+  @Test
+  public void testCellTypeByteRoundTripForAllTypes() throws IOException {
+    long ts = 12345L;
+    byte[] row = Bytes.toBytes("row");
+    byte[] cf = Bytes.toBytes("cf");
+    byte[] qual = Bytes.toBytes("q");
+
+    // Put cell type
+    Put put = new Put(row);
+    put.setTimestamp(ts);
+    put.addColumn(cf, qual, ts, Bytes.toBytes("v"));
+    singleRecordTest(
+      new LogFileRecord().setHBaseTableName("TBLCTP").setCommitId(1L).setMutation(put));
+
+    // Delete (single version) cell type
+    Delete del1 = new Delete(row);
+    del1.setTimestamp(ts);
+    del1.addColumn(cf, qual, ts);
+    singleRecordTest(
+      new LogFileRecord().setHBaseTableName("TBLCTD").setCommitId(1L).setMutation(del1));
+
+    // DeleteColumn (all versions) cell type
+    Delete del2 = new Delete(row);
+    del2.setTimestamp(ts);
+    del2.add(CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY).setRow(row).setFamily(cf)
+      .setQualifier(qual).setTimestamp(ts).setType(Cell.Type.DeleteColumn).build());
+    singleRecordTest(
+      new LogFileRecord().setHBaseTableName("TBLCTDC").setCommitId(1L).setMutation(del2));
+
+    // DeleteFamily cell type
+    Delete del3 = new Delete(row);
+    del3.setTimestamp(ts);
+    del3.addFamily(cf, ts);
+    singleRecordTest(
+      new LogFileRecord().setHBaseTableName("TBLCTDF").setCommitId(1L).setMutation(del3));
+
+    // DeleteFamilyVersion cell type
+    Delete del4 = new Delete(row);
+    del4.setTimestamp(ts);
+    del4.addFamilyVersion(cf, ts);
+    singleRecordTest(
+      new LogFileRecord().setHBaseTableName("TBLCTDFV").setCommitId(1L).setMutation(del4));
   }
 
 }
