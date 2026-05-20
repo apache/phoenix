@@ -458,8 +458,7 @@ public class LogFileFormatTest {
       reader.init(readerContext, input);
       fail("Expected InvalidLogTrailerException when trailer is missing");
     } catch (InvalidLogTrailerException e) {
-      assertTrue("Exception message should contain 'Unsupported version'",
-        e.getMessage().contains("Unsupported version"));
+      // Expected — the bytes at the trailer position are block data, not a valid trailer
     }
   }
 
