@@ -256,6 +256,9 @@ public class ReplicationLog {
    * Requests an on-demand rotation if the current writer exceeds the size threshold.
    */
   private void requestRotationIfNeeded() throws IOException {
+    if (isClosed() || rotationRequested.get()) {
+      return;
+    }
     if (shouldRotateForSize()) {
       requestRotation();
     }
@@ -316,7 +319,6 @@ public class ReplicationLog {
           generation = currentWriter.getGeneration();
         }
         action.action(currentWriter);
-        requestRotationIfNeeded();
         break;
       } catch (IOException e) {
         LOG.debug("Attempt {}/{} failed", attempt, maxAttempts, e);
@@ -348,6 +350,11 @@ public class ReplicationLog {
     if (blockSynced[0]) {
       // The block-full sync included this record — all records up to here are durable
       currentBatch.clear();
+      // Check size only after currentBatch is empty: if a rotation stages a new writer mid-batch,
+      // unsynced records are replayed into it and could exceed the threshold immediately,
+      // triggering another rotation and forming a loop. Checking only when the batch is empty
+      // ensures size-based rotations don't cascade.
+      requestRotationIfNeeded();
     }
   }
 
@@ -358,6 +365,9 @@ public class ReplicationLog {
   protected void sync() throws IOException {
     apply(LogFileWriter::sync);
     currentBatch.clear();
+    // See note in append(Record): size check runs only when currentBatch is empty so a replay
+    // into a freshly-staged writer cannot trigger a cascading rotation.
+    requestRotationIfNeeded();
   }
 
   /**
@@ -417,8 +427,6 @@ public class ReplicationLog {
       if (closed.get()) {
         return;
       }
-      rotationRequested.compareAndSet(true, false);
-
       try {
         LogFileWriter newWriter = createNewWriter();
         LogFileWriter undrained = pendingWriter.getAndSet(newWriter);
@@ -439,6 +447,9 @@ public class ReplicationLog {
             numFailures, maxRotationRetries, t);
         }
       } finally {
+        // Clear the flag last so requestRotation()'s CAS rejects duplicate on-demand submissions
+        // while this task is still creating/staging a writer.
+        rotationRequested.set(false);
         CountDownLatch latch = rotationStagedLatch;
         if (latch != null) {
           latch.countDown();
