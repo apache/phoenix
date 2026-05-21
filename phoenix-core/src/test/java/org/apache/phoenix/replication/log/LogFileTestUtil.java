@@ -17,6 +17,12 @@
  */
 package org.apache.phoenix.replication.log;
 
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.nullable;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.DataInputStream;
@@ -24,6 +30,10 @@ import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.OutputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
+import org.apache.hadoop.fs.FSDataOutputStreamBuilder;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
@@ -121,6 +131,30 @@ public interface LogFileTestUtil {
     } catch (IOException e) {
       throw new AssertionError(e.getMessage());
     }
+  }
+
+  /**
+   * Concrete typed subclass of {@link FSDataOutputStreamBuilder} so Mockito can stub
+   * {@code build()} without bridge-method ambiguity from the self-bounded generics. Mockito mocks
+   * this class via subclass-bytecode generation; the (unused) protected constructor is never
+   * invoked.
+   */
+  abstract class TestBuilder extends FSDataOutputStreamBuilder<FSDataOutputStream, TestBuilder> {
+    protected TestBuilder(FileSystem fs, Path p) {
+      super(fs, p);
+    }
+  }
+
+  /**
+   * Stubs the {@code fs.createFile(...).overwrite(...).blockSize(...).build()} chain on the given
+   * mock {@link FileSystem} to return the supplied {@link FSDataOutputStream}.
+   */
+  static void stubCreateFile(FileSystem mockFs, FSDataOutputStream out) throws IOException {
+    TestBuilder builder = mock(TestBuilder.class);
+    when(mockFs.createFile(nullable(Path.class))).thenReturn(builder);
+    when(builder.overwrite(anyBoolean())).thenReturn(builder);
+    when(builder.blockSize(anyLong())).thenReturn(builder);
+    when(builder.build()).thenReturn(out);
   }
 
   static void assertMutationEquals(String message, Mutation m1, Mutation m2) {

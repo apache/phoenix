@@ -68,6 +68,7 @@ public class ReplicationLog {
   protected final ReplicationLogGroup logGroup;
   protected final long rotationTimeMs;
   protected final long rotationSizeBytes;
+  protected final long fsBlockSize;
   protected final int maxRotationRetries;
   protected final Compression.Algorithm compression;
   protected final int maxAttempts;
@@ -109,13 +110,9 @@ public class ReplicationLog {
     double rotationSizePercent =
       conf.getDouble(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE_KEY,
         ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE);
-    long blockSize = shardManager.getFileSystem().getDefaultBlockSize();
-    if (configuredRotationSize > blockSize) {
-      LOG.warn("Configured rotation size {} exceeds HDFS block size {}; clamping to block size",
-        configuredRotationSize, blockSize);
-    }
-    long effectiveRotationSize = Math.min(configuredRotationSize, blockSize);
-    this.rotationSizeBytes = (long) (effectiveRotationSize * rotationSizePercent);
+    this.rotationSizeBytes = (long) (configuredRotationSize * rotationSizePercent);
+    this.fsBlockSize = conf.getLong(ReplicationLogGroup.REPLICATION_LOG_FS_BLOCK_SIZE_BYTES_KEY,
+      ReplicationLogGroup.DEFAULT_REPLICATION_LOG_FS_BLOCK_SIZE_BYTES);
     this.maxRotationRetries = conf.getInt(ReplicationLogGroup.REPLICATION_LOG_ROTATION_RETRIES_KEY,
       ReplicationLogGroup.DEFAULT_REPLICATION_LOG_ROTATION_RETRIES);
     String compressionName = conf.get(ReplicationLogGroup.REPLICATION_LOG_COMPRESSION_ALGORITHM_KEY,
@@ -150,7 +147,7 @@ public class ReplicationLog {
       logGroup.getServerName().getServerName());
     LogFileWriterContext writerContext = new LogFileWriterContext(logGroup.getConfiguration())
       .setFileSystem(replicationShardDirectoryManager.getFileSystem()).setFilePath(filePath)
-      .setCompression(compression);
+      .setCompression(compression).setFsBlockSize(fsBlockSize);
     LogFileWriter newWriter = new LogFileWriter();
     newWriter.init(writerContext);
     newWriter.setGeneration(writerGeneration.incrementAndGet());

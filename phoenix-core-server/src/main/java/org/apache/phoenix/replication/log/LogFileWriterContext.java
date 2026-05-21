@@ -50,6 +50,7 @@ public class LogFileWriterContext {
   private Compression.Algorithm compression;
   private LogFileCodec codec;
   private long maxBlockSize;
+  private long fsBlockSize;
   private boolean useHsync;
 
   public LogFileWriterContext(Configuration conf) {
@@ -122,6 +123,15 @@ public class LogFileWriterContext {
     return this;
   }
 
+  public long getFsBlockSize() {
+    return fsBlockSize;
+  }
+
+  public LogFileWriterContext setFsBlockSize(long fsBlockSize) {
+    this.fsBlockSize = fsBlockSize;
+    return this;
+  }
+
   public boolean getUseHsync() {
     return useHsync;
   }
@@ -134,7 +144,8 @@ public class LogFileWriterContext {
   @Override
   public String toString() {
     return "LogFileWriterContext [path=" + path + ", compression=" + compression + ", codec="
-      + codec + ", maxBlockSize=" + maxBlockSize + ", useHsync=" + useHsync + "]";
+      + codec + ", maxBlockSize=" + maxBlockSize + ", fsBlockSize=" + fsBlockSize + ", useHsync="
+      + useHsync + "]";
   }
 
 }
