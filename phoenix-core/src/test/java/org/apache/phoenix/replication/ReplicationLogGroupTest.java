@@ -46,6 +46,7 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
@@ -1906,5 +1907,92 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       .filter(inv -> inv.getMethod().getName().equals("append")).mapToInt(inv -> 1).sum();
     assertTrue("Replay should be bounded by last partial block, not all records. Got: "
       + newWriterAppendCount, newWriterAppendCount < id);
+  }
+
+  /**
+   * Tests that the size check is not invoked from inside apply(). Pre-fix, every successful action
+   * inside apply() ran requestRotationIfNeeded(); when a rotation swapped in a new writer mid-batch
+   * and replay made it exceed the threshold, the size check after every append would request
+   * another rotation, drain it on the next apply(), replay again, and loop indefinitely.
+   * <p>
+   * The new writer is mocked so its getLength() always reports above the rotation threshold. On the
+   * buggy code this triggers a rotation request after every successful append, which cascades into
+   * one writer per append. With the fix, requestRotationIfNeeded() runs only after currentBatch is
+   * cleared, so the chain is bounded.
+   */
+  @Test
+  public void testSizeRotationDoesNotLoopOnReplay() throws Exception {
+    final String tableName = "TBLSRDLOR";
+    long commitId = 1L;
+    // Long enough that only the first scheduled tick can fire within the test window.
+    final int roundDurationSeconds = 1;
+    final int numAppendsAfterTick = 20;
+
+    conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, roundDurationSeconds);
+    recreateLogGroup();
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
+
+    // Count writers created so we can detect a rotation chain. Each writer created after the
+    // initial one is configured to report a length above the rotation threshold so the size
+    // check (wherever it runs) sees an over-threshold writer.
+    AtomicInteger writersCreated = new AtomicInteger(1); // initial writer already created
+    final long oversizedLength = TEST_ROTATION_SIZE_BYTES + 1;
+    doAnswer(invocation -> {
+      LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
+      doReturn(oversizedLength).when(w).getLength();
+      writersCreated.incrementAndGet();
+      return w;
+    }).when(activeLog).createNewWriter();
+
+    // Append unsynced records so currentBatch is non-empty when the rotation tick fires.
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    for (int i = 0; i < 5; i++) {
+      logGroup.append(tableName, commitId++, put);
+    }
+
+    // Wait for the time-based rotation tick to stage a fresh pendingWriter.
+    waitForRotationTick(roundDurationSeconds);
+
+    // Continue appending. On the buggy code, the first such append drains the staged writer,
+    // replays the batch, then requestRotationIfNeeded() inside apply() fires (length is over
+    // threshold) → requests another rotation. Subsequent appends drain that one too, replay,
+    // request another, and so on — one new writer per append.
+    for (int i = 0; i < numAppendsAfterTick; i++) {
+      logGroup.append(tableName, commitId++, put);
+    }
+    logGroup.sync();
+
+    // Without the fix the count grows roughly linearly with numAppendsAfterTick (one new
+    // writer per append). With the fix, it is bounded regardless of how many appends are
+    // performed: initial + scheduled ticks (test runtime ~2s with 1s round = 1-2 ticks) +
+    // at most one size-triggered rotation per sync point. Use a generous bound that is well
+    // below the buggy behavior (which produced ~24) but tolerates extra scheduled ticks.
+    int writers = writersCreated.get();
+    assertTrue("Size-based rotation must not loop. Writers created: " + writers,
+      writers <= numAppendsAfterTick / 2);
+  }
+
+  /**
+   * Verifies the contract of {@code LogRotationTask}'s {@code onDemand} flag: a scheduled task
+   * (onDemand=false) must not clear {@code rotationRequested}, and an on-demand task
+   * (onDemand=true) must clear it. This prevents a scheduled tick from stomping the flag set by a
+   * concurrent on-demand request whose task hasn't run yet, which would allow duplicate on-demand
+   * submissions to be queued.
+   */
+  @Test
+  public void testScheduledRotationDoesNotClearOnDemandFlag() {
+    ReplicationLog activeLog = logGroup.getActiveLog();
+
+    activeLog.rotationRequested.set(true);
+    activeLog.new LogRotationTask(false).run();
+    assertTrue("Scheduled rotation must not clear rotationRequested",
+      activeLog.rotationRequested.get());
+
+    activeLog.new LogRotationTask(true).run();
+    assertFalse("On-demand rotation must clear rotationRequested",
+      activeLog.rotationRequested.get());
   }
 }
