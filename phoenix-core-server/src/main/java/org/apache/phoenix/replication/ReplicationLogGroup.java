@@ -20,6 +20,7 @@ package org.apache.phoenix.replication;
 import static org.apache.hadoop.hbase.HConstants.DEFAULT_ZK_SESSION_TIMEOUT;
 import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
 import static org.apache.phoenix.replication.ReplicationLogGroup.LogEvent.EVENT_TYPE_DATA;
+import static org.apache.phoenix.replication.ReplicationLogGroup.LogEvent.EVENT_TYPE_SWAP;
 import static org.apache.phoenix.replication.ReplicationLogGroup.LogEvent.EVENT_TYPE_SYNC;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.INIT;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
@@ -29,6 +30,7 @@ import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode
 import com.lmax.disruptor.EventFactory;
 import com.lmax.disruptor.EventHandler;
 import com.lmax.disruptor.ExceptionHandler;
+import com.lmax.disruptor.InsufficientCapacityException;
 import com.lmax.disruptor.LifecycleAware;
 import com.lmax.disruptor.RingBuffer;
 import com.lmax.disruptor.YieldingWaitStrategy;
@@ -314,6 +316,7 @@ public class ReplicationLogGroup {
 
     public static final byte EVENT_TYPE_DATA = 0;
     public static final byte EVENT_TYPE_SYNC = 1;
+    public static final byte EVENT_TYPE_SWAP = 2;
 
     public void setValues(int type, Record record, CompletableFuture<Void> syncFuture) {
       this.type = type;
@@ -635,6 +638,29 @@ public class ReplicationLogGroup {
       LOG.error(message, e);
       PhoenixWALSyncTimeoutException timeoutEx = new PhoenixWALSyncTimeoutException(message);
       abort(message, timeoutEx);
+    }
+  }
+
+  /**
+   * Publish a non-blocking swap marker so an idle consumer wakes up and runs
+   * {@link ReplicationLog#checkAndReplaceWriter(boolean)} promptly. Called by
+   * {@link ReplicationLog.LogRotationTask} after staging a new pending writer.
+   * <p>
+   * Uses {@code tryNext()} so a full ring buffer never blocks the rotation thread — when the buffer
+   * is full the consumer is actively draining and will hit {@code checkAndReplaceWriter} on its
+   * own.
+   */
+  protected void publishSwapEvent() {
+    try {
+      long sequence = ringBuffer.tryNext();
+      try {
+        LogEvent event = ringBuffer.get(sequence);
+        event.setValues(EVENT_TYPE_SWAP, null, null);
+      } finally {
+        ringBuffer.publish(sequence);
+      }
+    } catch (InsufficientCapacityException e) {
+      LOG.debug("HAGroup {} ring buffer full, skipping swap event publish", this);
     }
   }
 
@@ -1128,18 +1154,20 @@ public class ReplicationLogGroup {
         switch (event.type) {
           case EVENT_TYPE_DATA:
             currentModeImpl.append(event.record);
-            if (endOfBatch) {
-              processPendingSyncs(sequence);
-            }
-            return;
+            break;
           case EVENT_TYPE_SYNC:
             pendingSyncFutures.add(event.syncFuture);
-            if (endOfBatch) {
-              processPendingSyncs(sequence);
-            }
-            return;
+            break;
+          case EVENT_TYPE_SWAP:
+            // Wake-up marker from LogRotationTask. Drain the staged writer so the old writer is
+            // closed before the reader's round buffer expires. No append/sync to perform.
+            currentModeImpl.getReplicationLog().checkAndReplaceWriter(true);
+            break;
           default:
             throw new UnsupportedOperationException("Unknown event type: " + event.type);
+        }
+        if (endOfBatch) {
+          processPendingSyncs(sequence);
         }
       } catch (IOException e) {
         try {

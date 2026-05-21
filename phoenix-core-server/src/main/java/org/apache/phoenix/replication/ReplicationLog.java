@@ -439,9 +439,11 @@ public class ReplicationLog {
       if (closed.get()) {
         return;
       }
+      boolean staged = false;
       try {
         LogFileWriter newWriter = createNewWriter();
         LogFileWriter undrained = pendingWriter.getAndSet(newWriter);
+        staged = true;
         if (undrained != null) {
           closeWriter(undrained);
         }
@@ -468,6 +470,11 @@ public class ReplicationLog {
         if (latch != null) {
           latch.countDown();
           rotationStagedLatch = null;
+        }
+        if (staged) {
+          // Wake an idle consumer so it drains pendingWriter before the reader's round buffer
+          // expires. Non-blocking — see ReplicationLogGroup#publishSwapEvent.
+          logGroup.publishSwapEvent();
         }
       }
     }

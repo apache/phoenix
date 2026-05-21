@@ -1267,6 +1267,12 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     LogFileWriter writer = activeLog.getWriter();
     assertNotNull("Writer should not be null", writer);
 
+    // Configure all stubs before publishing any events. Stubbing a Mockito spy while the
+    // consumer thread is concurrently invoking methods on the same spy is racy — Mockito's
+    // invocation/stub state is not thread-safe and the partially-applied stub can be matched
+    // against an unrelated method on the consumer thread.
+    doThrow(new IOException("Simulate append failure")).when(writer).append(tableName, commitId5,
+      put5);
     // Rotated writers must also fail on the 5th append so the retry doesn't rescue the loop.
     doAnswer(invocation -> {
       LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
@@ -1279,11 +1285,6 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     logGroup.append(tableName, commitId2, put2);
     logGroup.append(tableName, commitId3, put3);
     logGroup.append(tableName, commitId4, put4);
-
-    // configure initial writer to throw IOException on the 5th append
-    doThrow(new IOException("Simulate append failure")).when(writer).append(tableName, commitId5,
-      put5);
-
     logGroup.append(tableName, commitId5, put5);
     logGroup.sync();
 
@@ -1393,11 +1394,13 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     LogFileWriter initialWriter = activeLog.getWriter();
     assertNotNull("Initial writer should not be null", initialWriter);
 
+    // Configure initial writer's sync to fail (simulating broken stream after lease recovery).
+    // Done before the append publishes anything so the consumer thread cannot race with this
+    // stub installation on the same Mockito spy.
+    doThrow(new IOException("Simulated broken stream")).when(initialWriter).sync();
+
     // Append a record — goes to initialWriter
     logGroup.append(tableName, commitId, put);
-
-    // Configure initial writer's sync to fail (simulating broken stream after lease recovery)
-    doThrow(new IOException("Simulated broken stream")).when(initialWriter).sync();
 
     // Stage a pending writer via forced rotation
     activeLog.forceRotation();
@@ -1994,5 +1997,90 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     activeLog.new LogRotationTask(true).run();
     assertFalse("On-demand rotation must clear rotationRequested",
       activeLog.rotationRequested.get());
+  }
+
+  /**
+   * Tests that a rotation tick wakes an idle consumer via the synthetic swap event so the staged
+   * pendingWriter is drained without waiting for the next real append/sync. Prior to this fix the
+   * undrained writer remained installed until the next data event, which on an idle system could
+   * exceed the reader's round buffer and trigger lease recovery.
+   */
+  @Test
+  public void testIdleConsumerSwapsOnRotation() throws Exception {
+    final String tableName = "TBLICSOR";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    final long commitId = 1L;
+    final int roundDurationSeconds = 2;
+
+    conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY, roundDurationSeconds);
+    recreateLogGroup();
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
+
+    // Establish baseline: append + sync to clear currentBatch
+    logGroup.append(tableName, commitId, put);
+    logGroup.sync();
+
+    // Wait past one rotation tick. With the synthetic swap event, the consumer wakes and drains
+    // pendingWriter — no further append/sync needed.
+    waitForRotationTick(roundDurationSeconds);
+
+    // The active writer should now be the one staged by the rotation tick.
+    LogFileWriter writerAfterIdleRotation = activeLog.getWriter();
+    assertTrue("Writer should have swapped after idle rotation tick without further events",
+      writerAfterIdleRotation != initialWriter);
+
+    // The initial writer should have been closed asynchronously by the swap.
+    verify(initialWriter, timeout(5000).times(1)).close();
+  }
+
+  /**
+   * Verifies that {@code publishSwapEvent} silently skips when the ring buffer is full — the
+   * consumer is actively draining and will hit {@code checkAndReplaceWriter} on its next event.
+   */
+  @Test
+  public void testPublishSwapEventOnFullRingBufferIsNoop() throws Exception {
+    final String tableName = "TBLPSEFRB";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+
+    LogFileWriter innerWriter = logGroup.getActiveLog().getWriter();
+    assertNotNull("Inner writer should not be null", innerWriter);
+
+    // Hold the consumer so the ring buffer cannot drain
+    final CountDownLatch holdConsumer = new CountDownLatch(1);
+    final CountDownLatch ringFull = new CountDownLatch(1);
+    doAnswer(invocation -> {
+      holdConsumer.await();
+      return invocation.callRealMethod();
+    }).when(innerWriter).append(anyString(), anyLong(), any(Mutation.class));
+
+    Thread filler = new Thread(() -> {
+      try {
+        long id = 0;
+        // Fill all ring buffer slots. The consumer is blocked on the first event so its
+        // gating sequence never advances, and these N publishes saturate the buffer.
+        for (int i = 0; i < TEST_RINGBUFFER_SIZE; i++) {
+          logGroup.append(tableName, id++, put);
+        }
+        ringFull.countDown();
+        // The next append will block until the consumer drains.
+        logGroup.append(tableName, id, put);
+      } catch (Exception ignored) {
+      }
+    });
+    filler.setDaemon(true);
+    filler.start();
+
+    // Wait until the filler has saturated the ring buffer.
+    ringFull.await();
+
+    // Should not throw / hang even though the ring buffer is full.
+    logGroup.publishSwapEvent();
+
+    // Release the consumer so the filler thread can finish and tearDown can close cleanly.
+    holdConsumer.countDown();
+    filler.join(5000);
   }
 }

@@ -23,8 +23,6 @@ import org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
-
 /**
  * Base class for different replication modes.
  * <p>
@@ -69,7 +67,6 @@ public abstract class ReplicationModeImpl {
   }
 
   /** Returns the underlying log abstraction */
-  @VisibleForTesting
   ReplicationLog getReplicationLog() {
     return log;
   }
