@@ -35,5 +35,8 @@
     <componentDescriptor>src/build/components/all-common-jars.xml</componentDescriptor>
     <componentDescriptor>src/build/components/all-common-files.xml</componentDescriptor>
     <componentDescriptor>src/build/components/all-common-dependencies.xml</componentDescriptor>
+    <!-- Resolves to assembly-noop.xml in default builds and
+         release-only-jars.xml under -Prelease. See phoenix-assembly/pom.xml. -->
+    <componentDescriptor>${assembly.mapreduce.componentDescriptor}</componentDescriptor>
   </componentDescriptors>
 </assembly>
