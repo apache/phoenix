@@ -1962,9 +1962,6 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // request another, and so on — one new writer per append.
     for (int i = 0; i < numAppendsAfterTick; i++) {
       logGroup.append(tableName, commitId++, put);
-      // Small sleep to give the on-demand rotation task time to actually create the writer
-      // before the next append drains it. This makes the chain observable in the test.
-      Thread.sleep(20);
     }
     logGroup.sync();
 
@@ -1976,5 +1973,26 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     int writers = writersCreated.get();
     assertTrue("Size-based rotation must not loop. Writers created: " + writers,
       writers <= numAppendsAfterTick / 2);
+  }
+
+  /**
+   * Verifies the contract of {@code LogRotationTask}'s {@code onDemand} flag: a scheduled task
+   * (onDemand=false) must not clear {@code rotationRequested}, and an on-demand task
+   * (onDemand=true) must clear it. This prevents a scheduled tick from stomping the flag set by a
+   * concurrent on-demand request whose task hasn't run yet, which would allow duplicate on-demand
+   * submissions to be queued.
+   */
+  @Test
+  public void testScheduledRotationDoesNotClearOnDemandFlag() {
+    ReplicationLog activeLog = logGroup.getActiveLog();
+
+    activeLog.rotationRequested.set(true);
+    activeLog.new LogRotationTask(false).run();
+    assertTrue("Scheduled rotation must not clear rotationRequested",
+      activeLog.rotationRequested.get());
+
+    activeLog.new LogRotationTask(true).run();
+    assertFalse("On-demand rotation must clear rotationRequested",
+      activeLog.rotationRequested.get());
   }
 }

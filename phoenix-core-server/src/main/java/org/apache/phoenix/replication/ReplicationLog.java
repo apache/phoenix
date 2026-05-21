@@ -82,7 +82,8 @@ public class ReplicationLog {
   // in a finally block so apply() can wait (with timeout) for a fresh writer to be staged.
   private volatile CountDownLatch rotationStagedLatch;
   private final AtomicBoolean closed = new AtomicBoolean(false);
-  private final AtomicBoolean rotationRequested = new AtomicBoolean(false);
+  @VisibleForTesting
+  final AtomicBoolean rotationRequested = new AtomicBoolean(false);
   private final ExecutorService closeExecutor;
   protected ScheduledExecutorService rotationExecutor;
   // Manages the creation of the actual log file in the shard directory
@@ -168,7 +169,7 @@ public class ReplicationLog {
     rotationExecutor = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
       .setNameFormat("ReplicationLogRotation-" + logGroup.getHAGroupName() + "-%d").setDaemon(true)
       .build());
-    rotationExecutor.scheduleAtFixedRate(new LogRotationTask(), initialDelay, rotationTimeMs,
+    rotationExecutor.scheduleAtFixedRate(new LogRotationTask(false), initialDelay, rotationTimeMs,
       TimeUnit.MILLISECONDS);
     LOG.info("Started rotation executor with initial delay {}ms and interval {}ms", initialDelay,
       rotationTimeMs);
@@ -244,7 +245,7 @@ public class ReplicationLog {
   private void requestRotation() {
     if (rotationRequested.compareAndSet(false, true)) {
       try {
-        rotationExecutor.execute(new LogRotationTask());
+        rotationExecutor.execute(new LogRotationTask(true));
       } catch (java.util.concurrent.RejectedExecutionException e) {
         LOG.info("Rotation executor shut down, skipping on-demand rotation", e);
         rotationRequested.set(false);
@@ -408,7 +409,7 @@ public class ReplicationLog {
 
   @VisibleForTesting
   protected void forceRotation() {
-    new LogRotationTask().run();
+    new LogRotationTask(false).run();
     checkAndReplaceWriter(false);
   }
 
@@ -420,8 +421,19 @@ public class ReplicationLog {
    * Creates a new writer on a background thread and stages it in {@code pendingWriter} for the
    * consumer thread to drain inside {@link #apply}. Invoked both by the scheduled rotation executor
    * at round boundaries and on-demand via {@link #requestRotation()}.
+   * <p>
+   * Only the on-demand path owns {@code rotationRequested} — it sets the flag before submitting the
+   * task and clears it in {@code finally}. Scheduled rotations must not touch the flag, otherwise
+   * they could clear a flag set by a concurrent on-demand request whose task hasn't run yet,
+   * allowing duplicate on-demand submissions to be queued.
    */
   protected class LogRotationTask implements Runnable {
+    private final boolean onDemand;
+
+    LogRotationTask(boolean onDemand) {
+      this.onDemand = onDemand;
+    }
+
     @Override
     public void run() {
       if (closed.get()) {
@@ -447,9 +459,11 @@ public class ReplicationLog {
             numFailures, maxRotationRetries, t);
         }
       } finally {
-        // Clear the flag last so requestRotation()'s CAS rejects duplicate on-demand submissions
-        // while this task is still creating/staging a writer.
-        rotationRequested.set(false);
+        if (onDemand) {
+          // Clear the flag last so requestRotation()'s CAS rejects duplicate on-demand
+          // submissions while this task is still creating/staging a writer.
+          rotationRequested.set(false);
+        }
         CountDownLatch latch = rotationStagedLatch;
         if (latch != null) {
           latch.countDown();
