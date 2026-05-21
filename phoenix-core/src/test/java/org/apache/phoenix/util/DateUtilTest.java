@@ -21,21 +21,38 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 
-import java.sql.Date;
-import java.sql.Time;
-import java.sql.Timestamp;
+import java.io.IOException;
 import java.text.ParseException;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.sql.Date;
+import java.sql.Time;
+import java.sql.Timestamp;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.Properties;
 import java.util.TimeZone;
+
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.util.ColumnInfo;
+import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.schema.types.PIntegerArray;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.junit.Test;
+import org.mockito.ArgumentCaptor;
+
+import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
+import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 
 /**
  * Test class for {@link DateUtil}
@@ -351,5 +368,50 @@ public class DateUtilTest {
       java.sql.Timestamp.from(startOfWinter.atZone(ZoneOffset.UTC).toInstant());
     assertEquals(DateUtil.applyInputDisplacement(startOfWinterLocal, tz), startOfWinterDisplaced);
     assertEquals(DateUtil.applyOutputDisplacement(startOfWinterDisplaced, tz), startOfWinterLocal);
+  }
+
+  /**
+   * parseTimestamp should use the configured timezone from parser instead of hardcoded UTC.
+   * Test logic:
+   * 1. Create a DateTimeParser with Asia/Shanghai timezone
+   * 2. Parse timestamp string "2020-01-01 00:00:00.000" using the parser
+   * 3. Verify parsed epoch millis is 8 hours less than UTC parsed result
+   */
+  @Test
+  public void testParseTimestampWithCustomTimeZone() throws ParseException {
+    String tsStr = "2020-01-01 00:00:00.000";
+    java.util.TimeZone shanghaiZone = java.util.TimeZone.getTimeZone("Asia/Shanghai");
+
+    java.sql.Timestamp parsedTs = DateUtil.parseTimestamp(tsStr,
+      DateUtil.getDateTimeParser("yyyy-MM-dd HH:mm:ss.SSS", PTimestamp.INSTANCE, shanghaiZone.getID()));
+
+    // DateUtil.parseTimestamp() parses using UTC by default when no parser is provided
+    java.sql.Timestamp utcTs = DateUtil.parseTimestamp(tsStr);
+
+    // Asia/Shanghai is UTC+8, so the parsed epoch time should be 8 hours less than UTC result
+    long expectedMillis = utcTs.getTime() - (8L * 60 * 60 * 1000);
+
+    assertEquals("Timestamp should be parsed using configured timezone Asia/Shanghai", expectedMillis, parsedTs.getTime());
+  }
+
+  /**
+   * Verifies that nanosecond precision is correctly preserved under a custom timezone
+   */
+  @Test
+  public void testParseTimestampWithCustomTimeZoneAndNanos() throws ParseException {
+    String tsStr = "2020-01-01 00:00:00.123"; // Only 3 nanoseconds
+    java.util.TimeZone shanghaiZone = java.util.TimeZone.getTimeZone("Asia/Shanghai");
+
+    java.sql.Timestamp parsedTs = DateUtil.parseTimestamp(tsStr,
+      DateUtil.getDateTimeParser("yyyy-MM-dd HH:mm:ss.SSS", PTimestamp.INSTANCE, shanghaiZone.getID()));
+
+    // DateUtil.parseTimestamp() parses using UTC by default when no parser is provided
+    java.sql.Timestamp utcTs = DateUtil.parseTimestamp(tsStr);
+
+    // Asia/Shanghai is UTC+8, so the parsed epoch time should be 8 hours less than UTC result
+    long expectedMillis = utcTs.getTime() - (8L * 60 * 60 * 1000);
+
+    assertEquals("Epoch millis should reflect Asia/Shanghai timezone", expectedMillis, parsedTs.getTime());
+    assertEquals("Nanos should be preserved correctly", 123000000, parsedTs.getNanos());
   }
 }
