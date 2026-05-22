@@ -1,6 +1,6 @@
 # Phoenix Consistent Failover -- TLA+ Specification
 
-Formal specification of the Phoenix Consistent Failover protocol using TLA+ and the TLC model checker.  The spec verifies safety properties (mutual exclusion, zero RPO, abort correctness) under arbitrary interleavings of admin actions, HDFS failures, RS crashes, ZK connection/session failures, watcher retry exhaustion, and the anti-flapping timer.
+Formal specification of the Phoenix Consistent Failover protocol.  The spec verifies safety properties (mutual exclusion, zero RPO, abort correctness) exhaustively, and liveness properties (failover completion, abort completion, degradation recovery) by per-property simulation, under arbitrary interleavings of admin actions, HDFS failures, RS crashes, ZK connection/session failures, watcher retry exhaustion, and the anti-flapping timer.
 
 ## Literate Specification
 
@@ -342,39 +342,23 @@ java -XX:+UseParallelGC \
 |--------|-------|
 | Configuration | 2 clusters, 2 RS per cluster, WaitTimeForSync=2 |
 | Workers | 16 |
-| States generated | 2,718,437,761 |
-| Distinct states | 170,978,688 |
-| Depth | 55 |
-| Duration | 24 min 19 sec |
-| Date | 2026-04-21 |
+| States generated | 1,107,584,929 |
+| Distinct states | 70,543,872 |
+| Depth | 54 |
+| Duration | 10 min 14 sec |
+| Date | 2026-05-22 |
 | Result | Success |
 
-All 9 state invariants and 9 action constraints verified.  No violations.
-
-### Simulation
-
-| Metric | Value |
-|--------|-------|
-| Configuration | 2 clusters, 9 RS per cluster, WaitTimeForSync=5 |
-| Workers | 128 |
-| States checked | 70,448,924,768 |
-| Traces generated | 7,044,645 |
-| Trace length | 10,000 |
-| Seed | -5836228587005873350 |
-| Duration | 8 hr |
-| Date | 2026-04-21 |
-| Result | Success |
-
-All 9 state invariants and 9 action constraints verified at production-scale RS count.  No violations.
+All 6 state invariants and 9 action constraints verified.  No violations.
 
 ### Liveness (Per-Property Simulation)
 
-All runs: 2 clusters, 2 RS per cluster, WaitTimeForSync=2, 128 workers, depth 10000, 1 hr.
+All runs: 2 clusters, 2 RS per cluster, WaitTimeForSync=2, 16 workers, depth 10000, 1 hr.
 
 | Property | Config | States Checked | Traces | Seed | Date | Result |
-|----------|--------|---------------|--------|------|------|--------|
-| `AbortCompletion` | `SpecAC` | 2,671,855,331 | 267,165 | -3508296420780792285 | 2026-04-21 | Success |
-| `DegradationRecovery` | `SpecDR` | 454,322,354 | 45,430 | 650174316504703997 | 2026-04-21 | Success |
-| `FailoverCompletion` | `SpecFC` | 1,107,505,130 | 110,740 | 3654016485672320894 | 2026-04-21 | Success |
+|----------|--------|----------------|--------|------|------|--------|
+| `AbortCompletion` | `SpecAC` | 887,247,734 | 88,739 | -8064834731958902658 | 2026-05-22 | Success |
+| `DegradationRecovery` | `SpecDR` | 276,520,202 | 27,667 | 496005584236440631 | 2026-05-22 | Success |
+| `FailoverCompletion` | `SpecFC` | 434,872,846 | 43,502 | -6452175759961749829 | 2026-05-22 | Success |
 
 All 3 liveness properties verified.  No violations.

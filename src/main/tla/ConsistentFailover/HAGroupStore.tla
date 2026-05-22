@@ -3,10 +3,10 @@
  * Peer-reactive transitions and auto-completion actions for the
  * Phoenix Consistent Failover protocol.
  *
- * Actions model the FailoverManagementListener (HAGroupStoreManager.java
- * L633-706) which reacts to peer ZK state changes via PathChildrenCache
- * watchers, and the local auto-completion resolvers from
- * createLocalStateTransitions() (L140-150).
+ * Actions model the FailoverManagementListener
+ * (HAGroupStoreManager.java) which reacts to peer ZK state changes
+ * via PathChildrenCache watchers, and the local auto-completion
+ * resolvers from createLocalStateTransitions().
  *
  * ZK WATCHER DELIVERY DEPENDENCY: All PeerReact* actions depend on
  * the peer ZK connection and session being alive (guarded by
@@ -16,18 +16,18 @@
  * notifications cannot be delivered.
  *
  * RETRY EXHAUSTION: The FailoverManagementListener retries each
- * reactive transition exactly 2 times (HAGroupStoreManager.java
- * L653-704). After exhaustion, the method returns silently. This
- * is modeled by the ReactiveTransitionFail(c) action, which
- * non-deterministically "consumes" a pending peer-reactive
- * transition without updating clusterState.
+ * reactive transition exactly 2 times in HAGroupStoreManager.
+ * After exhaustion, the method returns silently. This is modeled
+ * by the ReactiveTransitionFail(c) action, which non-
+ * deterministically "consumes" a pending peer-reactive transition
+ * without updating clusterState.
  *
  * Notification chain (peer-reactive transitions):
  *   Peer ZK znode change
  *     -> Curator peerPathChildrenCache
- *       -> HAGroupStoreClient.handleStateChange() [L1088-1110]
- *         -> notifySubscribers() [L1119-1151]
- *           -> FailoverManagementListener.onStateChange() [L653-705]
+ *       -> HAGroupStoreClient.handleStateChange()
+ *         -> notifySubscribers()
+ *           -> FailoverManagementListener.onStateChange()
  *             -> setHAGroupStatusIfNeeded() (2-retry limit)
  *
  * Notification chain (auto-completion transitions):
@@ -37,10 +37,10 @@
  *         -> notifySubscribers()
  *           -> FailoverManagementListener.onStateChange()
  *
- * LISTENER FOLDS: The recoveryListener (L147-157) and degradedListener
- * (L136-145) from ReplicationLogDiscoveryReplay fire synchronously on
- * the local PathChildrenCache event thread during state entry. Their
- * effects are folded atomically into the S-entry and DS-entry actions:
+ * LISTENER FOLDS: The recoveryListener and degradedListener from
+ * ReplicationLogDiscoveryReplay fire synchronously on the local
+ * PathChildrenCache event thread during state entry. Their effects
+ * are folded atomically into the S-entry and DS-entry actions:
  *   - S entry (PeerReactToANIS ATS->S, PeerReactToAIS ATS->S,
  *     PeerReactToAIS DS->S, AutoComplete AbTS->S): sets replayState
  *     to SYNCED_RECOVERY.
@@ -50,22 +50,19 @@
  *
  *   TLA+ action               | Java source
  *   --------------------------+-----------------------------------------------
- *   PeerReactToATS(c)         | createPeerStateTransitions() L109
- *   PeerReactToANIS(c)        | createPeerStateTransitions() L123, L126
- *   PeerReactToAbTS(c)        | createPeerStateTransitions() L132
- *   PeerReactToAIS(c)         | createPeerStateTransitions() L112-120
- *   AutoComplete(c)           | createLocalStateTransitions() L144, L145, L147
+ *   PeerReactToATS(c)         | createPeerStateTransitions()
+ *   PeerReactToANIS(c)        | createPeerStateTransitions()
+ *   PeerReactToAbTS(c)        | createPeerStateTransitions()
+ *   PeerReactToAIS(c)         | createPeerStateTransitions()
+ *   AutoComplete(c)           | createLocalStateTransitions()
  *   ANISTSToATS(c)            | HAGroupStoreManager.setHAGroupStatusToSync()
- *                             |   L341-355 (ANISTS -> ATS drain completion)
- *   PeerReactToOFFLINE(c)     | (proactive, Iteration 18) intended peer
- *                             |   OFFLINE detection; no impl trigger yet;
+ *                             | (ANISTS -> ATS drain completion)
+ *   PeerReactToOFFLINE(c)     | Intended peer OFFLINE detection
  *                             |   gated on UseOfflinePeerDetection
- *   PeerRecoverFromOFFLINE(c) | (proactive, Iteration 18) intended peer
- *                             |   OFFLINE recovery detection; no impl
- *                             |   trigger yet; gated on
- *                             |   UseOfflinePeerDetection
+ *   PeerRecoverFromOFFLINE(c) | Intended peer OFFLINE recovery detection
+ *                             |   gated on UseOfflinePeerDetection
  *   ReactiveTransitionFail(c) | FailoverManagementListener.onStateChange()
- *                             |   L653-704 (2 retries exhausted, returns
+ *                             | (2 retries exhausted, returns
  *                             |   silently)
  *
  * Failover completion (STA -> AIS) is modeled in Reader.tla
@@ -94,7 +91,7 @@ EXTENDS SpecState, Types
  *      auto-completes, so outDirEmpty is TRUE by the time the
  *      peer's AIS triggers the local S entry.
  *
- *   3. recoveryListener (L147-157) fires synchronously on the
+ *   3. recoveryListener fires synchronously on the
  *      local PathChildrenCache event thread during S entry,
  *      unconditionally setting replayState to SYNCED_RECOVERY.
  *
@@ -128,15 +125,14 @@ ResetToStandbyEntry(c) ==
  * standby never learns of the failover. The active cluster remains
  * in ATS with mutations blocked indefinitely. No polling fallback.
  *
- * Source: createPeerStateTransitions() L109 -- resolver is
+ * Source: createPeerStateTransitions() -- resolver is
  *         unconditional: currentLocal -> STANDBY_TO_ACTIVE.
  *
  * Also sets failoverPending[c] = TRUE, modeling the
- * triggerFailoverListener (ReplicationLogDiscoveryReplay.java
- * L159-171) which fires on LOCAL STANDBY_TO_ACTIVE. Folded
- * into PeerReactToATS because the listener fires
- * deterministically on every STA entry and PeerReactToATS is
- * the sole producer of STA.
+ * triggerFailoverListener in ReplicationLogDiscoveryReplay.java,
+ * which fires on LOCAL STANDBY_TO_ACTIVE. Folded into
+ * PeerReactToATS because the listener fires deterministically on
+ * every STA entry and PeerReactToATS is the sole producer of STA.
  *)
 PeerReactToATS(c) ==
     /\ PeerZKHealthy(c)
@@ -155,10 +151,10 @@ PeerReactToATS(c) ==
  * Two reactive transitions triggered by peer entering ANIS:
  *   1. Local S -> DS: standby degrades because peer's replication is
  *      degraded. Atomically sets replayState = DEGRADED (degraded-
- *      Listener fold). Source: L126.
+ *      Listener fold).
  *   2. Local ATS -> S: old active (in failover) completes transition
  *      to standby when peer is ANIS. Atomically sets replayState =
- *      SYNCED_RECOVERY (recoveryListener fold). Source: L123.
+ *      SYNCED_RECOVERY (recoveryListener fold).
  *
  * ZK watcher dependency: Delivered via peerPathChildrenCache.
  * Guarded on zkPeerConnected[c] and zkPeerSessionAlive[c].
@@ -200,7 +196,7 @@ PeerReactToANIS(c) ==
  * If lost: active stays in ATS with mutations blocked; abort does
  * not propagate. No polling fallback.
  *
- * Source: createPeerStateTransitions() L132.
+ * Source: createPeerStateTransitions().
  *)
 PeerReactToAbTS(c) ==
     /\ PeerZKHealthy(c)
@@ -226,16 +222,40 @@ PeerReactToAbTS(c) ==
  * zkLocalConnected[c]. If the local ZK connection is lost, the
  * cluster remains in the AbTS/AbTAIS/AbTANIS state indefinitely.
  *
- * AbTAIS auto-completion: conditional -- completes to AIS if all
- * writers are clean (INIT or SYNC) and OUT dir is empty, otherwise
- * completes to ANIS. This prevents AIS from coexisting with
- * degraded writers when HDFS fails during the abort window.
+ * AbTAIS auto-completion: always completes to AIS, matching
+ * createLocalStateTransitions() in HAGroupStoreManager. In mutation-
+ * blocked or transient roles (ATS, ANISTS, AbTAIS, AbTANIS) no
+ * client write reaches a writer, so writers do not degrade in those
+ * states. That invariant is encoded statically in this spec by the
+ * tightened cluster-state guards on the writer-degradation actions
+ * in Writer.tla (WriterToStoreFwd, WriterInitToStoreFwd, and their
+ * CAS-failure variants), which only fire in mutation-serving active
+ * states {AIS, ANIS, AWOP, ANISWOP}. If a write later arrives once
+ * the cluster is back in AIS and the peer HDFS is down, the
+ * existing AIS -> ANIS coupling at first failed write handles the
+ * degradation.
  *
- * Source: createLocalStateTransitions() L140-150
- *   AbTS   -> S    (L144) -- atomically sets replayState =
- *                            SYNCED_RECOVERY (recoveryListener fold)
- *   AbTAIS -> AIS or ANIS  (L145) -- conditional on writer/outDir state
- *   AbTANIS -> ANIS (L147)
+ * SYNC_AND_FWD writer snap: the AbTAIS -> AIS clause atomically
+ * transitions any remaining SYNC_AND_FWD writers to SYNC, mirroring
+ * ANISToAIS. This models the ACTIVE_IN_SYNC ZK event firing
+ * ReplicationLogDiscoveryForwarder.init(), which snaps SYNC_AND_FWD
+ * writers atomically with the cluster-state change. SYNC_AND_FWD
+ * writers can be carried into AbTAIS via the ANIS -> ANISTS -> ATS
+ * -> AbTAIS path (writer state preserved across ANISTSToATS,
+ * PeerReactToAbTS); without the snap, AbTAIS -> AIS would expose
+ * (AIS, SYNC_AND_FWD) and violate AISImpliesInSync. STORE_AND_FWD
+ * writers are unreachable in AbTAIS post-Option-B because
+ * ANISTSToATS requires outDirEmpty, which is only TRUE when no
+ * STORE_AND_FWD writer remains.
+ *
+ * Source: createLocalStateTransitions() in HAGroupStoreManager.java
+ *   AbTS    -> S    -- atomically sets replayState =
+ *                      SYNCED_RECOVERY (recoveryListener fold)
+ *   AbTAIS  -> AIS  -- unconditional cluster-state change;
+ *                      atomic with ReplicationLogDiscoveryForwarder
+ *                      ACTIVE_IN_SYNC handler snapping SYNC_AND_FWD
+ *                      writers to SYNC
+ *   AbTANIS -> ANIS -- unconditional
  *)
 AutoComplete(c) ==
     /\ LocalZKHealthy(c)
@@ -250,11 +270,12 @@ AutoComplete(c) ==
                          failoverPending, inProgressDirEmpty,
                          lastRoundInSync, lastRoundProcessed>>
        \/ /\ clusterState[c] = "AbTAIS"
-          /\ clusterState' = [clusterState EXCEPT ![c] =
-                 IF outDirEmpty[c] /\ \A rs \in RS : writerMode[c][rs] \in {"INIT", "SYNC"}
-                 THEN "AIS"
-                 ELSE "ANIS"]
-          /\ UNCHANGED <<writerVars, replayVars, envVars,
+          /\ clusterState' = [clusterState EXCEPT ![c] = "AIS"]
+          /\ writerMode' = [writerMode EXCEPT ![c] =
+                  [rs \in RS |-> IF writerMode[c][rs] = "SYNC_AND_FWD"
+                                 THEN "SYNC"
+                                 ELSE writerMode[c][rs]]]
+          /\ UNCHANGED <<replayVars, envVars,
                          outDirEmpty, antiFlapTimer,
                          failoverPending, inProgressDirEmpty>>
        \/ /\ clusterState[c] = "AbTANIS"
@@ -300,7 +321,7 @@ AutoComplete(c) ==
  * fallback. Curator PathChildrenCache re-queries on reconnect,
  * providing eventual delivery if the ZK session survives.
  *
- * Source: createPeerStateTransitions() L112-120 -- conditional
+ * Source: createPeerStateTransitions() -- conditional
  *         resolver for peer ACTIVE_IN_SYNC.
  *)
 PeerReactToAIS(c) ==
@@ -342,8 +363,8 @@ PeerReactToAIS(c) ==
  * setHAGroupStatusToStoreAndForward() which goes through
  * setHAGroupStatusIfNeeded(), requiring isHealthy = true.
  *
- * Source: StoreAndForwardModeImpl.startHAGroupStoreUpdateTask()
- *         L71-87; HAGroupStoreRecord.java L101 (ANIS self-transition).
+ * Source: StoreAndForwardModeImpl.startHAGroupStoreUpdateTask();
+ *         HAGroupStoreRecord.java (ANIS self-transition).
  *)
 ANISHeartbeat(c) ==
     /\ LocalZKHealthy(c)
@@ -368,7 +389,7 @@ ANISHeartbeat(c) ==
  * exited S&F (the heartbeat stops, and WaitTimeForSync ticks must
  * elapse) before this action fires. Any remaining SYNC_AND_FWD RS
  * are atomically transitioned to SYNC, modeling the ACTIVE_IN_SYNC
- * ZK event at ReplicationLogDiscoveryForwarder.init() L113-123.
+ * ZK event at ReplicationLogDiscoveryForwarder.init().
  *
  * The AISImpliesInSync invariant verifies that AIS is only reached
  * with all RS in SYNC or INIT.
@@ -376,7 +397,7 @@ ANISHeartbeat(c) ==
  * Guarded on zkLocalConnected[c] because this calls
  * setHAGroupStatusToSync() which requires isHealthy = true.
  *
- * Source: setHAGroupStatusToSync() L341-355, after forwarder drain.
+ * Source: setHAGroupStatusToSync(), after forwarder drain.
  *)
 ANISToAIS(c) ==
     /\ LocalZKHealthy(c)
@@ -414,19 +435,19 @@ ANISToAIS(c) ==
  * restart on standby entry -- see PeerReactToAIS, PeerReactToANIS).
  *
  * Anti-flapping gate: confirmed by implementation --
- * validateTransitionAndGetWaitTime() L1035-1036 applies the same
+ * validateTransitionAndGetWaitTime() applies the same
  * waitTimeForSyncModeInMs to ANISTS -> ATS as to ANIS -> AIS.
  * The forwarder handles the wait via syncUpdateTS deferral
- * (processNoMoreRoundsLeft() L169-172).
+ * (processNoMoreRoundsLeft()).
  *
  * Guarded on zkLocalConnected[c] because this calls
  * setHAGroupStatusToSync() -> setHAGroupStatusIfNeeded() which
  * requires isHealthy = true.
  *
- * Source: HAGroupStoreManager.setHAGroupStatusToSync() L341-355 --
+ * Source: HAGroupStoreManager.setHAGroupStatusToSync() --
  *         if current state is ANISTS, target is ATS.
  *         HAGroupStoreClient.validateTransitionAndGetWaitTime()
- *         L1027-1046 (anti-flapping gate).
+ *         (anti-flapping gate).
  *)
 ANISTSToATS(c) ==
     /\ LocalZKHealthy(c)
@@ -466,8 +487,8 @@ ANISTSToATS(c) ==
  * has no OFFLINE entry). The TLA+ model verifies the design
  * ahead of implementation.
  *
- * Source: (proactive) AIS->AWOP from allowedTransitions L103;
- *         ANIS->ANISWOP from allowedTransitions L101.
+ * Source: (proactive) AIS->AWOP from allowedTransitions;
+ *         ANIS->ANISWOP from allowedTransitions.
  *)
 PeerReactToOFFLINE(c) ==
     /\ UseOfflinePeerDetection = TRUE
@@ -505,8 +526,8 @@ PeerReactToOFFLINE(c) ==
  * NOTE: This models intended protocol behavior. See
  * PeerReactToOFFLINE comment for implementation status.
  *
- * Source: (proactive) AWOP->ANIS from allowedTransitions L113;
- *         ANISWOP->ANIS from allowedTransitions L123.
+ * Source: (proactive) AWOP->ANIS from allowedTransitions;
+ *         ANISWOP->ANIS from allowedTransitions.
  *)
 PeerRecoverFromOFFLINE(c) ==
     /\ UseOfflinePeerDetection = TRUE
@@ -523,11 +544,11 @@ PeerRecoverFromOFFLINE(c) ==
 (*
  * Reactive transition retry exhaustion.
  *
- * Models the FailoverManagementListener (HAGroupStoreManager.java
- * L653-704) where both retries of setHAGroupStatusIfNeeded() fail
- * and the method returns silently. The watcher notification was
- * delivered, the listener was invoked, but the local ZK write
- * failed. The transition is permanently lost for this notification.
+ * Models the FailoverManagementListener in HAGroupStoreManager,
+ * where both retries of setHAGroupStatusIfNeeded() fail and the
+ * method returns silently. The watcher notification was delivered,
+ * the listener was invoked, but the local ZK write failed. The
+ * transition is permanently lost for this notification.
  *
  * This action is enabled whenever any PeerReact* action would be
  * enabled (same ZK connectivity and peer-state guards). Its effect
@@ -547,7 +568,7 @@ PeerRecoverFromOFFLINE(c) ==
  * failures are permanent.
  *
  * Source: FailoverManagementListener.onStateChange()
- *         (HAGroupStoreManager.java L653-704) --
+ *         (HAGroupStoreManager.java) --
  *         2-retry exhaustion, method returns silently.
  *)
 

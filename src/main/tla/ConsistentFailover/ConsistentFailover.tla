@@ -38,24 +38,24 @@
  *   ------------------------+---------------------------------------------
  *   clusterState            | HAGroupStoreRecord per-cluster ZK znode
  *   PeerReact* actions      | FailoverManagementListener
- *                           |   (HAGroupStoreManager.java L633-706)
+ *                           |   (HAGroupStoreManager.java)
  *                           |   Delivered via peerPathChildrenCache
  *                           |   (ZK watcher -- conditional delivery)
  *   ReactiveTransitionFail  | FailoverManagementListener 2-retry
- *                           |   exhaustion (L653-704); method returns
+ *                           |   exhaustion; method returns
  *                           |   silently, transition permanently lost
  *   TriggerFailover          | Reader.TriggerFailover -- guarded
  *                           |   STA->AIS via shouldTriggerFailover()
- *                           |   L500-533 + triggerFailover() L535-548
- *   AutoComplete            | createLocalStateTransitions() L140-150
+ *                           | + triggerFailover()
+ *   AutoComplete            | createLocalStateTransitions()
  *                           |   Delivered via local pathChildrenCache
  *                           |   (ZK watcher -- conditional delivery)
  *   ANISTSToATS             | HAGroupStoreManager
- *                           |   .setHAGroupStatusToSync() L341-355
+ *                           |   .setHAGroupStatusToSync()
  *                           |   ANISTS -> ATS (drain completion)
- *   AdminStartFailover      | initiateFailoverOnActiveCluster() L375-400
+ *   AdminStartFailover      | initiateFailoverOnActiveCluster()
  *                           |   AIS -> ATS or ANIS -> ANISTS
- *   AdminAbortFailover      | setHAGroupStatusToAbortToStandby() L419-425
+ *   AdminAbortFailover      | setHAGroupStatusToAbortToStandby()
  *   AdminGoOffline          | PhoenixHAAdminTool update --state OFFLINE
  *                           |   (gated on UseOfflinePeerDetection)
  *   AdminForceRecover       | PhoenixHAAdminTool update --force
@@ -71,52 +71,52 @@
  *                           |   cluster in ACTIVE role at any time
  *   AbortSafety             | Abort originates from STA side; AbTAIS
  *                           |   only reachable via peer AbTS detection
- *   AllowedTransitions      | HAGroupStoreRecord.java L99-123
+ *   AllowedTransitions      | HAGroupStoreRecord.java
  *   writerMode              | ReplicationLogGroup per-RS mode
  *                           |   (SYNC/STORE_AND_FWD/SYNC_AND_FWD)
  *   outDirEmpty             | ReplicationLogDiscoveryForwarder
- *                           |   .processNoMoreRoundsLeft() L155-184
+ *                           |   .processNoMoreRoundsLeft()
  *                           |   Boolean: OUT dir empty/non-empty
  *   hdfsAvailable           | Abstract: NameNode availability per cluster
  *                           |   (no explicit field in implementation;
  *                           |   detected via IOException)
  *   RSCrash                 | JVM crash, OOM, kill signal
  *   RSAbortOnLocalHDFS-     | StoreAndForwardModeImpl.onFailure()
- *     Failure               |   L115-123 -> logGroup.abort()
+ *     Failure               | -> logGroup.abort()
  *   HDFSDown/HDFSUp         | NameNode crash/recovery incidents;
- *                           |   SyncModeImpl.onFailure() L61-74
+ *                           |   SyncModeImpl.onFailure()
  *   antiFlapTimer           | Countdown timer (Lamport CHARME 2005);
  *                           |   models validateTransitionAndGetWait-
- *                           |   Time() L1027-1046 anti-flapping gate
+ *                           |   Time() anti-flapping gate
  *   Tick                    | Passage of wall-clock time
  *   ANISHeartbeat           | StoreAndForwardModeImpl
- *                           |   .startHAGroupStoreUpdateTask() L71-87
+ *                           |   .startHAGroupStoreUpdateTask()
  *   replayState             | ReplicationLogDiscoveryReplay replay state
  *                           |   (NOT_INITIALIZED/SYNC/DEGRADED/
  *                           |   SYNCED_RECOVERY)
- *   lastRoundInSync         | ReplicationLogDiscoveryReplay L336-343
- *   lastRoundProcessed      | ReplicationLogDiscoveryReplay L336-351
- *   failoverPending         | ReplicationLogDiscoveryReplay L159-171
- *   inProgressDirEmpty      | ReplicationLogDiscoveryReplay L500-533
- *   ReplayAdvance           | replay() L336-343 (SYNC) and L345-351
+ *   lastRoundInSync         | ReplicationLogDiscoveryReplay
+ *   lastRoundProcessed      | ReplicationLogDiscoveryReplay
+ *   failoverPending         | ReplicationLogDiscoveryReplay
+ *   inProgressDirEmpty      | ReplicationLogDiscoveryReplay
+ *   ReplayAdvance           | replay() (SYNC) and
  *                           |   (DEGRADED) round processing
- *   ReplayRewind            | replay() L323-333 (CAS to SYNC)
- *   [listener folds]        | degradedListener L136-145 and
- *                           |   recoveryListener L147-157 are folded
+ *   ReplayRewind            | replay() (CAS to SYNC)
+ *   [listener folds]        | degradedListener and
+ *                           |   recoveryListener are folded
  *                           |   into HAGroupStore S/DS-entry actions
- *   TriggerFailover         | shouldTriggerFailover() L500-533 +
- *                           |   triggerFailover() L535-548
+ *   TriggerFailover         | shouldTriggerFailover() +
+ *                           |   triggerFailover()
  *   FailoverTriggerCorrectness | Action constraint: STA->AIS requires
  *                           |   failoverPending /\ inProgressDirEmpty
  *                           |   /\ replayState = SYNC
  *   NoDataLoss              | Action constraint: zero RPO property
  *                           |   for failover (STA->AIS)
  *   zkPeerConnected         | peerPathChildrenCache TCP connection
- *                           |   state (HAGroupStoreClient L110-112)
+ *                           |   state (HAGroupStoreClient)
  *   zkPeerSessionAlive      | Peer ZK session state (Curator internal)
  *   zkLocalConnected        | pathChildrenCache TCP connection state;
  *                           |   maps to HAGroupStoreClient.isHealthy
- *                           |   (L878-911)
+ *                           |
  *   ZKPeerDisconnect        | peerPathChildrenCache CONNECTION_LOST
  *   ZKPeerReconnect         | peerPathChildrenCache CONNECTION_RECONNECTED
  *   ZKPeerSessionExpiry     | Curator session expiry -> CONNECTION_LOST
@@ -532,7 +532,7 @@ SpecDR == Init /\ [][Next]_vars /\ FairnessDR
  * Failover completion: standby-side and abort transient states
  * eventually resolve to a stable state. Resolution paths:
  *   STA -> AIS (TriggerFailover) or STA -> AbTS -> S (abort)
- *   AbTAIS -> AIS/ANIS, AbTANIS -> ANIS, AbTS -> S
+ *   AbTAIS -> AIS, AbTANIS -> ANIS, AbTS -> S
  *       (auto-completion)
  *
  * ATS and ANISTS are excluded: their resolution depends on the
@@ -582,8 +582,8 @@ DegradationRecovery ==
  * Abort completion: every abort state eventually auto-completes
  * to a stable state.
  *   AbTS -> S    (AutoComplete)
- *   AbTAIS -> AIS or ANIS (AutoComplete, conditional on
- *             writer/outDir state)
+ *   AbTAIS -> AIS (AutoComplete, unconditional, atomic with
+ *             SYNC_AND_FWD -> SYNC writer-mode snap)
  *   AbTANIS -> ANIS (AutoComplete)
  *
  * Under WF on AutoComplete, each abort state deterministically
@@ -646,7 +646,7 @@ ZKSessionConsistency ==
 \* window -- isMutationBlocked()=true for ACTIVE_TO_STANDBY.
 \*
 \* Source: Architecture safety argument; ClusterRoleRecord.java
-\*         L84 -- ACTIVE_TO_STANDBY has isMutationBlocked()=true.
+\* -- ACTIVE_TO_STANDBY has isMutationBlocked()=true.
 MutualExclusion ==
     ~(\E c1, c2 \in Cluster :
         \* Two distinct clusters ...
@@ -678,12 +678,12 @@ MutualExclusion ==
  *
  * The reconciliation protocol is:
  *   (ATS, S/DS) --[ZKPeerReconnect]--> (AbTAIS, S/DS)
- *   then auto-complete AbTAIS -> AIS/ANIS.
+ *   then auto-complete AbTAIS -> AIS.
  *
  * Source: Architecture safety argument; abort originates from
- *         setHAGroupStatusToAbortToStandby() (L419-425) on the
+ *         setHAGroupStatusToAbortToStandby() on the
  *         STA side; active detects via FailoverManagementListener
- *         peer AbTS resolver (L132). Reconciliation path is in
+ *         peer AbTS resolver. Reconciliation path is in
  *         ZK.tla (ZKPeerReconnect/ZKPeerSessionRecover).
  *)
 AbortSafety ==
@@ -700,7 +700,7 @@ AbortSafety ==
 \* that the Next relation only produces transitions that are in the
 \* implementation's allowedTransitions set.
 \*
-\* Source: HAGroupStoreRecord.java L99-123, isTransitionAllowed() L130.
+\* Source: HAGroupStoreRecord.java, isTransitionAllowed().
 TransitionValid ==
     \A c \in Cluster :
         \* If the state changed for this cluster ...
@@ -742,7 +742,7 @@ WriterTransitionValid ==
  * so the remaining SYNC RSes and empty OUT dir ensure safety.
  * The implementation checks clusterState = AIS, not per-RS modes.
  *
- * Source: initiateFailoverOnActiveCluster() L375-400 (validates
+ * Source: initiateFailoverOnActiveCluster() (validates
  *         current state is AIS or ANIS); the precondition holds
  *         because AIS is only reachable when OUT dir is empty and
  *         all writers have returned to SYNC. RS crash does not
@@ -762,7 +762,7 @@ AIStoATSPrecondition ==
  * Precondition cross-checks AdminStartFailover.
  *
  * Source: HAGroupStoreClient.validateTransitionAndGetWaitTime()
- *         L1027-1046
+ *
  *)
 AntiFlapGate ==
     \A c \in Cluster :
@@ -779,9 +779,8 @@ AntiFlapGate ==
  * analogous to how AIStoATSPrecondition cross-checks
  * AdminStartFailover and AntiFlapGate cross-checks ANISToAIS.
  *
- * Source: HAGroupStoreManager.setHAGroupStatusToSync() L341-355;
- *         HAGroupStoreClient.validateTransitionAndGetWaitTime()
- *         L1027-1046.
+ * Source: HAGroupStoreManager.setHAGroupStatusToSync();
+ *         HAGroupStoreClient.validateTransitionAndGetWaitTime().
  *)
 ANISTStoATSPrecondition ==
     \A c \in Cluster :
@@ -801,7 +800,7 @@ ANISTStoATSPrecondition ==
  * guard (without HDFS, the action cannot fire), not a replay-
  * completeness condition.
  *
- * Source: shouldTriggerFailover() L500-533 (implementation guards)
+ * Source: shouldTriggerFailover() (implementation guards)
  *)
 FailoverTriggerCorrectness ==
     \A c \in Cluster :
@@ -842,8 +841,8 @@ NoDataLoss ==
  * closes the counter gap, and TriggerFailover (which requires
  * replayState = SYNC) cannot fire until the rewind completes.
  *
- * Source: replay() L323-333 -- compareAndSet(SYNCED_RECOVERY, SYNC);
- *         getFirstRoundToProcess() L389 -- rewinds to lastRoundInSync
+ * Source: replay() -- compareAndSet(SYNCED_RECOVERY, SYNC);
+ *         getFirstRoundToProcess() -- rewinds to lastRoundInSync
  *)
 ReplayRewindCorrectness ==
     \A c \in Cluster :
@@ -857,8 +856,8 @@ ReplayRewindCorrectness ==
  * Action constraint checked by TLC analogous to TransitionValid
  * and WriterTransitionValid.
  *
- * Source: ReplicationLogDiscoveryReplay.java L131-206 (listeners),
- *         L323-333 (CAS), L336-351 (replay loop)
+ * Source: ReplicationLogDiscoveryReplay.java (listeners),
+ * (CAS), (replay loop)
  *
  * AllowedReplayTransitions is defined in Types.tla.
  *)
@@ -889,21 +888,38 @@ AISImpliesInSync ==
 
 (*
  * Writer-cluster consistency: degraded writer modes (S&F,
- * SYNC_AND_FWD) can only appear on active clusters that are
- * NOT in AIS, on the ANISTS/ATS transitional states, or on
- * abort states where HDFS failure can degrade writers.
+ * SYNC_AND_FWD) can only appear on active clusters, plus the
+ * transitional states that preserve writer state across failover
+ * progression and abort propagation.
  *
  * AIS is excluded: prevented by the AIS->ANIS coupling
  * (WriterToStoreFwd, WriterInitToStoreFwd atomically transition
  * AIS -> ANIS when a writer degrades).
  *
- * ATS is included: the AIS failover path enters ATS with all
- * writers in SYNC/DEAD (AdminStartFailover guard), but the ANIS
- * failover path enters ATS via ANISTSToATS which does NOT snap
- * writer modes -- SYNC_AND_FWD writers persist into ATS. Also,
- * if HDFS goes down during ATS, WriterSyncFwdToStoreFwd can
- * re-degrade S&FWD writers to S&F. These degraded writers are
- * cleaned up on ATS -> S (replication subsystem restart).
+ * AWOP is reached only from AIS via PeerReactToOFFLINE. AIS
+ * contains only SYNC/INIT/DEAD writers (AISImpliesInSync), so
+ * AWOP entry has the same. The AISLikeStates coupling on
+ * WriterToStoreFwd / WriterInitToStoreFwd atomically transitions
+ * AWOP -> ANIS on any new degradation, so AWOP cannot accumulate
+ * degraded writers.
+ *
+ * ANIS, ANISWOP: degraded writers introduced here by writer-
+ * degradation actions (WriterToStoreFwd, WriterInitToStoreFwd,
+ * WriterSyncFwdToStoreFwd, etc.).
+ *
+ * ANISTS: preserves degraded writers from ANIS via
+ * AdminStartFailover (writer state unchanged).
+ *
+ * ATS: the ANIS failover path enters ATS via ANISTSToATS, which
+ * requires outDirEmpty (no STORE_AND_FORWARD writers remain) but
+ * does NOT snap SYNC_AND_FWD writers. So ATS may carry
+ * SYNC_AND_FWD writers into the abort-resolution path.
+ *
+ * AbTAIS: preserves SYNC_AND_FWD writers from ATS via
+ * PeerReactToAbTS. AutoComplete's AbTAIS -> AIS clause
+ * atomically snaps SYNC_AND_FWD -> SYNC, so (AbTAIS, S&FWD) is
+ * reachable as an intermediate state but is resolved before AIS
+ * is entered.
  *
  * Standby states (S, DS, AbTS) are excluded: live writer modes
  * are reset to INIT on ATS -> S entry (PeerReactToAIS,
@@ -915,16 +931,11 @@ AISImpliesInSync ==
  * writerMode to DEAD on any cluster state (an RS can crash
  * at any time). DEAD writers from CAS failure also appear
  * only on non-AIS active states, but RSCrash is unconstrained.
- *
- * The allowed set includes AbTAIS and AWOP because HDFS can go
- * down while the cluster is in these states; the AIS->ANIS
- * coupling only fires for AIS, so other active states retain
- * their state while writers degrade.
  *)
 WriterClusterConsistency ==
     \A c \in Cluster :
         (\E r \in RS : writerMode[c][r] \in {"STORE_AND_FWD", "SYNC_AND_FWD"}) =>
-            clusterState[c] \in {"ANIS", "ANISTS", "ATS", "ANISWOP", "AbTANIS", "AbTAIS", "AWOP"}
+            clusterState[c] \in {"ANIS", "ANISTS", "ATS", "ANISWOP", "AbTAIS"}
 
 ---------------------------------------------------------------------------
 

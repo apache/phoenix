@@ -24,7 +24,16 @@
  * CAS failure is only possible when clusterState /= "AIS" because
  * the first RS to write faces no concurrent version bump.
  *
- * ZK LOCAL CONNECTIVITY: Actions that perform ZK writes
+ * The writer-degradation actions (WriterToStoreFwd,
+ * WriterInitToStoreFwd, WriterSyncFwdToStoreFwd, and their CAS-
+ * failure variants WriterToStoreFwdFail, WriterInitToStoreFwdFail,
+ * WriterSyncFwdToStoreFwdFail) are guarded on
+ * MutationServingActiveStates ({AIS, ANIS, AWOP, ANISWOP}). In
+ * mutation blocked or transient active roles the implementation
+ * does not expect client writes to arrive at the writer, so writers
+ * cannot degrade in those states.
+ *
+ * Actions that perform ZK writes
  * (setHAGroupStatusToStoreAndForward, setHAGroupStatusToSync)
  * require isHealthy = true, modeled by the zkLocalConnected[c]
  * guard. Actions that are purely mode transitions driven by HDFS
@@ -40,19 +49,19 @@
  *                                    |   StoreAndForwardModeImpl; CAS
  *                                    |   success path
  *   WriterInitToStoreFwdFail(c, rs)  | Startup CAS failure -> abort
- *   WriterToStoreFwd(c, rs)          | SyncModeImpl.onFailure() L61-74 ->
+ *   WriterToStoreFwd(c, rs)          | SyncModeImpl.onFailure() ->
  *                                    |   setHAGroupStatusToStoreAndForward();
  *                                    |   CAS success path
  *   WriterToStoreFwdFail(c, rs)      | SyncModeImpl.onFailure() CAS
  *                                    |   failure -> abort
  *   WriterSyncToSyncFwd(c, rs)       | Forwarder ACTIVE_NOT_IN_SYNC event
- *                                    |   L98-108 while RS in SYNC
- *   WriterStoreFwdToSyncFwd(c, rs)   | Forwarder processFile() L133-152
+ *                                    | while RS in SYNC
+ *   WriterStoreFwdToSyncFwd(c, rs)   | Forwarder processFile()
  *                                    |   throughput threshold or drain start
  *   WriterSyncFwdToSync(c, rs)       | Forwarder drain complete; queue empty
- *                                    |   -> setHAGroupStatusToSync() L171
+ *                                    |   -> setHAGroupStatusToSync()
  *   WriterSyncFwdToStoreFwd(c, rs)   | SyncAndForwardModeImpl.onFailure()
- *                                    |   L66-78; CAS success path
+ *                                    |   CAS success path
  *   WriterSyncFwdToStoreFwdFail(c,rs)| SyncAndForwardModeImpl.onFailure()
  *                                    |   CAS failure -> abort
  *   CanDegradeToStoreFwd(c, rs)      | Guard predicate: RS is in a mode
@@ -109,11 +118,11 @@ WriterInit(c, rs) ==
  * setHAGroupStatusToStoreAndForward() which requires
  * isHealthy = true.
  *
- * Source: StoreAndForwardModeImpl.onEnter() L54-64
+ * Source: StoreAndForwardModeImpl.onEnter()
  *)
 WriterInitToStoreFwd(c, rs) ==
     /\ LocalZKHealthy(c)
-    /\ clusterState[c] \in ActiveStates
+    /\ clusterState[c] \in MutationServingActiveStates
     /\ writerMode[c][rs] = "INIT"
     /\ hdfsAvailable[Peer(c)] = FALSE
     /\ writerMode' = [writerMode EXCEPT ![c][rs] = "STORE_AND_FWD"]
@@ -132,18 +141,16 @@ WriterInitToStoreFwd(c, rs) ==
 (*
  * Forwarder started while in sync: SYNC -> SYNC_AND_FWD.
  *
- * On an ACTIVE_NOT_IN_SYNC event (L98-108), region servers
- * currently in SYNC learn that the cluster has entered ANIS
- * and transition to SYNC_AND_FWD. This event fires once when
- * the cluster enters ANIS. ANISTS does not produce a new
- * ACTIVE_NOT_IN_SYNC event -- it is a different ZK state
- * change (ACTIVE_NOT_IN_SYNC_TO_STANDBY). A SYNC writer that
- * has not yet received the event when ANIS -> ANISTS fires
- * will remain in SYNC (harmlessly: SYNC writers write directly
- * to standby HDFS, not to the OUT directory).
+ * On an ACTIVE_NOT_IN_SYNC event, region servers currently in SYNC
+ * learn that the cluster has entered ANIS and transition to
+ * SYNC_AND_FWD. This event fires once when the cluster enters ANIS.
+ * ANISTS does not produce a new ACTIVE_NOT_IN_SYNC event -- it is a
+ * different ZK state change (ACTIVE_NOT_IN_SYNC_TO_STANDBY). A SYNC
+ * writer that has not yet received the event when ANIS -> ANISTS fires
+ * will remain in SYNC.
  * No ZK write -- mode transition driven by forwarder event.
  *
- * Source: ReplicationLogDiscoveryForwarder.init() L98-108
+ * Source: ReplicationLogDiscoveryForwarder.init()
  *)
 WriterSyncToSyncFwd(c, rs) ==
     /\ clusterState[c] = "ANIS"
@@ -165,7 +172,7 @@ WriterSyncToSyncFwd(c, rs) ==
  * transitional state (draining OUT before ANISTS->ATS).
  * No ZK write -- mode transition driven by forwarder file copy.
  *
- * Source: ReplicationLogDiscoveryForwarder.processFile() L133-152
+ * Source: ReplicationLogDiscoveryForwarder.processFile()
  *         throughput threshold or drain start.
  *)
 WriterStoreFwdToSyncFwd(c, rs) ==
@@ -187,10 +194,9 @@ WriterStoreFwdToSyncFwd(c, rs) ==
  * transitional state (draining OUT before ANISTS->ATS).
  *
  * Per-RS vs per-cluster semantics: processNoMoreRoundsLeft()
- * (ReplicationLogDiscoveryForwarder.java L155-184) is a per-
- * cluster forwarder check that examines the global OUT directory
- * -- it only fires when the entire OUT directory is empty, not
- * when a single RS finishes. The guard
+ * (ReplicationLogDiscoveryForwarder.java) is a per-cluster forwarder
+ * check that examines the global OUT directory. It only fires when
+ * the entire OUT directory is empty. The guard
  * \A rs2 \in RS : writerMode[c][rs2] \notin {"STORE_AND_FWD"}
  * prevents setting outDirEmpty = TRUE while any RS is still
  * actively writing to the OUT directory.
@@ -205,10 +211,9 @@ WriterStoreFwdToSyncFwd(c, rs) ==
  * Guarded on zkLocalConnected[c] because this calls
  * setHAGroupStatusToSync() which requires isHealthy = true.
  *
- * Source: ReplicationLogDiscoveryForwarder.processFile() L133-152
- *         copies to peer HDFS; processNoMoreRoundsLeft() L155-184
- *         only fires after all files are forwarded.
- *         setHAGroupStatusToSync() L171
+ * Source: ReplicationLogDiscoveryForwarder.processFile() copies to
+ *         peer HDFS; processNoMoreRoundsLeft() only fires after
+ *         all files are forwarded. setHAGroupStatusToSync()
  *)
 WriterSyncFwdToSync(c, rs) ==
     /\ LocalZKHealthy(c)
@@ -232,27 +237,27 @@ WriterSyncFwdToSync(c, rs) ==
  * Models a single RS detecting standby HDFS unavailability via
  * IOException and successfully CAS-writing the ZK state. The ZK
  * CAS write is synchronous and happens BEFORE the mode change
- * (SyncModeImpl.onFailure() L61-74). On success, the writer
- * transitions to STORE_AND_FWD and the cluster transitions
- * AIS -> ANIS (if still AIS). Writers only run on the active cluster.
+ * (SyncModeImpl.onFailure()). On success, the writer transitions to
+ * STORE_AND_FWD and the cluster transitions AIS -> ANIS (if still
+ * AIS). Writers only run on the active cluster.
  *
- * AWOP/ANISWOP handling: when AWOP or ANISWOP
- * are reachable (UseOfflinePeerDetection = TRUE), HDFS failure
+ * AWOP/ANISWOP handling: when AWOP or ANISWOP are reachable
+ * (UseOfflinePeerDetection = TRUE), HDFS failure during these states
  * during these states triggers setHAGroupStatusToStoreAndForward()
  * which CAS-writes ANIS. AWOP.allowedTransitions = {ANIS} and
  * ANISWOP.allowedTransitions = {ANIS}, so the transition succeeds.
- * When UseOfflinePeerDetection = FALSE, AWOP/ANISWOP are
- * unreachable and the extended IF is a no-op.
+ * When UseOfflinePeerDetection = FALSE, AWOP/ANISWOP are unreachable
+ * and the extended IF is a no-op.
  *
  * Guarded on zkLocalConnected[c] because the CAS write goes through
  * setHAGroupStatusIfNeeded() which requires isHealthy = true.
  *
- * Source: SyncModeImpl.onFailure() L61-74 ->
+ * Source: SyncModeImpl.onFailure() ->
  *         setHAGroupStatusToStoreAndForward()
  *)
 WriterToStoreFwd(c, rs) ==
     /\ LocalZKHealthy(c)
-    /\ clusterState[c] \in ActiveStates
+    /\ clusterState[c] \in MutationServingActiveStates
     /\ writerMode[c][rs] = "SYNC"
     /\ hdfsAvailable[Peer(c)] = FALSE
     /\ writerMode' = [writerMode EXCEPT ![c][rs] = "STORE_AND_FWD"]
@@ -282,12 +287,12 @@ WriterToStoreFwd(c, rs) ==
  * Guarded on zkLocalConnected[c] because the CAS write goes through
  * setHAGroupStatusIfNeeded() which requires isHealthy = true.
  *
- * Source: SyncAndForwardModeImpl.onFailure() L66-78 ->
+ * Source: SyncAndForwardModeImpl.onFailure() ->
  *         setHAGroupStatusToStoreAndForward()
  *)
 WriterSyncFwdToStoreFwd(c, rs) ==
     /\ LocalZKHealthy(c)
-    /\ clusterState[c] \in ActiveStates \union TransitionalActiveStates
+    /\ clusterState[c] \in MutationServingActiveStates \ {"AIS", "AWOP"}
     /\ writerMode[c][rs] = "SYNC_AND_FWD"
     /\ hdfsAvailable[Peer(c)] = FALSE
     /\ writerMode' = [writerMode EXCEPT ![c][rs] = "STORE_AND_FWD"]
@@ -316,11 +321,11 @@ WriterSyncFwdToStoreFwd(c, rs) ==
  * Guarded on zkLocalConnected[c] because the CAS write requires
  * a live ZK connection (isHealthy = true).
  *
- * Source: SyncModeImpl.onFailure() L61-74 catch block -> abort()
+ * Source: SyncModeImpl.onFailure() catch block -> abort()
  *)
 WriterToStoreFwdFail(c, rs) ==
     /\ LocalZKHealthy(c)
-    /\ clusterState[c] \in ActiveStates \ {"AIS"}
+    /\ clusterState[c] \in MutationServingActiveStates \ {"AIS"}
     /\ writerMode[c][rs] = "SYNC"
     /\ hdfsAvailable[Peer(c)] = FALSE
     /\ writerMode' = [writerMode EXCEPT ![c][rs] = "DEAD"]
@@ -340,12 +345,12 @@ WriterToStoreFwdFail(c, rs) ==
  * Guarded on zkLocalConnected[c] because the CAS write requires
  * a live ZK connection (isHealthy = true).
  *
- * Source: SyncAndForwardModeImpl.onFailure() L66-78 catch block
+ * Source: SyncAndForwardModeImpl.onFailure() catch block
  *         -> abort()
  *)
 WriterSyncFwdToStoreFwdFail(c, rs) ==
     /\ LocalZKHealthy(c)
-    /\ clusterState[c] \in ActiveStates \union TransitionalActiveStates
+    /\ clusterState[c] \in MutationServingActiveStates \ {"AIS", "AWOP"}
     /\ writerMode[c][rs] = "SYNC_AND_FWD"
     /\ hdfsAvailable[Peer(c)] = FALSE
     /\ writerMode' = [writerMode EXCEPT ![c][rs] = "DEAD"]
@@ -367,12 +372,12 @@ WriterSyncFwdToStoreFwdFail(c, rs) ==
  * Guarded on zkLocalConnected[c] because the CAS write requires
  * a live ZK connection (isHealthy = true).
  *
- * Source: SyncModeImpl.onFailure() L61-74 via
+ * Source: SyncModeImpl.onFailure() via
  *         LogEventHandler.initializeMode() failure path
  *)
 WriterInitToStoreFwdFail(c, rs) ==
     /\ LocalZKHealthy(c)
-    /\ clusterState[c] \in ActiveStates \ {"AIS"}
+    /\ clusterState[c] \in MutationServingActiveStates \ {"AIS"}
     /\ writerMode[c][rs] = "INIT"
     /\ hdfsAvailable[Peer(c)] = FALSE
     /\ writerMode' = [writerMode EXCEPT ![c][rs] = "DEAD"]

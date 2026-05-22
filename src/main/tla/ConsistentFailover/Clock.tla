@@ -18,10 +18,7 @@
  *
  *   TLA+ action  | Java source
  *   -------------+--------------------------------------------------
- *   Tick         | Passage of wall-clock time; no direct Java
- *                |   counterpart. Models the interval between
- *                |   HAGroupStoreClient.validateTransitionAndGet-
- *                |   WaitTime() checks (L1027-1046).
+ *   Tick         | Passage of wall-clock time.
  *)
 EXTENDS SpecState, Types
 

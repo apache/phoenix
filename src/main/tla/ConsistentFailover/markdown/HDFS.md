@@ -33,7 +33,7 @@ Any cluster's HDFS can fail at any time, producing two distinct scenarios:
 | TLA+ Action | Java Source |
 |---|---|
 | `HDFSDown(c)` | NameNode crash; detected reactively via IOException from `ReplicationLog.apply()` |
-| `HDFSUp(c)` | NameNode recovery; forwarder detects via successful `FileUtil.copy()` in `processFile()` L132-152 |
+| `HDFSUp(c)` | NameNode recovery; forwarder detects via successful `FileUtil.copy()` in `processFile()` |
 
 ```tla
 EXTENDS SpecState, Types
@@ -63,7 +63,7 @@ Sets `hdfsAvailable[c] = TRUE`. No immediate writer effect -- recovery is per-RS
 
 **Fairness:** SF (Tier 3). Under SF on `HDFSUp`, HDFS cannot be permanently down. This is needed for the `DegradationRecovery` liveness property -- without it, the adversary could keep HDFS down indefinitely, preventing the writer recovery chain from completing.
 
-Source: `ReplicationLogDiscoveryForwarder.processFile()` L132-152.
+Source: `ReplicationLogDiscoveryForwarder.processFile()`.
 
 ```tla
 HDFSUp(c) ==

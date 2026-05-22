@@ -212,28 +212,28 @@ code you are changing:
 | Implementation Class / Method | Spec Module | Key Actions |
 |---|---|---|
 | `HAGroupStoreManager` | `ConsistentFailover.tla` | `Init`, `Next`, `Fairness`, invariants |
-| `FailoverManagementListener.onStateChange()` L653-706 | `HAGroupStore.tla` | `PeerReactToATS`, `PeerReactToANIS`, `PeerReactToAbTS`, `PeerReactToAIS`, `ReactiveTransitionFail` |
-| `createLocalStateTransitions()` L140-150 | `HAGroupStore.tla` | `AutoComplete` (AbTS->S, AbTAIS->AIS/ANIS, AbTANIS->ANIS) |
-| `StoreAndForwardModeImpl.startHAGroupStoreUpdateTask()` L71-87 | `HAGroupStore.tla` | `ANISHeartbeat` |
-| `HAGroupStoreManager.setHAGroupStatusToSync()` L341-355 | `HAGroupStore.tla` | `ANISToAIS`, `ANISTSToATS` |
-| `initiateFailoverOnActiveCluster()` L375-400 | `Admin.tla` | `AdminStartFailover` (AIS->ATS or ANIS->ANISTS) |
-| `setHAGroupStatusToAbortToStandby()` L419-425 | `Admin.tla` | `AdminAbortFailover` (STA->AbTS) |
-| `SyncModeImpl.onFailure()` L61-74 | `Writer.tla` | `WriterToStoreFwd`, `WriterToStoreFwdFail` |
-| `SyncAndForwardModeImpl.onFailure()` L66-78 | `Writer.tla` | `WriterSyncFwdToStoreFwd`, `WriterSyncFwdToStoreFwdFail` |
-| `ReplicationLogDiscoveryForwarder.init()` L98-108 | `Writer.tla` | `WriterSyncToSyncFwd` |
-| `ReplicationLogDiscoveryForwarder.processFile()` L133-152 | `Writer.tla` | `WriterStoreFwdToSyncFwd` |
-| `ReplicationLogDiscoveryForwarder.processNoMoreRoundsLeft()` L155-184 | `Writer.tla` | `WriterSyncFwdToSync` |
-| `ReplicationLogDiscoveryReplay.replay()` L323-351 | `Reader.tla` | `ReplayAdvance`, `ReplayRewind` |
-| `ReplicationLogDiscoveryReplay.shouldTriggerFailover()` L500-533 | `Reader.tla` | `TriggerFailover` |
+| `FailoverManagementListener.onStateChange()` | `HAGroupStore.tla` | `PeerReactToATS`, `PeerReactToANIS`, `PeerReactToAbTS`, `PeerReactToAIS`, `ReactiveTransitionFail` |
+| `createLocalStateTransitions()` | `HAGroupStore.tla` | `AutoComplete` (AbTS->S, AbTAIS->AIS, AbTANIS->ANIS) |
+| `StoreAndForwardModeImpl.startHAGroupStoreUpdateTask()` | `HAGroupStore.tla` | `ANISHeartbeat` |
+| `HAGroupStoreManager.setHAGroupStatusToSync()` | `HAGroupStore.tla` | `ANISToAIS`, `ANISTSToATS` |
+| `initiateFailoverOnActiveCluster()` | `Admin.tla` | `AdminStartFailover` (AIS->ATS or ANIS->ANISTS) |
+| `setHAGroupStatusToAbortToStandby()` | `Admin.tla` | `AdminAbortFailover` (STA->AbTS) |
+| `SyncModeImpl.onFailure()` | `Writer.tla` | `WriterToStoreFwd`, `WriterToStoreFwdFail` |
+| `SyncAndForwardModeImpl.onFailure()` | `Writer.tla` | `WriterSyncFwdToStoreFwd`, `WriterSyncFwdToStoreFwdFail` |
+| `ReplicationLogDiscoveryForwarder.init()` | `Writer.tla` | `WriterSyncToSyncFwd` |
+| `ReplicationLogDiscoveryForwarder.processFile()` | `Writer.tla` | `WriterStoreFwdToSyncFwd` |
+| `ReplicationLogDiscoveryForwarder.processNoMoreRoundsLeft()` | `Writer.tla` | `WriterSyncFwdToSync` |
+| `ReplicationLogDiscoveryReplay.replay()` | `Reader.tla` | `ReplayAdvance`, `ReplayRewind` |
+| `ReplicationLogDiscoveryReplay.shouldTriggerFailover()` | `Reader.tla` | `TriggerFailover` |
 | NameNode crash/recovery | `HDFS.tla` | `HDFSDown`, `HDFSUp` |
 | JVM crash, OOM, kill signal | `RS.tla` | `RSCrash` |
-| `StoreAndForwardModeImpl.onFailure()` L115-123 | `RS.tla` | `RSAbortOnLocalHDFSFailure` |
+| `StoreAndForwardModeImpl.onFailure()` | `RS.tla` | `RSAbortOnLocalHDFSFailure` |
 | Kubernetes/YARN pod restart | `RS.tla` | `RSRestart` |
-| `HAGroupStoreClient.validateTransitionAndGetWaitTime()` L1027-1046 | `Clock.tla` | `Tick` |
-| `HAGroupStoreClient.createCacheListener()` L894-906 | `ZK.tla` | `ZKPeerDisconnect`, `ZKPeerReconnect`, `ZKLocalDisconnect`, `ZKLocalReconnect` |
+| `HAGroupStoreClient.validateTransitionAndGetWaitTime()` | `Clock.tla` | `Tick` |
+| `HAGroupStoreClient.createCacheListener()` | `ZK.tla` | `ZKPeerDisconnect`, `ZKPeerReconnect`, `ZKLocalDisconnect`, `ZKLocalReconnect` |
 | Curator session management | `ZK.tla` | `ZKPeerSessionExpiry`, `ZKPeerSessionRecover` |
-| `HAGroupStoreRecord.HAGroupState` enum L51-65 | `Types.tla` | `HAGroupState`, `AllowedTransitions` |
-| `ClusterRoleRecord.ClusterRole` enum L59-107 | `Types.tla` | `ClusterRole`, `RoleOf` |
+| `HAGroupStoreRecord.HAGroupState` enum | `Types.tla` | `HAGroupState`, `AllowedTransitions` |
+| `ClusterRoleRecord.ClusterRole` enum | `Types.tla` | `ClusterRole`, `RoleOf` |
 | `ReplicationLogGroup` mode classes | `Types.tla` | `WriterMode` |
 
 ---
@@ -278,7 +278,7 @@ State 1: <Initial predicate>
 /\ clusterState = (c1 :> "AIS" @@ c2 :> "S")
 /\ writerMode = ...
 ...
-State N: <Action line L, col C to line L2, col C2 of module Module>
+State N: <Action line L, col C to line, col C2 of module Module>
 /\ clusterState = ...       ← the state that violates the invariant
 ```
 

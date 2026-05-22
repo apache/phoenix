@@ -48,12 +48,12 @@ Retry exhaustion of the `FailoverManagementListener` (2-retry limit) is modeled 
 
 | TLA+ Action | Java Source |
 |---|---|
-| `ZKPeerDisconnect(c)` | `HAGroupStoreClient.createCacheListener()` L894-898 -- `peerPathChildrenCache` CONNECTION_LOST/CONNECTION_SUSPENDED (no effect on `isHealthy` for PEER cache) |
-| `ZKPeerReconnect(c)` | `HAGroupStoreClient.createCacheListener()` L903-906 -- `peerPathChildrenCache` CONNECTION_RECONNECTED; Curator re-syncs `PathChildrenCache`, fires synthetic CHILD_UPDATED events |
+| `ZKPeerDisconnect(c)` | `HAGroupStoreClient.createCacheListener()` -- `peerPathChildrenCache` CONNECTION_LOST/CONNECTION_SUSPENDED (no effect on `isHealthy` for PEER cache) |
+| `ZKPeerReconnect(c)` | `HAGroupStoreClient.createCacheListener()` -- `peerPathChildrenCache` CONNECTION_RECONNECTED; Curator re-syncs `PathChildrenCache`, fires synthetic CHILD_UPDATED events |
 | `ZKPeerSessionExpiry(c)` | Curator maps SESSION_EXPIRED to CONNECTION_LOST internally; no explicit SESSION_EXPIRED handling in Phoenix |
 | `ZKPeerSessionRecover(c)` | Curator retry policy establishes new session; `PathChildrenCache` rebuilds |
-| `ZKLocalDisconnect(c)` | `HAGroupStoreClient.createCacheListener()` L894-898 -- `pathChildrenCache` (LOCAL) CONNECTION_LOST sets `isHealthy = false` |
-| `ZKLocalReconnect(c)` | `HAGroupStoreClient.createCacheListener()` L903-906 -- `pathChildrenCache` (LOCAL) CONNECTION_RECONNECTED sets `isHealthy = true` |
+| `ZKLocalDisconnect(c)` | `HAGroupStoreClient.createCacheListener()` -- `pathChildrenCache` (LOCAL) CONNECTION_LOST sets `isHealthy = false` |
+| `ZKLocalReconnect(c)` | `HAGroupStoreClient.createCacheListener()` -- `pathChildrenCache` (LOCAL) CONNECTION_RECONNECTED sets `isHealthy = true` |
 
 ```tla
 EXTENDS SpecState, Types
@@ -67,7 +67,7 @@ The implementation does NOT set `isHealthy = false` for PEER cache disconnection
 
 **Fairness:** No fairness (Tier 4). ZK disconnections are genuinely non-deterministic environment events.
 
-Source: `HAGroupStoreClient.createCacheListener()` L894-898 (CONNECTION_LOST/CONNECTION_SUSPENDED for PEER cache).
+Source: `HAGroupStoreClient.createCacheListener()` (CONNECTION_LOST/CONNECTION_SUSPENDED for PEER cache).
 
 ```tla
 ZKPeerDisconnect(c) ==
@@ -99,7 +99,7 @@ The reconciliation transitions ATS -> AbTAIS, which auto-completes to AIS via `A
 
 **Fairness:** WF (Tier 2). Encodes the ZK Liveness Assumption.
 
-Source: `HAGroupStoreClient.createCacheListener()` L903-906 (CONNECTION_RECONNECTED for PEER cache).
+Source: `HAGroupStoreClient.createCacheListener()` (CONNECTION_RECONNECTED for PEER cache).
 
 ```tla
 ZKPeerReconnect(c) ==
@@ -172,7 +172,7 @@ The `pathChildrenCache` (LOCAL) loses its connection to the local ZK quorum. The
 
 **Fairness:** No fairness (Tier 4). ZK disconnections are genuinely non-deterministic environment events.
 
-Source: `HAGroupStoreClient.createCacheListener()` L894-898 (CONNECTION_LOST/CONNECTION_SUSPENDED for LOCAL cache).
+Source: `HAGroupStoreClient.createCacheListener()` (CONNECTION_LOST/CONNECTION_SUSPENDED for LOCAL cache).
 
 ```tla
 ZKLocalDisconnect(c) ==
@@ -190,7 +190,7 @@ The `pathChildrenCache` (LOCAL) re-establishes its connection to the local ZK qu
 
 **Fairness:** WF (Tier 2). Encodes the ZK Liveness Assumption. This is the basis for SF on all actions guarded by `zkLocalConnected`.
 
-Source: `HAGroupStoreClient.createCacheListener()` L903-906 (CONNECTION_RECONNECTED for LOCAL cache).
+Source: `HAGroupStoreClient.createCacheListener()` (CONNECTION_RECONNECTED for LOCAL cache).
 
 ```tla
 ZKLocalReconnect(c) ==

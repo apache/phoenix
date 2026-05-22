@@ -37,17 +37,17 @@ The `degradedListener` and `recoveryListener` use unconditional `.set()` (not `.
 
 ### CAS Semantics
 
-The `SYNCED_RECOVERY -> SYNC` transition uses `compareAndSet(SYNCED_RECOVERY, SYNC)` at L332-333. The CAS can only fail if a concurrent `set(DEGRADED)` fires first (the cluster re-degrades before `replay()` can CAS). TLC's interleaving semantics model this race: either `ReplayRewind` fires first (CAS succeeds) or the DS-entry fold in `PeerReactToANIS` fires first (state becomes DEGRADED, `ReplayRewind` is no longer enabled).
+The `SYNCED_RECOVERY -> SYNC` transition uses `compareAndSet(SYNCED_RECOVERY, SYNC)` at. The CAS can only fail if a concurrent `set(DEGRADED)` fires first (the cluster re-degrades before `replay()` can CAS). TLC's interleaving semantics model this race: either `ReplayRewind` fires first (CAS succeeds) or the DS-entry fold in `PeerReactToANIS` fires first (state becomes DEGRADED, `ReplayRewind` is no longer enabled).
 
 ## Implementation Traceability
 
 | TLA+ Action | Java Source |
 |---|---|
-| `ReplayAdvance(c)` | `replay()` L336-343 (SYNC) and L345-351 (DEGRADED) -- round processing loop |
-| `ReplayRewind(c)` | `replay()` L323-333 -- `compareAndSet(SYNCED_RECOVERY, SYNC)`; `getFirstRoundToProcess()` rewinds to `lastRoundInSync` (L389) |
+| `ReplayAdvance(c)` | `replay()` (SYNC) and (DEGRADED) -- round processing loop |
+| `ReplayRewind(c)` | `replay()` -- `compareAndSet(SYNCED_RECOVERY, SYNC)`; `getFirstRoundToProcess()` rewinds to `lastRoundInSync` |
 | `ReplayBeginProcessing(c)` | `replay()` round processing start -- in-progress files created when a round is picked up |
 | `ReplayFinishProcessing(c)` | `replay()` round processing end -- in-progress files cleaned up after round is fully processed |
-| `TriggerFailover(c)` | `shouldTriggerFailover()` L500-533 (guards); `triggerFailover()` L535-548 (effect); `setHAGroupStatusToSync()` L341-355 (ZK write) |
+| `TriggerFailover(c)` | `shouldTriggerFailover()` (guards); `triggerFailover()` (effect); `setHAGroupStatusToSync()` (ZK write) |
 
 ```tla
 EXTENDS SpecState, Types
@@ -62,7 +62,7 @@ The reader processes the next round of replication logs:
 
 **Guard:** The cluster must be in a standby state or STA (replay continues during failover pending -- the `replay()` loop does not stop when the cluster enters STA).
 
-Source: `replay()` L336-343 (SYNC), L345-351 (DEGRADED).
+Source: `replay()` (SYNC), (DEGRADED).
 
 ```tla
 ReplayAdvance(c) ==
@@ -79,13 +79,13 @@ ReplayAdvance(c) ==
 
 ## ReplayRewind -- CAS to SYNC from SYNCED_RECOVERY
 
-In `SYNCED_RECOVERY`, `replay()` rewinds `lastRoundProcessed` to `lastRoundInSync` (via `getFirstRoundToProcess()` at L389), then attempts `compareAndSet(SYNCED_RECOVERY, SYNC)` at L332-333.
+In `SYNCED_RECOVERY`, `replay()` rewinds `lastRoundProcessed` to `lastRoundInSync` (via `getFirstRoundToProcess()` at), then attempts `compareAndSet(SYNCED_RECOVERY, SYNC)` at.
 
 The CAS can only fail if a concurrent `set(DEGRADED)` fires first (the cluster re-degrades before `replay()` can CAS). TLC's interleaving semantics model this race naturally: either this action fires (CAS succeeds, state becomes SYNC) or the DS-entry fold in `PeerReactToANIS` fires first (state becomes DEGRADED, this action is no longer enabled).
 
 The `ReplayRewindCorrectness` action constraint in [ConsistentFailover.md](ConsistentFailover.md) verifies that after rewind, `lastRoundProcessed = lastRoundInSync`.
 
-Source: `replay()` L323-333; `getFirstRoundToProcess()` L389.
+Source: `replay()`; `getFirstRoundToProcess()`.
 
 ```tla
 ReplayRewind(c) ==
@@ -104,7 +104,7 @@ When the reader picks up a new round for processing, it creates in-progress file
 
 **Guard:** The cluster is in a standby state or STA (replay continues during failover pending) and the in-progress directory is currently empty.
 
-Source: `replay()` L307-310 -- `getFirstRoundToProcess()` returns a round; processing begins.
+Source: `replay()` -- `getFirstRoundToProcess()` returns a round and processing begins.
 
 ```tla
 ReplayBeginProcessing(c) ==
@@ -135,20 +135,23 @@ ReplayFinishProcessing(c) ==
 
 The standby cluster writes `ACTIVE_IN_SYNC` to its own ZK znode after the replication log reader determines replay is complete. This is driven by the reader component, not a peer-reactive transition. It is the final step that completes the failover.
 
-### Four Guards
+### Guards
 
-The four guards model the conditions under which failover is safe:
+These guards model the conditions under which failover is safe:
 
-1. **`failoverPending[c]`** -- set by `triggerFailoverListener` (L159-171) when the local cluster enters STA. Ensures failover was properly initiated.
-2. **`inProgressDirEmpty[c]`** -- no partially-processed replication log files (`getInProgressFiles().isEmpty()` at L508). Ensures all in-flight rounds have completed processing.
-3. **`replayState[c] = "SYNC"`** -- the `SYNCED_RECOVERY` rewind must have completed. Without this guard, failover could proceed with degraded rounds not re-processed from the sync point. This is the key zero-RPO guard.
-4. **`hdfsAvailable[c] = TRUE`** -- the standby's own HDFS must be accessible; `shouldTriggerFailover()` performs HDFS reads (`getInProgressFiles`, `getNewFiles`) that throw IOException if HDFS is unavailable, blocking the trigger.
+**`failoverPending[c]`** -- set by `triggerFailoverListener` when the local cluster enters STA. Ensures failover was properly initiated.
 
-**Guarded on `zkLocalConnected[c]`** because `triggerFailover()` calls `setHAGroupStatusToSync()` which requires `isHealthy = true`.
+**`inProgressDirEmpty[c]`** -- no partially-processed replication log files (`getInProgressFiles().isEmpty()` at). Ensures all in-flight rounds have completed processing.
 
-**Also clears `failoverPending`**, modeling `triggerFailover()` L538 (`failoverPending.set(false)`).
+**`replayState[c] = "SYNC"`** -- the `SYNCED_RECOVERY` rewind must have completed. Without this guard, failover could proceed with degraded rounds not re-processed from the sync point. This is the key zero-RPO guard.
 
-Source: `shouldTriggerFailover()` L500-533 (guards); `triggerFailover()` L535-548 (effect); `setHAGroupStatusToSync()` L341-355 (ZK write).
+**`hdfsAvailable[c] = TRUE`** -- the standby's own HDFS must be accessible; `shouldTriggerFailover()` performs HDFS reads (`getInProgressFiles`, `getNewFiles`) that throw IOException if HDFS is unavailable, blocking the trigger.
+
+**`zkLocalConnected[c]`** -- `triggerFailover()` calls `setHAGroupStatusToSync()` which requires `isHealthy = true`.
+
+**Also clears `failoverPending`**, modeling `triggerFailover()` (`failoverPending.set(false)`).
+
+Source: `shouldTriggerFailover()` (guards); `triggerFailover()` (effect); `setHAGroupStatusToSync()` (ZK write).
 
 ```tla
 TriggerFailover(c) ==

@@ -16,8 +16,8 @@ Unlike the peer-reactive transitions in [HAGroupStore.md](HAGroupStore.md), admi
 
 | TLA+ Action | Java Source |
 |---|---|
-| `AdminStartFailover(c)` | `HAGroupStoreManager.initiateFailoverOnActiveCluster()` L375-400 |
-| `AdminAbortFailover(c)` | `HAGroupStoreManager.setHAGroupStatusToAbortToStandby()` L419-425; also clears `failoverPending` (models `abortFailoverListener` L173-185) |
+| `AdminStartFailover(c)` | `HAGroupStoreManager.initiateFailoverOnActiveCluster()` |
+| `AdminAbortFailover(c)` | `HAGroupStoreManager.setHAGroupStatusToAbortToStandby()`; also clears `failoverPending` (models `abortFailoverListener`) |
 | `AdminGoOffline(c)` | `PhoenixHAAdminTool update --state OFFLINE` (gated on `UseOfflinePeerDetection`) |
 | `AdminForceRecover(c)` | `PhoenixHAAdminTool update --force --state STANDBY` (OFFLINE -> S; gated on `UseOfflinePeerDetection`) |
 
@@ -45,7 +45,7 @@ The peer must be in a stable standby state (S or DS) to prevent initiating a new
 
 Cluster `c` transitions to ATS or ANISTS, both of which map to the ACTIVE_TO_STANDBY role, blocking mutations (`isMutationBlocked() = true`).
 
-Source: `initiateFailoverOnActiveCluster()` L375-400 checks current state and selects AIS -> ATS or ANIS -> ANISTS. Peer-state guard: `getHAGroupStoreRecordFromPeer()` (`HAGroupStoreClient` L421).
+Source: `initiateFailoverOnActiveCluster()` checks current state and selects AIS -> ATS or ANIS -> ANISTS. Peer-state guard: `getHAGroupStoreRecordFromPeer()` (`HAGroupStoreClient`).
 
 ```tla
 AdminStartFailover(c) ==
@@ -78,9 +78,9 @@ By requiring abort to originate from STA (writing AbTS), the standby explicitly 
 
 ### failoverPending Side-Effect
 
-Also clears `failoverPending[c]`, modeling the `abortFailoverListener` (`ReplicationLogDiscoveryReplay.java` L173-185) which fires on LOCAL ABORT_TO_STANDBY, calling `failoverPending.set(false)`. This ensures the replay state machine does not attempt to trigger failover after the abort.
+Also clears `failoverPending[c]`, modeling the `abortFailoverListener` (`ReplicationLogDiscoveryReplay.java`) which fires on LOCAL ABORT_TO_STANDBY, calling `failoverPending.set(false)`. This ensures the replay state machine does not attempt to trigger failover after the abort.
 
-Source: `setHAGroupStatusToAbortToStandby()` L419-425.
+Source: `setHAGroupStatusToAbortToStandby()`.
 
 ```tla
 AdminAbortFailover(c) ==

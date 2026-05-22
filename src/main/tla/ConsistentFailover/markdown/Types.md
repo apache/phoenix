@@ -16,14 +16,14 @@ Factoring pure definitions into their own module is a TLA+ best practice for spe
 
 | Modeled Concept | Java Class / Field |
 |---|---|
-| `HAGroupState` (14 states) | `HAGroupStoreRecord.HAGroupState` enum (L51-65) |
-| `AllowedTransitions` | `HAGroupStoreRecord` static initializer (L99-123) |
-| `ClusterRole` (6 roles) | `ClusterRoleRecord.ClusterRole` enum (L59-107) |
-| `RoleOf(state)` | `HAGroupState.getClusterRole()` (L73-97) |
-| ANIS self-transition | `HAGroupStoreRecord` L101 (heartbeat support) |
+| `HAGroupState` (14 states) | `HAGroupStoreRecord.HAGroupState` enum |
+| `AllowedTransitions` | `HAGroupStoreRecord` static initializer |
+| `ClusterRole` (6 roles) | `ClusterRoleRecord.ClusterRole` enum |
+| `RoleOf(state)` | `HAGroupState.getClusterRole()` |
+| ANIS self-transition | `HAGroupStoreRecord` (heartbeat support) |
 | `UseOfflinePeerDetection` | Feature gate for AWOP/ANISWOP modeling |
 | `WriterMode` (5 modes) | `ReplicationLogGroup` mode classes (SyncModeImpl, StoreAndForwardModeImpl, SyncAndForwardModeImpl) |
-| `ReplayStateSet` (4 states) | `ReplicationLogDiscoveryReplay` replay state (L550-555) |
+| `ReplayStateSet` (4 states) | `ReplicationLogDiscoveryReplay` replay state |
 | `StableClusterStates`, `FailoverCompletionAntecedentStates`, `AbortCompletionAntecedentStates`, `NotANISClusterStates` | Named sets for liveness (`~>`) formulas in the root module |
 | `AllowedWriterTransitions` | Per-RS writer mode pairs; `WriterTransitionValid` in the root module |
 | `AllowedReplayTransitions` | Replay state pairs; `ReplayTransitionValid` in the root module |
@@ -70,7 +70,7 @@ ASSUME WaitTimeForSync \in Nat
 ASSUME WaitTimeForSync > 0
 ```
 
-`WaitTimeForSync` is the anti-flapping wait threshold in logical time ticks. It controls how long the system must wait after the last STORE_AND_FWD heartbeat before the ANIS-to-AIS recovery transition is allowed. In the implementation, this maps to `HAGroupStoreClient.java` L98 where `ZK_SESSION_TIMEOUT_MULTIPLIER = 1.1` scales the ZK session timeout to produce the wait duration. The exhaustive model uses `WaitTimeForSync = 2` (the minimum value that exercises the timer's counting behavior); the simulation model uses `WaitTimeForSync = 5` to explore richer interleavings during the anti-flapping wait window.
+`WaitTimeForSync` is the anti-flapping wait threshold in logical time ticks. It controls how long the system must wait after the last STORE_AND_FWD heartbeat before the ANIS-to-AIS recovery transition is allowed. In the implementation, this maps to `HAGroupStoreClient.java` where `ZK_SESSION_TIMEOUT_MULTIPLIER = 1.1` scales the ZK session timeout to produce the wait duration. The exhaustive model uses `WaitTimeForSync = 2` (the minimum value that exercises the timer's counting behavior); the simulation model uses `WaitTimeForSync = 5` to explore richer interleavings during the anti-flapping wait window.
 
 ### UseOfflinePeerDetection
 
@@ -96,7 +96,7 @@ HAGroupState ==
       "OFFLINE", "UNKNOWN" }
 ```
 
-Each TLA+ abbreviation maps to a Java enum constant in `HAGroupStoreRecord.HAGroupState` (L51-65):
+Each TLA+ abbreviation maps to a Java enum constant in `HAGroupStoreRecord.HAGroupState`:
 
 | TLA+ Value | Enum Constant | Meaning |
 |---|---|---|
@@ -125,7 +125,7 @@ The states are classified into sets based on their cluster role, which determine
 ActiveStates == { "AIS", "ANIS", "AbTAIS", "AbTANIS", "AWOP", "ANISWOP" }
 ```
 
-A cluster in any `ActiveStates` member is considered active and serves mutations. The `MutualExclusion` invariant requires that at most one cluster be in an `ActiveStates` member at any time. Source: `HAGroupState.getClusterRole()` L73-97 -- these states return `ClusterRole.ACTIVE`.
+A cluster in any `ActiveStates` member is considered active and serves mutations. The `MutualExclusion` invariant requires that at most one cluster be in an `ActiveStates` member at any time. Source: `HAGroupState.getClusterRole()` -- these states return `ClusterRole.ACTIVE`.
 
 ```tla
 AISLikeStates == { "AIS", "AWOP", "ANISWOP" }
@@ -134,22 +134,28 @@ AISLikeStates == { "AIS", "AWOP", "ANISWOP" }
 `AISLikeStates` is the subset of `ActiveStates` whose writer-degradation path couples to `ANIS`. The [`Writer.tla`](../Writer.tla) actions `WriterInitToStoreFwd` and `WriterToStoreFwd` atomically transition `clusterState` to `ANIS` and reset `antiFlapTimer` when a writer degrades from any of these states. `AIS` is the base case; `AWOP` and `ANISWOP` are the OFFLINE-peer variants (gated on `UseOfflinePeerDetection`) -- both serve mutations while the peer is OFFLINE and are treated as `AIS`-equivalents for writer-degradation coupling.
 
 ```tla
+MutationServingActiveStates == { "AIS", "ANIS", "AWOP", "ANISWOP" }
+```
+
+`MutationServingActiveStates` is the subset of `ActiveStates` in which client mutations are actually delivered to the writers.
+
+```tla
 StandbyStates == { "S", "DS", "AbTS" }
 ```
 
-A cluster in any `StandbyStates` member is receiving and replaying replication logs from the active peer. Source: `HAGroupState.getClusterRole()` L73-97 -- these states return `ClusterRole.STANDBY`.
+A cluster in any `StandbyStates` member is receiving and replaying replication logs from the active peer. Source: `HAGroupState.getClusterRole()` -- these states return `ClusterRole.STANDBY`.
 
 ```tla
 TransitionalActiveStates == { "ATS", "ANISTS" }
 ```
 
-A cluster in `ATS` or `ANISTS` is transitioning from active to standby during a failover. Critically, mutations are blocked (`isMutationBlocked() = true`). This is the mechanism by which safety is maintained during the non-atomic failover window: the old active is in `ACTIVE_TO_STANDBY` role, which blocks all client mutations, even though the new active has already written `ACTIVE_IN_SYNC`. Source: `ClusterRoleRecord.java` L84 -- `ACTIVE_TO_STANDBY` role has `isMutationBlocked() = true`.
+A cluster in `ATS` or `ANISTS` is transitioning from active to standby during a failover. Critically, mutations are blocked (`isMutationBlocked() = true`). This is the mechanism by which safety is maintained during the non-atomic failover window: the old active is in `ACTIVE_TO_STANDBY` role, which blocks all client mutations, even though the new active has already written `ACTIVE_IN_SYNC`. Source: `ClusterRoleRecord.java` -- `ACTIVE_TO_STANDBY` role has `isMutationBlocked() = true`.
 
 ```tla
 ActiveRoles == {"ACTIVE"}
 ```
 
-`ActiveRoles` operates at the role abstraction layer (not the state layer). It is the set of roles considered "active" for role-level predicates such as `MutualExclusion`. Distinguished from `ActiveStates` (which is the set of HA group *states* that map to the ACTIVE role): `ActiveRoles` is used in predicates that compare role values, not state values. Source: `ClusterRoleRecord.java` L59-67 -- the ACTIVE role has `isMutationBlocked() = false`.
+`ActiveRoles` operates at the role abstraction layer (not the state layer). It is the set of roles considered "active" for role-level predicates such as `MutualExclusion`. Distinguished from `ActiveStates` (which is the set of HA group *states* that map to the ACTIVE role): `ActiveRoles` is used in predicates that compare role values, not state values. Source: `ClusterRoleRecord.java` -- the ACTIVE role has `isMutationBlocked() = false`.
 
 ## Replication Writer Mode Definitions
 
@@ -167,9 +173,9 @@ Each RegionServer on the active cluster maintains one of five writer modes. The 
 | `"SYNC_AND_FWD"` | `SyncAndForwardModeImpl` | Draining the local OUT queue while also writing synchronously; recovery/drain mode |
 | `"DEAD"` | RS aborted | Writer halted due to CAS failure or local HDFS failure; awaiting process supervisor restart |
 
-The `DEAD` mode is a modeling addition -- the implementation does not have an explicit "DEAD" mode enum. Instead, when `logGroup.abort()` is called (via `RuntimeException` from a CAS failure in `SyncModeImpl.onFailure()` L61-74), the Disruptor halts and the RS process is effectively dead. The process supervisor (Kubernetes/YARN) detects the dead pod and restarts it.
+The `DEAD` mode is a modeling addition -- the implementation does not have an explicit "DEAD" mode enum. Instead, when `logGroup.abort()` is called (via `RuntimeException` from a CAS failure in `SyncModeImpl.onFailure()`), the Disruptor halts and the RS process is effectively dead. The process supervisor (Kubernetes/YARN) detects the dead pod and restarts it.
 
-Source: `ReplicationLogGroup.java` mode classes; `SyncModeImpl.onFailure()` L61-74 (CAS failure leads to abort).
+Source: `ReplicationLogGroup.java` mode classes; `SyncModeImpl.onFailure()` (CAS failure leads to abort).
 
 ## Replication Replay State Definitions
 
@@ -188,11 +194,11 @@ The standby cluster's reader maintains one of four replay states per HA group, t
 
 The replay state machine is the key mechanism for achieving zero RPO. The `TriggerFailover` action (in [Reader.md](Reader.md)) requires `replayState = "SYNC"` -- failover cannot proceed until the SYNCED_RECOVERY rewind completes and the replay catches up from the last in-sync point.
 
-Source: `ReplicationLogDiscoveryReplay.java` L550-555.
+Source: `ReplicationLogDiscoveryReplay.java`.
 
 ## Allowed Transitions
 
-The `AllowedTransitions` set defines every valid `(from, to)` state transition pair. This is derived directly from the `allowedTransitions` static initializer in `HAGroupStoreRecord.java` (L99-123) and serves as the ground truth for the `TransitionValid` action constraint. TLC verifies that every state change produced by the `Next` relation is a member of this set.
+The `AllowedTransitions` set defines every valid `(from, to)` state transition pair. This is derived directly from the `allowedTransitions` static initializer in `HAGroupStoreRecord.java` and serves as the ground truth for the `TransitionValid` action constraint. TLC verifies that every state change produced by the `Next` relation is a member of this set.
 
 ```tla
 AllowedTransitions ==
@@ -228,9 +234,9 @@ AllowedTransitions ==
 
 ### Notable Entries
 
-**ANIS self-transition** (`<<"ANIS", "ANIS">>`): This entry supports the periodic heartbeat in `StoreAndForwardModeImpl` (L71-87) that refreshes the ZK znode's `mtime` without changing the state value. In the TLA+ model, this maps to the `ANISHeartbeat` action in [HAGroupStore.md](HAGroupStore.md), which resets the anti-flapping countdown timer to `StartAntiFlapWait`. Source: `HAGroupStoreRecord.java` L101.
+**ANIS self-transition** (`<<"ANIS", "ANIS">>`): This entry supports the periodic heartbeat in `StoreAndForwardModeImpl` that refreshes the ZK znode's `mtime` without changing the state value. In the TLA+ model, this maps to the `ANISHeartbeat` action in [HAGroupStore.md](HAGroupStore.md), which resets the anti-flapping countdown timer to `StartAntiFlapWait`. Source: `HAGroupStoreRecord.java`.
 
-**DS -> STA** (`<<"DS", "STA">>`): This entry supports the ANIS failover path where the standby is in `DEGRADED_STANDBY` when failover proceeds. The admin initiates failover on the active (ANIS -> ANISTS), the forwarder drains OUT (ANISTS -> ATS), and the standby detects ATS and transitions DS -> STA. Source: L117.
+**DS -> STA** (`<<"DS", "STA">>`): This entry supports the ANIS failover path where the standby is in `DEGRADED_STANDBY` when failover proceeds. The admin initiates failover on the active (ANIS -> ANISTS), the forwarder drains OUT (ANISTS -> ATS), and the standby detects ATS and transitions DS -> STA.
 
 **AbTAIS -> ANIS** (`<<"AbTAIS", "ANIS">>`): This entry is needed so that HDFS failure during the abort window can route the cluster to ANIS. Without it, S&F writers that degrade during AbTAIS would have no path to a consistent state -- the cluster would be stuck in AbTAIS with degraded writers and no way for `AutoComplete` to route to ANIS.
 
@@ -344,7 +350,7 @@ ClusterRole ==
       "STANDBY_TO_ACTIVE", "OFFLINE", "UNKNOWN" }
 ```
 
-The six cluster roles are visible to clients and determine whether a cluster accepts mutations. Source: `ClusterRoleRecord.ClusterRole` enum (L59-107).
+The six cluster roles are visible to clients and determine whether a cluster accepts mutations. Source: `ClusterRoleRecord.ClusterRole` enum.
 
 ### RoleOf Mapping
 
@@ -358,7 +364,7 @@ RoleOf(state) ==
     ELSE "UNKNOWN"
 ```
 
-`RoleOf` maps each HA group state to its client-visible cluster role. This operator is used in the `MutualExclusion` invariant to verify that at most one cluster is in the `ACTIVE` role at any time. The mapping is derived from `HAGroupState.getClusterRole()` L73-97 in the Java implementation.
+`RoleOf` maps each HA group state to its client-visible cluster role. This operator is used in the `MutualExclusion` invariant to verify that at most one cluster is in the `ACTIVE` role at any time. The mapping is derived from `HAGroupState.getClusterRole()` in the Java implementation.
 
 The critical safety insight is that `ATS` and `ANISTS` map to `ACTIVE_TO_STANDBY` (not `ACTIVE`), which means mutations are blocked during the failover window. This is how the protocol maintains mutual exclusion even though the failover is non-atomic (two independent ZK writes).
 
@@ -385,7 +391,7 @@ WaitTimeForSync ... 2 ... 1 ... 0
 
 The S&F heartbeat (`ANISHeartbeat` in [HAGroupStore.md](HAGroupStore.md)) resets the timer to `WaitTimeForSync`, keeping the gate closed. When the heartbeat stops (all RS exit STORE_AND_FWD), the `Tick` action (in [Clock.md](Clock.md)) counts the timer down to 0, opening the gate and allowing ANIS -> AIS.
 
-Source: `HAGroupStoreClient.validateTransitionAndGetWaitTime()` L1027-1046; `StoreAndForwardModeImpl.startHAGroupStoreUpdateTask()` L71-87.
+Source: `HAGroupStoreClient.validateTransitionAndGetWaitTime()`; `StoreAndForwardModeImpl.startHAGroupStoreUpdateTask()`.
 
 ### Modeling Choice: Countdown vs. Deadline
 

@@ -25,7 +25,7 @@ When a cluster transitions ATS -> S (becoming standby), the replication subsyste
 | TLA+ Action | Java Source |
 |---|---|
 | `RSCrash(c, rs)` | JVM crash, OOM, kill signal, process supervisor termination |
-| `RSAbortOnLocalHDFSFailure(c, rs)` | `StoreAndForwardModeImpl.onFailure()` L115-123 -> `logGroup.abort()` |
+| `RSAbortOnLocalHDFSFailure(c, rs)` | `StoreAndForwardModeImpl.onFailure()` -> `logGroup.abort()` |
 | `RSRestart(c, rs)` | Kubernetes/YARN pod restart -> HBase RS startup -> `ReplicationLogGroup.initializeReplicationMode()` |
 
 ```tla
@@ -85,7 +85,7 @@ Note: `hdfsAvailable[c]` is the cluster's OWN HDFS, not `Peer(c)`. RS in SYNC or
 
 **Fairness:** SF (Tier 3), grouped with `RSRestart` by mutual exclusivity (STORE_AND_FWD and DEAD are mutually exclusive writer modes).
 
-Source: `StoreAndForwardModeImpl.onFailure()` L115-123 -> `logGroup.abort()`.
+Source: `StoreAndForwardModeImpl.onFailure()` -> `logGroup.abort()`.
 
 ```tla
 RSAbortOnLocalHDFSFailure(c, rs) ==

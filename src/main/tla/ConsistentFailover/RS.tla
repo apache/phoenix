@@ -26,7 +26,7 @@
  *   RSCrash(c, rs)                  | JVM crash, OOM, kill signal,
  *                                   |   process supervisor termination
  *   RSAbortOnLocalHDFSFailure(c,rs) | StoreAndForwardModeImpl
- *                                   |   .onFailure() L115-123 ->
+ *                                   |   .onFailure() ->
  *                                   |   logGroup.abort()
  *   RSRestart(c, rs)                | Kubernetes/YARN pod restart ->
  *                                   |   HBase RS startup ->
@@ -105,7 +105,7 @@ RSCrash(c, rs) ==
  *       hdfsAvailable[c] = FALSE (own HDFS is down).
  * Post: writerMode[c][rs] = "DEAD".
  *
- * Source: StoreAndForwardModeImpl.onFailure() L115-123 ->
+ * Source: StoreAndForwardModeImpl.onFailure() ->
  *         logGroup.abort()
  *)
 RSAbortOnLocalHDFSFailure(c, rs) ==

@@ -23,7 +23,6 @@
  *                   |   IOException from ReplicationLog.apply()
  *   HDFSUp(c)       | NameNode recovery; forwarder detects via
  *                   |   successful FileUtil.copy() in processFile()
- *                   |   L132-152
  *)
 EXTENDS SpecState, Types
 
@@ -73,7 +72,7 @@ HDFSDown(c) ==
  * Pre:  c's HDFS is currently unavailable.
  * Post: hdfsAvailable[c] = TRUE. Writer modes unchanged.
  *
- * Source: ReplicationLogDiscoveryForwarder.processFile() L132-152
+ * Source: ReplicationLogDiscoveryForwarder.processFile()
  *)
 HDFSUp(c) ==
     /\ hdfsAvailable[c] = FALSE

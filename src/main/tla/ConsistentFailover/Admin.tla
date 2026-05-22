@@ -18,11 +18,11 @@
  *   TLA+ action              | Java source
  *   -------------------------+----------------------------------------------
  *   AdminStartFailover(c)    | HAGroupStoreManager
- *                            |   .initiateFailoverOnActiveCluster() L375-400
+ *                            |   .initiateFailoverOnActiveCluster()
  *   AdminAbortFailover(c)    | HAGroupStoreManager
- *                            |   .setHAGroupStatusToAbortToStandby() L419-425
+ *                            |   .setHAGroupStatusToAbortToStandby()
  *                            |   Also clears failoverPending (models
- *                            |   abortFailoverListener L173-185)
+ *                            |   abortFailoverListener)
  *   AdminGoOffline(c)        | PhoenixHAAdminTool update --state OFFLINE
  *                            |   (gated on UseOfflinePeerDetection)
  *   AdminForceRecover(c)     | PhoenixHAAdminTool update --force
@@ -68,10 +68,10 @@ EXTENDS SpecState, Types
  *       map to the ACTIVE_TO_STANDBY role, blocking mutations
  *       (isMutationBlocked()=true).
  *
- * Source: initiateFailoverOnActiveCluster() L375-400 checks current
+ * Source: initiateFailoverOnActiveCluster() checks current
  *         state and selects AIS -> ATS or ANIS -> ANISTS.
  *         Peer-state guard: getHAGroupStoreRecordFromPeer()
- *         (HAGroupStoreClient L421).
+ *         (HAGroupStoreClient).
  *)
 AdminStartFailover(c) ==
     /\ clusterState[Peer(c)] \in {"S", "DS"}
@@ -100,10 +100,10 @@ AdminStartFailover(c) ==
  * races -- this is the AbortSafety property.
  *
  * Also clears failoverPending[c], modeling the abortFailoverListener
- * (ReplicationLogDiscoveryReplay.java L173-185) which fires on LOCAL
+ * (ReplicationLogDiscoveryReplay.java) which fires on LOCAL
  * ABORT_TO_STANDBY, calling failoverPending.set(false).
  *
- * Source: setHAGroupStatusToAbortToStandby() L419-425.
+ * Source: setHAGroupStatusToAbortToStandby().
  *)
 AdminAbortFailover(c) ==
     /\ clusterState[c] = "STA"

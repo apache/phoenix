@@ -27,13 +27,13 @@ EXTENDS SpecState, Types
 | Modeled Concept | Java Class / Field |
 |---|---|
 | `clusterState` | `HAGroupStoreRecord` per-cluster ZK znode |
-| `PeerReact*` actions | `FailoverManagementListener` (`HAGroupStoreManager.java` L633-706), delivered via `peerPathChildrenCache` |
-| `ReactiveTransitionFail` | `FailoverManagementListener` 2-retry exhaustion (L653-704) |
-| `TriggerFailover` | `Reader.TriggerFailover` via `shouldTriggerFailover()` L500-533 + `triggerFailover()` L535-548 |
-| `AutoComplete` | `createLocalStateTransitions()` L140-150, delivered via local `pathChildrenCache` |
-| `ANISTSToATS` | `HAGroupStoreManager.setHAGroupStatusToSync()` L341-355 |
-| `AdminStartFailover` | `initiateFailoverOnActiveCluster()` L375-400 |
-| `AdminAbortFailover` | `setHAGroupStatusToAbortToStandby()` L419-425 |
+| `PeerReact*` actions | `FailoverManagementListener` (`HAGroupStoreManager.java`), delivered via `peerPathChildrenCache` |
+| `ReactiveTransitionFail` | `FailoverManagementListener` 2-retry exhaustion |
+| `TriggerFailover` | `Reader.TriggerFailover` via `shouldTriggerFailover()` + `triggerFailover()` |
+| `AutoComplete` | `createLocalStateTransitions()`, delivered via local `pathChildrenCache` |
+| `ANISTSToATS` | `HAGroupStoreManager.setHAGroupStatusToSync()` |
+| `AdminStartFailover` | `initiateFailoverOnActiveCluster()` |
+| `AdminAbortFailover` | `setHAGroupStatusToAbortToStandby()` |
 | `AdminGoOffline` | `PhoenixHAAdminTool update --state OFFLINE` (gated on `UseOfflinePeerDetection`) |
 | `AdminForceRecover` | `PhoenixHAAdminTool update --force --state STANDBY` (OFFLINE -> S) (gated on `UseOfflinePeerDetection`) |
 | `PeerReactToOFFLINE` | intended peer OFFLINE detection: AIS->AWOP, ANIS->ANISWOP; gated on `UseOfflinePeerDetection` |
@@ -41,30 +41,30 @@ EXTENDS SpecState, Types
 | `Init (AIS, S)` | Default initial states per team confirmation (PHOENIX_HA_TLA_PLAN.md Appendix A.6) |
 | `MutualExclusion` | Architecture safety argument: at most one cluster in ACTIVE role |
 | `AbortSafety` | Abort originates from STA side; AbTAIS only reachable via peer AbTS detection |
-| `AllowedTransitions` | `HAGroupStoreRecord.java` L99-123 |
+| `AllowedTransitions` | `HAGroupStoreRecord.java` |
 | `writerMode` | `ReplicationLogGroup` per-RS mode |
-| `outDirEmpty` | `ReplicationLogDiscoveryForwarder.processNoMoreRoundsLeft()` L155-184 |
+| `outDirEmpty` | `ReplicationLogDiscoveryForwarder.processNoMoreRoundsLeft()` |
 | `hdfsAvailable` | Abstract: NameNode availability per cluster (detected via IOException) |
 | `RSCrash` | JVM crash, OOM, kill signal |
-| `RSAbortOnLocalHDFSFailure` | `StoreAndForwardModeImpl.onFailure()` L115-123 |
-| `HDFSDown`/`HDFSUp` | NameNode crash/recovery; `SyncModeImpl.onFailure()` L61-74 |
-| `antiFlapTimer` | Countdown timer (Lamport CHARME 2005); `validateTransitionAndGetWaitTime()` L1027-1046 |
+| `RSAbortOnLocalHDFSFailure` | `StoreAndForwardModeImpl.onFailure()` |
+| `HDFSDown`/`HDFSUp` | NameNode crash/recovery; `SyncModeImpl.onFailure()` |
+| `antiFlapTimer` | Countdown timer (Lamport CHARME 2005); `validateTransitionAndGetWaitTime()` |
 | `Tick` | Passage of wall-clock time |
-| `ANISHeartbeat` | `StoreAndForwardModeImpl.startHAGroupStoreUpdateTask()` L71-87 |
-| `replayState` | `ReplicationLogDiscoveryReplay` replay state (L550-555) |
-| `lastRoundInSync` | `ReplicationLogDiscoveryReplay` L336-343 |
-| `lastRoundProcessed` | `ReplicationLogDiscoveryReplay` L336-351 |
-| `failoverPending` | `ReplicationLogDiscoveryReplay` L159-171 |
-| `inProgressDirEmpty` | `ReplicationLogDiscoveryReplay` L500-533 |
-| `ReplayAdvance` | `replay()` L336-343 (SYNC) and L345-351 (DEGRADED) |
-| `ReplayRewind` | `replay()` L323-333 (CAS to SYNC) |
-| Listener folds | `degradedListener` L136-145 and `recoveryListener` L147-157 folded into HAGroupStore S/DS-entry actions |
-| `TriggerFailover` | `shouldTriggerFailover()` L500-533 + `triggerFailover()` L535-548 |
+| `ANISHeartbeat` | `StoreAndForwardModeImpl.startHAGroupStoreUpdateTask()` |
+| `replayState` | `ReplicationLogDiscoveryReplay` replay state |
+| `lastRoundInSync` | `ReplicationLogDiscoveryReplay` |
+| `lastRoundProcessed` | `ReplicationLogDiscoveryReplay` |
+| `failoverPending` | `ReplicationLogDiscoveryReplay` |
+| `inProgressDirEmpty` | `ReplicationLogDiscoveryReplay` |
+| `ReplayAdvance` | `replay()` (SYNC) and (DEGRADED) |
+| `ReplayRewind` | `replay()` (CAS to SYNC) |
+| Listener folds | `degradedListener` and `recoveryListener` folded into HAGroupStore S/DS-entry actions |
+| `TriggerFailover` | `shouldTriggerFailover()` + `triggerFailover()` |
 | `FailoverTriggerCorrectness` | Action constraint: STA->AIS requires replay-completeness conditions |
 | `NoDataLoss` | Action constraint: zero RPO property |
-| `zkPeerConnected` | `peerPathChildrenCache` TCP connection state (`HAGroupStoreClient` L110-112) |
+| `zkPeerConnected` | `peerPathChildrenCache` TCP connection state (`HAGroupStoreClient`) |
 | `zkPeerSessionAlive` | Peer ZK session state (Curator internal) |
-| `zkLocalConnected` | `pathChildrenCache` TCP connection state; maps to `HAGroupStoreClient.isHealthy` (L878-911) |
+| `zkLocalConnected` | `pathChildrenCache` TCP connection state; maps to `HAGroupStoreClient.isHealthy` |
 | `ZKPeerDisconnect` | `peerPathChildrenCache` CONNECTION_LOST |
 | `ZKPeerReconnect` | `peerPathChildrenCache` CONNECTION_RECONNECTED |
 | `ZKPeerSessionExpiry` | Curator session expiry -> CONNECTION_LOST |
@@ -108,9 +108,9 @@ Source: `ReplicationLogGroup` per-RS mode (`SyncModeImpl`, `StoreAndForwardModeI
 VARIABLE outDirEmpty
 ```
 
-`outDirEmpty[c]` is TRUE when the OUT directory on cluster `c` contains no buffered replication log files. FALSE when writes are accumulating locally. This is a per-cluster boolean (not per-RS) because the OUT directory is shared -- `ReplicationLogDiscoveryForwarder.processNoMoreRoundsLeft()` (L155-184) checks the entire directory.
+`outDirEmpty[c]` is TRUE when the OUT directory on cluster `c` contains no buffered replication log files. FALSE when writes are accumulating locally. This is a per-cluster boolean (not per-RS) because the OUT directory is shared -- `ReplicationLogDiscoveryForwarder.processNoMoreRoundsLeft()` checks the entire directory.
 
-Source: `ReplicationLogDiscoveryForwarder.processNoMoreRoundsLeft()` L155-184 checks `getInProgressFiles().isEmpty() && getNewFilesForRound(nextRound).isEmpty()`.
+Source: `ReplicationLogDiscoveryForwarder.processNoMoreRoundsLeft()` checks `getInProgressFiles().isEmpty() && getNewFilesForRound(nextRound).isEmpty()`.
 
 ### Environment State
 
@@ -128,7 +128,7 @@ VARIABLE antiFlapTimer
 
 `antiFlapTimer[c]` is the per-cluster anti-flapping countdown timer. Counts down from `WaitTimeForSync` toward 0. The ANIS -> AIS transition is blocked while the timer is positive (gate closed). The S&F heartbeat resets the timer to `WaitTimeForSync`; the `Tick` action decrements it. See [Types.md](Types.md) for helper operator documentation and the Lamport CHARME 2005 countdown timer pattern.
 
-Source: `HAGroupStoreClient.validateTransitionAndGetWaitTime()` L1027-1046.
+Source: `HAGroupStoreClient.validateTransitionAndGetWaitTime()`.
 
 ### Replay State
 
@@ -142,11 +142,11 @@ VARIABLE inProgressDirEmpty
 
 These five variables model the standby-side replication replay state machine:
 
-- `replayState[c]` -- the current replay state (NOT_INITIALIZED / SYNC / DEGRADED / SYNCED_RECOVERY). Source: `ReplicationLogDiscoveryReplay.java` L550-555.
-- `lastRoundInSync[c]` -- the last round processed while in SYNC state; frozen during DEGRADED. Source: L336-343 (advance), L389 (rewind target).
-- `lastRoundProcessed[c]` -- the last round processed regardless of state; rewinds to `lastRoundInSync` during SYNCED_RECOVERY. Source: L336-351.
-- `failoverPending[c]` -- TRUE when the standby has received an STA notification and is waiting for replay to complete. Source: L159-171.
-- `inProgressDirEmpty[c]` -- TRUE when no partially-processed replication log files exist. Source: `shouldTriggerFailover()` L500-533.
+- `replayState[c]` -- the current replay state (NOT_INITIALIZED / SYNC / DEGRADED / SYNCED_RECOVERY). Source: `ReplicationLogDiscoveryReplay.java`.
+- `lastRoundInSync[c]` -- the last round processed while in SYNC state; frozen during DEGRADED. Source: (advance), (rewind target).
+- `lastRoundProcessed[c]` -- the last round processed regardless of state; rewinds to `lastRoundInSync` during SYNCED_RECOVERY.
+- `failoverPending[c]` -- TRUE when the standby has received an STA notification and is waiting for replay to complete.
+- `inProgressDirEmpty[c]` -- TRUE when no partially-processed replication log files exist. Source: `shouldTriggerFailover()`.
 
 ### ZK Coordination State
 
@@ -158,9 +158,9 @@ VARIABLE zkLocalConnected
 
 These three booleans per cluster model the ZK coordination substrate:
 
-- `zkPeerConnected[c]` -- TRUE when the `peerPathChildrenCache` has a live TCP connection to the peer ZK quorum. When FALSE, no watcher notifications from the peer are delivered, suppressing all `PeerReact*` transitions. Source: `HAGroupStoreClient.createCacheListener()` L894-906.
+- `zkPeerConnected[c]` -- TRUE when the `peerPathChildrenCache` has a live TCP connection to the peer ZK quorum. When FALSE, no watcher notifications from the peer are delivered, suppressing all `PeerReact*` transitions. Source: `HAGroupStoreClient.createCacheListener()`.
 - `zkPeerSessionAlive[c]` -- TRUE when the peer ZK session is alive. Session expiry permanently loses all watches until a new session is established. Session expiry implies disconnection. Source: Curator internal session management.
-- `zkLocalConnected[c]` -- TRUE when the `pathChildrenCache` (local) has a live connection. When FALSE, `isHealthy = false`, blocking all `setHAGroupStatusIfNeeded()` calls. Source: `HAGroupStoreClient.createCacheListener()` L894-906.
+- `zkLocalConnected[c]` -- TRUE when the `pathChildrenCache` (local) has a live connection. When FALSE, `isHealthy = false`, blocking all `setHAGroupStatusIfNeeded()` calls. Source: `HAGroupStoreClient.createCacheListener()`.
 
 ### Variable Tuple
 
@@ -457,7 +457,7 @@ FailoverCompletion ==
 Standby-side and abort transient states eventually resolve to a stable state. Resolution paths:
 
 - `STA -> AIS` (TriggerFailover) or `STA -> AbTS -> S` (abort)
-- `AbTAIS -> AIS/ANIS`, `AbTANIS -> ANIS`, `AbTS -> S` (auto-completion)
+- `AbTAIS -> AIS`, `AbTANIS -> ANIS`, `AbTS -> S` (auto-completion)
 
 **ATS and ANISTS are excluded** from this property. Their resolution depends on the peer completing failover (`PeerReactToAIS`/`PeerReactToANIS`) or on abort propagation (`PeerReactToAbTS`). Both require the peer to reach a specific state AND the ZK peer connection to be alive at the right moment. With no fairness on admin actions (the admin can abort every failover attempt) and no fairness on ZK disconnect (the scheduler can disconnect exactly when the peer is in AbTS), ATS can remain indefinitely. ATS does have a resolution path via the reconciliation fold in `ZKPeerReconnect`/`ZKPeerSessionRecover` (ATS -> AbTAIS -> AIS when peer is in S/DS at reconnect), but adding ATS here would require extending `FairnessFC` with the peer-reactive SF group.
 
@@ -528,7 +528,7 @@ MutualExclusion ==
 
 **The primary safety property of the failover protocol.** Two clusters never both in the ACTIVE role simultaneously. The ACTIVE role includes: AIS, ANIS, AbTAIS, AbTANIS, AWOP, ANISWOP. Transitional states ATS and ANISTS map to the ACTIVE_TO_STANDBY role (not ACTIVE), which is the mechanism by which safety is maintained during the non-atomic failover window -- `isMutationBlocked() = true` for ACTIVE_TO_STANDBY.
 
-Source: Architecture safety argument; `ClusterRoleRecord.java` L84 -- ACTIVE_TO_STANDBY has `isMutationBlocked() = true`.
+Source: Architecture safety argument; `ClusterRoleRecord.java` -- ACTIVE_TO_STANDBY has `isMutationBlocked() = true`.
 
 ### AbortSafety
 
@@ -565,11 +565,12 @@ Whenever a cluster is in AIS, the OUT directory must be empty and all RS must be
 WriterClusterConsistency ==
     \A c \in Cluster :
         (\E r \in RS : writerMode[c][r] \in {"STORE_AND_FWD", "SYNC_AND_FWD"}) =>
-            clusterState[c] \in {"ANIS", "ANISTS", "ATS", "ANISWOP",
-                                  "AbTANIS", "AbTAIS", "AWOP"}
+            clusterState[c] \in {"ANIS", "ANISTS", "ATS", "ANISWOP", "AbTAIS"}
 ```
 
-Degraded writer modes (S&F, SYNC_AND_FWD) can only appear on active clusters that are NOT in AIS, on the ANISTS/ATS transitional states, or on abort states where HDFS failure can degrade writers. AIS is excluded by the AIS->ANIS coupling. ATS is included because the ANIS failover path enters ATS via `ANISTSToATS` which does NOT snap writer modes. Standby states are excluded because writer modes are reset to INIT on ATS -> S entry.
+Degraded writer modes (S&F, SYNC_AND_FWD) can only appear on cluster states where mutations can arrive at the writers.
+
+DEAD is excluded from this check because `RSCrash` can set `writerMode` to DEAD on any cluster state.
 
 ## Action Constraints
 
@@ -582,7 +583,7 @@ TransitionValid ==
             <<clusterState[c], clusterState'[c]>> \in AllowedTransitions
 ```
 
-Every state change follows the `AllowedTransitions` table from [Types.md](Types.md). Source: `HAGroupStoreRecord.java` L99-123, `isTransitionAllowed()` L130.
+Every state change follows the `AllowedTransitions` table from [Types.md](Types.md). Source: `HAGroupStoreRecord.java`, `isTransitionAllowed()`.
 
 ### WriterTransitionValid
 
@@ -676,7 +677,7 @@ ReplayTransitionValid ==
             <<replayState[c], replayState'[c]>> \in AllowedReplayTransitions
 ```
 
-Every replay state change follows the allowed transitions. Source: `ReplicationLogDiscoveryReplay.java` L131-206 (listeners), L323-333 (CAS), L336-351 (replay loop).
+Every replay state change follows the allowed transitions. Source: `ReplicationLogDiscoveryReplay.java` (listeners), (CAS), (replay loop).
 
 ## State Constraint
 

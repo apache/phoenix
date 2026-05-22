@@ -30,11 +30,11 @@
  *
  *   Modeled concept        | Java class / field
  *   -----------------------+---------------------------------------------
- *   HAGroupState           | HAGroupStoreRecord.HAGroupState enum (L51-65)
- *   AllowedTransitions     | HAGroupStoreRecord static init (L99-123)
- *   ClusterRole            | ClusterRoleRecord.ClusterRole enum (L59-107)
- *   RoleOf                 | HAGroupState.getClusterRole() (L73-97)
- *   ANIS self-transition   | HAGroupStoreRecord L101 (heartbeat support)
+ *   HAGroupState           | HAGroupStoreRecord.HAGroupState enum
+ *   AllowedTransitions     | HAGroupStoreRecord static init
+ *   ClusterRole            | ClusterRoleRecord.ClusterRole enum
+ *   RoleOf                 | HAGroupState.getClusterRole()
+ *   ANIS self-transition   | HAGroupStoreRecord (heartbeat support)
  *   WriterMode             | ReplicationLogGroup mode (SYNC/S&F/S&FWD)
  *   ReplayStateSet         | ReplicationLogDiscoveryReplay replay state
  *   StableClusterStates,   | Named sets for liveness (~> consequents/antecedents)
@@ -68,7 +68,7 @@ CONSTANTS RS
 ASSUME RS # {}
 
 \* The anti-flapping wait threshold in logical time ticks.
-\* Source: HAGroupStoreClient.java L98 -- ZK_SESSION_TIMEOUT_MULTIPLIER = 1.1
+\* Source: HAGroupStoreClient.java -- ZK_SESSION_TIMEOUT_MULTIPLIER = 1.1
 CONSTANTS WaitTimeForSync
 
 \* WaitTimeForSync must be a positive natural number.
@@ -95,7 +95,7 @@ ASSUME UseOfflinePeerDetection \in BOOLEAN
 
 \* The 14 HA group states from HAGroupStoreRecord.HAGroupState enum.
 \*
-\* Source: HAGroupStoreRecord.java L51-65
+\* Source: HAGroupStoreRecord.java
 \*
 \*   Modeled value   | Enum constant
 \*   ----------------+----------------------------------------------
@@ -124,7 +124,7 @@ HAGroupState ==
 \* mutations. Mutual exclusion requires at most one cluster in an
 \* ActiveState at any time.
 \*
-\* Source: HAGroupState.getClusterRole() L73-97 -- these states
+\* Source: HAGroupState.getClusterRole() -- these states
 \*         return ClusterRole.ACTIVE.
 ActiveStates == { "AIS", "ANIS", "AbTAIS", "AbTANIS", "AWOP", "ANISWOP" }
 
@@ -141,11 +141,15 @@ ActiveStates == { "AIS", "ANIS", "AbTAIS", "AbTANIS", "AWOP", "ANISWOP" }
 \* AIS-equivalents for writer-degradation coupling.
 AISLikeStates == { "AIS", "AWOP", "ANISWOP" }
 
+\* Active states in which client mutations are actually serviced and may
+\* be delivered to the writers.
+MutationServingActiveStates == { "AIS", "ANIS", "AWOP", "ANISWOP" }
+
 \* States that map to the STANDBY cluster role.
 \* A cluster in any of these states is receiving and replaying
 \* replication logs from the active peer.
 \*
-\* Source: HAGroupState.getClusterRole() L73-97 -- these states
+\* Source: HAGroupState.getClusterRole() -- these states
 \*         return ClusterRole.STANDBY.
 StandbyStates == { "S", "DS", "AbTS" }
 
@@ -153,7 +157,7 @@ StandbyStates == { "S", "DS", "AbTS" }
 \* A cluster in these states is transitioning from active to standby
 \* during a failover. Mutations are blocked (isMutationBlocked()=true).
 \*
-\* Source: ClusterRoleRecord.java L84 -- ACTIVE_TO_STANDBY role
+\* Source: ClusterRoleRecord.java -- ACTIVE_TO_STANDBY role
 \*         has isMutationBlocked() = true.
 TransitionalActiveStates == { "ATS", "ANISTS" }
 
@@ -161,7 +165,7 @@ TransitionalActiveStates == { "ATS", "ANISTS" }
 \* Distinguished from ActiveStates (which is the set of HA group *states*
 \* that map to ACTIVE): ActiveRoles operates at the role abstraction layer.
 \*
-\* Source: ClusterRoleRecord.java L59-67 -- ACTIVE role has
+\* Source: ClusterRoleRecord.java -- ACTIVE role has
 \*         isMutationBlocked()=false.
 ActiveRoles == {"ACTIVE"}
 
@@ -183,7 +187,7 @@ ActiveRoles == {"ACTIVE"}
 \*                      |   awaiting process supervisor restart
 \*
 \* Source: ReplicationLogGroup.java mode classes;
-\*         SyncModeImpl.onFailure() L61-74 (CAS failure -> abort)
+\*         SyncModeImpl.onFailure() (CAS failure -> abort)
 WriterMode == {"INIT", "SYNC", "STORE_AND_FWD", "SYNC_AND_FWD", "DEAD"}
 
 ---------------------------------------------------------------------------
@@ -203,7 +207,7 @@ WriterMode == {"INIT", "SYNC", "STORE_AND_FWD", "SYNC_AND_FWD", "DEAD"}
 \*   "SYNCED_RECOVERY"   | Active returned to AIS; replay rewinds
 \*                       |   lastRoundProcessed to lastRoundInSync
 \*
-\* Source: ReplicationLogDiscoveryReplay.java L550-555
+\* Source: ReplicationLogDiscoveryReplay.java
 ReplayStateSet == {"NOT_INITIALIZED", "SYNC", "DEGRADED", "SYNCED_RECOVERY"}
 
 ---------------------------------------------------------------------------
@@ -212,63 +216,56 @@ ReplayStateSet == {"NOT_INITIALIZED", "SYNC", "DEGRADED", "SYNCED_RECOVERY"}
 
 \* The set of valid (from, to) state transition pairs.
 \* Derived from the allowedTransitions static initializer in
-\* HAGroupStoreRecord.java (L99-123).
+\* HAGroupStoreRecord.java.
 \*
 \* Each entry maps to one line of the static initializer block.
 \* The ANIS self-transition ("ANIS" -> "ANIS") supports the
-\* periodic heartbeat in StoreAndForwardModeImpl (L71-87) that
+\* periodic heartbeat in StoreAndForwardModeImpl that
 \* refreshes zkMtime without changing the state value.
 \*
-\* Source: HAGroupStoreRecord.java L99-123
+\* Source: HAGroupStoreRecord.java
 AllowedTransitions ==
     {
       \* ANIS can stay in ANIS (heartbeat), return to AIS (recovery),
       \* begin failover (ANISTS), or detect offline peer (ANISWOP).
-      \* Source: L101
       <<"ANIS", "ANIS">>,
       <<"ANIS", "AIS">>,
       <<"ANIS", "ANISTS">>,
       <<"ANIS", "ANISWOP">>,
       \* AIS can degrade to ANIS (writer failure), detect offline
       \* peer (AWOP), or begin failover (ATS).
-      \* Source: L103
       <<"AIS", "ANIS">>,
       <<"AIS", "AWOP">>,
       <<"AIS", "ATS">>,
       \* S (standby) can begin failover (STA), degrade (DS),
       \* or go offline (OFFLINE) via admin --force.
-      \* Source: L105; OFFLINE entry via PhoenixHAAdminTool
+      \* Source:; OFFLINE entry via PhoenixHAAdminTool
       \*         update --force (bypasses isTransitionAllowed)
       <<"S", "STA">>,
       <<"S", "DS">>,
       <<"S", "OFFLINE">>,
       \* ANISTS can abort (AbTANIS) or advance to ATS once OUT
       \* dir is drained (subject to anti-flapping gate).
-      \* Source: L107
       <<"ANISTS", "AbTANIS">>,
       <<"ANISTS", "ATS">>,
       \* ATS can abort (AbTAIS) or complete failover (become S).
-      \* Source: L109
       <<"ATS", "AbTAIS">>,
       <<"ATS", "S">>,
       \* STA can abort (AbTS) or complete failover (become AIS).
-      \* Source: L111
       <<"STA", "AbTS">>,
       <<"STA", "AIS">>,
       \* DS can recover to S, begin failover (STA), or go offline
       \* (OFFLINE) via admin --force.
       \* DS -> STA supports the ANIS failover path where the
       \* standby is in DEGRADED_STANDBY when failover proceeds.
-      \* Source: L117; OFFLINE entry via PhoenixHAAdminTool
+      \* Source:; OFFLINE entry via PhoenixHAAdminTool
       \*         update --force (bypasses isTransitionAllowed)
       <<"DS", "S">>,
       <<"DS", "STA">>,
       <<"DS", "OFFLINE">>,
       \* AWOP returns to ANIS when peer comes back.
-      \* Source: L113
       <<"AWOP", "ANIS">>,
       \* Abort auto-completion transitions.
-      \* Source: L115, L119, L121
       <<"AbTAIS", "AIS">>,
       \* AbTAIS -> ANIS: needed so HDFS failure during abort can
       \* route to ANIS (S&F writers cannot self-correct while in
@@ -277,7 +274,6 @@ AllowedTransitions ==
       <<"AbTANIS", "ANIS">>,
       <<"AbTS", "S">>,
       \* ANISWOP returns to ANIS when peer comes back.
-      \* Source: L123
       <<"ANISWOP", "ANIS">>,
       \* OFFLINE can recover to S via admin --force.
       \* Source: PhoenixHAAdminTool update --force --state STANDBY
@@ -345,14 +341,14 @@ AllowedReplayTransitions ==
 
 \* The 6 cluster roles visible to clients.
 \*
-\* Source: ClusterRoleRecord.ClusterRole enum (L59-107)
+\* Source: ClusterRoleRecord.ClusterRole enum
 ClusterRole ==
     { "ACTIVE", "ACTIVE_TO_STANDBY", "STANDBY",
       "STANDBY_TO_ACTIVE", "OFFLINE", "UNKNOWN" }
 
 \* Maps an HAGroupState to its ClusterRole.
 \*
-\* Source: HAGroupState.getClusterRole() L73-97
+\* Source: HAGroupState.getClusterRole()
 RoleOf(state) ==
     \* Active states map to ACTIVE role.
     IF state \in ActiveStates THEN "ACTIVE"
@@ -394,8 +390,7 @@ Peer(c) == CHOOSE p \in Cluster : p # c
 \* allowing ANIS -> AIS.
 \*
 \* Source: HAGroupStoreClient.validateTransitionAndGetWaitTime()
-\*         L1027-1046; StoreAndForwardModeImpl.startHAGroupStoreUpdate-
-\*         Task() L71-87.
+\*         StoreAndForwardModeImpl.startHAGroupStoreUpdateTask()
 
 \* TRUE when the anti-flapping wait period has fully elapsed.
 \* The guarded transition (ANIS -> AIS) may proceed.

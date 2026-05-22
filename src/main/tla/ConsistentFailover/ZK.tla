@@ -34,11 +34,11 @@
  *   TLA+ action              | Java source
  *   -------------------------+----------------------------------------------
  *   ZKPeerDisconnect(c)      | HAGroupStoreClient.createCacheListener()
- *                            |   L894-898 -- peerPathChildrenCache
+ *                            | -- peerPathChildrenCache
  *                            |   CONNECTION_LOST/CONNECTION_SUSPENDED
  *                            |   (no effect on isHealthy for PEER cache)
  *   ZKPeerReconnect(c)       | HAGroupStoreClient.createCacheListener()
- *                            |   L903-906 -- peerPathChildrenCache
+ *                            | -- peerPathChildrenCache
  *                            |   CONNECTION_RECONNECTED; Curator re-syncs
  *                            |   PathChildrenCache, fires synthetic
  *                            |   CHILD_UPDATED events
@@ -48,10 +48,10 @@
  *   ZKPeerSessionRecover(c)  | Curator retry policy establishes new
  *                            |   session; PathChildrenCache rebuilds
  *   ZKLocalDisconnect(c)     | HAGroupStoreClient.createCacheListener()
- *                            |   L894-898 -- pathChildrenCache (LOCAL)
+ *                            | -- pathChildrenCache (LOCAL)
  *                            |   CONNECTION_LOST sets isHealthy = false
  *   ZKLocalReconnect(c)      | HAGroupStoreClient.createCacheListener()
- *                            |   L903-906 -- pathChildrenCache (LOCAL)
+ *                            | -- pathChildrenCache (LOCAL)
  *                            |   CONNECTION_RECONNECTED sets isHealthy =
  *                            |   true
  *)
@@ -98,7 +98,7 @@ ATSReconcileEffect(c) ==
  * Pre:  zkPeerConnected[c] = TRUE.
  * Post: zkPeerConnected[c] = FALSE.
  *
- * Source: HAGroupStoreClient.createCacheListener() L894-898
+ * Source: HAGroupStoreClient.createCacheListener()
  *         (CONNECTION_LOST/CONNECTION_SUSPENDED for PEER cache)
  *)
 ZKPeerDisconnect(c) ==
@@ -152,7 +152,7 @@ ZKPeerDisconnect(c) ==
  *       If clusterState[c] = ATS and peer in {S, DS}:
  *         clusterState[c] = AbTAIS (reconciliation).
  *
- * Source: HAGroupStoreClient.createCacheListener() L903-906
+ * Source: HAGroupStoreClient.createCacheListener()
  *         (CONNECTION_RECONNECTED for PEER cache)
  *)
 ZKPeerReconnect(c) ==
@@ -246,7 +246,7 @@ ZKPeerSessionRecover(c) ==
  * Pre:  zkLocalConnected[c] = TRUE.
  * Post: zkLocalConnected[c] = FALSE.
  *
- * Source: HAGroupStoreClient.createCacheListener() L894-898
+ * Source: HAGroupStoreClient.createCacheListener()
  *         (CONNECTION_LOST/CONNECTION_SUSPENDED for LOCAL cache)
  *)
 ZKLocalDisconnect(c) ==
@@ -267,7 +267,7 @@ ZKLocalDisconnect(c) ==
  * Pre:  zkLocalConnected[c] = FALSE.
  * Post: zkLocalConnected[c] = TRUE.
  *
- * Source: HAGroupStoreClient.createCacheListener() L903-906
+ * Source: HAGroupStoreClient.createCacheListener()
  *         (CONNECTION_RECONNECTED for LOCAL cache)
  *)
 ZKLocalReconnect(c) ==

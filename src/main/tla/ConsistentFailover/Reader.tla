@@ -26,32 +26,32 @@
  *   - DS entry: set(DEGRADED) -- folded into PeerReactToANIS (S->DS)
  *
  * CAS SEMANTICS: The SYNCED_RECOVERY -> SYNC transition uses
- * compareAndSet(SYNCED_RECOVERY, SYNC) at L332-333. The CAS can
- * only fail if a concurrent set(DEGRADED) fires first (the cluster
- * re-degrades before replay() can CAS). TLC's interleaving semantics
- * model this race: either ReplayRewind fires first (CAS succeeds)
- * or the DS-entry fold in PeerReactToANIS fires first (state becomes
- * DEGRADED, ReplayRewind is no longer enabled).
+ * compareAndSet(SYNCED_RECOVERY, SYNC) at. The CAS can only fail if
+ * a concurrent set(DEGRADED) fires first (the cluster re-degrades
+ * before replay() can CAS). TLC's interleaving semantics model this
+ * race: either ReplayRewind fires first (CAS succeeds) or the DS-entry
+ * fold in PeerReactToANIS fires first (state becomes DEGRADED,
+ * ReplayRewind is no longer enabled).
  *
  * Implementation traceability:
  *
  *   TLA+ action                | Java source
  *   --------------------------+--------------------------------------------
- *   ReplayAdvance(c)          | replay() L336-343 (SYNC) and L345-351
+ *   ReplayAdvance(c)          | replay() (SYNC) and
  *                             |   (DEGRADED) -- round processing loop
- *   ReplayRewind(c)           | replay() L323-333 --
+ *   ReplayRewind(c)           | replay() --
  *                             |   compareAndSet(SYNCED_RECOVERY, SYNC);
  *                             |   getFirstRoundToProcess() rewinds to
- *                             |   lastRoundInSync (L389)
+ *                             |   lastRoundInSync
  *   ReplayBeginProcessing(c)  | replay() round processing start --
  *                             |   in-progress files created when a
  *                             |   round is picked up for processing
  *   ReplayFinishProcessing(c) | replay() round processing end --
  *                             |   in-progress files cleaned up after
  *                             |   round is fully processed
- *   TriggerFailover(c)        | shouldTriggerFailover() L500-533 (guards);
- *                             |   triggerFailover() L535-548 (effect);
- *                             |   setHAGroupStatusToSync() L341-355
+ *   TriggerFailover(c)        | shouldTriggerFailover() (guards);
+ *                             |   triggerFailover() (effect);
+ *                             |   setHAGroupStatusToSync()
  *                             |   (ZK write)
  *)
 EXTENDS SpecState, Types
@@ -71,7 +71,7 @@ EXTENDS SpecState, Types
  * Guard: cluster is in a standby state or STA (replay continues
  * during failover pending) and replay is in SYNC or DEGRADED.
  *
- * Source: replay() L336-343 (SYNC), L345-351 (DEGRADED)
+ * Source: replay() (SYNC), (DEGRADED)
  *)
 ReplayAdvance(c) ==
     /\ clusterState[c] \in StandbyStates \union {"STA"}
@@ -87,8 +87,8 @@ ReplayAdvance(c) ==
  * Replay rewind and CAS to SYNC from SYNCED_RECOVERY.
  *
  * In SYNCED_RECOVERY, replay() rewinds lastRoundProcessed to
- * lastRoundInSync (via getFirstRoundToProcess() at L389), then
- * attempts compareAndSet(SYNCED_RECOVERY, SYNC) at L332-333.
+ * lastRoundInSync (via getFirstRoundToProcess() at), then attempts
+ * a compareAndSet(SYNCED_RECOVERY, SYNC) at.
  *
  * The CAS can only fail if a concurrent set(DEGRADED) fires first
  * (the cluster re-degrades before replay() can CAS). TLC's
@@ -97,8 +97,8 @@ ReplayAdvance(c) ==
  * fold in PeerReactToANIS fires first (state becomes DEGRADED,
  * this action is no longer enabled).
  *
- * Source: replay() L323-333 -- compareAndSet(SYNCED_RECOVERY, SYNC);
- *         getFirstRoundToProcess() L389 -- rewinds to lastRoundInSync
+ * Source: replay() -- compareAndSet(SYNCED_RECOVERY, SYNC);
+ *         getFirstRoundToProcess() -- rewinds to lastRoundInSync
  *)
 ReplayRewind(c) ==
     /\ replayState[c] = "SYNCED_RECOVERY"
@@ -121,7 +121,7 @@ ReplayRewind(c) ==
  * the cluster enters STA) and the in-progress directory is
  * currently empty.
  *
- * Source: replay() L307-310 -- getFirstRoundToProcess() returns a
+ * Source: replay() -- getFirstRoundToProcess() returns a
  *         round; processing begins, creating in-progress files.
  *)
 ReplayBeginProcessing(c) ==
@@ -142,7 +142,7 @@ ReplayBeginProcessing(c) ==
  *
  * Guard: in-progress directory is currently non-empty.
  *
- * Source: replay() L336-351 -- round processing completes,
+ * Source: replay() -- round processing completes,
  *         in-progress files are cleaned up.
  *)
 ReplayFinishProcessing(c) ==
@@ -162,10 +162,10 @@ ReplayFinishProcessing(c) ==
  * transition.
  *
  * Four guards model the conditions under which failover is safe:
- *   1. failoverPending[c] -- set by triggerFailoverListener (L159-171)
+ *   1. failoverPending[c] -- set by triggerFailoverListener
  *      when the local cluster enters STA.
  *   2. inProgressDirEmpty[c] -- no partially-processed replication
- *      log files (getInProgressFiles().isEmpty() at L508).
+ *      log files (getInProgressFiles().isEmpty() at).
  *   3. replayState[c] = "SYNC" -- the SYNCED_RECOVERY rewind must
  *      have completed. Without this guard, failover could proceed
  *      with degraded rounds not re-processed from the sync point.
@@ -178,11 +178,11 @@ ReplayFinishProcessing(c) ==
  * setHAGroupStatusToSync() which requires isHealthy = true.
  *
  * The effect also clears failoverPending, modeling triggerFailover()
- * L538 (failoverPending.set(false)).
+ * (failoverPending.set(false)).
  *
- * Source: shouldTriggerFailover() L500-533 (guards);
- *         triggerFailover() L535-548 (effect);
- *         setHAGroupStatusToSync() L341-355 (ZK write)
+ * Source: shouldTriggerFailover() (guards);
+ *         triggerFailover() (effect);
+ *         setHAGroupStatusToSync() (ZK write)
  *)
 TriggerFailover(c) ==
     /\ LocalZKHealthy(c)
