@@ -243,8 +243,10 @@ public class ClusterRoleRecord {
 
   /**
    * Equality on the six identity/role fields ({@code haGroupName, policy, url1, url2, role1,
-   * role2}); ignores {@code version} (always bumps) and {@code registryType} (avoids RPC->ZK
-   * thrash). Returns {@code false} if {@code other} is {@code null}.
+   * role2}); ignores {@code version} (always bumps) and the {@code registryType} field itself.
+   * Same-registry callers only: {@code url1}/{@code url2} are normalized at construction per
+   * {@code registryType}, so cross-registry records will not compare equal even for the same
+   * underlying host:port. Returns {@code false} if {@code other} is {@code null}.
    */
   public boolean isLogicallyEqualIgnoringVersionAndRegistry(ClusterRoleRecord other) {
     if (other == null) {

@@ -37,6 +37,7 @@ import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.nio.charset.StandardCharsets;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -765,7 +766,6 @@ public class HAGroupStoreClientIT extends HABaseIT {
   @Test
   public void testSetHAGroupStatusIfNeededWithUnhealthyClient() throws Exception {
     String haGroupName = testName.getMethodName();
-
     HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient
       .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
 
@@ -1662,6 +1662,51 @@ public class HAGroupStoreClientIT extends HABaseIT {
     assertEquals(ClusterRoleRecord.RegistryType.ZK, after.getLeft().getRegistryType());
     assertTrue("Version must bump when peer state replaces stale role2",
       after.getLeft().getVersion() > seeded.getLeft().getVersion());
+  }
+
+  /**
+   * Regression for the apurtell PR-2479 lockout concern. Seeds the legacy znode with the
+   * pre-PHOENIX-7495 JSON shape ({@code zk1}/{@code zk2} keys, no {@code registryType}). Strict
+   * Jackson on this build rejects the unknown {@code zk1}/{@code zk2} fields, so {@code fromJson}
+   * returns empty and the sync path takes the {@code existing=null} + {@code stat!=null} branch,
+   * CAS-overwriting the bytes with a fresh ZK-registry record.
+   */
+  @Test
+  public void testLegacyCrrSyncMigratesOlderZk1Zk2Record() throws Exception {
+    String haGroupName = testName.getMethodName();
+
+    // \\\\ in the Java literal -> \\ in JSON bytes -> \ in the parsed url string.
+    String legacyJson = String.format("{\"haGroupName\":\"%s\"," + "\"policy\":\"FAILOVER\","
+      + "\"zk1\":\"legacy-host-1\\\\:2181::/hbase\"," + "\"role1\":\"ACTIVE\","
+      + "\"zk2\":\"legacy-host-2\\\\:2181::/hbase\"," + "\"role2\":\"STANDBY\"," + "\"version\":7}",
+      haGroupName);
+
+    // Sanity: this build's strict Jackson cannot decode the pre-PHOENIX-7495 shape.
+    assertFalse("Pre-PHOENIX-7495 JSON must fail to parse on this build",
+      ClusterRoleRecord.fromJson(legacyJson.getBytes(StandardCharsets.UTF_8)).isPresent());
+
+    // Seed the legacy znode with the older bytes, then start the client with sync on.
+    legacyHaAdmin.getCurator().create().creatingParentsIfNeeded().forPath(toPath(haGroupName),
+      legacyJson.getBytes(StandardCharsets.UTF_8));
+
+    Configuration conf = legacyCrrConf(/* legacyEnabled */ true, /* periodicSec */ 60);
+    HAGroupStoreClient client = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    assertNotNull(client);
+
+    // Migration: existing=null (unparseable) but stat populated -> CAS overwrite path.
+    Pair<ClusterRoleRecord, Stat> migrated = awaitLegacyCrrPresent(haGroupName);
+    ClusterRoleRecord crr = migrated.getLeft();
+
+    assertEquals("Migrated record must carry registryType=ZK", ClusterRoleRecord.RegistryType.ZK,
+      crr.getRegistryType());
+    assertEquals("Local role must reflect live consistentHA state (seeded ACTIVE)",
+      ClusterRoleRecord.ClusterRole.ACTIVE, crr.getRole(formattedZkUrlFor(ClusterType.LOCAL)));
+    // The seeded record's version=7 is lost because the bytes don't parse; buildDesiredLegacyCrr
+    // sees existing=null and bases the new version on local.getAdminCRRVersion(). Just assert
+    // monotonic-from-zero.
+    assertTrue("Migrated record must have positive version", crr.getVersion() >= 1L);
+    // ZK stat reflects an overwrite (CAS at stat.version=0 produced stat.version=1).
+    assertEquals("ZK stat version must reflect overwrite", 1, migrated.getRight().getVersion());
   }
 
   // ---------- Legacy CRR sync test helpers ----------

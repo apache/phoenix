@@ -61,6 +61,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
@@ -183,8 +184,15 @@ public class HAGroupStoreClient implements Closeable {
             result.close();
             result = null;
           } else {
-            instances.putIfAbsent(localZkUrl, new ConcurrentHashMap<>());
-            instances.get(localZkUrl).put(haGroupName, result);
+            // Atomic register; pairs with deregisterFromInstances()'s computeIfPresent.
+            final HAGroupStoreClient created = result;
+            instances.compute(localZkUrl, (k, v) -> {
+              if (v == null) {
+                v = new ConcurrentHashMap<>();
+              }
+              v.put(haGroupName, created);
+              return v;
+            });
           }
         }
       }
@@ -917,7 +925,13 @@ public class HAGroupStoreClient implements Closeable {
             // Curator's per-namespace event dispatcher.
             ScheduledExecutorService syncExec = legacyCrrSyncExecutor;
             if (syncExec != null) {
-              syncExec.execute(this::syncLegacyCRRIfRoleChanged);
+              try {
+                syncExec.execute(this::syncLegacyCRRIfRoleChanged);
+              } catch (RejectedExecutionException ree) {
+                // Executor already shutting down (close() race); drop silently.
+                LOGGER.debug("Legacy CRR sync skipped for HA group {}: executor shut down",
+                  haGroupName);
+              }
             }
           }
           break;
@@ -1015,12 +1029,11 @@ public class HAGroupStoreClient implements Closeable {
   }
 
   /**
-   * Shuts down the periodic sync executor gracefully.
-   */
-  /**
    * Remove this instance from the static {@link #instances} map. Idempotent. Uses value-based
    * remove so that, if a concurrent {@link #getInstanceForZkUrl} has already swapped in a fresh
-   * replacement, the replacement is preserved.
+   * replacement, the replacement is preserved. The outer-CHM {@code computeIfPresent} below pairs
+   * with the {@code compute} in {@link #getInstanceForZkUrl} to serialize bucket creation/removal
+   * on the same key.
    */
   private void deregisterFromInstances() {
     final String key = (this.zkUrl != null) ? this.zkUrl : getLocalZkUrl(this.conf);
@@ -1173,8 +1186,9 @@ public class HAGroupStoreClient implements Closeable {
         LOGGER.info("Synced legacy CRR for HA group {} (version {} -> {})", haGroupName,
           existing != null ? existing.getVersion() : -1L, desired.getVersion());
       } catch (StaleClusterRoleRecordVersionException stale) {
-        // CAS lost; next event/periodic cycle reconverges.
-        LOGGER.info("Legacy CRR CAS lost for HA group {} at expected stat version {}", haGroupName,
+        // CAS lost (another RS won); next event/periodic cycle reconverges. DEBUG: N-1 RSes
+        // log this per transition.
+        LOGGER.debug("Legacy CRR CAS lost for HA group {} at expected stat version {}", haGroupName,
           existingStat != null ? existingStat.getVersion() : -1);
       }
     } catch (Exception e) {
@@ -1251,14 +1265,24 @@ public class HAGroupStoreClient implements Closeable {
   private void setupLegacyCrrSync() throws Exception {
     this.legacyHaAdmin = new PhoenixHAAdmin(this.zkUrl, conf, PHOENIX_HA_ZOOKEEPER_ZNODE_NAMESPACE);
     this.legacyCrrNodeCache = new NodeCache(this.legacyHaAdmin.getCurator(), toPath(haGroupName));
-    this.legacyCrrNodeCache.start(true);
+    // Async start; rebuild() below warms the cache off-lock.
+    this.legacyCrrNodeCache.start(false);
     this.legacyCrrSyncExecutor = Executors.newSingleThreadScheduledExecutor(r -> {
       Thread t = new Thread(r, "HAGroupStoreClient-LegacyCRRSync-" + haGroupName);
       t.setDaemon(true);
       return t;
     });
-    // Run the initial sync off-thread so we don't block the static HAGroupStoreClient.class
-    // monitor held by getInstanceForZkUrl on JDBC/ZK I/O.
+    // Warm NodeCache and run initial sync off-thread so neither blocks the static
+    // HAGroupStoreClient.class monitor held by getInstanceForZkUrl on ZK/JDBC I/O. The sync's
+    // empty-snapshot fallback handles the race where it runs before rebuild() lands.
+    final NodeCache cacheRef = this.legacyCrrNodeCache;
+    this.legacyCrrSyncExecutor.execute(() -> {
+      try {
+        cacheRef.rebuild();
+      } catch (Exception e) {
+        LOGGER.debug("Legacy CRR cache rebuild failed for HA group {}", haGroupName, e);
+      }
+    });
     this.legacyCrrSyncExecutor.execute(this::syncLegacyCRRIfRoleChanged);
     startLegacyCrrReconciliation();
   }
