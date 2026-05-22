@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.replication.log;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
@@ -60,7 +58,7 @@ public class LogFileWriterSyncTest {
     // -hsync-> FSDataOutputStream -hsync-> internalOutput
     internalOutput = spy(new LogFileTestUtil.SyncableByteArrayOutputStream());
     mockFs = mock(FileSystem.class);
-    when(mockFs.create(any(), anyBoolean())).thenReturn(
+    LogFileTestUtil.stubCreateFile(mockFs,
       new FSDataOutputStream((OutputStream) internalOutput, new FileSystem.Statistics("hdfs"), 0));
     when(internalOutput.getPos()).thenReturn(100L);
 
@@ -201,7 +199,7 @@ public class LogFileWriterSyncTest {
     Configuration hflushConf = HBaseConfiguration.create();
     SyncableDataOutput hflushOutput = spy(new LogFileTestUtil.SyncableByteArrayOutputStream());
     FileSystem hflushMockFs = mock(FileSystem.class);
-    when(hflushMockFs.create(any(), anyBoolean())).thenReturn(
+    LogFileTestUtil.stubCreateFile(hflushMockFs,
       new FSDataOutputStream((OutputStream) hflushOutput, new FileSystem.Statistics("hdfs"), 0));
     when(hflushOutput.getPos()).thenReturn(100L);
 

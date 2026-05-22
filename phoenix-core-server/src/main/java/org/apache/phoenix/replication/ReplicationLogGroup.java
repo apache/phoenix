@@ -151,6 +151,9 @@ public class ReplicationLogGroup {
   public static final String REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE_KEY =
     "phoenix.replication.log.rotation.size.percentage";
   public static final double DEFAULT_REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE = 0.95;
+  public static final String REPLICATION_LOG_FS_BLOCK_SIZE_BYTES_KEY =
+    "phoenix.replication.log.fs.block.size.bytes";
+  public static final long DEFAULT_REPLICATION_LOG_FS_BLOCK_SIZE_BYTES = 256 * 1024 * 1024L;
   public static final String REPLICATION_LOG_COMPRESSION_ALGORITHM_KEY =
     "phoenix.replication.log.compression";
   public static final String DEFAULT_REPLICATION_LOG_COMPRESSION_ALGORITHM = "NONE";

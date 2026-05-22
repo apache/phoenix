@@ -68,7 +68,8 @@ public class LogFileWriter implements LogFile.Writer {
     // TODO: Handle stream creation with proper permissions and overwrite options based on
     // config. For now we overwrite.
     FileSystem fs = context.getFileSystem();
-    FSDataOutputStream out = fs.create(context.getFilePath(), true);
+    FSDataOutputStream out = fs.createFile(context.getFilePath()).overwrite(true)
+      .blockSize(context.getFsBlockSize()).build();
     this.writer.init(context, new HDFSDataOutput(out, context.getUseHsync()));
     LOG.debug("Initialized LogFileWriter for path {}", context.getFilePath());
   }
