@@ -230,7 +230,7 @@ public class ReplicationLogReplayService {
    * @throws IOException  if there's an error retrieving consistency points from replication groups
    * @throws SQLException if there's an error accessing HA group information
    */
-  public long getConsistencyPoint() throws IOException, SQLException {
+  protected long getConsistencyPoint() throws IOException, SQLException {
     long consistencyPoint = EnvironmentEdgeManager.currentTime();
     List<String> replicationGroups = getReplicationGroups();
     for (String replicationGroup : replicationGroups) {
