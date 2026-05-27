@@ -81,6 +81,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.replication.reader.ReplicationLogReplayService;
 import org.apache.phoenix.schema.CompiledConditionalTTLExpression;
 import org.apache.phoenix.schema.CompiledTTLExpression;
 import org.apache.phoenix.schema.ConditionalTTLExpression;
@@ -199,6 +200,16 @@ public class CompactionScanner implements InternalScanner {
     this.maxLookbackWindowStart = this.maxLookbackInMillis == 0
       ? compactionTime
       : compactionTime - (this.maxLookbackInMillis + 1);
+    Configuration conf = env.getConfiguration();
+    boolean replayEnabled =
+      conf.getBoolean(ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED,
+        ReplicationLogReplayService.DEFAULT_REPLICATION_REPLAY_ENABLED);
+    boolean guardEnabled = conf.getBoolean(QueryServices.REPLICATION_COMPACTION_GUARD_ENABLED,
+      QueryServicesOptions.DEFAULT_REPLICATION_COMPACTION_GUARD_ENABLED);
+    if (replayEnabled && guardEnabled) {
+      this.maxLookbackWindowStart = applyReplicationConsistencyGuard(this.maxLookbackWindowStart,
+        conf, tableName, columnFamilyName);
+    }
     ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
     this.major = major && !forceMinorCompaction;
     this.minVersion = cfd.getMinVersions();
@@ -357,6 +368,45 @@ public class CompactionScanner implements InternalScanner {
     return value == null
       ? maxLookbackInMillis
       : maxLookbackMap.get(tableName + CompactionScanner.SEPARATOR + columnFamilyName);
+  }
+
+  /**
+   * Applies the replication replay consistency point as a floor on maxLookbackWindowStart. On
+   * standby clusters, this prevents compaction from dropping delete markers that have timestamps
+   * newer than the consistency point.
+   */
+  @VisibleForTesting
+  static long applyReplicationConsistencyGuard(long currentMaxLookbackWindowStart,
+    Configuration conf, String tableName, String columnFamilyName) {
+    try {
+      long consistencyPoint = getConsistencyPointFromReplayService(conf);
+      return adjustMaxLookbackWindowStart(currentMaxLookbackWindowStart, consistencyPoint,
+        tableName, columnFamilyName);
+    } catch (Exception e) {
+      LOGGER
+        .warn("Replication guard enabled but consistency point unavailable for table={} store={}."
+          + " Retaining all delete markers.", tableName, columnFamilyName, e);
+      return 0L;
+    }
+  }
+
+  @VisibleForTesting
+  static long getConsistencyPointFromReplayService(Configuration conf) throws Exception {
+    ReplicationLogReplayService service = ReplicationLogReplayService.getInstance(conf);
+    return service.getConsistencyPoint();
+  }
+
+  @VisibleForTesting
+  static long adjustMaxLookbackWindowStart(long currentMaxLookbackWindowStart,
+    long consistencyPoint, String tableName, String columnFamilyName) {
+    long adjusted = Math.min(currentMaxLookbackWindowStart, consistencyPoint);
+    if (adjusted < currentMaxLookbackWindowStart) {
+      LOGGER.info(
+        "Replication guard: table={} store={} maxLookbackWindowStart adjusted from {} to {}"
+          + " (consistencyPoint={})",
+        tableName, columnFamilyName, currentMaxLookbackWindowStart, adjusted, consistencyPoint);
+    }
+    return adjusted;
   }
 
   static class CellTimeComparator implements Comparator<Cell> {

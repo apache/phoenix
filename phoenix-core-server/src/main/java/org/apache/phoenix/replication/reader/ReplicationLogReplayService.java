@@ -29,6 +29,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
@@ -83,7 +84,7 @@ public class ReplicationLogReplayService {
   private ScheduledExecutorService scheduler;
   private volatile boolean isRunning = false;
 
-  private ReplicationLogReplayService(final Configuration conf) {
+  protected ReplicationLogReplayService(final Configuration conf) {
     this.conf = conf;
   }
 
@@ -103,6 +104,16 @@ public class ReplicationLogReplayService {
       }
     }
     return instance;
+  }
+
+  @VisibleForTesting
+  public static void setInstanceForTesting(ReplicationLogReplayService testInstance) {
+    instance = testInstance;
+  }
+
+  @VisibleForTesting
+  public static void resetInstanceForTesting() {
+    instance = null;
   }
 
   /**
@@ -219,7 +230,7 @@ public class ReplicationLogReplayService {
    * @throws IOException  if there's an error retrieving consistency points from replication groups
    * @throws SQLException if there's an error accessing HA group information
    */
-  protected long getConsistencyPoint() throws IOException, SQLException {
+  public long getConsistencyPoint() throws IOException, SQLException {
     long consistencyPoint = EnvironmentEdgeManager.currentTime();
     List<String> replicationGroups = getReplicationGroups();
     for (String replicationGroup : replicationGroups) {
