@@ -204,13 +204,12 @@ public class CompactionScanner implements InternalScanner {
     boolean replayEnabled =
       conf.getBoolean(ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED,
         ReplicationLogReplayService.DEFAULT_REPLICATION_REPLAY_ENABLED);
-    boolean guardEnabled = conf.getBoolean(
-      ReplicationLogReplayService.REPLICATION_COMPACTION_GUARD_ENABLED,
-      ReplicationLogReplayService.DEFAULT_REPLICATION_COMPACTION_GUARD_ENABLED);
+    boolean guardEnabled =
+      conf.getBoolean(ReplicationLogReplayService.REPLICATION_COMPACTION_GUARD_ENABLED,
+        ReplicationLogReplayService.DEFAULT_REPLICATION_COMPACTION_GUARD_ENABLED);
     if (replayEnabled && guardEnabled) {
-      this.maxLookbackWindowStart =
-        ReplicationLogReplayService.applyReplicationConsistencyGuard(this.maxLookbackWindowStart,
-          conf, tableName, columnFamilyName);
+      this.maxLookbackWindowStart = ReplicationLogReplayService.applyReplicationConsistencyGuard(
+        this.maxLookbackWindowStart, conf, tableName, columnFamilyName);
     }
     ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
     this.major = major && !forceMinorCompaction;
@@ -371,7 +370,6 @@ public class CompactionScanner implements InternalScanner {
       ? maxLookbackInMillis
       : maxLookbackMap.get(tableName + CompactionScanner.SEPARATOR + columnFamilyName);
   }
-
 
   static class CellTimeComparator implements Comparator<Cell> {
     public static final CellTimeComparator COMPARATOR = new CellTimeComparator();
