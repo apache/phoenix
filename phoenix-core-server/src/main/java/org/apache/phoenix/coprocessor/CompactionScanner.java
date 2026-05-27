@@ -204,8 +204,9 @@ public class CompactionScanner implements InternalScanner {
     boolean replayEnabled =
       conf.getBoolean(ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED,
         ReplicationLogReplayService.DEFAULT_REPLICATION_REPLAY_ENABLED);
-    boolean guardEnabled = conf.getBoolean(QueryServices.REPLICATION_COMPACTION_GUARD_ENABLED,
-      QueryServicesOptions.DEFAULT_REPLICATION_COMPACTION_GUARD_ENABLED);
+    boolean guardEnabled = conf.getBoolean(
+      ReplicationLogReplayService.REPLICATION_COMPACTION_GUARD_ENABLED,
+      ReplicationLogReplayService.DEFAULT_REPLICATION_COMPACTION_GUARD_ENABLED);
     if (replayEnabled && guardEnabled) {
       this.maxLookbackWindowStart =
         ReplicationLogReplayService.applyReplicationConsistencyGuard(this.maxLookbackWindowStart,

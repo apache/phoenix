@@ -63,7 +63,8 @@ public class CompactionReplicationGuardDisabledIT extends BaseTest {
     props.put(QueryServices.PHOENIX_COMPACTION_ENABLED, Boolean.toString(true));
     props.put(ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED,
       Boolean.toString(true));
-    props.put(QueryServices.REPLICATION_COMPACTION_GUARD_ENABLED, Boolean.toString(false));
+    props.put(ReplicationLogReplayService.REPLICATION_COMPACTION_GUARD_ENABLED,
+      Boolean.toString(false));
     props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
