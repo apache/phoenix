@@ -36,8 +36,8 @@ public class ReplicationCompactionGuardTest {
     long maxLookbackWindowStart = 1000000L;
     long consistencyPoint = 500000L;
 
-    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(
-      maxLookbackWindowStart, consistencyPoint, TABLE_NAME, CF_NAME);
+    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(maxLookbackWindowStart,
+      consistencyPoint, TABLE_NAME, CF_NAME);
 
     assertEquals(consistencyPoint, result);
   }
@@ -47,8 +47,8 @@ public class ReplicationCompactionGuardTest {
     long maxLookbackWindowStart = 500000L;
     long consistencyPoint = 1000000L;
 
-    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(
-      maxLookbackWindowStart, consistencyPoint, TABLE_NAME, CF_NAME);
+    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(maxLookbackWindowStart,
+      consistencyPoint, TABLE_NAME, CF_NAME);
 
     assertEquals(maxLookbackWindowStart, result);
   }
@@ -58,8 +58,8 @@ public class ReplicationCompactionGuardTest {
     long maxLookbackWindowStart = 500000L;
     long consistencyPoint = 500000L;
 
-    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(
-      maxLookbackWindowStart, consistencyPoint, TABLE_NAME, CF_NAME);
+    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(maxLookbackWindowStart,
+      consistencyPoint, TABLE_NAME, CF_NAME);
 
     assertEquals(maxLookbackWindowStart, result);
   }
@@ -69,8 +69,8 @@ public class ReplicationCompactionGuardTest {
     long maxLookbackWindowStart = 1000000L;
     long consistencyPoint = 0L;
 
-    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(
-      maxLookbackWindowStart, consistencyPoint, TABLE_NAME, CF_NAME);
+    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(maxLookbackWindowStart,
+      consistencyPoint, TABLE_NAME, CF_NAME);
 
     assertEquals(0L, result);
   }
@@ -80,8 +80,8 @@ public class ReplicationCompactionGuardTest {
     long maxLookbackWindowStart = System.currentTimeMillis() - 86400000L;
     long consistencyPoint = System.currentTimeMillis() - 120000L;
 
-    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(
-      maxLookbackWindowStart, consistencyPoint, TABLE_NAME, CF_NAME);
+    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(maxLookbackWindowStart,
+      consistencyPoint, TABLE_NAME, CF_NAME);
 
     assertEquals(maxLookbackWindowStart, result);
   }
@@ -91,8 +91,8 @@ public class ReplicationCompactionGuardTest {
     long maxLookbackWindowStart = System.currentTimeMillis() - 86400000L;
     long consistencyPoint = System.currentTimeMillis() - 604800000L;
 
-    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(
-      maxLookbackWindowStart, consistencyPoint, TABLE_NAME, CF_NAME);
+    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(maxLookbackWindowStart,
+      consistencyPoint, TABLE_NAME, CF_NAME);
 
     assertEquals(consistencyPoint, result);
   }
