@@ -514,6 +514,8 @@ public class QueryServicesOptions {
 
   public static final Boolean DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED = false;
 
+  public static final boolean DEFAULT_REPLICATION_COMPACTION_GUARD_ENABLED = true;
+
   // Default HA Group Store sync job interval in seconds (15 minutes = 900 seconds)
   public static final int DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS = 900;
 
