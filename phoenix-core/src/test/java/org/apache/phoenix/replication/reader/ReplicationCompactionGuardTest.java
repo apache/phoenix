@@ -15,18 +15,18 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.phoenix.coprocessor;
+package org.apache.phoenix.replication.reader;
 
 import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
 /**
- * Tests for the replication consistency point guard in CompactionScanner. Tests the pure adjustment
- * logic (adjustMaxLookbackWindowStart) which is the core of the guard — ensuring
+ * Tests for the replication consistency point guard in ReplicationLogReplayService. Tests the pure
+ * adjustment logic (adjustMaxLookbackWindowStart) which is the core of the guard — ensuring
  * maxLookbackWindowStart is floored to the consistency point.
  */
-public class CompactionScannerReplicationGuardTest {
+public class ReplicationCompactionGuardTest {
 
   private static final String TABLE_NAME = "TEST_TABLE";
   private static final String CF_NAME = "0";
@@ -36,8 +36,8 @@ public class CompactionScannerReplicationGuardTest {
     long maxLookbackWindowStart = 1000000L;
     long consistencyPoint = 500000L;
 
-    long result = CompactionScanner.adjustMaxLookbackWindowStart(maxLookbackWindowStart,
-      consistencyPoint, TABLE_NAME, CF_NAME);
+    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(
+      maxLookbackWindowStart, consistencyPoint, TABLE_NAME, CF_NAME);
 
     assertEquals(consistencyPoint, result);
   }
@@ -47,8 +47,8 @@ public class CompactionScannerReplicationGuardTest {
     long maxLookbackWindowStart = 500000L;
     long consistencyPoint = 1000000L;
 
-    long result = CompactionScanner.adjustMaxLookbackWindowStart(maxLookbackWindowStart,
-      consistencyPoint, TABLE_NAME, CF_NAME);
+    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(
+      maxLookbackWindowStart, consistencyPoint, TABLE_NAME, CF_NAME);
 
     assertEquals(maxLookbackWindowStart, result);
   }
@@ -58,8 +58,8 @@ public class CompactionScannerReplicationGuardTest {
     long maxLookbackWindowStart = 500000L;
     long consistencyPoint = 500000L;
 
-    long result = CompactionScanner.adjustMaxLookbackWindowStart(maxLookbackWindowStart,
-      consistencyPoint, TABLE_NAME, CF_NAME);
+    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(
+      maxLookbackWindowStart, consistencyPoint, TABLE_NAME, CF_NAME);
 
     assertEquals(maxLookbackWindowStart, result);
   }
@@ -69,8 +69,8 @@ public class CompactionScannerReplicationGuardTest {
     long maxLookbackWindowStart = 1000000L;
     long consistencyPoint = 0L;
 
-    long result = CompactionScanner.adjustMaxLookbackWindowStart(maxLookbackWindowStart,
-      consistencyPoint, TABLE_NAME, CF_NAME);
+    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(
+      maxLookbackWindowStart, consistencyPoint, TABLE_NAME, CF_NAME);
 
     assertEquals(0L, result);
   }
@@ -80,8 +80,8 @@ public class CompactionScannerReplicationGuardTest {
     long maxLookbackWindowStart = System.currentTimeMillis() - 86400000L;
     long consistencyPoint = System.currentTimeMillis() - 120000L;
 
-    long result = CompactionScanner.adjustMaxLookbackWindowStart(maxLookbackWindowStart,
-      consistencyPoint, TABLE_NAME, CF_NAME);
+    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(
+      maxLookbackWindowStart, consistencyPoint, TABLE_NAME, CF_NAME);
 
     assertEquals(maxLookbackWindowStart, result);
   }
@@ -91,8 +91,8 @@ public class CompactionScannerReplicationGuardTest {
     long maxLookbackWindowStart = System.currentTimeMillis() - 86400000L;
     long consistencyPoint = System.currentTimeMillis() - 604800000L;
 
-    long result = CompactionScanner.adjustMaxLookbackWindowStart(maxLookbackWindowStart,
-      consistencyPoint, TABLE_NAME, CF_NAME);
+    long result = ReplicationLogReplayService.adjustMaxLookbackWindowStart(
+      maxLookbackWindowStart, consistencyPoint, TABLE_NAME, CF_NAME);
 
     assertEquals(consistencyPoint, result);
   }
