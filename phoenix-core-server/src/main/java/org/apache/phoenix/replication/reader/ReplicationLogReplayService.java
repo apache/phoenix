@@ -240,6 +240,38 @@ public class ReplicationLogReplayService {
     return consistencyPoint;
   }
 
+  /**
+   * Applies the replication replay consistency point as a floor on maxLookbackWindowStart. On
+   * standby clusters, this prevents compaction from dropping delete markers that have timestamps
+   * newer than the consistency point.
+   */
+  @VisibleForTesting
+  public static long applyReplicationConsistencyGuard(long currentMaxLookbackWindowStart,
+    Configuration conf, String tableName, String columnFamilyName) {
+    try {
+      long consistencyPoint = getInstance(conf).getConsistencyPoint();
+      return adjustMaxLookbackWindowStart(currentMaxLookbackWindowStart, consistencyPoint,
+        tableName, columnFamilyName);
+    } catch (Exception e) {
+      LOG.warn("Replication guard enabled but consistency point unavailable for table={} store={}."
+        + " Retaining all delete markers.", tableName, columnFamilyName, e);
+      return 0L;
+    }
+  }
+
+  @VisibleForTesting
+  public static long adjustMaxLookbackWindowStart(long currentMaxLookbackWindowStart,
+    long consistencyPoint, String tableName, String columnFamilyName) {
+    long adjusted = Math.min(currentMaxLookbackWindowStart, consistencyPoint);
+    if (adjusted < currentMaxLookbackWindowStart) {
+      LOG.info(
+        "Replication guard: table={} store={} maxLookbackWindowStart adjusted from {} to {}"
+          + " (consistencyPoint={})",
+        tableName, columnFamilyName, currentMaxLookbackWindowStart, adjusted, consistencyPoint);
+    }
+    return adjusted;
+  }
+
   /** Returns the list of HA groups on the cluster */
   protected List<String> getReplicationGroups() throws SQLException {
     return HAGroupStoreManager.getInstance(conf).getHAGroupNames();
