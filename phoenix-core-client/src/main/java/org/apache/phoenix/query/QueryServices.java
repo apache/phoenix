@@ -644,8 +644,6 @@ public interface QueryServices extends SQLCloseable {
 
   String SYNCHRONOUS_REPLICATION_ENABLED = "phoenix.synchronous.replication.enabled";
 
-  String REPLICATION_COMPACTION_GUARD_ENABLED = "phoenix.replication.compaction.guard.enabled";
-
   // HA Group Store sync job interval in seconds
   String HA_GROUP_STORE_SYNC_INTERVAL_SECONDS = "phoenix.ha.group.store.sync.interval.seconds";
 
