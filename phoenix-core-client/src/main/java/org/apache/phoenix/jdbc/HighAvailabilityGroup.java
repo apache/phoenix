@@ -973,14 +973,14 @@ public class HighAvailabilityGroup {
     try {
       // Get the CRR via RSEndpoint for cluster 1
       ClusterRoleRecord roleRecord = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
-        info.getName(), this, pollerInterval, properties);
+        info.getUrl2(), info.getUrl1(), info.getName(), this, pollerInterval, properties);
       // If we have unknown role for any cluster then try getting CRR from cluster 2 endpoint and if
       // we get unknown role from there as well then CRR with higher adminVersion wins.
       if (roleRecord.hasUnknownRole()) {
         ClusterRoleRecord roleRecordFromPR;
         try {
-          roleRecordFromPR = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl2(),
-            info.getName(), this, pollerInterval, properties);
+          roleRecordFromPR = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
+            info.getUrl2(), info.getUrl2(), info.getName(), this, pollerInterval, properties);
         } catch (Exception e) {
           // As we were able to get CRR from cluster 1 but cluster 2 threw exception then just
           // return
@@ -1009,16 +1009,16 @@ public class HighAvailabilityGroup {
             == SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getErrorCode()
       ) {
         try {
-          return GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl2(), info.getName(),
-            this, pollerInterval, properties);
+          return GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(), info.getUrl2(),
+            info.getUrl2(), info.getName(), this, pollerInterval, properties);
         } catch (Exception ignoredEx) {
           throw (SQLException) e;
         }
       }
 
       // If caught exception is not CRR not found, then just try cluster 2 endpoint.
-      return GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl2(), info.getName(), this,
-        pollerInterval, properties);
+      return GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(), info.getUrl2(),
+        info.getUrl2(), info.getName(), this, pollerInterval, properties);
     }
   }
 
