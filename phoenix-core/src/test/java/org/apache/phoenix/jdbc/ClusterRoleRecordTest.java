@@ -229,6 +229,110 @@ public class ClusterRoleRecordTest {
     assertEquals(ClusterRole.UNKNOWN, role);
   }
 
+  /** JSON without a {@code registryType} field defaults to RPC on deserialization. */
+  @Test
+  public void testFromJsonWithoutRegistryTypeDefaultsToRpc() throws IOException {
+    byte[] data = readFile("json/test_role_record_no_registry_type.json");
+    Optional<ClusterRoleRecord> opt = ClusterRoleRecord.fromJson(data);
+    assertTrue(opt.isPresent());
+    ClusterRoleRecord record = opt.get();
+    assertEquals(ClusterRoleRecord.RegistryType.RPC, record.getRegistryType());
+    assertEquals(HighAvailabilityPolicy.FAILOVER, record.getPolicy());
+    assertEquals(7L, record.getVersion());
+    assertEquals(ClusterRole.ACTIVE, record.getRole1());
+    assertEquals(ClusterRole.STANDBY, record.getRole2());
+  }
+
+  /** Explicit {@code registryType=RPC} must round-trip as RPC. */
+  @Test
+  public void testFromJsonExplicitRpcRegistryTypeRoundTrips() throws IOException {
+    Optional<ClusterRoleRecord> opt =
+      ClusterRoleRecord.fromJson(readFile("json/test_role_record_explicit_rpc.json"));
+    assertTrue(opt.isPresent());
+    assertEquals(ClusterRoleRecord.RegistryType.RPC, opt.get().getRegistryType());
+    assertEquals(11L, opt.get().getVersion());
+  }
+
+  /** Explicit {@code registryType=ZK} round-trips as ZK. */
+  @Test
+  public void testFromJsonExplicitZkRegistryTypeRoundTrips() throws IOException {
+    Optional<ClusterRoleRecord> opt =
+      ClusterRoleRecord.fromJson(readFile("json/test_role_record_explicit_zk.json"));
+    assertTrue(opt.isPresent());
+    assertEquals(ClusterRoleRecord.RegistryType.ZK, opt.get().getRegistryType());
+    assertEquals(13L, opt.get().getVersion());
+  }
+
+  /** Round-trip: ZK-registry CRR -> JSON -> CRR preserves {@code registryType}. */
+  @Test
+  public void testToFromJsonPreservesZkRegistryTypeAcrossRoundTrip() throws IOException {
+    ClusterRoleRecord written = new ClusterRoleRecord(testName.getMethodName(),
+      HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK, "zk1\\:2181::/hbase",
+      ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.STANDBY, 42L);
+    Optional<ClusterRoleRecord> read =
+      ClusterRoleRecord.fromJson(ClusterRoleRecord.toJson(written));
+    assertTrue(read.isPresent());
+    assertEquals(ClusterRoleRecord.RegistryType.ZK, read.get().getRegistryType());
+    assertEquals(written, read.get());
+  }
+
+  // Tests for isLogicallyEqualIgnoringVersionAndRegistry
+
+  @Test
+  public void testLogicalEquality_nullOther() {
+    ClusterRoleRecord r =
+      new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK,
+        "zk1\\:2181::/hbase", ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
+    assertFalse(r.isLogicallyEqualIgnoringVersionAndRegistry(null));
+  }
+
+  @Test
+  public void testLogicalEquality_sameFieldsDifferentVersion() {
+    ClusterRoleRecord a =
+      new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK,
+        "zk1\\:2181::/hbase", ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
+    ClusterRoleRecord b =
+      new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK,
+        "zk1\\:2181::/hbase", ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.STANDBY, 42L);
+    assertTrue(a.isLogicallyEqualIgnoringVersionAndRegistry(b));
+    assertTrue(b.isLogicallyEqualIgnoringVersionAndRegistry(a));
+  }
+
+  @Test
+  public void testLogicalEquality_zkVsRpcWithDifferentUrlForms() {
+    // Same logical roles but different URL forms (different registryType normalization)
+    // are NOT equal because the normalized url1/url2 differ.
+    ClusterRoleRecord zkForm =
+      new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK,
+        "zk1\\:2181::/hbase", ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
+    ClusterRoleRecord rpcForm = new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER,
+      ClusterRoleRecord.RegistryType.RPC, "master1\\:16000", ClusterRole.ACTIVE, "master2\\:16000",
+      ClusterRole.STANDBY, 1L);
+    assertFalse(zkForm.isLogicallyEqualIgnoringVersionAndRegistry(rpcForm));
+  }
+
+  @Test
+  public void testLogicalEquality_differentRole() {
+    ClusterRoleRecord a =
+      new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK,
+        "zk1\\:2181::/hbase", ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
+    ClusterRoleRecord b =
+      new ClusterRoleRecord("g", HighAvailabilityPolicy.FAILOVER, ClusterRoleRecord.RegistryType.ZK,
+        "zk1\\:2181::/hbase", ClusterRole.ACTIVE, "zk2\\:2181::/hbase", ClusterRole.OFFLINE, 1L);
+    assertFalse(a.isLogicallyEqualIgnoringVersionAndRegistry(b));
+  }
+
+  @Test
+  public void testLogicalEquality_differentHaGroupName() {
+    ClusterRoleRecord a = new ClusterRoleRecord("g1", HighAvailabilityPolicy.FAILOVER,
+      ClusterRoleRecord.RegistryType.ZK, "zk1\\:2181::/hbase", ClusterRole.ACTIVE,
+      "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
+    ClusterRoleRecord b = new ClusterRoleRecord("g2", HighAvailabilityPolicy.FAILOVER,
+      ClusterRoleRecord.RegistryType.ZK, "zk1\\:2181::/hbase", ClusterRole.ACTIVE,
+      "zk2\\:2181::/hbase", ClusterRole.STANDBY, 1L);
+    assertFalse(a.isLogicallyEqualIgnoringVersionAndRegistry(b));
+  }
+
   // Private Helper Methods
 
   private ClusterRoleRecord getClusterRoleRecord(String name, HighAvailabilityPolicy policy,

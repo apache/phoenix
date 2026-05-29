@@ -1,0 +1,9 @@
+{
+  "haGroupName" : "testFromJsonWithoutRegistryTypeDefaultsToRpc",
+  "policy" : "FAILOVER",
+  "url1" : "url1\\:2181",
+  "role1" : "ACTIVE",
+  "url2" : "url2\\:2181",
+  "role2" : "STANDBY",
+  "version" : 7
+}
