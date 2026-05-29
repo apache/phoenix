@@ -256,7 +256,6 @@ public class ReplicationLogReplayService {
    * standby clusters, this prevents compaction from dropping delete markers that have timestamps
    * newer than the consistency point.
    */
-  @VisibleForTesting
   public static long applyReplicationConsistencyGuard(long currentMaxLookbackWindowStart,
     Configuration conf, String tableName, String columnFamilyName) {
     try {
@@ -271,7 +270,7 @@ public class ReplicationLogReplayService {
   }
 
   @VisibleForTesting
-  public static long adjustMaxLookbackWindowStart(long currentMaxLookbackWindowStart,
+  static long adjustMaxLookbackWindowStart(long currentMaxLookbackWindowStart,
     long consistencyPoint, String tableName, String columnFamilyName) {
     long adjusted = Math.min(currentMaxLookbackWindowStart, consistencyPoint);
     if (adjusted < currentMaxLookbackWindowStart) {

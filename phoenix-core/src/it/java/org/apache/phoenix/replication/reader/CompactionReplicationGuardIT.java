@@ -58,7 +58,7 @@ public class CompactionReplicationGuardIT extends BaseTest {
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    Map<String, String> props = Maps.newHashMapWithExpectedSize(4);
+    Map<String, String> props = Maps.newHashMapWithExpectedSize(5);
     props.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, Integer.toString(MAX_LOOKBACK_AGE));
     props.put(QueryServices.PHOENIX_COMPACTION_ENABLED, Boolean.toString(true));
     props.put(ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED,
