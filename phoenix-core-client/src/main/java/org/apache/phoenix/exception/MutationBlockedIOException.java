@@ -17,13 +17,18 @@
  */
 package org.apache.phoenix.exception;
 
-import java.io.IOException;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 
 /**
  * Exception thrown when CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is set and the current cluster
  * role is ACTIVE_TO_STANDBY.
+ *
+ * <p>Extends {@link DoNotRetryIOException} so HBase's RPC retry layers
+ * ({@code AsyncRequestFutureImpl}, {@code RpcRetryingCallerImpl}) fail-fast on the first hit
+ * instead of absorbing the brief mutation-block window into the retry budget. Phoenix's outer
+ * failover-aware retry remains responsible for routing to the new ACTIVE.
  */
-public class MutationBlockedIOException extends IOException {
+public class MutationBlockedIOException extends DoNotRetryIOException {
   private static final long serialVersionUID = 1L;
 
   /**
