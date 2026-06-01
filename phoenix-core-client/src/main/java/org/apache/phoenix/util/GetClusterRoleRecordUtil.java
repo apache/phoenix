@@ -230,11 +230,14 @@ public class GetClusterRoleRecordUtil {
               if (future != null) {
                 future.cancel(false);
               }
-              // Refresh ClusterRoleRecord for the HAGroup with appropriate transition
-              haGroup.refreshClusterRoleRecord(true);
-              ScheduledExecutorService scheduler = schedulerMap.remove(haGroupName);
-              if (scheduler != null) {
-                scheduler.shutdown();
+              try {
+                // Refresh ClusterRoleRecord for the HAGroup with appropriate transition
+                haGroup.refreshClusterRoleRecord(true);
+              } finally {
+                ScheduledExecutorService scheduler = schedulerMap.remove(haGroupName);
+                if (scheduler != null) {
+                  scheduler.shutdown();
+                }
               }
             }
           }
