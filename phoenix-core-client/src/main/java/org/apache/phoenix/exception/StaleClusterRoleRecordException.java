@@ -17,13 +17,18 @@
  */
 package org.apache.phoenix.exception;
 
-import java.io.IOException;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 
 /**
  * Exception thrown when attempting to do operation on STANDBY Cluster of HA Connection, indicating
  * that the client has slate Cluster Role Record info for the HAGroup.
+ *
+ * <p>Extends {@link DoNotRetryIOException} so HBase's RPC retry layers
+ * ({@code AsyncRequestFutureImpl}, {@code RpcRetryingCallerImpl}) fail-fast on the first hit
+ * instead of consuming the full retry budget against the now-STANDBY cluster. Phoenix's outer
+ * failover-aware retry remains responsible for routing to the new ACTIVE.
  */
-public class StaleClusterRoleRecordException extends IOException {
+public class StaleClusterRoleRecordException extends DoNotRetryIOException {
   private static final long serialVersionUID = 1L;
 
   /**
