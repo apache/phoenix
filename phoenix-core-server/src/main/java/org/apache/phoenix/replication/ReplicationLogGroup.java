@@ -962,12 +962,27 @@ public class ReplicationLogGroup {
   }
 
   /**
-   * Handles events from the Disruptor,
+   * Holder for a pending SYNC event captured at consumer pickup time. Stored separately from the
+   * LogEvent because Disruptor reuses ring buffer slots — retaining a LogEvent reference past the
+   * end of its onEvent invocation is unsafe.
    */
+  private static class PendingSync {
+    final CompletableFuture<Void> future;
+    final long pickupTimeNs;
+
+    PendingSync(CompletableFuture<Void> future, long pickupTimeNs) {
+      this.future = future;
+      this.pickupTimeNs = pickupTimeNs;
+    }
+  }
+
+  /** Handles events from the Disruptor. */
   protected class LogEventHandler implements EventHandler<LogEvent>, LifecycleAware {
-    private final List<CompletableFuture<Void>> pendingSyncFutures = new ArrayList<>();
+    private final List<PendingSync> pendingSyncs = new ArrayList<>();
     private ReplicationModeImpl currentModeImpl;
     private volatile IOException fatalException;
+    // Counts events drained per Disruptor batch. Single-threaded access from onEvent.
+    private int batchEventCount;
 
     public LogEventHandler() {
     }
@@ -1028,16 +1043,27 @@ public class ReplicationLogGroup {
      * @throws IOException if the sync operation fails
      */
     private void processPendingSyncs(long sequence) throws IOException {
-      if (pendingSyncFutures.isEmpty()) {
+      int pendingSyncCount = pendingSyncs.size();
+      if (pendingSyncCount == 0) {
         return;
       }
-      // call sync on the current mode
-      currentModeImpl.sync();
-      // Complete all pending sync futures
-      for (CompletableFuture<Void> future : pendingSyncFutures) {
-        future.complete(null);
+      metrics.updatePendingSyncCount(pendingSyncCount);
+      // Record per-event wait between SYNC pickup and fsync start.
+      long syncStartNs = System.nanoTime();
+      for (PendingSync ps : pendingSyncs) {
+        metrics.updatePendingSyncWaitTime(syncStartNs - ps.pickupTimeNs);
       }
-      pendingSyncFutures.clear();
+      // call sync on the current mode
+      try {
+        currentModeImpl.sync();
+      } finally {
+        metrics.updateFsSyncTime(System.nanoTime() - syncStartNs);
+      }
+      // Complete all pending sync futures
+      for (PendingSync ps : pendingSyncs) {
+        ps.future.complete(null);
+      }
+      pendingSyncs.clear();
       LOG.debug("Sync operation completed successfully up to sequence {}", sequence);
       // after a successful sync check the mode set on the replication group
       // Doing the mode check on sync points makes the implementation more robust
@@ -1068,13 +1094,13 @@ public class ReplicationLogGroup {
      * @param e        The IOException that caused the failure
      */
     private void failPendingSyncs(long sequence, IOException e) {
-      if (pendingSyncFutures.isEmpty()) {
+      if (pendingSyncs.isEmpty()) {
         return;
       }
-      for (CompletableFuture<Void> future : pendingSyncFutures) {
-        future.completeExceptionally(e);
+      for (PendingSync ps : pendingSyncs) {
+        ps.future.completeExceptionally(e);
       }
-      pendingSyncFutures.clear();
+      pendingSyncs.clear();
       LOG.warn("Failed to process syncs at sequence {}", sequence, e);
     }
 
@@ -1145,6 +1171,7 @@ public class ReplicationLogGroup {
       long currentTimeNs = System.nanoTime();
       long ringBufferTimeNs = currentTimeNs - event.timestampNs;
       metrics.updateRingBufferTime(ringBufferTimeNs);
+      batchEventCount++;
       if (fatalException != null) {
         // Append events are ignored; sync futures are failed immediately
         // so producer threads unblock without waiting for the sync timeout.
@@ -1159,7 +1186,7 @@ public class ReplicationLogGroup {
             currentModeImpl.append(event.record);
             break;
           case EVENT_TYPE_SYNC:
-            pendingSyncFutures.add(event.syncFuture);
+            pendingSyncs.add(new PendingSync(event.syncFuture, currentTimeNs));
             break;
           case EVENT_TYPE_SWAP:
             // Wake-up marker from LogRotationTask. Drain the staged writer so the old writer is
@@ -1188,6 +1215,13 @@ public class ReplicationLogGroup {
           new IOException("Unexpected error in event handler at sequence " + sequence, t);
         setFatalException(wrapped);
         failPendingSyncs(sequence, wrapped);
+      } finally {
+        // Reset on endOfBatch regardless of success/failure so the counter never leaks
+        // across batches when an exception path bypasses processPendingSyncs.
+        if (endOfBatch) {
+          metrics.updateBatchSize(batchEventCount);
+          batchEventCount = 0;
+        }
       }
     }
 

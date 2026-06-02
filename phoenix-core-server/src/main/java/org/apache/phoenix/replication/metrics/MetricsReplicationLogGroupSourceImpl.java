@@ -33,6 +33,10 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
   private final MutableHistogram syncTime;
   private final MutableHistogram rotationTime;
   private final MutableHistogram ringBufferTime;
+  private final MutableHistogram fsSyncTime;
+  private final MutableHistogram batchSize;
+  private final MutableHistogram pendingSyncCount;
+  private final MutableHistogram pendingSyncWaitTime;
 
   public MetricsReplicationLogGroupSourceImpl(String haGroupName) {
     this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT, haGroupName);
@@ -51,6 +55,12 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
     syncTime = getMetricsRegistry().newHistogram(SYNC_TIME, SYNC_TIME_DESC);
     rotationTime = getMetricsRegistry().newHistogram(ROTATION_TIME, ROTATION_TIME_DESC);
     ringBufferTime = getMetricsRegistry().newHistogram(RING_BUFFER_TIME, RING_BUFFER_TIME_DESC);
+    fsSyncTime = getMetricsRegistry().newHistogram(FS_SYNC_TIME, FS_SYNC_TIME_DESC);
+    batchSize = getMetricsRegistry().newHistogram(BATCH_SIZE, BATCH_SIZE_DESC);
+    pendingSyncCount =
+      getMetricsRegistry().newHistogram(PENDING_SYNC_COUNT, PENDING_SYNC_COUNT_DESC);
+    pendingSyncWaitTime =
+      getMetricsRegistry().newHistogram(PENDING_SYNC_WAIT_TIME, PENDING_SYNC_WAIT_TIME_DESC);
   }
 
   @Override
@@ -94,10 +104,34 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
   }
 
   @Override
+  public void updateFsSyncTime(long timeNs) {
+    fsSyncTime.add(timeNs);
+  }
+
+  @Override
+  public void updateBatchSize(long size) {
+    batchSize.add(size);
+  }
+
+  @Override
+  public void updatePendingSyncCount(long count) {
+    pendingSyncCount.add(count);
+  }
+
+  @Override
+  public void updatePendingSyncWaitTime(long timeNs) {
+    pendingSyncWaitTime.add(timeNs);
+  }
+
+  @Override
   public ReplicationLogMetricValues getCurrentMetricValues() {
-    return new ReplicationLogMetricValues(rotationCount.value(), rotationFailuresCount.value(),
-      syncToSafTransitions.value(), appendTime.getMax(), syncTime.getMax(), rotationTime.getMax(),
-      ringBufferTime.getMax());
+    return ReplicationLogMetricValues.builder().rotationCount(rotationCount.value())
+      .rotationFailuresCount(rotationFailuresCount.value())
+      .syncToSafTransitions(syncToSafTransitions.value()).appendTime(appendTime.getMax())
+      .syncTime(syncTime.getMax()).rotationTime(rotationTime.getMax())
+      .ringBufferTime(ringBufferTime.getMax()).fsSyncTime(fsSyncTime.getMax())
+      .batchSize(batchSize.getMax()).pendingSyncCount(pendingSyncCount.getMax())
+      .pendingSyncWaitTime(pendingSyncWaitTime.getMax()).build();
   }
 
   @Override

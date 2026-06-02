@@ -33,17 +33,33 @@ public interface MetricsReplicationLogGroupSource extends BaseSource {
   String ROTATION_FAILURES = "rotationFailures";
 
   String ROTATION_FAILURES_DESC = "Number of times log rotation has failed";
-  String APPEND_TIME = "appendTimeMs";
+
+  // All time histograms in this source are nanoseconds.
+  String APPEND_TIME = "appendTime";
   String APPEND_TIME_DESC = "Histogram of time taken for append operations in nanoseconds";
 
-  String SYNC_TIME = "syncTimeMs";
+  String SYNC_TIME = "syncTime";
   String SYNC_TIME_DESC = "Histogram of time taken for sync operations in nanoseconds";
 
-  String ROTATION_TIME = "rotationTimeMs";
+  String ROTATION_TIME = "rotationTime";
   String ROTATION_TIME_DESC = "Histogram of time taken for log rotations in nanoseconds";
 
   String RING_BUFFER_TIME = "ringBufferTime";
-  String RING_BUFFER_TIME_DESC = "Time events spend in the ring buffer";
+  String RING_BUFFER_TIME_DESC = "Time events spend in the ring buffer in nanoseconds";
+
+  String FS_SYNC_TIME = "fsSyncTime";
+  String FS_SYNC_TIME_DESC =
+    "Histogram of time taken for the underlying filesystem sync (fsync) in nanoseconds";
+
+  String BATCH_SIZE = "batchSize";
+  String BATCH_SIZE_DESC = "Histogram of number of events drained per Disruptor batch";
+
+  String PENDING_SYNC_COUNT = "pendingSyncCount";
+  String PENDING_SYNC_COUNT_DESC = "Histogram of pending sync futures coalesced into one fsync";
+
+  String PENDING_SYNC_WAIT_TIME = "pendingSyncWaitTime";
+  String PENDING_SYNC_WAIT_TIME_DESC =
+    "Time a SYNC event waits between consumer pickup and fsync start, in nanoseconds";
 
   String SYNC_TO_SAF_TRANSITIONS = "syncToSafTransitions";
   String SYNC_TO_SAF_TRANSITIONS_DESC = "Number of SYNC to STORE_AND_FORWARD mode transitions";
@@ -77,6 +93,30 @@ public interface MetricsReplicationLogGroupSource extends BaseSource {
    * @param timeNs Time spent in nanoseconds
    */
   void updateRingBufferTime(long timeNs);
+
+  /**
+   * Update the time taken for the underlying filesystem sync (fsync) in nanoseconds.
+   * @param timeNs Time taken in nanoseconds
+   */
+  void updateFsSyncTime(long timeNs);
+
+  /**
+   * Update the number of events drained in a single Disruptor batch.
+   * @param size Number of events in the batch
+   */
+  void updateBatchSize(long size);
+
+  /**
+   * Update the number of pending sync futures coalesced into one fsync.
+   * @param count Number of sync futures
+   */
+  void updatePendingSyncCount(long count);
+
+  /**
+   * Update the time a SYNC event waited between consumer pickup and fsync start.
+   * @param timeNs Time in nanoseconds
+   */
+  void updatePendingSyncWaitTime(long timeNs);
 
   /**
    * Increments the counter for log rotation failures. This counter tracks the number of times log
