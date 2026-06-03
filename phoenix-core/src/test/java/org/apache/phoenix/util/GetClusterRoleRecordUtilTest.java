@@ -38,18 +38,16 @@ import org.junit.Test;
 /**
  * Unit tests for {@link GetClusterRoleRecordUtil}. These tests cover two regressions in the
  * non-active CRR poller infrastructure:
- *
  * <ol>
  * <li>Per-HA-group future tracking: a previous implementation kept a single static
  * {@code pollerFuture} field that was overwritten by every {@code schedulePoller} invocation
  * regardless of HA group, so cancelling one HA group's poller would target whichever future was
  * scheduled most recently — possibly belonging to a different HA group. The fix keys both the
  * scheduler executor and the future on {@code haGroupName} via concurrent maps.</li>
- * <li>URL alternation each tick: a previous implementation pinned each scheduled poller to a
- * single URL passed in at schedule time. If that cluster's RegionServer Endpoint became
- * transiently unreachable, the poller could never observe the peer cluster's CRR even after
- * the peer became Active. The fix has the poller alternate between url1 and url2 on each tick.
- * </li>
+ * <li>URL alternation each tick: a previous implementation pinned each scheduled poller to a single
+ * URL passed in at schedule time. If that cluster's RegionServer Endpoint became transiently
+ * unreachable, the poller could never observe the peer cluster's CRR even after the peer became
+ * Active. The fix has the poller alternate between url1 and url2 on each tick.</li>
  * </ol>
  */
 public class GetClusterRoleRecordUtilTest {
@@ -73,8 +71,8 @@ public class GetClusterRoleRecordUtilTest {
   }
 
   /**
-   * URL-alternation core: even ticks pick url1, odd ticks pick url2. This verifies the helper
-   * that the poller calls each tick to choose its target URL.
+   * URL-alternation core: even ticks pick url1, odd ticks pick url2. This verifies the helper that
+   * the poller calls each tick to choose its target URL.
    */
   @Test
   public void testSelectUrlForTickAlternates() {
@@ -94,7 +92,8 @@ public class GetClusterRoleRecordUtilTest {
   public void testSelectUrlForTickHandlesLargeTickValues() {
     assertEquals(URL_1, GetClusterRoleRecordUtil.selectUrlForTick(URL_1, URL_2, 1_000_000L));
     assertEquals(URL_2, GetClusterRoleRecordUtil.selectUrlForTick(URL_1, URL_2, 1_000_001L));
-    assertEquals(URL_1, GetClusterRoleRecordUtil.selectUrlForTick(URL_1, URL_2, Long.MAX_VALUE - 1));
+    assertEquals(URL_1,
+      GetClusterRoleRecordUtil.selectUrlForTick(URL_1, URL_2, Long.MAX_VALUE - 1));
     assertEquals(URL_2, GetClusterRoleRecordUtil.selectUrlForTick(URL_1, URL_2, Long.MAX_VALUE));
   }
 
@@ -131,8 +130,8 @@ public class GetClusterRoleRecordUtilTest {
 
   /**
    * Removal/cancellation isolation: cancelling one HA group's poller cancels only that group's
-   * future and does not touch the peer group's future. This is the key behavioural invariant
-   * the prior single-static field violated.
+   * future and does not touch the peer group's future. This is the key behavioural invariant the
+   * prior single-static field violated.
    */
   @Test
   public void testCancelOneHaGroupDoesNotCancelOthers() {

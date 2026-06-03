@@ -61,10 +61,10 @@ public class GetClusterRoleRecordUtil {
 
   /**
    * Per-HA-group poller futures, keyed on haGroupName. A previous implementation kept a single
-   * static {@code pollerFuture} field that was overwritten by each new {@code schedulePoller}
-   * call regardless of haGroupName, so cancelling the poller for one HA group would cancel the
-   * future most recently scheduled (which may belong to a different HA group). Keying by
-   * haGroupName ensures each group's future is cancelled independently.
+   * static {@code pollerFuture} field that was overwritten by each new {@code schedulePoller} call
+   * regardless of haGroupName, so cancelling the poller for one HA group would cancel the future
+   * most recently scheduled (which may belong to a different HA group). Keying by haGroupName
+   * ensures each group's future is cancelled independently.
    */
   private static final Map<String, ScheduledFuture<?>> futureMap = new ConcurrentHashMap<>();
 
@@ -184,12 +184,12 @@ public class GetClusterRoleRecordUtil {
    * <p>
    * The poller alternates between {@code url1} and {@code url2} on successive ticks. Alternating
    * (rather than pinning to a single URL) avoids stalling if the chosen cluster's RegionServer
-   * Endpoint is transiently unreachable while the peer cluster is healthy and may already hold
-   * the Active role.
+   * Endpoint is transiently unreachable while the peer cluster is healthy and may already hold the
+   * Active role.
    * <p>
    * Each haGroupName gets its own entry in {@link #futureMap} and {@link #schedulerMap}. Multiple
-   * HA groups can therefore run independent pollers; cancellation of one HA group's poller does
-   * not interfere with another's lifecycle.
+   * HA groups can therefore run independent pollers; cancellation of one HA group's poller does not
+   * interfere with another's lifecycle.
    * @param url1           URL of the RegionServer Endpoint Service for cluster 1
    * @param url2           URL of the RegionServer Endpoint Service for cluster 2
    * @param haGroupName    Name of the HA group
@@ -242,8 +242,9 @@ public class GetClusterRoleRecordUtil {
             }
           }
         } catch (SQLException e) {
-          LOGGER.error("Exception found while polling for ClusterRoleRecord on {} for HA group"
-            + " {}: {}", tickUrl, haGroupName, e.getMessage());
+          LOGGER.error(
+            "Exception found while polling for ClusterRoleRecord on {} for HA group" + " {}: {}",
+            tickUrl, haGroupName, e.getMessage());
         }
       };
 
@@ -286,8 +287,8 @@ public class GetClusterRoleRecordUtil {
   }
 
   /**
-   * Pick which URL the poller should target on tick {@code tick}. Even ticks (0, 2, 4, ...)
-   * select {@code url1}; odd ticks select {@code url2}. Package-private for unit-test access.
+   * Pick which URL the poller should target on tick {@code tick}. Even ticks (0, 2, 4, ...) select
+   * {@code url1}; odd ticks select {@code url2}. Package-private for unit-test access.
    */
   static String selectUrlForTick(String url1, String url2, long tick) {
     return (tick % 2 == 0) ? url1 : url2;

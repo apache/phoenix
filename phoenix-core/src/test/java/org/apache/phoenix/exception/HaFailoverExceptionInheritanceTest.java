@@ -24,11 +24,10 @@ import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.junit.Test;
 
 /**
- * Unit tests for the HA failover signaling exceptions thrown server-side when a mutation hits an
- * HA group whose cluster role is in transition. Both classes must extend
- * {@link DoNotRetryIOException} so HBase's RPC retry layers fail-fast on the first hit instead of
- * consuming the per-call retry budget; Phoenix's outer failover-aware retry handles routing to
- * the new ACTIVE.
+ * Unit tests for the HA failover signaling exceptions thrown server-side when a mutation hits an HA
+ * group whose cluster role is in transition. Both classes must extend {@link DoNotRetryIOException}
+ * so HBase's RPC retry layers fail-fast on the first hit instead of consuming the per-call retry
+ * budget; Phoenix's outer failover-aware retry handles routing to the new ACTIVE.
  */
 public class HaFailoverExceptionInheritanceTest {
 
