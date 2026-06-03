@@ -28,9 +28,11 @@ import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilder;
 import org.apache.hadoop.hbase.CellBuilderFactory;
@@ -40,6 +42,8 @@ import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
@@ -49,6 +53,7 @@ import org.apache.phoenix.coprocessor.generated.IndexMutationsProtos;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
+import org.apache.phoenix.filter.CDCVersionFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.CDCTableInfo;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -123,21 +128,60 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     ) {
       return null;
     }
-    // TODO: Get Timerange from the start row and end row of the index scan object
-    // and set it in the datatable scan object.
-    // if (scan.getStartRow().length == 8) {
-    // startTimeRange = PLong.INSTANCE.getCodec().decodeLong(
-    // scan.getStartRow(), 0, SortOrder.getDefault());
-    // }
-    // if (scan.getStopRow().length == 8) {
-    // stopTimeRange = PLong.INSTANCE.getCodec().decodeLong(
-    // scan.getStopRow(), 0, SortOrder.getDefault());
-    // }
     Scan dataScan = prepareDataTableScan(dataRowKeys, true);
     if (dataScan == null) {
       return null;
     }
-    return CDCUtil.setupScanForCDC(dataScan);
+    CDCUtil.setupScanForCDC(dataScan);
+    Map<ImmutableBytesPtr, long[]> timestampMap = buildDataRowTimestampMap(dataRowKeys);
+    if (!timestampMap.isEmpty()) {
+      CDCVersionFilter versionFilter = new CDCVersionFilter(timestampMap);
+      Filter existingFilter = dataScan.getFilter();
+      if (existingFilter != null) {
+        dataScan.setFilter(
+          new FilterList(FilterList.Operator.MUST_PASS_ALL, existingFilter, versionFilter));
+      } else {
+        dataScan.setFilter(versionFilter);
+      }
+    }
+    return dataScan;
+  }
+
+  private Map<ImmutableBytesPtr, long[]> buildDataRowTimestampMap(Collection<byte[]> dataRowKeys) {
+    Set<ImmutableBytesPtr> scopedRowKeys = new HashSet<>(dataRowKeys.size());
+    for (byte[] dataRowKey : dataRowKeys) {
+      scopedRowKeys.add(new ImmutableBytesPtr(dataRowKey));
+    }
+    Map<ImmutableBytesPtr, TreeSet<Long>> tempMap = new HashMap<>();
+    for (List<Cell> indexRow : indexRows) {
+      if (indexRow.isEmpty()) {
+        continue;
+      }
+      Cell firstCell = indexRow.get(0);
+      byte[] indexRowKey = ImmutableBytesPtr.cloneCellRowIfNecessary(firstCell);
+      byte[] dataRowKey = indexToDataRowKeyMap.get(indexRowKey);
+      if (dataRowKey == null) {
+        continue;
+      }
+      ImmutableBytesPtr dataRowKeyPtr = new ImmutableBytesPtr(dataRowKey);
+      if (!scopedRowKeys.contains(dataRowKeyPtr)) {
+        continue;
+      }
+      long changeTs = firstCell.getTimestamp();
+      tempMap.computeIfAbsent(dataRowKeyPtr, k -> new TreeSet<>(Collections.reverseOrder()))
+        .add(changeTs);
+    }
+    Map<ImmutableBytesPtr, long[]> result = new HashMap<>(tempMap.size());
+    for (Map.Entry<ImmutableBytesPtr, TreeSet<Long>> entry : tempMap.entrySet()) {
+      TreeSet<Long> tsSet = entry.getValue();
+      long[] tsArray = new long[tsSet.size()];
+      int i = 0;
+      for (long ts : tsSet) {
+        tsArray[i++] = ts;
+      }
+      result.put(entry.getKey(), tsArray);
+    }
+    return result;
   }
 
   protected boolean getNextCoveredIndexRow(List<Cell> result) throws IOException {

@@ -614,6 +614,149 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     return changes;
   }
 
+  protected List<ChangeRow> generateChangesForPrePostImage(long startTS, String[] tenantids,
+    String tableName, CommitAdapter committer) throws Exception {
+    List<ChangeRow> changes = new ArrayList<>();
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    injectEdge.setValue(startTS);
+    committer.init();
+    Map<String, Object> rowid1 = new HashMap() {
+      {
+        put("K", 1);
+      }
+    };
+    Map<String, Object> rowid2 = new HashMap() {
+      {
+        put("K", 2);
+      }
+    };
+    long ts = startTS;
+    for (String tid : tenantids) {
+      try (Connection conn = committer.getConnection(tid)) {
+        // Initial inserts for two rows at the same timestamp (one batch, multiple data rows).
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 1L);
+              put("V2", 10L);
+              put("V3", 1000L);
+              put("B.VB", 100L);
+            }
+          })));
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts, rowid2, new TreeMap<String, Object>() {
+            {
+              put("V1", 200L);
+              put("V2", 2000L);
+            }
+          })));
+        committer.commit(conn);
+
+        // Partial update: only V1 changes, so V2/V3/B.VB pre-images come from the prior version.
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 2L);
+            }
+          })));
+        committer.commit(conn);
+
+        // V3 and B.VB remain untouched here, so they stay sparse relative to the V1/V2 churn.
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 3L);
+              put("V2", 20L);
+            }
+          })));
+        committer.commit(conn);
+
+        // Column-level null -> DeleteColumn marker on V2.
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V2", null);
+            }
+          })));
+        committer.commit(conn);
+
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 4L);
+              put("B.VB", 400L);
+            }
+          })));
+        committer.commit(conn);
+
+        // Full-row delete -> DeleteFamily marker.
+        changes.add(addChange(conn, tableName, new ChangeRow(tid, ts += 100, rowid1, null)));
+        committer.commit(conn);
+
+        // Re-insert after delete: PRE image must be empty (bounded by the delete family marker).
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 5L);
+              put("V2", 50L);
+            }
+          })));
+        committer.commit(conn);
+
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("B.VB", 500L);
+            }
+          })));
+        committer.commit(conn);
+
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 6L);
+              put("V2", 60L);
+              put("V3", 6000L);
+              put("B.VB", 600L);
+            }
+          })));
+        committer.commit(conn);
+
+        // Second row mutated again so the scan batch keeps covering multiple data rows.
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid2, new TreeMap<String, Object>() {
+            {
+              put("V1", 201L);
+            }
+          })));
+        committer.commit(conn);
+
+        // Consecutive full-row deletes: CDC collapses these into a single delete event.
+        changes.add(addChange(conn, tableName, new ChangeRow(tid, ts += 100, rowid1, null)));
+        committer.commit(conn);
+        changes.add(addChange(conn, tableName, new ChangeRow(tid, ts += 100, rowid1, null)));
+        committer.commit(conn);
+
+        // Re-insert a single column after the deletes.
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 7L);
+            }
+          })));
+        committer.commit(conn);
+      }
+      ts += 100;
+    }
+    committer.reset();
+    for (int i = 0; i < changes.size(); ++i) {
+      LOGGER.debug("----- generated change: " + i + " tenantId:" + changes.get(i).tenantId
+        + " changeTS: " + changes.get(i).changeTS + " pks: " + changes.get(i).pks + " change: "
+        + changes.get(i).change);
+    }
+    return changes;
+  }
+
   protected void verifyChangesViaSCN(String tenantId, Connection conn, String cdcFullName,
     Map<String, String> pkColumns, String dataTableName, Map<String, String> dataColumns,
     List<ChangeRow> changes, long startTS, long endTS) throws Exception {
