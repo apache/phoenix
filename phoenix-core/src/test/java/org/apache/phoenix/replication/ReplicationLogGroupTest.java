@@ -392,8 +392,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   /**
    * Tests size-based log rotation. Verifies that the log file is rotated when it exceeds the
    * configured size threshold and that operations continue correctly with the new log file. After
-   * the first sync, requestRotationIfNeeded submits an on-demand LogRotationTask which creates the
-   * new writer immediately on the executor thread.
+   * the first sync, requestRotationIfOversized submits an on-demand LogRotationTask which creates
+   * the new writer immediately on the executor thread.
    */
   @Test
   public void testSizeBasedRotation() throws Exception {
@@ -409,7 +409,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     for (int i = 0; i < 100; i++) {
       logGroup.append(tableName, commitId++, put);
     }
-    // Sync: data goes to old writer. requestRotationIfNeeded submits on-demand rotation task.
+    // Sync: data goes to old writer. requestRotationIfOversized submits on-demand rotation task.
     logGroup.sync();
 
     // Wait for the on-demand rotation task to create a new writer on the background thread
@@ -1914,14 +1914,14 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
   /**
    * Tests that the size check is not invoked from inside apply(). Pre-fix, every successful action
-   * inside apply() ran requestRotationIfNeeded(); when a rotation swapped in a new writer mid-batch
-   * and replay made it exceed the threshold, the size check after every append would request
-   * another rotation, drain it on the next apply(), replay again, and loop indefinitely.
+   * inside apply() ran requestRotationIfOversized(); when a rotation swapped in a new writer
+   * mid-batch and replay made it exceed the threshold, the size check after every append would
+   * request another rotation, drain it on the next apply(), replay again, and loop indefinitely.
    * <p>
    * The new writer is mocked so its getLength() always reports above the rotation threshold. On the
    * buggy code this triggers a rotation request after every successful append, which cascades into
-   * one writer per append. With the fix, requestRotationIfNeeded() runs only after currentBatch is
-   * cleared, so the chain is bounded.
+   * one writer per append. With the fix, requestRotationIfOversized() runs only after currentBatch
+   * is cleared, so the chain is bounded.
    */
   @Test
   public void testSizeRotationDoesNotLoopOnReplay() throws Exception {
@@ -1960,7 +1960,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     waitForRotationTick(roundDurationSeconds);
 
     // Continue appending. On the buggy code, the first such append drains the staged writer,
-    // replays the batch, then requestRotationIfNeeded() inside apply() fires (length is over
+    // replays the batch, then requestRotationIfOversized() inside apply() fires (length is over
     // threshold) → requests another rotation. Subsequent appends drain that one too, replay,
     // request another, and so on — one new writer per append.
     for (int i = 0; i < numAppendsAfterTick; i++) {
@@ -1979,24 +1979,16 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
-   * Verifies the contract of {@code LogRotationTask}'s {@code onDemand} flag: a scheduled task
-   * (onDemand=false) must not clear {@code rotationRequested}, and an on-demand task
-   * (onDemand=true) must clear it. This prevents a scheduled tick from stomping the flag set by a
-   * concurrent on-demand request whose task hasn't run yet, which would allow duplicate on-demand
-   * submissions to be queued.
+   * Both scheduled ticks and on-demand callers go through {@code requestRotation()}, so a task
+   * always owns {@code rotationRequested} and clears it in finally.
    */
   @Test
-  public void testScheduledRotationDoesNotClearOnDemandFlag() {
+  public void testRotationTaskClearsRequestedFlag() {
     ReplicationLog activeLog = logGroup.getActiveLog();
 
     activeLog.rotationRequested.set(true);
-    activeLog.new LogRotationTask(false).run();
-    assertTrue("Scheduled rotation must not clear rotationRequested",
-      activeLog.rotationRequested.get());
-
-    activeLog.new LogRotationTask(true).run();
-    assertFalse("On-demand rotation must clear rotationRequested",
-      activeLog.rotationRequested.get());
+    activeLog.new LogRotationTask().run();
+    assertFalse("LogRotationTask must clear rotationRequested", activeLog.rotationRequested.get());
   }
 
   /**

@@ -79,10 +79,15 @@ public class ReplicationLog {
   protected final AtomicLong rotationFailures = new AtomicLong(0);
   // Staged writer created by the background LogRotationTask, drained by checkAndReplaceWriter().
   private final AtomicReference<LogFileWriter> pendingWriter = new AtomicReference<>();
-  // Latch set by apply() before requesting an on-demand rotation; counted down by LogRotationTask
-  // in a finally block so apply() can wait (with timeout) for a fresh writer to be staged.
+  // Latch set by apply() on the retry path before calling requestRotation(); counted down by
+  // LogRotationTask in a finally block so apply() can wait (with timeout) for a fresh writer.
   private volatile CountDownLatch rotationStagedLatch;
   private final AtomicBoolean closed = new AtomicBoolean(false);
+  // Single gate for rotation submission. Set by requestRotation()'s CAS before queuing a task,
+  // cleared in LogRotationTask's finally. Both scheduled ticks and on-demand callers go through
+  // requestRotation(), so a request that arrives while a rotation is queued or running is a
+  // no-op — preventing the duplicate-writer bug where an in-flight scheduled rotation and a
+  // concurrent size-triggered request both stage writers and the second closes the first.
   @VisibleForTesting
   final AtomicBoolean rotationRequested = new AtomicBoolean(false);
   private final ExecutorService closeExecutor;
@@ -166,7 +171,9 @@ public class ReplicationLog {
     rotationExecutor = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
       .setNameFormat("ReplicationLogRotation-" + logGroup.getHAGroupName() + "-%d").setDaemon(true)
       .build());
-    rotationExecutor.scheduleAtFixedRate(new LogRotationTask(false), initialDelay, rotationTimeMs,
+    // Scheduled ticks route through requestRotation() so they share the same CAS gate as on-demand
+    // size-triggered rotations — only one rotation can be queued or running at a time.
+    rotationExecutor.scheduleAtFixedRate(this::requestRotation, initialDelay, rotationTimeMs,
       TimeUnit.MILLISECONDS);
     LOG.info("Started rotation executor with initial delay {}ms and interval {}ms", initialDelay,
       rotationTimeMs);
@@ -236,25 +243,29 @@ public class ReplicationLog {
   }
 
   /**
-   * Submits an on-demand {@link LogRotationTask} to the executor. The compareAndSet avoids
-   * submitting duplicate tasks — if the flag is already set, a task is already queued.
+   * Submits a {@link LogRotationTask} to the executor. The CAS gate ensures only one rotation can
+   * be queued or in flight at a time — if the flag is already set, a task is already pending or
+   * running. Both scheduled ticks and on-demand size-triggered callers go through this method.
    */
   private void requestRotation() {
     if (rotationRequested.compareAndSet(false, true)) {
       try {
-        rotationExecutor.execute(new LogRotationTask(true));
+        rotationExecutor.execute(new LogRotationTask());
       } catch (java.util.concurrent.RejectedExecutionException e) {
-        LOG.info("Rotation executor shut down, skipping on-demand rotation", e);
+        LOG.info("Rotation executor shut down, skipping rotation", e);
         rotationRequested.set(false);
       }
     }
   }
 
   /**
-   * Requests an on-demand rotation if the current writer exceeds the size threshold.
+   * Requests a rotation if the current writer exceeds the size threshold. Skips when a writer is
+   * already staged but not yet drained — the consumer hasn't swapped in the new writer yet, so
+   * {@code currentWriter} still reports the old (over-threshold) length and a fresh request would
+   * stage a redundant writer that the next task immediately closes.
    */
-  private void requestRotationIfNeeded() throws IOException {
-    if (isClosed() || rotationRequested.get()) {
+  private void requestRotationIfOversized() throws IOException {
+    if (isClosed() || rotationRequested.get() || pendingWriter.get() != null) {
       return;
     }
     if (shouldRotateForSize()) {
@@ -352,7 +363,7 @@ public class ReplicationLog {
       // unsynced records are replayed into it and could exceed the threshold immediately,
       // triggering another rotation and forming a loop. Checking only when the batch is empty
       // ensures size-based rotations don't cascade.
-      requestRotationIfNeeded();
+      requestRotationIfOversized();
     }
   }
 
@@ -365,7 +376,7 @@ public class ReplicationLog {
     currentBatch.clear();
     // See note in append(Record): size check runs only when currentBatch is empty so a replay
     // into a freshly-staged writer cannot trigger a cascading rotation.
-    requestRotationIfNeeded();
+    requestRotationIfOversized();
   }
 
   /**
@@ -406,7 +417,7 @@ public class ReplicationLog {
 
   @VisibleForTesting
   protected void forceRotation() {
-    new LogRotationTask(false).run();
+    new LogRotationTask().run();
     checkAndReplaceWriter(false);
   }
 
@@ -416,21 +427,14 @@ public class ReplicationLog {
 
   /**
    * Creates a new writer on a background thread and stages it in {@code pendingWriter} for the
-   * consumer thread to drain inside {@link #apply}. Invoked both by the scheduled rotation executor
-   * at round boundaries and on-demand via {@link #requestRotation()}.
+   * consumer thread to drain inside {@link #apply}. Submitted via {@link #requestRotation()} from
+   * both the scheduled tick and on-demand size-triggered callers.
    * <p>
-   * Only the on-demand path owns {@code rotationRequested} — it sets the flag before submitting the
-   * task and clears it in {@code finally}. Scheduled rotations must not touch the flag, otherwise
-   * they could clear a flag set by a concurrent on-demand request whose task hasn't run yet,
-   * allowing duplicate on-demand submissions to be queued.
+   * {@code rotationRequested} stays set for the entire duration of run() (cleared in finally), so
+   * any request that arrives while this task is creating/staging a writer is rejected by
+   * {@link #requestRotation()}'s CAS and not duplicated.
    */
   protected class LogRotationTask implements Runnable {
-    private final boolean onDemand;
-
-    LogRotationTask(boolean onDemand) {
-      this.onDemand = onDemand;
-    }
-
     @Override
     public void run() {
       if (closed.get()) {
@@ -461,11 +465,8 @@ public class ReplicationLog {
       } finally {
         // Time both success and failure paths so slow rotations are visible even when they fail.
         logGroup.getMetrics().updateRotationTime(System.nanoTime() - startNs);
-        if (onDemand) {
-          // Clear the flag last so requestRotation()'s CAS rejects duplicate on-demand
-          // submissions while this task is still creating/staging a writer.
-          rotationRequested.set(false);
-        }
+        // Clear last so requestRotation()'s CAS suppresses duplicates throughout this run.
+        rotationRequested.set(false);
         CountDownLatch latch = rotationStagedLatch;
         if (latch != null) {
           latch.countDown();
