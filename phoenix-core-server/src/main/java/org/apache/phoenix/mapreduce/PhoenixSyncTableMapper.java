@@ -20,31 +20,19 @@ package org.apache.phoenix.mapreduce;
 import static org.apache.phoenix.schema.types.PDataType.TRUE_BYTES;
 
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.security.MessageDigest;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
-import java.util.NavigableMap;
-import java.util.Set;
-import java.util.TreeMap;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
-import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseConfiguration;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Row;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -53,6 +41,9 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer.ChunkRepairRequest;
+import org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer.ChunkRepairResult;
+import org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer.DriftCounters;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.KeyRange;
@@ -89,6 +80,7 @@ public class PhoenixSyncTableMapper
     TARGET_ROWS_PROCESSED,
     ROWS_MISSING_ON_TARGET,
     ROWS_EXTRA_ON_TARGET,
+    ROWS_DIFFERENT_ON_TARGET,
     ROWS_CANNOT_REPAIR,
     CELLS_MISSING_ON_TARGET,
     CELLS_EXTRA_ON_TARGET,
@@ -104,7 +96,6 @@ public class PhoenixSyncTableMapper
   private long chunkSizeBytes;
   private boolean isRawScan;
   private boolean isReadAllVersions;
-  private int repairBatchSize;
   private Configuration conf;
   private Connection sourceConnection;
   private Connection targetConnection;
@@ -113,6 +104,7 @@ public class PhoenixSyncTableMapper
   private byte[] physicalTableName;
   private List<KeyRange> regionKeyRanges;
   private PhoenixSyncTableOutputRepository syncTableOutputRepository;
+  private PhoenixSyncTableChunkRepairer chunkRepairer;
 
   @Override
   protected void setup(Context context) throws InterruptedException {
@@ -128,7 +120,7 @@ public class PhoenixSyncTableMapper
       chunkSizeBytes = PhoenixSyncTableTool.getPhoenixSyncTableChunkSizeBytes(conf);
       isRawScan = PhoenixSyncTableTool.getPhoenixSyncTableRawScan(conf);
       isReadAllVersions = PhoenixSyncTableTool.getPhoenixSyncTableReadAllVersions(conf);
-      repairBatchSize = PhoenixSyncTableTool.getPhoenixSyncTableRepairBatchSize(conf);
+      int repairBatchSize = PhoenixSyncTableTool.getPhoenixSyncTableRepairBatchSize(conf);
       extractRegionBoundariesFromSplit(context);
       sourceConnection = ConnectionUtil.getInputConnection(conf);
       pTable = sourceConnection.unwrap(PhoenixConnection.class).getTable(tableName);
@@ -136,6 +128,9 @@ public class PhoenixSyncTableMapper
       connectToTargetCluster();
       globalConnection = createGlobalConnection(conf);
       syncTableOutputRepository = new PhoenixSyncTableOutputRepository(globalConnection);
+      chunkRepairer = new PhoenixSyncTableChunkRepairer(sourceConnection, targetConnection, pTable,
+        physicalTableName, tableName, fromTime, toTime, isRawScan, isReadAllVersions,
+        repairBatchSize);
     } catch (Exception e) {
       tryClosingResources();
       throw new RuntimeException(
@@ -234,6 +229,15 @@ public class PhoenixSyncTableMapper
     long repairFailedBefore = context.getCounter(SyncCounters.CHUNKS_REPAIR_FAILED).getValue();
     long sourceRowsBefore = context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
     long targetRowsBefore = context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).getValue();
+    long rowsMissingBefore = context.getCounter(SyncCounters.ROWS_MISSING_ON_TARGET).getValue();
+    long rowsExtraBefore = context.getCounter(SyncCounters.ROWS_EXTRA_ON_TARGET).getValue();
+    long rowsDifferentBefore =
+      context.getCounter(SyncCounters.ROWS_DIFFERENT_ON_TARGET).getValue();
+    long rowsCannotRepairBefore = context.getCounter(SyncCounters.ROWS_CANNOT_REPAIR).getValue();
+    long cellsMissingBefore = context.getCounter(SyncCounters.CELLS_MISSING_ON_TARGET).getValue();
+    long cellsExtraBefore = context.getCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).getValue();
+    long cellsDifferentBefore =
+      context.getCounter(SyncCounters.CELLS_DIFFERENT_ON_TARGET).getValue();
 
     // Process all unprocessed ranges in this region
     boolean isStartKeyInclusive = shouldStartKeyBeInclusive(regionStart, processedChunks);
@@ -256,10 +260,26 @@ public class PhoenixSyncTableMapper
       context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).getValue() - sourceRowsBefore;
     long targetRowsProcessed =
       context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).getValue() - targetRowsBefore;
+    long rowsMissingOnTarget =
+      context.getCounter(SyncCounters.ROWS_MISSING_ON_TARGET).getValue() - rowsMissingBefore;
+    long rowsExtraOnTarget =
+      context.getCounter(SyncCounters.ROWS_EXTRA_ON_TARGET).getValue() - rowsExtraBefore;
+    long rowsDifferentOnTarget =
+      context.getCounter(SyncCounters.ROWS_DIFFERENT_ON_TARGET).getValue() - rowsDifferentBefore;
+    long rowsCannotRepair =
+      context.getCounter(SyncCounters.ROWS_CANNOT_REPAIR).getValue() - rowsCannotRepairBefore;
+    long cellsMissingOnTarget =
+      context.getCounter(SyncCounters.CELLS_MISSING_ON_TARGET).getValue() - cellsMissingBefore;
+    long cellsExtraOnTarget =
+      context.getCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).getValue() - cellsExtraBefore;
+    long cellsDifferentOnTarget =
+      context.getCounter(SyncCounters.CELLS_DIFFERENT_ON_TARGET).getValue() - cellsDifferentBefore;
 
     Timestamp regionEndTime = new Timestamp(System.currentTimeMillis());
-    String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
-      .formatMapper(verifiedChunks, mismatchedChunks, sourceRowsProcessed, targetRowsProcessed);
+    String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter.formatMapper(
+      verifiedChunks, mismatchedChunks, sourceRowsProcessed, targetRowsProcessed,
+      rowsMissingOnTarget, rowsExtraOnTarget, rowsDifferentOnTarget, rowsCannotRepair,
+      cellsMissingOnTarget, cellsExtraOnTarget, cellsDifferentOnTarget);
     if (sourceRowsProcessed > 0) {
       recordRegionCompletion(regionStart, regionEnd, regionStartTime, regionEndTime, verifiedChunks,
         mismatchedChunks, unrepairableChunks, repairFailedChunks, counters, context);
@@ -448,16 +468,33 @@ public class PhoenixSyncTableMapper
             sourceChunk.rowCount, targetChunk.rowCount, matched);
         }
         sourceChunk.executionEndTime = new Timestamp(System.currentTimeMillis());
-        String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
-          .formatChunk(sourceChunk.rowCount, targetChunk.rowCount, 0L, 0L, 0L, 0L, 0L, 0L);
         if (matched) {
+          String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
+            .formatChunk(sourceChunk.rowCount, targetChunk.rowCount, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
           handleVerifiedChunk(sourceChunk, context, counters);
         } else {
-          handleMismatchedChunk(sourceChunk, context, counters);
-          if (!isDryRun) {
-            repairChunk(sourceChunk.startKey, sourceChunk.endKey, targetStart, targetEnd,
-              isTargetStartKeyInclusive, targetEndInclusive, sourceChunk.rowCount,
-              targetChunk.rowCount, sourceChunk.executionStartTime, context);
+          ChunkRepairRequest request = new ChunkRepairRequest(sourceChunk.startKey,
+            sourceChunk.endKey, targetStart, targetEnd, isTargetStartKeyInclusive,
+            targetEndInclusive, sourceChunk.rowCount, targetChunk.rowCount,
+            sourceChunk.executionStartTime, isDryRun);
+          ChunkRepairResult result = chunkRepairer.repair(request, context::progress);
+          if (isDryRun) {
+            // Dry-run: write CHUNK/MISMATCHED with real row-level drift in COUNTERS so the
+            // checkpoint audit row matches the job counters. No CHUNK/REPAIRED row and no
+            // target mutations.
+            DriftCounters drift = result.drift;
+            context.getCounter(SyncCounters.ROWS_MISSING_ON_TARGET)
+              .increment(drift.rowsMissingOnTarget);
+            context.getCounter(SyncCounters.ROWS_EXTRA_ON_TARGET)
+              .increment(drift.rowsExtraOnTarget);
+            context.getCounter(SyncCounters.ROWS_DIFFERENT_ON_TARGET)
+              .increment(drift.rowsDifferentOnTarget);
+            String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter.formatChunk(
+              sourceChunk.rowCount, targetChunk.rowCount, drift.rowsMissingOnTarget,
+              drift.rowsExtraOnTarget, drift.rowsDifferentOnTarget, 0L, 0L, 0L, 0L);
+            handleMismatchedChunk(sourceChunk, context, counters);
+          } else {
+            recordRepairOutcome(sourceChunk, request, result, context);
           }
         }
         previousSourceChunk = sourceChunk;
@@ -632,43 +669,22 @@ public class PhoenixSyncTableMapper
   }
 
   /**
-   * Builds the common Scan shape used by verification, repair, and tombstone loading: key
-   * range, inclusivity, time window, cache-blocks, plus raw-scan and all-versions semantics
-   * controlled by the user's {@code --raw-scan} / {@code --read-all-versions} flags.
-   *
-   * Callers that need to force raw-scan or all-versions on a specific call (e.g., the
-   * tombstone loader, which must surface tombstones regardless of user flags) pass
-   * {@code forceRaw=true} or {@code forceAllVersions=true} to override.
-   *
-   * Callers layer on their own caching, limits, and coprocessor attributes. Keeping the
-   * base shared guarantees that the cells visited by repair are exactly the cells the
-   * verifier hashed (when both pass the same force flags).
+   * Creates an HBase scan for a chunk range. Honors the user's {@code --raw-scan} and
+   * {@code --read-all-versions} flags. For target-side scans, sets caching/limit to 1 to enable
+   * sequential partial-digest retrieval — each target chunk's digest feeds into the next until
+   * scanning completes.
    */
-  private Scan createBaseScan(byte[] startKey, byte[] endKey, boolean isStartKeyInclusive,
-    boolean isEndKeyInclusive, boolean forceRaw, boolean forceAllVersions) throws IOException {
+  private Scan createChunkScan(byte[] startKey, byte[] endKey, boolean isStartKeyInclusive,
+    boolean isEndKeyInclusive, boolean isTargetScan) throws IOException {
     Scan scan = new Scan();
     scan.withStartRow(startKey, isStartKeyInclusive);
     scan.withStopRow(endKey, isEndKeyInclusive);
-    scan.setRaw(forceRaw || isRawScan);
-    if (forceAllVersions || isReadAllVersions) {
+    scan.setRaw(isRawScan);
+    if (isReadAllVersions) {
       scan.readAllVersions();
     }
     scan.setCacheBlocks(false);
     scan.setTimeRange(fromTime, toTime);
-    return scan;
-  }
-
-  /**
-   * Creates an HBase scan for a chunk range. Can be configured to use raw scan mode and read all
-   * cell versions based on command-line options.
-   */
-  private Scan createChunkScan(byte[] startKey, byte[] endKey, boolean isStartKeyInclusive,
-    boolean isEndKeyInclusive, boolean isTargetScan) throws IOException {
-    Scan scan =
-      createBaseScan(startKey, endKey, isStartKeyInclusive, isEndKeyInclusive, false, false);
-    // Set limit and caching to 1 for sequential partial digest retrieval from target.
-    // Enables digest continuation: each target chunk's digest feeds into the next until scanning
-    // completes
     if (isTargetScan) {
       scan.setLimit(1);
       scan.setCaching(1);
@@ -788,649 +804,60 @@ public class PhoenixSyncTableMapper
   }
 
   /**
-   * Builds a row-level HBase scan for repair. Differs from {@link #createChunkScan} in that it
-   * does NOT set {@code SYNC_TABLE_CHUNK_FORMATION} or {@code SYNC_TABLE_CHUNK_SIZE_BYTES}, so
-   * the scanner returns actual {@link Result} rows rather than coprocessor chunk metadata.
-   * Shares the {@link #createBaseScan} core (time range, raw-scan, all-versions, inclusivity)
-   * with verification so the cells visited here are the same cells that produced the chunk
-   * hash. Adds bulk caching plus Phoenix TTL / {@code IS_STRICT_TTL} attributes.
+   * Translates a {@link ChunkRepairResult} into MapReduce side effects: bumps the cell/row drift
+   * counters, builds the chunk-level checkpoint row (REPAIRED / UNREPAIRABLE / REPAIR_FAILED),
+   * and writes it via {@link #writeChunkCheckpoint} so the outcome counter is bumped only on a
+   * successful checkpoint write (audit row and counter stay consistent).
    */
-  private Scan createRepairScan(byte[] startKey, byte[] endKey, boolean isStartKeyInclusive,
-    boolean isEndKeyInclusive, PhoenixConnection phoenixConn) throws IOException, SQLException {
-    Scan scan =
-      createBaseScan(startKey, endKey, isStartKeyInclusive, isEndKeyInclusive, false, false);
-    scan.setCaching(1000);
-    ScanUtil.setScanAttributesForPhoenixTTL(scan, pTable, phoenixConn);
-    scan.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL, TRUE_BYTES);
-    return scan;
+  private void recordRepairOutcome(ChunkInfo sourceChunk, ChunkRepairRequest request,
+    ChunkRepairResult result, Context context) {
+    DriftCounters drift = result.drift;
+    context.getCounter(SyncCounters.ROWS_MISSING_ON_TARGET).increment(drift.rowsMissingOnTarget);
+    context.getCounter(SyncCounters.ROWS_EXTRA_ON_TARGET).increment(drift.rowsExtraOnTarget);
+    context.getCounter(SyncCounters.ROWS_CANNOT_REPAIR).increment(drift.rowsCannotRepair);
+    context.getCounter(SyncCounters.CELLS_MISSING_ON_TARGET).increment(drift.cellsMissingOnTarget);
+    context.getCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).increment(drift.cellsExtraOnTarget);
+    context.getCounter(SyncCounters.CELLS_DIFFERENT_ON_TARGET)
+      .increment(drift.cellsDifferentOnTarget);
+
+    String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter.formatChunk(
+      request.verifySourceRows, request.verifyTargetRows, drift.rowsMissingOnTarget,
+      drift.rowsExtraOnTarget, drift.rowsDifferentOnTarget, drift.rowsCannotRepair,
+      drift.cellsMissingOnTarget, drift.cellsExtraOnTarget, drift.cellsDifferentOnTarget);
+
+    PhoenixSyncTableCheckpointOutputRow.Status status;
+    SyncCounters outcomeCounter;
+    switch (result.status) {
+      case REPAIRED:
+        status = PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED;
+        outcomeCounter = SyncCounters.CHUNKS_REPAIRED;
+        break;
+      case UNREPAIRABLE:
+        status = PhoenixSyncTableCheckpointOutputRow.Status.UNREPAIRABLE;
+        outcomeCounter = SyncCounters.CHUNKS_UNREPAIRABLE;
+        break;
+      case REPAIR_FAILED:
+        status = PhoenixSyncTableCheckpointOutputRow.Status.REPAIR_FAILED;
+        outcomeCounter = SyncCounters.CHUNKS_REPAIR_FAILED;
+        break;
+      default:
+        throw new IllegalStateException("Unexpected repair status: " + result.status);
+    }
+
+    writeChunkCheckpoint(new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+      .setTargetCluster(targetZkQuorum).setType(PhoenixSyncTableCheckpointOutputRow.Type.CHUNK)
+      .setFromTime(fromTime).setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun)
+      .setStartRowKey(sourceChunk.startKey).setEndRowKey(sourceChunk.endKey).setStatus(status)
+      .setExecutionStartTime(request.verifyStartTime).setExecutionEndTime(result.endTime)
+      .setCounters(counters).build(), outcomeCounter, context);
   }
 
   /**
-   * Loads the target row's tombstone index for shadow detection. Issues a single-row scan
-   * against target with raw=true and all-versions forced (regardless of user flags), so the
-   * tombstone subtypes that would otherwise be filtered out are surfaced. Live cells in the
-   * response are ignored — they were already visible to the repair scan and are handled by
-   * the merge logic. (HBase 2.x exposes {@code setRaw} only on Scan, not on Get — so a
-   * one-row scan stands in for what would otherwise be a raw Get.)
+   * Writes a chunk-level checkpoint row and bumps the matching outcome counter. The outcome
+   * counter is bumped only after a successful checkpoint write, so on-disk audit and in-memory
+   * counters stay in sync.
    *
-   * Time range: the base scan applies {@code [fromTime, toTime]}, but shadow detection
-   * needs tombstones at ts >= fromTime regardless of the upper bound. A DeleteColumn /
-   * DeleteFamily at ts > toTime can still shadow a Put we mirror at ts in window during
-   * application reads (HBase tombstones don't respect the verifier's sync window). Lower
-   * bound stays at fromTime since tombstones below the window can't shadow anything we'd
-   * write inside the window.
-   */
-  private TargetRowTombstones loadTargetRowTombstones(byte[] rowKey, Table targetHTable)
-    throws IOException {
-    Scan scan = createBaseScan(rowKey, rowKey, true, true, true, true);
-    scan.setTimeRange(fromTime, Long.MAX_VALUE);
-    scan.setCaching(1);
-    scan.setLimit(1);
-    TargetRowTombstones tombstones = new TargetRowTombstones();
-    try (ResultScanner scanner = targetHTable.getScanner(scan)) {
-      Result raw = scanner.next();
-      if (raw != null) {
-        for (Cell cell : raw.rawCells()) {
-          // Record both tombstones (for shadow detection) and Puts (for hidden-version
-          // discovery during cmp > 0 tombstoning of target-only cells).
-          tombstones.record(cell);
-        }
-      }
-    }
-    return tombstones;
-  }
-
-  /**
-   * Lazily-built per-row Put and Delete mutations plus per-row unrepairable-drift state.
-   * Each mutation field is created on first use so a row that needs only Puts produces no
-   * Delete (and vice versa); a row that needs no mutation at all produces neither.
-   *
-   * Tombstone-index state is lazy: {@link #tombstones} is loaded only on the first
-   * shadow check via {@link #tombstones(Table)} (one raw scan per row at most).
-   * {@link #anyCellUnrepairable} accumulates whether the row carries any drift that
-   * repair could not act on — either a source-side Put was shadow-suppressed by an
-   * existing target tombstone, or a target-only tombstone exists that source lacks
-   * (HBase has no API to remove tombstones). The caller reads it after the merge to
-   * decide whether to bump {@link SyncCounters#ROWS_CANNOT_REPAIR}.
-   *
-   * After construction, callers append produced mutations to the pending batches via
-   * {@link #flush(List, List)}.
-   */
-  private final class RowRepairState {
-    private final byte[] rowKey;
-    Put put;
-    Delete delete;
-    TargetRowTombstones tombstones;
-    boolean anyCellUnrepairable;
-
-    RowRepairState(byte[] rowKey) {
-      this.rowKey = rowKey;
-    }
-
-    Put put() {
-      if (put == null) {
-        put = new Put(rowKey);
-      }
-      return put;
-    }
-
-    Delete delete() {
-      if (delete == null) {
-        delete = new Delete(rowKey);
-      }
-      return delete;
-    }
-
-    /**
-     * Lazily loads the target row's tombstone index on first call (one raw single-row scan
-     * via {@link #loadTargetRowTombstones}); cached thereafter for reuse across the row's
-     * subsequent shadow checks.
-     */
-    TargetRowTombstones targetRowTombstones(Table targetHTable) throws IOException {
-      if (tombstones == null) {
-        tombstones = loadTargetRowTombstones(rowKey, targetHTable);
-      }
-      return tombstones;
-    }
-
-    void flush(List<Put> pendingPuts, List<Delete> pendingDeletes) {
-      if (put != null) {
-        pendingPuts.add(put);
-      }
-      if (delete != null) {
-        pendingDeletes.add(delete);
-      }
-    }
-  }
-
-  /**
-   * Cell-level drift counts produced by {@link #diffCellsForRow}. Populated only for rows
-   * present on both clusters; whole-row drift is signaled by the caller directly at the
-   * {@code cmp != 0} branches in {@link #repairChunk}. Three counters partition the cell
-   * differences into disjoint buckets — source-only, target-only-live, same-coord-diff-value.
-   */
-  private static final class CellDriftCounts {
-    static final CellDriftCounts NONE = new CellDriftCounts(0, 0, 0);
-
-    final int missing;
-    final int extra;
-    final int different;
-
-    CellDriftCounts(int missing, int extra, int different) {
-      this.missing = missing;
-      this.extra = extra;
-      this.different = different;
-    }
-  }
-
-  /**
-   * Per-row index of target's tombstones AND Puts in {@code [fromTime, MAX_VALUE]}, built
-   * lazily from a single raw single-row scan with all-versions enabled. Used in two roles:
-   *
-   * <ol>
-   *   <li><b>Shadow detection</b> ({@link #wouldShadow}): would a source Put we're about
-   *       to mirror be suppressed by an existing target tombstone?</li>
-   *   <li><b>Hidden-version discovery</b> ({@link #targetPutTimestampsBetween}): what
-   *       max-versions-filtered target Puts sit between source's max ts at a column and
-   *       target's visible Put? Used in the {@code cmp > 0} tombstoning path to issue
-   *       point Deletes for hidden versions that would otherwise surface on read after
-   *       the visible Put is shadowed.</li>
-   * </ol>
-   *
-   * HBase has four tombstone subtypes, each with distinct shadow semantics:
-   *   Delete                — shadows a Put at {@code (cf, q, ts == T)} exactly
-   *   DeleteColumn          — shadows Puts at {@code (cf, q, ts <= T)}
-   *   DeleteFamily          — shadows Puts at {@code (cf, *, ts <= T)}
-   *   DeleteFamilyVersion   — shadows Puts at {@code (cf, *, ts == T)}
-   * {@link #wouldShadow(Cell)} consults all four indices and returns true on any match.
-   */
-  private static final class TargetRowTombstones {
-    private final Map<ColumnKey, Set<Long>> deletePointTs = new HashMap<>();
-    private final Map<ColumnKey, Long> deleteColumnUpperBound = new HashMap<>();
-    private final Map<ByteBuffer, Long> deleteFamilyUpperBound = new HashMap<>();
-    private final Map<ByteBuffer, Set<Long>> deleteFamilyVersionTs = new HashMap<>();
-    /** Per-column ts-ordered set of target's Put timestamps. */
-    private final Map<ColumnKey, NavigableMap<Long, Boolean>> targetPutTs = new HashMap<>();
-
-    void record(Cell cell) {
-      if (CellUtil.isDelete(cell)) {
-        recordTombstone(cell);
-      } else {
-        targetPutTs.computeIfAbsent(columnKey(cell), k -> new TreeMap<>())
-          .put(cell.getTimestamp(), Boolean.TRUE);
-      }
-    }
-
-    private void recordTombstone(Cell tombstone) {
-      long ts = tombstone.getTimestamp();
-      ByteBuffer family = ByteBuffer.wrap(CellUtil.cloneFamily(tombstone));
-      switch (tombstone.getType()) {
-        case Delete:
-          deletePointTs.computeIfAbsent(columnKey(tombstone), k -> new HashSet<>()).add(ts);
-          break;
-        case DeleteColumn:
-          deleteColumnUpperBound.merge(columnKey(tombstone), ts, Math::max);
-          break;
-        case DeleteFamily:
-          deleteFamilyUpperBound.merge(family, ts, Math::max);
-          break;
-        case DeleteFamilyVersion:
-          deleteFamilyVersionTs.computeIfAbsent(family, k -> new HashSet<>()).add(ts);
-          break;
-        default:
-          // Caller filters via CellUtil.isDelete; non-tombstone cells should never reach here.
-      }
-    }
-
-    /** Returns true if any tombstone in this index would shadow a Put at the cell's coords. */
-    boolean wouldShadow(Cell sourcePut) {
-      long ts = sourcePut.getTimestamp();
-      ByteBuffer family = ByteBuffer.wrap(CellUtil.cloneFamily(sourcePut));
-      ColumnKey column = columnKey(sourcePut);
-
-      Set<Long> pointTs = deletePointTs.get(column);
-      if (pointTs != null && pointTs.contains(ts)) {
-        return true;
-      }
-      Long deleteColTs = deleteColumnUpperBound.get(column);
-      if (deleteColTs != null && ts <= deleteColTs) {
-        return true;
-      }
-      Long deleteFamTs = deleteFamilyUpperBound.get(family);
-      if (deleteFamTs != null && ts <= deleteFamTs) {
-        return true;
-      }
-      Set<Long> dfvTs = deleteFamilyVersionTs.get(family);
-      return dfvTs != null && dfvTs.contains(ts);
-    }
-
-    /**
-     * Returns target's Put timestamps at {@code (cf, q)} that are strictly greater than
-     * {@code lowerExclusive} and strictly less than {@code upperExclusive}. Used to find
-     * hidden (max-versions-filtered) target versions sitting between source's max ts and
-     * target's visible ts so they can be point-Deleted.
-     */
-    Set<Long> targetPutTimestampsBetween(byte[] family, byte[] qualifier, long lowerExclusive,
-      long upperExclusive) {
-      NavigableMap<Long, Boolean> tss = targetPutTs.get(new ColumnKey(family, qualifier));
-      if (tss == null) {
-        return Collections.emptySet();
-      }
-      return tss.subMap(lowerExclusive, false, upperExclusive, false).keySet();
-    }
-
-    private static ColumnKey columnKey(Cell cell) {
-      return new ColumnKey(CellUtil.cloneFamily(cell), CellUtil.cloneQualifier(cell));
-    }
-  }
-
-  /** Composite (family, qualifier) key with byte-array equality semantics. */
-  private static final class ColumnKey {
-    private final byte[] family;
-    private final byte[] qualifier;
-
-    ColumnKey(byte[] family, byte[] qualifier) {
-      this.family = family;
-      this.qualifier = qualifier;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (!(o instanceof ColumnKey)) {
-        return false;
-      }
-      ColumnKey other = (ColumnKey) o;
-      return Bytes.equals(family, other.family) && Bytes.equals(qualifier, other.qualifier);
-    }
-
-    @Override
-    public int hashCode() {
-      return Bytes.hashCode(family) * 31 + Bytes.hashCode(qualifier);
-    }
-  }
-
-  /**
-   * Result of {@link #diffCellsForRow}. Carries the cell-level drift counts plus a flag
-   * indicating whether any source-side mirror was suppressed because target tombstones
-   * would shadow it — making the row partially or fully unrepairable.
-   */
-  private static final class RowDiffOutcome {
-    static final RowDiffOutcome NONE = new RowDiffOutcome(CellDriftCounts.NONE, false);
-
-    final CellDriftCounts cells;
-    final boolean rowCannotRepair;
-
-    RowDiffOutcome(CellDriftCounts cells, boolean rowCannotRepair) {
-      this.cells = cells;
-      this.rowCannotRepair = rowCannotRepair;
-    }
-  }
-
-  /**
-   * Per-chunk aggregate of all six drift counters: three row-level (whole rows missing /
-   * extra on target, plus rows that cannot be repaired because target's row is entirely
-   * tombstones — HBase has no API to remove tombstones, only major compaction does) plus
-   * three cell-level (cells missing / extra / different on rows present on both clusters).
-   * Owns the bookkeeping that was previously scattered across {@link #repairChunk} — local
-   * accumulators, MapReduce job-counter increments, the
-   * {@link PhoenixSyncTableCheckpointOutputRow.CounterFormatter#formatChunk} call, and the
-   * end-of-chunk log line. Adding a new drift signal means touching this class and the one
-   * place in the merge loop that produces it; everything else (commit to job context,
-   * checkpoint COUNTERS string, log) flows through these methods.
-   */
-  private static final class DriftCounters {
-    long rowsMissingOnTarget;
-    long rowsExtraOnTarget;
-    long rowsCannotRepair;
-    long cellsMissingOnTarget;
-    long cellsExtraOnTarget;
-    long cellsDifferentOnTarget;
-
-    void addCellDrift(CellDriftCounts cellDrift) {
-      cellsMissingOnTarget += cellDrift.missing;
-      cellsExtraOnTarget += cellDrift.extra;
-      cellsDifferentOnTarget += cellDrift.different;
-    }
-
-    /** Increments the job's MapReduce counters with this chunk's drift totals. */
-    void commitTo(Context context) {
-      context.getCounter(SyncCounters.ROWS_MISSING_ON_TARGET).increment(rowsMissingOnTarget);
-      context.getCounter(SyncCounters.ROWS_EXTRA_ON_TARGET).increment(rowsExtraOnTarget);
-      context.getCounter(SyncCounters.ROWS_CANNOT_REPAIR).increment(rowsCannotRepair);
-      context.getCounter(SyncCounters.CELLS_MISSING_ON_TARGET).increment(cellsMissingOnTarget);
-      context.getCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).increment(cellsExtraOnTarget);
-      context.getCounter(SyncCounters.CELLS_DIFFERENT_ON_TARGET).increment(cellsDifferentOnTarget);
-    }
-
-    /** Formats the chunk's COUNTERS string for persistence in the checkpoint table. */
-    String formatChunkCounters(long verifySourceRows, long verifyTargetRows) {
-      return PhoenixSyncTableCheckpointOutputRow.CounterFormatter.formatChunk(verifySourceRows,
-        verifyTargetRows, rowsMissingOnTarget, rowsExtraOnTarget, rowsCannotRepair,
-        cellsMissingOnTarget, cellsExtraOnTarget, cellsDifferentOnTarget);
-    }
-
-    /** Compact end-of-chunk log line summarizing all six drift signals. */
-    String toLogString() {
-      return String.format(
-        "rowsMissingOnTarget=%d, rowsExtraOnTarget=%d, rowsCannotRepair=%d, "
-          + "cellsMissingOnTarget=%d, cellsExtraOnTarget=%d, cellsDifferentOnTarget=%d",
-        rowsMissingOnTarget, rowsExtraOnTarget, rowsCannotRepair, cellsMissingOnTarget,
-        cellsExtraOnTarget, cellsDifferentOnTarget);
-    }
-  }
-
-  /**
-   * Routes a source cell to the right mutation kind. Put cells go to a {@link Put}; tombstone
-   * cells go to a {@link Delete} via {@link Delete#add(Cell)} which preserves the tombstone's
-   * exact subtype (Delete / DeleteColumn / DeleteFamily / DeleteFamilyVersion). Required under
-   * {@code --raw-scan}: {@link Put#add(Cell)} rejects non-Put cells.
-   */
-  private void mirrorSourceCell(Cell cell, RowRepairState rowState) throws IOException {
-    if (CellUtil.isDelete(cell)) {
-      rowState.delete().add(cell);
-    } else {
-      rowState.put().add(cell);
-    }
-  }
-
-  /**
-   * Mirrors a source cell onto target only if no existing target tombstone would shadow
-   * the resulting Put. Lazily loads the target row's tombstone index on first Put cell
-   * (one raw single-row scan per row at most) via {@link RowRepairState#tombstones}. If
-   * the cell would be shadowed, the mirror is suppressed, {@code rowState.anyCellUnrepairable}
-   * is set, and the caller is expected to record {@link SyncCounters#ROWS_CANNOT_REPAIR}.
-   *
-   * Shadow detection only applies to Put cells. Tombstone source cells (under
-   * {@code --raw-scan}) bypass the check and always mirror via {@link #mirrorSourceCell}:
-   * {@link TargetRowTombstones#wouldShadow} is defined for live cells (does an existing target
-   * tombstone hide a new Put on read), and is not meaningful for delete-marker cells —
-   * mirroring a tombstone over an existing tombstone is a benign duplicate, not a suppression.
-   *
-   * @return {@code true} if the cell was mirrored, {@code false} if suppressed by shadowing.
-   */
-  private boolean mirrorSourceCellUnlessShadowed(Cell cell, Table targetHTable,
-      RowRepairState rowState) throws IOException {
-    if (!CellUtil.isDelete(cell) && rowState.targetRowTombstones(targetHTable).wouldShadow(cell)) {
-      rowState.anyCellUnrepairable = true;
-      return false;
-    }
-    mirrorSourceCell(cell, rowState);
-    return true;
-  }
-
-  /**
-   * Tombstones a target-only cell to make target's read view at this column match source's.
-   * Skips cells that are themselves already tombstones: HBase has no API to remove a
-   * tombstone cell — tombstones can only be reaped by major compaction once they age past
-   * the keep-deleted-cells window. Issuing another Delete at the same coordinates writes a
-   * duplicate marker, does not change the row's effective state, and only adds compaction
-   * load. Combined with the absence of a source-side counterpart to mirror, the right
-   * action is to leave the existing tombstone untouched.
-   *
-   * Tombstone subtype depends on what source has at this {@code (cf, q)}:
-   * <ul>
-   *   <li><b>Source has no cell at this column</b> — target's read at this column should
-   *       be empty. Use {@link Delete#addColumns(byte[], byte[], long)} (DeleteColumn,
-   *       scope {@code ts <= T}) so even max-versions-hidden older target versions are
-   *       shadowed. A point Delete would only shadow this exact ts, surfacing the next
-   *       hidden version on read.</li>
-   *   <li><b>Source's max ts at this column is >= target's ts</b> — point-Delete only
-   *       target's exact ts. Source's equal-or-higher ts mirror will surface; no hidden
-   *       version can surface above it.</li>
-   *   <li><b>Source's max ts at this column is &lt; target's ts</b> — point-Delete target's
-   *       ts, AND point-Delete every max-versions-hidden Put on target with ts in
-   *       {@code (sourceMaxTs, targetTs)}. Otherwise after target's visible cell is
-   *       shadowed, the next hidden version surfaces above source's mirror — silent
-   *       divergence. Hidden versions are discovered via the row's tombstone+Put index
-   *       loaded from a single raw all-versions scan.</li>
-   * </ul>
-   *
-   * Pre-build {@code sourceMaxTsByColumn} once per row from the source cell array.
-   *
-   * @return true if the cell was a live cell that contributed a tombstone marker, false if
-   *         the cell was already a tombstone and was skipped.
-   */
-  private boolean tombstoneTargetCell(Cell cell, Table targetHTable, RowRepairState rowState,
-    Map<ColumnKey, Long> sourceMaxTsByColumn) throws IOException {
-    if (CellUtil.isDelete(cell)) {
-      return false;
-    }
-    byte[] family = CellUtil.cloneFamily(cell);
-    byte[] qualifier = CellUtil.cloneQualifier(cell);
-    long ts = cell.getTimestamp();
-    Long sourceMaxTs = sourceMaxTsByColumn.get(new ColumnKey(family, qualifier));
-    if (sourceMaxTs == null) {
-      // Source has no cell at this column; shadow ts <= T so hidden older versions
-      // don't surface on read.
-      rowState.delete().addColumns(family, qualifier, ts);
-    } else if (sourceMaxTs >= ts) {
-      // Source's mirror is at >= target's ts; point-Delete only target's exact ts.
-      rowState.delete().addColumn(family, qualifier, ts);
-    } else {
-      // Source's max ts at this column < target's ts. Point-Delete target's visible cell,
-      // AND point-Delete every hidden target Put in (sourceMaxTs, ts) so they don't
-      // surface above source's mirror after the visible cell is shadowed.
-      rowState.delete().addColumn(family, qualifier, ts);
-      Set<Long> hiddenTs = rowState.targetRowTombstones(targetHTable)
-        .targetPutTimestampsBetween(family, qualifier, sourceMaxTs, ts);
-      for (Long hidden : hiddenTs) {
-        rowState.delete().addColumn(family, qualifier, hidden);
-      }
-    }
-    return true;
-  }
-
-  /**
-   * Outcome of {@link #mirrorWholeRow}. {@code FULLY_MIRRORED} = every source cell mirrored
-   * onto target with no shadowing. {@code PARTIALLY_MIRRORED} = at least one cell mirrored,
-   * at least one suppressed by an existing target tombstone (caller bumps both
-   * ROWS_MISSING_ON_TARGET and ROWS_CANNOT_REPAIR). {@code FULLY_SHADOWED} = every source
-   * cell suppressed; the row is unrepairable until target's tombstones are reaped (caller
-   * bumps only ROWS_CANNOT_REPAIR).
-   */
-  private enum WholeRowMirrorOutcome {
-    FULLY_MIRRORED, PARTIALLY_MIRRORED, FULLY_SHADOWED
-  }
-
-  /**
-   * Mirrors every source cell of a row that is missing on target. Source cells route by
-   * type: live cells to a Put, tombstone cells (under {@code --raw-scan}) to a Delete via
-   * {@link Delete#add(Cell)}. Each cell is shadow-checked against existing target
-   * tombstones (lazy raw single-row scan on first cell) — even though target's filtered scan
-   * returned no cells for this row, target may carry tombstones that would shadow our Put.
-   */
-  private WholeRowMirrorOutcome mirrorWholeRow(Result sourceResult, Table targetHTable,
-    List<Put> pendingPuts, List<Delete> pendingDeletes) throws IOException {
-    RowRepairState rowState = new RowRepairState(sourceResult.getRow());
-    int mirrored = 0;
-    for (Cell cell : sourceResult.rawCells()) {
-      if (mirrorSourceCellUnlessShadowed(cell, targetHTable, rowState)) {
-        mirrored++;
-      }
-    }
-    rowState.flush(pendingPuts, pendingDeletes);
-    if (mirrored == 0) {
-      return WholeRowMirrorOutcome.FULLY_SHADOWED;
-    }
-    return rowState.anyCellUnrepairable ? WholeRowMirrorOutcome.PARTIALLY_MIRRORED
-      : WholeRowMirrorOutcome.FULLY_MIRRORED;
-  }
-
-  /**
-   * Tombstones every live cell of a row that is extra on target. Existing tombstones on the
-   * target row are skipped — HBase cannot remove tombstone cells; only major compaction
-   * reaps them.
-   *
-   * @return the number of live cells that contributed a tombstone marker. {@code 0} means
-   *         the row was already entirely tombstones — repair could not act on it, and the
-   *         caller should record this as {@link SyncCounters#ROWS_CANNOT_REPAIR}.
-   */
-  private int tombstoneWholeRow(Result targetResult, Table targetHTable,
-    List<Put> pendingPuts, List<Delete> pendingDeletes) throws IOException {
-    RowRepairState rowState = new RowRepairState(targetResult.getRow());
-    // Source has no row at all here, so source has no cell at any column — every target
-    // cell hits the "shadow ts <= T" path inside tombstoneTargetCell.
-    Map<ColumnKey, Long> sourceMaxTsByColumn = Collections.emptyMap();
-    int liveCellsTombstoned = 0;
-    for (Cell cell : targetResult.rawCells()) {
-      if (tombstoneTargetCell(cell, targetHTable, rowState, sourceMaxTsByColumn)) {
-        liveCellsTombstoned++;
-      }
-    }
-    rowState.flush(pendingPuts, pendingDeletes);
-    return liveCellsTombstoned;
-  }
-
-  /**
-   * Diffs cells of two rows present on both clusters in lock-step using {@link CellComparator}
-   * order and appends the resulting {@link Put}/{@link Delete} mutations (if any) to the
-   * pending lists. Returns a {@link RowDiffOutcome} carrying both the cell-level drift
-   * counts and a flag indicating whether any source-side mirror was suppressed by target
-   * tombstone shadowing — letting the caller decide whether to bump
-   * {@link SyncCounters#ROWS_CANNOT_REPAIR}.
-   *
-   * Branches:
-   *   same coords + matching value         → no drift, no signal
-   *   same coords + different value        → different++; mirror source cell (shadow-checked)
-   *   source-only cell at unique coords    → missing++;   mirror source cell (shadow-checked)
-   *   target-only live cell at unique coords → extra++;   tombstone target cell
-   *   target-only tombstone cell           → skip (HBase cannot remove tombstones)
-   *
-   * Cells whose mirror is suppressed by shadowing do NOT bump the cell counter — the
-   * cell wasn't written to target, so it isn't repaired drift. The row-level shadow
-   * signal is surfaced via {@link RowDiffOutcome#rowCannotRepair}.
-   */
-  private RowDiffOutcome diffCellsForRow(Result sourceResult, Result targetResult,
-    Table targetHTable, List<Put> pendingPuts, List<Delete> pendingDeletes) throws IOException {
-    Cell[] sourceCells = sourceResult.rawCells();
-    Cell[] targetCells = targetResult.rawCells();
-    CellComparator comparator = CellComparator.getInstance();
-
-    // Always use the lazy raw single-row fetch path for shadow detection. Even under
-    // --raw-scan, the merge-scan's targetCells came from a time-range-filtered scan and
-    // would not surface tombstones at ts > toTime — and those out-of-window tombstones
-    // can still shadow Puts we mirror inside the window during application reads. The
-    // lazy fetch in {@link RowRepairState#tombstones} loads tombstones at ts >= fromTime
-    // regardless of upper bound, catching that case correctly.
-    RowRepairState rowState = new RowRepairState(sourceResult.getRow());
-
-    // Pre-compute the set of (cf, q) coordinates source has any cell at. tombstoneTargetCell
-    // uses this to choose between point-Delete (when source has the column at some ts —
-    // mirrored cell will surface on read) and DeleteColumn (when source has nothing at the
-    // column — must shadow ts <= T to keep max-versions-hidden older versions invisible.
-    // The map records source's max ts at each column. When tombstoning a target cell at a
-    // column source has at lower ts, hidden target Puts in (sourceMax, targetTs) need
-    // their own point Deletes too — otherwise after the visible cell is shadowed, a hidden
-    // version surfaces above source's mirror.
-    Map<ColumnKey, Long> sourceMaxTsByColumn = new HashMap<>();
-    for (Cell sourceCell : sourceCells) {
-      if (!CellUtil.isDelete(sourceCell)) {
-        ColumnKey key = new ColumnKey(CellUtil.cloneFamily(sourceCell),
-          CellUtil.cloneQualifier(sourceCell));
-        sourceMaxTsByColumn.merge(key, sourceCell.getTimestamp(), Math::max);
-      }
-    }
-
-    int cellMissing = 0;
-    int cellExtra = 0;
-    int cellDifferent = 0;
-
-    int sourceIdx = 0;
-    int targetIdx = 0;
-    while (sourceIdx < sourceCells.length && targetIdx < targetCells.length) {
-      int cmp = comparator.compare(sourceCells[sourceIdx], targetCells[targetIdx]);
-      if (cmp == 0) {
-        // Same coordinates; CellComparator does not compare values, check separately.
-        if (!CellUtil.matchingValue(sourceCells[sourceIdx], targetCells[targetIdx])) {
-          if (mirrorSourceCellUnlessShadowed(sourceCells[sourceIdx], targetHTable, rowState)) {
-            cellDifferent++;
-          }
-        }
-        sourceIdx++;
-        targetIdx++;
-      } else if (cmp < 0) {
-        if (mirrorSourceCellUnlessShadowed(sourceCells[sourceIdx], targetHTable, rowState)) {
-          cellMissing++;
-        }
-        sourceIdx++;
-      } else {
-        // Target-only cell. Live cell → tombstone it (cellExtra++). Tombstone cell →
-        // can't act on it (HBase has no API to remove tombstones), so the row carries
-        // unrepairable drift and re-verify will mismatch.
-        if (tombstoneTargetCell(targetCells[targetIdx++], targetHTable, rowState,
-          sourceMaxTsByColumn)) {
-          cellExtra++;
-        } else {
-          rowState.anyCellUnrepairable = true;
-        }
-      }
-    }
-    while (sourceIdx < sourceCells.length) {
-      if (mirrorSourceCellUnlessShadowed(sourceCells[sourceIdx], targetHTable, rowState)) {
-        cellMissing++;
-      }
-      sourceIdx++;
-    }
-    while (targetIdx < targetCells.length) {
-      if (tombstoneTargetCell(targetCells[targetIdx++], targetHTable, rowState,
-        sourceMaxTsByColumn)) {
-        cellExtra++;
-      } else {
-        rowState.anyCellUnrepairable = true;
-      }
-    }
-
-    if (cellMissing == 0 && cellExtra == 0 && cellDifferent == 0 && !rowState.anyCellUnrepairable) {
-      return RowDiffOutcome.NONE;
-    }
-    rowState.flush(pendingPuts, pendingDeletes);
-    return new RowDiffOutcome(new CellDriftCounts(cellMissing, cellExtra, cellDifferent),
-      rowState.anyCellUnrepairable);
-  }
-
-  /**
-   * Flushes the accumulated Put and Delete batches to the target HTable as a single mixed
-   * RPC and clears both lists. Called every {@code repairBatchSize} rows and once more at
-   * the end of a chunk.
-   *
-   * Issuing both Puts and Deletes via {@link Table#batch} (one network round-trip) instead
-   * of separate {@code put()} + {@code delete()} calls (two round-trips) eliminates the
-   * inter-RPC failure window where a JVM/regionserver crash between the two would leave
-   * target with Puts applied but matching Deletes not yet tombstoned. Server-side, batch
-   * mutations are still applied per-row sequentially, so a regionserver crash mid-batch
-   * can still leave partial application — but the mid-flush gap on the client side is
-   * gone.
-   *
-   * {@link InterruptedException} from {@code batch} is converted to {@link IOException}
-   * so the existing per-chunk catch path treats interruption like any other transient
-   * write failure (chunk → REPAIR_FAILED, retry on next invocation). The interrupt flag is
-   * restored so an outer cancellation still observes the interrupted state.
-   */
-  private void flushRepairMutations(Table targetHTable, List<Put> puts, List<Delete> deletes)
-    throws IOException {
-    if (puts.isEmpty() && deletes.isEmpty()) {
-      return;
-    }
-    List<Row> mutations = new ArrayList<>(puts.size() + deletes.size());
-    mutations.addAll(puts);
-    mutations.addAll(deletes);
-    Object[] results = new Object[mutations.size()];
-    try {
-      targetHTable.batch(mutations, results);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new IOException("Interrupted while flushing repair mutations", e);
-    }
-    puts.clear();
-    deletes.clear();
-  }
-
-  /**
-   * Writes a chunk-level checkpoint row and bumps the matching outcome counter, as a single
-   * "this attempt is recorded" unit. The outcome counter is bumped only after a successful
-   * checkpoint write, so on-disk audit and in-memory counters stay in sync.
-   *
-   * If the checkpoint write throws {@link SQLException}, the failure is logged and the
+   * <p>If the checkpoint write throws {@link SQLException}, the failure is logged and the
    * {@link SyncCounters#CHECKPOINT_WRITE_FAILED} counter is bumped, but the exception is
    * NOT propagated. Reasons:
    * <ul>
@@ -1458,174 +885,6 @@ public class PhoenixSyncTableMapper
     }
   }
 
-  /**
-   * Performs row-level repair for a mismatched chunk by merge-scanning source and target
-   * cluster data and applying targeted mutations to target. The two scan ranges may differ:
-   * the verifier reads target over a wider range than source (covers extra-on-target rows
-   * that fall between consecutive source chunks); repair must mirror the same boundaries so
-   * those extras are visible here as {@code cmp > 0} rows and get deleted.
-   *
-   * Merge-scan contract: both scanners return rows in ascending key order (HBase guarantee).
-   *   cmp == 0 (same row): compare cells; repair if different.
-   *   cmp <  0 (source-only): Put all source cells.
-   *   cmp >  0 (target-only): Delete target cells within [fromTime, toTime].
-   *
-   * Cells outside [fromTime, toTime] are never read (scan time range), so never mutated.
-   *
-   * Only called when isDryRun == false.
-   *
-   * @param sourceStart           Source chunk start key (also the checkpoint PK) — inclusive
-   * @param sourceEnd             Source chunk end key (also the checkpoint PK) — inclusive
-   * @param targetStart           Target scan start (matches verifier-side boundary)
-   * @param targetEnd             Target scan end (matches verifier-side boundary)
-   * @param targetStartInclusive  Inclusivity of target scan start — matches verify side
-   * @param targetEndInclusive    Inclusivity of target scan end — matches verify side
-   * @param verifyStartTime       When the verify pass began for this chunk; reused as the
-   *                              REPAIRED row's START_TIME so the row spans the full
-   *                              verify+repair lifecycle that overwrites the MISMATCHED row.
-   */
-  private void repairChunk(byte[] sourceStart, byte[] sourceEnd, byte[] targetStart,
-    byte[] targetEnd, boolean targetStartInclusive, boolean targetEndInclusive,
-    long verifySourceRows, long verifyTargetRows, Timestamp verifyStartTime, Context context)
-    throws IOException, SQLException {
-    DriftCounters driftCounters = new DriftCounters();
-
-    LOGGER.info(
-      "Starting repair for chunk source=[{}, {}] target=[{}{}, {}{} on table {}",
-      Bytes.toStringBinary(sourceStart), Bytes.toStringBinary(sourceEnd),
-      targetStartInclusive ? "[" : "(", Bytes.toStringBinary(targetStart),
-      Bytes.toStringBinary(targetEnd), targetEndInclusive ? "]" : ")", tableName);
-
-    PhoenixConnection sourcePhoenixConn = sourceConnection.unwrap(PhoenixConnection.class);
-    PhoenixConnection targetPhoenixConn = targetConnection.unwrap(PhoenixConnection.class);
-
-    Scan sourceScan = createRepairScan(sourceStart, sourceEnd, true, true, sourcePhoenixConn);
-    Scan targetScan = createRepairScan(targetStart, targetEnd, targetStartInclusive,
-      targetEndInclusive, targetPhoenixConn);
-
-    List<Put> pendingPuts = new ArrayList<>();
-    List<Delete> pendingDeletes = new ArrayList<>();
-
-    try (Table sourceHTable = sourcePhoenixConn.getQueryServices().getTable(physicalTableName);
-      Table targetHTable = targetPhoenixConn.getQueryServices().getTable(physicalTableName);
-      ResultScanner sourceScanner = sourceHTable.getScanner(sourceScan);
-      ResultScanner targetScanner = targetHTable.getScanner(targetScan)) {
-
-      Result sourceResult = sourceScanner.next();
-      Result targetResult = targetScanner.next();
-
-      while (sourceResult != null || targetResult != null) {
-        int cmp;
-        if (sourceResult == null) {
-          cmp = 1;
-        } else if (targetResult == null) {
-          cmp = -1;
-        } else {
-          cmp = Bytes.compareTo(sourceResult.getRow(), targetResult.getRow());
-        }
-
-        // Drift signals are bumped at the branch that semantically caused them: row-level
-        // signals at the cmp != 0 branches, cell-level signals at the cmp == 0 branch.
-        // ROWS_CANNOT_REPAIR is bumped whenever any source mirror is suppressed by an
-        // existing target tombstone (or the cmp > 0 row was already entirely tombstones).
-        if (cmp == 0) {
-          // Same row key on both clusters — diff at cell level and repair only if cells differ.
-          RowDiffOutcome outcome = diffCellsForRow(sourceResult, targetResult, targetHTable,
-            pendingPuts, pendingDeletes);
-          driftCounters.addCellDrift(outcome.cells);
-          if (outcome.rowCannotRepair) {
-            driftCounters.rowsCannotRepair++;
-          }
-          sourceResult = sourceScanner.next();
-          targetResult = targetScanner.next();
-        } else if (cmp < 0) {
-          // Source-only row — mirror it onto target. Even though target's filtered scan
-          // returned no row at this key, target may carry tombstones that would shadow
-          // some or all of the Puts.
-          WholeRowMirrorOutcome outcome =
-            mirrorWholeRow(sourceResult, targetHTable, pendingPuts, pendingDeletes);
-          if (outcome != WholeRowMirrorOutcome.FULLY_SHADOWED) {
-            driftCounters.rowsMissingOnTarget++;
-          }
-          if (outcome != WholeRowMirrorOutcome.FULLY_MIRRORED) {
-            driftCounters.rowsCannotRepair++;
-          }
-          sourceResult = sourceScanner.next();
-        } else {
-          // Target-only row — tombstone its live cells. If the row is already entirely
-          // tombstones, repair has nothing to do (HBase cannot remove tombstones; only
-          // major compaction reaps them) — record as ROWS_CANNOT_REPAIR so operators can
-          // see the unrepairable drift volume.
-          int liveCellsTombstoned =
-            tombstoneWholeRow(targetResult, targetHTable, pendingPuts, pendingDeletes);
-          if (liveCellsTombstoned == 0) {
-            driftCounters.rowsCannotRepair++;
-          } else {
-            driftCounters.rowsExtraOnTarget++;
-          }
-          targetResult = targetScanner.next();
-        }
-
-        if (pendingPuts.size() + pendingDeletes.size() >= repairBatchSize) {
-          flushRepairMutations(targetHTable, pendingPuts, pendingDeletes);
-        }
-        context.progress();
-      }
-      flushRepairMutations(targetHTable, pendingPuts, pendingDeletes);
-    } catch (IOException e) {
-      // Per-chunk fault isolation. Mark this chunk REPAIR_FAILED, increment the counter,
-      // and return so the mapper continues with the next chunk. Phase 2's STATUS filter
-      // (VERIFIED, REPAIRED) excludes REPAIR_FAILED, so a re-run will re-attempt this chunk
-      // as an unprocessed gap.
-      LOGGER.error("Repair failed for chunk source=[{}, {}] on table {}: {}",
-        Bytes.toStringBinary(sourceStart), Bytes.toStringBinary(sourceEnd), tableName,
-        e.getMessage(), e);
-
-      Timestamp failedAt = new Timestamp(System.currentTimeMillis());
-      // Capture partial progress in the COUNTERS column for triage.
-      String failedCounters =
-        driftCounters.formatChunkCounters(verifySourceRows, verifyTargetRows);
-      writeChunkCheckpoint(new PhoenixSyncTableCheckpointOutputRow.Builder()
-        .setTableName(tableName).setTargetCluster(targetZkQuorum)
-        .setType(PhoenixSyncTableCheckpointOutputRow.Type.CHUNK).setFromTime(fromTime)
-        .setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun)
-        .setStartRowKey(sourceStart).setEndRowKey(sourceEnd)
-        .setStatus(PhoenixSyncTableCheckpointOutputRow.Status.REPAIR_FAILED)
-        .setExecutionStartTime(verifyStartTime).setExecutionEndTime(failedAt)
-        .setCounters(failedCounters).build(), SyncCounters.CHUNKS_REPAIR_FAILED, context);
-      return;
-    }
-
-    driftCounters.commitTo(context);
-    // Chunk transitions to UNREPAIRABLE if any row landed in ROWS_CANNOT_REPAIR — operator
-    // intervention (typically major compaction on target to reap shadowing tombstones) is
-    // needed before re-running the tool. Otherwise REPAIRED.
-    boolean unrepairable = driftCounters.rowsCannotRepair > 0;
-    PhoenixSyncTableCheckpointOutputRow.Status status = unrepairable
-      ? PhoenixSyncTableCheckpointOutputRow.Status.UNREPAIRABLE
-      : PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED;
-
-    Timestamp repairEndTime = new Timestamp(System.currentTimeMillis());
-    String repairCounters =
-      driftCounters.formatChunkCounters(verifySourceRows, verifyTargetRows);
-
-    // Write checkpoint first; outcome counter is bumped inside writeChunkCheckpoint only
-    // on a successful write so the audit row and the counter stay consistent.
-    writeChunkCheckpoint(new PhoenixSyncTableCheckpointOutputRow.Builder()
-      .setTableName(tableName).setTargetCluster(targetZkQuorum)
-      .setType(PhoenixSyncTableCheckpointOutputRow.Type.CHUNK).setFromTime(fromTime)
-      .setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun).setStartRowKey(sourceStart)
-      .setEndRowKey(sourceEnd).setStatus(status)
-      .setExecutionStartTime(verifyStartTime).setExecutionEndTime(repairEndTime)
-      .setCounters(repairCounters).build(),
-      unrepairable ? SyncCounters.CHUNKS_UNREPAIRABLE : SyncCounters.CHUNKS_REPAIRED, context);
-
-    LOGGER.info("Completed repair for chunk source=[{}, {}] with status={}: {}",
-      Bytes.toStringBinary(sourceStart), Bytes.toStringBinary(sourceEnd), status,
-      driftCounters.toLogString());
-  }
-
-  @Override
   protected void cleanup(Context context) throws IOException, InterruptedException {
     tryClosingResources();
     super.cleanup(context);

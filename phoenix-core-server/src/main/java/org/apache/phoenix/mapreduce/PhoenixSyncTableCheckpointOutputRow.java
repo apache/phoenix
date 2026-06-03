@@ -146,12 +146,14 @@ public class PhoenixSyncTableCheckpointOutputRow {
 
   @VisibleForTesting
   public long getSourceRowsProcessed() {
-    return CounterFormatter.parseSourceRows(counters);
+    return CounterFormatter.parseCounterValue(counters,
+      PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name());
   }
 
   @VisibleForTesting
   public long getTargetRowsProcessed() {
-    return CounterFormatter.parseTargetRows(counters);
+    return CounterFormatter.parseCounterValue(counters,
+      PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name());
   }
 
   /**
@@ -160,49 +162,25 @@ public class PhoenixSyncTableCheckpointOutputRow {
    */
   public static class CounterFormatter {
     private static final String FORMAT_CHUNK =
-      "%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d";
-    private static final String FORMAT_MAPPER = "%s=%d,%s=%d,%s=%d,%s=%d";
+      "%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d";
+    private static final String FORMAT_MAPPER =
+      "%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d";
 
     /**
-     * Formats chunk counters as comma-separated key=value pairs. Always emits all eight
-     * counters; for verify-only chunks (no repair) the six drift counters are 0 so
-     * operators querying the checkpoint table see a uniform format.
-     *
-     * Drift signals partition into two layers:
-     *   row-level  — whole row missing or extra on target, or unrepairable (target row is
-     *                entirely tombstones — HBase cannot remove tombstones, only major
-     *                compaction does)
-     *   cell-level — for rows present on both clusters, individual cells missing, extra,
-     *                or differing in value at matching coordinates
-     * The two layers are disjoint per row: a row drift case contributes only to row
-     * counters; a cell drift case contributes only to cell counters.
-     *
-     * @param sourceRows         Source rows processed
-     * @param targetRows         Target rows processed
-     * @param rowsMissingOnTarget Rows present on source but missing on target (0 if not
-     *                            repaired)
-     * @param rowsExtraOnTarget  Rows present on target but missing on source whose live
-     *                           cells repair tombstoned (0 if not repaired)
-     * @param rowsCannotRepair   Rows present on target but missing on source whose contents
-     *                           are entirely tombstones — repair cannot act on them and an
-     *                           operator-driven major compaction is required to make the
-     *                           verifier converge under {@code --raw-scan}
-     * @param cellsMissingOnTarget Cells (across rows present on both sides) that source had
-     *                             at coordinates target lacked (0 if not repaired)
-     * @param cellsExtraOnTarget  Cells (across rows present on both sides) that target had
-     *                            at coordinates source lacked (0 if not repaired)
-     * @param cellsDifferentOnTarget Cells (across rows present on both sides) at matching
-     *                               coordinates whose values differed (0 if not repaired)
-     * @return Formatted string with all eight counters
+     * Formats chunk counters as comma-separated key=value pairs. Always emits all nine
+     * counters; unpopulated counters are 0 so operators querying the checkpoint table see
+     * a uniform format. {@code ROWS_DIFFERENT_ON_TARGET} is populated only in dry-run;
+     * cell-level counters and {@code ROWS_CANNOT_REPAIR} are populated only in repair mode.
      */
     public static String formatChunk(long sourceRows, long targetRows, long rowsMissingOnTarget,
-      long rowsExtraOnTarget, long rowsCannotRepair, long cellsMissingOnTarget,
-      long cellsExtraOnTarget, long cellsDifferentOnTarget) {
+      long rowsExtraOnTarget, long rowsDifferentOnTarget, long rowsCannotRepair,
+      long cellsMissingOnTarget, long cellsExtraOnTarget, long cellsDifferentOnTarget) {
       return String.format(FORMAT_CHUNK,
         PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRows,
         PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows,
         PhoenixSyncTableMapper.SyncCounters.ROWS_MISSING_ON_TARGET.name(), rowsMissingOnTarget,
         PhoenixSyncTableMapper.SyncCounters.ROWS_EXTRA_ON_TARGET.name(), rowsExtraOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_DIFFERENT_ON_TARGET.name(), rowsDifferentOnTarget,
         PhoenixSyncTableMapper.SyncCounters.ROWS_CANNOT_REPAIR.name(), rowsCannotRepair,
         PhoenixSyncTableMapper.SyncCounters.CELLS_MISSING_ON_TARGET.name(), cellsMissingOnTarget,
         PhoenixSyncTableMapper.SyncCounters.CELLS_EXTRA_ON_TARGET.name(), cellsExtraOnTarget,
@@ -211,40 +189,27 @@ public class PhoenixSyncTableCheckpointOutputRow {
     }
 
     /**
-     * Formats mapper counters as comma-separated key=value pairs.
-     * @param chunksVerified   Chunks verified count
-     * @param chunksMismatched Chunks mismatched count
-     * @param sourceRows       Source rows processed
-     * @param targetRows       Target rows processed
-     * @return Formatted string with all mapper counters
+     * Formats mapper (region-level) counters as comma-separated key=value pairs. The seven
+     * drift counters are the per-region sum of the same fields emitted by
+     * {@link #formatChunk}.
      */
     public static String formatMapper(long chunksVerified, long chunksMismatched, long sourceRows,
-      long targetRows) {
+      long targetRows, long rowsMissingOnTarget, long rowsExtraOnTarget,
+      long rowsDifferentOnTarget, long rowsCannotRepair, long cellsMissingOnTarget,
+      long cellsExtraOnTarget, long cellsDifferentOnTarget) {
       return String.format(FORMAT_MAPPER,
         PhoenixSyncTableMapper.SyncCounters.CHUNKS_VERIFIED.name(), chunksVerified,
         PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED.name(), chunksMismatched,
         PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name(), sourceRows,
-        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows);
-    }
-
-    /**
-     * Parses SOURCE_ROWS_PROCESSED value from counter string.
-     * @param counters Counter string in format "KEY1=val1,KEY2=val2,..."
-     * @return Source rows processed, or 0 if not found
-     */
-    public static long parseSourceRows(String counters) {
-      return parseCounterValue(counters,
-        PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED.name());
-    }
-
-    /**
-     * Parses TARGET_ROWS_PROCESSED value from counter string.
-     * @param counters Counter string in format "KEY1=val1,KEY2=val2,..."
-     * @return Target rows processed, or 0 if not found
-     */
-    public static long parseTargetRows(String counters) {
-      return parseCounterValue(counters,
-        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name());
+        PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED.name(), targetRows,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_MISSING_ON_TARGET.name(), rowsMissingOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_EXTRA_ON_TARGET.name(), rowsExtraOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_DIFFERENT_ON_TARGET.name(), rowsDifferentOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.ROWS_CANNOT_REPAIR.name(), rowsCannotRepair,
+        PhoenixSyncTableMapper.SyncCounters.CELLS_MISSING_ON_TARGET.name(), cellsMissingOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.CELLS_EXTRA_ON_TARGET.name(), cellsExtraOnTarget,
+        PhoenixSyncTableMapper.SyncCounters.CELLS_DIFFERENT_ON_TARGET.name(),
+        cellsDifferentOnTarget);
     }
 
     /**
@@ -253,7 +218,7 @@ public class PhoenixSyncTableCheckpointOutputRow {
      * @param counterName Name of the counter to extract
      * @return Counter value, or 0 if not found
      */
-    private static long parseCounterValue(String counters, String counterName) {
+    public static long parseCounterValue(String counters, String counterName) {
       if (counters == null || counters.isEmpty()) {
         return 0;
       }
