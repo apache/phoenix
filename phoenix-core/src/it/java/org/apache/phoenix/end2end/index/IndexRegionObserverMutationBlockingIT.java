@@ -281,12 +281,12 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
    * Walks the cause chain of a {@link CommitException} looking for a
    * {@link MutationBlockedIOException}. Handles two paths:
    * <ul>
-   *   <li>Direct chain — {@code MutationBlockedIOException} now extends
-   *       {@link org.apache.hadoop.hbase.DoNotRetryIOException}, so HBase's RPC retry layers
-   *       fail-fast and propagate the exception without wrapping it in
-   *       {@link RetriesExhaustedWithDetailsException}.</li>
-   *   <li>REWDE-wrapped — the legacy retry path; preserved here for any caller that still
-   *       reaches it (defense-in-depth).</li>
+   * <li>Direct chain — {@code MutationBlockedIOException} now extends
+   * {@link org.apache.hadoop.hbase.DoNotRetryIOException}, so HBase's RPC retry layers fail-fast
+   * and propagate the exception without wrapping it in
+   * {@link RetriesExhaustedWithDetailsException}.</li>
+   * <li>REWDE-wrapped — the legacy retry path; preserved here for any caller that still reaches it
+   * (defense-in-depth).</li>
    * </ul>
    */
   private boolean containsMutationBlockedException(CommitException e) {
@@ -310,25 +310,23 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
 
   /**
    * Regression test for the fail-fast fix on the batched-mutation path. The fix is the inheritance
-   * change on {@link MutationBlockedIOException} — it now extends
-   * {@code DoNotRetryIOException}, signaling intent to fail fast.
-   *
-   * <p>Empirical verification: server-side rehydration (via
-   * {@code ProtobufUtil.toException}) delivers a real {@code MutationBlockedIOException} instance
-   * to HBase's batched-RPC retry layer ({@code AsyncRequestFutureImpl.manageError}); the
-   * {@code instanceof DoNotRetryIOException} check at line 749 returns true post-inheritance, so
-   * no retries fire and the failure surfaces immediately. The inheritance change alone is
-   * sufficient for the batched path.
-   *
-   * <p>Test asserts:
+   * change on {@link MutationBlockedIOException} — it now extends {@code DoNotRetryIOException},
+   * signaling intent to fail fast.
+   * <p>
+   * Empirical verification: server-side rehydration (via {@code ProtobufUtil.toException}) delivers
+   * a real {@code MutationBlockedIOException} instance to HBase's batched-RPC retry layer
+   * ({@code AsyncRequestFutureImpl.manageError}); the {@code instanceof DoNotRetryIOException}
+   * check at line 749 returns true post-inheritance, so no retries fire and the failure surfaces
+   * immediately. The inheritance change alone is sufficient for the batched path.
+   * <p>
+   * Test asserts:
    * <ol>
-   *   <li>An {@link MutationBlockedIOException} appears somewhere on the {@link CommitException}
-   *       cause chain (proves the server gate fired).</li>
-   *   <li>Wall-clock duration of the failed commit is well below the pre-fix HBase retry-budget
-   *       tail (which was on the order of tens of seconds for default 16 retries × per-retry
-   *       timeout). A bound of {@code MAX_FAIL_FAST_DURATION_MS} captures this with generous
-   *       headroom for slow CI; on a healthy mini-cluster the actual duration is
-   *       sub-second.</li>
+   * <li>An {@link MutationBlockedIOException} appears somewhere on the {@link CommitException}
+   * cause chain (proves the server gate fired).</li>
+   * <li>Wall-clock duration of the failed commit is well below the pre-fix HBase retry-budget tail
+   * (which was on the order of tens of seconds for default 16 retries × per-retry timeout). A bound
+   * of {@code MAX_FAIL_FAST_DURATION_MS} captures this with generous headroom for slow CI; on a
+   * healthy mini-cluster the actual duration is sub-second.</li>
    * </ol>
    */
   @Test
@@ -350,8 +348,7 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
           HighAvailabilityPolicy.FAILOVER.toString(), this.peerZkUrl, CLUSTERS.getMasterAddress1(),
           CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
       haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
-      awaitZkPropagation(haGroupName,
-        HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+      awaitZkPropagation(haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
 
       long startMs = System.currentTimeMillis();
       try {
@@ -365,12 +362,13 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
           "Expected MutationBlockedIOException somewhere on the cause chain (helper walks both "
             + "direct and REWDE-wrapped layouts).",
           containsMutationBlockedException(e));
-        assertTrue("Expected fail-fast: failed commit took " + durationMs
-          + "ms which exceeds the bound of " + MAX_FAIL_FAST_DURATION_MS
-          + "ms. Pre-fix this took on the order of tens of seconds while HBase exhausted its "
-          + "retry budget against the now-blocking server. If this assertion fails, HBase has "
-          + "started retrying despite DoNotRetryIOException — investigate whether the inheritance"
-          + " change on MutationBlockedIOException is still in place.",
+        assertTrue(
+          "Expected fail-fast: failed commit took " + durationMs + "ms which exceeds the bound of "
+            + MAX_FAIL_FAST_DURATION_MS
+            + "ms. Pre-fix this took on the order of tens of seconds while HBase exhausted its "
+            + "retry budget against the now-blocking server. If this assertion fails, HBase has "
+            + "started retrying despite DoNotRetryIOException — investigate whether the inheritance"
+            + " change on MutationBlockedIOException is still in place.",
           durationMs < MAX_FAIL_FAST_DURATION_MS);
       }
     }
@@ -378,19 +376,19 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
 
   /**
    * Wall-clock bound for fail-fast on the batched mutation path. Pre-fix, HBase's default
-   * {@code hbase.client.retries.number=16} multiplied by per-retry RPC timeouts produced tails
-   * on the order of tens of seconds. Post-fix (server-side DNRIOE inheritance), the first hit
-   * propagates immediately. The 10-second bound gives generous headroom for slow CI hardware
-   * while staying well below any plausible retry tail.
+   * {@code hbase.client.retries.number=16} multiplied by per-retry RPC timeouts produced tails on
+   * the order of tens of seconds. Post-fix (server-side DNRIOE inheritance), the first hit
+   * propagates immediately. The 10-second bound gives generous headroom for slow CI hardware while
+   * staying well below any plausible retry tail.
    */
   private static final long MAX_FAIL_FAST_DURATION_MS = 10_000L;
 
   /**
    * Empirical proof that the DNRIOE inheritance change alone — with no Phoenix-side client-code
-   * changes — is sufficient to deliver fail-fast on the batched mutation path under elevated
-   * retry settings.
-   *
-   * <p>Server-side rehydration via {@code ProtobufUtil.toException} delivers a real
+   * changes — is sufficient to deliver fail-fast on the batched mutation path under elevated retry
+   * settings.
+   * <p>
+   * Server-side rehydration via {@code ProtobufUtil.toException} delivers a real
    * {@link MutationBlockedIOException} instance to HBase's batched-RPC retry layer
    * ({@code AsyncRequestFutureImpl.manageError}); the {@code instanceof DoNotRetryIOException}
    * check at line 749 returns true post-inheritance, so no retries fire and the failure surfaces
@@ -398,14 +396,14 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
    * {@code hbase.client.pause} to values that would — absent the inheritance — force HBase's
    * batched-RPC retry layer to consume many seconds before surfacing the failure (16 retries ×
    * ~100ms base pause with exponential backoff yields multi-second tails). The wall-clock bound
-   * stays under {@link #MAX_FAIL_FAST_DURATION_MS} only because the inheritance change is in
-   * place; the assertion-passing IS the empirical proof of inheritance-alone fail-fast.
-   *
-   * <p>Note: even with elevated retry settings, the mini-cluster batched path may still surface
-   * only a single attempt before propagation due to harness internals not faithfully modeling
-   * the production-perf retry tail observed on real clusters. In that case, this test functions
-   * as additional regression coverage rather than a true behavioral discriminator; real-cluster
-   * perf testing remains the authoritative validation of the wall-clock benefit.
+   * stays under {@link #MAX_FAIL_FAST_DURATION_MS} only because the inheritance change is in place;
+   * the assertion-passing IS the empirical proof of inheritance-alone fail-fast.
+   * <p>
+   * Note: even with elevated retry settings, the mini-cluster batched path may still surface only a
+   * single attempt before propagation due to harness internals not faithfully modeling the
+   * production-perf retry tail observed on real clusters. In that case, this test functions as
+   * additional regression coverage rather than a true behavioral discriminator; real-cluster perf
+   * testing remains the authoritative validation of the wall-clock benefit.
    */
   @Test
   public void testMutationBlockedFailsFastUnderElevatedRetries() throws Exception {
@@ -433,8 +431,7 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
           HighAvailabilityPolicy.FAILOVER.toString(), this.peerZkUrl, CLUSTERS.getMasterAddress1(),
           CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
       haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, haGroupStoreRecord, -1);
-      awaitZkPropagation(haGroupName,
-        HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+      awaitZkPropagation(haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
 
       long startMs = System.currentTimeMillis();
       try {
@@ -444,15 +441,15 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
         fail("Expected MutationBlockedIOException to be thrown");
       } catch (CommitException e) {
         long durationMs = System.currentTimeMillis() - startMs;
-        assertTrue(
-          "Expected MutationBlockedIOException somewhere on the cause chain.",
+        assertTrue("Expected MutationBlockedIOException somewhere on the cause chain.",
           containsMutationBlockedException(e));
-        assertTrue("Expected fail-fast under elevated retry settings: failed commit took "
-          + durationMs + "ms which exceeds the bound of " + MAX_FAIL_FAST_DURATION_MS
-          + "ms. Under hbase.client.retries.number=16 and hbase.client.pause=100, the absence "
-          + "of the DNRIOE inheritance change would surface a multi-second retry tail. "
-          + "If this assertion fails, the inheritance change is not in place or HBase has "
-          + "started retrying despite DoNotRetryIOException — investigate the cause chain.",
+        assertTrue(
+          "Expected fail-fast under elevated retry settings: failed commit took " + durationMs
+            + "ms which exceeds the bound of " + MAX_FAIL_FAST_DURATION_MS
+            + "ms. Under hbase.client.retries.number=16 and hbase.client.pause=100, the absence "
+            + "of the DNRIOE inheritance change would surface a multi-second retry tail. "
+            + "If this assertion fails, the inheritance change is not in place or HBase has "
+            + "started retrying despite DoNotRetryIOException — investigate the cause chain.",
           durationMs < MAX_FAIL_FAST_DURATION_MS);
       }
     }
@@ -460,27 +457,26 @@ public class IndexRegionObserverMutationBlockingIT extends HABaseIT {
 
   /**
    * Polls ZooKeeper for the HAGroupStoreRecord to reflect the {@code expectedState} after a
-   * {@code haAdmin.updateHAGroupStoreRecordInZooKeeper} write. Returns as soon as the cached
-   * state matches the expected, or after a timeout. Replaces the unconditional
-   * {@code Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS)} pattern with a bounded
-   * polling loop (with a short between-poll park) so the wait is condition-driven rather than
+   * {@code haAdmin.updateHAGroupStoreRecordInZooKeeper} write. Returns as soon as the cached state
+   * matches the expected, or after a timeout. Replaces the unconditional
+   * {@code Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS)} pattern with a bounded polling
+   * loop (with a short between-poll park) so the wait is condition-driven rather than
    * fixed-duration.
-   *
-   * <p>The poll interval is short ({@link #ZK_PROPAGATION_POLL_INTERVAL_MS} ms) so the typical
-   * wait is well under the propagation budget; the deadline gives generous CI headroom. Throws
-   * {@code AssertionError} via {@code fail()} if the state never converges, which surfaces the
-   * same failure shape a stale read would (the subsequent UPSERT would observe the old state).
-   *
-   * @param haGroupName    the HA group whose state to await
-   * @param expectedState  the {@link HAGroupStoreRecord.HAGroupState} the cached record must reach
+   * <p>
+   * The poll interval is short ({@link #ZK_PROPAGATION_POLL_INTERVAL_MS} ms) so the typical wait is
+   * well under the propagation budget; the deadline gives generous CI headroom. Throws
+   * {@code AssertionError} via {@code fail()} if the state never converges, which surfaces the same
+   * failure shape a stale read would (the subsequent UPSERT would observe the old state).
+   * @param haGroupName   the HA group whose state to await
+   * @param expectedState the {@link HAGroupStoreRecord.HAGroupState} the cached record must reach
    * @throws Exception if reading the cached record throws
    */
   // java:S2925 (Thread.sleep in tests) suppressed: the sleep here is bounded between condition
   // checks inside a deadline-bounded polling loop, not an unconditional wait. The rule's flake
   // concern (fixed-duration sleeps) does not apply.
   @SuppressWarnings("java:S2925")
-  private void awaitZkPropagation(String haGroupName,
-      HAGroupStoreRecord.HAGroupState expectedState) throws Exception {
+  private void awaitZkPropagation(String haGroupName, HAGroupStoreRecord.HAGroupState expectedState)
+    throws Exception {
     long deadlineMs = System.currentTimeMillis() + ZK_PROPAGATION_AWAIT_DEADLINE_MS;
     while (System.currentTimeMillis() < deadlineMs) {
       HAGroupStoreRecord cached = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getLeft();
