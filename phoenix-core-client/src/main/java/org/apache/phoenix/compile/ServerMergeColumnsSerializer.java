@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import org.apache.phoenix.schema.PColumn;
@@ -48,12 +49,7 @@ public class ServerMergeColumnsSerializer extends StdSerializer<Set<PColumn>> {
     for (PColumn column : value) {
       names.add(column == null ? null : column.toString());
     }
-    Collections.sort(names, (a, b) -> {
-      if (a == null && b == null) return 0;
-      if (a == null) return -1;
-      if (b == null) return 1;
-      return a.compareTo(b);
-    });
+    Collections.sort(names, Comparator.nullsFirst(Comparator.naturalOrder()));
     gen.writeStartArray();
     for (String name : names) {
       gen.writeString(name);

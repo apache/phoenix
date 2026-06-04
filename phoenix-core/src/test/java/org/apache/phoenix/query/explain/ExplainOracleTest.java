@@ -727,7 +727,7 @@ public class ExplainOracleTest extends BaseConnectionlessQueryTest {
   }
 
   /**
-   * Convenience wrapper that builds {@link #defaultAttrs()} and sets the four fields every
+   * Convenience wrapper that builds {@link #defaultAttrs()} and sets the five fields every
    * connection-backed scan emits via {@code ExplainTable.explain}: {@code iteratorTypeAndScanSize},
    * {@code consistency}, {@code explainScanType}, {@code tableName}, and {@code keyRanges}.
    * @param scanType the {@code explainScanType} string (with its trailing space, e.g.
