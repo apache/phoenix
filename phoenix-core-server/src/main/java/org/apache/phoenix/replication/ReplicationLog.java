@@ -437,6 +437,7 @@ public class ReplicationLog {
         return;
       }
       boolean staged = false;
+      long startNs = System.nanoTime();
       try {
         LogFileWriter newWriter = createNewWriter();
         LogFileWriter undrained = pendingWriter.getAndSet(newWriter);
@@ -458,6 +459,8 @@ public class ReplicationLog {
             numFailures, maxRotationRetries, t);
         }
       } finally {
+        // Time both success and failure paths so slow rotations are visible even when they fail.
+        logGroup.getMetrics().updateRotationTime(System.nanoTime() - startNs);
         if (onDemand) {
           // Clear the flag last so requestRotation()'s CAS rejects duplicate on-demand
           // submissions while this task is still creating/staging a writer.

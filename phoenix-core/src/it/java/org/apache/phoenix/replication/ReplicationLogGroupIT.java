@@ -67,6 +67,7 @@ import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
 import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.query.PhoenixTestBuilder;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.replication.metrics.ReplicationLogMetricValues;
 import org.apache.phoenix.replication.reader.ReplicationLogProcessor;
 import org.apache.phoenix.replication.tool.LogFileAnalyzer;
 import org.apache.phoenix.util.TestUtil;
@@ -176,6 +177,22 @@ public class ReplicationLogGroupIT extends HABaseIT {
         }
       }
     }
+  }
+
+  private void assertMetricsEmitted() {
+    ReplicationLogMetricValues values = logGroup.getMetrics().getCurrentMetricValues();
+    assertTrue("appendTime should be > 0, got " + values.getAppendTime(),
+      values.getAppendTime() > 0);
+    assertTrue("syncTime should be > 0, got " + values.getSyncTime(), values.getSyncTime() > 0);
+    assertTrue("ringBufferTime should be > 0, got " + values.getRingBufferTime(),
+      values.getRingBufferTime() > 0);
+    assertTrue("fsSyncTime should be > 0, got " + values.getFsSyncTime(),
+      values.getFsSyncTime() > 0);
+    assertTrue("batchSize should be > 0, got " + values.getBatchSize(), values.getBatchSize() > 0);
+    assertTrue("pendingSyncCount should be > 0, got " + values.getPendingSyncCount(),
+      values.getPendingSyncCount() > 0);
+    assertTrue("pendingSyncWaitTime should be > 0, got " + values.getPendingSyncWaitTime(),
+      values.getPendingSyncWaitTime() > 0);
   }
 
   private void dumpTableLogCount(Map<String, List<Mutation>> mutationsByTable) {
@@ -303,6 +320,11 @@ public class ReplicationLogGroupIT extends HABaseIT {
           assertEquals(0, stmt.executeUpdate());
         }
       }
+
+      // Sanity-check that producer- and consumer-side metrics fired at least once on the haGroup.
+      // This guards against the rotationTimeMs-style bug where a metric is declared but never
+      // emitted. Snapshot before verifyReplication() since it closes the log group.
+      assertMetricsEmitted();
 
       // verify replication mutation counts
       // mutation count will be equal to row count since the atomic upsert mutations will be
