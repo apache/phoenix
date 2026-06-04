@@ -337,7 +337,6 @@ public class CDCQueryIT extends CDCBaseIT {
 
     String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
     try (Connection conn = newConnection(tenantId)) {
-      // For debug: uncomment to see the exact results logged to console.
       dumpCDCResults(conn, cdcName, new TreeMap<String, String>() {
         {
           put("K", "INTEGER");
@@ -489,7 +488,6 @@ public class CDCQueryIT extends CDCBaseIT {
     };
     String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
     try (Connection conn = newConnection(tenantId)) {
-      // For debug: uncomment to see the exact results logged to console.
       dumpCDCResults(conn, cdcName, new TreeMap<String, String>() {
         {
           put("K", "INTEGER");
@@ -574,7 +572,6 @@ public class CDCQueryIT extends CDCBaseIT {
 
     String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
     try (Connection conn = newConnection(tenantId)) {
-      // For debug: uncomment to see the exact results logged to console.
       dumpCDCResults(conn, cdcName, pkColumns, addPartitionInList(conn, cdcFullName,
         "SELECT /*+ CDC_INCLUDE(PRE, CHANGE) */ * FROM " + cdcFullName));
 
@@ -678,7 +675,6 @@ public class CDCQueryIT extends CDCBaseIT {
     };
 
     try (Connection conn = newConnection(tenantId)) {
-      // For debug: uncomment to see the exact results logged to console.
       dumpCDCResults(conn, cdcName, new TreeMap<String, String>() {
         {
           put("K", "INTEGER");
@@ -761,7 +757,6 @@ public class CDCQueryIT extends CDCBaseIT {
 
     String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
     try (Connection conn = newConnection(tenantId)) {
-      // For debug: uncomment to see the exact results logged to console.
       dumpCDCResults(conn, cdcName, pkColumns,
         "SELECT /*+ CDC_INCLUDE(PRE, CHANGE) */ * FROM " + cdcFullName);
 
