@@ -54,7 +54,7 @@ public final class ExplainTextNormalizer {
         continue;
       }
       // Drop region-location lines outright
-      if (line.startsWith(REGION_LOCATIONS_PREFIX) || line.contains(REGION_LOCATIONS_PREFIX)) {
+      if (line.contains(REGION_LOCATIONS_PREFIX)) {
         continue;
       }
       String normalized = line;
