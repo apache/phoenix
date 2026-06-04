@@ -78,7 +78,7 @@ public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
   private static ObjectMapper mapper;
 
   @BeforeClass
-  public static synchronized void setUpExplainOracleSchemas() throws Exception {
+  public static synchronized void setUp() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     props.setProperty(DATE_FORMAT_ATTRIB, "yyyy-MM-dd");
     props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
