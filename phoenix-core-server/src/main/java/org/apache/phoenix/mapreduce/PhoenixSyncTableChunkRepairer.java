@@ -375,15 +375,16 @@ public final class PhoenixSyncTableChunkRepairer {
     CellComparator comparator = CellComparator.getInstance();
     RowRepairBuffer rowRepairBuffer = new RowRepairBuffer(sourceResult.getRow());
 
-    // Per-column max source PUT timestamp; consumed by tombstoneTargetCell to pick the
-    // tombstone shape for a target-extra cell. Three cases:
-    //   key absent              → DeleteColumn at target's ts (wipe hidden older versions too)
+    // Per-column max source PUT timestamp; consumed by tombstoneTargetCell (target-extra
+    // cell) to pick the delete shape. Three cases:
+    //   key absent              → DeleteColumn at target's ts (also wipes older hidden versions)
     //   sourceMaxTs >= targetTs → point Delete at target's ts
-    //   sourceMaxTs <  targetTs → point Delete at target's ts AND every hidden target Put in
-    //                             (sourceMaxTs, targetTs); else hidden version surfaces.
-    // Math::max collapses multi-version source so the third case only fires when target sits above
-    // ALL of source's versions.
-    // Check tombstoneTargetCell() for its usage.
+    //   sourceMaxTs <  targetTs → point Delete at target's ts, PLUS a point Delete for every
+    //                             hidden target Put whose ts ∈ (sourceMaxTs, targetTs); without
+    //                             these, the next hidden Put surfaces above source's mirror
+    //                             once target's visible cell is shadowed.
+    // Math::max collapses multi-version source, so case 3 only fires when target sits above
+    // ALL source versions at this column. See tombstoneTargetCell() for the application.
     Map<ColumnKey, Long> sourceMaxTsByColumn = new HashMap<>();
     for (Cell sourceCell : sourceCells) {
       if (!CellUtil.isDelete(sourceCell)) {

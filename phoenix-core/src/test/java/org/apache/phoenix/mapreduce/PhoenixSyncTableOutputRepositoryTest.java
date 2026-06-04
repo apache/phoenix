@@ -753,6 +753,233 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
   }
 
   @Test
+  public void testGetProcessedMapperRegionsRepairModeFiltersByStatus() throws Exception {
+    String tableName = generateUniqueName();
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    // One region per Status, distinguished by start key so result ordering is deterministic.
+    Status[] statuses = new Status[] { Status.VERIFIED, Status.MISMATCHED, Status.REPAIRED,
+      Status.UNREPAIRABLE, Status.REPAIR_FAILED };
+    for (int i = 0; i < statuses.length; i++) {
+      byte[] startKey = Bytes.toBytes(String.format("region%02d_start", i));
+      byte[] endKey = Bytes.toBytes(String.format("region%02d_end", i));
+      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+        .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION)
+        .setFromTime(0L).setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey)
+        .setEndRowKey(endKey).setStatus(statuses[i]).setExecutionStartTime(timestamp)
+        .setExecutionEndTime(timestamp).build());
+    }
+
+    // Repair mode should skip only fully-done regions (VERIFIED + REPAIRED) so the mapper
+    // re-processes MISMATCHED/UNREPAIRABLE/REPAIR_FAILED on the next run.
+    List<PhoenixSyncTableCheckpointOutputRow> repairResults =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, null, false);
+    assertEquals("Repair mode should return only VERIFIED + REPAIRED regions", 2,
+      repairResults.size());
+    assertArrayEquals("First should be region00 (VERIFIED)",
+      Bytes.toBytes("region00_start"), repairResults.get(0).getStartRowKey());
+    assertArrayEquals("Second should be region02 (REPAIRED)",
+      Bytes.toBytes("region02_start"), repairResults.get(1).getStartRowKey());
+  }
+
+  @Test
+  public void testGetProcessedMapperRegionsDryRunReturnsAllStatuses() throws Exception {
+    String tableName = generateUniqueName();
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    Status[] statuses = new Status[] { Status.VERIFIED, Status.MISMATCHED, Status.REPAIRED,
+      Status.UNREPAIRABLE, Status.REPAIR_FAILED };
+    for (int i = 0; i < statuses.length; i++) {
+      byte[] startKey = Bytes.toBytes(String.format("region%02d_start", i));
+      byte[] endKey = Bytes.toBytes(String.format("region%02d_end", i));
+      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+        .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION)
+        .setFromTime(0L).setToTime(1000L).setIsDryRun(true).setStartRowKey(startKey)
+        .setEndRowKey(endKey).setStatus(statuses[i]).setExecutionStartTime(timestamp)
+        .setExecutionEndTime(timestamp).build());
+    }
+
+    // Dry-run mode does not filter by status; resume should skip every region the previous
+    // dry-run pass touched, regardless of its outcome.
+    List<PhoenixSyncTableCheckpointOutputRow> dryRunResults =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, null, true);
+    assertEquals("Dry-run mode should return all statuses", statuses.length, dryRunResults.size());
+  }
+
+  @Test
+  public void testGetProcessedChunksRepairModeFiltersByStatus() throws Exception {
+    String tableName = generateUniqueName();
+    // Mapper region bracket — chunkStart must be <= mapperEnd AND chunkEnd must be >=
+    // mapperStart for a chunk to overlap. Use 'a' < chunk* < 'z' so the boundary check is
+    // satisfied for every chunk and only the STATUS filter decides what comes back.
+    byte[] mapperStart = Bytes.toBytes("aaaa");
+    byte[] mapperEnd = Bytes.toBytes("zzzz");
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    Status[] statuses = new Status[] { Status.VERIFIED, Status.MISMATCHED, Status.REPAIRED,
+      Status.UNREPAIRABLE, Status.REPAIR_FAILED };
+    for (int i = 0; i < statuses.length; i++) {
+      byte[] startKey = Bytes.toBytes(String.format("chunk%02d_start", i));
+      byte[] endKey = Bytes.toBytes(String.format("chunk%02d_end", i));
+      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+        .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK)
+        .setFromTime(0L).setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey)
+        .setEndRowKey(endKey).setStatus(statuses[i]).setExecutionStartTime(timestamp)
+        .setExecutionEndTime(timestamp).build());
+    }
+
+    List<PhoenixSyncTableCheckpointOutputRow> repairResults = repository.getProcessedChunks(
+      tableName, targetCluster, 0L, 1000L, null, mapperStart, mapperEnd, false);
+    assertEquals("Repair mode should return only VERIFIED + REPAIRED chunks", 2,
+      repairResults.size());
+    assertArrayEquals("First should be chunk00 (VERIFIED)",
+      Bytes.toBytes("chunk00_start"), repairResults.get(0).getStartRowKey());
+    assertArrayEquals("Second should be chunk02 (REPAIRED)",
+      Bytes.toBytes("chunk02_start"), repairResults.get(1).getStartRowKey());
+  }
+
+  @Test
+  public void testGetProcessedChunksDryRunReturnsAllStatuses() throws Exception {
+    String tableName = generateUniqueName();
+    byte[] mapperStart = Bytes.toBytes("aaaa");
+    byte[] mapperEnd = Bytes.toBytes("zzzz");
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    Status[] statuses = new Status[] { Status.VERIFIED, Status.MISMATCHED, Status.REPAIRED,
+      Status.UNREPAIRABLE, Status.REPAIR_FAILED };
+    for (int i = 0; i < statuses.length; i++) {
+      byte[] startKey = Bytes.toBytes(String.format("chunk%02d_start", i));
+      byte[] endKey = Bytes.toBytes(String.format("chunk%02d_end", i));
+      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+        .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK)
+        .setFromTime(0L).setToTime(1000L).setIsDryRun(true).setStartRowKey(startKey)
+        .setEndRowKey(endKey).setStatus(statuses[i]).setExecutionStartTime(timestamp)
+        .setExecutionEndTime(timestamp).build());
+    }
+
+    List<PhoenixSyncTableCheckpointOutputRow> dryRunResults = repository.getProcessedChunks(
+      tableName, targetCluster, 0L, 1000L, null, mapperStart, mapperEnd, true);
+    assertEquals("Dry-run mode should return all statuses", statuses.length, dryRunResults.size());
+  }
+
+  @Test
+  public void testCounterFormatterFormatChunkRoundTrip() throws Exception {
+    String tableName = generateUniqueName();
+    byte[] startKey = Bytes.toBytes("row1");
+    byte[] endKey = Bytes.toBytes("row100");
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    // Args: sourceRows, targetRows, rowsMissing, rowsExtra, rowsDifferent, rowsCannotRepair,
+    // cellsMissing, cellsExtra, cellsDifferent.
+    String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter.formatChunk(100L, 95L,
+      3L, 2L, 6L, 1L, 7L, 5L, 4L);
+
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey)
+      .setStatus(Status.REPAIRED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .setCounters(counters).build());
+
+    String query = "SELECT COUNTERS FROM "
+      + PhoenixSyncTableOutputRepository.SYNC_TABLE_CHECKPOINT_TABLE_NAME + " WHERE TABLE_NAME = ?";
+    String stored;
+    try (java.sql.PreparedStatement ps = connection.prepareStatement(query)) {
+      ps.setString(1, tableName);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        stored = rs.getString("COUNTERS");
+      }
+    }
+
+    // Stored COUNTERS string should pin every counter to the exact value from formatChunk.
+    assertEquals(counters, stored);
+    assertTrue("COUNTERS should contain SOURCE_ROWS_PROCESSED=100",
+      stored.contains("SOURCE_ROWS_PROCESSED=100"));
+    assertTrue("COUNTERS should contain TARGET_ROWS_PROCESSED=95",
+      stored.contains("TARGET_ROWS_PROCESSED=95"));
+    assertTrue("COUNTERS should contain ROWS_MISSING_ON_TARGET=3",
+      stored.contains("ROWS_MISSING_ON_TARGET=3"));
+    assertTrue("COUNTERS should contain ROWS_EXTRA_ON_TARGET=2",
+      stored.contains("ROWS_EXTRA_ON_TARGET=2"));
+    assertTrue("COUNTERS should contain ROWS_DIFFERENT_ON_TARGET=6",
+      stored.contains("ROWS_DIFFERENT_ON_TARGET=6"));
+    assertTrue("COUNTERS should contain ROWS_CANNOT_REPAIR=1",
+      stored.contains("ROWS_CANNOT_REPAIR=1"));
+    assertTrue("COUNTERS should contain CELLS_MISSING_ON_TARGET=7",
+      stored.contains("CELLS_MISSING_ON_TARGET=7"));
+    assertTrue("COUNTERS should contain CELLS_EXTRA_ON_TARGET=5",
+      stored.contains("CELLS_EXTRA_ON_TARGET=5"));
+    assertTrue("COUNTERS should contain CELLS_DIFFERENT_ON_TARGET=4",
+      stored.contains("CELLS_DIFFERENT_ON_TARGET=4"));
+
+    // Public parse helpers should round-trip the source/target row counts.
+    PhoenixSyncTableCheckpointOutputRow parsed = new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setStartRowKey(startKey).setCounters(counters).build();
+    assertEquals(100L, parsed.getSourceRowsProcessed());
+    assertEquals(95L, parsed.getTargetRowsProcessed());
+  }
+
+  @Test
+  public void testCounterFormatterFormatMapperRoundTrip() throws Exception {
+    String tableName = generateUniqueName();
+    byte[] startKey = Bytes.toBytes("region_start");
+    byte[] endKey = Bytes.toBytes("region_end");
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    // Args: chunksVerified, chunksMismatched, sourceRows, targetRows, rowsMissing, rowsExtra,
+    // rowsDifferent, rowsCannotRepair, cellsMissing, cellsExtra, cellsDifferent.
+    String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter.formatMapper(8L, 2L,
+      500L, 480L, 12L, 9L, 4L, 3L, 25L, 18L, 7L);
+
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey)
+      .setStatus(Status.REPAIRED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .setCounters(counters).build());
+
+    String query = "SELECT COUNTERS FROM "
+      + PhoenixSyncTableOutputRepository.SYNC_TABLE_CHECKPOINT_TABLE_NAME + " WHERE TABLE_NAME = ?";
+    String stored;
+    try (java.sql.PreparedStatement ps = connection.prepareStatement(query)) {
+      ps.setString(1, tableName);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        stored = rs.getString("COUNTERS");
+      }
+    }
+
+    // Stored COUNTERS string should pin every counter to the exact value from formatMapper.
+    assertEquals(counters, stored);
+    assertTrue("COUNTERS should contain CHUNKS_VERIFIED=8", stored.contains("CHUNKS_VERIFIED=8"));
+    assertTrue("COUNTERS should contain CHUNKS_MISMATCHED=2",
+      stored.contains("CHUNKS_MISMATCHED=2"));
+    assertTrue("COUNTERS should contain SOURCE_ROWS_PROCESSED=500",
+      stored.contains("SOURCE_ROWS_PROCESSED=500"));
+    assertTrue("COUNTERS should contain TARGET_ROWS_PROCESSED=480",
+      stored.contains("TARGET_ROWS_PROCESSED=480"));
+    assertTrue("COUNTERS should contain ROWS_MISSING_ON_TARGET=12",
+      stored.contains("ROWS_MISSING_ON_TARGET=12"));
+    assertTrue("COUNTERS should contain ROWS_EXTRA_ON_TARGET=9",
+      stored.contains("ROWS_EXTRA_ON_TARGET=9"));
+    assertTrue("COUNTERS should contain ROWS_DIFFERENT_ON_TARGET=4",
+      stored.contains("ROWS_DIFFERENT_ON_TARGET=4"));
+    assertTrue("COUNTERS should contain ROWS_CANNOT_REPAIR=3",
+      stored.contains("ROWS_CANNOT_REPAIR=3"));
+    assertTrue("COUNTERS should contain CELLS_MISSING_ON_TARGET=25",
+      stored.contains("CELLS_MISSING_ON_TARGET=25"));
+    assertTrue("COUNTERS should contain CELLS_EXTRA_ON_TARGET=18",
+      stored.contains("CELLS_EXTRA_ON_TARGET=18"));
+    assertTrue("COUNTERS should contain CELLS_DIFFERENT_ON_TARGET=7",
+      stored.contains("CELLS_DIFFERENT_ON_TARGET=7"));
+
+    // Public parse helpers should round-trip the source/target row counts.
+    PhoenixSyncTableCheckpointOutputRow parsed = new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setStartRowKey(startKey).setCounters(counters).build();
+    assertEquals(500L, parsed.getSourceRowsProcessed());
+    assertEquals(480L, parsed.getTargetRowsProcessed());
+  }
+
+  @Test
   public void testCheckpointMapperRegionWithTenantId() throws Exception {
     String tableName = generateUniqueName();
     byte[] startKey = Bytes.toBytes("row1");

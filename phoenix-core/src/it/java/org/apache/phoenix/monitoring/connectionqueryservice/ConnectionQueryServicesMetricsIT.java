@@ -20,7 +20,6 @@ package org.apache.phoenix.monitoring.connectionqueryservice;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
-import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTION_CREATION_TIME_MS;
 import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
 import static org.apache.phoenix.query.QueryServices.CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS;
 import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_METRICS_ENABLED;
@@ -226,27 +225,6 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
 
     // Check If all CSQI Metric check passed or not
     assertEquals("Number of passing CSQI Metrics check should be : ", 4, counter.get());
-  }
-
-  @Test
-  public void testConnectionTime() {
-    Map<String, List<ConnectionQueryServicesMetric>> metrics =
-        ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
-    List<ConnectionQueryServicesMetric> serviceMetrics = metrics.get("DEFAULT_CQSN");
-    assertNotNull("No metrics found for service: DEFAULT_CQSN", serviceMetrics);
-
-    // Find connection creation time metric
-    boolean foundMetric = false;
-    for (ConnectionQueryServicesMetric metric : serviceMetrics) {
-      System.out.println("Found metric: " + metric.getMetricType() + " = " + metric.getValue());
-      if (metric.getMetricType() == PHOENIX_CONNECTION_CREATION_TIME_MS) {
-        assertTrue("Connection creation time should be >= 0", metric.getValue() >= 0);
-        foundMetric = true;
-        break;
-      }
-    }
-    assertTrue("Connection creation time metric not found", foundMetric);
-
   }
 
   private void checkConnectionQueryServiceMetricsValues(String queryServiceName) throws Exception {

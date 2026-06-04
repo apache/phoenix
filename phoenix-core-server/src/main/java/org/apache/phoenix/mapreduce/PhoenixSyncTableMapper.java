@@ -808,9 +808,15 @@ public class PhoenixSyncTableMapper
    * counters, builds the chunk-level checkpoint row (REPAIRED / UNREPAIRABLE / REPAIR_FAILED),
    * and writes it via {@link #writeChunkCheckpoint} so the outcome counter is bumped only on a
    * successful checkpoint write (audit row and counter stay consistent).
+   *
+   * <p>{@code CHUNKS_MISMATCHED} is bumped here too: it tracks every chunk where source and
+   * target hashes differed — the drift-detected signal — regardless of whether repair ran.
+   * Without this, repair-mode {@link #recordRegionCompletion} would see {@code mismatchedChunks
+   * == 0} for fully-repaired regions and roll them up as VERIFIED instead of REPAIRED.
    */
   private void recordRepairOutcome(ChunkInfo sourceChunk, ChunkRepairRequest request,
     ChunkRepairResult result, Context context) {
+    context.getCounter(SyncCounters.CHUNKS_MISMATCHED).increment(1);
     DriftCounters drift = result.drift;
     context.getCounter(SyncCounters.ROWS_MISSING_ON_TARGET).increment(drift.rowsMissingOnTarget);
     context.getCounter(SyncCounters.ROWS_EXTRA_ON_TARGET).increment(drift.rowsExtraOnTarget);
