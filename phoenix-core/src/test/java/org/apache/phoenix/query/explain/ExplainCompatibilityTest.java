@@ -66,7 +66,7 @@ import org.junit.Test;
  * to the {@link ExplainOracle} for a tolerant comparison. The corpus covers every EXPLAIN grammar
  * branch reachable without a connection.
  */
-public class ExplainOracleTest extends BaseConnectionlessQueryTest {
+public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
 
   private static final String SALTED = "EO_SALTED";
   private static final String SEQ = "EO_SEQ";
