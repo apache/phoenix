@@ -684,7 +684,7 @@ public class Bson2IT extends ParallelStatsDisabledIT {
       + "  \"InPublication\" : false,\n" + "  \"AddedId\" : 10,\n" + "  \"ColorBytes\" : {\n"
       + "    \"$binary\" : {\n" + "      \"base64\" : \"QmxhY2s=\",\n"
       + "      \"subType\" : \"00\"\n" + "    }\n" + "  },\n" + "  \"ISBN\" : \"111-1111111111\",\n"
-      + "  \"NestedList1\" : [ -473.11999999999995, \"1234abcd\", [ \"xyz0123\", {\n"
+      + "  \"NestedList1\" : [ \"NestedList1[0] + 12.22\", \"1234abcd\", [ \"xyz0123\", {\n"
       + "    \"InPublication\" : false,\n" + "    \"BinaryTitleSet\" : {\n"
       + "      \"$set\" : [ {\n" + "        \"$binary\" : {\n"
       + "          \"base64\" : \"Qm9vayAxMDExIFRpdGxlIEJpbmFyeQ==\",\n"
@@ -716,7 +716,7 @@ public class Bson2IT extends ParallelStatsDisabledIT {
       + "    \"n_attr_1\" : 1295.03,\n" + "    \"n_attr_2\" : {\n" + "      \"$binary\" : {\n"
       + "        \"base64\" : \"MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==\",\n"
       + "        \"subType\" : \"00\"\n" + "      }\n" + "    },\n" + "    \"n_attr_3\" : true,\n"
-      + "    \"n_attr_4\" : null\n" + "  },\n" + "  \"attr_5\" : [ 1224, \"str001\", {\n"
+      + "    \"n_attr_4\" : null\n" + "  },\n" + "  \"attr_5\" : [ \"attr_5[0] - 10\", \"str001\", {\n"
       + "    \"$binary\" : {\n" + "      \"base64\" : \"AAECAwQF\",\n"
       + "      \"subType\" : \"00\"\n" + "    }\n" + "  } ],\n"
       + "  \"NestedList12\" : [ -485.34, \"1234abcd\", [ {\n"
@@ -768,7 +768,7 @@ public class Bson2IT extends ParallelStatsDisabledIT {
     // }
     // },
     // "ISBN" : "111-1111111111",
-    // "NestedList1" : [ -473.11999999999995, "1234abcd", [ "xyz0123", {
+    // "NestedList1" : [ "NestedList1[0] + 12.22", "1234abcd", [ "xyz0123", {
     // "InPublication" : false,
     // "BinaryTitleSet" : {
     // "$set" : [ {
@@ -837,7 +837,7 @@ public class Bson2IT extends ParallelStatsDisabledIT {
     // "n_attr_3" : true,
     // "n_attr_4" : null
     // },
-    // "attr_5" : [ 1224, "str001", {
+    // "attr_5" : [ "attr_5[0] - 10", "str001", {
     // "$binary" : {
     // "base64" : "AAECAwQF",
     // "subType" : "00"
@@ -893,7 +893,7 @@ public class Bson2IT extends ParallelStatsDisabledIT {
       + "  \"InPublication\" : false,\n" + "  \"AddedId\" : 10,\n" + "  \"ColorBytes\" : {\n"
       + "    \"$binary\" : {\n" + "      \"base64\" : \"QmxhY2s=\",\n"
       + "      \"subType\" : \"00\"\n" + "    }\n" + "  },\n" + "  \"ISBN\" : \"111-1111111111\",\n"
-      + "  \"NestedList1\" : [ -473.11999999999995, \"1234abcd\", [ \"xyz0123\", {\n"
+      + "  \"NestedList1\" : [ \"NestedList1[0] + 12.22\", \"1234abcd\", [ \"xyz0123\", {\n"
       + "    \"InPublication\" : false,\n" + "    \"BinaryTitleSet\" : {\n"
       + "      \"$set\" : [ {\n" + "        \"$binary\" : {\n"
       + "          \"base64\" : \"Qm9vayAxMDExIFRpdGxlIEJpbmFyeQ==\",\n"
@@ -926,7 +926,7 @@ public class Bson2IT extends ParallelStatsDisabledIT {
       + "    \"n_attr_2\" : {\n" + "      \"$binary\" : {\n"
       + "        \"base64\" : \"MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==\",\n"
       + "        \"subType\" : \"00\"\n" + "      }\n" + "    },\n" + "    \"n_attr_3\" : true,\n"
-      + "    \"n_attr_4\" : null\n" + "  },\n" + "  \"attr_5\" : [ 1224, \"str001\", {\n"
+      + "    \"n_attr_4\" : null\n" + "  },\n" + "  \"attr_5\" : [ \"attr_5[0] - 10\", \"str001\", {\n"
       + "    \"$binary\" : {\n" + "      \"base64\" : \"AAECAwQF\",\n"
       + "      \"subType\" : \"00\"\n" + "    }\n" + "  } ],\n"
       + "  \"NestedList12\" : [ -485.34, \"1234abcd\", [ {\n"
@@ -979,7 +979,7 @@ public class Bson2IT extends ParallelStatsDisabledIT {
     // }
     // },
     // "ISBN" : "111-1111111111",
-    // "NestedList1" : [ -473.11999999999995, "1234abcd", [ "xyz0123", {
+    // "NestedList1" : [ "NestedList1[0] + 12.22", "1234abcd", [ "xyz0123", {
     // "InPublication" : false,
     // "BinaryTitleSet" : {
     // "$set" : [ {
@@ -1049,7 +1049,7 @@ public class Bson2IT extends ParallelStatsDisabledIT {
     // "n_attr_3" : true,
     // "n_attr_4" : null
     // },
-    // "attr_5" : [ 1224, "str001", {
+    // "attr_5" : [ "attr_5[0] - 10", "str001", {
     // "$binary" : {
     // "base64" : "AAECAwQF",
     // "subType" : "00"
