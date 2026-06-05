@@ -56,67 +56,316 @@ public abstract class HashJoinIT extends BaseJoinIT {
    * each concrete subclass supplies the attribute-based assertions via these hooks.
    */
 
+  /**
+   * {@link #testLeftJoinWithAggregation()}:
+   *
+   * <pre>
+   * SELECT i.name, sum(quantity) FROM joinOrderTable o
+   *   LEFT JOIN joinItemTable i ON o.item_id = i.item_id
+   *   GROUP BY i.name ORDER BY i.name
+   * </pre>
+   */
   protected abstract void assertLeftJoinWithAggPlan1(Connection conn, String query)
     throws Exception;
 
+  /**
+   * {@link #testLeftJoinWithAggregation()}:
+   *
+   * <pre>
+   * SELECT i.item_id iid, sum(quantity) q FROM joinOrderTable o
+   *   LEFT JOIN joinItemTable i ON o.item_id = i.item_id
+   *   GROUP BY i.item_id ORDER BY q DESC
+   * </pre>
+   */
   protected abstract void assertLeftJoinWithAggPlan2(Connection conn, String query)
     throws Exception;
 
+  /**
+   * {@link #testLeftJoinWithAggregation()}:
+   *
+   * <pre>
+   * SELECT i.item_id iid, sum(quantity) q FROM joinItemTable i
+   *   LEFT JOIN joinOrderTable o ON o.item_id = i.item_id
+   *   GROUP BY i.item_id ORDER BY q DESC NULLS LAST, iid
+   * </pre>
+   */
   protected abstract void assertLeftJoinWithAggPlan3(Connection conn, String query)
     throws Exception;
 
+  /**
+   * {@link #testRightJoinWithAggregation()}:
+   *
+   * <pre>
+   * SELECT i.name, sum(quantity) FROM joinOrderTable o
+   *   RIGHT JOIN joinItemTable i ON o.item_id = i.item_id
+   *   GROUP BY i.name ORDER BY i.name
+   * </pre>
+   */
   protected abstract void assertRightJoinWithAggPlan1(Connection conn, String query)
     throws Exception;
 
+  /**
+   * {@link #testRightJoinWithAggregation()}:
+   *
+   * <pre>
+   * SELECT i.item_id iid, sum(quantity) q FROM joinOrderTable o
+   *   RIGHT JOIN joinItemTable i ON o.item_id = i.item_id
+   *   GROUP BY i.item_id ORDER BY q DESC NULLS LAST, iid
+   * </pre>
+   */
   protected abstract void assertRightJoinWithAggPlan2(Connection conn, String query)
     throws Exception;
 
+  /**
+   * {@link #testJoinWithWildcard()}:
+   *
+   * <pre>
+   * SELECT * FROM joinItemTable
+   *   LEFT JOIN joinSupplierTable supp ON joinItemTable.supplier_id = supp.supplier_id
+   *   ORDER BY item_id
+   * </pre>
+   */
   protected abstract void assertJoinWithWildcardPlan(Connection conn, String query)
     throws Exception;
 
+  /**
+   * {@link #testJoinPlanWithIndex()}:
+   *
+   * <pre>
+   * SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM joinItemTable item
+   *   LEFT JOIN joinSupplierTable supp
+   *     ON substr(item.name, 2, 1) = substr(supp.name, 2, 1)
+   *     AND (supp.name BETWEEN 'S1' AND 'S5')
+   *   WHERE item.name BETWEEN 'T1' AND 'T5'
+   * </pre>
+   */
   protected abstract void assertJoinPlanWithIndexPlan1(Connection conn, String query)
     throws Exception;
 
+  /**
+   * {@link #testJoinPlanWithIndex()}:
+   *
+   * <pre>
+   * SELECT item.item_id, item.name, supp.supplier_id, supp.name FROM joinItemTable item
+   *   INNER JOIN joinSupplierTable supp ON item.supplier_id = supp.supplier_id
+   *   WHERE (item.name = 'T1' OR item.name = 'T5')
+   *     AND (supp.name = 'S1' OR supp.name = 'S5')
+   * </pre>
+   */
   protected abstract void assertJoinPlanWithIndexPlan2(Connection conn, String query)
     throws Exception;
 
+  /**
+   * {@link #testJoinWithSkipMergeOptimization()}:
+   *
+   * <pre>
+   * SELECT s.name FROM joinItemTable i
+   *   JOIN joinOrderTable o ON o.item_id = i.item_id AND quantity &lt; 5000
+   *   JOIN joinSupplierTable s ON i.supplier_id = s.supplier_id
+   * </pre>
+   */
   protected abstract void assertSkipMergeOptimizationPlan(Connection conn, String query)
     throws Exception;
 
+  /**
+   * {@link #testSelfJoin()}:
+   *
+   * <pre>
+   * SELECT i2.item_id, i1.name FROM joinItemTable i1
+   *   JOIN joinItemTable i2 ON i1.item_id = i2.item_id
+   *   ORDER BY i1.item_id
+   * </pre>
+   */
   protected abstract void assertSelfJoinPlan1(Connection conn, String query) throws Exception;
 
+  /**
+   * {@link #testSelfJoin()}:
+   *
+   * <pre>
+   * SELECT i1.name, i2.name FROM joinItemTable i1
+   *   JOIN joinItemTable i2 ON i1.item_id = i2.supplier_id
+   *   ORDER BY i1.name, i2.name
+   * </pre>
+   */
   protected abstract void assertSelfJoinPlan2(Connection conn, String query) throws Exception;
 
-  /** {@code noStarJoin} selects the NO_STAR_JOIN variant of {@link #testStarJoin()}. */
+  /**
+   * {@link #testStarJoin()}. {@code noStarJoin} selects the {@code NO_STAR_JOIN} variant.
+   *
+   * <pre>
+   * SELECT order_id, c.name, i.name iname, quantity, o.date FROM joinOrderTable o
+   *   JOIN joinCustomerTable c ON o.customer_id = c.customer_id
+   *   JOIN joinItemTable i ON o.item_id = i.item_id
+   *   ORDER BY order_id
+   *
+   * -- noStarJoin variant adds the NO_STAR_JOIN hint:
+   * SELECT /&#42;+ NO_STAR_JOIN&#42;/ order_id, c.name, i.name iname, quantity, o.date
+   *   FROM joinOrderTable o
+   *   JOIN joinCustomerTable c ON o.customer_id = c.customer_id
+   *   JOIN joinItemTable i ON o.item_id = i.item_id
+   *   ORDER BY order_id
+   * </pre>
+   */
   protected abstract void assertStarJoinPlan(Connection conn, String query, boolean noStarJoin)
     throws Exception;
 
+  /**
+   * {@link #testSubJoin()}:
+   *
+   * <pre>
+   * SELECT * FROM joinCustomerTable c
+   *   INNER JOIN (joinOrderTable o
+   *     INNER JOIN (joinSupplierTable s
+   *       RIGHT JOIN joinItemTable i ON i.supplier_id = s.supplier_id)
+   *     ON o.item_id = i.item_id)
+   *   ON c.customer_id = o.customer_id
+   *   WHERE c.customer_id &lt;= '0000000005'
+   *     AND order_id != '000000000000003' AND i.name != 'T3'
+   *   ORDER BY c.customer_id, i.name
+   * </pre>
+   */
   protected abstract void assertSubJoinPlan(Connection conn, String query) throws Exception;
 
+  /**
+   * {@link #testJoinWithSubqueryAndAggregation()}:
+   *
+   * <pre>
+   * SELECT i.name, sum(quantity) FROM joinOrderTable o
+   *   LEFT JOIN (SELECT name, item_id iid FROM joinItemTable) AS i ON o.item_id = i.iid
+   *   GROUP BY i.name ORDER BY i.name
+   * </pre>
+   */
   protected abstract void assertSubqueryAggPlan1(Connection conn, String query) throws Exception;
 
+  /**
+   * {@link #testJoinWithSubqueryAndAggregation()}:
+   *
+   * <pre>
+   * SELECT o.iid, sum(o.quantity) q
+   *   FROM (SELECT item_id iid, quantity FROM joinOrderTable) AS o
+   *   LEFT JOIN (SELECT item_id FROM joinItemTable) AS i ON o.iid = i.item_id
+   *   GROUP BY o.iid ORDER BY q DESC
+   * </pre>
+   */
   protected abstract void assertSubqueryAggPlan2(Connection conn, String query) throws Exception;
 
+  /**
+   * {@link #testJoinWithSubqueryAndAggregation()}:
+   *
+   * <pre>
+   * SELECT i.iid, o.q
+   *   FROM (SELECT item_id iid FROM joinItemTable) AS i
+   *   LEFT JOIN (SELECT item_id iid, sum(quantity) q FROM joinOrderTable GROUP BY item_id) AS o
+   *     ON o.iid = i.iid
+   *   ORDER BY o.q DESC NULLS LAST, i.iid
+   * </pre>
+   */
   protected abstract void assertSubqueryAggPlan3(Connection conn, String query) throws Exception;
 
+  /**
+   * {@link #testJoinWithSubqueryAndAggregation()}:
+   *
+   * <pre>
+   * SELECT i.iid, o.q
+   *   FROM (SELECT item_id iid, sum(quantity) q FROM joinOrderTable GROUP BY item_id) AS o
+   *   JOIN (SELECT item_id iid FROM joinItemTable) AS i ON o.iid = i.iid
+   *   ORDER BY o.q DESC, i.iid
+   * </pre>
+   */
   protected abstract void assertSubqueryAggPlan4(Connection conn, String query) throws Exception;
 
+  /**
+   * {@link #testNestedSubqueries()}:
+   *
+   * <pre>
+   * SELECT * FROM
+   *   (SELECT customer_id cid, name, phone, address, loc_id, date FROM joinCustomerTable) AS c
+   *   INNER JOIN
+   *   (SELECT o.oid ooid, o.cid ocid, o.iid oiid, o.price * o.quantity, o.date odate,
+   *           qi.iiid iiid, qi.iname iname, qi.iprice iprice, qi.idiscount1 idiscount1,
+   *           qi.idiscount2 idiscount2, qi.isid isid, qi.idescription idescription,
+   *           qi.ssid ssid, qi.sname sname, qi.sphone sphone, qi.saddress saddress,
+   *           qi.sloc_id sloc_id
+   *      FROM (SELECT item_id iid, customer_id cid, order_id oid, price, quantity, date
+   *              FROM joinOrderTable) AS o
+   *      INNER JOIN
+   *      (SELECT i.iid iiid, i.name iname, i.price iprice, i.discount1 idiscount1,
+   *              i.discount2 idiscount2, i.sid isid, i.description idescription,
+   *              s.sid ssid, s.name sname, s.phone sphone, s.address saddress, s.loc_id sloc_id
+   *         FROM (SELECT supplier_id sid, name, phone, address, loc_id FROM joinSupplierTable) AS s
+   *         RIGHT JOIN (SELECT item_id iid, name, price, discount1, discount2, supplier_id sid,
+   *                            description FROM joinItemTable) AS i ON i.sid = s.sid) as qi
+   *      ON o.iid = qi.iiid) as qo
+   *   ON c.cid = qo.ocid
+   *   WHERE c.cid &lt;= '0000000005' AND qo.ooid != '000000000000003' AND qo.iname != 'T3'
+   *   ORDER BY c.cid, qo.iname
+   * </pre>
+   */
   protected abstract void assertNestedSubqueriesPlan(Connection conn, String query)
     throws Exception;
 
+  /**
+   * {@link #testJoinWithLimit()}:
+   *
+   * <pre>
+   * SELECT order_id, i.name, s.name, s.address, quantity FROM joinSupplierTable s
+   *   LEFT JOIN joinItemTable i ON i.supplier_id = s.supplier_id
+   *   LEFT JOIN joinOrderTable o ON o.item_id = i.item_id
+   *   LIMIT 4
+   * </pre>
+   */
   protected abstract void assertJoinWithLimitPlan1(Connection conn, String query) throws Exception;
 
+  /**
+   * {@link #testJoinWithLimit()}:
+   *
+   * <pre>
+   * SELECT order_id, i.name, s.name, s.address, quantity FROM joinSupplierTable s
+   *   JOIN joinItemTable i ON i.supplier_id = s.supplier_id
+   *   JOIN joinOrderTable o ON o.item_id = i.item_id
+   *   LIMIT 4
+   * </pre>
+   */
   protected abstract void assertJoinWithLimitPlan2(Connection conn, String query) throws Exception;
 
   /**
    * Assert the EXPLAIN plan for {@link #testJoinWithSetMaxRows()} (with a max-rows limit of 4). The
    * {@code CLIENT 4 ROW LIMIT} comes from {@link java.sql.Statement#setMaxRows(int)} rather than
    * the SQL, so subclasses must compile via a {@code PhoenixPreparedStatement}.
+   *
+   * <pre>
+   * statement.setMaxRows(4);
+   * SELECT order_id, i.name, quantity FROM joinItemTable i
+   *   JOIN joinOrderTable o ON o.item_id = i.item_id
+   *
+   * SELECT o.order_id, i.name, o.quantity FROM joinItemTable i
+   *   JOIN (SELECT order_id, item_id, quantity FROM joinOrderTable) o ON o.item_id = i.item_id
+   * </pre>
    */
   protected abstract void assertSetMaxRowsPlan(Connection conn, String query) throws Exception;
 
+  /**
+   * {@link #testJoinWithOffset()}:
+   *
+   * <pre>
+   * SELECT order_id, i.name, s.name, s.address, quantity FROM joinSupplierTable s
+   *   LEFT JOIN joinItemTable i ON i.supplier_id = s.supplier_id
+   *   LEFT JOIN joinOrderTable o ON o.item_id = i.item_id
+   *   LIMIT 1 OFFSET 2
+   * </pre>
+   */
   protected abstract void assertJoinWithOffsetPlan1(Connection conn, String query) throws Exception;
 
+  /**
+   * {@link #testJoinWithOffset()}:
+   *
+   * <pre>
+   * SELECT order_id, i.name, s.name, s.address, quantity FROM joinSupplierTable s
+   *   JOIN joinItemTable i ON i.supplier_id = s.supplier_id
+   *   JOIN joinOrderTable o ON o.item_id = i.item_id
+   *   LIMIT 1 OFFSET 2
+   * </pre>
+   */
   protected abstract void assertJoinWithOffsetPlan2(Connection conn, String query) throws Exception;
 
   public void testInnerJoin(boolean renamePhysicalTable) throws Exception {
