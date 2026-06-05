@@ -32,7 +32,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS;
-import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.getPlanSteps;
 import static org.apache.phoenix.schema.PTable.TaskType.DROP_CHILD_VIEWS;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithExpectedSize;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -950,8 +950,11 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
 
     String sql = "select /*+ INDEX(" + viewName + " " + indexName + ") */ * from " + viewName
       + " where col2 = 'aaa'";
-    // check if the query uses the index
-    assertPlan(s2.getConnection(), sql).tableContains(indexName);
+    // This query produces a SKIP-SCAN-JOIN where the index is scanned in a sub-plan. Assert that
+    // the index name appears in the plan steps.
+    List<String> planSteps = getPlanSteps(s2.getConnection(), sql);
+    assertTrue("Expected plan to use index " + indexName + " but was: " + planSteps,
+      planSteps.toString().contains(indexName));
   }
 
   @Test
