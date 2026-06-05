@@ -18,14 +18,10 @@
 package org.apache.phoenix.expression.util.bson;
 
 import java.math.BigDecimal;
-import java.text.NumberFormat;
-import java.text.ParseException;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import org.bson.BsonArray;
 import org.bson.BsonDecimal128;
 import org.bson.BsonDocument;
@@ -102,7 +98,7 @@ public class UpdateExpressionUtils {
   public static void updateExpression(final BsonDocument updateExpression,
     final BsonDocument bsonDocument) {
 
-    LOGGER.info("Update Expression: {} , current bsonDocument: {}", updateExpression, bsonDocument);
+    LOGGER.debug("Update Expression: {} , current bsonDocument: {}", updateExpression, bsonDocument);
 
     if (updateExpression.containsKey("$SET")) {
       executeSetExpression((BsonDocument) updateExpression.get("$SET"), bsonDocument);
@@ -578,73 +574,26 @@ public class UpdateExpressionUtils {
   }
 
   /**
-   * Retrieve the value to be updated for the given current value. If the current value does not
-   * contain any arithmetic operators, the current value is returned without any modifications. If
-   * the current value contains arithmetic expressions like "a + b" or "a - b", the values of
-   * operands are retrieved from the given document and if the values are numeric, the given
-   * arithmetic operation is performed. If the current value is a bson document with an entry from
-   * $IF_NOT_EXISTS to a document with a key and a fallback value, we lookup if the key is already
-   * present in the document. If it is, we return its value. Otherwise, we return the provided
-   * fallback value. If the current value is a bson document with $ADD or $SUBTRACT as key, we get
-   * the array of operands from this document and perform the corresponding operation. Operand can
-   * be an $IF_NOT_EXISTS bson document. If the current value is a bson document with $LIST_APPEND
-   * as key, the value is a two-element array of operands; each operand resolves to a BsonArray
-   * (literal array, a path string referring to an existing array attribute, or an $IF_NOT_EXISTS
-   * document whose resolved value is an array) and the two arrays are concatenated in order with
-   * duplicates preserved.
+   * Retrieve the value to be updated for the given current value. Arithmetic and other computed SET
+   * values are always carried as explicit BSON documents (never inferred from the textual content
+   * of a string value), so any non-document value - including a {@link BsonString} that happens to
+   * contain " + " or " - " - is treated as a literal and returned without modification. If the
+   * current value is a bson document with an entry from $IF_NOT_EXISTS to a document with a key and
+   * a fallback value, we lookup if the key is already present in the document. If it is, we return
+   * its value. Otherwise, we return the provided fallback value. If the current value is a bson
+   * document with $ADD or $SUBTRACT as key, we get the array of operands from this document and
+   * perform the corresponding operation. Operand can be an $IF_NOT_EXISTS bson document. If the
+   * current value is a bson document with $LIST_APPEND as key, the value is a two-element array of
+   * operands; each operand resolves to a BsonArray (literal array, a path string referring to an
+   * existing array attribute, or an $IF_NOT_EXISTS document whose resolved value is an array) and
+   * the two arrays are concatenated in order with duplicates preserved.
    * @param curValue     The current value.
    * @param bsonDocument The document with all field key-value pairs.
    * @return Updated values to be used by SET operation.
    */
   private static BsonValue getNewFieldValue(final BsonValue curValue,
     final BsonDocument bsonDocument) {
-    if (
-      curValue != null && curValue.isString()
-        && (((BsonString) curValue).getValue().contains(" + ")
-          || ((BsonString) curValue).getValue().contains(" - "))
-    ) {
-      String[] tokens = ((BsonString) curValue).getValue().split("\\s+");
-      boolean addNum = true;
-      // Pattern pattern = Pattern.compile(":?[a-zA-Z0-9]+");
-      Pattern pattern = Pattern.compile("[#:$]?[^\\s\\n]+");
-      Number newNum = null;
-      for (String token : tokens) {
-        if (token.equals("+")) {
-          addNum = true;
-          continue;
-        } else if (token.equals("-")) {
-          addNum = false;
-          continue;
-        }
-        Matcher matcher = pattern.matcher(token);
-        if (matcher.find()) {
-          String operand = matcher.group();
-          Number literalNum;
-          BsonValue topLevelValue = bsonDocument.get(operand);
-          BsonValue bsonValue = topLevelValue != null
-            ? topLevelValue
-            : CommonComparisonExpressionUtils.getFieldFromDocument(operand, bsonDocument);
-
-          if (bsonValue == null && (literalNum = stringToNumber(operand)) != null) {
-            Number val = literalNum;
-            newNum =
-              newNum == null ? val : (addNum ? addNum(newNum, val) : subtractNum(newNum, val));
-          } else {
-            if (bsonValue == null) {
-              throw new IllegalArgumentException("Operand " + operand + " does not exist");
-            }
-            if (!bsonValue.isNumber() && !bsonValue.isDecimal128()) {
-              throw new IllegalArgumentException(
-                "Operand " + operand + " is not provided as number type");
-            }
-            Number val = getNumberFromBsonNumber((BsonNumber) bsonValue);
-            newNum =
-              newNum == null ? val : (addNum ? addNum(newNum, val) : subtractNum(newNum, val));
-          }
-        }
-      }
-      return getBsonNumberFromNumber(newNum);
-    } else if (curValue instanceof BsonDocument) {
+    if (curValue instanceof BsonDocument) {
       BsonDocument doc = (BsonDocument) curValue;
       if (doc.get("$IF_NOT_EXISTS") != null) {
         return resolveIfNotExists(doc, bsonDocument);
@@ -821,34 +770,6 @@ public class UpdateExpressionUtils {
       return Float.toString(number.floatValue());
     }
     throw new RuntimeException("Number type is not known for number: " + number);
-  }
-
-  /**
-   * Convert the given String to Number.
-   * @param number The String represented numeric value.
-   * @return The Number object.
-   */
-  private static Number stringToNumber(String number) {
-    try {
-      return Integer.parseInt(number);
-    } catch (NumberFormatException e) {
-      // no-op
-    }
-    try {
-      return Long.parseLong(number);
-    } catch (NumberFormatException e) {
-      // no-op
-    }
-    try {
-      return Double.parseDouble(number);
-    } catch (NumberFormatException e) {
-      // no-op
-    }
-    try {
-      return NumberFormat.getInstance().parse(number);
-    } catch (ParseException e) {
-      return null;
-    }
   }
 
   /**
