@@ -25,6 +25,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -45,7 +46,6 @@ import org.apache.hadoop.hbase.client.RegionInfoBuilder;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
@@ -66,7 +66,7 @@ import org.junit.Test;
  * to the {@link ExplainOracle} for a tolerant comparison. The corpus covers every EXPLAIN grammar
  * branch reachable without a connection.
  */
-public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
+public class ExplainPlanTest extends BaseConnectionlessQueryTest {
 
   private static final String SALTED = "EO_SALTED";
   private static final String SEQ = "EO_SEQ";
@@ -267,6 +267,170 @@ public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
   }
 
   @Test
+  public void testRangeScanCompositeRvcUpperBound() throws Exception {
+    verifyQuery("rangeScanCompositeRvcUpper",
+      "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001'"
+        + " AND entity_id > '000000000000002' AND entity_id < '000000000000008'"
+        + " AND (organization_id,entity_id) <= ('000000000000001','000000000000005')",
+      text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE"
+        + " ['000000000000001','000000000000003'] - ['000000000000001','000000000000005']"),
+      scanAttrs("RANGE SCAN ", "ATABLE",
+        " ['000000000000001','000000000000003'] - ['000000000000001','000000000000005']"));
+  }
+
+  @Test
+  public void testRangeScanCompositeRvcOpenUpperBound() throws Exception {
+    verifyQuery("rangeScanCompositeRvcOpen",
+      "SELECT a_string,b_string FROM atable WHERE organization_id > '000000000000001'"
+        + " AND entity_id > '000000000000002' AND entity_id < '000000000000008'"
+        + " AND (organization_id,entity_id) >= ('000000000000003','000000000000005')",
+      text(
+        "CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE"
+          + " ['000000000000003000000000000005'] - [*]",
+        "    SERVER FILTER BY (ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008')"),
+      scanAttrs("RANGE SCAN ", "ATABLE", " ['000000000000003000000000000005'] - [*]").put(
+        "serverWhereFilter",
+        "SERVER FILTER BY (ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008')"));
+  }
+
+  @Test
+  public void testRangeScanNullNotNull() throws Exception {
+    verifyQuery("rangeScanNullNotNull",
+      "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL"
+        + " AND \"DATE\" >= to_date('2013-01-01')",
+      text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER PTSDB [null,not null]",
+        "    SERVER FILTER BY FIRST KEY ONLY AND \"DATE\" >= DATE '2013-01-01 00:00:00.000'"),
+      scanAttrs("RANGE SCAN ", "PTSDB", " [null,not null]").put("serverWhereFilter",
+        "SERVER FILTER BY FIRST KEY ONLY AND \"DATE\" >= DATE '2013-01-01 00:00:00.000'"));
+  }
+
+  @Test
+  public void testRangeScanNotNull() throws Exception {
+    verifyQuery("rangeScanNotNull",
+      "SELECT host FROM PTSDB WHERE inst IS NOT NULL AND host IS NULL"
+        + " AND \"DATE\" >= to_date('2013-01-01')",
+      text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER PTSDB [not null]",
+        "    SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL"
+          + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')"),
+      scanAttrs("RANGE SCAN ", "PTSDB", " [not null]").put("serverWhereFilter",
+        "SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL"
+          + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')"));
+  }
+
+  @Test
+  public void testSkipScanLikeRanges() throws Exception {
+    verifyQuery("skipScanLikeRanges",
+      "SELECT inst,host FROM PTSDB WHERE inst LIKE 'na%' AND host IN ('a','b')"
+        + " AND \"DATE\" >= to_date('2013-01-01') AND \"DATE\" < to_date('2013-01-02')",
+      text(
+        "CLIENT PARALLEL <N>-WAY SKIP SCAN ON 2 RANGES OVER PTSDB"
+          + " ['na','a','2013-01-01'] - ['nb','b','2013-01-02']",
+        "    SERVER FILTER BY FIRST KEY ONLY"),
+      scanAttrs("SKIP SCAN ON 2 RANGES ", "PTSDB",
+        " ['na','a','2013-01-01'] - ['nb','b','2013-01-02']").put("serverWhereFilter",
+          "SERVER FILTER BY FIRST KEY ONLY"));
+  }
+
+  @Test
+  public void testSkipScanRegexpRanges() throws Exception {
+    verifyQuery("skipScanRegexpRanges",
+      "SELECT inst,host FROM PTSDB WHERE REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1', 'na2','na3')",
+      text("CLIENT PARALLEL <N>-WAY SKIP SCAN ON 3 RANGES OVER PTSDB ['na1'] - ['na4']",
+        "    SERVER FILTER BY FIRST KEY ONLY AND"
+          + " REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')"),
+      scanAttrs("SKIP SCAN ON 3 RANGES ", "PTSDB", " ['na1'] - ['na4']").put("serverWhereFilter",
+        "SERVER FILTER BY FIRST KEY ONLY AND REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')"));
+  }
+
+  @Test
+  public void testRangeScanSubstrBounds() throws Exception {
+    verifyQuery("rangeScanSubstrBounds",
+      "SELECT a_string FROM atable WHERE organization_id='000000000000001'"
+        + " AND SUBSTR(entity_id,1,3) > '002' AND SUBSTR(entity_id,1,3) <= '003'",
+      text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE"
+        + " ['000000000000001','003            '] - ['000000000000001','004            ']"),
+      scanAttrs("RANGE SCAN ", "ATABLE",
+        " ['000000000000001','003            '] - ['000000000000001','004            ']"));
+  }
+
+  @Test
+  public void testSkipScanTwoKeys() throws Exception {
+    verifyQuery("skipScanTwoKeys",
+      "SELECT a_string,b_string FROM atable"
+        + " WHERE organization_id IN ('000000000000001', '000000000000005')",
+      text("CLIENT PARALLEL <N>-WAY SKIP SCAN ON 2 KEYS OVER ATABLE"
+        + " ['000000000000001'] - ['000000000000005']"),
+      scanAttrs("SKIP SCAN ON 2 KEYS ", "ATABLE", " ['000000000000001'] - ['000000000000005']"));
+  }
+
+  @Test
+  public void testGroupByClientLimit() throws Exception {
+    verifyQuery("groupByClientLimit", "SELECT count(1) FROM atable GROUP BY a_string LIMIT 5",
+      text("CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE",
+        "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING]", "CLIENT MERGE SORT",
+        "CLIENT 5 ROW LIMIT"),
+      scanAttrs("FULL SCAN ", "ATABLE", "")
+        .put("serverAggregate", "SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING]")
+        .put("clientRowLimit", 5).put("clientSortAlgo", "CLIENT MERGE SORT"));
+  }
+
+  @Test
+  public void testTopNAscNullsFirstLimit() throws Exception {
+    verifyQuery("topNAscNullsFirstLimit",
+      "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001'"
+        + " ORDER BY a_string ASC NULLS FIRST LIMIT 10",
+      text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE ['000000000000001']",
+        "    SERVER TOP 10 ROWS SORTED BY [A_STRING]", "CLIENT MERGE SORT", "CLIENT LIMIT 10"),
+      scanAttrs("RANGE SCAN ", "ATABLE", " ['000000000000001']").put("serverSortedBy", "[A_STRING]")
+        .put("serverRowLimit", 10).put("clientRowLimit", 10)
+        .put("clientSortAlgo", "CLIENT MERGE SORT"));
+  }
+
+  @Test
+  public void testTopNDescNullsLastLimit() throws Exception {
+    verifyQuery("topNDescNullsLastLimit",
+      "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001'"
+        + " ORDER BY a_string DESC NULLS LAST LIMIT 10",
+      text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE ['000000000000001']",
+        "    SERVER TOP 10 ROWS SORTED BY [A_STRING DESC NULLS LAST]", "CLIENT MERGE SORT",
+        "CLIENT LIMIT 10"),
+      scanAttrs("RANGE SCAN ", "ATABLE", " ['000000000000001']")
+        .put("serverSortedBy", "[A_STRING DESC NULLS LAST]").put("serverRowLimit", 10)
+        .put("clientRowLimit", 10).put("clientSortAlgo", "CLIENT MERGE SORT"));
+  }
+
+  @Test
+  public void testAggregateOrderByClientLimit() throws Exception {
+    verifyQuery("aggregateOrderByClientLimit",
+      "SELECT max(a_integer) FROM atable WHERE organization_id = '000000000000001'"
+        + " GROUP BY organization_id,entity_id,ROUND(a_date,'HOUR')"
+        + " ORDER BY entity_id NULLS LAST LIMIT 10",
+      text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE ['000000000000001']",
+        "    SERVER AGGREGATE INTO DISTINCT ROWS BY"
+          + " [ORGANIZATION_ID, ENTITY_ID, ROUND(A_DATE)]",
+        "CLIENT MERGE SORT", "CLIENT 10 ROW LIMIT"),
+      scanAttrs("RANGE SCAN ", "ATABLE", " ['000000000000001']")
+        .put("serverAggregate",
+          "SERVER AGGREGATE INTO DISTINCT ROWS BY [ORGANIZATION_ID, ENTITY_ID, ROUND(A_DATE)]")
+        .put("clientRowLimit", 10).put("clientSortAlgo", "CLIENT MERGE SORT"));
+  }
+
+  @Test
+  public void testClientSortedByHaving() throws Exception {
+    verifyQuery("clientSortedByHaving",
+      "SELECT count(1) FROM atable WHERE a_integer = 1 GROUP BY a_string,b_string"
+        + " HAVING max(a_string) = 'a' ORDER BY b_string",
+      text("CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "    SERVER FILTER BY A_INTEGER = 1",
+        "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]", "CLIENT MERGE SORT",
+        "CLIENT FILTER BY MAX(A_STRING) = 'a'", "CLIENT SORTED BY [B_STRING]"),
+      scanAttrs("FULL SCAN ", "ATABLE", "")
+        .put("serverWhereFilter", "SERVER FILTER BY A_INTEGER = 1")
+        .put("serverAggregate", "SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]")
+        .put("clientFilterBy", "MAX(A_STRING) = 'a'").put("clientSortedBy", "[B_STRING]")
+        .put("clientOffset", 0).put("clientSortAlgo", "CLIENT MERGE SORT"));
+  }
+
+  @Test
   public void testSortMergeJoin() throws Exception {
     ObjectNode rhs = scanAttrs("FULL SCAN ", "ATABLE", "");
     verifyQuery("sortMergeJoin",
@@ -282,6 +446,14 @@ public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
 
   @Test
   public void testHashJoinInner() throws Exception {
+    // HashJoinPlan root attributes come from the delegate scan. Each hash/skip-scan child
+    // is recorded under subPlans with its join header on abstractExplainPlan.
+    ObjectNode child = scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan",
+      "PARALLEL INNER-JOIN TABLE 0");
+    ObjectNode expected = scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']");
+    expected.set("subPlans", mapper.createArrayNode().add(child));
+    expected.put("dynamicServerFilter",
+      "DYNAMIC SERVER FILTER BY A.ORGANIZATION_ID IN (B.ORGANIZATION_ID)");
     verifyQuery("hashJoinInner",
       "SELECT a.a_string, b.a_string FROM atable a"
         + " JOIN atable b ON a.organization_id = b.organization_id"
@@ -289,13 +461,19 @@ public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
       text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE ['00D000000000001']",
         "    PARALLEL INNER-JOIN TABLE 0", "        CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE",
         "    DYNAMIC SERVER FILTER BY A.ORGANIZATION_ID IN (B.ORGANIZATION_ID)"),
-      // HashJoinPlan uses the List<String>-only ExplainPlan constructor, which installs the
-      // default attributes (all-null/empty). Freeze that baseline.
-      defaultAttrs());
+      expected);
   }
 
   @Test
   public void testHashJoinSemiInSubquery() throws Exception {
+    ObjectNode child =
+      scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan", "SKIP-SCAN-JOIN TABLE 0")
+        .put("serverWhereFilter", "SERVER FILTER BY A_INTEGER = 1")
+        .put("serverAggregate", "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [ORGANIZATION_ID]");
+    ObjectNode expected = scanAttrs("FULL SCAN ", "ATABLE", "");
+    expected.set("subPlans", mapper.createArrayNode().add(child));
+    expected.put("dynamicServerFilter",
+      "DYNAMIC SERVER FILTER BY ATABLE.ORGANIZATION_ID IN ($1.$3)");
     verifyQuery("hashJoinSemiInSubquery",
       "SELECT a_string FROM atable"
         + " WHERE organization_id IN (SELECT organization_id FROM atable WHERE a_integer = 1)",
@@ -304,7 +482,7 @@ public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
         "            SERVER FILTER BY A_INTEGER = 1",
         "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [ORGANIZATION_ID]",
         "    DYNAMIC SERVER FILTER BY ATABLE.ORGANIZATION_ID IN ($1.$3)"),
-      defaultAttrs());
+      expected);
   }
 
   @Test
@@ -355,8 +533,11 @@ public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
 
   @Test
   public void testDeleteSingleRow() throws Exception {
-    verifyMutation("deleteSingleRow", "DELETE FROM atable WHERE organization_id = '00D000000000001'"
-      + " AND entity_id = '00E00000000001'", true, text("DELETE SINGLE ROW"), defaultAttrs());
+    verifyMutation("deleteSingleRow",
+      "DELETE FROM atable WHERE organization_id = '00D000000000001'"
+        + " AND entity_id = '00E00000000001'",
+      true, text("DELETE SINGLE ROW"),
+      defaultAttrs().put("abstractExplainPlan", "DELETE SINGLE ROW"));
   }
 
   @Test
@@ -496,21 +677,20 @@ public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
 
   @Test
   public void testJacksonFieldOrderMatchesPropertyOrderAnnotation() throws Exception {
-    ExplainPlanAttributes a = new ExplainPlanAttributesBuilder()
-      .setIteratorTypeAndScanSize("PARALLEL 1-WAY").setTableName("T").build();
-    String json = mapper.writeValueAsString(a);
-    int iAbstract = json.indexOf("\"abstractExplainPlan\"");
-    int iIter = json.indexOf("\"iteratorTypeAndScanSize\"");
-    int iTable = json.indexOf("\"tableName\"");
-    int iRhs = json.indexOf("\"rhsJoinQueryExplainPlan\"");
-    int iMerge = json.indexOf("\"serverMergeColumns\"");
-    int iRegions = json.indexOf("\"regionLocations\"");
-    int iLookups = json.indexOf("\"numRegionLocationLookups\"");
-    assertTrue("abstractExplainPlan first", iAbstract >= 0 && iAbstract < iIter);
-    assertTrue("iteratorTypeAndScanSize before tableName", iIter < iTable);
-    assertTrue("rhsJoinQueryExplainPlan before serverMergeColumns", iRhs < iMerge);
-    assertTrue("serverMergeColumns before regionLocations", iMerge < iRegions);
-    assertTrue("regionLocations before numRegionLocationLookups", iRegions < iLookups);
+    // The serialized field order must exactly follow the @JsonPropertyOrder declaration. Deriving
+    // the expected order from the annotation keeps this test correct across future reorderings.
+    String[] expectedOrder =
+      ExplainPlanAttributes.class.getAnnotation(JsonPropertyOrder.class).value();
+    String json = mapper.writeValueAsString(new ExplainPlanAttributesBuilder().build());
+    int prevIdx = -1;
+    String prevName = null;
+    for (String name : expectedOrder) {
+      int idx = json.indexOf("\"" + name + "\"");
+      assertTrue(name + " present in serialized JSON", idx >= 0);
+      assertTrue(name + " must serialize after " + prevName, idx > prevIdx);
+      prevIdx = idx;
+      prevName = name;
+    }
   }
 
   @Test
@@ -575,9 +755,8 @@ public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
     // Sanity: with no rules, today's plan compares against today's expected.
     new ExplainOracle().verify("today", todayPlan, todayExpectedText, todayExpectedJson);
 
-    // Tomorrow: design renames the marker. Future plan emits the new form; the embedded baseline
-    // stays unchanged ("today's" expected); a rule transforms the baseline into the new shape and
-    // the comparison passes.
+    // Future plan emits the new form. The embedded baseline stays unchanged and a rule transforms
+    // the baseline into the new shape so it passes the comparison.
     ExplainPlanAttributes futureAttrs = new ExplainPlanAttributesBuilder()
       .setIteratorTypeAndScanSize("PARALLEL 1-WAY").setExplainScanType("FULL SCAN ")
       .setTableName("T").setServerWhereFilter("SERVER PROJECTION FILTER BY FIRST KEY ONLY").build();
@@ -644,8 +823,7 @@ public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
   private void verifyQuery(String caseId, String query, Properties props, List<String> expectedText,
     JsonNode expectedJson) throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-      ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
+      ExplainPlan plan = ExplainPlanTestUtil.getExplainPlan(conn, query);
       oracle.verify(caseId, plan, expectedText, expectedJson);
     }
   }
@@ -663,9 +841,7 @@ public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
   }
 
   private ExplainPlan compileMutation(Connection conn, String query) throws SQLException {
-    PhoenixPreparedStatement ps =
-      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
-    return ps.compileMutation().getExplainPlan();
+    return ExplainPlanTestUtil.getMutationExplainPlan(conn, query);
   }
 
   private static Properties defaultProps() {
@@ -678,13 +854,6 @@ public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
     return Arrays.asList(lines);
   }
 
-  /**
-   * Returns a fresh {@link ObjectNode} populated with the JSON shape that
-   * {@link ExplainPlanAttributes#getDefaultExplainPlan()} serializes to (after normalization): all
-   * nullable fields are null, both booleans are false, and {@code numRegionLocationLookups} is 0.
-   * Each test case starts from this baseline and overrides only the fields it asserts on. Field
-   * order is irrelevant — {@link JsonNode#equals(Object)} compares maps, not order.
-   */
   private static ObjectNode defaultAttrs() {
     ObjectNode n = mapper.createObjectNode();
     n.putNull("abstractExplainPlan");
@@ -723,13 +892,17 @@ public class ExplainCompatibilityTest extends BaseConnectionlessQueryTest {
     n.putNull("serverMergeColumns");
     n.putNull("regionLocations");
     n.put("numRegionLocationLookups", 0);
+    n.putNull("subPlans");
+    n.putNull("serverGroupByLimit");
+    n.putNull("dynamicServerFilter");
+    n.putNull("afterJoinFilter");
+    n.putNull("joinScannerLimit");
+    n.put("sortMergeSkipMerge", false);
     return n;
   }
 
   /**
-   * Convenience wrapper that builds {@link #defaultAttrs()} and sets the five fields every
-   * connection-backed scan emits via {@code ExplainTable.explain}: {@code iteratorTypeAndScanSize},
-   * {@code consistency}, {@code explainScanType}, {@code tableName}, and {@code keyRanges}.
+   * Convenience method that builds {@link #defaultAttrs()}.
    * @param scanType the {@code explainScanType} string (with its trailing space, e.g.
    *                 {@code "FULL SCAN "})
    * @param table    the {@code tableName} value

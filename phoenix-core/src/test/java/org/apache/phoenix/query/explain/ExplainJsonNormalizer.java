@@ -18,6 +18,7 @@
 package org.apache.phoenix.query.explain;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.regex.Pattern;
@@ -64,6 +65,14 @@ public final class ExplainJsonNormalizer {
     JsonNode rhs = obj.get("rhsJoinQueryExplainPlan");
     if (rhs != null && rhs.isObject()) {
       normalize(rhs);
+    }
+
+    JsonNode subPlans = obj.get("subPlans");
+    if (subPlans != null && subPlans.isArray()) {
+      ArrayNode subPlansArray = (ArrayNode) subPlans;
+      for (JsonNode subPlan : subPlansArray) {
+        normalize(subPlan);
+      }
     }
 
     return obj;

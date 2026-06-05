@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertMutationPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -52,16 +54,17 @@ import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.DeleteCompiler;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.MutationPlan;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -192,20 +195,25 @@ public class DeleteIT extends ParallelStatsDisabledIT {
 
   private static void assertIndexUsed(Connection conn, String query, List<Object> binds,
     String indexName, boolean expectedToBeUsed, boolean local) throws SQLException {
-    PreparedStatement stmt = conn.prepareStatement("EXPLAIN " + query);
+    PhoenixPreparedStatement stmt =
+      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
     for (int i = 0; i < binds.size(); i++) {
       stmt.setObject(i + 1, binds.get(i));
     }
-    ResultSet rs = stmt.executeQuery();
-    String explainPlan = QueryUtil.getExplainPlan(rs);
+    boolean isMutation = query.trim().toUpperCase().startsWith("DELETE")
+      || query.trim().toUpperCase().startsWith("UPSERT");
+    ExplainPlanAttributes attributes =
+      (isMutation ? stmt.compileMutation().getExplainPlan() : stmt.optimizeQuery().getExplainPlan())
+        .getPlanStepsAsAttributes();
     // It's very difficult currently to check if a local index is being used
     // This check is brittle as it checks that the index ID appears in the range scan
-    // TODO: surface QueryPlan from MutationPlan
     if (local) {
-      assertEquals(expectedToBeUsed,
-        explainPlan.contains(indexName + " [1]") || explainPlan.contains(indexName + " [1,"));
+      String keyRanges = attributes.getKeyRanges();
+      boolean used = indexName.equals(attributes.getTableName()) && keyRanges != null
+        && (keyRanges.startsWith(" [1]") || keyRanges.startsWith(" [1,"));
+      assertEquals(expectedToBeUsed, used);
     } else {
-      assertEquals(expectedToBeUsed, explainPlan.contains(" SCAN OVER " + indexName));
+      assertEquals(expectedToBeUsed, indexName.equals(attributes.getTableName()));
     }
   }
 
@@ -499,16 +507,18 @@ public class DeleteIT extends ParallelStatsDisabledIT {
       if (!autoCommit) {
         con.commit();
       }
-      psDelete = con.prepareStatement("EXPLAIN " + dml);
-      psDelete.setString(1, "AA");
-      psDelete.setString(2, "BB");
-      psDelete.setString(3, "CC");
-      psDelete.setDate(4, date);
-      String explainPlan = QueryUtil.getExplainPlan(psDelete.executeQuery());
+      PhoenixPreparedStatement explainStmt =
+        con.prepareStatement(dml).unwrap(PhoenixPreparedStatement.class);
+      explainStmt.setString(1, "AA");
+      explainStmt.setString(2, "BB");
+      explainStmt.setString(3, "CC");
+      explainStmt.setDate(4, date);
+      ExplainPlanAttributes attributes =
+        explainStmt.compileMutation().getExplainPlan().getPlanStepsAsAttributes();
       if (addNonPKIndex) {
-        assertNotEquals("DELETE SINGLE ROW", explainPlan);
+        assertNotEquals("DELETE SINGLE ROW", attributes.getAbstractExplainPlan());
       } else {
-        assertEquals("DELETE SINGLE ROW", explainPlan);
+        assertPlan(attributes).abstractExplainPlan("DELETE SINGLE ROW");
       }
 
       assertDeleted(con, tableName, indexName1, indexName2, indexName3);
@@ -927,26 +937,20 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     }
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       conn.setAutoCommit(true);
-      try (Statement statement = conn.createStatement()) {
-        ResultSet rs = statement.executeQuery("EXPLAIN " + delete);
-        String explainPlan = QueryUtil.getExplainPlan(rs);
-        // Verify index is used for the delete query
-        IndexToolIT.assertExplainPlan(false, explainPlan, tableName, indexName1);
-      }
+      // Verify index is used for the delete query
+      assertMutationPlan(conn, delete).scanType("RANGE SCAN").table(indexName1);
       // Created the second index
       try (Statement statement = conn.createStatement()) {
         statement.execute(indexDdl2);
       }
+      // Verify index is used for the delete query
+      assertMutationPlan(conn, delete).scanType("RANGE SCAN").table(indexName1);
       try (Statement statement = conn.createStatement()) {
-        ResultSet rs = statement.executeQuery("EXPLAIN " + delete);
-        String explainPlan = QueryUtil.getExplainPlan(rs);
-        // Verify index is used for the delete query
-        IndexToolIT.assertExplainPlan(false, explainPlan, tableName, indexName1);
         statement.executeUpdate(delete);
         // Count the number of rows
         String query = "SELECT COUNT(*) from " + tableName;
         // There should be no rows on the data table
-        rs = conn.createStatement().executeQuery(query);
+        ResultSet rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals(0, rs.getInt(1));
         query = "SELECT COUNT(*) from " + indexName1;

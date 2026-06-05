@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.INDEX_DATA_SCHEMA;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -44,7 +45,6 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -696,11 +696,9 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
 
       conn.createStatement().execute("ALTER VIEW " + viewName + " DROP COLUMN s4");
       // i2 cannot be used since s4 has been dropped from the view, so i1 will be used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      String queryPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName1 + " [1]\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY AND ((\"S2\" || '_' || \"S3\") = 'abc_cab' AND \"S1\" = 'foo')",
-        queryPlan);
+      assertPlan(conn, query).scanType("RANGE SCAN").tableContains(indexName1).keyRanges(" [1]")
+        .serverWhereFilter(
+          "SERVER FILTER BY FIRST KEY ONLY AND ((\"S2\" || '_' || \"S3\") = 'abc_cab' AND \"S1\" = 'foo')");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("abc_cab", rs.getString(1));
@@ -860,21 +858,20 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
       query = "select c.c_customer_sk from  " + tableName + " c " + "left outer join " + tableName
         + " c2 on c.c_customer_sk = c2.c_customer_sk "
         + "where c.c_customer_sk || c.c_first_name = '1David'";
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
       if (localIndex) {
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName + "(" + tableName
-          + ") [1,'1David']\n" + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT\n"
-          + "    PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)\n"
-          + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName + "(" + tableName
-          + ") [1]\n" + "            SERVER FILTER BY FIRST KEY ONLY\n"
-          + "        CLIENT MERGE SORT", explainPlan);
+        assertPlan(conn, query).scanType("RANGE SCAN")
+          .tableContains(indexName + "(" + tableName + ")").keyRanges(" [1,'1David']")
+          .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT")
+          .subPlanCount(1).subPlan(0).scanType("RANGE SCAN")
+          .tableContains(indexName + "(" + tableName + ")").keyRanges(" [1]")
+          .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT")
+          .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)").end();
       } else {
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexName + " ['1David']\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n"
-          + "    PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + indexName + "\n"
-          + "            SERVER FILTER BY FIRST KEY ONLY", explainPlan);
+        assertPlan(conn, query).scanType("RANGE SCAN").tableContains(indexName)
+          .keyRanges(" ['1David']").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+          .subPlanCount(1).subPlan(0).scanType("FULL SCAN").tableContains(indexName)
+          .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+          .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)").end();
       }
 
       rs = conn.createStatement().executeQuery(query);

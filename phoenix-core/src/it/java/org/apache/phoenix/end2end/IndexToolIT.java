@@ -38,6 +38,8 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.getExplainAttributes;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -104,7 +106,6 @@ import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -779,16 +780,18 @@ public class IndexToolIT extends BaseTest {
         "SELECT ID FROM %s WHERE LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz' = 'xxUNAME2_xyz'",
         qDataTableName);
 
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-
       // assert we are pulling from data table.
-      assertEquals(String.format(
-        "CLIENT PARALLEL 1-WAY FULL SCAN OVER %s\n"
-          + "    SERVER FILTER BY (LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'",
-        dataTableNameForExplain), actualExplainPlan.replaceAll(":", "."));
+      ExplainPlanAttributes dataAttributes = getExplainAttributes(conn, selectSql);
+      assertPlan(dataAttributes).scanType("FULL SCAN")
+        .serverWhereFilter("(LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'");
+      // Table names are case-sensitive and (under namespace mapping) carry a ':' separator, so
+      // compare against the normalized ('.') form rather than via tableContains().
+      String dataScanTable = dataAttributes.getTableName() == null
+        ? null
+        : dataAttributes.getTableName().replaceAll(":", ".");
+      assertEquals(dataTableNameForExplain, dataScanTable);
 
-      rs = stmt1.executeQuery(selectSql);
+      ResultSet rs = stmt1.executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(2, rs.getInt(1));
       assertFalse(rs.next());
@@ -803,12 +806,19 @@ public class IndexToolIT extends BaseTest {
       conn.commit();
 
       // assert we are pulling from index table.
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      // Because the explain plan doesn't include double-quotes around case-sensitive table names,
-      // we need to tell assertExplainPlan to not normalize our table names.
-      assertExplainPlan(localIndex, actualExplainPlan, dataTableNameForExplain,
-        indexTableNameForExplain, false);
+      ExplainPlanAttributes indexAttributes = getExplainAttributes(conn, selectSql);
+      assertPlan(indexAttributes).scanType("RANGE SCAN");
+      // The explain plan doesn't include double-quotes around case-sensitive table names and (under
+      // namespace mapping) uses a ':' separator, so compare against the non-normalized ('.') form.
+      String indexScanTable = indexAttributes.getTableName() == null
+        ? null
+        : indexAttributes.getTableName().replaceAll(":", ".");
+      String expectedIndexTable = localIndex
+        ? indexTableNameForExplain + "(" + dataTableNameForExplain + ")"
+        : indexTableNameForExplain;
+      assertTrue(
+        "expected scanned table <" + indexScanTable + "> to use index <" + expectedIndexTable + ">",
+        indexScanTable != null && indexScanTable.contains(expectedIndexTable));
 
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());

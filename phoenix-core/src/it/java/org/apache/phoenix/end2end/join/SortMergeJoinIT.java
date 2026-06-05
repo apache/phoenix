@@ -40,7 +40,6 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
@@ -48,9 +47,17 @@ import org.junit.runners.Parameterized;
 @RunWith(Parameterized.class)
 public abstract class SortMergeJoinIT extends BaseJoinIT {
 
-  public SortMergeJoinIT(String[] indexDDL, String[] plans) {
-    super(indexDDL, plans);
+  public SortMergeJoinIT(String[] indexDDL) {
+    super(indexDDL);
   }
+
+  protected abstract void assertSkipMergeOptimizationPlan(Connection conn, String query)
+    throws Exception;
+
+  protected abstract void assertSelfJoinPlan(Connection conn, String query) throws Exception;
+
+  protected abstract void assertSetMaxRowsPlan(Connection conn, String query, int queryIndex)
+    throws Exception;
 
   @Test
   public void testDefaultJoin() throws Exception {
@@ -1663,8 +1670,7 @@ public abstract class SortMergeJoinIT extends BaseJoinIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      assertPlansEqual(plans[0], QueryUtil.getExplainPlan(rs));
+      assertSkipMergeOptimizationPlan(conn, query);
     } finally {
       conn.close();
     }
@@ -1707,8 +1713,7 @@ public abstract class SortMergeJoinIT extends BaseJoinIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query1);
-      assertPlansEqual(plans[2], QueryUtil.getExplainPlan(rs));
+      assertSelfJoinPlan(conn, query1);
 
       statement = conn.prepareStatement(query2);
       rs = statement.executeQuery();
@@ -2581,9 +2586,7 @@ public abstract class SortMergeJoinIT extends BaseJoinIT {
 
         assertFalse(rs.next());
 
-        rs = statement.executeQuery("EXPLAIN " + query);
-        assertPlansEqual(i == 0 ? plans[1] : plans[1].replaceFirst("O\\.item_id", "item_id"),
-          QueryUtil.getExplainPlan(rs));
+        assertSetMaxRowsPlan(conn, query, i);
       }
     } finally {
       conn.close();

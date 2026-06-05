@@ -196,6 +196,7 @@ public class SortMergeJoinPlan implements QueryPlan {
       new ExplainPlanAttributesBuilder(lhsPlanAttributes);
     lhsPlanBuilder
       .setAbstractExplainPlan("SORT-MERGE-JOIN (" + joinType.toString().toUpperCase() + ")");
+    lhsPlanBuilder.setSortMergeSkipMerge(rhsSchema.getFieldCount() == 0);
 
     for (String step : lhsPlanSteps) {
       steps.add("    " + step);

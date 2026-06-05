@@ -32,6 +32,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.schema.PTable.TaskType.DROP_CHILD_VIEWS;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithExpectedSize;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -947,13 +948,10 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
     // Create a index on the table
     s1.execute("create index " + indexName + " ON " + tableName + " (col2)");
 
-    try (ResultSet rs = s2.executeQuery("explain select /*+ INDEX(" + viewName + " " + indexName
-      + ") */ * from " + viewName + " where col2 = 'aaa'")) {
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-
-      // check if the query uses the index
-      assertTrue(explainPlan.contains(indexName));
-    }
+    String sql = "select /*+ INDEX(" + viewName + " " + indexName + ") */ * from " + viewName
+      + " where col2 = 'aaa'";
+    // check if the query uses the index
+    assertPlan(s2.getConnection(), sql).tableContains(indexName);
   }
 
   @Test

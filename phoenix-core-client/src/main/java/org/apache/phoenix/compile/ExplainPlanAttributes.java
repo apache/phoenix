@@ -32,58 +32,67 @@ import org.apache.phoenix.schema.PColumn;
  * against. This also makes attribute retrieval easier as an API rather than retrieving list of
  * Strings containing entire plan.
  */
-@JsonPropertyOrder({ "abstractExplainPlan", "splitsChunk", "estimatedRows", "estimatedSizeInBytes",
-  "iteratorTypeAndScanSize", "samplingRate", "useRoundRobinIterator", "hexStringRVCOffset",
-  "consistency", "hint", "serverSortedBy", "explainScanType", "tableName", "keyRanges",
-  "scanTimeRangeMin", "scanTimeRangeMax", "serverWhereFilter", "serverDistinctFilter",
-  "serverOffset", "serverRowLimit", "serverArrayElementProjection", "serverAggregate",
-  "clientFilterBy", "clientAggregate", "clientSortedBy", "clientAfterAggregate",
-  "clientDistinctFilter", "clientOffset", "clientRowLimit", "clientSequenceCount",
-  "clientCursorName", "clientSortAlgo", "rhsJoinQueryExplainPlan", "serverMergeColumns",
+@JsonPropertyOrder({ "abstractExplainPlan", "hint", "explainScanType", "consistency", "tableName",
+  "keyRanges", "scanTimeRangeMin", "scanTimeRangeMax", "splitsChunk", "useRoundRobinIterator",
+  "samplingRate", "hexStringRVCOffset", "iteratorTypeAndScanSize", "estimatedRows",
+  "estimatedSizeInBytes", "serverWhereFilter", "serverDistinctFilter", "serverMergeColumns",
+  "serverArrayElementProjection", "serverAggregate", "serverGroupByLimit", "serverSortedBy",
+  "serverOffset", "serverRowLimit", "clientFilterBy", "clientAggregate", "clientDistinctFilter",
+  "clientAfterAggregate", "clientSortAlgo", "clientSortedBy", "clientOffset", "clientRowLimit",
+  "clientSequenceCount", "clientCursorName", "rhsJoinQueryExplainPlan", "subPlans",
+  "dynamicServerFilter", "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge",
   "regionLocations", "numRegionLocationLookups" })
 public class ExplainPlanAttributes {
 
+  // Plan identity and scan-level metadata
   private final String abstractExplainPlan;
-  private final Integer splitsChunk;
-  private final Long estimatedRows;
-  private final Long estimatedSizeInBytes;
-  private final String iteratorTypeAndScanSize;
-  private final Double samplingRate;
-  private final boolean useRoundRobinIterator;
-  private final String hexStringRVCOffset;
-  private final Consistency consistency;
   private final Hint hint;
-  private final String serverSortedBy;
   private final String explainScanType;
+  private final Consistency consistency;
   private final String tableName;
   private final String keyRanges;
   private final Long scanTimeRangeMin;
   private final Long scanTimeRangeMax;
+  private final Integer splitsChunk;
+  private final boolean useRoundRobinIterator;
+  private final Double samplingRate;
+  private final String hexStringRVCOffset;
+  private final String iteratorTypeAndScanSize;
+  private final Long estimatedRows;
+  private final Long estimatedSizeInBytes;
+
+  // Server-side operations
   private final String serverWhereFilter;
   private final String serverDistinctFilter;
-  private final Integer serverOffset;
-  private final Long serverRowLimit;
+  private final Set<PColumn> serverMergeColumns;
   private final boolean serverArrayElementProjection;
   private final String serverAggregate;
+  private final Integer serverGroupByLimit;
+  private final String serverSortedBy;
+  private final Integer serverOffset;
+  private final Long serverRowLimit;
+
+  // Client-side operations
   private final String clientFilterBy;
   private final String clientAggregate;
-  private final String clientSortedBy;
-  private final String clientAfterAggregate;
   private final String clientDistinctFilter;
+  private final String clientAfterAggregate;
+  private final String clientSortAlgo;
+  private final String clientSortedBy;
   private final Integer clientOffset;
   private final Integer clientRowLimit;
   private final Integer clientSequenceCount;
   private final String clientCursorName;
-  private final String clientSortAlgo;
-  // This object represents PlanAttributes object for rhs query
-  // to be used only by Join queries. In case of Join query, lhs plan is
-  // represented by 'this' object and rhs plan is represented by
-  // 'rhsJoinQueryExplainPlan' object (which in turn should
-  // have null rhsJoinQueryExplainPlan)
-  // For non-Join queries related Plans, rhsJoinQueryExplainPlan will always
-  // be null
+
+  // Join / sub-plan
   private final ExplainPlanAttributes rhsJoinQueryExplainPlan;
-  private final Set<PColumn> serverMergeColumns;
+  private final List<ExplainPlanAttributes> subPlans;
+  private final String dynamicServerFilter;
+  private final String afterJoinFilter;
+  private final Long joinScannerLimit;
+  private final boolean sortMergeSkipMerge;
+
+  // Region-location metadata
   private final List<HRegionLocation> regionLocations;
   private final int numRegionLocationLookups;
 
@@ -91,89 +100,103 @@ public class ExplainPlanAttributes {
 
   private ExplainPlanAttributes() {
     this.abstractExplainPlan = null;
-    this.splitsChunk = null;
-    this.estimatedRows = null;
-    this.estimatedSizeInBytes = null;
-    this.iteratorTypeAndScanSize = null;
-    this.samplingRate = null;
-    this.useRoundRobinIterator = false;
-    this.hexStringRVCOffset = null;
-    this.consistency = null;
     this.hint = null;
-    this.serverSortedBy = null;
     this.explainScanType = null;
+    this.consistency = null;
     this.tableName = null;
     this.keyRanges = null;
     this.scanTimeRangeMin = null;
     this.scanTimeRangeMax = null;
+    this.splitsChunk = null;
+    this.useRoundRobinIterator = false;
+    this.samplingRate = null;
+    this.hexStringRVCOffset = null;
+    this.iteratorTypeAndScanSize = null;
+    this.estimatedRows = null;
+    this.estimatedSizeInBytes = null;
     this.serverWhereFilter = null;
     this.serverDistinctFilter = null;
-    this.serverOffset = null;
-    this.serverRowLimit = null;
+    this.serverMergeColumns = null;
     this.serverArrayElementProjection = false;
     this.serverAggregate = null;
+    this.serverGroupByLimit = null;
+    this.serverSortedBy = null;
+    this.serverOffset = null;
+    this.serverRowLimit = null;
     this.clientFilterBy = null;
     this.clientAggregate = null;
-    this.clientSortedBy = null;
-    this.clientAfterAggregate = null;
     this.clientDistinctFilter = null;
+    this.clientAfterAggregate = null;
+    this.clientSortAlgo = null;
+    this.clientSortedBy = null;
     this.clientOffset = null;
     this.clientRowLimit = null;
     this.clientSequenceCount = null;
     this.clientCursorName = null;
-    this.clientSortAlgo = null;
     this.rhsJoinQueryExplainPlan = null;
-    this.serverMergeColumns = null;
+    this.subPlans = null;
+    this.dynamicServerFilter = null;
+    this.afterJoinFilter = null;
+    this.joinScannerLimit = null;
+    this.sortMergeSkipMerge = false;
     this.regionLocations = null;
     this.numRegionLocationLookups = 0;
   }
 
-  public ExplainPlanAttributes(String abstractExplainPlan, Integer splitsChunk, Long estimatedRows,
-    Long estimatedSizeInBytes, String iteratorTypeAndScanSize, Double samplingRate,
-    boolean useRoundRobinIterator, String hexStringRVCOffset, Consistency consistency, Hint hint,
-    String serverSortedBy, String explainScanType, String tableName, String keyRanges,
-    Long scanTimeRangeMin, Long scanTimeRangeMax, String serverWhereFilter,
-    String serverDistinctFilter, Integer serverOffset, Long serverRowLimit,
-    boolean serverArrayElementProjection, String serverAggregate, String clientFilterBy,
-    String clientAggregate, String clientSortedBy, String clientAfterAggregate,
-    String clientDistinctFilter, Integer clientOffset, Integer clientRowLimit,
-    Integer clientSequenceCount, String clientCursorName, String clientSortAlgo,
-    ExplainPlanAttributes rhsJoinQueryExplainPlan, Set<PColumn> serverMergeColumns,
-    List<HRegionLocation> regionLocations, int numRegionLocationLookups) {
+  public ExplainPlanAttributes(String abstractExplainPlan, Hint hint, String explainScanType,
+    Consistency consistency, String tableName, String keyRanges, Long scanTimeRangeMin,
+    Long scanTimeRangeMax, Integer splitsChunk, boolean useRoundRobinIterator, Double samplingRate,
+    String hexStringRVCOffset, String iteratorTypeAndScanSize, Long estimatedRows,
+    Long estimatedSizeInBytes, String serverWhereFilter, String serverDistinctFilter,
+    Set<PColumn> serverMergeColumns, boolean serverArrayElementProjection, String serverAggregate,
+    Integer serverGroupByLimit, String serverSortedBy, Integer serverOffset, Long serverRowLimit,
+    String clientFilterBy, String clientAggregate, String clientDistinctFilter,
+    String clientAfterAggregate, String clientSortAlgo, String clientSortedBy, Integer clientOffset,
+    Integer clientRowLimit, Integer clientSequenceCount, String clientCursorName,
+    ExplainPlanAttributes rhsJoinQueryExplainPlan, List<ExplainPlanAttributes> subPlans,
+    String dynamicServerFilter, String afterJoinFilter, Long joinScannerLimit,
+    boolean sortMergeSkipMerge, List<HRegionLocation> regionLocations,
+    int numRegionLocationLookups) {
     this.abstractExplainPlan = abstractExplainPlan;
-    this.splitsChunk = splitsChunk;
-    this.estimatedRows = estimatedRows;
-    this.estimatedSizeInBytes = estimatedSizeInBytes;
-    this.iteratorTypeAndScanSize = iteratorTypeAndScanSize;
-    this.samplingRate = samplingRate;
-    this.useRoundRobinIterator = useRoundRobinIterator;
-    this.hexStringRVCOffset = hexStringRVCOffset;
-    this.consistency = consistency;
     this.hint = hint;
-    this.serverSortedBy = serverSortedBy;
     this.explainScanType = explainScanType;
+    this.consistency = consistency;
     this.tableName = tableName;
     this.keyRanges = keyRanges;
     this.scanTimeRangeMin = scanTimeRangeMin;
     this.scanTimeRangeMax = scanTimeRangeMax;
+    this.splitsChunk = splitsChunk;
+    this.useRoundRobinIterator = useRoundRobinIterator;
+    this.samplingRate = samplingRate;
+    this.hexStringRVCOffset = hexStringRVCOffset;
+    this.iteratorTypeAndScanSize = iteratorTypeAndScanSize;
+    this.estimatedRows = estimatedRows;
+    this.estimatedSizeInBytes = estimatedSizeInBytes;
     this.serverWhereFilter = serverWhereFilter;
     this.serverDistinctFilter = serverDistinctFilter;
-    this.serverOffset = serverOffset;
-    this.serverRowLimit = serverRowLimit;
+    this.serverMergeColumns = serverMergeColumns;
     this.serverArrayElementProjection = serverArrayElementProjection;
     this.serverAggregate = serverAggregate;
+    this.serverGroupByLimit = serverGroupByLimit;
+    this.serverSortedBy = serverSortedBy;
+    this.serverOffset = serverOffset;
+    this.serverRowLimit = serverRowLimit;
     this.clientFilterBy = clientFilterBy;
     this.clientAggregate = clientAggregate;
-    this.clientSortedBy = clientSortedBy;
-    this.clientAfterAggregate = clientAfterAggregate;
     this.clientDistinctFilter = clientDistinctFilter;
+    this.clientAfterAggregate = clientAfterAggregate;
+    this.clientSortAlgo = clientSortAlgo;
+    this.clientSortedBy = clientSortedBy;
     this.clientOffset = clientOffset;
     this.clientRowLimit = clientRowLimit;
     this.clientSequenceCount = clientSequenceCount;
     this.clientCursorName = clientCursorName;
-    this.clientSortAlgo = clientSortAlgo;
     this.rhsJoinQueryExplainPlan = rhsJoinQueryExplainPlan;
-    this.serverMergeColumns = serverMergeColumns;
+    this.subPlans = subPlans;
+    this.dynamicServerFilter = dynamicServerFilter;
+    this.afterJoinFilter = afterJoinFilter;
+    this.joinScannerLimit = joinScannerLimit;
+    this.sortMergeSkipMerge = sortMergeSkipMerge;
     this.regionLocations = regionLocations;
     this.numRegionLocationLookups = numRegionLocationLookups;
   }
@@ -182,48 +205,16 @@ public class ExplainPlanAttributes {
     return abstractExplainPlan;
   }
 
-  public Integer getSplitsChunk() {
-    return splitsChunk;
-  }
-
-  public Long getEstimatedRows() {
-    return estimatedRows;
-  }
-
-  public Long getEstimatedSizeInBytes() {
-    return estimatedSizeInBytes;
-  }
-
-  public String getIteratorTypeAndScanSize() {
-    return iteratorTypeAndScanSize;
-  }
-
-  public Double getSamplingRate() {
-    return samplingRate;
-  }
-
-  public boolean isUseRoundRobinIterator() {
-    return useRoundRobinIterator;
-  }
-
-  public String getHexStringRVCOffset() {
-    return hexStringRVCOffset;
-  }
-
-  public Consistency getConsistency() {
-    return consistency;
-  }
-
   public Hint getHint() {
     return hint;
   }
 
-  public String getServerSortedBy() {
-    return serverSortedBy;
-  }
-
   public String getExplainScanType() {
     return explainScanType;
+  }
+
+  public Consistency getConsistency() {
+    return consistency;
   }
 
   public String getTableName() {
@@ -242,6 +233,34 @@ public class ExplainPlanAttributes {
     return scanTimeRangeMax;
   }
 
+  public Integer getSplitsChunk() {
+    return splitsChunk;
+  }
+
+  public boolean isUseRoundRobinIterator() {
+    return useRoundRobinIterator;
+  }
+
+  public Double getSamplingRate() {
+    return samplingRate;
+  }
+
+  public String getHexStringRVCOffset() {
+    return hexStringRVCOffset;
+  }
+
+  public String getIteratorTypeAndScanSize() {
+    return iteratorTypeAndScanSize;
+  }
+
+  public Long getEstimatedRows() {
+    return estimatedRows;
+  }
+
+  public Long getEstimatedSizeInBytes() {
+    return estimatedSizeInBytes;
+  }
+
   public String getServerWhereFilter() {
     return serverWhereFilter;
   }
@@ -250,12 +269,9 @@ public class ExplainPlanAttributes {
     return serverDistinctFilter;
   }
 
-  public Integer getServerOffset() {
-    return serverOffset;
-  }
-
-  public Long getServerRowLimit() {
-    return serverRowLimit;
+  @JsonSerialize(using = ServerMergeColumnsSerializer.class)
+  public Set<PColumn> getServerMergeColumns() {
+    return serverMergeColumns;
   }
 
   public boolean isServerArrayElementProjection() {
@@ -266,6 +282,22 @@ public class ExplainPlanAttributes {
     return serverAggregate;
   }
 
+  public Integer getServerGroupByLimit() {
+    return serverGroupByLimit;
+  }
+
+  public String getServerSortedBy() {
+    return serverSortedBy;
+  }
+
+  public Integer getServerOffset() {
+    return serverOffset;
+  }
+
+  public Long getServerRowLimit() {
+    return serverRowLimit;
+  }
+
   public String getClientFilterBy() {
     return clientFilterBy;
   }
@@ -274,16 +306,20 @@ public class ExplainPlanAttributes {
     return clientAggregate;
   }
 
-  public String getClientSortedBy() {
-    return clientSortedBy;
+  public String getClientDistinctFilter() {
+    return clientDistinctFilter;
   }
 
   public String getClientAfterAggregate() {
     return clientAfterAggregate;
   }
 
-  public String getClientDistinctFilter() {
-    return clientDistinctFilter;
+  public String getClientSortAlgo() {
+    return clientSortAlgo;
+  }
+
+  public String getClientSortedBy() {
+    return clientSortedBy;
   }
 
   public Integer getClientOffset() {
@@ -302,17 +338,28 @@ public class ExplainPlanAttributes {
     return clientCursorName;
   }
 
-  public String getClientSortAlgo() {
-    return clientSortAlgo;
-  }
-
   public ExplainPlanAttributes getRhsJoinQueryExplainPlan() {
     return rhsJoinQueryExplainPlan;
   }
 
-  @JsonSerialize(using = ServerMergeColumnsSerializer.class)
-  public Set<PColumn> getServerMergeColumns() {
-    return serverMergeColumns;
+  public List<ExplainPlanAttributes> getSubPlans() {
+    return subPlans;
+  }
+
+  public String getDynamicServerFilter() {
+    return dynamicServerFilter;
+  }
+
+  public String getAfterJoinFilter() {
+    return afterJoinFilter;
+  }
+
+  public Long getJoinScannerLimit() {
+    return joinScannerLimit;
+  }
+
+  public boolean isSortMergeSkipMerge() {
+    return sortMergeSkipMerge;
   }
 
   @JsonSerialize(using = RegionLocationsListSerializer.class)
@@ -330,39 +377,45 @@ public class ExplainPlanAttributes {
 
   public static class ExplainPlanAttributesBuilder {
     private String abstractExplainPlan;
-    private Integer splitsChunk;
-    private Long estimatedRows;
-    private Long estimatedSizeInBytes;
-    private String iteratorTypeAndScanSize;
-    private Double samplingRate;
-    private boolean useRoundRobinIterator;
-    private String hexStringRVCOffset;
-    private Consistency consistency;
     private HintNode.Hint hint;
-    private String serverSortedBy;
     private String explainScanType;
+    private Consistency consistency;
     private String tableName;
     private String keyRanges;
     private Long scanTimeRangeMin;
     private Long scanTimeRangeMax;
+    private Integer splitsChunk;
+    private boolean useRoundRobinIterator;
+    private Double samplingRate;
+    private String hexStringRVCOffset;
+    private String iteratorTypeAndScanSize;
+    private Long estimatedRows;
+    private Long estimatedSizeInBytes;
     private String serverWhereFilter;
     private String serverDistinctFilter;
-    private Integer serverOffset;
-    private Long serverRowLimit;
+    private Set<PColumn> serverMergeColumns;
     private boolean serverArrayElementProjection;
     private String serverAggregate;
+    private Integer serverGroupByLimit;
+    private String serverSortedBy;
+    private Integer serverOffset;
+    private Long serverRowLimit;
     private String clientFilterBy;
     private String clientAggregate;
-    private String clientSortedBy;
-    private String clientAfterAggregate;
     private String clientDistinctFilter;
+    private String clientAfterAggregate;
+    private String clientSortAlgo;
+    private String clientSortedBy;
     private Integer clientOffset;
     private Integer clientRowLimit;
     private Integer clientSequenceCount;
     private String clientCursorName;
-    private String clientSortAlgo;
     private ExplainPlanAttributes rhsJoinQueryExplainPlan;
-    private Set<PColumn> serverMergeColumns;
+    private List<ExplainPlanAttributes> subPlans;
+    private String dynamicServerFilter;
+    private String afterJoinFilter;
+    private Long joinScannerLimit;
+    private boolean sortMergeSkipMerge;
     private List<HRegionLocation> regionLocations;
     private int numRegionLocationLookups;
 
@@ -372,39 +425,45 @@ public class ExplainPlanAttributes {
 
     public ExplainPlanAttributesBuilder(ExplainPlanAttributes explainPlanAttributes) {
       this.abstractExplainPlan = explainPlanAttributes.getAbstractExplainPlan();
-      this.splitsChunk = explainPlanAttributes.getSplitsChunk();
-      this.estimatedRows = explainPlanAttributes.getEstimatedRows();
-      this.estimatedSizeInBytes = explainPlanAttributes.getEstimatedSizeInBytes();
-      this.iteratorTypeAndScanSize = explainPlanAttributes.getIteratorTypeAndScanSize();
-      this.samplingRate = explainPlanAttributes.getSamplingRate();
-      this.useRoundRobinIterator = explainPlanAttributes.isUseRoundRobinIterator();
-      this.hexStringRVCOffset = explainPlanAttributes.getHexStringRVCOffset();
-      this.consistency = explainPlanAttributes.getConsistency();
       this.hint = explainPlanAttributes.getHint();
-      this.serverSortedBy = explainPlanAttributes.getServerSortedBy();
       this.explainScanType = explainPlanAttributes.getExplainScanType();
+      this.consistency = explainPlanAttributes.getConsistency();
       this.tableName = explainPlanAttributes.getTableName();
       this.keyRanges = explainPlanAttributes.getKeyRanges();
       this.scanTimeRangeMin = explainPlanAttributes.getScanTimeRangeMin();
       this.scanTimeRangeMax = explainPlanAttributes.getScanTimeRangeMax();
+      this.splitsChunk = explainPlanAttributes.getSplitsChunk();
+      this.useRoundRobinIterator = explainPlanAttributes.isUseRoundRobinIterator();
+      this.samplingRate = explainPlanAttributes.getSamplingRate();
+      this.hexStringRVCOffset = explainPlanAttributes.getHexStringRVCOffset();
+      this.iteratorTypeAndScanSize = explainPlanAttributes.getIteratorTypeAndScanSize();
+      this.estimatedRows = explainPlanAttributes.getEstimatedRows();
+      this.estimatedSizeInBytes = explainPlanAttributes.getEstimatedSizeInBytes();
       this.serverWhereFilter = explainPlanAttributes.getServerWhereFilter();
       this.serverDistinctFilter = explainPlanAttributes.getServerDistinctFilter();
-      this.serverOffset = explainPlanAttributes.getServerOffset();
-      this.serverRowLimit = explainPlanAttributes.getServerRowLimit();
+      this.serverMergeColumns = explainPlanAttributes.getServerMergeColumns();
       this.serverArrayElementProjection = explainPlanAttributes.isServerArrayElementProjection();
       this.serverAggregate = explainPlanAttributes.getServerAggregate();
+      this.serverGroupByLimit = explainPlanAttributes.getServerGroupByLimit();
+      this.serverSortedBy = explainPlanAttributes.getServerSortedBy();
+      this.serverOffset = explainPlanAttributes.getServerOffset();
+      this.serverRowLimit = explainPlanAttributes.getServerRowLimit();
       this.clientFilterBy = explainPlanAttributes.getClientFilterBy();
       this.clientAggregate = explainPlanAttributes.getClientAggregate();
-      this.clientSortedBy = explainPlanAttributes.getClientSortedBy();
-      this.clientAfterAggregate = explainPlanAttributes.getClientAfterAggregate();
       this.clientDistinctFilter = explainPlanAttributes.getClientDistinctFilter();
+      this.clientAfterAggregate = explainPlanAttributes.getClientAfterAggregate();
+      this.clientSortAlgo = explainPlanAttributes.getClientSortAlgo();
+      this.clientSortedBy = explainPlanAttributes.getClientSortedBy();
       this.clientOffset = explainPlanAttributes.getClientOffset();
       this.clientRowLimit = explainPlanAttributes.getClientRowLimit();
       this.clientSequenceCount = explainPlanAttributes.getClientSequenceCount();
       this.clientCursorName = explainPlanAttributes.getClientCursorName();
-      this.clientSortAlgo = explainPlanAttributes.getClientSortAlgo();
       this.rhsJoinQueryExplainPlan = explainPlanAttributes.getRhsJoinQueryExplainPlan();
-      this.serverMergeColumns = explainPlanAttributes.getServerMergeColumns();
+      this.subPlans = explainPlanAttributes.getSubPlans();
+      this.dynamicServerFilter = explainPlanAttributes.getDynamicServerFilter();
+      this.afterJoinFilter = explainPlanAttributes.getAfterJoinFilter();
+      this.joinScannerLimit = explainPlanAttributes.getJoinScannerLimit();
+      this.sortMergeSkipMerge = explainPlanAttributes.isSortMergeSkipMerge();
       this.regionLocations = explainPlanAttributes.getRegionLocations();
       this.numRegionLocationLookups = explainPlanAttributes.getNumRegionLocationLookups();
     }
@@ -414,58 +473,18 @@ public class ExplainPlanAttributes {
       return this;
     }
 
-    public ExplainPlanAttributesBuilder setSplitsChunk(Integer splitsChunk) {
-      this.splitsChunk = splitsChunk;
-      return this;
-    }
-
-    public ExplainPlanAttributesBuilder setEstimatedRows(Long estimatedRows) {
-      this.estimatedRows = estimatedRows;
-      return this;
-    }
-
-    public ExplainPlanAttributesBuilder setEstimatedSizeInBytes(Long estimatedSizeInBytes) {
-      this.estimatedSizeInBytes = estimatedSizeInBytes;
-      return this;
-    }
-
-    public ExplainPlanAttributesBuilder setIteratorTypeAndScanSize(String iteratorTypeAndScanSize) {
-      this.iteratorTypeAndScanSize = iteratorTypeAndScanSize;
-      return this;
-    }
-
-    public ExplainPlanAttributesBuilder setSamplingRate(Double samplingRate) {
-      this.samplingRate = samplingRate;
-      return this;
-    }
-
-    public ExplainPlanAttributesBuilder setUseRoundRobinIterator(boolean useRoundRobinIterator) {
-      this.useRoundRobinIterator = useRoundRobinIterator;
-      return this;
-    }
-
-    public ExplainPlanAttributesBuilder setHexStringRVCOffset(String hexStringRVCOffset) {
-      this.hexStringRVCOffset = hexStringRVCOffset;
-      return this;
-    }
-
-    public ExplainPlanAttributesBuilder setConsistency(Consistency consistency) {
-      this.consistency = consistency;
-      return this;
-    }
-
     public ExplainPlanAttributesBuilder setHint(HintNode.Hint hint) {
       this.hint = hint;
       return this;
     }
 
-    public ExplainPlanAttributesBuilder setServerSortedBy(String serverSortedBy) {
-      this.serverSortedBy = serverSortedBy;
+    public ExplainPlanAttributesBuilder setExplainScanType(String explainScanType) {
+      this.explainScanType = explainScanType;
       return this;
     }
 
-    public ExplainPlanAttributesBuilder setExplainScanType(String explainScanType) {
-      this.explainScanType = explainScanType;
+    public ExplainPlanAttributesBuilder setConsistency(Consistency consistency) {
+      this.consistency = consistency;
       return this;
     }
 
@@ -489,6 +508,41 @@ public class ExplainPlanAttributes {
       return this;
     }
 
+    public ExplainPlanAttributesBuilder setSplitsChunk(Integer splitsChunk) {
+      this.splitsChunk = splitsChunk;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setUseRoundRobinIterator(boolean useRoundRobinIterator) {
+      this.useRoundRobinIterator = useRoundRobinIterator;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setSamplingRate(Double samplingRate) {
+      this.samplingRate = samplingRate;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setHexStringRVCOffset(String hexStringRVCOffset) {
+      this.hexStringRVCOffset = hexStringRVCOffset;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setIteratorTypeAndScanSize(String iteratorTypeAndScanSize) {
+      this.iteratorTypeAndScanSize = iteratorTypeAndScanSize;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setEstimatedRows(Long estimatedRows) {
+      this.estimatedRows = estimatedRows;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setEstimatedSizeInBytes(Long estimatedSizeInBytes) {
+      this.estimatedSizeInBytes = estimatedSizeInBytes;
+      return this;
+    }
+
     public ExplainPlanAttributesBuilder setServerWhereFilter(String serverWhereFilter) {
       this.serverWhereFilter = serverWhereFilter;
       return this;
@@ -499,13 +553,8 @@ public class ExplainPlanAttributes {
       return this;
     }
 
-    public ExplainPlanAttributesBuilder setServerOffset(Integer serverOffset) {
-      this.serverOffset = serverOffset;
-      return this;
-    }
-
-    public ExplainPlanAttributesBuilder setServerRowLimit(Long serverRowLimit) {
-      this.serverRowLimit = serverRowLimit;
+    public ExplainPlanAttributesBuilder setServerMergeColumns(Set<PColumn> columns) {
+      this.serverMergeColumns = columns;
       return this;
     }
 
@@ -520,6 +569,26 @@ public class ExplainPlanAttributes {
       return this;
     }
 
+    public ExplainPlanAttributesBuilder setServerGroupByLimit(Integer serverGroupByLimit) {
+      this.serverGroupByLimit = serverGroupByLimit;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setServerSortedBy(String serverSortedBy) {
+      this.serverSortedBy = serverSortedBy;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setServerOffset(Integer serverOffset) {
+      this.serverOffset = serverOffset;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setServerRowLimit(Long serverRowLimit) {
+      this.serverRowLimit = serverRowLimit;
+      return this;
+    }
+
     public ExplainPlanAttributesBuilder setClientFilterBy(String clientFilterBy) {
       this.clientFilterBy = clientFilterBy;
       return this;
@@ -530,8 +599,8 @@ public class ExplainPlanAttributes {
       return this;
     }
 
-    public ExplainPlanAttributesBuilder setClientSortedBy(String clientSortedBy) {
-      this.clientSortedBy = clientSortedBy;
+    public ExplainPlanAttributesBuilder setClientDistinctFilter(String clientDistinctFilter) {
+      this.clientDistinctFilter = clientDistinctFilter;
       return this;
     }
 
@@ -540,8 +609,13 @@ public class ExplainPlanAttributes {
       return this;
     }
 
-    public ExplainPlanAttributesBuilder setClientDistinctFilter(String clientDistinctFilter) {
-      this.clientDistinctFilter = clientDistinctFilter;
+    public ExplainPlanAttributesBuilder setClientSortAlgo(String clientSortAlgo) {
+      this.clientSortAlgo = clientSortAlgo;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setClientSortedBy(String clientSortedBy) {
+      this.clientSortedBy = clientSortedBy;
       return this;
     }
 
@@ -565,19 +639,34 @@ public class ExplainPlanAttributes {
       return this;
     }
 
-    public ExplainPlanAttributesBuilder setClientSortAlgo(String clientSortAlgo) {
-      this.clientSortAlgo = clientSortAlgo;
-      return this;
-    }
-
     public ExplainPlanAttributesBuilder
       setRhsJoinQueryExplainPlan(ExplainPlanAttributes rhsJoinQueryExplainPlan) {
       this.rhsJoinQueryExplainPlan = rhsJoinQueryExplainPlan;
       return this;
     }
 
-    public ExplainPlanAttributesBuilder setServerMergeColumns(Set<PColumn> columns) {
-      this.serverMergeColumns = columns;
+    public ExplainPlanAttributesBuilder setSubPlans(List<ExplainPlanAttributes> subPlans) {
+      this.subPlans = subPlans;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setDynamicServerFilter(String dynamicServerFilter) {
+      this.dynamicServerFilter = dynamicServerFilter;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setAfterJoinFilter(String afterJoinFilter) {
+      this.afterJoinFilter = afterJoinFilter;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setJoinScannerLimit(Long joinScannerLimit) {
+      this.joinScannerLimit = joinScannerLimit;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setSortMergeSkipMerge(boolean sortMergeSkipMerge) {
+      this.sortMergeSkipMerge = sortMergeSkipMerge;
       return this;
     }
 
@@ -592,14 +681,16 @@ public class ExplainPlanAttributes {
     }
 
     public ExplainPlanAttributes build() {
-      return new ExplainPlanAttributes(abstractExplainPlan, splitsChunk, estimatedRows,
-        estimatedSizeInBytes, iteratorTypeAndScanSize, samplingRate, useRoundRobinIterator,
-        hexStringRVCOffset, consistency, hint, serverSortedBy, explainScanType, tableName,
-        keyRanges, scanTimeRangeMin, scanTimeRangeMax, serverWhereFilter, serverDistinctFilter,
-        serverOffset, serverRowLimit, serverArrayElementProjection, serverAggregate, clientFilterBy,
-        clientAggregate, clientSortedBy, clientAfterAggregate, clientDistinctFilter, clientOffset,
-        clientRowLimit, clientSequenceCount, clientCursorName, clientSortAlgo,
-        rhsJoinQueryExplainPlan, serverMergeColumns, regionLocations, numRegionLocationLookups);
+      return new ExplainPlanAttributes(abstractExplainPlan, hint, explainScanType, consistency,
+        tableName, keyRanges, scanTimeRangeMin, scanTimeRangeMax, splitsChunk,
+        useRoundRobinIterator, samplingRate, hexStringRVCOffset, iteratorTypeAndScanSize,
+        estimatedRows, estimatedSizeInBytes, serverWhereFilter, serverDistinctFilter,
+        serverMergeColumns, serverArrayElementProjection, serverAggregate, serverGroupByLimit,
+        serverSortedBy, serverOffset, serverRowLimit, clientFilterBy, clientAggregate,
+        clientDistinctFilter, clientAfterAggregate, clientSortAlgo, clientSortedBy, clientOffset,
+        clientRowLimit, clientSequenceCount, clientCursorName, rhsJoinQueryExplainPlan, subPlans,
+        dynamicServerFilter, afterJoinFilter, joinScannerLimit, sortMergeSkipMerge, regionLocations,
+        numRegionLocationLookups);
     }
   }
 }

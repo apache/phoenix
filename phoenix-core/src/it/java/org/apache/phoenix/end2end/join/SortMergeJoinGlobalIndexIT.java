@@ -17,10 +17,15 @@
  */
 package org.apache.phoenix.end2end.join;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+
+import java.sql.Connection;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
@@ -46,8 +51,53 @@ public class SortMergeJoinGlobalIndexIT extends SortMergeJoinIT {
     return virtualNameToRealNameMap;
   }
 
-  public SortMergeJoinGlobalIndexIT(String[] indexDDL, String[] plans) {
-    super(indexDDL, plans);
+  public SortMergeJoinGlobalIndexIT(String[] indexDDL) {
+    super(indexDDL);
+  }
+
+  @Override
+  protected void assertSkipMergeOptimizationPlan(Connection conn, String query) throws Exception {
+    String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+    String itemIndex = getSchemaName() + ".idx_item";
+    String supplierIndex = getSchemaName() + ".idx_supplier";
+    assertPlan(conn, query).abstractExplainPlan("SORT-MERGE-JOIN (LEFT)").scanType("FULL SCAN")
+      .table(supplierIndex).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverSortedBy("[\"S.:supplier_id\"]").clientSortAlgo("CLIENT MERGE SORT")
+      .sortMergeSkipMerge(false).rhs().abstractExplainPlan("SORT-MERGE-JOIN (INNER)")
+      .scanType("FULL SCAN").table(itemIndex).serverSortedBy("[\"I.:item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").sortMergeSkipMerge(true)
+      .clientSortedBy("[\"I.0:supplier_id\"]").rhs().scanType("FULL SCAN").table(order)
+      .serverWhereFilter("SERVER FILTER BY QUANTITY < 5000").serverSortedBy("[\"O.item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end().end();
+  }
+
+  @Override
+  protected void assertSelfJoinPlan(Connection conn, String query) throws Exception {
+    String itemIndex = getSchemaName() + ".idx_item";
+    assertPlan(conn, query).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").scanType("FULL SCAN")
+      .table(itemIndex).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverSortedBy("[\"I1.:item_id\"]").clientSortAlgo("CLIENT MERGE SORT")
+      .sortMergeSkipMerge(false).rhs().scanType("FULL SCAN").table(itemIndex)
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"I2.:item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end();
+  }
+
+  @Override
+  protected void assertSetMaxRowsPlan(Connection conn, String query, int queryIndex)
+    throws Exception {
+    String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+    String itemIndex = getSchemaName() + ".idx_item";
+    PhoenixPreparedStatement statement =
+      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
+    statement.setMaxRows(4);
+    ExplainPlanAttributes attributes =
+      statement.optimizeQuery().getExplainPlan().getPlanStepsAsAttributes();
+    assertPlan(attributes).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").scanType("FULL SCAN")
+      .table(itemIndex).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverSortedBy("[\"I.:item_id\"]").clientSortAlgo("CLIENT MERGE SORT")
+      .sortMergeSkipMerge(false).clientRowLimit(4).rhs().scanType("FULL SCAN").table(order)
+      .serverSortedBy(queryIndex == 0 ? "[\"O.item_id\"]" : "[\"item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end();
   }
 
   @Parameters(name = "SortMergeJoinGlobalIndexIT_{index}") // name is used by failsafe as file name
@@ -58,32 +108,7 @@ public class SortMergeJoinGlobalIndexIT extends SortMergeJoinIT {
       { "CREATE INDEX \"idx_customer\" ON " + JOIN_CUSTOMER_TABLE_FULL_NAME + " (name)",
         "CREATE INDEX \"idx_item\" ON " + JOIN_ITEM_TABLE_FULL_NAME
           + " (name) INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
-        "CREATE INDEX \"idx_supplier\" ON " + JOIN_SUPPLIER_TABLE_FULL_NAME + " (name)" },
-      { "SORT-MERGE-JOIN (LEFT) TABLES\n" + "    CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-        + JOIN_SCHEMA + ".idx_supplier\n" + "        SERVER FILTER BY FIRST KEY ONLY\n"
-        + "        SERVER SORTED BY [\"S.:supplier_id\"]\n" + "    CLIENT MERGE SORT\n" + "AND\n"
-        + "    SORT-MERGE-JOIN (INNER) TABLES\n" + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-        + JOIN_SCHEMA + ".idx_item\n" + "            SERVER SORTED BY [\"I.:item_id\"]\n"
-        + "        CLIENT MERGE SORT\n" + "    AND (SKIP MERGE)\n"
-        + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n"
-        + "            SERVER FILTER BY QUANTITY < 5000\n"
-        + "            SERVER SORTED BY [\"O.item_id\"]\n" + "        CLIENT MERGE SORT\n"
-        + "    CLIENT SORTED BY [\"I.0:supplier_id\"]",
-
-        "SORT-MERGE-JOIN (INNER) TABLES\n" + "    CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-          + JOIN_SCHEMA + ".idx_item\n" + "        SERVER FILTER BY FIRST KEY ONLY\n"
-          + "        SERVER SORTED BY [\"I.:item_id\"]\n" + "    CLIENT MERGE SORT\n" + "AND\n"
-          + "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n"
-          + "        SERVER SORTED BY [\"O.item_id\"]\n" + "    CLIENT MERGE SORT\n"
-          + "CLIENT 4 ROW LIMIT",
-
-        "SORT-MERGE-JOIN (INNER) TABLES\n"
-          + "    CLIENT PARALLEL 1-WAY FULL SCAN OVER Join.idx_item\n"
-          + "        SERVER FILTER BY FIRST KEY ONLY\n"
-          + "        SERVER SORTED BY [\"I1.:item_id\"]\n" + "    CLIENT MERGE SORT\n" + "AND\n"
-          + "    CLIENT PARALLEL 1-WAY FULL SCAN OVER Join.idx_item\n"
-          + "        SERVER FILTER BY FIRST KEY ONLY\n"
-          + "        SERVER SORTED BY [\"I2.:item_id\"]\n" + "    CLIENT MERGE SORT" } });
+        "CREATE INDEX \"idx_supplier\" ON " + JOIN_SUPPLIER_TABLE_FULL_NAME + " (name)" } });
     return testCases;
   }
 }

@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryConstants.CDC_POST_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_PRE_IMAGE;
 import static org.apache.phoenix.query.QueryConstants.CDC_TTL_DELETE_EVENT_TYPE;
 import static org.apache.phoenix.query.QueryConstants.CDC_UPSERT_EVENT_TYPE;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.*;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -45,7 +46,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
@@ -575,9 +575,7 @@ public class TableTTLIT extends BaseTest {
       String expectedValue;
       String dql = "select val1, val2 from " + tableName + " where id = 'a1'";
       try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertFalse(explainPlan.contains(indexName));
+        assertPlan(conn, dql).table(tableName);
         assertTrue(rs.next());
         indexColumnValue = rs.getString(1);
         expectedValue = rs.getString(2);
@@ -609,9 +607,7 @@ public class TableTTLIT extends BaseTest {
       // do a read on the index which should trigger a read repair
       dql = "select val2 from " + tableName + " where val1 = '" + indexColumnValue + "'";
       try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(explainPlan.contains(indexName));
+        assertPlan(conn, dql).tableContains(indexName);
         assertTrue(rs.next());
         assertEquals(rs.getString(1), expectedValue);
         assertFalse(rs.next());
@@ -622,9 +618,7 @@ public class TableTTLIT extends BaseTest {
       TestUtil.dumpTable(conn, TableName.valueOf(indexName));
       // run the same query again after compaction
       try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(explainPlan.contains(indexName));
+        assertPlan(conn, dql).tableContains(indexName);
         assertTrue(rs.next());
         assertEquals(rs.getString(1), expectedValue);
         assertFalse(rs.next());

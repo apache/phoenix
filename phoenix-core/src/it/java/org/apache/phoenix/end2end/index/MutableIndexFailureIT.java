@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.hadoop.hbase.coprocessor.CoprocessorHost.REGIONSERVER_COPROCESSOR_CONF_KEY;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -511,18 +512,15 @@ public class MutableIndexFailureIT extends BaseTest {
     String query = "SELECT /*+ INDEX(" + fullTableName + " "
       + SchemaUtil.getTableNameFromFullName(fullIndexName) + ")  */ k,v1 FROM " + fullTableName;
     ResultSet rs = conn.createStatement().executeQuery(query);
-    String expectedPlan =
-      " OVER "
-        + (localIndex
-          ? fullIndexName + "("
-            + Bytes.toString(SchemaUtil
-              .getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).getName())
-            + ")"
-          : SchemaUtil.getPhysicalTableName(fullIndexName.getBytes(), isNamespaceMapped)
-            .getNameAsString());
-    String explainPlan =
-      QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + query));
-    assertTrue(explainPlan, explainPlan.contains(expectedPlan));
+    String expectedTable = localIndex
+      ? fullIndexName + "("
+        + Bytes.toString(
+          SchemaUtil.getPhysicalTableName(fullTableName.getBytes(), isNamespaceMapped).getName())
+        + ")"
+      : SchemaUtil.getPhysicalTableName(fullIndexName.getBytes(), isNamespaceMapped)
+        .getNameAsString();
+    assertPlan(conn, query).scanType(localIndex ? "RANGE SCAN" : "FULL SCAN")
+      .tableContains(expectedTable);
     if (transactional) { // failed commit does not get retried
       assertTrue(rs.next());
       assertEquals("a", rs.getString(1));

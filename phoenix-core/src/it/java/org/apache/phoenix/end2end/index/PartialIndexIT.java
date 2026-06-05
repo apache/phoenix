@@ -59,12 +59,12 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.explain.ExplainPlanTestUtil;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.Assert;
@@ -1014,26 +1014,23 @@ public class PartialIndexIT extends BaseTest {
       // Index hint provided and query plan using partial index is usable
       String selectSql = "SELECT  /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ "
         + "A from " + dataTableName + " WHERE id2 = 100 AND id1 = 'id12'";
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + selectSql);
-      String actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + indexTableName));
-      rs = stmt.executeQuery(selectSql);
+      ExplainPlanTestUtil.assertPlan(conn, selectSql).scanType("POINT LOOKUP ON 1 KEY")
+        .table(indexTableName);
+      ResultSet rs = stmt.executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(2, rs.getInt(1));
       assertFalse(rs.next());
       // Index hint provided but query plan using partial index is not usable so, no data
       selectSql = "SELECT  /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ " + "A from "
         + dataTableName + " WHERE id2 = 10 AND id1 = 'id11'";
-      rs = stmt.executeQuery("EXPLAIN " + selectSql);
-      actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + indexTableName));
+      ExplainPlanTestUtil.assertPlan(conn, selectSql).scanType("POINT LOOKUP ON 1 KEY")
+        .table(indexTableName);
       rs = stmt.executeQuery(selectSql);
       assertFalse(rs.next());
       // No index hint so, use data table only as its point lookup
       selectSql = "SELECT A from " + dataTableName + " WHERE id2 = 10 AND id1 = 'id11'";
-      rs = stmt.executeQuery("EXPLAIN " + selectSql);
-      actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + dataTableName));
+      ExplainPlanTestUtil.assertPlan(conn, selectSql).scanType("POINT LOOKUP ON 1 KEY")
+        .table(dataTableName);
       rs = stmt.executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(1, rs.getInt(1));

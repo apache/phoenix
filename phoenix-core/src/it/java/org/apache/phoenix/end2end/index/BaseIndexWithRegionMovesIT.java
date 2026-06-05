@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.ROW5;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -80,7 +81,6 @@ import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.apache.phoenix.util.TransactionUtil;
@@ -1673,14 +1673,12 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
 
         query = "SELECT /*+ INDEX(" + fullTableName + " " + indexName + ")*/ " + columns + " from "
           + fullTableName + " where int_col1=2 and long_col1=2";
-        rs = stmt.executeQuery("Explain " + query);
-        String explainPlan = QueryUtil.getExplainPlan(rs);
-        assertEquals("bad plan with columns:" + columns,
-          "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName + " [2]\n"
-            + "    SERVER MERGE [A.VARCHAR_COL1, A.CHAR_COL1, A.DECIMAL_COL1,"
-            + " A.DATE1, B.VARCHAR_COL2, B.CHAR_COL2, B.INT_COL2, " + "B.DECIMAL_COL2, B.DATE2]\n"
-            + "    SERVER FILTER BY A.\"LONG_COL1\" = 2",
-          explainPlan);
+        assertPlan(conn, query).scanType("RANGE SCAN").tableContains(fullIndexName)
+          .keyRanges(" [2]")
+          .serverMergeColumns(
+            "[A.VARCHAR_COL1, A.CHAR_COL1, A.DECIMAL_COL1, A.DATE1, B.VARCHAR_COL2, B.CHAR_COL2,"
+              + " B.INT_COL2, B.DECIMAL_COL2, B.DATE2]")
+          .serverWhereFilter("SERVER FILTER BY A.\"LONG_COL1\" = 2");
         rs = stmt.executeQuery(query);
         assertTrue(rs.next());
         moveRegionsOfTable(fullTableName);

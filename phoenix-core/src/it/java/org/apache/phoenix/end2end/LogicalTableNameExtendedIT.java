@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 
@@ -232,8 +233,7 @@ public class LogicalTableNameExtendedIT extends LogicalTableNameBaseIT {
       }
       String indexSelect =
         "SELECT /*+ INDEX(" + tableName + " " + hintedIndex + ")*/ V1,V2,V3 FROM " + tableName;
-      rs = conn.createStatement().executeQuery("EXPLAIN " + indexSelect);
-      assertEquals(true, QueryUtil.getExplainPlan(rs).contains(hintedIndex));
+      assertPlan(conn, indexSelect).tableContains(hintedIndex);
       rs = conn.createStatement().executeQuery(indexSelect);
       assertEquals(true, rs.next());
     }

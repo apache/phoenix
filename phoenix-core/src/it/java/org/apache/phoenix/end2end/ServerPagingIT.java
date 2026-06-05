@@ -17,11 +17,11 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.commitWithException;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
 import static org.apache.phoenix.query.QueryServices.USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -658,7 +658,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
 
       selectSql = "SELECT count(val3) from " + dataTableName + " where val1 > '0' GROUP BY val1";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertPlan(conn, selectSql).scanType("RANGE SCAN").tableContains(indexTableName);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(2, rs.getInt(1));
@@ -668,7 +668,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
 
       selectSql = "SELECT count(val3) from " + dataTableName + " where val1 > '0'";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertPlan(conn, selectSql).scanType("RANGE SCAN").tableContains(indexTableName);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(3, rs.getInt(1));
@@ -676,7 +676,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
       // Run an order by query where the uncovered index should be used
       selectSql = "SELECT val3 from " + dataTableName + " where val1 > '0' ORDER BY val1";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertPlan(conn, selectSql).scanType("RANGE SCAN").tableContains(indexTableName);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals("abcd", rs.getString(1));

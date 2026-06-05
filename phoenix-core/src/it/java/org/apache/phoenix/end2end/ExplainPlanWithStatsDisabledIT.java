@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.getByteRowEstimates;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -34,7 +35,6 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -256,12 +256,10 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
           + "              ) IMMUTABLE_ROWS=true\n" + "                ,SALT_BUCKETS=20");
       String query =
         "select * from foo where a = 'a' and b >= timestamp '2016-01-28 00:00:00' and b < timestamp '2016-01-29 00:00:00'";
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      String queryPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals(
-        "CLIENT PARALLEL 20-WAY RANGE SCAN OVER FOO [X'00','a',~'2016-01-28 23:59:59.999'] - [X'13','a',~'2016-01-28 00:00:00.000']\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-        queryPlan);
+      assertPlan(conn, query).scanType("RANGE SCAN").table("FOO")
+        .keyRanges(
+          " [X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
     }
   }
 
@@ -278,11 +276,10 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
           + "              ) IMMUTABLE_ROWS=true\n" + "                ,SALT_BUCKETS=20");
       String query = "select * from " + tableName
         + " where a = 'a' and b >= timestamp '2016-01-28 00:00:00' and b < timestamp '2016-01-29 00:00:00'";
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      String queryPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals("CLIENT PARALLEL 20-WAY ROUND ROBIN RANGE SCAN OVER " + tableName
-        + " [X'00','a',~'2016-01-28 23:59:59.999'] - [X'13','a',~'2016-01-28 00:00:00.000']\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY", queryPlan);
+      assertPlan(conn, query).useRoundRobinIterator(true).scanType("RANGE SCAN").table(tableName)
+        .keyRanges(
+          " [X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
     }
   }
 
@@ -346,60 +343,48 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
       ResultSet rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(53, rs.getInt(1));
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      String queryPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals(
-        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [*] - ['b']\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" + "    SERVER AGGREGATE INTO SINGLE ROW",
-        queryPlan);
       ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
         .optimizeQuery().getExplainPlan();
       ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
+      assertPlan(planAttributes).scanType("RANGE SCAN").table(tableName).keyRanges(" [*] - ['b']")
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW");
       assertEquals(2, planAttributes.getNumRegionLocationLookups());
 
       query = "select count(*) from " + tableName + " where PK1 <= 'cd'";
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(128, rs.getInt(1));
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      queryPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals(
-        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " [*] - ['cd']\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" + "    SERVER AGGREGATE INTO SINGLE ROW",
-        queryPlan);
       plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
         .getExplainPlan();
       planAttributes = plan.getPlanStepsAsAttributes();
+      assertPlan(planAttributes).scanType("RANGE SCAN").table(tableName).keyRanges(" [*] - ['cd']")
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW");
       assertEquals(3, planAttributes.getNumRegionLocationLookups());
 
       query = "select count(*) from " + tableName + " where PK1 LIKE 'ef%'";
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(25, rs.getInt(1));
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      queryPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals(
-        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " ['ef'] - ['eg']\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" + "    SERVER AGGREGATE INTO SINGLE ROW",
-        queryPlan);
       plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
         .getExplainPlan();
       planAttributes = plan.getPlanStepsAsAttributes();
+      assertPlan(planAttributes).scanType("RANGE SCAN").table(tableName)
+        .keyRanges(" ['ef'] - ['eg']").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW");
       assertEquals(1, planAttributes.getNumRegionLocationLookups());
 
       query = "select count(*) from " + tableName + " where PK1 > 'de'";
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(75, rs.getInt(1));
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      queryPlan = QueryUtil.getExplainPlan(rs);
-      assertEquals(
-        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " ['de'] - [*]\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" + "    SERVER AGGREGATE INTO SINGLE ROW",
-        queryPlan);
       plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
         .getExplainPlan();
       planAttributes = plan.getPlanStepsAsAttributes();
+      assertPlan(planAttributes).scanType("RANGE SCAN").table(tableName).keyRanges(" ['de'] - [*]")
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW");
       assertEquals(1, planAttributes.getNumRegionLocationLookups());
     }
   }
@@ -494,28 +479,23 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(50, rs.getInt(1));
 
-        rs = tenantConn.createStatement().executeQuery("EXPLAIN " + query);
-        String queryPlan = QueryUtil.getExplainPlan(rs);
-        assertEquals(
-          "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " ['ab12']\n"
-            + "    SERVER FILTER BY FIRST KEY ONLY\n" + "    SERVER AGGREGATE INTO SINGLE ROW",
-          queryPlan);
         ExplainPlan plan = tenantConn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
           .optimizeQuery().getExplainPlan();
         ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
+        assertPlan(planAttributes).scanType("RANGE SCAN").table(tableName).keyRanges(" ['ab12']")
+          .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+          .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW");
         assertEquals(1, planAttributes.getNumRegionLocationLookups());
       }
 
       try (Connection tenantConn = getTenantConnection("cd12")) {
         String query = "select * from " + view03 + " order by col2";
 
-        ResultSet rs = tenantConn.createStatement().executeQuery("EXPLAIN " + query);
-        String queryPlan = QueryUtil.getExplainPlan(rs);
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " ['cd12']\n"
-          + "    SERVER SORTED BY [COL2]\n" + "CLIENT MERGE SORT", queryPlan);
         ExplainPlan plan = tenantConn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
           .optimizeQuery().getExplainPlan();
         ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
+        assertPlan(planAttributes).scanType("RANGE SCAN").table(tableName).keyRanges(" ['cd12']")
+          .serverSortedBy("[COL2]").clientSortAlgo("CLIENT MERGE SORT");
         assertEquals(1, planAttributes.getNumRegionLocationLookups());
       }
 
@@ -528,13 +508,11 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         }
         assertEquals(25, c);
 
-        rs = tenantConn.createStatement().executeQuery("EXPLAIN " + query);
-        String queryPlan = QueryUtil.getExplainPlan(rs);
-        assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + tableName + " ['de12']\n"
-          + "    SERVER FILTER BY COL1 = 'col101'", queryPlan);
         ExplainPlan plan = tenantConn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
           .optimizeQuery().getExplainPlan();
         ExplainPlanAttributes planAttributes = plan.getPlanStepsAsAttributes();
+        assertPlan(planAttributes).scanType("RANGE SCAN").table(tableName).keyRanges(" ['de12']")
+          .serverWhereFilter("SERVER FILTER BY COL1 = 'col101'");
         assertEquals(1, planAttributes.getNumRegionLocationLookups());
       }
     }
