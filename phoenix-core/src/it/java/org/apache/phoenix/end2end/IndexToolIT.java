@@ -782,8 +782,8 @@ public class IndexToolIT extends BaseTest {
 
       // assert we are pulling from data table.
       ExplainPlanAttributes dataAttributes = getExplainAttributes(conn, selectSql);
-      assertPlan(dataAttributes).scanType("FULL SCAN")
-        .serverWhereFilter("(LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'");
+      assertPlan(dataAttributes).scanType("FULL SCAN").serverWhereFilter(
+        "SERVER FILTER BY (LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'");
       // Table names are case-sensitive and (under namespace mapping) carry a ':' separator, so
       // compare against the normalized ('.') form rather than via tableContains().
       String dataScanTable = dataAttributes.getTableName() == null
