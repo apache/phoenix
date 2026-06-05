@@ -21,6 +21,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.util.bson.UpdateExpressionUtils;
 import org.bson.BsonBinaryReader;
 import org.bson.BsonDocument;
+import org.bson.BsonString;
 import org.bson.RawBsonDocument;
 import org.bson.codecs.BsonDocumentCodec;
 import org.bson.codecs.DecoderContext;
@@ -854,7 +855,7 @@ public class UpdateExpressionUtilsTest {
       + "  \"InPublication\" : false,\n" + "  \"ColorBytes\" : {\n" + "    \"$binary\" : {\n"
       + "      \"base64\" : \"QmxhY2s=\",\n" + "      \"subType\" : \"00\"\n" + "    }\n" + "  },\n"
       + "  \"ISBN\" : \"111-1111111111\",\n"
-      + "  \"NestedList1\" : [ -473.11999999999995, \"1234abcd\", [ \"xyz0123\", {\n"
+      + "  \"NestedList1\" : [ \"NestedList1[0] + 12.22\", \"1234abcd\", [ \"xyz0123\", {\n"
       + "    \"InPublication\" : false,\n" + "    \"BinaryTitleSet\" : {\n"
       + "      \"$set\" : [ {\n" + "        \"$binary\" : {\n"
       + "          \"base64\" : \"Qm9vayAxMDExIFRpdGxlIEJpbmFyeQ==\",\n"
@@ -888,10 +889,10 @@ public class UpdateExpressionUtilsTest {
       + "        \"base64\" : \"MjA0OHU1bmJsd2plaVdGR1RIKDRiZjkzMA==\",\n"
       + "        \"subType\" : \"00\"\n" + "      }\n" + "    },\n" + "    \"n_attr_3\" : true,\n"
       + "    \"n_attr_4\" : null,\n" + "    \"n_attr_10\" : true,\n"
-      + "    \"n_attr_20\" : \"str_val_0\"\n" + "  },\n" + "  \"attr_5\" : [ 1224, \"str001\", {\n"
-      + "    \"$binary\" : {\n" + "      \"base64\" : \"AAECAwQF\",\n"
-      + "      \"subType\" : \"00\"\n" + "    }\n" + "  } ],\n"
-      + "  \"NestedList12\" : [ -485.34, \"1234abcd\", [ {\n"
+      + "    \"n_attr_20\" : \"str_val_0\"\n" + "  },\n"
+      + "  \"attr_5\" : [ \"attr_5[0] - 10\", \"str001\", {\n" + "    \"$binary\" : {\n"
+      + "      \"base64\" : \"AAECAwQF\",\n" + "      \"subType\" : \"00\"\n" + "    }\n"
+      + "  } ],\n" + "  \"NestedList12\" : [ -485.34, \"1234abcd\", [ {\n"
       + "    \"$set\" : [ \"xyz01234\", \"xyz0123\", \"abc01234\" ]\n" + "  }, {\n"
       + "    \"$set\" : [ {\n" + "      \"$binary\" : {\n" + "        \"base64\" : \"dmFsMDE=\",\n"
       + "        \"subType\" : \"00\"\n" + "      }\n" + "    }, {\n" + "      \"$binary\" : {\n"
@@ -942,7 +943,7 @@ public class UpdateExpressionUtilsTest {
     // }
     // },
     // "ISBN" : "111-1111111111",
-    // "NestedList1" : [ -473.11999999999995, "1234abcd", [ "xyz0123", {
+    // "NestedList1" : [ "NestedList1[0] + 12.22", "1234abcd", [ "xyz0123", {
     // "InPublication" : false,
     // "BinaryTitleSet" : {
     // "$set" : [ {
@@ -1016,7 +1017,7 @@ public class UpdateExpressionUtilsTest {
     // "n_attr_10" : true,
     // "n_attr_20" : "str_val_0"
     // },
-    // "attr_5" : [ 1224, "str001", {
+    // "attr_5" : [ "attr_5[0] - 10", "str001", {
     // "$binary" : {
     // "base64" : "AAECAwQF",
     // "subType" : "00"
@@ -1198,9 +1199,10 @@ public class UpdateExpressionUtilsTest {
     String updateExpression = "{\n" + "  \"$SET\": {\n"
     // 1. Simple key = value
       + "    \"simpleField\": \"newValue\",\n" + "    \"numericField\": 42,\n"
-      // 2. string-based arithmetic: fieldA + fieldB = 10 + 25 = 35
+      // 2. literal string containing " + " is stored verbatim (NOT interpreted as arithmetic).
+      // Arithmetic is only performed via the explicit $ADD / $SUBTRACT document forms below.
       + "    \"sumField\": \"fieldA + fieldB\",\n"
-      // 2b. string-based arithmetic with subtraction: fieldB - fieldA = 25 - 10 = 15
+      // 2b. literal string containing " - " is stored verbatim (NOT interpreted as arithmetic).
       + "    \"diffField\": \"fieldB - fieldA\",\n"
       // 3. Array element set: items[1] = 999
       + "    \"items[1]\": 999,\n"
@@ -1233,9 +1235,10 @@ public class UpdateExpressionUtilsTest {
     Assert.assertEquals("newValue", bsonDocument.getString("simpleField").getValue());
     Assert.assertEquals(42, bsonDocument.getInt32("numericField").getValue());
 
-    // 2. Verify string-based arithmetic
-    Assert.assertEquals(35, bsonDocument.getInt32("sumField").getValue());
-    Assert.assertEquals(15, bsonDocument.getInt32("diffField").getValue());
+    // 2. Verify literal strings containing " + " / " - " are stored verbatim and are never
+    // mistaken for arithmetic expressions.
+    Assert.assertEquals("fieldA + fieldB", bsonDocument.getString("sumField").getValue());
+    Assert.assertEquals("fieldB - fieldA", bsonDocument.getString("diffField").getValue());
 
     // 3. Verify array element set
     Assert.assertEquals(999, bsonDocument.getArray("items").get(1).asInt32().getValue());
@@ -1262,6 +1265,37 @@ public class UpdateExpressionUtilsTest {
 
     // Verify original fields unchanged where expected
     Assert.assertEquals(25, bsonDocument.getInt32("fieldB").getValue());
+  }
+
+  /**
+   * Regression test for literal string SET values that contain " + " or " - ". Such values must be
+   * stored verbatim and must never be mistaken for arithmetic expressions (which previously threw
+   * "Operand ... does not exist"). Arithmetic is only performed via the explicit $ADD / $SUBTRACT
+   * document forms.
+   */
+  @Test
+  public void testLiteralStringWithArithmeticOperatorsIsStoredVerbatim() {
+    BsonDocument bsonDocument = new BsonDocument();
+
+    // Literal JSON string containing " - ".
+    String propertiesLiteral = "{\"teamId\":\"abc123\"," + "\"teamName\":\"Foo - Bar Baz Service\","
+      + "\"channelName\":\"#foo-notifications\"}";
+
+    BsonDocument setDoc = new BsonDocument();
+    setDoc.put("properties", new BsonString(propertiesLiteral));
+    // Literal string containing " + ".
+    setDoc.put("equation", new BsonString("E = mc^2 + offset"));
+    // Plain literal that looks like a subtraction of two field names.
+    setDoc.put("company", new BsonString("Acme - Widgets"));
+
+    BsonDocument updateExpression = new BsonDocument();
+    updateExpression.put("$SET", setDoc);
+
+    UpdateExpressionUtils.updateExpression(updateExpression, bsonDocument);
+
+    Assert.assertEquals(propertiesLiteral, bsonDocument.getString("properties").getValue());
+    Assert.assertEquals("E = mc^2 + offset", bsonDocument.getString("equation").getValue());
+    Assert.assertEquals("Acme - Widgets", bsonDocument.getString("company").getValue());
   }
 
   private static BsonDocument seedListAppendDoc() {
