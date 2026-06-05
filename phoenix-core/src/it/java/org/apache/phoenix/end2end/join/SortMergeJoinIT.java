@@ -51,11 +51,51 @@ public abstract class SortMergeJoinIT extends BaseJoinIT {
     super(indexDDL);
   }
 
+  /*
+   * The expected EXPLAIN plan for each of the queries below differs per index configuration, so
+   * each concrete subclass supplies the attribute-based assertions via these hooks.
+   */
+
+  /**
+   * {@link #testJoinWithSkipMergeOptimization()}:
+   *
+   * <pre>
+   * SELECT /&#42;+ USE_SORT_MERGE_JOIN&#42;/ s.name FROM joinItemTable i
+   *   JOIN joinOrderTable o ON o.item_id = i.item_id AND quantity &lt; 5000
+   *   RIGHT JOIN joinSupplierTable s ON i.supplier_id = s.supplier_id
+   * </pre>
+   */
   protected abstract void assertSkipMergeOptimizationPlan(Connection conn, String query)
     throws Exception;
 
+  /**
+   * {@link #testSelfJoin()}:
+   *
+   * <pre>
+   * SELECT /&#42;+ USE_SORT_MERGE_JOIN&#42;/ i2.item_id, i1.name FROM joinItemTable i1
+   *   JOIN joinItemTable i2 ON i1.item_id = i2.item_id
+   *   ORDER BY i1.item_id
+   * </pre>
+   */
   protected abstract void assertSelfJoinPlan(Connection conn, String query) throws Exception;
 
+  /**
+   * Assert the EXPLAIN plan for {@link #testJoinWithSetMaxRows()} (with a max-rows limit of 4). The
+   * {@code CLIENT 4 ROW LIMIT} comes from {@link java.sql.Statement#setMaxRows(int)} rather than
+   * the SQL, so subclasses must compile via a {@code PhoenixPreparedStatement}.
+   *
+   * <pre>
+   * statement.setMaxRows(4);
+   *
+   * // queryIndex 0:
+   * SELECT /&#42;+ USE_SORT_MERGE_JOIN&#42;/ order_id, i.name, quantity FROM joinItemTable i
+   *   JOIN joinOrderTable o ON o.item_id = i.item_id
+   *
+   * // queryIndex 1:
+   * SELECT /&#42;+ USE_SORT_MERGE_JOIN&#42;/ o.order_id, i.name, o.quantity FROM joinItemTable i
+   *   JOIN (SELECT order_id, item_id, quantity FROM joinOrderTable) o ON o.item_id = i.item_id
+   * </pre>
+   */
   protected abstract void assertSetMaxRowsPlan(Connection conn, String query, int queryIndex)
     throws Exception;
 
