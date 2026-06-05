@@ -472,8 +472,9 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
         .put("serverAggregate", "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [ORGANIZATION_ID]");
     ObjectNode expected = scanAttrs("FULL SCAN ", "ATABLE", "");
     expected.set("subPlans", mapper.createArrayNode().add(child));
+    // Dynamic filter bind aliases ($N.$N) are normalized to $<N>.$<N>.
     expected.put("dynamicServerFilter",
-      "DYNAMIC SERVER FILTER BY ATABLE.ORGANIZATION_ID IN ($1.$3)");
+      "DYNAMIC SERVER FILTER BY ATABLE.ORGANIZATION_ID IN ($<N>.$<N>)");
     verifyQuery("hashJoinSemiInSubquery",
       "SELECT a_string FROM atable"
         + " WHERE organization_id IN (SELECT organization_id FROM atable WHERE a_integer = 1)",
@@ -481,7 +482,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
         "        CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE",
         "            SERVER FILTER BY A_INTEGER = 1",
         "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [ORGANIZATION_ID]",
-        "    DYNAMIC SERVER FILTER BY ATABLE.ORGANIZATION_ID IN ($1.$3)"),
+        "    DYNAMIC SERVER FILTER BY ATABLE.ORGANIZATION_ID IN ($<N>.$<N>)"),
       expected);
   }
 

@@ -19,6 +19,7 @@ package org.apache.phoenix.query.explain;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -36,6 +37,12 @@ public final class ExplainTextNormalizer {
 
   // 1234 ROWS 5678 BYTES (stats-row-count gated; we strip when present).
   private static final Pattern ROWS_BYTES = Pattern.compile("\\d+ ROWS \\d+ BYTES\\s*");
+
+  // The dynamic filter bind aliases are assigned from a per-connection counter and so vary with
+  // compilation and test-execution order.
+  private static final Pattern DYNAMIC_FILTER_ALIAS = Pattern.compile("\\$\\d+\\.\\$\\d+");
+  private static final String DYNAMIC_FILTER_ALIAS_PLACEHOLDER =
+    Matcher.quoteReplacement("$<N>.$<N>");
 
   // " (region locations = [...]) " emitted via planSteps.add(regionLocationPlan); the line always
   // begins with the leading-space form of ExplainTable.REGION_LOCATIONS.
@@ -61,6 +68,8 @@ public final class ExplainTextNormalizer {
       normalized = CHUNK_COUNT.matcher(normalized).replaceAll("<N>-CHUNK");
       normalized = WAY_COUNT.matcher(normalized).replaceAll("<N>-WAY");
       normalized = ROWS_BYTES.matcher(normalized).replaceAll("");
+      normalized =
+        DYNAMIC_FILTER_ALIAS.matcher(normalized).replaceAll(DYNAMIC_FILTER_ALIAS_PLACEHOLDER);
       out.add(normalized);
     }
     return out;

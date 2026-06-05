@@ -21,6 +21,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
@@ -30,6 +31,11 @@ import java.util.regex.Pattern;
 public final class ExplainJsonNormalizer {
 
   private static final Pattern WAY_COUNT = Pattern.compile("\\b\\d+-WAY\\b");
+
+  // Dynamic filter bind aliases vary with compilation and test-execution order.
+  private static final Pattern DYNAMIC_FILTER_ALIAS = Pattern.compile("\\$\\d+\\.\\$\\d+");
+  private static final String DYNAMIC_FILTER_ALIAS_PLACEHOLDER =
+    Matcher.quoteReplacement("$<N>.$<N>");
 
   /**
    * Recursively normalize the given attributes-shaped JSON node.
@@ -60,6 +66,12 @@ public final class ExplainJsonNormalizer {
     JsonNode iter = obj.get("iteratorTypeAndScanSize");
     if (iter != null && iter.isTextual()) {
       obj.put("iteratorTypeAndScanSize", WAY_COUNT.matcher(iter.asText()).replaceAll("<N>-WAY"));
+    }
+
+    JsonNode dynamicServerFilter = obj.get("dynamicServerFilter");
+    if (dynamicServerFilter != null && dynamicServerFilter.isTextual()) {
+      obj.put("dynamicServerFilter", DYNAMIC_FILTER_ALIAS.matcher(dynamicServerFilter.asText())
+        .replaceAll(DYNAMIC_FILTER_ALIAS_PLACEHOLDER));
     }
 
     JsonNode rhs = obj.get("rhsJoinQueryExplainPlan");
