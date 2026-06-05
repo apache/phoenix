@@ -1932,7 +1932,7 @@ public class PhoenixSyncTableToolIT {
    * The repair scan honors {@code --to-time} and never sees the tombstone in the diff window, so
    * the diff routes to {@code mirrorWholeRow} in
    * {@link org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer}. Inside,
-   * {@code loadTargetRowRecord} deliberately uses {@code (fromTime, MAX_VALUE)} (line 487) — so it
+   * {@code TargetRowRecord.load} deliberately uses {@code (fromTime, MAX_VALUE)} — so it
    * still sees the T=600 tombstone and {@code wouldShadow} returns true on Source's Put@T=200
    * (DeleteColumn covers ts &lt;= T=600). Result: source's mirror is suppressed, the row is
    * flagged unrepairable.
@@ -1953,8 +1953,8 @@ public class PhoenixSyncTableToolIT {
         "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
       scnSrc.commit();
     }
-    // Target has a tombstone strictly above --to-time. Diff scan won't see it; loadTargetRowRecord
-    // still will.
+    // Target has a tombstone strictly above --to-time. Diff scan won't see it;
+    // TargetRowRecord.load still will.
     writeRawDeleteColumn(targetConnection, uniqueTableName, integerRowKey(rowId), "0", "NAME",
       tombstoneTs);
 
@@ -1988,6 +1988,292 @@ public class PhoenixSyncTableToolIT {
         assertNull("NAME should still be null — DeleteColumn shadow respected", rs.getString(1));
       }
     }
+  }
+
+  /**
+   * Shadow detection via {@code DeleteFamily}: target has a {@code DeleteFamily} tombstone on
+   * cf {@code "0"} covering every qualifier in the family at {@code ts <= tombstoneTs}. Source
+   * has every cell of the row inside the diff window at {@code ts < tombstoneTs}, so each
+   * source cell would be shadowed if mirrored. Drives the
+   * {@code TargetRowRecord.deleteFamilyUpperBound} branch in {@code wouldShadow} — uncovered
+   * by other shadow ITs which only exercise {@code DeleteColumn}.
+   *
+   * <p>To force the {@code cmp < 0} (whole-row mirror) path, the tombstone is planted strictly
+   * above {@code --to-time} so the diff scan does not see target's row at all, but
+   * {@code TargetRowRecord.load} (range {@code [fromTime, MAX_VALUE]}) still surfaces it.
+   */
+  @Test
+  public void testRepairShadowFromDeleteFamilyOnTarget() throws Exception {
+    final int rowId = 5;
+    long base = createRepairTestTableOnBothClusters(uniqueTableName, 1, "3, 7");
+
+    final long fromTime = 0L;
+    final long sourceTs = base + 1L;
+    final long toTime = base + 2L;
+    final long familyTombstoneTs = base + 3L;
+
+    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), sourceTs)) {
+      scnSrc.createStatement().execute(
+        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
+      scnSrc.commit();
+    }
+    // DeleteFamily on cf "0" — covers every qualifier (NAME, NAME_VALUE, _0, ...) at
+    // ts <= familyTombstoneTs. Planted strictly above --to-time so the diff scan can't see it.
+    writeRawDeleteFamily(targetConnection, uniqueTableName, integerRowKey(rowId), "0",
+      familyTombstoneTs);
+
+    while (System.currentTimeMillis() <= familyTombstoneTs) {
+      // spin
+    }
+
+    RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
+      String.valueOf(fromTime), "--to-time", String.valueOf(toTime), "--raw-scan");
+    assertTrue("Repair should succeed (shadowing is correctness-only)",
+      result.repairJob.isSuccessful());
+
+    Counters c = result.repairJob.getCounters();
+    // Both source cells (NAME and _0) live at sourceTs in cf "0"; DeleteFamily covers the whole
+    // family at ts <= familyTombstoneTs (sourceTs < familyTombstoneTs), so every mirror is
+    // suppressed → mirrorWholeRow returns FULLY_SHADOWED → rowsMissing stays 0,
+    // rowsCannotRepair++.
+    assertRepairRowCounters(c, 0, 0, 1);
+    assertTrue("At least one mapper should roll up to UNREPAIRABLE",
+      c.findCounter(SyncCounters.MAPPERS_UNREPAIRABLE).getValue() >= 1);
+
+    // Post-repair: target should still have no visible row — every source cell was suppressed.
+    try (PreparedStatement ps = targetConnection
+      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
+      ps.setInt(1, rowId);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertFalse("Row should not be visible on target — DeleteFamily covered every source cell",
+          rs.next());
+      }
+    }
+  }
+
+  /**
+   * Shadow detection via {@code DeleteFamilyVersion}: target has a {@code DeleteFamilyVersion}
+   * tombstone on cf {@code "0"} at exactly {@code sourceTs}. Source's cells at the same ts get
+   * shadowed because {@code DeleteFamilyVersion} matches every qualifier in the family at the
+   * exact ts. Drives the {@code TargetRowRecord.deleteFamilyVersionTs} branch in
+   * {@code wouldShadow} — also uncovered prior to this test.
+   *
+   * <p>{@code DeleteFamilyVersion} requires ts equality (not inequality) so the
+   * tombstone-above-{@code toTime} trick used in the {@code DeleteColumn}/{@code DeleteFamily}
+   * shadow tests doesn't apply here. Instead we omit {@code --raw-scan}: target has no live
+   * cells (just the tombstone), so without raw mode the diff scan sees target as empty,
+   * routing to the {@code cmp < 0} mirrorWholeRow path; {@code TargetRowRecord.load} runs
+   * raw internally and surfaces the tombstone for shadow detection.
+   */
+  @Test
+  public void testRepairShadowFromDeleteFamilyVersionOnTarget() throws Exception {
+    final int rowId = 5;
+    long base = createRepairTestTableOnBothClusters(uniqueTableName, 1, "3, 7");
+
+    final long fromTime = 0L;
+    final long sourceTs = base + 1L;
+
+    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), sourceTs)) {
+      scnSrc.createStatement().execute(
+        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
+      scnSrc.commit();
+    }
+    // DeleteFamilyVersion on cf "0" at exactly sourceTs — covers every qualifier in the family
+    // at ts == sourceTs. Source's NAME and _0 cells, both Put at sourceTs, are shadow targets.
+    writeRawDeleteFamilyVersion(targetConnection, uniqueTableName, integerRowKey(rowId), "0",
+      sourceTs);
+
+    while (System.currentTimeMillis() <= sourceTs) {
+      // spin
+    }
+
+    RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
+      String.valueOf(fromTime), "--to-time", String.valueOf(System.currentTimeMillis()));
+    assertTrue("Repair should succeed (shadowing is correctness-only)",
+      result.repairJob.isSuccessful());
+
+    Counters c = result.repairJob.getCounters();
+    assertRepairRowCounters(c, 0, 0, 1);
+    assertTrue("At least one mapper should roll up to UNREPAIRABLE",
+      c.findCounter(SyncCounters.MAPPERS_UNREPAIRABLE).getValue() >= 1);
+
+    try (PreparedStatement ps = targetConnection
+      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
+      ps.setInt(1, rowId);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertFalse("Row should not be visible on target — DeleteFamilyVersion shadowed every "
+          + "source cell at sourceTs", rs.next());
+      }
+    }
+  }
+
+  /**
+   * Multi-hidden-version unwinding: extends {@link #testRepairUnwindsHiddenTargetVersions}
+   * with TWO max-versions-hidden Puts beneath target's visible Put. Pins
+   * {@code targetPutTimestampsBetween} (in {@link
+   * org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer.TargetRowRecord})
+   * end-to-end: when {@code sourceMaxTs < target visible ts}, the repairer must point-Delete
+   * the visible ts AND every hidden Put in {@code (sourceMaxTs, target visible ts)} —
+   * otherwise after we shadow the visible cell, a hidden Put surfaces above source's mirror.
+   */
+  @Test
+  public void testRepairUnwindsMultipleHiddenTargetVersions() throws Exception {
+    final int rowId = 5;
+    long base = createRepairTestTableOnBothClusters(uniqueTableName, 3, "3, 7");
+
+    final long fromTime = 0L;
+    final long sourceTs = base + 1L;
+    final long targetT1 = base + 2L;
+    final long targetT2 = base + 3L;
+    final long targetT3 = base + 4L;
+
+    byte[] rowKey = integerRowKey(rowId);
+    String family = "0";
+    String qualifier = "NAME";
+
+    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), sourceTs)) {
+      scnSrc.createStatement().execute(
+        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
+      scnSrc.commit();
+    }
+
+    // Three target NAME versions, all retained under VERSIONS=3:
+    //   T1 "bob" (hidden), T2 "carol" (hidden), T3 "dave" (visible).
+    try (Connection scnTgtT1 = openConnectionAtScn(CLUSTERS.getZkUrl2(), targetT1)) {
+      scnTgtT1.createStatement().execute(
+        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'bob')");
+      scnTgtT1.commit();
+    }
+    try (Connection scnTgtT2 = openConnectionAtScn(CLUSTERS.getZkUrl2(), targetT2)) {
+      scnTgtT2.createStatement().execute(
+        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'carol')");
+      scnTgtT2.commit();
+    }
+    try (Connection scnTgtT3 = openConnectionAtScn(CLUSTERS.getZkUrl2(), targetT3)) {
+      scnTgtT3.createStatement().execute(
+        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'dave')");
+      scnTgtT3.commit();
+    }
+
+    // Sanity: pre-repair target visible NAME is "dave" (newest of the three).
+    try (PreparedStatement ps = targetConnection
+      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
+      ps.setInt(1, rowId);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        assertEquals("Pre-repair target visible NAME should be dave", "dave", rs.getString(1));
+      }
+    }
+
+    while (System.currentTimeMillis() <= targetT3) {
+      // spin
+    }
+
+    RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
+      String.valueOf(fromTime), "--to-time", String.valueOf(System.currentTimeMillis()),
+      "--read-all-versions");
+    assertTrue("Dry-run should succeed", result.dryRunJob.isSuccessful());
+    assertTrue("Repair should succeed", result.repairJob.isSuccessful());
+
+    Counters repairCounters = result.repairJob.getCounters();
+    // Source has one NAME Put@sourceTs; target has three NAME Puts at T1, T2, T3 (all >
+    // sourceTs). Each target NAME cell drives the cellExtra branch (sourceMaxTs < ts) and the
+    // hidden-version unwinding logic point-Deletes every Put in (sourceTs, ts).
+    assertTrue("At least 3 cells should be tombstoned across target's three NAME versions",
+      repairCounters.findCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).getValue() >= 3);
+
+    // Post-repair: standard read on target must see source's "alice" — every hidden version
+    // ("bob"@T1, "carol"@T2) was unwound along with the visible "dave"@T3.
+    try (PreparedStatement ps = targetConnection
+      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
+      ps.setInt(1, rowId);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        assertEquals("Post-repair target NAME must be alice (all hidden versions unwound)",
+          "alice", rs.getString(1));
+      }
+    }
+
+    // Raw scan: target should have a Delete marker covering each of T1/T2/T3 plus source's
+    // mirror. The exact tombstone cell count may include duplicates from the unwind logic
+    // (each iteration's hidden-set spans a shrinking interval, so T1 appears in T3's hidden
+    // set, then again in T2's), so assert a lower bound on distinct delete-bearing scan cells.
+    try (Table targetHTable = getHBaseTable(targetConnection, uniqueTableName)) {
+      Scan scan = new Scan().withStartRow(rowKey, true).withStopRow(rowKey, true).setRaw(true);
+      scan.readAllVersions();
+      int nameDeletes = 0;
+      int namePutAtSourceTs = 0;
+      try (ResultScanner sc = targetHTable.getScanner(scan)) {
+        for (Result r; (r = sc.next()) != null;) {
+          for (Cell c : r.rawCells()) {
+            if (Bytes.equals(CellUtil.cloneFamily(c), Bytes.toBytes(family))
+              && Bytes.equals(CellUtil.cloneQualifier(c), Bytes.toBytes(qualifier))) {
+              if (CellUtil.isDelete(c)) {
+                nameDeletes++;
+              } else if (c.getTimestamp() == sourceTs) {
+                namePutAtSourceTs++;
+              }
+            }
+          }
+        }
+      }
+      assertTrue("Expected at least 3 NAME delete markers on target, saw " + nameDeletes,
+        nameDeletes >= 3);
+      assertEquals("Source's Put@" + sourceTs + " should be mirrored", 1, namePutAtSourceTs);
+    }
+  }
+
+  /**
+   * cmp==0 row carrying a target-only tombstone cell at a coord source lacks: drives the
+   * {@code tombstoneTargetCell} return-{@code false} branch ({@link
+   * org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer}, around line 420)
+   * inside {@code generateMutationForDiffCells}'s {@code cellExtra} branch — the target cell
+   * is itself a tombstone, so no new tombstone is emitted, but {@code anyCellUnrepairable} is
+   * set. The row contributes to {@code ROWS_CANNOT_REPAIR} without bumping any cell counter.
+   *
+   * <p>Setup: source and target share a matching {@code NAME_VALUE} cell so the row exists on
+   * both. Target also has a raw point-{@link Delete} on {@code NAME} at a coord source lacks;
+   * with {@code --raw-scan} the diff scan surfaces that tombstone cell, taking the
+   * {@code cmp > 0} branch on it.
+   */
+  @Test
+  public void testRepairCmpEqualWithTargetTombstoneCell() throws Exception {
+    final int rowId = 5;
+    long base = createRepairTestTableOnBothClusters(uniqueTableName, 1, "3, 7");
+
+    final long ts = base + 1L;
+    final long tombstoneTs = base + 2L;
+
+    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), ts)) {
+      scnSrc.createStatement().execute(
+        "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
+      scnSrc.commit();
+    }
+    try (Connection scnTgt = openConnectionAtScn(CLUSTERS.getZkUrl2(), ts)) {
+      scnTgt.createStatement().execute(
+        "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
+      scnTgt.commit();
+    }
+    // Plant a raw point-Delete on NAME at tombstoneTs — a coord source has no cell at, but the
+    // target cell is itself a tombstone, so tombstoneTargetCell returns false in repair-mode.
+    writeRawPointDelete(targetConnection, uniqueTableName, integerRowKey(rowId), "0", "NAME",
+      tombstoneTs);
+
+    while (System.currentTimeMillis() <= tombstoneTs) {
+      // spin
+    }
+
+    RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time", "0",
+      "--to-time", String.valueOf(System.currentTimeMillis()), "--raw-scan");
+    assertTrue("Repair should succeed", result.repairJob.isSuccessful());
+
+    Counters c = result.repairJob.getCounters();
+    // No mirror, no tombstone emitted — but anyCellUnrepairable was set, so the row rolls up
+    // as unrepairable. All cell counters stay 0.
+    assertRepairCellCounters(c, 0, 0, 0, 1);
+    assertRepairRowCounters(c, 0, 0, 1);
+    assertTrue("At least one mapper should roll up to UNREPAIRABLE",
+      c.findCounter(SyncCounters.MAPPERS_UNREPAIRABLE).getValue() >= 1);
   }
 
   /**
@@ -3948,6 +4234,35 @@ public class PhoenixSyncTableToolIT {
     try (Table hTable = getHBaseTable(phoenixConn, tableName)) {
       Delete del = new Delete(rowKey);
       del.addColumns(Bytes.toBytes(family), Bytes.toBytes(qualifier), markerTs);
+      hTable.delete(del);
+    }
+  }
+
+  /**
+   * Plants a raw {@link Delete#addFamily} (DeleteFamily — covers every qualifier in the family
+   * at {@code ts <= markerTs}) at {@code (rowKey, family)}. Used by shadow-detection tests
+   * exercising the {@code TargetRowRecord.deleteFamilyUpperBound} branch in {@code wouldShadow}.
+   */
+  private void writeRawDeleteFamily(Connection phoenixConn, String tableName, byte[] rowKey,
+    String family, long markerTs) throws Exception {
+    try (Table hTable = getHBaseTable(phoenixConn, tableName)) {
+      Delete del = new Delete(rowKey);
+      del.addFamily(Bytes.toBytes(family), markerTs);
+      hTable.delete(del);
+    }
+  }
+
+  /**
+   * Plants a raw {@link Delete#addFamilyVersion} (DeleteFamilyVersion — covers every qualifier
+   * in the family at exactly {@code ts == markerTs}) at {@code (rowKey, family)}. Used by
+   * shadow-detection tests exercising the {@code TargetRowRecord.deleteFamilyVersionTs} branch
+   * in {@code wouldShadow}.
+   */
+  private void writeRawDeleteFamilyVersion(Connection phoenixConn, String tableName,
+    byte[] rowKey, String family, long markerTs) throws Exception {
+    try (Table hTable = getHBaseTable(phoenixConn, tableName)) {
+      Delete del = new Delete(rowKey);
+      del.addFamilyVersion(Bytes.toBytes(family), markerTs);
       hTable.delete(del);
     }
   }
