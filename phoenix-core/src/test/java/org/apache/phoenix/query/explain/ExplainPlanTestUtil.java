@@ -41,9 +41,10 @@ public final class ExplainPlanTestUtil {
 
   /** Optimize {@code query} and return its {@link ExplainPlan}. */
   public static ExplainPlan getExplainPlan(Connection conn, String query) throws SQLException {
-    PhoenixPreparedStatement statement =
-      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
-    return statement.optimizeQuery().getExplainPlan();
+    try (PhoenixPreparedStatement statement =
+      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)) {
+      return statement.optimizeQuery().getExplainPlan();
+    }
   }
 
   /** Optimize {@code query} and return its structured {@link ExplainPlanAttributes}. */
@@ -60,9 +61,10 @@ public final class ExplainPlanTestUtil {
   /** Compile a mutation (UPSERT/DELETE) and return its {@link ExplainPlan}. */
   public static ExplainPlan getMutationExplainPlan(Connection conn, String query)
     throws SQLException {
-    PhoenixPreparedStatement statement =
-      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
-    return statement.compileMutation().getExplainPlan();
+    try (PhoenixPreparedStatement statement =
+      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)) {
+      return statement.compileMutation().getExplainPlan();
+    }
   }
 
   /** Compile a mutation (UPSERT/DELETE) and return its structured {@link ExplainPlanAttributes}. */

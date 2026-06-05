@@ -319,10 +319,10 @@ public class HashJoinPlan extends DelegateQueryPlan {
     List<String> planSteps = Lists.newArrayList(delegateExplainPlan.getPlanSteps());
     // Each hash/skip-scan sub-plan is recorded under subPlans.
     ExplainPlanAttributes delegateAttributes = delegateExplainPlan.getPlanStepsAsAttributes();
-    ExplainPlanAttributesBuilder builder = (delegateAttributes != null
-      && delegateAttributes != ExplainPlanAttributes.getDefaultExplainPlan())
-        ? new ExplainPlanAttributesBuilder(delegateAttributes)
-        : null;
+    if (delegateAttributes == null) {
+      delegateAttributes = ExplainPlanAttributes.getDefaultExplainPlan();
+    }
+    ExplainPlanAttributesBuilder builder = new ExplainPlanAttributesBuilder(delegateAttributes);
     List<ExplainPlanAttributes> subPlanAttributes = Lists.newArrayList();
     int count = subPlans.length;
     for (int i = 0; i < count; i++) {
@@ -335,12 +335,10 @@ public class HashJoinPlan extends DelegateQueryPlan {
     for (int i = 0; i < count; i++) {
       List<String> postSteps = subPlans[i].getPostSteps(this);
       planSteps.addAll(postSteps);
-      if (builder != null) {
-        for (String step : postSteps) {
-          String trimmed = step.trim();
-          if (trimmed.startsWith("DYNAMIC SERVER FILTER BY")) {
-            builder.setDynamicServerFilter(trimmed);
-          }
+      for (String step : postSteps) {
+        String trimmed = step.trim();
+        if (trimmed.startsWith("DYNAMIC SERVER FILTER BY")) {
+          builder.setDynamicServerFilter(trimmed);
         }
       }
     }
@@ -349,18 +347,11 @@ public class HashJoinPlan extends DelegateQueryPlan {
       String afterJoinFilter =
         "AFTER-JOIN SERVER FILTER BY " + joinInfo.getPostJoinFilterExpression().toString();
       planSteps.add("    " + afterJoinFilter);
-      if (builder != null) {
-        builder.setAfterJoinFilter(afterJoinFilter);
-      }
+      builder.setAfterJoinFilter(afterJoinFilter);
     }
     if (joinInfo != null && joinInfo.getLimit() != null) {
       planSteps.add("    JOIN-SCANNER " + joinInfo.getLimit() + " ROW LIMIT");
-      if (builder != null) {
-        builder.setJoinScannerLimit(joinInfo.getLimit().longValue());
-      }
-    }
-    if (builder == null) {
-      return new ExplainPlan(planSteps);
+      builder.setJoinScannerLimit(joinInfo.getLimit().longValue());
     }
     if (!subPlanAttributes.isEmpty()) {
       builder.setSubPlans(subPlanAttributes);
@@ -370,8 +361,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
   /**
    * Builds the explain-plan attributes for a hash-join subplan by taking the inner plan's
-   * attributes and stamping the supplied join header onto abstractExplainPlan. Returns null when
-   * the inner plan exposes no structured attributes.
+   * attributes (when available) and stamping the supplied join header onto abstractExplainPlan.
    */
   private static ExplainPlanAttributes subPlanAttributesWithHeader(QueryPlan plan, String header)
     throws SQLException {
