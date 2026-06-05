@@ -62,6 +62,7 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -92,8 +93,9 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
     public QueryPlan getQueryPlan(PhoenixConnection phoenixConnection, String oldTableFullName,
       String newTableFullName) throws SQLException {
       PTable newTable = phoenixConnection.getTableNoCache(newTableFullName);
+      String quotedOldTableName = getQuotedTableNameForSQL(oldTableFullName);
       ServerBuildTransformingTableCompiler compiler =
-        new ServerBuildTransformingTableCompiler(phoenixConnection, oldTableFullName);
+        new ServerBuildTransformingTableCompiler(phoenixConnection, quotedOldTableName);
       MutationPlan plan = compiler.compile(newTable);
       return plan.getQueryPlan();
     }
@@ -104,8 +106,9 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
     public QueryPlan getQueryPlan(PhoenixConnection phoenixConnection, String dataTableFullName,
       String indexTableFullName) throws SQLException {
       PTable indexTable = phoenixConnection.getTableNoCache(indexTableFullName);
+      String quotedDataTableName = getQuotedTableNameForSQL(dataTableFullName);
       ServerBuildIndexCompiler compiler =
-        new ServerBuildIndexCompiler(phoenixConnection, dataTableFullName);
+        new ServerBuildIndexCompiler(phoenixConnection, quotedDataTableName);
       MutationPlan plan = compiler.compile(indexTable);
       return plan.getQueryPlan();
     }
@@ -117,7 +120,8 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
       String indexTableFullName) throws SQLException {
       QueryPlan plan;
       try (final PhoenixStatement statement = new PhoenixStatement(phoenixConnection)) {
-        String query = "SELECT count(*) FROM " + indexTableFullName;
+        String quotedIndexName = getQuotedTableNameForSQL(indexTableFullName);
+        String query = "SELECT count(*) FROM " + quotedIndexName;
         plan = statement.compileQuery(query);
         TableRef tableRef = plan.getTableRef();
         Scan scan = plan.getContext().getScan();
@@ -138,6 +142,12 @@ public class PhoenixServerBuildIndexInputFormat<T extends DBWritable> extends Ph
   }
 
   private QueryPlanBuilder queryPlanBuilder;
+
+  private String getQuotedTableNameForSQL(String normalizedFullTableName) {
+    String schemaName = SchemaUtil.getSchemaNameFromFullName(normalizedFullTableName);
+    String tableName = SchemaUtil.getTableNameFromFullName(normalizedFullTableName);
+    return SchemaUtil.getFullTableNameWithQuotes(schemaName, tableName);
+  }
 
   @Override
   protected QueryPlan getQueryPlan(final JobContext context, final Configuration configuration)

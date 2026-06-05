@@ -36,12 +36,15 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.List;
@@ -64,6 +67,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
+import org.junit.Assume;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -81,8 +85,8 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 public class GlobalIndexCheckerIT extends BaseTest {
 
   private final boolean async;
-  private String indexDDLOptions;
-  private String tableDDLOptions;
+  protected String indexDDLOptions;
+  protected String tableDDLOptions;
   private StringBuilder optionBuilder;
   private StringBuilder indexOptionBuilder;
   private final boolean encoded;
@@ -262,6 +266,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the index table
       assertExplainPlan(conn, query, dataTableName, indexTableName);
+      waitForEventualConsistency();
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -296,6 +301,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
         "SELECT  val1, val2, PHOENIX_ROW_TIMESTAMP()  from " + dataTableName + " WHERE val1 = 'de'";
       // Verify that we will read from the index table
       assertExplainPlan(conn, query, dataTableName, indexTableName);
+      waitForEventualConsistency();
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("de", rs.getString(1));
@@ -318,6 +324,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('e', 'ae', 'efg', 'efgh')");
       conn.commit();
+      waitForEventualConsistency();
       // Write a query to get all the rows in the order of their timestamps
       query = "SELECT  val1, val2, PHOENIX_ROW_TIMESTAMP() from " + dataTableName + " WHERE "
         + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + initial.toString()
@@ -361,6 +368,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
 
       assertExplainPlan(conn, query, dataTableName, indexTableName);
+      waitForEventualConsistency();
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("ab", rs.getString(1));
@@ -561,6 +569,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.commit();
       // Now the expected state of the index table is {('ab', 'a', 'abcc' , null), ('ab', 'b', null,
       // 'bcde')}
+      waitForEventualConsistency();
       ResultSet rs = conn.createStatement().executeQuery("SELECT * from " + indexTableName);
       assertTrue(rs.next());
       assertEquals("ab", rs.getString(1));
@@ -602,6 +611,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       String dml = "DELETE from " + dataTableName + " WHERE id  = 'a'";
       assertEquals(1, conn.createStatement().executeUpdate(dml));
       conn.commit();
+      waitForEventualConsistency();
 
       // The index rows are actually not deleted yet because IndexRegionObserver failed delete
       // operation. However, they are
@@ -649,6 +659,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
     String selectSql = "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
     // Verify that we will read from the index table
     assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+    waitForEventualConsistency();
     ResultSet rs = conn.createStatement().executeQuery(selectSql);
     assertTrue(rs.next());
     assertEquals("a", rs.getString(1));
@@ -662,6 +673,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
     conn.commit();
     // Verify that we will read from the index table
     assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+    waitForEventualConsistency();
     rs = conn.createStatement().executeQuery(selectSql);
     assertTrue(rs.next());
     assertEquals("a", rs.getString(1));
@@ -791,6 +803,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
         // run the index MR job.
         IndexToolIT.runIndexTool(false, null, dataTableName, indexTableName);
       }
+      waitForEventualConsistency();
       // Configure IndexRegionObserver to fail the last write phase (i.e., the post index update
       // phase) where the verify flag is set
       // to true and/or index rows are deleted and check that this does not impact the correctness
@@ -801,6 +814,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " (id, val1, val2) values ('c', 'cd','cde')");
       conn.commit();
+      waitForEventualConsistency();
       IndexTool indexTool = IndexToolIT.runIndexTool(false, "", dataTableName, indexTableName, null,
         0, IndexTool.IndexVerifyType.ONLY);
       assertEquals(3, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
@@ -820,8 +834,10 @@ public class GlobalIndexCheckerIT extends BaseTest {
         .findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
       assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
-      assertEquals(2, indexTool.getJob().getCounters()
-        .findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
+      if (!indexDDLOptions.contains("CONSISTENCY=EVENTUAL")) {
+        assertEquals(2, indexTool.getJob().getCounters()
+          .findCounter(BEFORE_REBUILD_UNVERIFIED_INDEX_ROW_COUNT).getValue());
+      }
       assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
       assertEquals(0, indexTool.getJob().getCounters()
@@ -868,6 +884,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " (id, val1, val2) values ('a', 'ab','abc')");
       conn.commit();
+      waitForEventualConsistency();
       // At this moment val3 in the data table row has null value
       String selectSql = "SELECT val3 from " + dataTableName + " WHERE val1  = 'ab'";
       // Verify that we will read from the index table
@@ -915,6 +932,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('a', 'ab','abc', 'abcd')");
       conn.commit();
+      waitForEventualConsistency();
       // At this moment val3 in the data table row should not have null value
       selectSql = "SELECT val3 from " + dataTableName + " WHERE val1  = 'ab'";
       // Verify that we will read from the index table
@@ -928,6 +946,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " (id, val1, val3) values ('a', 'ab','abcde')");
       commitWithException(conn);
+      waitForEventualConsistency();
       // The above upsert will create an unverified index row
       // Configure IndexRegionObserver to allow the data write phase
       IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
@@ -979,6 +998,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       String selectSql = "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'cd'";
       // Verify that we will read from the first index table
       assertExplainPlan(conn, selectSql, dataTableName, indexTableName + "1");
+      waitForEventualConsistency();
       // Verify the first write is visible but the second one is not
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
@@ -1116,6 +1136,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " (id, val3) values ('a', 'abcdd')");
       conn.commit();
+      waitForEventualConsistency();
       String selectSql = "SELECT val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
       // Verify that we will read from the first index table
       assertExplainPlan(conn, selectSql, dataTableName, indexName + "1");
@@ -1322,6 +1343,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " " + "values ('g', 'val1', 'val2g', null)");
       conn.commit();
+      waitForEventualConsistency();
       // Fail phase 3
       IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
       String selectSql = "SELECT id from " + dataTableName
@@ -1356,6 +1378,172 @@ public class GlobalIndexCheckerIT extends BaseTest {
         TestUtil.dumpTable(conn, TableName.valueOf(indexName));
         throw e;
       }
+    }
+  }
+
+  @Test
+  public void testReadRepairWithDistinctPrefixFilter() throws Exception {
+    Assume.assumeTrue(async == false);
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      String indexName = generateUniqueName();
+      conn.createStatement().execute("create table " + dataTableName
+        + " (id1 varchar(10) not null, id2 varchar(10) not null, val1 varchar(10), val2 varchar(10), "
+        + "val3 varchar(10), val4 varchar(10) constraint pk primary key(id1, id2))"
+        + tableDDLOptions);
+      conn.createStatement().execute("CREATE INDEX " + indexName + " on " + dataTableName
+        + " (val1, val2) include (val3, val4)" + this.indexDDLOptions);
+
+      // create orphan unverified index row
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a1', 'a2', 'val1', 'val2a', 'val3', 'val4')");
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a3', 'a2', 'val1', 'val2a', 'val3', 'val4')");
+      commitWithException(conn);
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a1', 'a3', 'val1', 'val2a', 'val31', 'val4')");
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a2', 'a1', 'val1', 'val2a', 'val31', 'val4')");
+      conn.commit();
+      waitForEventualConsistency();
+
+      // create an unverified update to the index row pointing to an existing data row
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a2', 'a1', 'val1', 'val1b', 'val3', 'val4')");
+      commitWithException(conn);
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a2', 'a2', 'val1', 'val1b', 'val3', 'val4')");
+      conn.commit();
+      waitForEventualConsistency();
+
+      ArrayList<String> expectedValues = Lists.newArrayList("a1", "a2");
+      String selectSql =
+        "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1' AND val2 = 'val2a'";
+      verifyDistinctQueryOnIndex(conn, indexName, selectSql, expectedValues);
+
+      expectedValues = Lists.newArrayList("a2");
+      selectSql =
+        "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1' AND val2 = 'val1b'";
+      verifyDistinctQueryOnIndex(conn, indexName, selectSql, expectedValues);
+
+      IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a3', 'a2', 'val1', 'val2a', 'val3', 'val4')");
+      conn.commit();
+      waitForEventualConsistency();
+      IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+      expectedValues = Lists.newArrayList("a1", "a2", "a3");
+      selectSql =
+        "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1' AND val2 = 'val2a'";
+      verifyDistinctQueryOnIndex(conn, indexName, selectSql, expectedValues);
+
+      // first verified and then verified
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a4', 'a1', 'val1_4', 'val1_4', 'val1_4', 'val1_4')");
+      conn.commit();
+      IndexRegionObserver.setFailPostIndexUpdatesForTesting(true);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a4', 'a2', 'val1_4', 'val1_4', 'val1_4', 'val1_4')");
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a5', 'a1', 'val1_4', 'val1_4', 'val1_4', 'val1_4')");
+      conn.commit();
+      waitForEventualConsistency();
+      IndexRegionObserver.setFailPostIndexUpdatesForTesting(false);
+      expectedValues = Lists.newArrayList("a4", "a5");
+      selectSql =
+        "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1_4' AND val2 = 'val1_4'";
+      verifyDistinctQueryOnIndex(conn, indexName, selectSql, expectedValues);
+    }
+  }
+
+  @Test
+  public void testUncoveredIndexWithDistinctPrefixFilter() throws Exception {
+    Assume.assumeTrue(async == false);
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      String uncoveredIndex1 = generateUniqueName();
+      conn.createStatement().execute("create table " + dataTableName
+        + " (id1 varchar(10) not null, id2 varchar(10) not null, val1 varchar(10), val2 varchar(10), "
+        + "val3 varchar(10), val4 varchar(10) constraint pk primary key(id1, id2))"
+        + tableDDLOptions);
+      conn.createStatement().execute("CREATE UNCOVERED INDEX " + uncoveredIndex1 + " on "
+        + dataTableName + " (val1)" + this.indexDDLOptions);
+
+      // create orphan unverified index row
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a1', 'a1', 'val1a', 'val2a', 'val3', 'val4')");
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a1', 'a2', 'val1a', 'val2a', 'val3', 'val4')");
+      commitWithException(conn);
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+      // add a valid row with same value for id1 column as the unverified row above to test that
+      // the DistinctPrefix filter is reset correctly
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a1', 'a3', 'val1a', 'val2a', 'val31', 'val4')");
+      // add more valid rows with same value for id1 column so that the DistinctPrefix filter
+      // can skip those rows
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a1', 'a4', 'val1a', 'val2b', 'val31', 'val4')");
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a1', 'a5', 'val1a', 'val2b', 'val31', 'val4')");
+      // add another valid row with a different value for id1 column
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a2', 'a1', 'val1a', 'val2a', 'val31', 'val4')");
+      conn.commit();
+      waitForEventualConsistency();
+
+      ArrayList<String> expectedValues = Lists.newArrayList("a1", "a2");
+      // condition on val1 in WHERE clause so that query will use the uncovered index
+      String selectSql = "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1a'";
+      verifyDistinctQueryOnIndex(conn, uncoveredIndex1, selectSql, expectedValues);
+      expectedValues = Lists.newArrayList("a1");
+      // add extra where conditions to the query
+      selectSql =
+        "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1a' AND val2 = 'val2b'";
+      verifyDistinctQueryOnIndex(conn, uncoveredIndex1, selectSql, expectedValues);
+
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a3', 'a1', 'val1b', 'val2a', 'val31', 'val4')");
+      conn.commit();
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a3', 'a2', 'val1b', 'val2a', 'val3', 'val4')");
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a3', 'a3', 'val1b', 'val2a', 'val3', 'val4')");
+      commitWithException(conn);
+      IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
+      conn.createStatement().execute("upsert into " + dataTableName + " "
+        + "values ('a4', 'a1', 'val1b', 'val2a', 'val31', 'val4')");
+      conn.commit();
+      waitForEventualConsistency();
+      expectedValues = Lists.newArrayList("a3", "a4");
+      selectSql = "SELECT distinct(id1) from " + dataTableName + " WHERE val1 = 'val1b'";
+      verifyDistinctQueryOnIndex(conn, uncoveredIndex1, selectSql, expectedValues);
+    }
+  }
+
+  private void verifyDistinctQueryOnIndex(Connection conn, String indexName, String query,
+    List<String> expectedValues) throws SQLException, IOException {
+    try (ResultSet rs = conn.createStatement().executeQuery(query)) {
+      PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+      String actualExplainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+      assertTrue(actualExplainPlan.contains(indexName));
+      assertTrue(actualExplainPlan, actualExplainPlan.contains("SERVER DISTINCT PREFIX FILTER"));
+      List actualValues = Lists.newArrayList();
+      while (rs.next()) {
+        actualValues.add(rs.getString(1));
+      }
+      assertEquals(expectedValues, actualValues);
+    } catch (AssertionError e) {
+      TestUtil.dumpTable(conn, TableName.valueOf(indexName));
+      throw e;
     }
   }
 
@@ -1425,6 +1613,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " (id, val3) values ('a', null)");
       conn.commit();
+      waitForEventualConsistency();
 
       String dql =
         String.format("select id, val2 from %s where val1='ab' and val3='abcd'", dataTableName);
@@ -1449,6 +1638,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('a', 'ac', null, null)");
       conn.commit();
+      waitForEventualConsistency();
 
       dql =
         String.format("select id, val2 from %s where val1='ac' and val3 is null", dataTableName);
@@ -1487,6 +1677,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " (id, val1, val2) values ('c', 'cd', 'cde')");
       conn.commit();
+      waitForEventualConsistency();
       IndexRegionObserver.setIgnoreWritingDeleteColumnsToIndex(false);
       IndexTool it = IndexToolIT.runIndexTool(false, null, dataTableName, indexName, null, 0,
         IndexTool.IndexVerifyType.BEFORE);
@@ -1525,6 +1716,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       String delete = String.format("DELETE FROM %s where id = 'a'", dataTableName);
       conn.createStatement().execute(delete);
       conn.commit();
+      waitForEventualConsistency();
       // skip phase2, inserts an unverified row in index
       IndexRegionObserver.setFailDataTableUpdatesForTesting(true);
       String dml = "upsert into " + dataTableName + " (id, val1, val3) values ('a', 'ab', ?)";
@@ -1551,6 +1743,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " (id, val1, val3) values ('a', 'ab', null)");
       conn.commit();
+      waitForEventualConsistency();
       IndexTool it = IndexToolIT.runIndexTool(false, null, dataTableName, indexName, null, 0,
         IndexTool.IndexVerifyType.ONLY);
       CounterGroup mrJobCounters = IndexToolIT.getMRJobCounters(it);
@@ -1573,6 +1766,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
       // No need to run the same test twice one for async = true and the other for async = false
       return;
     }
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       // Create a base table
       String dataTableName = generateUniqueName();
@@ -1649,6 +1844,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
         + "val1 = val1 || val1, val2 = val2 || val2";
       conn.createStatement().execute(upsertSql);
       conn.commit();
+      waitForEventualConsistency();
       String selectSql = "SELECT * from " + dataTableName + " WHERE val1 = 'abab'";
       assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
@@ -1658,6 +1854,46 @@ public class GlobalIndexCheckerIT extends BaseTest {
       assertEquals("abcabc", rs.getString(3));
       assertEquals("abcd", rs.getString(4));
       assertFalse(rs.next());
+    }
+  }
+
+  @Test
+  public void testWithDistinctPrefixFilter() throws Exception {
+    Assume.assumeTrue(async == false);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      String indexTableName = generateUniqueName();
+      String ddl = "create table " + dataTableName + " (id varchar(10) not null primary key, "
+        + "val1 varchar(10), val2 varchar(10), val3 varchar(10))" + tableDDLOptions;
+      conn.createStatement().execute(ddl);
+      ddl = "create index " + indexTableName + " on " + dataTableName
+        + " (val1) include (val2, val3)" + this.indexDDLOptions;
+      conn.createStatement().execute(ddl);
+      String[] expectedValues = { "val1_1", "val1_2", "val1_3", "val1_4" };
+      int rowCount = 20;
+      String dml = "UPSERT INTO " + dataTableName + " VALUES(?, ?, ?, ?)";
+      PreparedStatement ps = conn.prepareStatement(dml);
+      for (int id = 0; id < rowCount; ++id) {
+        ps.setString(1, "id_" + id);
+        ps.setString(2, expectedValues[id % expectedValues.length]);
+        ps.setString(3, "val2_" + id % 2);
+        ps.setString(4, "val3");
+        ps.executeUpdate();
+      }
+      conn.commit();
+      waitForEventualConsistency();
+      String distinctQuery = "SELECT DISTINCT val1 FROM " + dataTableName;
+      try (ResultSet rs = conn.createStatement().executeQuery(distinctQuery)) {
+        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
+        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
+        assertTrue(explainPlan.contains(indexTableName));
+        assertTrue(explainPlan.contains("SERVER DISTINCT PREFIX FILTER OVER"));
+        List actualValues = Lists.newArrayList();
+        while (rs.next()) {
+          actualValues.add(rs.getString(1));
+        }
+        assertEquals(Arrays.asList(expectedValues), actualValues);
+      }
     }
   }
 
@@ -1673,14 +1909,18 @@ public class GlobalIndexCheckerIT extends BaseTest {
     }
   }
 
-  static private void verifyTableHealth(Connection conn, String dataTableName,
-    String indexTableName) throws Exception {
+  protected void waitForEventualConsistency() throws Exception {
+  }
+
+  protected void verifyTableHealth(Connection conn, String dataTableName, String indexTableName)
+    throws Exception {
     // Add two rows and check everything is still okay
     conn.createStatement()
       .execute("upsert into " + dataTableName + " values ('a', 'ab', 'abc', 'abcd')");
     conn.createStatement()
       .execute("upsert into " + dataTableName + " values ('z', 'za', 'zab', 'zabc')");
     conn.commit();
+    waitForEventualConsistency();
     String selectSql = "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
     /// Verify that we will read from the index table
     assertExplainPlan(conn, selectSql, dataTableName, indexTableName);

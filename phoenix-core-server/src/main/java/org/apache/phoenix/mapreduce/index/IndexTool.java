@@ -83,11 +83,13 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.ConnectionQueryServices;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.util.ByteUtil;
@@ -295,9 +297,6 @@ public class IndexTool extends Configured implements Tool {
         + "extra rows will be identified but not repaired.");
 
   public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
-
-  public static final String INVALID_TIME_RANGE_EXCEPTION_MESSAGE = "startTime is greater than "
-    + "or equal to endTime " + "or either of them are set in the future; IndexTool can't proceed.";
 
   public static final String FEATURE_NOT_APPLICABLE =
     "start-time/end-time and retry verify feature are only "
@@ -754,7 +753,7 @@ public class IndexTool extends Configured implements Tool {
       configuration.setBooleanIfUnset(
         PhoenixConfigurationUtil.MAPREDUCE_RANDOMIZE_MAPPER_EXECUTION_ORDER, true);
 
-      PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, dataTableWithSchema);
+      PhoenixConfigurationUtil.setIndexToolDataTableName(configuration, qDataTable);
       PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
       PhoenixConfigurationUtil.setIndexToolSourceTable(configuration, sourceTable);
       if (startTime != null) {
@@ -925,9 +924,6 @@ public class IndexTool extends Configured implements Tool {
       lastVerifyTime = new Long(cmdLine.getOptionValue(RETRY_VERIFY_OPTION.getOpt()));
       validateLastVerifyTime();
     }
-    if (isTimeRangeSet(startTime, endTime)) {
-      validateTimeRange(startTime, endTime);
-    }
     if (verify) {
       String value = cmdLine.getOptionValue(VERIFY_OPTION.getOpt());
       indexVerifyType = IndexVerifyType.fromValue(value);
@@ -952,6 +948,9 @@ public class IndexTool extends Configured implements Tool {
     isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
     useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
     shouldDeleteBeforeRebuild = cmdLine.hasOption(DELETE_ALL_AND_REBUILD_OPTION.getOpt());
+    if (isTimeRangeSet(startTime, endTime)) {
+      PhoenixMapReduceUtil.validateTimeRange(startTime, endTime, qDataTable);
+    }
     return 0;
   }
 
@@ -969,7 +968,7 @@ public class IndexTool extends Configured implements Tool {
   public boolean isValidLastVerifyTime(Long lastVerifyTime) throws Exception {
     try (Connection conn = getConnection(configuration);
       Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
-        .getTable(IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES)) {
+        .getTable(IndexVerificationResultRepository.getResultTableNameBytes())) {
       Scan s = new Scan();
       ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
       boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(null, cqs.getProps());
@@ -979,15 +978,6 @@ public class IndexTool extends Configured implements Tool {
       try (ResultScanner rs = hIndexToolTable.getScanner(s)) {
         return rs.next() != null;
       }
-    }
-  }
-
-  public static void validateTimeRange(Long sTime, Long eTime) {
-    Long currentTime = EnvironmentEdgeManager.currentTimeMillis();
-    Long st = (sTime == null) ? 0 : sTime;
-    Long et = (eTime == null) ? currentTime : eTime;
-    if (st.compareTo(currentTime) > 0 || et.compareTo(currentTime) > 0 || st.compareTo(et) >= 0) {
-      throw new RuntimeException(INVALID_TIME_RANGE_EXCEPTION_MESSAGE);
     }
   }
 
@@ -1002,10 +992,20 @@ public class IndexTool extends Configured implements Tool {
         .format(" %s is not an index table for %s for this connection", indexTable, qDataTable));
     }
     qSchemaName = SchemaUtil.normalizeIdentifier(schemaName);
+
     pIndexTable = connection.unwrap(PhoenixConnection.class)
       .getTable(SchemaUtil.getQualifiedTableName(schemaName, indexTable));
+    if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, getConf())) {
+      pIndexTable = connection.unwrap(PhoenixConnection.class)
+        .getTable(SchemaUtil.getQualifiedTableName(schemaName, indexTable)
+          .replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR));
+    }
     indexType = pIndexTable.getIndexType();
     qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
+    if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, getConf())) {
+      qIndexTable =
+        qIndexTable.replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR);
+    }
     if (IndexType.LOCAL.equals(indexType)) {
       isLocalIndexBuild = true;
       if (useSnapshot) {

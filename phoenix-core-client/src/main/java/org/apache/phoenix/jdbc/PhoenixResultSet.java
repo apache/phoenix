@@ -106,6 +106,8 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.phoenix.thirdparty.com.google.common.primitives.Bytes;
 
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
+
 /**
  * JDBC ResultSet implementation of Phoenix. Currently only the following data types are supported:
  * - String - Date - Time - Timestamp - BigDecimal - Double - Float - Int - Short - Long - Binary -
@@ -1494,6 +1496,11 @@ public class PhoenixResultSet implements PhoenixMonitoredResultSet, SQLCloseable
       }
     }
     return one.aggregate();
+  }
+
+  @Override
+  public List<List<JsonObject>> getTopNSlowestScanMetrics() {
+    return context.getTopNSlowestScanMetrics();
   }
 
   @Override

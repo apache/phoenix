@@ -20,8 +20,6 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.mapreduce.PhoenixJobCounters.INPUT_RECORDS;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.INDEX_TOOL_RUN_STATUS_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_COLUMN_FAMILY;
-import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME;
-import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.ROW_KEY_SEPARATOR;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RUN_STATUS_EXECUTED;
 import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RUN_STATUS_SKIPPED;
@@ -130,11 +128,11 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   public static final int MAX_LOOKBACK_AGE = 3600;
-  private final String tableDDLOptions;
+  protected final String tableDDLOptions;
 
   private final boolean useSnapshot = false;
-  private final boolean mutable;
-  private final String indexDDLOptions;
+  protected final boolean mutable;
+  protected String indexDDLOptions;
   private boolean singleCell;
 
   @Rule
@@ -196,13 +194,17 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
     getUtility().getConfiguration().set(QueryServices.INDEX_REBUILD_RPC_RETRIES_COUNTER, "1");
   }
 
+  protected void waitForEventualConsistency() throws Exception {
+  }
+
   @After
   public void cleanup() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       deleteAllRows(conn,
-        TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES));
-      deleteAllRows(conn, TableName.valueOf(IndexVerificationResultRepository.RESULT_TABLE_NAME));
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableNameBytes()));
+      deleteAllRows(conn,
+        TableName.valueOf(IndexVerificationResultRepository.getResultTableName()));
     }
     EnvironmentEdgeManager.reset();
   }
@@ -240,15 +242,18 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       assertEquals(NROWS, indexTool.getJob().getCounters().findCounter(INPUT_RECORDS).getValue());
       assertTrue("Index rebuild failed!", indexTool.getJob().isSuccessful());
       TestUtil.assertIndexState(conn, indexTableFullName, PIndexState.ACTIVE, null);
+      waitForEventualConsistency();
       long actualRowCount =
         IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(NROWS, actualRowCount);
       IndexToolIT.setEveryNthRowWithNull(NROWS, 5, stmt);
       conn.commit();
+      waitForEventualConsistency();
       actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(NROWS, actualRowCount);
       IndexToolIT.setEveryNthRowWithNull(NROWS, 7, stmt);
       conn.commit();
+      waitForEventualConsistency();
       actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(NROWS, actualRowCount);
       actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
@@ -325,7 +330,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       modifyColumnFams.get(41000, TimeUnit.MILLISECONDS);
 
       TableName indexToolOutputTable =
-        TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME_BYTES);
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableNameBytes());
       admin.disableTable(indexToolOutputTable);
       admin.deleteTable(indexToolOutputTable);
       // Run the index tool using the only-verify option, verify it gives no mismatch
@@ -445,6 +450,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       }
       assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(BEFORE_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+      waitForEventualConsistency();
       long actualRowCount =
         IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(NROWS, actualRowCount);
@@ -454,6 +460,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         IndexToolIT.upsertRow(stmt1, i);
       }
       conn.commit();
+      waitForEventualConsistency();
       indexTool = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName,
         null, 0, IndexTool.IndexVerifyType.BOTH, new String[0]);
       assertEquals(2 * NROWS,
@@ -492,6 +499,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         .findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_MISSING_INDEX_ROW_COUNT).getValue());
       assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(AFTER_REBUILD_BEYOND_MAXLOOKBACK_INVALID_INDEX_ROW_COUNT).getValue());
+      waitForEventualConsistency();
       actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(2 * NROWS, actualRowCount);
     }
@@ -554,6 +562,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         .findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
       assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT).getValue());
+      waitForEventualConsistency();
       long actualRowCount =
         IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(N_ROWS, actualRowCount);
@@ -580,6 +589,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
         null, 0, IndexTool.IndexVerifyType.BEFORE, new String[0]);
       assertEquals(0, indexTool.getJob().getCounters()
         .findCounter(BEFORE_REBUILD_OLD_INDEX_ROW_COUNT).getValue());
+      waitForEventualConsistency();
       actualRowCount = IndexScrutiny.scrutinizeIndex(conn, dataTableFullName, indexTableFullName);
       assertEquals(N_ROWS, actualRowCount);
     }
@@ -587,6 +597,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   @Test
   public void testIndexToolVerifyBeforeAndBothOptions() throws Exception {
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String schemaName = generateUniqueName();
@@ -630,6 +642,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   @Test
   public void testIndexToolVerifyAfterOption() throws Exception {
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       String schemaName = generateUniqueName();
@@ -760,7 +774,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       Assert.assertEquals(PIndexState.BUILDING, TestUtil.getIndexState(conn, indexTableFullName));
 
       // Delete the output table for the next test
-      deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+      deleteAllRows(conn,
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       // Run the index tool to populate the index while verifying rows
       IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName, null, 0,
         IndexTool.IndexVerifyType.AFTER);
@@ -801,7 +816,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       try {
         verifyRunStatusFromResultTable(conn, scn, indexTableFullName, 3, expectedStatus);
       } catch (AssertionError ae) {
-        TestUtil.dumpTable(conn, TableName.valueOf(RESULT_TABLE_NAME));
+        TestUtil.dumpTable(conn,
+          TableName.valueOf(IndexVerificationResultRepository.getResultTableName()));
         throw ae;
       }
 
@@ -841,6 +857,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   @Test
   public void testIndexToolForIncrementalVerify() throws Exception {
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     ManualEnvironmentEdge customEdge = new ManualEnvironmentEdge();
     String schemaName = generateUniqueName();
     String dataTableName = generateUniqueName();
@@ -976,6 +994,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   @Test
   public void testIndexToolForIncrementalVerify_viewIndex() throws Exception {
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     ManualEnvironmentEdge customeEdge = new ManualEnvironmentEdge();
     String schemaName = generateUniqueName();
     String dataTableName = generateUniqueName();
@@ -1093,7 +1113,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
-      deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+      deleteAllRows(conn,
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       String stmString1 = "CREATE TABLE " + dataTableFullName
         + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) " + tableDDLOptions;
       conn.createStatement().execute(stmString1);
@@ -1181,7 +1202,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
     try (Connection conn = DriverManager.getConnection(getUrl())) {
 
-      deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+      deleteAllRows(conn,
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       String stmString1 = "CREATE TABLE " + dataTableFullName
         + " (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, ZIP INTEGER) ";
       conn.createStatement().execute(stmString1);
@@ -1206,13 +1228,14 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       EnvironmentEdgeManager.injectEdge(injectEdge);
       injectEdge.incrementValue(1L);
       injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000);
-      deleteAllRows(conn, TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+      deleteAllRows(conn,
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       getUtility().getConfiguration()
         .set(IndexRebuildRegionScanner.PHOENIX_INDEX_MR_LOG_BEYOND_MAX_LOOKBACK_ERRORS, "true");
       IndexTool it = IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName,
         indexTableName, null, 0, IndexTool.IndexVerifyType.ONLY);
       TestUtil.dumpTable(conn,
-        TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       Counters counters = it.getJob().getCounters();
       System.out.println(counters.toString());
       assertEquals(2L,
@@ -1383,6 +1406,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   @Test
   public void testUpdatablePKFilterViewIndexRebuild() throws Exception {
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     if (!mutable) {
       return;
     }
@@ -1452,6 +1477,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   @Test
   public void testUpdatableNonPkFilterViewIndexRebuild() throws Exception {
+    Assume.assumeFalse("View indexes do not support CONSISTENCY=EVENTUAL",
+      indexDDLOptions.contains("CONSISTENCY=EVENTUAL"));
     if (!mutable) {
       return;
     }
@@ -1574,11 +1601,13 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   private void truncateIndexToolTables() throws IOException {
     getUtility().getAdmin()
-      .disableTable(TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+      .disableTable(TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
+    getUtility().getAdmin().truncateTable(
+      TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()), true);
     getUtility().getAdmin()
-      .truncateTable(TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME), true);
-    getUtility().getAdmin().disableTable(TableName.valueOf(RESULT_TABLE_NAME));
-    getUtility().getAdmin().truncateTable(TableName.valueOf(RESULT_TABLE_NAME), true);
+      .disableTable(TableName.valueOf(IndexVerificationResultRepository.getResultTableName()));
+    getUtility().getAdmin().truncateTable(
+      TableName.valueOf(IndexVerificationResultRepository.getResultTableName()), true);
   }
 
   private void assertDisableLogging(Connection conn, int expectedRows,
@@ -1599,7 +1628,7 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
       assertEquals(expectedRows, rows.size());
     } catch (AssertionError e) {
       TestUtil.dumpTable(conn,
-        TableName.valueOf(IndexVerificationOutputRepository.OUTPUT_TABLE_NAME));
+        TableName.valueOf(IndexVerificationOutputRepository.getOutputTableName()));
       throw e;
     }
     if (expectedRows > 0) {
@@ -1609,8 +1638,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   private void deleteOneRowFromResultTable(Connection conn, Long scn, String indexTable)
     throws SQLException, IOException {
-    Table hIndexToolTable =
-      conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(RESULT_TABLE_NAME_BYTES);
+    Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+      .getTable(IndexVerificationResultRepository.getResultTableNameBytes());
     Scan s = new Scan();
     s.setRowPrefixFilter(
       Bytes.toBytes(String.format("%s%s%s", scn, ROW_KEY_SEPARATOR, indexTable)));
@@ -1620,8 +1649,8 @@ public class IndexToolForNonTxGlobalIndexIT extends BaseTest {
 
   private List<String> verifyRunStatusFromResultTable(Connection conn, Long scn, String indexTable,
     int totalRows, List<String> expectedStatus) throws SQLException, IOException {
-    Table hIndexToolTable =
-      conn.unwrap(PhoenixConnection.class).getQueryServices().getTable(RESULT_TABLE_NAME_BYTES);
+    Table hIndexToolTable = conn.unwrap(PhoenixConnection.class).getQueryServices()
+      .getTable(IndexVerificationResultRepository.getResultTableNameBytes());
     Assert.assertEquals(totalRows, TestUtil.getRowCount(hIndexToolTable, false));
     List<String> output = new ArrayList<>();
     Scan s = new Scan();

@@ -77,6 +77,7 @@ import org.apache.phoenix.schema.tuple.Tuple;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.schema.types.PVarchar;
 import org.apache.phoenix.schema.types.PhoenixArray;
 import org.apache.phoenix.util.ByteUtil;
@@ -421,9 +422,11 @@ public class WhereOptimizer {
 
   private static KeyRange getTrailingRange(RowKeySchema rowKeySchema, int clippedPkPos,
     KeyRange range, KeyRange clippedResult, ImmutableBytesWritable ptr) {
-    // We are interested in the clipped part's Seperator. Since we combined first part, we need to
+    // We are interested in the clipped part's Separator. Since we combined first part, we need to
     // remove its separator from the trailing parts' start
-    int clippedSepLength = rowKeySchema.getField(clippedPkPos).getDataType().isFixedWidth() ? 0 : 1;
+    PDataType clippedType = rowKeySchema.getField(clippedPkPos).getDataType();
+    int clippedSepLength =
+      clippedType.isFixedWidth() ? 0 : clippedType == PVarbinaryEncoded.INSTANCE ? 2 : 1;
     byte[] lowerRange = KeyRange.UNBOUND;
     boolean lowerInclusive = false;
     // Lower range of trailing part of RVC must be true, so we can form a new range to intersect
@@ -1571,20 +1574,30 @@ public class WhereOptimizer {
       byte[] lowerRange = result.getLowerRange();
       byte[] clippedLowerRange = lowerRange;
       byte[] fullLowerRange = otherRange.getLowerRange();
+      boolean fullLowerRangeUsed = false;
       if (!result.lowerUnbound() && Bytes.startsWith(fullLowerRange, clippedLowerRange)) {
         lowerRange = fullLowerRange;
+        fullLowerRangeUsed = true;
       }
       byte[] upperRange = result.getUpperRange();
       byte[] clippedUpperRange = upperRange;
       byte[] fullUpperRange = otherRange.getUpperRange();
-      if (!result.lowerUnbound() && Bytes.startsWith(fullUpperRange, clippedUpperRange)) {
+      boolean fullUpperRangeUsed = false;
+      if (!result.upperUnbound() && Bytes.startsWith(fullUpperRange, clippedUpperRange)) {
         upperRange = fullUpperRange;
+        fullUpperRangeUsed = true;
       }
       if (lowerRange == clippedLowerRange && upperRange == clippedUpperRange) {
         return result;
       }
-      return KeyRange.getKeyRange(lowerRange, result.isLowerInclusive(), upperRange,
-        result.isUpperInclusive());
+      // When we restore the full range bytes from otherRange, we must also use
+      // the inclusivity from otherRange. Otherwise, an exclusive bound would incorrectly
+      // become inclusive (PHOENIX-7760).
+      boolean lowerInclusive =
+        fullLowerRangeUsed ? otherRange.isLowerInclusive() : result.isLowerInclusive();
+      boolean upperInclusive =
+        fullUpperRangeUsed ? otherRange.isUpperInclusive() : result.isUpperInclusive();
+      return KeyRange.getKeyRange(lowerRange, lowerInclusive, upperRange, upperInclusive);
     }
 
     /**
@@ -1604,8 +1617,9 @@ public class WhereOptimizer {
       int otherPKPos) {
       RowKeySchema rowKeySchema = table.getRowKeySchema();
       ImmutableBytesWritable ptr = context.getTempPtr();
+      PDataType sepType = table.getPKColumns().get(otherPKPos - 1).getDataType();
       int separatorLength =
-        table.getPKColumns().get(otherPKPos - 1).getDataType().isFixedWidth() ? 0 : 1;
+        sepType.isFixedWidth() ? 0 : sepType == PVarbinaryEncoded.INSTANCE ? 2 : 1;
       boolean lowerInclusive = result.isLowerInclusive();
       byte[] lowerRange = result.getLowerRange();
       ptr.set(lowerRange);

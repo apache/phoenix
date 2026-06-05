@@ -392,6 +392,34 @@ public class ScanUtil {
     return getKey(schema, slots, slotSpan, Bound.UPPER);
   }
 
+  private static Field getActualEndField(RowKeySchema schema, int startFieldIndex, int slotSpan,
+    KeyRange range, Bound bound) {
+    if (slotSpan > 0) {
+      byte[] boundBytes = range.getRange(bound);
+      // For multi-span slots, the bound bytes might cover fewer fields than the slotSpan. In such
+      // cases, we need to use the actual last field covered by the bytes for separator logic.
+      // Otherwise, a variable-length field may incorrectly omit its separator byte, producing an
+      // incorrect scan boundary.
+      if (boundBytes.length > 0 && boundBytes != KeyRange.UNBOUND) {
+        ImmutableBytesWritable spanPtr =
+          new ImmutableBytesWritable(boundBytes, 0, boundBytes.length);
+        if (!schema.position(spanPtr, startFieldIndex, startFieldIndex + slotSpan)) {
+          // The bytes don't cover the full span. Find the actual last field covered.
+          int actualEndFieldIdx = startFieldIndex;
+          for (int i = startFieldIndex + 1; i <= startFieldIndex + slotSpan; i++) {
+            spanPtr = new ImmutableBytesWritable(boundBytes, 0, boundBytes.length);
+            if (!schema.position(spanPtr, startFieldIndex, i)) {
+              break;
+            }
+            actualEndFieldIdx = i;
+          }
+          return schema.getField(actualEndFieldIdx);
+        }
+      }
+    }
+    return schema.getField(startFieldIndex + slotSpan);
+  }
+
   private static byte[] getKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan,
     Bound bound) {
     if (slots.isEmpty()) {
@@ -404,7 +432,9 @@ public class ScanUtil {
       position[i] = bound == Bound.LOWER ? 0 : slots.get(i).size() - 1;
       KeyRange range = slots.get(i).get(position[i]);
       slotEndingFieldPos = slotEndingFieldPos + slotSpan[i] + 1;
-      Field field = schema.getField(slotEndingFieldPos);
+      int startFieldPos = slotEndingFieldPos - slotSpan[i];
+      // Use the actual end field based on how many fields the bound bytes cover.
+      Field field = getActualEndField(schema, startFieldPos, slotSpan[i], range, bound);
       int keyLength = range.getRange(bound).length;
       if (!field.getDataType().isFixedWidth()) {
         if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
@@ -455,13 +485,26 @@ public class ScanUtil {
       slotEndIndex, slotStartIndex);
   }
 
+  private static boolean doesSlotsCoverAllColumnsWithoutMultiSpan(RowKeySchema schema,
+    List<List<KeyRange>> slots, int[] slotSpan) {
+    long slotSpanSum = 0;
+    for (int i = 0; i < slotSpan.length; i++) {
+      slotSpanSum += slotSpan[i];
+    }
+    return slotSpanSum == 0 && slots.size() == schema.getMaxFields();
+  }
+
   public static int setKey(RowKeySchema schema, List<List<KeyRange>> slots, int[] slotSpan,
     int[] position, Bound bound, byte[] key, int byteOffset, int slotStartIndex, int slotEndIndex,
     int schemaStartIndex) {
     int offset = byteOffset;
     boolean lastInclusiveUpperSingleKey = false;
+    boolean allInclusiveLowerSingleKey = bound == Bound.LOWER;
     boolean anyInclusiveUpperRangeKey = false;
     boolean lastUnboundUpper = false;
+    boolean slotsCoverAllColumnsWithoutMultiSpan =
+      doesSlotsCoverAllColumnsWithoutMultiSpan(schema, slots, slotSpan);
+    int trailingNullCount = 0;
     // The index used for slots should be incremented by 1,
     // but the index for the field it represents in the schema
     // should be incremented by 1 + value in the current slotSpan index
@@ -472,8 +515,9 @@ public class ScanUtil {
       // Build up the key by appending the bound of each key range
       // from the current position of each slot.
       KeyRange range = slots.get(i).get(position[i]);
-      // Use last slot in a multi-span column to determine if fixed width
-      field = schema.getField(fieldIndex + slotSpan[i]);
+      // Use last slot in a multi-span column to determine if fixed width.
+      // Use the actual end field based on how many fields the bound bytes cover.
+      field = getActualEndField(schema, fieldIndex, slotSpan[i], range, bound);
       boolean isFixedWidth = field.getDataType().isFixedWidth();
       /*
        * If the current slot is unbound then stop if: 1) setting the upper bound. There's no value
@@ -490,6 +534,13 @@ public class ScanUtil {
       byte[] bytes = range.getRange(bound);
       System.arraycopy(bytes, 0, key, offset, bytes.length);
       offset += bytes.length;
+
+      if (bytes.length == 0) {
+        trailingNullCount++;
+      } else {
+        trailingNullCount = 0;
+      }
+      allInclusiveLowerSingleKey &= range.isSingleKey();
 
       /*
        * We must add a terminator to a variable length key even for the last PK column if the lower
@@ -607,10 +658,15 @@ public class ScanUtil {
     // after the table has data, in which case there won't be a separator
     // byte.
     if (bound == Bound.LOWER) {
+      // Remove trailing separator bytes for DESC keys only if they are trailing nulls for point
+      // lookups and schema is rowKeyOrderOptimizable.
       while (
         --i >= schemaStartIndex && offset > byteOffset
           && !(field = schema.getField(--fieldIndex)).getDataType().isFixedWidth()
-          && field.getSortOrder() == SortOrder.ASC && hasSeparatorBytes(key, field, offset)
+          && hasSeparatorBytes(key, field, offset)
+          && (field.getSortOrder() == SortOrder.DESC && schema.rowKeyOrderOptimizable()
+            && slotsCoverAllColumnsWithoutMultiSpan && allInclusiveLowerSingleKey
+            && trailingNullCount-- > 0 || field.getSortOrder() == SortOrder.ASC)
       ) {
         if (field.getDataType() != PVarbinaryEncoded.INSTANCE) {
           offset--;
@@ -1150,6 +1206,11 @@ public class ScanUtil {
 
   public static boolean isIndexRebuild(Scan scan) {
     return scan.getAttribute((BaseScannerRegionObserverConstants.REBUILD_INDEXES)) != null;
+  }
+
+  public static boolean isSyncTableChunkFormationEnabled(Scan scan) {
+    return Arrays.equals(
+      scan.getAttribute(BaseScannerRegionObserverConstants.SYNC_TABLE_CHUNK_FORMATION), TRUE_BYTES);
   }
 
   public static int getClientVersion(Scan scan) {
@@ -1915,6 +1976,33 @@ public class ScanUtil {
         return (SkipScanFilter) filter;
       } else if (filter instanceof FilterList) {
         return removeSkipScanFilterFromFilterList((FilterList) filter);
+      }
+    }
+    return null;
+  }
+
+  public static DistinctPrefixFilter findDistinctPrefixFilter(Scan scan) {
+    Filter filter = scan.getFilter();
+    if (filter instanceof PagingFilter) {
+      filter = ((PagingFilter) filter).getDelegateFilter();
+    }
+    return findDistinctPrefixFilter(filter);
+  }
+
+  public static DistinctPrefixFilter findDistinctPrefixFilter(Filter filter) {
+    if (filter == null) {
+      return null;
+    }
+    if (filter instanceof DistinctPrefixFilter) {
+      return (DistinctPrefixFilter) filter;
+    }
+    if (filter instanceof FilterList) {
+      Iterator<Filter> filterIterator = ((FilterList) filter).getFilters().iterator();
+      while (filterIterator.hasNext()) {
+        DistinctPrefixFilter distinctFilter = findDistinctPrefixFilter(filterIterator.next());
+        if (distinctFilter != null) {
+          return distinctFilter;
+        }
       }
     }
     return null;

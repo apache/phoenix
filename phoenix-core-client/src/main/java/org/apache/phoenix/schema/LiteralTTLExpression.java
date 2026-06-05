@@ -89,7 +89,7 @@ public class LiteralTTLExpression implements TTLExpression, CompiledTTLExpressio
   }
 
   @Override
-  public void validateTTLOnAlter(PhoenixConnection connection, PTable table) {
+  public void validateTTLOnAlter(PhoenixConnection connection, PTable table, boolean isStrictTTL) {
   }
 
   @Override

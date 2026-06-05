@@ -78,6 +78,7 @@ import org.apache.hadoop.hbase.client.CoprocessorDescriptorBuilder;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.RegionLocator;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -1692,6 +1693,99 @@ public class TestUtil {
       }
     }
     return sb.toString();
+  }
+
+  public static void splitTable(String url, String tableName, int nSplits,
+    long sleepBetweenSplitsMs) {
+    try (
+      PhoenixConnection phoenixConn =
+        DriverManager.getConnection(url).unwrap(PhoenixConnection.class);
+      Admin admin = phoenixConn.getQueryServices().getAdmin()) {
+      TableName hTableName = TableName.valueOf(tableName);
+      int splitCount = 0;
+      while (splitCount < nSplits) {
+        Thread.sleep(sleepBetweenSplitsMs);
+        try {
+          int regionsBefore = admin.getRegions(hTableName).size();
+          admin.split(hTableName);
+          int retries = 0;
+          while (retries < 50) {
+            int regionsAfter = admin.getRegions(hTableName).size();
+            if (regionsAfter >= regionsBefore * 2) {
+              LOGGER.info("Split {} completed, regions: {} -> {}", splitCount + 1, regionsBefore,
+                regionsAfter);
+              break;
+            }
+            retries++;
+            Thread.sleep(100);
+          }
+          splitCount++;
+        } catch (Exception e) {
+          LOGGER.warn("Exception during split: " + e.getMessage());
+        }
+      }
+    } catch (Exception e) {
+      LOGGER.error("Error in split thread", e);
+    }
+  }
+
+  /**
+   * Merges table regions in groups of nMerges consecutive regions.
+   * @param url                  connection URL.
+   * @param tableName            name of the table.
+   * @param nMerges              number of consecutive regions to merge together in each group.
+   * @param sleepBetweenMergesMs time to sleep between merge operations.
+   */
+  public static void mergeTableRegions(String url, String tableName, int nMerges,
+    long sleepBetweenMergesMs) {
+    if (nMerges < 2) {
+      throw new IllegalArgumentException("nMerges must be at least 2");
+    }
+    try (
+      PhoenixConnection phoenixConn =
+        DriverManager.getConnection(url).unwrap(PhoenixConnection.class);
+      Admin admin = phoenixConn.getQueryServices().getAdmin()) {
+      TableName hTableName = TableName.valueOf(tableName);
+      List<RegionInfo> regions = admin.getRegions(hTableName);
+      if (regions.size() < 2) {
+        return;
+      }
+      int regionIndex = 0;
+      while (regionIndex < regions.size()) {
+        int remainingRegions = regions.size() - regionIndex;
+        int groupSize = Math.min(nMerges, remainingRegions);
+        if (groupSize < 2) {
+          break;
+        }
+        byte[][] regionsToMerge = new byte[groupSize][];
+        for (int i = 0; i < groupSize; i++) {
+          regionsToMerge[i] = regions.get(regionIndex + i).getRegionName();
+        }
+        try {
+          int regionsBefore = admin.getRegions(hTableName).size();
+          admin.mergeRegionsAsync(regionsToMerge, false).get();
+          int retries = 0;
+          while (retries < 50) {
+            List<RegionInfo> currentRegions = admin.getRegions(hTableName);
+            if (currentRegions.size() <= regionsBefore - groupSize + 1) {
+              LOGGER.info("Merge completed, regions: {} -> {}", regionsBefore,
+                currentRegions.size());
+              break;
+            }
+            retries++;
+            Thread.sleep(100);
+          }
+        } catch (Exception e) {
+          LOGGER.warn("Exception during merge: " + e.getMessage(), e);
+        }
+        regionIndex += groupSize;
+        if (regionIndex < regions.size()) {
+          Thread.sleep(sleepBetweenMergesMs);
+        }
+      }
+    } catch (Exception e) {
+      LOGGER.error("Error in mergeTableRegions", e);
+    }
   }
 
 }

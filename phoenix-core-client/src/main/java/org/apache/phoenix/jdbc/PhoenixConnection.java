@@ -191,6 +191,8 @@ public class PhoenixConnection
   private HighAvailabilityGroup haGroup;
   private volatile SQLException reasonForClose;
   private static final String[] CONNECTION_PROPERTIES;
+  private final int slowestScanMetricsCount;
+  private final boolean isScanMetricsByRegionEnabled;
 
   private final ConcurrentLinkedQueue<PhoenixConnection> childConnections =
     new ConcurrentLinkedQueue<>();
@@ -370,6 +372,13 @@ public class PhoenixConnection
       .get(QueryServices.AUDIT_LOG_LEVEL, QueryServicesOptions.DEFAULT_AUDIT_LOGGING_LEVEL));
     this.isRequestLevelMetricsEnabled =
       JDBCUtil.isCollectingRequestLevelMetricsEnabled(url, info, this.services.getProps());
+    int slowestScanMetricsCount =
+      JDBCUtil.getSlowestScanMetricsCount(url, this.info, this.services.getProps());
+    this.slowestScanMetricsCount = this.isRequestLevelMetricsEnabled ? slowestScanMetricsCount : 0;
+    boolean isScanMetricsByRegionEnabled =
+      JDBCUtil.isScanMetricsByRegionEnabled(url, this.info, this.services.getProps());
+    this.isScanMetricsByRegionEnabled =
+      this.slowestScanMetricsCount > 0 ? isScanMetricsByRegionEnabled : false;
     this.mutationState = mutationState == null
       ? newMutationState(maxSize, maxSizeBytes)
       : new MutationState(mutationState, this);
@@ -1522,5 +1531,13 @@ public class PhoenixConnection
 
   public void setActivityLogger(ConnectionActivityLogger connectionActivityLogger) {
     this.connectionActivityLogger = connectionActivityLogger;
+  }
+
+  public int getSlowestScanMetricsCount() {
+    return slowestScanMetricsCount;
+  }
+
+  public boolean isScanMetricsByRegionEnabled() {
+    return isScanMetricsByRegionEnabled;
   }
 }

@@ -582,6 +582,9 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
         PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_TABLE, PTableType.SYSTEM);
       assertTrue(rs.next());
       assertTableMetaData(rs, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
+        PhoenixDatabaseMetaData.SYSTEM_IDX_CDC_TRACKER_TABLE, PTableType.SYSTEM);
+      assertTrue(rs.next());
+      assertTableMetaData(rs, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,
         PhoenixDatabaseMetaData.SYSTEM_LOG_TABLE, PTableType.SYSTEM);
       assertTrue(rs.next());
       assertTableMetaData(rs, PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA,

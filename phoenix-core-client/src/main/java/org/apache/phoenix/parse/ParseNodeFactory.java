@@ -49,6 +49,7 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TypeMismatchException;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
@@ -379,6 +380,20 @@ public class ParseNodeFactory {
       baseTableName, tableTypeIdNode, bindCount, immutableRows, null, false);
   }
 
+  public TruncateTableStatement truncateTable(TableName tableName, PTableType tableType,
+    boolean preserveSplits) {
+    return new TruncateTableStatement(tableName, tableType, preserveSplits);
+  }
+
+  // Maintain backward compatibility or overload
+  public TruncateTableStatement truncateTable(TableName tableName, PTableType tableType) {
+    return new TruncateTableStatement(tableName, tableType, true);
+  }
+
+  // public TruncateTableStatement truncateTable(TableName tableName, PTableType tableType) {
+  // return new TruncateTableStatement(tableName, tableType);
+  // }
+
   public CreateSchemaStatement createSchema(String schemaName, boolean ifNotExists) {
     return new CreateSchemaStatement(schemaName, ifNotExists);
   }
@@ -468,6 +483,13 @@ public class ParseNodeFactory {
     ListMultimap<String, Pair<String, Object>> props) {
     return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, isRebuildAll,
       async, props);
+  }
+
+  public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName,
+    boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
+    ListMultimap<String, Pair<String, Object>> props, IndexConsistency indexConsistency) {
+    return new AlterIndexStatement(indexTableNode, dataTableName, ifExists, state, isRebuildAll,
+      async, props, indexConsistency);
   }
 
   public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName,
@@ -898,7 +920,7 @@ public class ParseNodeFactory {
   }
 
   public UpsertStatement upsert(NamedTableNode table, HintNode hint, List<ColumnName> columns,
-    List<ParseNode> values, SelectStatement select, int bindCount,
+    List<List<ParseNode>> values, SelectStatement select, int bindCount,
     Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
     UpsertStatement.OnDuplicateKeyType onDupKeyType, boolean returningRow) {
     return new UpsertStatement(table, hint, columns, values, select, bindCount, udfParseNodes,

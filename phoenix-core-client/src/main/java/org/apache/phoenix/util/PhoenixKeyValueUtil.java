@@ -173,21 +173,6 @@ public class PhoenixKeyValueUtil {
     return size;
   }
 
-  /**
-   * Estimates the storage size of a row
-   * @param tableMutationMap map from table to row to RowMutationState
-   * @return estimated row size
-   */
-  public static long
-    getEstimatedRowMutationSize(Map<TableRef, MultiRowMutationState> tableMutationMap) {
-    long size = 0;
-    // iterate over table
-    for (Entry<TableRef, MultiRowMutationState> tableEntry : tableMutationMap.entrySet()) {
-      size += calculateMultiRowMutationSize(tableEntry.getValue());
-    }
-    return size;
-  }
-
   public static long getEstimatedRowMutationSizeWithBatch(
     Map<TableRef, List<MultiRowMutationState>> tableMutationMap) {
     long size = 0;

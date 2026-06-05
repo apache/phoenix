@@ -18,7 +18,6 @@
 package org.apache.phoenix.coprocessor;
 
 import org.apache.hadoop.hbase.client.metrics.ScanMetrics;
-import org.apache.hadoop.hbase.monitoring.ThreadLocalServerSideScanMetrics;
 import org.apache.phoenix.compat.hbase.CompatScanMetrics;
 import org.apache.phoenix.compat.hbase.CompatThreadLocalServerSideScanMetrics;
 
@@ -29,8 +28,8 @@ import org.apache.phoenix.compat.hbase.CompatThreadLocalServerSideScanMetrics;
  * <li>Read repair operations</li>
  * </ul>
  * These metrics help identify latency variations that occur when both data table and index table
- * are scanned together, and are used to populate {@link ThreadLocalServerSideScanMetrics} for index
- * table RPC calls.
+ * are scanned together, and are used to populate ThreadLocalServerSideScanMetrics for index table
+ * RPC calls.
  */
 public class DataTableScanMetrics {
   private final long fsReadTimeInMs;

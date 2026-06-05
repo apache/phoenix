@@ -44,10 +44,12 @@ public interface TTLExpression {
 
   /**
    * Validate the TTL expression on ALTER [TABLE | VIEW]
-   * @param connection Phoenix connection
-   * @param table      PTable of the entity being changed
+   * @param connection  Phoenix connection
+   * @param table       PTable of the entity being changed
+   * @param isStrictTTL True if the TTL being set is strict
    */
-  void validateTTLOnAlter(PhoenixConnection connection, PTable table) throws SQLException;
+  void validateTTLOnAlter(PhoenixConnection connection, PTable table, boolean isStrictTTL)
+    throws SQLException;
 
   /**
    * Compile the TTL expression so that it can be evaluated against of a row of cells

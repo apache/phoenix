@@ -766,6 +766,42 @@ public class QueryParserTest {
   }
 
   @Test
+  public void testValidMultipleUpsert() throws Exception {
+    String sql = (("upsert into t VALUES(1,2),(3,4)"));
+    parseQuery(sql);
+  }
+
+  @Test
+  public void testValidMultipleUpsert2() throws Exception {
+    String sql = "upsert into t(a,b) VALUES(1,2),(3,4)";
+    parseQuery(sql);
+  }
+
+  @Test
+  public void testValidMultipleUpsert3() throws Exception {
+    String sql = (("upsert into t(a,b) VALUES(1,2),(3,4),"));
+    parseQueryThatShouldFail(sql);
+  }
+
+  @Test
+  public void testValidMultipleUpsert4() throws Exception {
+    String sql = (("upsert into t(a,b) VALUES()"));
+    parseQueryThatShouldFail(sql);
+  }
+
+  @Test
+  public void testValidMultipleUpsert5() throws Exception {
+    String sql = (("upsert into t(a,b) VALUES(1,2)(3,4)"));
+    parseQueryThatShouldFail(sql);
+  }
+
+  @Test
+  public void testValidMultipleUpsert6() throws Exception {
+    String sql = (("upsert into t(a,b) VALUES(1,2),(3,4"));
+    parseQueryThatShouldFail(sql);
+  }
+
+  @Test
   public void testDeleteInvalidReturningRow() throws Exception {
     String sql = "DELETE FROM T RETURNING PK1";
     try {

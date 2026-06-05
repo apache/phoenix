@@ -33,10 +33,13 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.MetricType;
+import org.apache.phoenix.util.JDBCUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 /**
  * ResultSet suitable for truly immutable use cases that do not delete data and do not query data
@@ -238,6 +241,11 @@ public class ParallelPhoenixNullComparingResultSet extends DelegateResultSet
     }
     context.decorateMetrics(metrics);
     return metrics;
+  }
+
+  @Override
+  public List<List<JsonObject>> getTopNSlowestScanMetrics() {
+    return JDBCUtil.getTopNSlowestScanMetrics(rs);
   }
 
   @Override

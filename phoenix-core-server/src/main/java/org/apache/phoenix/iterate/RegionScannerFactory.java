@@ -52,6 +52,7 @@ import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
+import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryConstants;
@@ -117,6 +118,7 @@ public abstract class RegionScannerFactory {
       final long pageSizeMs = ScanUtil.getPageSizeMsForRegionScanner(scan);
       Expression extraWhere = null;
       long extraLimit = -1;
+      DistinctPrefixFilter distinctFilter = null;
 
       {
         // for indexes construct the row filter for uncovered columns if it exists
@@ -169,19 +171,22 @@ public abstract class RegionScannerFactory {
                 dataTableScan.addColumn(column.getFamily(), column.getQualifier());
               }
             }
+            // If the DistinctPrefix filter is present on the scan we set the batch size to 1
+            // when scanning uncovered index rows
+            distinctFilter = ScanUtil.findDistinctPrefixFilter(scan);
             if (ScanUtil.isLocalIndex(scan)) {
               s = new UncoveredLocalIndexRegionScanner(regionScanner, dataRegion, scan, env,
                 dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
-                offset, actualStartKey, extraLimit);
+                offset, actualStartKey, extraLimit, distinctFilter != null);
             } else {
               if (scan.getAttribute(CDC_DATA_TABLE_DEF) != null) {
                 s = new CDCGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
                   dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
-                  extraLimit);
+                  extraLimit, distinctFilter != null);
               } else {
                 s = new UncoveredGlobalIndexRegionScanner(regionScanner, dataRegion, scan, env,
                   dataTableScan, tupleProjector, indexMaintainer, viewConstants, ptr, pageSizeMs,
-                  extraLimit);
+                  extraLimit, distinctFilter != null);
               }
             }
           }
@@ -253,6 +258,11 @@ public abstract class RegionScannerFactory {
             return true;
           }
           if (result.size() == 0) {
+            if (distinctFilter != null) {
+              // we got an orphaned uncovered index row just reinitialize the distinct filter and
+              // move to the new row
+              distinctFilter.reinitialize();
+            }
             return next;
           }
           if ((ScanUtil.isLocalOrUncoveredGlobalIndex(scan)) && !ScanUtil.isAnalyzeTable(scan)) {
@@ -274,6 +284,12 @@ public abstract class RegionScannerFactory {
               extraWhere.evaluate(merged, ptr);
               if (!Boolean.TRUE.equals(extraWhere.getDataType().toObject(ptr))) {
                 result.clear();
+                if (distinctFilter != null) {
+                  // The current row was rejected after evaluating the extra where conditions.
+                  // We can't skip to the next unique key prefix as that could result in skipping
+                  // valid result so reinitialize the distinct filter and move to the next row
+                  distinctFilter.reinitialize();
+                }
                 return next;
               }
             }

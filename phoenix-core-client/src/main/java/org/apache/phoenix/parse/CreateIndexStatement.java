@@ -21,7 +21,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.types.IndexConsistency;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
@@ -37,11 +39,21 @@ public class CreateIndexStatement extends SingleTableStatement {
   private final boolean async;
   private final Map<String, UDFParseNode> udfParseNodes;
   private final ParseNode where;
+  private final IndexConsistency indexConsistency;
 
   public CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable,
     IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
     ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, IndexType indexType,
     boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where) {
+    this(indexTableName, dataTable, indexKeyConstraint, includeColumns, splits, props, ifNotExists,
+      indexType, async, bindCount, udfParseNodes, where, getIndexConsistency(props));
+  }
+
+  public CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable,
+    IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
+    ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, IndexType indexType,
+    boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where,
+    IndexConsistency indexConsistency) {
     super(dataTable, bindCount);
     this.indexTableName =
       TableName.create(dataTable.getName().getSchemaName(), indexTableName.getName());
@@ -56,6 +68,7 @@ public class CreateIndexStatement extends SingleTableStatement {
     this.async = async;
     this.udfParseNodes = udfParseNodes;
     this.where = where;
+    this.indexConsistency = indexConsistency;
   }
 
   public CreateIndexStatement(CreateIndexStatement createStmt,
@@ -71,6 +84,23 @@ public class CreateIndexStatement extends SingleTableStatement {
     this.async = createStmt.isAsync();
     this.udfParseNodes = createStmt.getUdfParseNodes();
     this.where = createStmt.where;
+    this.indexConsistency = createStmt.getIndexConsistency();
+  }
+
+  public static IndexConsistency
+    getIndexConsistency(ListMultimap<String, Pair<String, Object>> props) {
+    IndexConsistency indexConsistency = null;
+    if (props != null) {
+      for (Pair<String, Object> prop : props.get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY)) {
+        if (prop != null && "CONSISTENCY".equalsIgnoreCase(prop.getFirst())) {
+          Object value = prop.getSecond();
+          indexConsistency =
+            value == null ? null : IndexConsistency.valueOf(value.toString().toUpperCase());
+          break;
+        }
+      }
+    }
+    return indexConsistency;
   }
 
   public IndexKeyConstraint getIndexConstraint() {
@@ -111,5 +141,9 @@ public class CreateIndexStatement extends SingleTableStatement {
 
   public ParseNode getWhere() {
     return where;
+  }
+
+  public IndexConsistency getIndexConsistency() {
+    return indexConsistency;
   }
 }

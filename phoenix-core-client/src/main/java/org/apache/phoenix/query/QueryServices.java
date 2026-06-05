@@ -97,6 +97,8 @@ public interface QueryServices extends SQLCloseable {
   public static final String SCAN_CACHE_SIZE_ATTRIB = "hbase.client.scanner.caching";
   public static final String MAX_MUTATION_SIZE_ATTRIB = "phoenix.mutate.maxSize";
   public static final String MAX_MUTATION_SIZE_BYTES_ATTRIB = "phoenix.mutate.maxSizeBytes";
+  public static final String PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB =
+    "phoenix.mutate.preserveOnLimitExceeded";
   public static final String HBASE_CLIENT_KEYVALUE_MAXSIZE = "hbase.client.keyvalue.maxsize";
 
   public static final String MUTATE_BATCH_SIZE_ATTRIB = "phoenix.mutate.batchSize";
@@ -214,6 +216,12 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.invalidate.metadata.cache.rpc.priority";
 
   public static final String ALLOW_LOCAL_INDEX_ATTRIB = "phoenix.index.allowLocalIndex";
+
+  // Timeout config for PhoenixSyncTableTool
+  String SYNC_TABLE_QUERY_TIMEOUT_ATTRIB = "phoenix.sync.table.query.timeout";
+  String SYNC_TABLE_RPC_TIMEOUT_ATTRIB = "phoenix.sync.table.rpc.timeout";
+  String SYNC_TABLE_CLIENT_SCANNER_TIMEOUT_ATTRIB = "phoenix.sync.table.client.scanner.timeout";
+  String SYNC_TABLE_RPC_RETRIES_COUNTER = "phoenix.sync.table.rpc.retries.counter";
 
   // Retries when doing server side writes to SYSTEM.CATALOG
   public static final String METADATA_WRITE_RETRIES_NUMBER = "phoenix.metadata.rpc.retries.number";
@@ -641,6 +649,11 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.uncovered.index.threads.keepalive.sec";
 
   String USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP = "phoenix.bloomfilter.multikey.pointlookup";
+  // Value of N for the top N slowest scan metrics to be collected. Accepts integer values.
+  String SLOWEST_SCAN_METRICS_COUNT = "phoenix.slowest.scan.metrics.count";
+  // Whether to collect region name and server name in the slowest scan metrics. Accepts boolean
+  // values.
+  String SCAN_METRICS_BY_REGION_ENABLED = "phoenix.scan.metrics.by.region.enabled";
 
   String SYNCHRONOUS_REPLICATION_ENABLED = "phoenix.synchronous.replication.enabled";
 

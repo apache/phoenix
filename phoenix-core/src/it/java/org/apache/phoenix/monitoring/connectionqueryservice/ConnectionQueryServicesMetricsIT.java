@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.monitoring.connectionqueryservice;
 
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.OPEN_PHOENIX_CONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.PHOENIX_CONNECTIONS_THROTTLED_COUNTER;
@@ -98,6 +99,7 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
         // counter won't be increased at all. So we need to set max allowed connection count
         conf.set(CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, "2");
         conf.set(INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS, "1");
+        conf.set(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
         return conf;
       }
 
@@ -109,6 +111,7 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
         // counter won't be increased at all. So we need to set max allowed connection count
         conf.set(CLIENT_CONNECTION_MAX_ALLOWED_CONNECTIONS, "2");
         conf.set(INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS, "1");
+        conf.set(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
         Configuration copy = new Configuration(conf);
         copy.addResource(confToClone);
         return copy;
@@ -117,6 +120,7 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
     Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
     conf.set(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     conf.set(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
+    conf.set(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     hbaseTestUtil = new HBaseTestingUtility(conf);
     setUpConfigForMiniCluster(conf);
     conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,

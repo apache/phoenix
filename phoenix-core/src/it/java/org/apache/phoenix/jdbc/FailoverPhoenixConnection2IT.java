@@ -20,6 +20,7 @@ package org.apache.phoenix.jdbc;
 import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION;
 import static org.apache.phoenix.exception.SQLExceptionCode.FAILOVER_IN_PROGRESS;
+import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY;
 import static org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole.STANDBY;
@@ -90,6 +91,9 @@ public class FailoverPhoenixConnection2IT extends HABaseIT {
     // Disable replication replay service
     conf1.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, false);
     conf2.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, false);
+    conf1.setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, false);
+    conf2.setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, false);
+
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
   }

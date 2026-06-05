@@ -76,7 +76,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 
-  private void assertServerPagingMetric(String tableName, ResultSet rs, boolean isPaged)
+  private void assertServerPagingMetric(String tableName, ResultSet rs, boolean isDummyRowReturned)
     throws SQLException {
     Map<String, Map<MetricType, Long>> metrics = PhoenixRuntime.getRequestReadMetricInfo(rs);
     for (Map.Entry<String, Map<MetricType, Long>> entry : metrics.entrySet()) {
@@ -84,7 +84,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
       Map<MetricType, Long> metricValues = entry.getValue();
       Long pagedRowsCntr = metricValues.get(MetricType.PAGED_ROWS_COUNTER);
       assertNotNull(pagedRowsCntr);
-      if (isPaged) {
+      if (isDummyRowReturned) {
         assertTrue(String.format("Got %d", pagedRowsCntr.longValue()), pagedRowsCntr > 0);
       } else {
         assertTrue(String.format("Got %d", pagedRowsCntr.longValue()), pagedRowsCntr == 0);
@@ -582,7 +582,11 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(STRINGS[i - 1], rs.getString(1));
       }
-      assertServerPagingMetric(tablename, rs, true);
+      // To ensure PAGED_ROWS_COUNTER is incremented correctly, we need to close the result set.
+      rs.close();
+      // No dummy rows are returned though paging happens as we only hit the condition of paging
+      // filter being stopped with a valid row.
+      assertServerPagingMetric(tablename, rs, false);
       limit = 1;
       offset = 1;
       rs = conn.createStatement().executeQuery(

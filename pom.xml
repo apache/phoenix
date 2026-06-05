@@ -77,10 +77,10 @@
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.4.runtime.version>2.5.10-hadoop3</hbase-2.5.4.runtime.version>
-    <hbase-2.5.runtime.version>2.5.13-hadoop3</hbase-2.5.runtime.version>
+    <hbase-2.5.runtime.version>2.5.14-hadoop3</hbase-2.5.runtime.version>
     <hbase-2.6.0.runtime.version>2.6.1-hadoop3</hbase-2.6.0.runtime.version>
     <hbase-2.6.3.runtime.version>2.6.3-hadoop3</hbase-2.6.3.runtime.version>
-    <hbase-2.6.runtime.version>2.6.4-hadoop3</hbase-2.6.runtime.version>
+    <hbase-2.6.runtime.version>2.6.5-hadoop3</hbase-2.6.runtime.version>
 
     <compileSource>1.8</compileSource>
     <maven.compiler.source>${compileSource}</maven.compiler.source>
@@ -92,7 +92,10 @@
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}/..</top.dir>
     <test.tmp.dir>${project.build.directory}</test.tmp.dir>
-    <shadeSources>true</shadeSources>
+    <!-- Sources-jar shading roughly doubles the time of every shade execution.
+         Default it OFF here; the `release` profile re-enables it so RC / publish
+         builds still produce shaded sources jars. -->
+    <shadeSources>false</shadeSources>
 
     <!-- Dependency versions -->
     <jackson-bom.version>2.18.4.1</jackson-bom.version>
@@ -115,6 +118,7 @@
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
     <jsr305.version>2.0.1</jsr305.version>
     <snappy.version>0.5</snappy.version>
+    <snappy-java.version>1.1.10.8</snappy-java.version>
     <commons-codec.version>1.16.0</commons-codec.version>
     <htrace.version>3.1.0-incubating</htrace.version>
     <jodatime.version>2.10.5</jodatime.version>
@@ -135,6 +139,7 @@
     <junit.version>4.13.1</junit.version>
     <hdrhistogram.version>2.1.12</hdrhistogram.version>
     <byte-buddy.version>1.15.11</byte-buddy.version>
+    <bcprov-jdk18on.version>1.79</bcprov-jdk18on.version>
 
     <!-- These are only used for exclusion when shading, and the exact version is completely
     irrelevant, but we need to keep them up to date to appease static checkers. While Phoenix does
@@ -159,7 +164,7 @@
     <lifecycle-mapping.version>1.0.0</lifecycle-mapping.version>
     <maven-bundle-plugin.version>5.1.9</maven-bundle-plugin.version>
     <exec-maven-plugin.version>3.1.1</exec-maven-plugin.version>
-    <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
+    <maven-shade-plugin.version>3.6.2</maven-shade-plugin.version>
     <!-- This overrides the property in the ASF parent project-->
     <version.maven-site-plugin>3.21.0</version.maven-site-plugin>
     <spotless.version>2.30.0</spotless.version>
@@ -1265,6 +1270,11 @@
         <version>${snappy.version}</version>
       </dependency>
       <dependency>
+        <groupId>org.xerial.snappy</groupId>
+        <artifactId>snappy-java</artifactId>
+        <version>${snappy-java.version}</version>
+      </dependency>
+      <dependency>
         <groupId>com.fasterxml.jackson</groupId>
         <artifactId>jackson-bom</artifactId>
         <version>${jackson-bom.version}</version>
@@ -1376,6 +1386,11 @@
         <groupId>org.jruby.jcodings</groupId>
         <artifactId>jcodings</artifactId>
         <version>${jcodings.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.bouncycastle</groupId>
+        <artifactId>bcprov-jdk18on</artifactId>
+        <version>${bcprov-jdk18on.version}</version>
       </dependency>
       <dependency>
         <groupId>org.hdrhistogram</groupId>
@@ -1914,6 +1929,8 @@
             <!-- tmp files -->
             <exclude>dev/work/**</exclude>
             <exclude>dev/artifacts/**</exclude>
+            <!-- GitHub templates -->
+            <exclude>.github/PULL_REQUEST_TEMPLATE</exclude>
           </excludes>
         </configuration>
       </plugin>
@@ -2091,13 +2108,22 @@
         <module>phoenix-client-parent/phoenix-client-embedded</module>
         <module>phoenix-client-parent/phoenix-client-lite</module>
         <module>phoenix-server</module>
-        <module>phoenix-mapreduce-byo-shaded-hbase</module>
         <module>phoenix-assembly</module>
       </modules>
     </profile>
     <!-- this profile should be activated for release builds -->
     <profile>
       <id>release</id>
+      <!-- The byo-shaded-hbase mapreduce uberjar is a release-only artifact.
+           It costs several minutes to shade and is not needed for normal
+           dev builds, so we only add it to the reactor under -Prelease. -->
+      <modules>
+        <module>phoenix-mapreduce-byo-shaded-hbase</module>
+      </modules>
+      <properties>
+        <!-- Re-enable shaded sources jars for RC / publish builds. -->
+        <shadeSources>true</shadeSources>
+      </properties>
       <build>
         <plugins>
           <plugin>

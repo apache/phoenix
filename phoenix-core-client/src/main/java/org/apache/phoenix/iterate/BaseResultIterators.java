@@ -336,9 +336,12 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
           && groupBy.isOrderPreserving()
           && (context.getAggregationManager().isEmpty() || groupBy.isUngroupedAggregate())
       ) {
-
-        ScanUtil.andFilterAtEnd(scan,
-          new DistinctPrefixFilter(plan.getTableRef().getTable().getRowKeySchema(), cols));
+        byte[] ecf = SchemaUtil.getEmptyColumnFamily(table);
+        byte[] ecq = table.getEncodingScheme() == NON_ENCODED_QUALIFIERS
+          ? QueryConstants.EMPTY_COLUMN_BYTES
+          : table.getEncodingScheme().encode(QueryConstants.ENCODED_EMPTY_COLUMN_NAME);
+        ScanUtil.andFilterAtEnd(scan, new DistinctPrefixFilter(
+          plan.getTableRef().getTable().getRowKeySchema(), cols, ecf, ecq));
         if (!groupBy.isUngroupedAggregate() && plan.getLimit() != null) {
           // We can push the limit to the server,but for UngroupedAggregate
           // we can not push the limit.

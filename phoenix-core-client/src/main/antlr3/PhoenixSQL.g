@@ -85,6 +85,8 @@ tokens
     PRE='pre';
     POST='post';
     CHANGE='change';
+    IDX_MUTATIONS='idx_mutations';
+    DATA_ROW_STATE='data_row_state';
     LATEST='latest';
     ALL='all';
     INDEX='index';
@@ -161,6 +163,12 @@ tokens
     REGIONS = 'regions';
     NOVERIFY = 'noverify';
     RETURNING = 'returning';
+    TRUNCATE = 'truncate';
+    PRESERVE='preserve';
+    SPLITS='splits';
+    CONSISTENCY = 'consistency';
+    EVENTUAL = 'eventual';
+    STRONG = 'strong';
 }
 
 
@@ -209,6 +217,7 @@ import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.IllegalDataException;
 import org.apache.phoenix.schema.PIndexState;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.CDCChangeScope;
@@ -432,6 +441,7 @@ oneStatement returns [BindableStatement ret]
     |	s=upsert_node
     |   s=delete_node
     |   s=create_table_node
+    |   s=truncate_table_node
     |   s=create_schema_node
     |   s=create_view_node
     |   s=create_index_node
@@ -487,7 +497,21 @@ create_table_node returns [CreateTableStatement ret]
         (COLUMN_QUALIFIER_COUNTER LPAREN cqc=initializiation_list RPAREN)?
         {ret = factory.createTable(t, p, c, pk, s, PTableType.TABLE, ex!=null, null, null, getBindCount(), im!=null ? true : null, cqc, noverify!=null); }
     ;
-   
+
+// Parse a truncate table statement.
+truncate_table_node returns [TruncateTableStatement ret]
+    :   TRUNCATE TABLE t=from_table_name
+        (
+            // Case 1: Explicitly DROP SPLITS
+            DROP SPLITS
+            { $ret = factory.truncateTable(t, PTableType.TABLE, false); }
+        |
+            // Default Case: PRESERVE SPLITS or Nothing (Both mean preserve=true)
+            (PRESERVE SPLITS)?
+            { $ret = factory.truncateTable(t, PTableType.TABLE, true); }
+        )
+    ;
+
 // Parse a create schema statement.
 create_schema_node returns [CreateSchemaStatement ret]
     :   CREATE SCHEMA (IF NOT ex=EXISTS)? s=identifier
@@ -585,7 +609,7 @@ cdc_change_scopes returns [Set<CDCChangeScope> ret]
     ;
 
 cdc_change_scope returns [CDCChangeScope ret]
-    :   v=(PRE | POST | CHANGE)
+    :   v=(PRE | POST | CHANGE | IDX_MUTATIONS | DATA_ROW_STATE)
         {
             ret = CDCChangeScope.valueOf(v.getText().toUpperCase());
         }
@@ -699,8 +723,8 @@ drop_cdc_node returns [DropCDCStatement ret]
 // Parse a alter index statement
 alter_index_node returns [AlterIndexStatement ret]
     : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name
-      ((s=(USABLE | UNUSABLE | REBUILD (isRebuildAll=ALL)? | DISABLE | ACTIVE)) (async=ASYNC)? ((SET?)p=fam_properties)?)
-      {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText())), isRebuildAll!=null, async!=null, p); }
+      ((s=(USABLE | UNUSABLE | REBUILD (isRebuildAll=ALL)? | DISABLE | ACTIVE)) (async=ASYNC)? ((SET?)p=fam_properties)? | (CONSISTENCY EQ c=(STRONG | EVENTUAL)))
+      {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, s!=null ? PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText())) : null, isRebuildAll!=null, async!=null, p, c!=null ? IndexConsistency.valueOf(SchemaUtil.normalizeIdentifier(c.getText())) : null); }
     ;
 
 // Parse a trace statement.
@@ -865,9 +889,10 @@ finally{ contextStack.pop(); }
 
 // Parse a full upsert expression structure.
 upsert_node returns [UpsertStatement ret]
+@init{List<List<ParseNode>> v = new ArrayList<List<ParseNode>>(); }
     :   UPSERT (hint=hintClause)? INTO t=from_table_name
         (LPAREN p=upsert_column_refs RPAREN)?
-        ((VALUES LPAREN v=one_or_more_expressions RPAREN (
+        ((VALUES LPAREN e = one_or_more_expressions {v.add(e);} RPAREN (COMMA LPAREN e = one_or_more_expressions {v.add(e);} RPAREN )* (
             ON DUPLICATE KEY (
                 ig=IGNORE
               | ( upd=UPDATE pairs=update_column_pairs )
@@ -1317,6 +1342,9 @@ identifier returns [String ret]
 
 parseNoReserved returns [String ret]
     :   n=NAME { $ret = n.getText(); }
+    |   CONSISTENCY { $ret = "CONSISTENCY"; }
+    |   EVENTUAL { $ret = "EVENTUAL"; }
+    |   STRONG { $ret = "STRONG"; }
     ;
 
 case_statement returns [ParseNode ret]

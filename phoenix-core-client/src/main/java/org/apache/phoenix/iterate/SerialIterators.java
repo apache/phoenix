@@ -185,8 +185,9 @@ public class SerialIterators extends BaseResultIterators {
           currentScan.setAttribute(BaseScannerRegionObserverConstants.SCAN_OFFSET,
             PInteger.INSTANCE.toBytes(remainingOffset));
         }
+        PhoenixConnection connection = context.getConnection();
         ScanMetricsHolder scanMetricsHolder = ScanMetricsHolder.getInstance(readMetrics, tableName,
-          currentScan, context.getConnection().getLogLevel());
+          currentScan, connection.getLogLevel(), connection.isScanMetricsByRegionEnabled());
         TableResultIterator itr = new TableResultIterator(mutationState, currentScan,
           scanMetricsHolder, renewLeaseThreshold, plan, scanGrouper, caches, maxQueryEndTime);
         PeekingResultIterator peekingItr =

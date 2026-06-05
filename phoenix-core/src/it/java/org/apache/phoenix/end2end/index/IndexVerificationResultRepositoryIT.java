@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.coprocessorclient.MetaDataProtocol.DEFAULT_LOG_TTL;
-import static org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository.RESULT_TABLE_NAME_BYTES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 
@@ -83,7 +82,7 @@ public class IndexVerificationResultRepositoryIT extends ParallelStatsDisabledIT
     try (Connection conn = DriverManager.getConnection(getUrl()); PhoenixConnection pconn =
       DriverManager.getConnection(getUrl()).unwrap(PhoenixConnection.class)) {
       ConnectionQueryServices services = pconn.getQueryServices();
-      Table hTable = services.getTable(RESULT_TABLE_NAME_BYTES);
+      Table hTable = services.getTable(IndexVerificationResultRepository.getResultTableNameBytes());
       long scanMaxTs = EnvironmentEdgeManager.currentTimeMillis();
       IndexToolVerificationResult expectedResult = getExpectedResult(scanMaxTs);
       setupResultRepository(conn, mockStringBytes, expectedResult);
@@ -108,8 +107,9 @@ public class IndexVerificationResultRepositoryIT extends ParallelStatsDisabledIT
     IndexVerificationResultRepository resultRepository =
       new IndexVerificationResultRepository(conn, indexNameBytes);
     resultRepository.createResultTable(conn);
-    TestUtil.assertTTLValue(conn, TableName.valueOf(RESULT_TABLE_NAME_BYTES), DEFAULT_LOG_TTL,
-      false);
+    TestUtil.assertTTLValue(conn,
+      TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes()),
+      DEFAULT_LOG_TTL, false);
     byte[] regionOne = Bytes.toBytes("a.1.00000000000000000000");
     byte[] regionTwo = Bytes.toBytes("a.2.00000000000000000000");
     resultRepository.logToIndexToolResultTable(expectedResult, IndexTool.IndexVerifyType.BOTH,
@@ -198,10 +198,13 @@ public class IndexVerificationResultRepositoryIT extends ParallelStatsDisabledIT
       ConnectionQueryServices queryServices =
         conn.unwrap(PhoenixConnection.class).getQueryServices();
       Admin admin = queryServices.getAdmin();
-      TableName outputTableName = TableName.valueOf(RESULT_TABLE_NAME_BYTES);
+      TableName outputTableName =
+        TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes());
       if (admin.tableExists(outputTableName)) {
-        admin.disableTable(TableName.valueOf(RESULT_TABLE_NAME_BYTES));
-        admin.deleteTable(TableName.valueOf(RESULT_TABLE_NAME_BYTES));
+        admin.disableTable(
+          TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes()));
+        admin.deleteTable(
+          TableName.valueOf(IndexVerificationResultRepository.getResultTableNameBytes()));
       }
     }
     EnvironmentEdgeManager.reset();

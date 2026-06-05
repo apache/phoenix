@@ -225,6 +225,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
     return setSystemDDLProperties(QueryConstants.CREATE_HA_GROUP_METADATA);
   }
 
+  protected String getIdxCdcTrackerDDL() {
+    return setSystemDDLProperties(QueryConstants.CREATE_IDX_CDC_TRACKER_METADATA);
+  }
+
   private String setSystemDDLProperties(String ddl) {
     return String.format(ddl,
       props.getInt(DEFAULT_SYSTEM_MAX_VERSIONS_ATTRIB,
@@ -510,6 +514,10 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
         }
         try (Statement stmt = metaConnection.createStatement()) {
           stmt.executeUpdate(getHAGroupDDL());
+        } catch (TableAlreadyExistsException ignore) {
+        }
+        try {
+          metaConnection.createStatement().executeUpdate(getIdxCdcTrackerDDL());
         } catch (TableAlreadyExistsException ignore) {
         }
       } catch (SQLException e) {
@@ -899,6 +907,11 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
   @Override
   public void deleteMutexCell(String tenantId, String schemaName, String tableName,
     String columnName, String familyName) throws SQLException {
+  }
+
+  @Override
+  public void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped,
+    boolean preserveSplits) throws SQLException {
   }
 
   @Override

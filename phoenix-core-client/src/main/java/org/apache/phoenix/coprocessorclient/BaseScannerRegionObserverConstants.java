@@ -204,4 +204,33 @@ public class BaseScannerRegionObserverConstants {
    * Attribute name used to pass HAGroupName in Mutations and Scans.
    */
   public static final String HA_GROUP_NAME_ATTRIB = "_HAGroupName";
+
+  /**
+   * The scan attribute to enable server-side chunk formation and checksum computation for
+   * PhoenixSyncTableTool.
+   */
+  public static final String SYNC_TABLE_CHUNK_FORMATION = "_SyncTableChunkFormation";
+
+  /**
+   * The scan attribute to provide the target chunk size in bytes for PhoenixSyncTableTool.
+   */
+  public static final String SYNC_TABLE_CHUNK_SIZE_BYTES = "_SyncTableChunkSizeBytes";
+
+  /**
+   * The scan attribute to provide the MessageDigest state for cross-region hash continuation in
+   * PhoenixSyncTableTool.
+   */
+  public static final String SYNC_TABLE_CONTINUED_DIGEST_STATE = "_SyncTableContinuedDigestState";
+
+  /**
+   * PhoenixSyncTableTool chunk metadata cell qualifiers. These define the wire protocol between
+   * PhoenixSyncTableRegionScanner (server-side coprocessor) and PhoenixSyncTableMapper (client-side
+   * mapper). The coprocessor returns chunk metadata as HBase cells with these qualifiers, and the
+   * mapper parses them to extract chunk information.
+   */
+  public static final byte[] SYNC_TABLE_START_KEY_QUALIFIER = Bytes.toBytes("START_KEY");
+  public static final byte[] SYNC_TABLE_HASH_QUALIFIER = Bytes.toBytes("HASH");
+  public static final byte[] SYNC_TABLE_ROW_COUNT_QUALIFIER = Bytes.toBytes("ROW_COUNT");
+  public static final byte[] SYNC_TABLE_IS_PARTIAL_CHUNK_QUALIFIER =
+    Bytes.toBytes("IS_PARTIAL_CHUNK");
 }

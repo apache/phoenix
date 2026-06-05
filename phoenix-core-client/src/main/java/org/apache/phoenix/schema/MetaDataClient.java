@@ -23,12 +23,14 @@ import static org.apache.phoenix.coprocessorclient.tasks.IndexRebuildTaskConstan
 import static org.apache.phoenix.coprocessorclient.tasks.IndexRebuildTaskConstants.REBUILD_ALL;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_SET_CONDITIONAL_TTL_ON_TABLE_WITH_MULTIPLE_COLUMN_FAMILIES;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TRANSACTIONAL_TABLE;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRUNCATE_MULTITENANT_TABLE;
 import static org.apache.phoenix.exception.SQLExceptionCode.CDC_ALREADY_ENABLED;
 import static org.apache.phoenix.exception.SQLExceptionCode.ERROR_WRITING_TO_SCHEMA_REGISTRY;
 import static org.apache.phoenix.exception.SQLExceptionCode.INSUFFICIENT_MULTI_TENANT_COLUMNS;
 import static org.apache.phoenix.exception.SQLExceptionCode.PARENT_TABLE_NOT_FOUND;
 import static org.apache.phoenix.exception.SQLExceptionCode.SALTING_NOT_ALLOWED_FOR_CDC;
 import static org.apache.phoenix.exception.SQLExceptionCode.TABLE_ALREADY_EXIST;
+import static org.apache.phoenix.exception.SQLExceptionCode.TRUNCATE_NOT_ALLOWED_ON_SYSTEM_TABLE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.APPEND_ONLY_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARG_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ARRAY_SIZE;
@@ -57,6 +59,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.FUNCTION_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GUIDE_POSTS_WIDTH;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_ROWS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_CONSISTENCY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_DISABLE_TIMESTAMP;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_STATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE;
@@ -129,6 +132,7 @@ import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_
 import static org.apache.phoenix.schema.PTable.EncodedCQCounter.NULL_COUNTER;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
+import static org.apache.phoenix.schema.PTable.IndexType.UNCOVERED_GLOBAL;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.ViewType.MAPPED;
 import static org.apache.phoenix.schema.PTableType.CDC;
@@ -253,6 +257,7 @@ import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.parse.PrimaryKeyConstraint;
 import org.apache.phoenix.parse.TableName;
+import org.apache.phoenix.parse.TruncateTableStatement;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UseSchemaStatement;
 import org.apache.phoenix.query.ConnectionQueryServices;
@@ -275,6 +280,7 @@ import org.apache.phoenix.schema.stats.StatisticsUtil;
 import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.task.Task;
 import org.apache.phoenix.schema.transform.TransformClient;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
@@ -343,9 +349,9 @@ public class MetaDataClient {
     + IMMUTABLE_STORAGE_SCHEME + "," + ENCODING_SCHEME + "," + USE_STATS_FOR_PARALLELIZATION + ","
     + VIEW_INDEX_ID_DATA_TYPE + "," + CHANGE_DETECTION_ENABLED + "," + PHYSICAL_TABLE_NAME + ","
     + SCHEMA_VERSION + "," + STREAMING_TOPIC_NAME + "," + INDEX_WHERE + "," + CDC_INCLUDE_TABLE
-    + "," + TTL + "," + ROW_KEY_MATCHER + "," + IS_STRICT_TTL
+    + "," + TTL + "," + ROW_KEY_MATCHER + "," + IS_STRICT_TTL + "," + INDEX_CONSISTENCY
     + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-    + "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    + "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\""
     + SYSTEM_CATALOG_TABLE + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -396,6 +402,10 @@ public class MetaDataClient {
     + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + TENANT_ID + "," + TABLE_SCHEM + "," + TABLE_NAME + ","
     + INDEX_STATE + "," + INDEX_DISABLE_TIMESTAMP + "," + ASYNC_REBUILD_TIMESTAMP + " "
     + PLong.INSTANCE.getSqlTypeName() + ") VALUES (?, ?, ?, ?, ?, ?)";
+
+  public static final String UPDATE_INDEX_CONSISTENCY =
+    "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\"" + SYSTEM_CATALOG_TABLE + "\"( " + TENANT_ID + ","
+      + TABLE_SCHEM + "," + TABLE_NAME + "," + INDEX_CONSISTENCY + ") VALUES (?, ?, ?, ?)";
 
   /*
    * Custom sql to add a column to SYSTEM.CATALOG table during upgrade. We can't use the regular
@@ -1061,7 +1071,7 @@ public class MetaDataClient {
       }
     }
     table = createTableInternal(statement, splits, parent, viewStatement, viewType, viewIndexIdType,
-      rowKeyMatcher, viewColumnConstants, isViewColumnReferenced, false, null, null, null,
+      rowKeyMatcher, viewColumnConstants, isViewColumnReferenced, false, null, null, null, null,
       tableProps, commonFamilyProps);
 
     if (table == null || table.getType() == PTableType.VIEW || statement.isNoVerify() /*
@@ -1187,6 +1197,10 @@ public class MetaDataClient {
               commonFamilyProps.put(prop.getFirst(), value);
             }
           }
+          continue;
+        }
+
+        if (tableType == PTableType.INDEX && "CONSISTENCY".equalsIgnoreCase(prop.getFirst())) {
           continue;
         }
 
@@ -1894,7 +1908,7 @@ public class MetaDataClient {
         statement.ifNotExists(), null, statement.getWhere(), statement.getBindCount(), null);
       table = createTableInternal(tableStatement, splits, dataTable, null, null,
         getViewIndexDataType(), null, null, null, allocateIndexId, statement.getIndexType(),
-        asyncCreatedDate, null, tableProps, commonFamilyProps);
+        statement.getIndexConsistency(), asyncCreatedDate, null, tableProps, commonFamilyProps);
     } finally {
       deleteMutexCells(physicalSchemaName, physicalTableName, acquiredColumnMutexSet);
     }
@@ -1904,6 +1918,13 @@ public class MetaDataClient {
 
     if (LOGGER.isInfoEnabled())
       LOGGER.info("Created index " + table.getName().getString() + " at " + table.getTimeStamp());
+
+    if (
+      statement.getIndexConsistency() != null && statement.getIndexConsistency().isAsynchronous()
+    ) {
+      createCDCForEventuallyConsistentIndex(dataTable);
+    }
+
     boolean asyncIndexBuildEnabled =
       connection.getQueryServices().getProps().getBoolean(QueryServices.INDEX_ASYNC_BUILD_ENABLED,
         QueryServicesOptions.DEFAULT_INDEX_ASYNC_BUILD_ENABLED);
@@ -2003,7 +2024,6 @@ public class MetaDataClient {
     columnDefs.add(FACTORY.columnDef(FACTORY.columnName(QueryConstants.CDC_JSON_COL_NAME),
       PVarchar.INSTANCE.getSqlTypeName(), false, null, true, null, null, false,
       SortOrder.getDefault(), "", null, false));
-    tableProps = new HashMap<>();
     if (dataTable.getImmutableStorageScheme() == SINGLE_CELL_ARRAY_WITH_OFFSETS) {
       // CDC table doesn't need SINGLE_CELL_ARRAY_WITH_OFFSETS encoding, so override it.
       tableProps.put(TableProperty.IMMUTABLE_STORAGE_SCHEME.getPropertyName(),
@@ -2017,7 +2037,7 @@ public class MetaDataClient {
         columnDefs, FACTORY.primaryKey(null, pkColumnDefs), Collections.emptyList(), PTableType.CDC,
         statement.isIfNotExists(), null, null, statement.getBindCount(), null);
     createTableInternal(tableStatement, null, dataTable, null, null, null, null, null, null, false,
-      null, null, statement.getIncludeScopes(), tableProps, commonFamilyProps);
+      null, null, null, statement.getIncludeScopes(), tableProps, commonFamilyProps);
     // for now, only track stream partition metadata for tables, TODO: updatable views
     if (PTableType.TABLE == dataTable.getType()) {
       updateStreamPartitionMetadata(dataTableFullName, cdcObjName);
@@ -2399,10 +2419,13 @@ public class MetaDataClient {
    * @return TTL from hierarchy if defined otherwise TTL_NOT_DEFINED.
    * @throws TableNotFoundException if not able ot find any table in hierarchy
    */
-  private TTLExpression checkAndGetTTLFromHierarchy(PTable parent, String entityName)
-    throws SQLException {
+  private TTLExpression checkAndGetTTLFromHierarchy(PTable parent, String entityName,
+    IndexType indexType) throws SQLException {
     if (CDCUtil.isCDCIndex(entityName)) {
       return TTL_EXPRESSION_FOREVER;
+    }
+    if (UNCOVERED_GLOBAL.equals(indexType) && parent.hasConditionalTTL() && !parent.isStrictTTL()) {
+      return TTL_EXPRESSION_NOT_DEFINED;
     }
     return parent != null
       ? (parent.getType() == TABLE
@@ -2437,12 +2460,37 @@ public class MetaDataClient {
     return parentName.getString().equals(view.getPhysicalName().getString());
   }
 
+  /**
+   * Creates a CDC stream on the data table for eventually consistent indexes if not already
+   * present.
+   * @param dataTable The data table PTable object for which to create the CDC stream.
+   * @throws SQLException If there is an error executing the CREATE CDC statement or accessing the
+   *                      database connection.
+   */
+  private void createCDCForEventuallyConsistentIndex(PTable dataTable) throws SQLException {
+    String dataTableName = dataTable.getTableName().getString();
+    String schemaName = dataTable.getSchemaName().getString();
+    String cdcName = "CDC_" + dataTableName;
+    String fullTableName = SchemaUtil.getCaseSensitiveColumnDisplayName(schemaName, dataTableName);
+    String cdcSql = "CREATE CDC IF NOT EXISTS \"" + cdcName + "\" ON " + fullTableName;
+    try {
+      connection.createStatement().execute(cdcSql);
+    } catch (SQLException e) {
+      if (SQLExceptionCode.CDC_ALREADY_ENABLED.getErrorCode() != e.getErrorCode()) {
+        LOGGER.error("Error while creating CDC for {}", fullTableName, e);
+        throw e;
+      }
+      LOGGER.debug("CDC already exists for {}", fullTableName, e);
+    }
+  }
+
   private PTable createTableInternal(CreateTableStatement statement, byte[][] splits,
     final PTable parent, String viewStatement, ViewType viewType, PDataType viewIndexIdType,
     final byte[] rowKeyMatcher, final byte[][] viewColumnConstants,
     final BitSet isViewColumnReferenced, boolean allocateIndexId, IndexType indexType,
-    Date asyncCreatedDate, Set<PTable.CDCChangeScope> cdcIncludeScopes,
-    Map<String, Object> tableProps, Map<String, Object> commonFamilyProps) throws SQLException {
+    IndexConsistency indexConsistency, Date asyncCreatedDate,
+    Set<PTable.CDCChangeScope> cdcIncludeScopes, Map<String, Object> tableProps,
+    Map<String, Object> commonFamilyProps) throws SQLException {
     final PTableType tableType = statement.getTableType();
     boolean wasAutoCommit = connection.getAutoCommit();
     TableName tableNameNode = null;
@@ -2513,7 +2561,7 @@ public class MetaDataClient {
             SQLExceptionCode.TTL_SUPPORTED_FOR_TABLES_AND_VIEWS_ONLY).setSchemaName(schemaName)
               .setTableName(tableName).build().buildException();
         }
-        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
+        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName, indexType);
         if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
           throw new SQLExceptionInfo.Builder(SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY)
             .setSchemaName(schemaName).setTableName(tableName).build().buildException();
@@ -2527,7 +2575,7 @@ public class MetaDataClient {
         }
         ttl = getCompatibleTTLExpression(ttlProp, tableType, viewType, fullTableName);
       } else {
-        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName);
+        ttlFromHierarchy = checkAndGetTTLFromHierarchy(parent, tableName, indexType);
         if (!ttlFromHierarchy.equals(TTL_EXPRESSION_NOT_DEFINED)) {
           ttlFromHierarchy.validateTTLOnCreate(connection, statement, parent, tableProps);
         }
@@ -3392,9 +3440,10 @@ public class MetaDataClient {
           .setTimeStamp(MetaDataProtocol.MIN_TABLE_TIMESTAMP).setIndexDisableTimestamp(0L)
           .setSequenceNumber(PTable.INITIAL_SEQ_NUM).setImmutableRows(isImmutableRows)
           .setDisableWAL(Boolean.TRUE.equals(disableWAL)).setMultiTenant(false).setStoreNulls(false)
-          .setViewIndexIdType(viewIndexIdType).setIndexType(indexType).setUpdateCacheFrequency(0)
-          .setNamespaceMapped(isNamespaceMapped).setAutoPartitionSeqName(autoPartitionSeq)
-          .setAppendOnlySchema(isAppendOnlySchema).setImmutableStorageScheme(ONE_CELL_PER_COLUMN)
+          .setViewIndexIdType(viewIndexIdType).setIndexType(indexType).setIndexConsistency(null)
+          .setUpdateCacheFrequency(0).setNamespaceMapped(isNamespaceMapped)
+          .setAutoPartitionSeqName(autoPartitionSeq).setAppendOnlySchema(isAppendOnlySchema)
+          .setImmutableStorageScheme(ONE_CELL_PER_COLUMN)
           .setQualifierEncodingScheme(NON_ENCODED_QUALIFIERS)
           .setBaseColumnCount(QueryConstants.BASE_TABLE_BASE_COLUMN_COUNT)
           .setEncodedCQCounter(PTable.EncodedCQCounter.NULL_COUNTER)
@@ -3699,6 +3748,16 @@ public class MetaDataClient {
 
       tableUpsert.setBoolean(38, isStrictTTL);
 
+      if (tableType == PTableType.INDEX) {
+        if (indexConsistency == null) {
+          tableUpsert.setNull(39, Types.CHAR);
+        } else {
+          tableUpsert.setString(39, indexConsistency.getCodeAsString());
+        }
+      } else {
+        tableUpsert.setNull(39, Types.CHAR);
+      }
+
       tableUpsert.execute();
 
       if (asyncCreatedDate != null) {
@@ -3802,6 +3861,7 @@ public class MetaDataClient {
           .setDisableWAL(Boolean.TRUE.equals(disableWAL)).setMultiTenant(multiTenant)
           .setStoreNulls(storeNulls).setViewType(viewType).setViewIndexIdType(viewIndexIdType)
           .setViewIndexId(result.getViewIndexId()).setIndexType(indexType)
+          .setIndexConsistency(tableType == PTableType.INDEX ? indexConsistency : null)
           .setTransactionProvider(transactionProvider).setUpdateCacheFrequency(updateCacheFrequency)
           .setNamespaceMapped(isNamespaceMapped).setAutoPartitionSeqName(autoPartitionSeq)
           .setAppendOnlySchema(isAppendOnlySchema).setImmutableStorageScheme(immutableStorageScheme)
@@ -4031,6 +4091,131 @@ public class MetaDataClient {
     if (tenantIdCol.isNullable()) {
       throw new SQLExceptionInfo.Builder(INSUFFICIENT_MULTI_TENANT_COLUMNS)
         .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+    }
+  }
+
+  private void deleteStatistics(List<String> truncatedObjectList) throws SQLException {
+    if (truncatedObjectList == null || truncatedObjectList.isEmpty()) {
+      return;
+    }
+    String deleteStatsSql = "DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_STATS_NAME + " WHERE "
+      + PhoenixDatabaseMetaData.PHYSICAL_NAME + " = ?";
+    try (PreparedStatement stmt = connection.prepareStatement(deleteStatsSql)) {
+      for (String physicalName : truncatedObjectList) {
+        stmt.setString(1, physicalName);
+        stmt.executeUpdate();
+      }
+      connection.commit();
+    }
+  }
+
+  private PTable getPTableRef(String schemaName, String tableName) throws SQLException {
+    return connection.getTable(
+      new PTableKey(connection.getTenantId(), SchemaUtil.getTableName(schemaName, tableName)));
+  }
+
+  private void validateObjectTypeBeingTruncated(PTable pTable, String tableName, String schemaName,
+    boolean preserveSplits) throws SQLException {
+    // Cannot drop splits on a salted table
+    if (!preserveSplits && pTable.getBucketNum() != null) {
+      throw new SQLExceptionInfo.Builder(
+        SQLExceptionCode.TRUNCATE_MUST_PRESERVE_SPLITS_FOR_SALTED_TABLE).setSchemaName(schemaName)
+          .setTableName(tableName).build().buildException();
+    }
+    // disallow truncating a view
+    if (pTable.getType() == PTableType.VIEW) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.TRUNCATE_NOT_ALLOWED_ON_VIEW)
+        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+    }
+    // block if the table type is SYSTEM or if it resides in the SYSTEM schema
+    if (
+      pTable.getType() == PTableType.SYSTEM
+        || PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA.equals(schemaName)
+    ) {
+      throw new SQLExceptionInfo.Builder(TRUNCATE_NOT_ALLOWED_ON_SYSTEM_TABLE)
+        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+    }
+    // Block truncate as it would wipe data for ALL tenants
+    if (pTable.isMultiTenant() && connection.getTenantId() != null) {
+      throw new SQLExceptionInfo.Builder(CANNOT_TRUNCATE_MULTITENANT_TABLE)
+        .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+    }
+  }
+
+  private void truncateGlobalIndexes(PTable pTable, List<String> truncatedObjectList,
+    boolean preserveSplits) throws SQLException {
+    for (PTable index : pTable.getIndexes()) {
+      if (index.getIndexType() != IndexType.LOCAL) {
+        if (!preserveSplits && index.getBucketNum() != null) {
+          throw new SQLExceptionInfo.Builder(
+            SQLExceptionCode.TRUNCATE_MUST_PRESERVE_SPLITS_FOR_SALTED_TABLE)
+              .setTableName(index.getName().getString()).build().buildException();
+        }
+        String indexSchemaName = index.getSchemaName().getString();
+        String indexTableName = index.getTableName().getString();
+        connection.getQueryServices().truncateTable(indexSchemaName, indexTableName,
+          index.isNamespaceMapped(), preserveSplits);
+        truncatedObjectList.add(index.getPhysicalName().getString());
+      }
+    }
+  }
+
+  private void truncateSharedViewIndexTable(PTable pTable, List<String> truncatedObjectList,
+    boolean preserveSplits) throws SQLException {
+    if (pTable.getType() == PTableType.TABLE) {
+      byte[] viewIndexPhysicalNameBytes =
+        MetaDataUtil.getViewIndexPhysicalName(pTable.getPhysicalName().getBytes());
+      String viewIndexPhysicalName = Bytes.toString(viewIndexPhysicalNameBytes);
+
+      try (Admin admin = connection.getQueryServices().getAdmin()) {
+        org.apache.hadoop.hbase.TableName viewIdxTableName =
+          org.apache.hadoop.hbase.TableName.valueOf(viewIndexPhysicalName);
+        if (admin.tableExists(viewIdxTableName)) {
+          String viewIdxSchema = SchemaUtil.getSchemaNameFromFullName(viewIndexPhysicalName);
+          String viewIdxTableStr = SchemaUtil.getTableNameFromFullName(viewIndexPhysicalName);
+          connection.getQueryServices().truncateTable(viewIdxSchema, viewIdxTableStr, false,
+            preserveSplits);
+          connection.getQueryServices().clearTableRegionCache(viewIdxTableName);
+          truncatedObjectList.add(viewIndexPhysicalName);
+        }
+      } catch (IOException e) {
+        throw ClientUtil.parseServerException(e);
+      }
+    }
+  }
+
+  public MutationState truncateTable(TruncateTableStatement statement) throws SQLException {
+    String schemaName =
+      connection.getSchema() != null && statement.getTableName().getSchemaName() == null
+        ? connection.getSchema()
+        : statement.getTableName().getSchemaName();
+    boolean isNamespaceMapped = SchemaUtil.isNamespaceMappingEnabled(statement.getTableType(),
+      connection.getQueryServices().getProps());
+    String tableName = statement.getTableName().getTableName();
+    boolean preserveSplits = statement.preserveSplits();
+    PTable pTable = getPTableRef(schemaName, tableName);
+
+    // Allow truncate only for valid object types
+    validateObjectTypeBeingTruncated(pTable, tableName, schemaName, preserveSplits);
+
+    try {
+      List<String> truncatedObjectList = new ArrayList<>();
+      // Truncate the Base Table
+      connection.getQueryServices().truncateTable(schemaName, tableName, isNamespaceMapped,
+        preserveSplits);
+      // Mark for stats deletion
+      truncatedObjectList.add(pTable.getPhysicalName().getString());
+      // Identify and Truncate Global Indexes
+      truncateGlobalIndexes(pTable, truncatedObjectList, preserveSplits);
+      // Identify and Truncate Shared View Index Table
+      truncateSharedViewIndexTable(pTable, truncatedObjectList, preserveSplits);
+      // Delete Statistics of all the tables being truncated
+      deleteStatistics(truncatedObjectList);
+      // Update cache post truncation
+      updateCache(schemaName, tableName);
+      return new MutationState(0, 0, connection);
+    } catch (SQLException e) {
+      throw e;
     }
   }
 
@@ -4728,7 +4913,7 @@ public class MetaDataClient {
           if (table.getType() != PTableType.TABLE) {
             ttlAlreadyDefined = checkAndGetTTLFromHierarchy(
               PhoenixRuntime.getTableNoCache(connection, table.getParentName().toString()),
-              tableName);
+              tableName, table.getIndexType());
           }
           if (!ttlAlreadyDefined.equals(TTL_EXPRESSION_NOT_DEFINED)) {
             throw new SQLExceptionInfo.Builder(SQLExceptionCode.TTL_ALREADY_DEFINED_IN_HIERARCHY)
@@ -5796,6 +5981,37 @@ public class MetaDataClient {
         metaPropertiesEvaluated, table, schemaName, tableName, new MutableBoolean(false));
 
       PIndexState newIndexState = statement.getIndexState();
+      IndexConsistency newIndexConsistency = statement.getIndexConsistency();
+
+      if (newIndexConsistency != null) {
+        try (PreparedStatement consistencyUpsert =
+          connection.prepareStatement(UPDATE_INDEX_CONSISTENCY)) {
+          consistencyUpsert.setString(1, tenantId);
+          consistencyUpsert.setString(2, schemaName);
+          consistencyUpsert.setString(3, indexName);
+          consistencyUpsert.setString(4, newIndexConsistency.getCodeAsString());
+          consistencyUpsert.execute();
+          connection.commit();
+
+          if (newIndexConsistency == IndexConsistency.EVENTUAL) {
+            PTable dataTable =
+              connection.getTable(tenantId, SchemaUtil.getTableName(schemaName, dataTableName));
+            createCDCForEventuallyConsistentIndex(dataTable);
+          }
+
+          connection.getQueryServices().clearTableFromCache(
+            connection.getTenantId() == null
+              ? ByteUtil.EMPTY_BYTE_ARRAY
+              : connection.getTenantId().getBytes(),
+            schemaName == null ? ByteUtil.EMPTY_BYTE_ARRAY : Bytes.toBytes(schemaName),
+            Bytes.toBytes(indexName), HConstants.LATEST_TIMESTAMP);
+          connection.removeTable(connection.getTenantId(),
+            SchemaUtil.getTableName(schemaName, indexName),
+            SchemaUtil.getTableName(schemaName, dataTableName), HConstants.LATEST_TIMESTAMP);
+
+          return new MutationState(1, 1000, connection);
+        }
+      }
 
       if (isAsync && newIndexState != PIndexState.REBUILD) {
         throw new SQLExceptionInfo.Builder(SQLExceptionCode.ASYNC_NOT_ALLOWED)
@@ -5809,13 +6025,8 @@ public class MetaDataClient {
       connection.setAutoCommit(false);
       // Confirm index table is valid and up-to-date
       TableRef indexRef = FromCompiler.getResolver(statement, connection).getTables().get(0);
-      PreparedStatement tableUpsert = null;
-      try {
-        if (newIndexState == PIndexState.ACTIVE) {
-          tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE_TO_ACTIVE);
-        } else {
-          tableUpsert = connection.prepareStatement(UPDATE_INDEX_STATE);
-        }
+      try (PreparedStatement tableUpsert = connection.prepareStatement(
+        newIndexState == PIndexState.ACTIVE ? UPDATE_INDEX_STATE_TO_ACTIVE : UPDATE_INDEX_STATE)) {
         tableUpsert.setString(1,
           connection.getTenantId() == null ? null : connection.getTenantId().getString());
         tableUpsert.setString(2, schemaName);
@@ -5826,10 +6037,6 @@ public class MetaDataClient {
           tableUpsert.setLong(6, 0);
         }
         tableUpsert.execute();
-      } finally {
-        if (tableUpsert != null) {
-          tableUpsert.close();
-        }
       }
       Long timeStamp = indexRef.getTable().isTransactional() ? indexRef.getTimeStamp() : null;
       List<Mutation> tableMetadata =
@@ -5918,8 +6125,8 @@ public class MetaDataClient {
                   }
                 }
               } else {
-                try {
-                  tableUpsert = connection.prepareStatement(UPDATE_INDEX_REBUILD_ASYNC_STATE);
+                try (PreparedStatement tableUpsert =
+                  connection.prepareStatement(UPDATE_INDEX_REBUILD_ASYNC_STATE)) {
                   tableUpsert.setString(1,
                     connection.getTenantId() == null ? null : connection.getTenantId().getString());
                   tableUpsert.setString(2, schemaName);
@@ -5928,10 +6135,6 @@ public class MetaDataClient {
                   tableUpsert.setLong(4, beginTimestamp);
                   tableUpsert.execute();
                   connection.commit();
-                } finally {
-                  if (tableUpsert != null) {
-                    tableUpsert.close();
-                  }
                 }
               }
             }
@@ -6413,7 +6616,9 @@ public class MetaDataClient {
       }
       if (metaProperties.getTTL() != table.getTTLExpression()) {
         TTLExpression newTTL = metaProperties.getTTL();
-        newTTL.validateTTLOnAlter(connection, table);
+        boolean isStrictTTL =
+          metaProperties.isStrictTTL() != null ? metaProperties.isStrictTTL : table.isStrictTTL();
+        newTTL.validateTTLOnAlter(connection, table, isStrictTTL);
         metaPropertiesEvaluated.setTTL(getCompatibleTTLExpression(metaProperties.getTTL(),
           table.getType(), table.getViewType(), table.getName().toString()));
         changingPhoenixTableProperty = true;

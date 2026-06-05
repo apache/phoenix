@@ -19,8 +19,11 @@ package org.apache.phoenix.compile;
 
 import java.sql.SQLException;
 import java.text.Format;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -33,6 +36,9 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.log.QueryLogger;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
 import org.apache.phoenix.monitoring.ReadMetricQueue;
+import org.apache.phoenix.monitoring.ScanMetricsHolder;
+import org.apache.phoenix.monitoring.SlowestScanMetricsQueue;
+import org.apache.phoenix.monitoring.TopNTreeMultiMap;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -51,6 +57,8 @@ import org.apache.phoenix.util.ReadOnlyProps;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Sets;
+
+import org.apache.hbase.thirdparty.com.google.gson.JsonObject;
 
 /**
  * Class that keeps common state used across processing the various clauses in a top level JDBC
@@ -91,6 +99,8 @@ public class StatementContext {
   private Integer totalSegmentsValue;
   private boolean hasRowSizeFunction = false;
   private boolean hasRawRowSizeFunction = false;
+  private final SlowestScanMetricsQueue slowestScanMetricsQueue;
+  private final int slowestScanMetricsCount;
 
   public StatementContext(PhoenixStatement statement) {
     this(statement, new Scan());
@@ -116,6 +126,8 @@ public class StatementContext {
     this.subqueryResults = context.subqueryResults;
     this.readMetricsQueue = context.readMetricsQueue;
     this.overAllQueryMetrics = context.overAllQueryMetrics;
+    this.slowestScanMetricsQueue = context.slowestScanMetricsQueue;
+    this.slowestScanMetricsCount = context.slowestScanMetricsCount;
     this.queryLogger = context.queryLogger;
     this.isClientSideUpsertSelect = context.isClientSideUpsertSelect;
     this.isUncoveredIndex = context.isUncoveredIndex;
@@ -180,6 +192,10 @@ public class StatementContext {
     this.readMetricsQueue = new ReadMetricQueue(isRequestMetricsEnabled, connection.getLogLevel());
     this.overAllQueryMetrics =
       new OverAllQueryMetrics(isRequestMetricsEnabled, connection.getLogLevel());
+    this.slowestScanMetricsCount = connection.getSlowestScanMetricsCount();
+    this.slowestScanMetricsQueue = slowestScanMetricsCount > 0
+      ? new SlowestScanMetricsQueue()
+      : SlowestScanMetricsQueue.NOOP_SLOWEST_SCAN_METRICS_QUEUE;
     this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();
     this.hasFirstValidResult = new AtomicBoolean(false);
     this.subStatementContexts = Sets.newHashSet();
@@ -474,5 +490,72 @@ public class StatementContext {
 
   public void setTotalSegmentsValue(Integer totalSegmentsValue) {
     this.totalSegmentsValue = totalSegmentsValue;
+  }
+
+  /**
+   * FOR INTERNAL USE ONLY.
+   * @return the slowest scan metrics queue
+   */
+  public SlowestScanMetricsQueue getSlowestScanMetricsQueue() {
+    return slowestScanMetricsQueue;
+  }
+
+  public List<List<JsonObject>> getTopNSlowestScanMetrics() {
+    if (slowestScanMetricsCount <= 0) {
+      return Collections.emptyList();
+    }
+    TopNTreeMultiMap<Long, List<ScanMetricsHolder>> slowestScanMetricsHolders =
+      TopNTreeMultiMap.getInstance(slowestScanMetricsCount, (s1, s2) -> Long.compare(s2, s1));
+    getSlowestScanMetricsUtil(this, new ArrayDeque<>(), 0, slowestScanMetricsHolders);
+    List<List<JsonObject>> topNSlowestScanMetricsHolders =
+      new ArrayList<>(slowestScanMetricsHolders.size());
+    for (Map.Entry<Long, List<ScanMetricsHolder>> entry : slowestScanMetricsHolders.entries()) {
+      List<JsonObject> scanMetricsHolderJsonObjects = new ArrayList<>(entry.getValue().size());
+      for (ScanMetricsHolder scanMetricsHolder : entry.getValue()) {
+        scanMetricsHolderJsonObjects.add(scanMetricsHolder.toJson());
+      }
+      topNSlowestScanMetricsHolders.add(scanMetricsHolderJsonObjects);
+    }
+    return topNSlowestScanMetricsHolders;
+  }
+
+  private static void getSlowestScanMetricsUtil(StatementContext node,
+    Deque<ScanMetricsHolder> currentScanMetricsHolders, long sumOfMillisBetweenNexts,
+    TopNTreeMultiMap<Long, List<ScanMetricsHolder>> topNSlowestScanMetricsHolders) {
+    Iterator<ScanMetricsHolder> currentScanMetricsHolderIterator =
+      node.getSlowestScanMetricsQueue().getIterator();
+    if (currentScanMetricsHolderIterator.hasNext()) {
+      do {
+        ScanMetricsHolder currentScanMetricsHolder = currentScanMetricsHolderIterator.next();
+        long currentMillisBetweenNexts = currentScanMetricsHolder.getCostOfScan();
+        long newSumOfMillisBetweenNexts = sumOfMillisBetweenNexts + currentMillisBetweenNexts;
+
+        // Add at tail of the dequeue
+        currentScanMetricsHolders.addLast(currentScanMetricsHolder);
+
+        traverseSlowestScanMetricsTree(node, currentScanMetricsHolders, newSumOfMillisBetweenNexts,
+          topNSlowestScanMetricsHolders);
+        currentScanMetricsHolders.removeLast();
+      } while (currentScanMetricsHolderIterator.hasNext());
+    } else {
+      traverseSlowestScanMetricsTree(node, currentScanMetricsHolders, sumOfMillisBetweenNexts,
+        topNSlowestScanMetricsHolders);
+    }
+  }
+
+  private static void traverseSlowestScanMetricsTree(StatementContext node,
+    Deque<ScanMetricsHolder> currentScanMetricsHolders, long sumOfMillisBetweenNexts,
+    TopNTreeMultiMap<Long, List<ScanMetricsHolder>> topNSlowestScanMetricsHolders) {
+    Set<StatementContext> subContexts = node.getSubStatementContexts();
+    if (subContexts == null || subContexts.isEmpty()) {
+      topNSlowestScanMetricsHolders.put(sumOfMillisBetweenNexts,
+        () -> new ArrayList<>(currentScanMetricsHolders));
+    } else {
+      // Process sub-contexts
+      for (StatementContext sub : subContexts) {
+        getSlowestScanMetricsUtil(sub, currentScanMetricsHolders, sumOfMillisBetweenNexts,
+          topNSlowestScanMetricsHolders);
+      }
+    }
   }
 }

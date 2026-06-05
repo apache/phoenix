@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema;
 
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+import static org.apache.phoenix.schema.PTable.IndexType.UNCOVERED_GLOBAL;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTableType.CDC;
 import static org.apache.phoenix.schema.PTableType.VIEW;
@@ -181,17 +182,22 @@ public class ConditionalTTLExpression implements TTLExpression {
   /**
    * @param table TABLE | VIEW referenced in ALTER statement
    */
-  public void validateTTLOnAlter(PhoenixConnection conn, PTable table) throws SQLException {
+  public void validateTTLOnAlter(PhoenixConnection conn, PTable table, boolean isStrictTTL)
+    throws SQLException {
     // first validate the expression on the entity being changed
     validateTTLExpression(conn, table, null);
 
     for (PTable index : table.getIndexes()) {
       try {
-        if (CDCUtil.isCDCIndex(index)) {
+        if (
+          CDCUtil.isCDCIndex(index)
+            || (!isStrictTTL && UNCOVERED_GLOBAL.equals(index.getIndexType()))
+        ) {
           // CDC index doesn't inherit ConditionTTL expression
+          // skip validation if index is uncovered and TTL is not strict
           continue;
         }
-        // verify that the new expression is covered by all the existing indexes
+        // verify that the new expression is covered by all the existing covered indexes
         buildExpression(conn, index, table);
       } catch (ColumnNotFoundException | ColumnFamilyNotFoundException e) {
         throw new SQLException(

@@ -48,8 +48,6 @@ import org.apache.hadoop.hbase.coprocessor.RegionCoprocessor;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.filter.Filter;
-import org.apache.hadoop.hbase.filter.FilterList;
-import org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter;
 import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.regionserver.PhoenixScannerContext;
@@ -63,7 +61,6 @@ import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.DataTableScanMetrics;
 import org.apache.phoenix.coprocessor.DelegateRegionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
-import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.UnverifiedRowFilter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
@@ -237,23 +234,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
     }
 
     private boolean shouldCreateUnverifiedRowFilter(Filter delegateFilter) {
-      if (delegateFilter == null) {
-        return false;
-      }
-      Filter wrappedFilter = delegateFilter;
-      if (delegateFilter instanceof FilterList) {
-        List<Filter> filters = ((FilterList) delegateFilter).getFilters();
-        wrappedFilter = filters.get(0);
-      }
-      // Optimization since FirstKeyOnlyFilter and EmptyColumnOnlyFilter
-      // always include the empty column in the scan result
-      if (
-        wrappedFilter instanceof FirstKeyOnlyFilter
-          || wrappedFilter instanceof EmptyColumnOnlyFilter
-      ) {
-        return false;
-      }
-      return true;
+      return delegateFilter != null && !indexMaintainer.isUncovered();
     }
 
     public boolean next(List<Cell> result, boolean raw, ScannerContext scannerContext)
@@ -630,7 +611,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         long repairStart = EnvironmentEdgeManager.currentTimeMillis();
 
         byte[] rowKey = CellUtil.cloneRow(cell);
-        long ts = cellList.get(0).getTimestamp();
+        long ts = getMaxTimestamp(cellList);
         cellList.clear();
         long repairTime;
         try {

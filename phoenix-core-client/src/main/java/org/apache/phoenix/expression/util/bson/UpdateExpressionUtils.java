@@ -585,7 +585,13 @@ public class UpdateExpressionUtils {
    * arithmetic operation is performed. If the current value is a bson document with an entry from
    * $IF_NOT_EXISTS to a document with a key and a fallback value, we lookup if the key is already
    * present in the document. If it is, we return its value. Otherwise, we return the provided
-   * fallback value.
+   * fallback value. If the current value is a bson document with $ADD or $SUBTRACT as key, we get
+   * the array of operands from this document and perform the corresponding operation. Operand can
+   * be an $IF_NOT_EXISTS bson document. If the current value is a bson document with $LIST_APPEND
+   * as key, the value is a two-element array of operands; each operand resolves to a BsonArray
+   * (literal array, a path string referring to an existing array attribute, or an $IF_NOT_EXISTS
+   * document whose resolved value is an array) and the two arrays are concatenated in order with
+   * duplicates preserved.
    * @param curValue     The current value.
    * @param bsonDocument The document with all field key-value pairs.
    * @return Updated values to be used by SET operation.
@@ -638,19 +644,129 @@ public class UpdateExpressionUtils {
         }
       }
       return getBsonNumberFromNumber(newNum);
-    } else if (
-      curValue instanceof BsonDocument && ((BsonDocument) curValue).get("$IF_NOT_EXISTS") != null
-    ) {
-      BsonValue ifNotExistsDoc = ((BsonDocument) curValue).get("$IF_NOT_EXISTS");
-      Map.Entry<String, BsonValue> ifNotExistsEntry =
-        ((BsonDocument) ifNotExistsDoc).entrySet().iterator().next();
-      String ifNotExistsKey = ifNotExistsEntry.getKey();
-      BsonValue ifNotExistsVal = ifNotExistsEntry.getValue();
-      BsonValue val =
-        CommonComparisonExpressionUtils.getFieldFromDocument(ifNotExistsKey, bsonDocument);
-      return (val != null) ? val : ifNotExistsVal;
+    } else if (curValue instanceof BsonDocument) {
+      BsonDocument doc = (BsonDocument) curValue;
+      if (doc.get("$IF_NOT_EXISTS") != null) {
+        return resolveIfNotExists(doc, bsonDocument);
+      } else if (doc.containsKey("$ADD")) {
+        BsonArray operands = doc.getArray("$ADD");
+        Number result = resolveSetOperand(operands.get(0), bsonDocument);
+        result = addNum(result, resolveSetOperand(operands.get(1), bsonDocument));
+        return getBsonNumberFromNumber(result);
+      } else if (doc.containsKey("$SUBTRACT")) {
+        BsonArray operands = doc.getArray("$SUBTRACT");
+        Number result = resolveSetOperand(operands.get(0), bsonDocument);
+        result = subtractNum(result, resolveSetOperand(operands.get(1), bsonDocument));
+        return getBsonNumberFromNumber(result);
+      } else if (doc.containsKey("$LIST_APPEND")) {
+        BsonArray operands = doc.getArray("$LIST_APPEND");
+        if (operands.size() != 2) {
+          throw new BsonUpdateInvalidArgumentException(
+            "Incorrect number of operands for operator or function; operator or function: "
+              + "$LIST_APPEND, number of operands: " + operands.size());
+        }
+        BsonArray list1 = resolveListAppendOperand(operands.get(0), bsonDocument);
+        BsonArray list2 = resolveListAppendOperand(operands.get(1), bsonDocument);
+        BsonArray result = new BsonArray(new ArrayList<>(list1.size() + list2.size()));
+        result.addAll(list1);
+        result.addAll(list2);
+        return result;
+      }
     }
     return curValue;
+  }
+
+  /**
+   * Resolve a single operand of <code>$LIST_APPEND</code> to a {@link BsonArray}. Accepted operand
+   * shapes:
+   * <ul>
+   * <li>literal array — used as-is</li>
+   * <li>{@link BsonString} naming a top-level or nested document path — the resolved value must
+   * exist and be an array; otherwise an exception is thrown</li>
+   * <li>{@code {"$IF_NOT_EXISTS": {<path>: <fallback>}}} — fallback is used when the path is
+   * absent; the resolved value must be an array regardless of which branch is taken</li>
+   * </ul>
+   * Any other operand shape (including a nested {@code $LIST_APPEND}) is rejected.
+   */
+  private static BsonArray resolveListAppendOperand(final BsonValue operand,
+    final BsonDocument bsonDocument) {
+    if (operand == null) {
+      throw new BsonUpdateInvalidArgumentException(
+        "An operand in the update expression has an incorrect data type");
+    }
+    if (operand.isArray()) {
+      return operand.asArray();
+    }
+    if (operand instanceof BsonDocument && ((BsonDocument) operand).get("$IF_NOT_EXISTS") != null) {
+      BsonValue resolved = resolveIfNotExists((BsonDocument) operand, bsonDocument);
+      if (resolved == null || !resolved.isArray()) {
+        throw new BsonUpdateInvalidArgumentException(
+          "An operand in the update expression has an incorrect data type");
+      }
+      return resolved.asArray();
+    }
+    if (operand instanceof BsonString) {
+      String path = ((BsonString) operand).getValue();
+      BsonValue topLevelValue = bsonDocument.get(path);
+      BsonValue bsonValue = topLevelValue != null
+        ? topLevelValue
+        : CommonComparisonExpressionUtils.getFieldFromDocument(path, bsonDocument);
+      if (bsonValue == null) {
+        throw new BsonUpdateInvalidArgumentException(
+          "The provided expression refers to an attribute that does not exist in the item: "
+            + path);
+      }
+      if (!bsonValue.isArray()) {
+        throw new BsonUpdateInvalidArgumentException(
+          "An operand in the update expression has an incorrect data type");
+      }
+      return bsonValue.asArray();
+    }
+    throw new BsonUpdateInvalidArgumentException("Invalid operand for $LIST_APPEND: " + operand);
+  }
+
+  /**
+   * Resolves an $IF_NOT_EXISTS expression. Returns the existing field value if present, otherwise
+   * returns the fallback value.
+   * @param ifNotExistsDoc The document containing the $IF_NOT_EXISTS expression
+   * @param bsonDocument   The source document to look up field values
+   * @return The resolved value (existing field value or fallback)
+   */
+  private static BsonValue resolveIfNotExists(final BsonDocument ifNotExistsDoc,
+    final BsonDocument bsonDocument) {
+    BsonValue ifNotExistsSpec = ifNotExistsDoc.get("$IF_NOT_EXISTS");
+    Map.Entry<String, BsonValue> ifNotExistsEntry =
+      ((BsonDocument) ifNotExistsSpec).entrySet().iterator().next();
+    String fieldPath = ifNotExistsEntry.getKey();
+    BsonValue fallbackValue = ifNotExistsEntry.getValue();
+    BsonValue existingValue =
+      CommonComparisonExpressionUtils.getFieldFromDocument(fieldPath, bsonDocument);
+    return (existingValue != null) ? existingValue : fallbackValue;
+  }
+
+  private static Number resolveSetOperand(BsonValue operand, BsonDocument bsonDocument) {
+    if (operand.isNumber()) {
+      return getNumberFromBsonNumber((BsonNumber) operand);
+    } else if (
+      operand instanceof BsonDocument && ((BsonDocument) operand).get("$IF_NOT_EXISTS") != null
+    ) {
+      BsonValue resolved = resolveIfNotExists((BsonDocument) operand, bsonDocument);
+      return getNumberFromBsonNumber((BsonNumber) resolved);
+    } else if (operand instanceof BsonString) {
+      String operandVal = ((BsonString) operand).getValue();
+      BsonValue topLevelValue = bsonDocument.get(operandVal);
+      BsonValue bsonValue = topLevelValue != null
+        ? topLevelValue
+        : CommonComparisonExpressionUtils.getFieldFromDocument(operandVal, bsonDocument);
+      if (bsonValue != null && bsonValue.isNumber()) {
+        return getNumberFromBsonNumber((BsonNumber) bsonValue);
+      } else {
+        throw new BsonUpdateInvalidArgumentException(
+          "Operand for $SET not found in document: " + operand);
+      }
+    } else {
+      throw new BsonUpdateInvalidArgumentException("Invalid operand for $SET: " + operand);
+    }
   }
 
   /**

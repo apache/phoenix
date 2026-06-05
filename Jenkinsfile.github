@@ -25,8 +25,14 @@ pipeline {
     options {
         // N.B. this is per-branch, which means per PR
         disableConcurrentBuilds()
-        buildDiscarder(logRotator(daysToKeepStr: '15', artifactDaysToKeepStr: '5'))
-        timeout (time: 9, unit: 'HOURS')
+        buildDiscarder(logRotator(
+            daysToKeepStr: '3',
+            artifactDaysToKeepStr: '3',
+            numToKeepStr: '2',
+            artifactNumToKeepStr: '2'
+        ))
+        rateLimitBuilds(throttle: [count: 2, durationName: 'day', userBoost: true])
+        timeout (time: 11, unit: 'HOURS')
         timestamps()
         skipDefaultCheckout()
     }

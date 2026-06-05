@@ -190,6 +190,7 @@ import org.apache.phoenix.parse.ShowTablesStatement;
 import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.parse.TableNode;
 import org.apache.phoenix.parse.TraceStatement;
+import org.apache.phoenix.parse.TruncateTableStatement;
 import org.apache.phoenix.parse.UDFParseNode;
 import org.apache.phoenix.parse.UpdateStatisticsStatement;
 import org.apache.phoenix.parse.UpsertStatement;
@@ -204,6 +205,7 @@ import org.apache.phoenix.schema.ExecuteUpdateNotApplicableException;
 import org.apache.phoenix.schema.FunctionNotFoundException;
 import org.apache.phoenix.schema.MetaDataClient;
 import org.apache.phoenix.schema.MetaDataEntityNotFoundException;
+import org.apache.phoenix.schema.MutationLimitReachedException;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PDatum;
 import org.apache.phoenix.schema.PIndexState;
@@ -220,6 +222,7 @@ import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
@@ -1202,7 +1205,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     implements CompilableStatement {
 
     private ExecutableUpsertStatement(NamedTableNode table, HintNode hintNode,
-      List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount,
+      List<ColumnName> columns, List<List<ParseNode>> values, SelectStatement select, int bindCount,
       Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
       OnDuplicateKeyType onDupKeyType, boolean returningRow) {
       super(table, hintNode, columns, values, select, bindCount, udfParseNodes, onDupKeyPairs,
@@ -1263,6 +1266,33 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       MutationPlan plan = compiler.compile(this, returnResult);
       plan.getContext().getSequenceManager().validateSequences(seqAction);
       return plan;
+    }
+  }
+
+  private static class ExecutableTruncateTableStatement extends TruncateTableStatement
+    implements CompilableStatement {
+    ExecutableTruncateTableStatement(TableName tableName, PTableType tableType,
+      boolean preserveSplits) {
+      super(tableName, tableType, preserveSplits);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Override
+    public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
+      throws SQLException {
+      final StatementContext context = new StatementContext(stmt);
+      return new BaseMutationPlan(context, this.getOperation()) {
+        @Override
+        public ExplainPlan getExplainPlan() throws SQLException {
+          return new ExplainPlan(Collections.singletonList("Truncate Table"));
+        }
+
+        @Override
+        public MutationState execute() throws SQLException {
+          MetaDataClient client = new MetaDataClient(getContext().getConnection());
+          return client.truncateTable(ExecutableTruncateTableStatement.this);
+        }
+      };
     }
   }
 
@@ -1643,9 +1673,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     public ExecutableCreateIndexStatement(NamedNode indexName, NamedTableNode dataTable,
       IndexKeyConstraint ikConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
       ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, IndexType indexType,
-      boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where) {
+      boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where,
+      IndexConsistency indexConsistency) {
       super(indexName, dataTable, ikConstraint, includeColumns, splits, props, ifNotExists,
-        indexType, async, bindCount, udfParseNodes, where);
+        indexType, async, bindCount, udfParseNodes, where, indexConsistency);
     }
 
     @SuppressWarnings("unchecked")
@@ -1877,10 +1908,17 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
   private static class ExecutableAlterIndexStatement extends AlterIndexStatement
     implements CompilableStatement {
 
-    public ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName,
+    ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName,
       boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
       ListMultimap<String, Pair<String, Object>> props) {
       super(indexTableNode, dataTableName, ifExists, state, isRebuildAll, async, props);
+    }
+
+    ExecutableAlterIndexStatement(NamedTableNode indexTableNode, String dataTableName,
+      boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
+      ListMultimap<String, Pair<String, Object>> props, IndexConsistency indexConsistency) {
+      super(indexTableNode, dataTableName, ifExists, state, isRebuildAll, async, props,
+        indexConsistency);
     }
 
     @SuppressWarnings("unchecked")
@@ -2147,7 +2185,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
     @Override
     public ExecutableUpsertStatement upsert(NamedTableNode table, HintNode hintNode,
-      List<ColumnName> columns, List<ParseNode> values, SelectStatement select, int bindCount,
+      List<ColumnName> columns, List<List<ParseNode>> values, SelectStatement select, int bindCount,
       Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
       UpsertStatement.OnDuplicateKeyType onDupKeyType, boolean returningRow) {
       return new ExecutableUpsertStatement(table, hintNode, columns, values, select, bindCount,
@@ -2223,6 +2261,12 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
     @Override
+    public TruncateTableStatement truncateTable(TableName tableName, PTableType tableType,
+      boolean preserveSplits) {
+      return new ExecutableTruncateTableStatement(tableName, tableType, preserveSplits);
+    }
+
+    @Override
     public CreateSchemaStatement createSchema(String schemaName, boolean ifNotExists) {
       return new ExecutableCreateSchemaStatement(schemaName, ifNotExists);
     }
@@ -2268,7 +2312,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       ListMultimap<String, Pair<String, Object>> props, boolean ifNotExists, IndexType indexType,
       boolean async, int bindCount, Map<String, UDFParseNode> udfParseNodes, ParseNode where) {
       return new ExecutableCreateIndexStatement(indexName, dataTable, ikConstraint, includeColumns,
-        splits, props, ifNotExists, indexType, async, bindCount, udfParseNodes, where);
+        splits, props, ifNotExists, indexType, async, bindCount, udfParseNodes, where,
+        CreateIndexStatement.getIndexConsistency(props));
     }
 
     @Override
@@ -2323,6 +2368,14 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       ListMultimap<String, Pair<String, Object>> props) {
       return new ExecutableAlterIndexStatement(indexTableNode, dataTableName, ifExists, state,
         isRebuildAll, async, props);
+    }
+
+    @Override
+    public AlterIndexStatement alterIndex(NamedTableNode indexTableNode, String dataTableName,
+      boolean ifExists, PIndexState state, boolean isRebuildAll, boolean async,
+      ListMultimap<String, Pair<String, Object>> props, IndexConsistency indexConsistency) {
+      return new ExecutableAlterIndexStatement(indexTableNode, dataTableName, ifExists, state,
+        isRebuildAll, async, props, indexConsistency);
     }
 
     @Override
@@ -2438,6 +2491,26 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         connection.commit();
       }
       return returnCodes;
+    } catch (MutationLimitReachedException limitEx) {
+      // Special handling: limit reached but existing mutations preserved
+      // Statements 0 through i-1 were successfully added to MutationState
+      // Statement at index i was NOT added (its join was rejected by the pre-check)
+
+      // If original autoCommit was true, commit what we have buffered
+      if (autoCommit) {
+        connection.commit();
+      }
+
+      // Trim the batch list to contain only unprocessed items (from index i to end)
+      if (i > 0) {
+        batch.subList(0, i).clear();
+      }
+
+      // Mark the failed index
+      returnCodes[i] = Statement.EXECUTE_FAILED;
+
+      // Throw MutationLimitBatchException with checkpoint information
+      throw new MutationLimitBatchException(returnCodes, limitEx, i);
     } catch (SQLException t) {
       if (i == returnCodes.length) {
         // Exception after for loop, perhaps in commit(), discard returnCodes.

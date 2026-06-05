@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
 import static org.apache.phoenix.schema.LiteralTTLExpression.TTL_EXPRESSION_NOT_DEFINED;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
+import static org.apache.phoenix.util.TestUtil.retainSingleQuotes;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -41,6 +42,7 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.schema.ConditionalTTLExpressionTest;
 import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -98,6 +100,48 @@ public abstract class SetPropertyIT extends ParallelStatsDisabledIT {
       sb.append(tableDDLOptions);
     }
     return sb.toString();
+  }
+
+  @Test
+  public void testSettingCondTTLOnTableWithRelaxedTTLAndUncoveredIndex() throws Exception {
+    String ddlTemplate = "create table %s (id varchar not null primary key, "
+      + "col1 integer, col2 integer, col3 double, col4 varchar) IS_STRICT_TTL = false";
+    String tableName = generateUniqueName();
+    String indexTemplate = "create uncovered index %s on %s (col1)";
+    String indexName = generateUniqueName();
+    String ttl = "col2 > 100 AND col4='expired'";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String ddl = String.format(ddlTemplate, tableName);
+      conn.createStatement().execute(ddl);
+      ddl = String.format(indexTemplate, indexName, tableName);
+      conn.createStatement().execute(ddl);
+      ddl = String.format("alter table %s set TTL = '%s'", tableName, retainSingleQuotes(ttl));
+      conn.createStatement().execute(ddl);
+      ConditionalTTLExpressionTest.assertConditionTTL(conn, tableName, ttl);
+      ConditionalTTLExpressionTest.assertTTL(conn, indexName, TTL_EXPRESSION_NOT_DEFINED);
+    }
+  }
+
+  @Test
+  public void testSettingCondTTLOnTableWithStrictLiteralTTLAndUncoveredIndex() throws Exception {
+    String ddlTemplate = "create table %s (id varchar not null primary key, "
+      + "col1 integer, col2 integer, col3 double, col4 varchar) TTL = 10000";
+    String tableName = generateUniqueName();
+    String indexTemplate = "create uncovered index %s on %s (col1)";
+    String indexName = generateUniqueName();
+    String ttl = "col2 > 100 AND col4='expired'";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String ddl = String.format(ddlTemplate, tableName);
+      conn.createStatement().execute(ddl);
+      ddl = String.format(indexTemplate, indexName, tableName);
+      conn.createStatement().execute(ddl);
+      ddl = String.format("alter table %s set TTL = '%s', IS_STRICT_TTL = false", tableName,
+        retainSingleQuotes(ttl));
+      conn.createStatement().execute(ddl);
+      ConditionalTTLExpressionTest.assertConditionTTL(conn, tableName, ttl);
+      ConditionalTTLExpressionTest.assertIsStrictTTL(conn, tableName, false);
+      ConditionalTTLExpressionTest.assertTTL(conn, indexName, TTL_EXPRESSION_NOT_DEFINED);
+    }
   }
 
   @Test

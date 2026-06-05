@@ -2098,6 +2098,415 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
     }
   }
 
+  @Test
+  public void testRVCWithUpperBoundOnIndex() throws Exception {
+    Connection conn = nextConnection(getUrl());
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+
+    String ddl = "CREATE TABLE " + tableName + " (" + "pk VARCHAR NOT NULL, "
+      + "sk BIGINT NOT NULL, " + "category VARCHAR, " + "score DOUBLE, " + "data VARCHAR, "
+      + "CONSTRAINT table_pk PRIMARY KEY (pk, sk))";
+    conn.createStatement().execute(ddl);
+
+    conn = nextConnection(getUrl());
+    conn.createStatement()
+      .execute("CREATE INDEX " + indexName + " ON " + tableName + " (category, score)");
+
+    conn = nextConnection(getUrl());
+    PreparedStatement stmt = conn.prepareStatement(
+      "UPSERT INTO " + tableName + " (pk, sk, category, score, data) VALUES (?, ?, ?, ?, ?)");
+    for (int i = 0; i < 20000; i++) {
+      stmt.setString(1, "pk_" + (i % 100));
+      stmt.setLong(2, i);
+      stmt.setString(3, "category_" + (i % 10));
+      stmt.setDouble(4, i);
+      stmt.setString(5, "data_" + i);
+      stmt.execute();
+    }
+    conn.commit();
+
+    conn = nextConnection(getUrl());
+    // category_0 rows have scores: 0, 10, 20, ..., 19990
+    // With score <= 5000 AND (score, pk, sk) > (4990, 'pk_90', 4990):
+    // score=4990 row is (pk_90, 4990) which is NOT > the RVC bound (exact match)
+    // score=5000 row is (pk_0, 5000) which satisfies both conditions
+    // score=5010+ rows must be excluded by score <= 5000
+    String query =
+      "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score " + "FROM "
+        + tableName + " " + "WHERE category = 'category_0' " + "AND score <= 5000 "
+        + "AND (score, pk, sk) > (4990, 'pk_90', 4990) "
+        + "ORDER BY category ASC, score ASC, pk ASC, sk ASC " + "LIMIT 100";
+    ResultSet rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "pk_0", 5000, "category_0", 5000.0);
+    assertFalse(rs.next());
+
+    // Verify that score < 5000 returns no row
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_0' " + "AND score < 5000 "
+      + "AND (score, pk, sk) > (4990, 'pk_90', 4990) "
+      + "ORDER BY category ASC, score ASC, pk ASC, sk ASC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_0' " + "AND score <= 5000 "
+      + "AND (score, pk, sk) > (4990, 'pk_90', 4990) "
+      + "ORDER BY category ASC, score DESC, pk DESC, sk DESC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "pk_0", 5000, "category_0", 5000.0);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_0' " + "AND score < 5000 "
+      + "AND (score, pk, sk) > (4990, 'pk_90', 4990) "
+      + "ORDER BY category ASC, score DESC, pk DESC, sk DESC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertFalse("Expected no rows with score < 5000 and DESC ordering", rs.next());
+
+    // score >= 4980 with RVC upper bound < (5010, 'pk_10', 5010).
+    // category_0 rows with score >= 4980:
+    // score=4980: (pk_80, 4980)
+    // score=4990: (pk_90, 4990)
+    // score=5000: (pk_0, 5000)
+    // score=5010: (pk_10, 5010) -> RVC equal, NOT strictly less -> excluded
+    // Expected 3 rows in ASC order.
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_0' " + "AND score >= 4980 "
+      + "AND (score, pk, sk) < (5010, 'pk_10', 5010) "
+      + "ORDER BY category ASC, score ASC, pk ASC, sk ASC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "pk_80", 4980, "category_0", 4980.0);
+    assertRow(rs, "pk_90", 4990, "category_0", 4990.0);
+    assertRow(rs, "pk_0", 5000, "category_0", 5000.0);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_0' " + "AND score >= 4980 "
+      + "AND (score, pk, sk) < (5010, 'pk_10', 5010) "
+      + "ORDER BY category ASC, score DESC, pk DESC, sk DESC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "pk_0", 5000, "category_0", 5000.0);
+    assertRow(rs, "pk_90", 4990, "category_0", 4990.0);
+    assertRow(rs, "pk_80", 4980, "category_0", 4980.0);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_0' "
+      + "AND (score, pk) <= (5000, 'pk_0') " + "AND (score, pk, sk) > (4970, 'pk_70', 4970) "
+      + "ORDER BY category ASC, score ASC, pk ASC, sk ASC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "pk_80", 4980, "category_0", 4980.0);
+    assertRow(rs, "pk_90", 4990, "category_0", 4990.0);
+    assertRow(rs, "pk_0", 5000, "category_0", 5000.0);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_0' "
+      + "AND (score, pk) <= (5000, 'pk_0') " + "AND (score, pk, sk) > (4970, 'pk_70', 4970) "
+      + "ORDER BY category ASC, score DESC, pk DESC, sk DESC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "pk_0", 5000, "category_0", 5000.0);
+    assertRow(rs, "pk_90", 4990, "category_0", 4990.0);
+    assertRow(rs, "pk_80", 4980, "category_0", 4980.0);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_0' "
+      + "AND (score, pk) < (5000, 'pk_0') " + "AND (score, pk, sk) > (4970, 'pk_70', 4970) "
+      + "ORDER BY category ASC, score ASC, pk ASC, sk ASC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "pk_80", 4980, "category_0", 4980.0);
+    assertRow(rs, "pk_90", 4990, "category_0", 4990.0);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_0' "
+      + "AND (score, pk) < (5000, 'pk_0') " + "AND (score, pk, sk) > (4970, 'pk_70', 4970) "
+      + "ORDER BY category ASC, score DESC, pk DESC, sk DESC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "pk_90", 4990, "category_0", 4990.0);
+    assertRow(rs, "pk_80", 4980, "category_0", 4980.0);
+    assertFalse(rs.next());
+  }
+
+  @Test
+  public void testRVCWithAlternatingFixedVarWidthPK() throws Exception {
+    Connection conn = nextConnection(getUrl());
+    String tableName = generateUniqueName();
+
+    String ddl = "CREATE TABLE " + tableName + " (" + "a VARCHAR NOT NULL, " + "b BIGINT NOT NULL, "
+      + "c VARCHAR NOT NULL, " + "d INTEGER NOT NULL, " + "e VARCHAR NOT NULL, "
+      + "f BIGINT NOT NULL, " + "val VARCHAR, " + "CONSTRAINT pk PRIMARY KEY (a, b, c, d, e, f))";
+    conn.createStatement().execute(ddl);
+
+    conn = nextConnection(getUrl());
+    PreparedStatement stmt = conn.prepareStatement(
+      "UPSERT INTO " + tableName + " (a, b, c, d, e, f, val) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    for (int i = 0; i < 50000; i++) {
+      stmt.setString(1, "a_" + (i % 5));
+      stmt.setLong(2, i);
+      stmt.setString(3, "c_" + (i % 7));
+      stmt.setInt(4, i % 100);
+      stmt.setString(5, "e_" + (i % 3));
+      stmt.setLong(6, i);
+      stmt.setString(7, "val_" + i);
+      stmt.execute();
+      if (i % 5000 == 0) {
+        conn.commit();
+      }
+    }
+    conn.commit();
+
+    conn = nextConnection(getUrl());
+    String query = "SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = 'a_0' AND b >= 24990 AND b <= 25010" + " ORDER BY a, b, c, d, e, f";
+    ResultSet rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "a_0", 24990, "c_0", 90, "e_0", 24990);
+    assertRow(rs, "a_0", 24995, "c_5", 95, "e_2", 24995);
+    assertRow(rs, "a_0", 25000, "c_3", 0, "e_1", 25000);
+    assertRow(rs, "a_0", 25005, "c_1", 5, "e_0", 25005);
+    assertRow(rs, "a_0", 25010, "c_6", 10, "e_2", 25010);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT a, b, c, d, e, f FROM " + tableName + " WHERE a = 'a_0' AND b <= 25010"
+      + " AND (b > 24995 OR (b = 24995 AND c > 'c_5'))" + " ORDER BY a, b, c, d, e, f LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "a_0", 25000, "c_3", 0, "e_1", 25000);
+    assertRow(rs, "a_0", 25005, "c_1", 5, "e_0", 25005);
+    assertRow(rs, "a_0", 25010, "c_6", 10, "e_2", 25010);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = 'a_0' AND b <= 25010 AND (b, c) > (24995, 'c_5')"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "a_0", 25000, "c_3", 0, "e_1", 25000);
+    assertRow(rs, "a_0", 25005, "c_1", 5, "e_0", 25005);
+    assertRow(rs, "a_0", 25010, "c_6", 10, "e_2", 25010);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = 'a_0' AND b <= 25010 AND (b, c, d) > (25000, 'c_3', 0)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "a_0", 25005, "c_1", 5, "e_0", 25005);
+    assertRow(rs, "a_0", 25010, "c_6", 10, "e_2", 25010);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = 'a_0' AND b <= 25010 AND (b, c, d, e) > (25000, 'c_3', 0, 'e_1')"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "a_0", 25005, "c_1", 5, "e_0", 25005);
+    assertRow(rs, "a_0", 25010, "c_6", 10, "e_2", 25010);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query =
+      "SELECT a, b, c, d, e, f FROM " + tableName + " WHERE a = 'a_0' AND (b, c) <= (25005, 'c_1')"
+        + " AND (b, c, d) > (24995, 'c_5', 95)" + " ORDER BY a, b, c, d, e, f LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "a_0", 25000, "c_3", 0, "e_1", 25000);
+    assertRow(rs, "a_0", 25005, "c_1", 5, "e_0", 25005);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = 'a_0' AND (b, c, d) <= (25005, 'c_1', 5)"
+      + " AND (b, c, d, e, f) > (24995, 'c_5', 95, 'e_2', 24995)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "a_0", 25000, "c_3", 0, "e_1", 25000);
+    assertRow(rs, "a_0", 25005, "c_1", 5, "e_0", 25005);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = 'a_0' AND b >= 24995 AND (b, c, d) < (25010, 'c_6', 10)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "a_0", 24995, "c_5", 95, "e_2", 24995);
+    assertRow(rs, "a_0", 25000, "c_3", 0, "e_1", 25000);
+    assertRow(rs, "a_0", 25005, "c_1", 5, "e_0", 25005);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = 'a_0' AND b <= 25010 AND (b, c) > (24995, 'c_5')"
+      + " ORDER BY a ASC, b DESC, c DESC, d DESC, e DESC, f DESC LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "a_0", 25010, "c_6", 10, "e_2", 25010);
+    assertRow(rs, "a_0", 25005, "c_1", 5, "e_0", 25005);
+    assertRow(rs, "a_0", 25000, "c_3", 0, "e_1", 25000);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = 'a_0' AND (b, c) <= (25005, 'c_1')" + " AND (b, c, d) > (24995, 'c_5', 95)"
+      + " ORDER BY a ASC, b DESC, c DESC, d DESC, e DESC, f DESC LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "a_0", 25005, "c_1", 5, "e_0", 25005);
+    assertRow(rs, "a_0", 25000, "c_3", 0, "e_1", 25000);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = 'a_0' AND b >= 24995 AND (b, c, d) < (25010, 'c_6', 10)"
+      + " ORDER BY a ASC, b DESC, c DESC, d DESC, e DESC, f DESC LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "a_0", 25005, "c_1", 5, "e_0", 25005);
+    assertRow(rs, "a_0", 25000, "c_3", 0, "e_1", 25000);
+    assertRow(rs, "a_0", 24995, "c_5", 95, "e_2", 24995);
+    assertFalse(rs.next());
+  }
+
+  @Test
+  public void testRVCWithBetweenOnIndex() throws Exception {
+    Connection conn = nextConnection(getUrl());
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+
+    String ddl = "CREATE TABLE " + tableName + " (" + "pk VARCHAR NOT NULL, "
+      + "sk BIGINT NOT NULL, " + "category VARCHAR, " + "score DOUBLE, " + "data VARCHAR, "
+      + "CONSTRAINT table_pk PRIMARY KEY (pk, sk))";
+    conn.createStatement().execute(ddl);
+
+    conn = nextConnection(getUrl());
+    conn.createStatement()
+      .execute("CREATE INDEX " + indexName + " ON " + tableName + " (category, score)");
+
+    conn = nextConnection(getUrl());
+    PreparedStatement stmt = conn.prepareStatement(
+      "UPSERT INTO " + tableName + " (pk, sk, category, score, data) VALUES (?, ?, ?, ?, ?)");
+    for (int i = 0; i < 20000; i++) {
+      stmt.setString(1, "pk_" + (i % 100));
+      stmt.setLong(2, i);
+      stmt.setString(3, "category_" + (i % 10));
+      stmt.setDouble(4, i);
+      stmt.setString(5, "data_" + i);
+      stmt.execute();
+    }
+    conn.commit();
+
+    // category_7 rows have scores: 7, 17, 27, ..., 19997
+    // Scores in [2000, 8000]: 2007, 2017, ..., 7997
+    // With (score, pk, sk) > (7997, 'pk_97', 7997):
+    // score=7997 row is (pk_97, 7997) which is NOT > the RVC bound (exact match)
+    // Next category_7 score is 8007 which exceeds BETWEEN upper bound of 8000
+    conn = nextConnection(getUrl());
+    String query =
+      "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score " + "FROM "
+        + tableName + " " + "WHERE category = 'category_7' " + "AND score BETWEEN 2000 AND 8000 "
+        + "AND (score, pk, sk) > (7997, 'pk_97', 7997) "
+        + "ORDER BY category ASC, score ASC, pk ASC, sk ASC " + "LIMIT 100";
+    ResultSet rs = conn.createStatement().executeQuery(query);
+    assertFalse(rs.next());
+
+    // Verify that using >= instead of > includes the exact match row (7997, 'pk_97', 7997).
+    conn = nextConnection(getUrl());
+    String queryGte =
+      "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score " + "FROM "
+        + tableName + " " + "WHERE category = 'category_7' " + "AND score BETWEEN 2000 AND 8000 "
+        + "AND (score, pk, sk) >= (7997, 'pk_97', 7997) "
+        + "ORDER BY category ASC, score ASC, pk ASC, sk ASC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(queryGte);
+    assertRow(rs, "pk_97", 7997, "category_7", 7997.0);
+    assertFalse("Expected only one row since next category_7 score (8007) exceeds "
+      + "BETWEEN upper bound of 8000.", rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_7' "
+      + "AND score BETWEEN 2000 AND 8000 " + "AND (score, pk, sk) > (7997, 'pk_97', 7997) "
+      + "ORDER BY category ASC, score DESC, pk DESC, sk DESC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertFalse("Expected no rows with > RVC bound and DESC ordering", rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_7' "
+      + "AND score BETWEEN 2000 AND 8000 " + "AND (score, pk, sk) >= (7997, 'pk_97', 7997) "
+      + "ORDER BY category ASC, score DESC, pk DESC, sk DESC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "pk_97", 7997, "category_7", 7997.0);
+    assertFalse("Expected only one row with >= RVC bound and DESC ordering", rs.next());
+
+    // BETWEEN with RVC upper bound < (2037, 'pk_37', 2037).
+    // category_7 scores in [2000, 8000]: 2007, 2017, 2027, 2037, ...
+    // score=2007: (2007, 'pk_7', 2007) < (2037, 'pk_37', 2037)? Yes -> included
+    // score=2017: (2017, 'pk_17', 2017) < (2037, 'pk_37', 2037)? Yes -> included
+    // score=2027: (2027, 'pk_27', 2027) < (2037, 'pk_37', 2037)? Yes -> included
+    // score=2037: (2037, 'pk_37', 2037) < (2037, 'pk_37', 2037)? No (equal) -> excluded
+    // Expected 3 rows in ASC order.
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_7' "
+      + "AND score BETWEEN 2000 AND 8000 " + "AND (score, pk, sk) < (2037, 'pk_37', 2037) "
+      + "ORDER BY category ASC, score ASC, pk ASC, sk ASC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "pk_7", 2007, "category_7", 2007.0);
+    assertRow(rs, "pk_17", 2017, "category_7", 2017.0);
+    assertRow(rs, "pk_27", 2027, "category_7", 2027.0);
+    assertFalse("Expected exactly 3 rows with BETWEEN and RVC < (2037, 'pk_37', 2037)", rs.next());
+
+    conn = nextConnection(getUrl());
+    query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ pk, sk, category, score "
+      + "FROM " + tableName + " " + "WHERE category = 'category_7' "
+      + "AND score BETWEEN 2000 AND 8000 " + "AND (score, pk, sk) < (2037, 'pk_37', 2037) "
+      + "ORDER BY category ASC, score DESC, pk DESC, sk DESC " + "LIMIT 100";
+    rs = conn.createStatement().executeQuery(query);
+    assertRow(rs, "pk_27", 2027, "category_7", 2027.0);
+    assertRow(rs, "pk_17", 2017, "category_7", 2017.0);
+    assertRow(rs, "pk_7", 2007, "category_7", 2007.0);
+    assertFalse("Expected exactly 3 rows (DESC) with BETWEEN and RVC < (2037, 'pk_37', 2037)",
+      rs.next());
+  }
+
+  private void assertRow(ResultSet rs, String pk, long sk, String category, double score)
+    throws SQLException {
+    assertTrue(rs.next());
+    assertEquals(pk, rs.getString("pk"));
+    assertEquals(sk, rs.getLong("sk"));
+    assertEquals(category, rs.getString("category"));
+    assertEquals(score, rs.getDouble("score"), 0.000);
+  }
+
+  private void assertRow(ResultSet rs, String a, long b, String c, int d, String e, long f)
+    throws SQLException {
+    assertTrue(rs.next());
+    assertEquals(a, rs.getString("a"));
+    assertEquals(b, rs.getLong("b"));
+    assertEquals(c, rs.getString("c"));
+    assertEquals(d, rs.getInt("d"));
+    assertEquals(e, rs.getString("e"));
+    assertEquals(f, rs.getLong("f"));
+  }
+
+  private void assertRowBytes(ResultSet rs, byte[] a, long b, byte[] c, int d, byte[] e, long f)
+    throws SQLException {
+    assertTrue(rs.next());
+    assertArrayEquals(a, rs.getBytes("a"));
+    assertEquals(b, rs.getLong("b"));
+    assertArrayEquals(c, rs.getBytes("c"));
+    assertEquals(d, rs.getInt("d"));
+    assertArrayEquals(e, rs.getBytes("e"));
+    assertEquals(f, rs.getLong("f"));
+  }
+
   private StringBuilder generateQueryToTest(int numItemsInClause, String fullViewName) {
     StringBuilder querySb =
       new StringBuilder("SELECT OBJECT_ID,OBJECT_DATA2,OBJECT_DATA FROM " + fullViewName);
@@ -2166,4 +2575,458 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
     PreparedStatement stmt2 = tenantConn.prepareStatement(tenantViewDdl);
     stmt2.execute();
   }
+
+  @Test
+  public void testRVCOverlappingKeyRange() throws Exception {
+    String tableName = generateUniqueName();
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName + " (" + "hk VARCHAR NOT NULL, "
+          + "sk VARCHAR NOT NULL, " + "ihk VARCHAR NOT NULL, " + "isk VARCHAR NOT NULL, "
+          + "data VARCHAR " + "CONSTRAINT pk PRIMARY KEY (hk, sk, ihk, isk))");
+
+      PreparedStatement upsert = conn.prepareStatement(
+        "UPSERT INTO " + tableName + " (hk, sk, ihk, isk, data) VALUES (?, ?, ?, ?, ?)");
+      for (int i = 1; i <= 20; i++) {
+        String pad = String.format("%02d", i);
+        upsert.setString(1, "hk");
+        upsert.setString(2, "sk100");
+        upsert.setString(3, "idx");
+        upsert.setString(4, "isk" + pad);
+        upsert.setString(5, "data" + pad);
+        upsert.execute();
+      }
+      conn.commit();
+
+      String query = "SELECT * FROM " + tableName + " WHERE hk = 'hk' AND "
+        + "(sk, ihk, isk) > ('sk100', 'idx', 'isk11') ORDER BY sk, ihk, isk LIMIT 5";
+      assertValues1(conn, query);
+
+      query = "SELECT * FROM " + tableName + " WHERE hk = 'hk' AND sk <= 'sk200' "
+        + "AND (sk, ihk, isk) > ('sk100', 'idx', 'isk11') ORDER BY sk, ihk, isk" + " LIMIT 5";
+      assertValues1(conn, query);
+
+      query =
+        "SELECT * FROM " + tableName + " WHERE hk = 'hk'" + " AND sk <= 'sk200' AND sk >= 'sk1'"
+          + " AND (sk, ihk, isk) > ('sk100', 'idx', 'isk11')" + " ORDER BY sk, ihk, isk LIMIT 5";
+      assertValues1(conn, query);
+
+      query = "SELECT * FROM " + tableName + " WHERE hk = 'hk' AND sk >= 'sk000' "
+        + "AND (sk, ihk, isk) >= ('sk100', 'idx', 'isk12') "
+        + "AND (sk, ihk, isk) < ('sk100', 'idx', 'isk17') ORDER BY sk, ihk, isk";
+      assertValues1(conn, query);
+
+      query = "SELECT * FROM " + tableName + " WHERE hk = 'hk' AND sk >= 'sk000' "
+        + "AND (sk, ihk, isk) > ('sk100', 'idx', 'isk11') "
+        + "AND (sk, ihk, isk) < ('sk100', 'idx', 'isk17') ORDER BY sk, ihk, isk";
+      assertValues1(conn, query);
+
+      query = "SELECT * FROM " + tableName + " WHERE hk = 'hk' AND sk >= 'sk000' "
+        + "AND (sk, ihk, isk) < ('sk100', 'idx', 'isk17') ORDER BY sk, ihk, isk";
+      assertValues2(conn, query);
+
+      query = "SELECT hk, sk, ihk, isk FROM " + tableName
+        + " WHERE hk = 'hk' AND sk <= 'sk200' AND (sk, ihk, isk) < ('sk100', 'idx', 'isk11')"
+        + " ORDER BY hk ASC, sk DESC, ihk DESC, isk DESC LIMIT 5";
+      assertValues3(conn, query);
+    }
+  }
+
+  private static void assertValues1(Connection conn, String query) throws SQLException {
+    try (Statement stmt = conn.createStatement()) {
+      ResultSet rs = stmt.executeQuery(query);
+      List<String> results = Lists.newArrayList();
+      while (rs.next()) {
+        results.add(rs.getString("isk"));
+      }
+      assertEquals(5, results.size());
+      assertFalse("Should not include isk11", results.contains("isk11"));
+      assertEquals("isk12", results.get(0));
+      assertEquals("isk13", results.get(1));
+      assertEquals("isk14", results.get(2));
+      assertEquals("isk15", results.get(3));
+      assertEquals("isk16", results.get(4));
+    }
+  }
+
+  private static void assertValues2(Connection conn, String query) throws SQLException {
+    try (Statement stmt = conn.createStatement()) {
+      ResultSet rs = stmt.executeQuery(query);
+      List<String> results = Lists.newArrayList();
+      while (rs.next()) {
+        results.add(rs.getString("isk"));
+      }
+      assertEquals(16, results.size());
+      assertTrue("Should not include isk17-isk20 range", !results.contains("isk17")
+        && !results.contains("isk18") && !results.contains("isk19") && !results.contains("isk20"));
+      assertEquals("isk01", results.get(0));
+      assertEquals("isk16", results.get(15));
+    }
+  }
+
+  private static void assertValues3(Connection conn, String query) throws SQLException {
+    try (Statement stmt = conn.createStatement()) {
+      ResultSet rs = stmt.executeQuery(query);
+      List<String> results = Lists.newArrayList();
+      while (rs.next()) {
+        results.add(rs.getString("isk"));
+      }
+      assertEquals(5, results.size());
+      assertFalse(results.contains("isk11"));
+      assertEquals("isk10", results.get(0));
+      assertEquals("isk09", results.get(1));
+      assertEquals("isk08", results.get(2));
+      assertEquals("isk07", results.get(3));
+      assertEquals("isk06", results.get(4));
+    }
+  }
+
+  @Test
+  public void testRVCWithAlternatingFixedVarBinaryEncodedPK() throws Exception {
+    Connection conn = nextConnection(getUrl());
+    String tableName = generateUniqueName();
+
+    String ddl = "CREATE TABLE " + tableName + " (" + "a VARBINARY_ENCODED NOT NULL, "
+      + "b BIGINT NOT NULL, " + "c VARBINARY_ENCODED NOT NULL, " + "d INTEGER NOT NULL, "
+      + "e VARBINARY_ENCODED NOT NULL, " + "f BIGINT NOT NULL, " + "val VARCHAR, "
+      + "CONSTRAINT pk PRIMARY KEY (a, b, c, d, e, f))";
+    conn.createStatement().execute(ddl);
+
+    conn = nextConnection(getUrl());
+    PreparedStatement stmt = conn.prepareStatement(
+      "UPSERT INTO " + tableName + " (a, b, c, d, e, f, val) VALUES (?, ?, ?, ?, ?, ?, ?)");
+    for (int i = 0; i < 5000; i++) {
+      stmt.setBytes(1, new byte[] { 0x00, 0x0A, (byte) (i % 5) });
+      stmt.setLong(2, i);
+      stmt.setBytes(3, new byte[] { 0x0C, (byte) (i % 7) });
+      stmt.setInt(4, i % 100);
+      stmt.setBytes(5, new byte[] { 0x00, 0x0E, (byte) (i % 3) });
+      stmt.setLong(6, i);
+      stmt.setString(7, "val_" + i);
+      stmt.execute();
+      if (i % 1000 == 0) {
+        conn.commit();
+      }
+    }
+    conn.commit();
+
+    byte[] a0 = { 0x00, 0x0A, 0 };
+    byte[] c5 = { 0x0C, 5 };
+    byte[] c3 = { 0x0C, 3 };
+    byte[] c1 = { 0x0C, 1 };
+    byte[] c6 = { 0x0C, 6 };
+    byte[] c4 = { 0x0C, 4 };
+    byte[] e0 = { 0x00, 0x0E, 0 };
+    byte[] e1 = { 0x00, 0x0E, 1 };
+    byte[] e2 = { 0x00, 0x0E, 2 };
+
+    conn = nextConnection(getUrl());
+    PreparedStatement q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b >= 2490 AND b <= 2510 ORDER BY a, b, c, d, e, f");
+    q.setBytes(1, a0);
+    ResultSet rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2490, c5, 90, e0, 2490);
+    assertRowBytes(rs, a0, 2495, c3, 95, e2, 2495);
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2510, c4, 10, e2, 2510);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b <= 2510 AND (b > 2495 OR (b = 2495 AND c > ?))"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setBytes(2, c3);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2510, c4, 10, e2, 2510);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b <= 2510 AND (b, c) > (?, ?)" + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2495);
+    q.setBytes(3, c3);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2510, c4, 10, e2, 2510);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b <= 2510 AND (b, c, d) > (?, ?, ?)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2500);
+    q.setBytes(3, c1);
+    q.setInt(4, 0);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2510, c4, 10, e2, 2510);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b <= 2510 AND (b, c, d, e) > (?, ?, ?, ?)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2500);
+    q.setBytes(3, c1);
+    q.setInt(4, 0);
+    q.setBytes(5, e1);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2510, c4, 10, e2, 2510);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND (b, c) <= (?, ?) AND (b, c, d) > (?, ?, ?)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2505);
+    q.setBytes(3, c6);
+    q.setLong(4, 2495);
+    q.setBytes(5, c3);
+    q.setInt(6, 95);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND (b, c, d) <= (?, ?, ?) AND (b, c, d, e, f) > (?, ?, ?, ?, ?)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2505);
+    q.setBytes(3, c6);
+    q.setInt(4, 5);
+    q.setLong(5, 2495);
+    q.setBytes(6, c3);
+    q.setInt(7, 95);
+    q.setBytes(8, e2);
+    q.setLong(9, 2495);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b >= 2495 AND (b, c, d) < (?, ?, ?)"
+      + " ORDER BY a, b, c, d, e, f LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2510);
+    q.setBytes(3, c4);
+    q.setInt(4, 10);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2495, c3, 95, e2, 2495);
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement(
+      "SELECT a, b, c, d, e, f FROM " + tableName + " WHERE a = ? AND b <= 2510 AND (b, c) > (?, ?)"
+        + " ORDER BY a ASC, b DESC, c DESC, d DESC, e DESC, f DESC LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2495);
+    q.setBytes(3, c3);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2510, c4, 10, e2, 2510);
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND (b, c) <= (?, ?) AND (b, c, d) > (?, ?, ?)"
+      + " ORDER BY a ASC, b DESC, c DESC, d DESC, e DESC, f DESC LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2505);
+    q.setBytes(3, c6);
+    q.setLong(4, 2495);
+    q.setBytes(5, c3);
+    q.setInt(6, 95);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertFalse(rs.next());
+
+    conn = nextConnection(getUrl());
+    q = conn.prepareStatement("SELECT a, b, c, d, e, f FROM " + tableName
+      + " WHERE a = ? AND b >= 2495 AND (b, c, d) < (?, ?, ?)"
+      + " ORDER BY a ASC, b DESC, c DESC, d DESC, e DESC, f DESC LIMIT 100");
+    q.setBytes(1, a0);
+    q.setLong(2, 2510);
+    q.setBytes(3, c4);
+    q.setInt(4, 10);
+    rs = q.executeQuery();
+    assertRowBytes(rs, a0, 2505, c6, 5, e0, 2505);
+    assertRowBytes(rs, a0, 2500, c1, 0, e1, 2500);
+    assertRowBytes(rs, a0, 2495, c3, 95, e2, 2495);
+    assertFalse(rs.next());
+  }
+
+  @Test
+  public void testRVCWithUncoveredIndex1() throws Exception {
+    Connection conn = nextConnection(getUrl());
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+
+    String ddl = "CREATE TABLE " + tableName + " (HK VARBINARY_ENCODED NOT NULL,"
+      + "  SK VARBINARY_ENCODED NOT NULL," + "  GSI_HK VARBINARY_ENCODED,"
+      + "  GSI_SK VARBINARY_ENCODED," + "  DATA VARCHAR," + "  CONSTRAINT pk PRIMARY KEY(HK, SK))";
+    conn.createStatement().execute(ddl);
+
+    conn = nextConnection(getUrl());
+    conn.createStatement()
+      .execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (GSI_HK, GSI_SK)");
+
+    conn = nextConnection(getUrl());
+    PreparedStatement upsert = conn.prepareStatement(
+      "UPSERT INTO " + tableName + " (HK, SK, GSI_HK, GSI_SK, DATA) VALUES (?, ?, ?, ?, ?)");
+
+    byte[] gsiHk = new byte[] { 0x00, 0x00, 0x00, 0x0A };
+    byte[] gsiSk = "1".getBytes();
+
+    byte[] hk1 = new byte[] { 0x0B, 0x01 };
+    byte[] sk1 = "1".getBytes();
+    upsert.setBytes(1, hk1);
+    upsert.setBytes(2, sk1);
+    upsert.setBytes(3, gsiHk);
+    upsert.setBytes(4, gsiSk);
+    upsert.setString(5, "row1-should-be-excluded");
+    upsert.execute();
+
+    byte[] hk2 = new byte[] { 0x0B, 0x01 };
+    byte[] sk2 = "2".getBytes();
+    upsert.setBytes(1, hk2);
+    upsert.setBytes(2, sk2);
+    upsert.setBytes(3, gsiHk);
+    upsert.setBytes(4, gsiSk);
+    upsert.setString(5, "row2-include");
+    upsert.execute();
+
+    byte[] hk3 = new byte[] { 0x0B, 0x02 };
+    byte[] sk3 = "1".getBytes();
+    upsert.setBytes(1, hk3);
+    upsert.setBytes(2, sk3);
+    upsert.setBytes(3, gsiHk);
+    upsert.setBytes(4, gsiSk);
+    upsert.setString(5, "row3-include");
+    upsert.execute();
+
+    conn.commit();
+
+    conn = nextConnection(getUrl());
+    String query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ "
+      + "HK, SK, DATA FROM " + tableName + " WHERE GSI_HK = ?" + " AND GSI_SK = ?"
+      + " AND (GSI_SK, HK, SK) > (?, ?, ?)" + " ORDER BY GSI_SK, HK, SK";
+
+    PreparedStatement stmt = conn.prepareStatement(query);
+    stmt.setBytes(1, gsiHk);
+    stmt.setBytes(2, gsiSk);
+    stmt.setBytes(3, gsiSk);
+    stmt.setBytes(4, hk1);
+    stmt.setBytes(5, sk1);
+    ResultSet rs = stmt.executeQuery();
+
+    assertTrue("Expected row2 to be returned", rs.next());
+    assertArrayEquals(hk2, rs.getBytes("HK"));
+    assertArrayEquals(sk2, rs.getBytes("SK"));
+    assertEquals("row2-include", rs.getString("DATA"));
+
+    assertTrue("Expected row3 to be returned", rs.next());
+    assertArrayEquals(hk3, rs.getBytes("HK"));
+    assertArrayEquals(sk3, rs.getBytes("SK"));
+    assertEquals("row3-include", rs.getString("DATA"));
+
+    assertFalse("Expected only 2 rows but got more", rs.next());
+  }
+
+  @Test
+  public void testRVCWithUncoveredIndex2() throws Exception {
+    Connection conn = nextConnection(getUrl());
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+
+    String ddl = "CREATE TABLE " + tableName + " (HK VARCHAR NOT NULL," + "  SK VARCHAR NOT NULL,"
+      + "  GSI_HK VARCHAR," + "  GSI_SK VARCHAR," + "  DATA VARCHAR,"
+      + "  CONSTRAINT pk PRIMARY KEY(HK, SK))";
+    conn.createStatement().execute(ddl);
+
+    conn = nextConnection(getUrl());
+    conn.createStatement()
+      .execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (GSI_HK, GSI_SK)");
+
+    conn = nextConnection(getUrl());
+    PreparedStatement upsert = conn.prepareStatement(
+      "UPSERT INTO " + tableName + " (HK, SK, GSI_HK, GSI_SK, DATA) VALUES (?, ?, ?, ?, ?)");
+
+    String gsiHk = "gsi_hk_1";
+    String gsiSk = "gsi_sk_1";
+
+    String hk1 = "hk_bb";
+    String sk1 = "sk_1";
+    upsert.setString(1, hk1);
+    upsert.setString(2, sk1);
+    upsert.setString(3, gsiHk);
+    upsert.setString(4, gsiSk);
+    upsert.setString(5, "row1-should-be-excluded");
+    upsert.execute();
+
+    String hk2 = "hk_bb";
+    String sk2 = "sk_2";
+    upsert.setString(1, hk2);
+    upsert.setString(2, sk2);
+    upsert.setString(3, gsiHk);
+    upsert.setString(4, gsiSk);
+    upsert.setString(5, "row2-include");
+    upsert.execute();
+
+    String hk3 = "hk_cc";
+    String sk3 = "sk_1";
+    upsert.setString(1, hk3);
+    upsert.setString(2, sk3);
+    upsert.setString(3, gsiHk);
+    upsert.setString(4, gsiSk);
+    upsert.setString(5, "row3-include");
+    upsert.execute();
+
+    conn.commit();
+
+    conn = nextConnection(getUrl());
+    String query = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ "
+      + "HK, SK, DATA FROM " + tableName + " WHERE GSI_HK = ?" + " AND GSI_SK = ?"
+      + " AND (GSI_SK, HK, SK) > (?, ?, ?)" + " ORDER BY GSI_SK, HK, SK";
+
+    PreparedStatement stmt = conn.prepareStatement(query);
+    stmt.setString(1, gsiHk);
+    stmt.setString(2, gsiSk);
+    stmt.setString(3, gsiSk);
+    stmt.setString(4, hk1);
+    stmt.setString(5, sk1);
+    ResultSet rs = stmt.executeQuery();
+
+    assertTrue("Expected row2 to be returned", rs.next());
+    assertEquals(hk2, rs.getString("HK"));
+    assertEquals(sk2, rs.getString("SK"));
+    assertEquals("row2-include", rs.getString("DATA"));
+
+    assertTrue("Expected row3 to be returned", rs.next());
+    assertEquals(hk3, rs.getString("HK"));
+    assertEquals(sk3, rs.getString("SK"));
+    assertEquals("row3-include", rs.getString("DATA"));
+
+    assertFalse("Expected only 2 rows but got more", rs.next());
+  }
+
 }

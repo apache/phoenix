@@ -32,7 +32,7 @@ public class UpsertStatement extends DMLStatement implements RowReturningDMLStat
   }
 
   private final List<ColumnName> columns;
-  private final List<ParseNode> values;
+  private final List<List<ParseNode>> values;
   private final SelectStatement select;
   private final HintNode hint;
   private final List<Pair<ColumnName, ParseNode>> onDupKeyPairs;
@@ -40,7 +40,7 @@ public class UpsertStatement extends DMLStatement implements RowReturningDMLStat
   private final boolean returningRow;
 
   public UpsertStatement(NamedTableNode table, HintNode hint, List<ColumnName> columns,
-    List<ParseNode> values, SelectStatement select, int bindCount,
+    List<List<ParseNode>> values, SelectStatement select, int bindCount,
     Map<String, UDFParseNode> udfParseNodes, List<Pair<ColumnName, ParseNode>> onDupKeyPairs,
     OnDuplicateKeyType onDupKeyType, boolean returningRow) {
     super(table, bindCount, udfParseNodes);
@@ -57,7 +57,7 @@ public class UpsertStatement extends DMLStatement implements RowReturningDMLStat
     return columns;
   }
 
-  public List<ParseNode> getValues() {
+  public List<List<ParseNode>> getValues() {
     return values;
   }
 
