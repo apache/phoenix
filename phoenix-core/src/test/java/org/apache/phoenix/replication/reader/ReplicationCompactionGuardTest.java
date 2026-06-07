@@ -19,6 +19,8 @@ package org.apache.phoenix.replication.reader;
 
 import static org.junit.Assert.assertEquals;
 
+import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.hadoop.conf.Configuration;
 import org.junit.Test;
 
 /**
@@ -108,5 +110,31 @@ public class ReplicationCompactionGuardTest {
     long result = computeRowBoundary(ttlWindowStart, maxLookbackWindowStart, consistencyPoint);
 
     assertEquals(ttlWindowStart, result);
+  }
+
+  @Test
+  public void testCachedConsistencyPointAvoidsRepeatedFetches() {
+    AtomicInteger fetchCount = new AtomicInteger(0);
+    ReplicationLogReplayService.setConsistencyPointSupplierForTesting(() -> {
+      fetchCount.incrementAndGet();
+      return 500000L;
+    });
+
+    try {
+      Configuration conf = new Configuration(false);
+      String table = "TEST_TABLE";
+      String cf = "0";
+
+      long result1 = ReplicationLogReplayService.resolveConsistencyPoint(conf, table, cf);
+      long result2 = ReplicationLogReplayService.resolveConsistencyPoint(conf, table, cf);
+      long result3 = ReplicationLogReplayService.resolveConsistencyPoint(conf, table, cf);
+
+      assertEquals(500000L, result1);
+      assertEquals(500000L, result2);
+      assertEquals(500000L, result3);
+      assertEquals(1, fetchCount.get());
+    } finally {
+      ReplicationLogReplayService.resetInstanceForTesting();
+    }
   }
 }
