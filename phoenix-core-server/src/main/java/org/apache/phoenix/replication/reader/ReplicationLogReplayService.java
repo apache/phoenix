@@ -117,6 +117,12 @@ public class ReplicationLogReplayService {
     this.cachedConsistencyPoint = () -> fixedConsistencyPoint;
   }
 
+  private ReplicationLogReplayService(Supplier<Long> supplier) {
+    this.conf = null;
+    this.cachedConsistencyPoint = Suppliers.memoizeWithExpiration(
+      supplier, CONSISTENCY_POINT_CACHE_TTL_SECONDS, TimeUnit.SECONDS);
+  }
+
   /**
    * Gets the singleton instance of the ReplicationLogReplayService using the lazy initializer
    * pattern. Initializes the instance if it hasn't been created yet.
@@ -138,6 +144,11 @@ public class ReplicationLogReplayService {
   @VisibleForTesting
   public static void setConsistencyPointForTesting(long fixedConsistencyPoint) {
     instance = new ReplicationLogReplayService(fixedConsistencyPoint);
+  }
+
+  @VisibleForTesting
+  public static void setConsistencyPointSupplierForTesting(Supplier<Long> supplier) {
+    instance = new ReplicationLogReplayService(supplier);
   }
 
   @VisibleForTesting
