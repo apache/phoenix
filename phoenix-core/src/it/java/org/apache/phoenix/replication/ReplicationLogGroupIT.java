@@ -181,18 +181,20 @@ public class ReplicationLogGroupIT extends HABaseIT {
 
   private void assertMetricsEmitted() {
     ReplicationLogMetricValues values = logGroup.getMetrics().getCurrentMetricValues();
-    assertTrue("appendTime should be > 0, got " + values.getAppendTime(),
-      values.getAppendTime() > 0);
-    assertTrue("syncTime should be > 0, got " + values.getSyncTime(), values.getSyncTime() > 0);
-    assertTrue("ringBufferTime should be > 0, got " + values.getRingBufferTime(),
-      values.getRingBufferTime() > 0);
-    assertTrue("fsSyncTime should be > 0, got " + values.getFsSyncTime(),
-      values.getFsSyncTime() > 0);
-    assertTrue("batchSize should be > 0, got " + values.getBatchSize(), values.getBatchSize() > 0);
-    assertTrue("pendingSyncCount should be > 0, got " + values.getPendingSyncCount(),
-      values.getPendingSyncCount() > 0);
-    assertTrue("pendingSyncWaitTime should be > 0, got " + values.getPendingSyncWaitTime(),
-      values.getPendingSyncWaitTime() > 0);
+    assertTrue("appendTime should be > 0, got " + values.getAppendTimeMax(),
+      values.getAppendTimeMax() > 0);
+    assertTrue("syncTime should be > 0, got " + values.getSyncTimeMax(),
+      values.getSyncTimeMax() > 0);
+    assertTrue("ringBufferTime should be > 0, got " + values.getRingBufferTimeMax(),
+      values.getRingBufferTimeMax() > 0);
+    assertTrue("fsSyncTime should be > 0, got " + values.getFsSyncTimeMax(),
+      values.getFsSyncTimeMax() > 0);
+    assertTrue("batchSize should be > 0, got " + values.getBatchSizeMax(),
+      values.getBatchSizeMax() > 0);
+    assertTrue("pendingSyncCount should be > 0, got " + values.getPendingSyncCountMax(),
+      values.getPendingSyncCountMax() > 0);
+    assertTrue("pendingSyncWaitTime should be > 0, got " + values.getPendingSyncWaitTimeMax(),
+      values.getPendingSyncWaitTimeMax() > 0);
   }
 
   private void dumpTableLogCount(Map<String, List<Mutation>> mutationsByTable) {

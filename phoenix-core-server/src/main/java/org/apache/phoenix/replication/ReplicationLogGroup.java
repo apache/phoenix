@@ -1169,8 +1169,11 @@ public class ReplicationLogGroup {
     @Override
     public void onEvent(LogEvent event, long sequence, boolean endOfBatch) throws Exception {
       long currentTimeNs = System.nanoTime();
-      long ringBufferTimeNs = currentTimeNs - event.timestampNs;
-      metrics.updateRingBufferTime(ringBufferTimeNs);
+      // Record ring-buffer wait only for SYNC events (queue + drain ahead). Producers are blocked
+      // on sync; data-event waits are not directly observable to a caller.
+      if (event.type == EVENT_TYPE_SYNC) {
+        metrics.updateRingBufferTime(currentTimeNs - event.timestampNs);
+      }
       batchEventCount++;
       if (fatalException != null) {
         // Append events are ignored; sync futures are failed immediately

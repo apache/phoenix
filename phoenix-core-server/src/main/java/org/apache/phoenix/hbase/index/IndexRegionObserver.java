@@ -2319,13 +2319,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                      // updates
         CompletableFuture<Void> postIndexFuture =
           CompletableFuture.runAsync(() -> doPost(c, context));
-        long start = EnvironmentEdgeManager.currentTimeMillis();
-        try {
-          replicateMutations(c.getEnvironment(), miniBatchOp, context);
-        } finally {
-          long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
-          metricSource.updateReplicationSyncTime(dataTableName, duration);
-        }
+        replicateMutations(c.getEnvironment(), miniBatchOp, context);
         FutureUtils.get(postIndexFuture);
       }
     } finally {
@@ -2942,40 +2936,47 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
     ReplicationLogGroup group = logGroup.get();
 
-    for (int i = 0; i < miniBatchOp.size(); i++) {
-      Mutation m = miniBatchOp.getOperation(i);
-      if (this.ignoreReplicationFilter.test(m)) {
-        continue;
-      }
-      // When coprocessors add cells (local index, conditional TTL, ON DUPLICATE KEY UPDATE),
-      // HBase merges them into the data mutation which can mix row keys and cell types.
-      // Split those back into individual Put/Delete mutations for correct serialization.
-      if (miniBatchOp.getOperationsFromCoprocessors(i) == null) {
-        group.append(this.dataTableName, -1, m);
-      } else {
-        for (Mutation split : splitCellsIntoMutations(m)) {
-          group.append(this.dataTableName, -1, split);
-        }
-      }
-    }
-    if (context.preIndexUpdates != null) {
-      for (Map.Entry<HTableInterfaceReference, Mutation> entry : context.preIndexUpdates
-        .entries()) {
-        if (this.ignoreReplicationFilter.test(entry.getValue())) {
+    // Record ReplicationSyncTime only when we are actually doing work (not on early-return paths).
+    long start = EnvironmentEdgeManager.currentTimeMillis();
+    try {
+      for (int i = 0; i < miniBatchOp.size(); i++) {
+        Mutation m = miniBatchOp.getOperation(i);
+        if (this.ignoreReplicationFilter.test(m)) {
           continue;
         }
-        group.append(entry.getKey().getTableName(), -1, entry.getValue());
-      }
-    }
-    if (context.postIndexUpdates != null) {
-      for (Map.Entry<HTableInterfaceReference, Mutation> entry : context.postIndexUpdates
-        .entries()) {
-        if (this.ignoreReplicationFilter.test(entry.getValue())) {
-          continue;
+        // When coprocessors add cells (local index, conditional TTL, ON DUPLICATE KEY UPDATE),
+        // HBase merges them into the data mutation which can mix row keys and cell types.
+        // Split those back into individual Put/Delete mutations for correct serialization.
+        if (miniBatchOp.getOperationsFromCoprocessors(i) == null) {
+          group.append(this.dataTableName, -1, m);
+        } else {
+          for (Mutation split : splitCellsIntoMutations(m)) {
+            group.append(this.dataTableName, -1, split);
+          }
         }
-        group.append(entry.getKey().getTableName(), -1, entry.getValue());
       }
+      if (context.preIndexUpdates != null) {
+        for (Map.Entry<HTableInterfaceReference, Mutation> entry : context.preIndexUpdates
+          .entries()) {
+          if (this.ignoreReplicationFilter.test(entry.getValue())) {
+            continue;
+          }
+          group.append(entry.getKey().getTableName(), -1, entry.getValue());
+        }
+      }
+      if (context.postIndexUpdates != null) {
+        for (Map.Entry<HTableInterfaceReference, Mutation> entry : context.postIndexUpdates
+          .entries()) {
+          if (this.ignoreReplicationFilter.test(entry.getValue())) {
+            continue;
+          }
+          group.append(entry.getKey().getTableName(), -1, entry.getValue());
+        }
+      }
+      group.sync();
+    } finally {
+      long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
+      metricSource.updateReplicationSyncTime(this.dataTableName, duration);
     }
-    group.sync();
   }
 }

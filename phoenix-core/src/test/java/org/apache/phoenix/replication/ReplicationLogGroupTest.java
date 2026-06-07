@@ -45,8 +45,12 @@ import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
@@ -58,6 +62,8 @@ import org.apache.phoenix.replication.log.LogFileReaderContext;
 import org.apache.phoenix.replication.log.LogFileTestUtil;
 import org.apache.phoenix.replication.log.LogFileWriter;
 import org.apache.phoenix.replication.log.LogFileWriterContext;
+import org.apache.phoenix.replication.metrics.ReplicationLogMetricValues;
+import org.junit.Assume;
 import org.junit.Test;
 import org.mockito.InOrder;
 import org.mockito.Mockito;
@@ -2074,5 +2080,151 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // Release the consumer so the filler thread can finish and tearDown can close cleanly.
     holdConsumer.countDown();
     filler.join(5000);
+  }
+
+  /**
+   * Measures sync coalescing effectiveness when many producer threads append+sync concurrently.
+   * Adds a small delay inside the inner writer's sync() so the consumer holds long enough for
+   * additional SYNC events to queue behind it on the ring buffer; under contention the
+   * LogEventHandler should consolidate them into a single inner sync per Disruptor batch. Logs the
+   * producer-sync count, inner-sync count, coalescing ratio, and metric histograms; no assertions —
+   * purpose is observation.
+   */
+  @Test
+  public void testReplicationSyncPathSimulator() throws Exception {
+    Assume.assumeTrue("Simulator test, opt in with -Dtest.runSimulator=true",
+      Boolean.getBoolean("test.runSimulator"));
+    final String tableName = "TBLSCM";
+    final int producerCount = Integer.getInteger("test.producerCount", 64);
+    final int syncsPerProducer = Integer.getInteger("test.syncsPerProducer", 20);
+    final int appendsPerSync = Integer.getInteger("test.appendsPerSync", 5);
+    final int cellsPerMutation = Integer.getInteger("test.cellsPerMutation", 1);
+    final long innerSyncDelayMs = Long.getLong("test.innerSyncDelayMs", 2);
+
+    // Use the production-default ring buffer size so producers are not artificially blocked on
+    // ringBuffer.next() — the default test fixture uses a 32-slot buffer which fills under
+    // contention and inflates the producer-perceived sync latency.
+    conf.setInt(ReplicationLogGroup.REPLICATION_LOG_RINGBUFFER_SIZE_KEY,
+      ReplicationLogGroup.DEFAULT_REPLICATION_LOG_RINGBUFFER_SIZE);
+    // Disable size-based rotation for the duration of the run so coalescing measurements are not
+    // contaminated by rotation overhead. The fixture's 10 KB threshold otherwise causes 5-20
+    // rotations per run at high producerCount.
+    conf.setLong(ReplicationLogGroup.REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY, Long.MAX_VALUE);
+    recreateLogGroup();
+
+    final List<LogFileWriter> allWriters =
+      java.util.Collections.synchronizedList(new ArrayList<>());
+
+    // Apply the sleep stub to a writer so concurrent producers' SYNC events queue behind it,
+    // and register it for later invocation counting.
+    java.util.function.Consumer<LogFileWriter> instrumentWriter = w -> {
+      try {
+        doAnswer(invocation -> {
+          sleep(innerSyncDelayMs);
+          return invocation.callRealMethod();
+        }).when(w).sync();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+      allWriters.add(w);
+    };
+
+    // Instrument the initial writer.
+    LogFileWriter initialWriter = logGroup.getActiveLog().getWriter();
+    assertNotNull("Inner writer should not be null", initialWriter);
+    instrumentWriter.accept(initialWriter);
+
+    // Instrument every writer the rotation path creates.
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    doAnswer(invocation -> {
+      LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
+      instrumentWriter.accept(w);
+      return w;
+    }).when(activeLog).createNewWriter();
+
+    final CountDownLatch startLatch = new CountDownLatch(1);
+    final CountDownLatch doneLatch = new CountDownLatch(producerCount);
+    final AtomicLong totalProducerSyncs = new AtomicLong(0);
+    final AtomicLong totalProducerAppends = new AtomicLong(0);
+    final AtomicLong commitIdSeq = new AtomicLong(0);
+    ExecutorService pool = Executors.newFixedThreadPool(producerCount);
+
+    try {
+      for (int p = 0; p < producerCount; p++) {
+        pool.submit(() -> {
+          try {
+            startLatch.await();
+            for (int i = 0; i < syncsPerProducer; i++) {
+              for (int j = 0; j < appendsPerSync; j++) {
+                long commitId = commitIdSeq.getAndIncrement();
+                Mutation put = LogFileTestUtil.newPut("row" + commitId, commitId, cellsPerMutation);
+                logGroup.append(tableName, commitId, put);
+                totalProducerAppends.incrementAndGet();
+              }
+              logGroup.sync();
+              totalProducerSyncs.incrementAndGet();
+            }
+          } catch (Exception e) {
+            LOG.error("Producer failed", e);
+          } finally {
+            doneLatch.countDown();
+          }
+        });
+      }
+
+      long startNs = System.nanoTime();
+      startLatch.countDown();
+      doneLatch.await();
+      long elapsedMs = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startNs);
+
+      // Count actual fsyncs invoked across all writers (rotation creates new ones mid-test).
+      int innerSyncCount = 0;
+      synchronized (allWriters) {
+        for (LogFileWriter w : allWriters) {
+          innerSyncCount += (int) Mockito.mockingDetails(w).getInvocations().stream()
+            .filter(inv -> "sync".equals(inv.getMethod().getName())).count();
+        }
+      }
+      int writerCount = allWriters.size();
+      long producerSyncs = totalProducerSyncs.get();
+      double coalescingRatio = innerSyncCount == 0 ? 0.0 : (double) producerSyncs / innerSyncCount;
+
+      LOG.info(
+        "Sync coalescing: producers={} syncsPerProducer={} appendsPerSync={} cellsPerMutation={} "
+          + "totalProducerAppends={} totalProducerSyncs={} innerSyncCalls={} writerCount={} "
+          + "ratio={} elapsedMs={} innerSyncDelayMs={}",
+        producerCount, syncsPerProducer, appendsPerSync, cellsPerMutation,
+        totalProducerAppends.get(), producerSyncs, innerSyncCount, writerCount,
+        String.format("%.2f", coalescingRatio), elapsedMs, innerSyncDelayMs);
+      ReplicationLogMetricValues metricValues = logGroup.getMetrics().getCurrentMetricValues();
+      // syncTime, fsSyncTime histograms record in milliseconds; ringBufferTime and
+      // pendingSyncWaitTime record in nanoseconds. Compare the decomposition in nanoseconds to
+      // avoid ms-truncation losses. Each ms-stored value loses up to ~1ms of precision via floor
+      // truncation. fsSyncTime appears on the component side (its floor truncation makes
+      // componentSumNs undershoot), so a ~1ms tolerance is needed for the comparison to hold
+      // reliably at low absolute values.
+      long ringBufferTimeNs = metricValues.getRingBufferTimeMax();
+      long pendingSyncWaitTimeNs = metricValues.getPendingSyncWaitTimeMax();
+      long fsSyncTimeNs = TimeUnit.MILLISECONDS.toNanos(metricValues.getFsSyncTimeMax());
+      long syncTimeNs = TimeUnit.MILLISECONDS.toNanos(metricValues.getSyncTimeMax());
+      long componentSumNs = ringBufferTimeNs + pendingSyncWaitTimeNs + fsSyncTimeNs;
+      long truncationToleranceNs = TimeUnit.MILLISECONDS.toNanos(1);
+      LOG.info(
+        "Metrics snapshot: maxBatchSize={} maxPendingSyncCount={}"
+          + " syncTime[p50={}ms p99={}ms max={}ms]" + " ringBuffer[p50={}ns p99={}ns max={}ns]"
+          + " fsSync[p50={}ms p99={}ms max={}ms]" + " pendingSyncWait[p50={}ns p99={}ns max={}ns]"
+          + " maxComponentSumNs={} syncTimeWithinBound={}",
+        metricValues.getBatchSizeMax(), metricValues.getPendingSyncCountMax(),
+        metricValues.getSyncTimeP50(), metricValues.getSyncTimeP99(), metricValues.getSyncTimeMax(),
+        metricValues.getRingBufferTimeP50(), metricValues.getRingBufferTimeP99(),
+        metricValues.getRingBufferTimeMax(), metricValues.getFsSyncTimeP50(),
+        metricValues.getFsSyncTimeP99(), metricValues.getFsSyncTimeMax(),
+        metricValues.getPendingSyncWaitTimeP50(), metricValues.getPendingSyncWaitTimeP99(),
+        metricValues.getPendingSyncWaitTimeMax(), componentSumNs,
+        syncTimeNs <= componentSumNs + truncationToleranceNs);
+    } finally {
+      pool.shutdownNow();
+      pool.awaitTermination(5, TimeUnit.SECONDS);
+    }
   }
 }

@@ -27,41 +27,41 @@ public interface MetricsReplicationLogGroupSource extends BaseSource {
   String METRICS_DESCRIPTION = "Metrics about Replication Log Operations for an HA Group";
   String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
-  String ROTATION_COUNT = "rotationCount";
+  String ROTATION_COUNT = "phoenixWALRotationCount";
   String ROTATION_COUNT_DESC = "Total number of times rotateLog was called";
 
-  String ROTATION_FAILURES = "rotationFailures";
-
+  String ROTATION_FAILURES = "phoenixWALRotationFailures";
   String ROTATION_FAILURES_DESC = "Number of times log rotation has failed";
 
-  // All time histograms in this source are nanoseconds.
-  String APPEND_TIME = "appendTime";
+  // Time histograms encode the unit in the name suffix (Ms or Ns) so consumers cannot misinterpret.
+  String APPEND_TIME = "phoenixWALAppendTimeNs";
   String APPEND_TIME_DESC = "Histogram of time taken for append operations in nanoseconds";
 
-  String SYNC_TIME = "syncTime";
-  String SYNC_TIME_DESC = "Histogram of time taken for sync operations in nanoseconds";
+  String SYNC_TIME = "phoenixWALSyncTimeMs";
+  String SYNC_TIME_DESC = "Histogram of time taken for sync operations in milliseconds";
 
-  String ROTATION_TIME = "rotationTime";
-  String ROTATION_TIME_DESC = "Histogram of time taken for log rotations in nanoseconds";
+  String ROTATION_TIME = "phoenixWALRotationTimeMs";
+  String ROTATION_TIME_DESC = "Histogram of time taken for log rotations in milliseconds";
 
-  String RING_BUFFER_TIME = "ringBufferTime";
-  String RING_BUFFER_TIME_DESC = "Time events spend in the ring buffer in nanoseconds";
+  String RING_BUFFER_TIME = "phoenixWALSyncRingBufferTimeNs";
+  String RING_BUFFER_TIME_DESC =
+    "Time SYNC events spend in the ring buffer (queue + drain ahead) in nanoseconds";
 
-  String FS_SYNC_TIME = "fsSyncTime";
+  String FS_SYNC_TIME = "phoenixWALFsSyncTimeMs";
   String FS_SYNC_TIME_DESC =
-    "Histogram of time taken for the underlying filesystem sync (fsync) in nanoseconds";
+    "Histogram of time taken for the underlying filesystem sync (fsync) in milliseconds";
 
-  String BATCH_SIZE = "batchSize";
+  String BATCH_SIZE = "phoenixWALBatchSize";
   String BATCH_SIZE_DESC = "Histogram of number of events drained per Disruptor batch";
 
-  String PENDING_SYNC_COUNT = "pendingSyncCount";
+  String PENDING_SYNC_COUNT = "phoenixWALPendingSyncCount";
   String PENDING_SYNC_COUNT_DESC = "Histogram of pending sync futures coalesced into one fsync";
 
-  String PENDING_SYNC_WAIT_TIME = "pendingSyncWaitTime";
+  String PENDING_SYNC_WAIT_TIME = "phoenixWALPendingSyncWaitTimeNs";
   String PENDING_SYNC_WAIT_TIME_DESC =
     "Time a SYNC event waits between consumer pickup and fsync start, in nanoseconds";
 
-  String SYNC_TO_SAF_TRANSITIONS = "syncToSafTransitions";
+  String SYNC_TO_SAF_TRANSITIONS = "SyncToSafTransitions";
   String SYNC_TO_SAF_TRANSITIONS_DESC = "Number of SYNC to STORE_AND_FORWARD mode transitions";
 
   /**
@@ -71,31 +71,33 @@ public interface MetricsReplicationLogGroupSource extends BaseSource {
   void incrementRotationCount();
 
   /**
-   * Update the time taken for an append operation in nanoseconds.
+   * Update the time taken for an append operation. Recorded into histogram in nanoseconds.
    * @param timeNs Time taken in nanoseconds
    */
   void updateAppendTime(long timeNs);
 
   /**
-   * Update the time taken for a sync operation in nanoseconds.
+   * Update the time taken for a sync operation. Recorded into histogram in milliseconds.
    * @param timeNs Time taken in nanoseconds
    */
   void updateSyncTime(long timeNs);
 
   /**
-   * Update the time taken for a rotation operation in nanoseconds.
+   * Update the time taken for a rotation operation. Recorded into histogram in milliseconds.
    * @param timeNs Time taken in nanoseconds
    */
   void updateRotationTime(long timeNs);
 
   /**
-   * Update the time an event spent in the ring buffer in nanoseconds.
+   * Update the time a SYNC event spent in the ring buffer (queue + drain ahead). Recorded into
+   * histogram in nanoseconds.
    * @param timeNs Time spent in nanoseconds
    */
   void updateRingBufferTime(long timeNs);
 
   /**
-   * Update the time taken for the underlying filesystem sync (fsync) in nanoseconds.
+   * Update the time taken for the underlying filesystem sync (fsync). Recorded into histogram in
+   * milliseconds.
    * @param timeNs Time taken in nanoseconds
    */
   void updateFsSyncTime(long timeNs);
