@@ -30,6 +30,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Supplier;
+import org.apache.phoenix.thirdparty.com.google.common.base.Suppliers;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
@@ -89,14 +91,30 @@ public class ReplicationLogReplayService {
    */
   public static final int DEFAULT_REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS = 30;
 
+  private static final long CONSISTENCY_POINT_CACHE_TTL_SECONDS = 30;
+
   private static volatile ReplicationLogReplayService instance;
 
   private final Configuration conf;
   private ScheduledExecutorService scheduler;
   private volatile boolean isRunning = false;
+  private final Supplier<Long> cachedConsistencyPoint;
 
-  protected ReplicationLogReplayService(final Configuration conf) {
+  private ReplicationLogReplayService(final Configuration conf) {
     this.conf = conf;
+    this.cachedConsistencyPoint = Suppliers.memoizeWithExpiration(() -> {
+      try {
+        return getConsistencyPoint();
+      } catch (Exception e) {
+        LOG.warn("Failed to refresh cached consistency point", e);
+        return 0L;
+      }
+    }, CONSISTENCY_POINT_CACHE_TTL_SECONDS, TimeUnit.SECONDS);
+  }
+
+  private ReplicationLogReplayService(long fixedConsistencyPoint) {
+    this.conf = null;
+    this.cachedConsistencyPoint = () -> fixedConsistencyPoint;
   }
 
   /**
@@ -118,8 +136,8 @@ public class ReplicationLogReplayService {
   }
 
   @VisibleForTesting
-  public static void setInstanceForTesting(ReplicationLogReplayService testInstance) {
-    instance = testInstance;
+  public static void setConsistencyPointForTesting(long fixedConsistencyPoint) {
+    instance = new ReplicationLogReplayService(fixedConsistencyPoint);
   }
 
   @VisibleForTesting
@@ -252,34 +270,24 @@ public class ReplicationLogReplayService {
   }
 
   /**
-   * Applies the replication replay consistency point as a floor on maxLookbackWindowStart. On
-   * standby clusters, this prevents compaction from dropping delete markers that have timestamps
-   * newer than the consistency point.
+   * Resolves the minimum replication consistency point across all HA groups. Uses a cached value
+   * with a 30-second TTL to avoid repeated NameNode RPCs during compaction bursts. Returns 0L on
+   * any failure (caller treats 0 as "retain all delete markers").
    */
-  public static long applyReplicationConsistencyGuard(long currentMaxLookbackWindowStart,
-    Configuration conf, String tableName, String columnFamilyName) {
+  public static long resolveConsistencyPoint(Configuration conf, String tableName,
+    String columnFamilyName) {
     try {
-      long consistencyPoint = getInstance(conf).getConsistencyPoint();
-      return adjustMaxLookbackWindowStart(currentMaxLookbackWindowStart, consistencyPoint,
-        tableName, columnFamilyName);
+      long consistencyPoint = getInstance(conf).cachedConsistencyPoint.get();
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Replication guard: table={} store={} consistencyPoint={}", tableName,
+          columnFamilyName, consistencyPoint);
+      }
+      return consistencyPoint;
     } catch (Exception e) {
-      LOG.warn("Replication guard enabled but consistency point unavailable for table={} store={}."
+      LOG.warn("Replication guard: consistency point unavailable for table={} store={}."
         + " Retaining all delete markers.", tableName, columnFamilyName, e);
       return 0L;
     }
-  }
-
-  @VisibleForTesting
-  static long adjustMaxLookbackWindowStart(long currentMaxLookbackWindowStart,
-    long consistencyPoint, String tableName, String columnFamilyName) {
-    long adjusted = Math.min(currentMaxLookbackWindowStart, consistencyPoint);
-    if (adjusted < currentMaxLookbackWindowStart) {
-      LOG.info(
-        "Replication guard: table={} store={} maxLookbackWindowStart adjusted from {} to {}"
-          + " (consistencyPoint={})",
-        tableName, columnFamilyName, currentMaxLookbackWindowStart, adjusted, consistencyPoint);
-    }
-    return adjusted;
   }
 
   /** Returns the list of HA groups on the cluster */

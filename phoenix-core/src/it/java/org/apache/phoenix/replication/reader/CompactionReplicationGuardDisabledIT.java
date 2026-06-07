@@ -20,8 +20,6 @@ package org.apache.phoenix.replication.reader;
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
 import static org.apache.phoenix.util.TestUtil.assertRawRowCount;
 import static org.junit.Assert.assertFalse;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -106,9 +104,7 @@ public class CompactionReplicationGuardDisabledIT extends BaseTest {
 
       // Set consistency point BEFORE delete — guard would retain if enabled
       long consistencyPoint = beforeDeleteTime - 1;
-      ReplicationLogReplayService mockService = mock(ReplicationLogReplayService.class);
-      when(mockService.getConsistencyPoint()).thenReturn(consistencyPoint);
-      ReplicationLogReplayService.setInstanceForTesting(mockService);
+      ReplicationLogReplayService.setConsistencyPointForTesting(consistencyPoint);
 
       // Advance past maxLookback
       injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000 + 1000);
