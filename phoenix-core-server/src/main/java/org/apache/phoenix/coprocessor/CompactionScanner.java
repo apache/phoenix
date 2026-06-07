@@ -140,6 +140,7 @@ public class CompactionScanner implements InternalScanner {
   private final Store store;
   private final RegionCoprocessorEnvironment env;
   private long maxLookbackWindowStart;
+  private final long replicationConsistencyPoint;
   private final long maxLookbackInMillis;
   private int minVersion;
   private int maxVersion;
@@ -201,18 +202,20 @@ public class CompactionScanner implements InternalScanner {
       ? compactionTime
       : compactionTime - (this.maxLookbackInMillis + 1);
     Configuration conf = env.getConfiguration();
+    this.major = major && !forceMinorCompaction;
     boolean replayEnabled =
       conf.getBoolean(ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED,
         ReplicationLogReplayService.DEFAULT_REPLICATION_REPLAY_ENABLED);
     boolean guardEnabled =
       conf.getBoolean(ReplicationLogReplayService.REPLICATION_COMPACTION_GUARD_ENABLED,
         ReplicationLogReplayService.DEFAULT_REPLICATION_COMPACTION_GUARD_ENABLED);
-    if (replayEnabled && guardEnabled) {
-      this.maxLookbackWindowStart = ReplicationLogReplayService.applyReplicationConsistencyGuard(
-        this.maxLookbackWindowStart, conf, tableName, columnFamilyName);
+    if (this.major && replayEnabled && guardEnabled) {
+      this.replicationConsistencyPoint =
+        ReplicationLogReplayService.resolveConsistencyPoint(conf, tableName, columnFamilyName);
+    } else {
+      this.replicationConsistencyPoint = Long.MAX_VALUE;
     }
     ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
-    this.major = major && !forceMinorCompaction;
     this.minVersion = cfd.getMinVersions();
     this.maxVersion = cfd.getMaxVersions();
     this.keepDeletedCells = keepDeleted ? KeepDeletedCells.TTL : cfd.getKeepDeletedCells();
@@ -1670,6 +1673,8 @@ public class CompactionScanner implements InternalScanner {
       this.ttl = Math.max(ttlInSecs * 1000, maxLookbackInMillis + 1);
       this.ttlWindowStart = ttlInSecs == HConstants.FOREVER ? 1 : compactionTime - ttl;
       this.maxLookbackWindowStartForRow = Math.max(ttlWindowStart, maxLookbackWindowStart);
+      this.maxLookbackWindowStartForRow =
+        Math.min(this.maxLookbackWindowStartForRow, replicationConsistencyPoint);
       if (LOGGER.isTraceEnabled()) {
         LOGGER.trace(String.format("RowContext:- (ttlWindowStart=%d, maxLookbackWindowStart=%d)",
           ttlWindowStart, maxLookbackWindowStart));
