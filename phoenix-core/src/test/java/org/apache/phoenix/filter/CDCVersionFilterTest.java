@@ -19,6 +19,8 @@ package org.apache.phoenix.filter;
 
 import static org.junit.Assert.assertEquals;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
@@ -230,6 +232,41 @@ public class CDCVersionFilterTest {
     assertEquals(ReturnCode.INCLUDE, deserialized.filterCell(put(ROW2, CF, CQ1, 80)));
     assertEquals(ReturnCode.INCLUDE, deserialized.filterCell(put(ROW2, CF, CQ1, 70)));
     assertEquals(ReturnCode.NEXT_COL, deserialized.filterCell(put(ROW2, CF, CQ1, 60)));
+  }
+
+  // parseFrom is a public, class-name-addressable deserialization entry point; a malformed payload
+  // with a negative wire-supplied length must be rejected rather than throwing
+  // NegativeArraySizeException.
+
+  @Test(expected = DeserializationException.class)
+  public void testParseFromRejectsNegativeRowCount() throws Exception {
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    try (DataOutputStream out = new DataOutputStream(bos)) {
+      out.writeInt(-1); // numRows
+    }
+    CDCVersionFilter.parseFrom(bos.toByteArray());
+  }
+
+  @Test(expected = DeserializationException.class)
+  public void testParseFromRejectsNegativeRowKeyLength() throws Exception {
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    try (DataOutputStream out = new DataOutputStream(bos)) {
+      out.writeInt(1); // numRows
+      out.writeInt(-3); // keyLen negative
+    }
+    CDCVersionFilter.parseFrom(bos.toByteArray());
+  }
+
+  @Test(expected = DeserializationException.class)
+  public void testParseFromRejectsNegativeTimestampCount() throws Exception {
+    ByteArrayOutputStream bos = new ByteArrayOutputStream();
+    try (DataOutputStream out = new DataOutputStream(bos)) {
+      out.writeInt(1); // numRows
+      out.writeInt(4); // keyLen
+      out.write(Bytes.toBytes("row1"));
+      out.writeInt(-5); // numTs negative
+    }
+    CDCVersionFilter.parseFrom(bos.toByteArray());
   }
 
   @Test

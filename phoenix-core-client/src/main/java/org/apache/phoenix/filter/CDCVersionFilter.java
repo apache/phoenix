@@ -207,12 +207,21 @@ public class CDCVersionFilter extends FilterBase implements Writable {
   @Override
   public void readFields(DataInput in) throws IOException {
     int numRows = in.readInt();
-    timestampMap = new HashMap<>(numRows);
+    if (numRows < 0) {
+      throw new IOException("Invalid CDCVersionFilter row count: " + numRows);
+    }
+    timestampMap = new HashMap<>();
     for (int i = 0; i < numRows; i++) {
       int keyLen = in.readInt();
+      if (keyLen < 0) {
+        throw new IOException("Invalid CDCVersionFilter row key length: " + keyLen);
+      }
       byte[] keyBytes = new byte[keyLen];
       in.readFully(keyBytes);
       int numTs = in.readInt();
+      if (numTs < 0) {
+        throw new IOException("Invalid CDCVersionFilter timestamp count: " + numTs);
+      }
       long[] timestamps = new long[numTs];
       for (int j = 0; j < numTs; j++) {
         timestamps[j] = in.readLong();
