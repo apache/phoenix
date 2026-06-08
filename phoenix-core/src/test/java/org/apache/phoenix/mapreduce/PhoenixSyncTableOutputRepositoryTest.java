@@ -1072,4 +1072,222 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
       targetCluster, 0L, 1000L, null, mapperStart, mapperEnd, true);
     assertEquals("Null tenant query should return only null-tenant chunk", 1, results3.size());
   }
+
+  @Test
+  public void testCheckpointValidationEmptyTableName() throws Exception {
+    byte[] startKey = Bytes.toBytes("row1");
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    try {
+      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+        .setTableName("").setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+        .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(startKey)
+        .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+        .build());
+      fail("Should throw IllegalArgumentException for empty tableName");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("TableName cannot be null or empty"));
+    }
+  }
+
+  @Test
+  public void testCheckpointValidationEmptyTargetCluster() throws Exception {
+    String tableName = generateUniqueName();
+    byte[] startKey = Bytes.toBytes("row1");
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    try {
+      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+        .setTableName(tableName).setTargetCluster("").setType(Type.REGION).setFromTime(0L)
+        .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(startKey)
+        .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+        .build());
+      fail("Should throw IllegalArgumentException for empty targetCluster");
+    } catch (IllegalArgumentException e) {
+      assertTrue(e.getMessage().contains("TargetCluster cannot be null or empty"));
+    }
+  }
+
+  @Test
+  public void testCheckpointValidationNullToTime() throws Exception {
+    String tableName = generateUniqueName();
+    byte[] startKey = Bytes.toBytes("row1");
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    try {
+      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+        .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION)
+        .setFromTime(0L).setToTime(null).setIsDryRun(false).setStartRowKey(startKey)
+        .setEndRowKey(startKey).setStatus(Status.VERIFIED).setExecutionStartTime(timestamp)
+        .setExecutionEndTime(timestamp).build());
+      fail("Should throw NullPointerException for null toTime");
+    } catch (NullPointerException e) {
+      assertTrue(e.getMessage().contains("ToTime cannot be null"));
+    }
+  }
+
+  @Test
+  public void testCheckpointWithNullStatusPersistsAsNull() throws Exception {
+    String tableName = generateUniqueName();
+    byte[] startKey = Bytes.toBytes("row1");
+    byte[] endKey = Bytes.toBytes("row100");
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    // Status is permitted to be null — production has an explicit null guard at the upsert site.
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey)
+      .setStatus(null).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp).build());
+
+    String query = "SELECT STATUS FROM "
+      + PhoenixSyncTableOutputRepository.SYNC_TABLE_CHECKPOINT_TABLE_NAME + " WHERE TABLE_NAME = ?";
+    try (java.sql.PreparedStatement ps = connection.prepareStatement(query)) {
+      ps.setString(1, tableName);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        assertNull("STATUS should be null when builder sets it to null", rs.getString("STATUS"));
+      }
+    }
+  }
+
+  @Test
+  public void testBuilderSetEndRowKeyNullCoercedToEmpty() {
+    PhoenixSyncTableCheckpointOutputRow row =
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setEndRowKey(null).build();
+
+    byte[] retrieved = row.getEndRowKey();
+    assertNotNull("setEndRowKey(null) should coerce to empty array, not stay null", retrieved);
+    assertEquals("Coerced array should have length 0", 0, retrieved.length);
+  }
+
+  @Test
+  public void testBuilderSetEndRowKeyEmptyArrayCoercedToEmpty() {
+    PhoenixSyncTableCheckpointOutputRow row =
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setEndRowKey(new byte[0]).build();
+
+    byte[] retrieved = row.getEndRowKey();
+    assertNotNull("setEndRowKey(empty array) should remain non-null", retrieved);
+    assertEquals("Coerced array should have length 0", 0, retrieved.length);
+  }
+
+  @Test
+  public void testGetEndRowKeyDefensiveCopy() {
+    byte[] endKey = Bytes.toBytes("end");
+
+    PhoenixSyncTableCheckpointOutputRow row =
+      new PhoenixSyncTableCheckpointOutputRow.Builder().setEndRowKey(endKey).build();
+
+    byte[] retrieved = row.getEndRowKey();
+    assertNotSame("Should return a copy, not the original", endKey, retrieved);
+
+    retrieved[0] = (byte) 0xFF;
+
+    byte[] retrievedAgain = row.getEndRowKey();
+    assertNotEquals("Internal array should not be modified", (byte) 0xFF, retrievedAgain[0]);
+  }
+
+  @Test
+  public void testParseCounterValueCorruptedFormatThrows() {
+    // "FOO,BAR=1" — first token "FOO" splits by '=' to length 1, which fails the length-2 check.
+    PhoenixSyncTableCheckpointOutputRow row = new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setStartRowKey(Bytes.toBytes("start")).setCounters("FOO,BAR=1").build();
+
+    try {
+      row.getSourceRowsProcessed();
+      fail("Should throw IllegalArgumentException for corrupted counter format");
+    } catch (IllegalArgumentException e) {
+      assertTrue("Error message should explain corruption: " + e.getMessage(),
+        e.getMessage().contains("Corrupted counter format"));
+    }
+  }
+
+  @Test
+  public void testParseCounterValueCounterNameNotPresentReturnsZero() {
+    // Well-formed counters string that doesn't contain SOURCE_ROWS_PROCESSED — should default to 0.
+    PhoenixSyncTableCheckpointOutputRow row = new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setStartRowKey(Bytes.toBytes("start")).setCounters("CHUNKS_VERIFIED=5").build();
+
+    assertEquals(0L, row.getSourceRowsProcessed());
+    assertEquals(0L, row.getTargetRowsProcessed());
+  }
+
+  @Test
+  public void testParseCounterValueEmptyStringReturnsZero() {
+    // Distinct from null — exercises the counters.isEmpty() branch in parseCounterValue.
+    PhoenixSyncTableCheckpointOutputRow row = new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setStartRowKey(Bytes.toBytes("start")).setCounters("").build();
+
+    assertEquals(0L, row.getSourceRowsProcessed());
+    assertEquals(0L, row.getTargetRowsProcessed());
+  }
+
+  @Test
+  public void testGetProcessedChunksBothBoundariesFilterNonOverlappingChunks() throws Exception {
+    String tableName = generateUniqueName();
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    // Three chunks; mapper region is row25..row50. Only the middle chunk overlaps both bounds.
+    byte[] chunk1Start = Bytes.toBytes("row10");
+    byte[] chunk1End = Bytes.toBytes("row20");
+    byte[] chunk2Start = Bytes.toBytes("row30");
+    byte[] chunk2End = Bytes.toBytes("row40");
+    byte[] chunk3Start = Bytes.toBytes("row60");
+    byte[] chunk3End = Bytes.toBytes("row70");
+
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunk1Start).setEndRowKey(chunk1End)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunk2Start).setEndRowKey(chunk2End)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(chunk3Start).setEndRowKey(chunk3End)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
+
+    // chunk1 ends at row20 (< mapperStart=row25), chunk3 starts at row60 (> mapperEnd=row50).
+    byte[] mapperStart = Bytes.toBytes("row25");
+    byte[] mapperEnd = Bytes.toBytes("row50");
+
+    List<PhoenixSyncTableCheckpointOutputRow> results = repository.getProcessedChunks(tableName,
+      targetCluster, 0L, 1000L, null, mapperStart, mapperEnd, true);
+
+    assertEquals("Only the overlapping chunk (row30..row40) should match", 1, results.size());
+    assertArrayEquals("Surviving chunk should be chunk2", chunk2Start,
+      results.get(0).getStartRowKey());
+  }
+
+  @Test
+  public void testGetProcessedMapperRegionsFiltersByExactTimeWindow() throws Exception {
+    String tableName = generateUniqueName();
+    byte[] startKey1 = Bytes.toBytes("row1");
+    byte[] endKey1 = Bytes.toBytes("row100");
+    byte[] startKey2 = Bytes.toBytes("row200");
+    byte[] endKey2 = Bytes.toBytes("row300");
+    Timestamp timestamp = new Timestamp(System.currentTimeMillis());
+
+    // Two regions for the same table at distinct (fromTime, toTime) windows.
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L)
+      .setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey1).setEndRowKey(endKey1)
+      .setStatus(Status.VERIFIED).setExecutionStartTime(timestamp).setExecutionEndTime(timestamp)
+      .build());
+    repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
+      .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION)
+      .setFromTime(1000L).setToTime(2000L).setIsDryRun(false).setStartRowKey(startKey2)
+      .setEndRowKey(endKey2).setStatus(Status.VERIFIED).setExecutionStartTime(timestamp)
+      .setExecutionEndTime(timestamp).build());
+
+    List<PhoenixSyncTableCheckpointOutputRow> results =
+      repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, null, true);
+
+    assertEquals("Only the [0, 1000) region should match", 1, results.size());
+    assertArrayEquals("Surviving region should be the [0, 1000) one", startKey1,
+      results.get(0).getStartRowKey());
+  }
 }

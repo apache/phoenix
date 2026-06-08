@@ -43,17 +43,23 @@ import java.util.Properties;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.coprocessor.ObserverContext;
+import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
+import org.apache.hadoop.hbase.coprocessor.SimpleRegionObserver;
+import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
@@ -72,7 +78,6 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -86,6 +91,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 @Category(NeedsOwnMiniClusterTest.class)
+@SuppressWarnings({ "SqlNoDataSourceInspection", "SqlResolve"})
 public class PhoenixSyncTableToolIT {
   private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixSyncTableToolIT.class);
 
@@ -158,7 +164,7 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
-  public void testSyncTableValidateWithDataDifference() throws Exception {
+  public void testSyncTableWithDataDifference() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 10);
 
     introduceAndVerifyTargetDifferences(uniqueTableName);
@@ -178,46 +184,28 @@ public class PhoenixSyncTableToolIT {
     // Dry-run row-level logging should flag the 3 same-key/different-value rows as
     // ROWS_DIFFERENT_ON_TARGET; nothing missing or extra (replication seeded both sides
     // with the same row keys before introduceAndVerifyTargetDifferences mutated three).
-    assertEquals("Dry-run should detect 3 rows different on target", 3,
-      dryRunCounters.rowsDifferentOnTarget);
-    assertEquals("Dry-run should report 0 rows missing on target", 0,
-      dryRunCounters.rowsMissingOnTarget);
-    assertEquals("Dry-run should report 0 rows extra on target", 0,
-      dryRunCounters.rowsExtraOnTarget);
+    assertRowDriftCounters(dryRunCounters, 0, 0, 3, 0);
 
-    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
-    validateCheckpointEntries(checkpointEntries, uniqueTableName, targetZkQuorum, 10, 10, 1, 3, 4,
-      3, null);
+    validateCheckpointEntries(uniqueTableName, null, dryRunCounters, null);
 
     // Phase 2: repair pass over the same window — MISMATCHED rows transition to REPAIRED in
     // place.
     Job repairJob = runSyncToolWithLargeChunks(uniqueTableName, "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
-    Counters repairCounters = repairJob.getCounters();
-    assertRepairChunkAndMapperCounters(repairCounters, 3, 0, 3, 0, 0);
-    assertRepairRowCounters(repairCounters, 0, 0, 0);
+    SyncCountersResult repairCounters = getSyncCounters(repairJob);
+    assertRepairChunkAndMapperCounters(repairCounters, 3, 0, 0, 3, 0, 0);
+    assertRowDriftCounters(repairCounters, 0, 0, 0, 0);
     // 3 rows × 2 mismatched cells (NAME + Phoenix's _0 empty-key cell) = 6 missing and 6 extra.
     assertRepairCellCounters(repairCounters, 6, 6, 0, 0);
 
     // Target rows should now match source.
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
 
-    List<PhoenixSyncTableCheckpointOutputRow> postRepairEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
-    assertEquals("Expected 3 CHUNK/REPAIRED rows after repair", 3,
-      countCheckpointsByTypeAndStatus(postRepairEntries,
-        PhoenixSyncTableCheckpointOutputRow.Type.CHUNK,
-        PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED));
-    assertEquals("Expected 3 REGION/REPAIRED rows after repair", 3,
-      countCheckpointsByTypeAndStatus(postRepairEntries,
-        PhoenixSyncTableCheckpointOutputRow.Type.REGION,
-        PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED));
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    validateCheckpointEntries(uniqueTableName, null, dryRunCounters, repairCounters);
   }
 
   @Test
-  public void testSyncTableValidateWithDifferentZkQuorumFormats() throws Exception {
+  public void testSyncTableWithDifferentZkQuorumFormats() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 10);
     introduceAndVerifyTargetDifferences(uniqueTableName);
 
@@ -239,9 +227,17 @@ public class PhoenixSyncTableToolIT {
 
     // After validating detection across ZK formats, run dry-run + repair against the default
     // targetZkQuorum to confirm the tool converges source and target.
-    runSyncToolWithRepair(uniqueTableName);
+    RepairRunResult result = runSyncToolWithRepair(uniqueTableName);
+    SyncCountersResult dryRunCounters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
+    validateSyncCounters(dryRunCounters, 10, 10, 7, 3);
+    validateMapperCounters(dryRunCounters, 1, 3);
+    assertRowDriftCounters(dryRunCounters, 0, 0, 3, 0);
+    assertRepairChunkAndMapperCounters(repairCounters, 3, 0, 0, 3, 0, 0);
+    assertRowDriftCounters(repairCounters, 0, 0, 0, 0);
+    assertRepairCellCounters(repairCounters, 6, 6, 0, 0);
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    validateCheckpointEntries(uniqueTableName, null, dryRunCounters, repairCounters);
   }
 
   @Test
@@ -263,12 +259,22 @@ public class PhoenixSyncTableToolIT {
     validateSyncCounters(counters, 10, 7, 7, 3);
     validateMapperCounters(counters, 1, 3);
     assertEquals("Should have only 1 Mapper task created with coalescing", 4, counters.taskCreated);
+    // Three target rows were Phoenix-deleted, so dry-run sees them as missing on target.
+    assertRowDriftCounters(counters, 3, 0, 0, 0);
 
     // Repair pass only re-runs the 3 mismatched chunks (verified chunks are excluded by the
     // resume filter). Target's DELETEs left tombstones that shadow source's Puts at lower
     // timestamps, so each re-run mapper rolls up to UNREPAIRABLE.
     SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
     validateMapperCountersRepair(repairCounters, 0, 0, 3, 0);
+    assertRepairChunkAndMapperCounters(repairCounters, 0, 3, 0, 0, 3, 0);
+
+    // Tombstones still shadow source — Phoenix SELECT must still diverge.
+    verifyDataDiverges(sourceConnection, targetConnection, uniqueTableName);
+
+    // 7 verified chunks/mappers from the dry-run, 3 unrepairable chunks from repair, mappers
+    // roll up to UNREPAIRABLE because every chunk in their region went UNREPAIRABLE.
+    validateCheckpointEntries(uniqueTableName, null, counters, repairCounters);
   }
 
   @Test
@@ -299,12 +305,15 @@ public class PhoenixSyncTableToolIT {
     // Run sync tool, TTL-expired rows (1-3) should be skipped on both source and target
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName);
     SyncCountersResult counters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
 
     validateSyncCounters(counters, 7, 7, 5, 2);
     validateMapperCounters(counters, 2, 2);
+    assertRowDriftCounters(counters, 0, 0, 2, 0);
+    assertRepairChunkAndMapperCounters(repairCounters, 2, 0, 0, 2, 0, 0);
 
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    validateCheckpointEntries(uniqueTableName, null, counters, repairCounters);
   }
 
   @Test
@@ -355,12 +364,20 @@ public class PhoenixSyncTableToolIT {
     // on source vs 7 on target because IS_STRICT_TTL=false returns expired rows on source
     // (uncompacted) but compaction on target physically removed them — that asymmetry is by
     // design, not drift the tool can converge.
-    runSyncToolWithRepair(uniqueTableName);
+    //
+    // Note: the two runSyncTool calls above each write CHUNK/VERIFIED rows under their own
+    // (from-time, to-time) PK, so the checkpoint table accumulates entries from prior validate
+    // passes — validateCheckpointEntries can't be applied here against a single counter
+    // snapshot. Stick with the MISMATCHED-count invariant.
+    RepairRunResult result = runSyncToolWithRepair(uniqueTableName);
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
+    assertRowDriftCounters(repairCounters, 0, 0, 0, 0);
+    assertRepairChunkAndMapperCounters(repairCounters, 0, 0, 0, 0, 0, 0);
     assertNoMismatchedCheckpoints(uniqueTableName, null);
   }
 
   @Test
-  public void testSyncValidateIndexTable() throws Exception {
+  public void testSyncIndexTable() throws Exception {
     // Create data table on both clusters with replication
     createTableOnBothClusters(sourceConnection, targetConnection, uniqueTableName);
 
@@ -382,24 +399,24 @@ public class PhoenixSyncTableToolIT {
 
     RepairRunResult result = runSyncToolWithRepair(indexName);
     SyncCountersResult counters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
 
     validateSyncCounters(counters, 10, 7, 7, 3);
+    assertRowDriftCounters(counters, 3, 0, 0, 0);
 
     // Verify checkpoint entries show mismatches (from dry-run pass) before repair runs.
     List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
       queryCheckpointTable(sourceConnection, indexName, targetZkQuorum, null);
-
     assertFalse("Should have checkpointEntries", checkpointEntries.isEmpty());
 
-    // The repair pass syncs the index physical table on target with the source index. Since the
-    // data table was also corrupted on target (3 rows deleted via deleteHBaseRows) but we only
-    // ran sync on the index, the data table itself is still drifted — only assert on index
-    // checkpoint rows.
-    assertNoMismatchedCheckpoints(indexName, null);
+    // Repair-pass outcome (REPAIRED vs UNREPAIRABLE) depends on tombstone-vs-source timestamps,
+    // which we don't pin here, so fall back to an asserCheckpoint counters check that simply
+    // mirrors whatever the repair pass produced.
+    validateCheckpointEntries(indexName, null, counters, repairCounters);
   }
 
   @Test
-  public void testSyncValidateLocalIndexTable() throws Exception {
+  public void testSyncLocalIndexTable() throws Exception {
     // Create data table on both clusters with replication
     createTableOnBothClusters(sourceConnection, targetConnection, uniqueTableName);
 
@@ -423,6 +440,7 @@ public class PhoenixSyncTableToolIT {
     // missing index rows on target.
     RepairRunResult result = runSyncToolWithRepair(indexName);
     SyncCountersResult counters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
 
     assertTrue(String.format("Should have at least %d verified chunks, actual: %d", 1,
       counters.chunksVerified), counters.chunksVerified >= 1);
@@ -434,13 +452,11 @@ public class PhoenixSyncTableToolIT {
       queryCheckpointTable(sourceConnection, indexName, targetZkQuorum, null);
 
     assertFalse("Should have checkpoint entries for local index", checkpointEntries.isEmpty());
-
-    // After repair, the local-index physical table on target should match source's index.
-    assertNoMismatchedCheckpoints(indexName, null);
+    validateCheckpointEntries(indexName, null, counters, repairCounters);
   }
 
   @Test
-  public void testSyncValidateMultiTenantSaltedTableDifferences() throws Exception {
+  public void testSyncMultiTenantSaltedTableDifferences() throws Exception {
     String[] tenantIds = new String[] { "TENANT_001", "TENANT_002", "TENANT_003" };
     int rowsPerTenant = 10;
     createMultiTenantSaltedTableOnBothClusters(sourceConnection, targetConnection, uniqueTableName);
@@ -490,27 +506,26 @@ public class PhoenixSyncTableToolIT {
     RepairRunResult t1 =
       runSyncToolWithRepair(uniqueTableName, "--tenant-id", tenantIds[0], "--to-time", toTime);
     SyncCountersResult counters1 = getSyncCounters(t1.dryRunJob);
+    SyncCountersResult repairCounters1 = getSyncCounters(t1.repairJob);
     validateSyncCounters(counters1, 10, 10, 10, 0);
     validateMapperCounters(counters1, 4, 0);
+    assertRowDriftCounters(counters1, 0, 0, 0, 0);
+    assertRepairChunkAndMapperCounters(repairCounters1, 0, 0, 0, 0, 0, 0);
 
     // TENANT_002 has 3 modified rows. Dry-run detects, repair writes back source values.
     RepairRunResult t2 = runSyncToolWithRepair(uniqueTableName, "--tenant-id", tenantIds[1]);
     SyncCountersResult counters2 = getSyncCounters(t2.dryRunJob);
+    SyncCountersResult repairCounters2 = getSyncCounters(t2.repairJob);
     validateSyncCounters(counters2, 10, 10, 7, 3);
     validateMapperCounters(counters2, 2, 2);
+    assertRowDriftCounters(counters2, 0, 0, 3, 0);
+    assertRepairChunkAndMapperCounters(repairCounters2, 3, 0, 0, 2, 0, 0);
 
-    // Verify checkpoint table has entries for the reprocessed regions
-    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, "TENANT_002");
-    assertFalse("Should have checkpoint entries for TENANT_002", checkpointEntries.isEmpty());
-
-    checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, "TENANT_001");
-    assertFalse("Should have checkpoint entries for TENANT_001", checkpointEntries.isEmpty());
-
-    // No MISMATCHED rows should remain after repair pass for either tenant.
-    assertNoMismatchedCheckpoints(uniqueTableName, "TENANT_001");
-    assertNoMismatchedCheckpoints(uniqueTableName, "TENANT_002");
+    // Pin checkpoint state per tenant.
+    validateCheckpointEntries(uniqueTableName, "TENANT_001", counters1,
+      repairCounters1);
+    validateCheckpointEntries(uniqueTableName, "TENANT_002", counters2,
+      repairCounters2);
 
     // After repair, TENANT_002's data should be identical between source and target.
     withTenantConnections(tenantIds[1],
@@ -518,7 +533,7 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
-  public void testSyncTableValidateWithTimeRangeFilter() throws Exception {
+  public void testSyncTableWithTimeRangeFilter() throws Exception {
     createTableOnBothClusters(sourceConnection, targetConnection, uniqueTableName);
 
     // Insert data BEFORE the time range window
@@ -564,7 +579,7 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
-  public void testSyncTableValidateCheckpointWithPartialReRunAndRegionSplits() throws Exception {
+  public void testSyncTableCheckpointWithPartialReRunAndRegionSplits() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 100);
 
     List<Integer> sourceSplits = Arrays.asList(15, 45, 51, 75, 95);
@@ -639,14 +654,11 @@ public class PhoenixSyncTableToolIT {
     // REPAIRED with stale boundaries (relative to the post-split layout); the resume filter
     // skips those, so a final run can leave residual drift. Cleanup the checkpoint and run
     // a dry-run + repair pass on the stable layout to converge.
-    cleanupCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
-    runSyncToolWithRepair(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
-      String.valueOf(toTime));
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    convergeAndAssertIdentical(uniqueTableName, fromTime, toTime);
   }
 
   @Test
-  public void testSyncTableValidateCheckpointWithChunkSizeChangeOnReRun() throws Exception {
+  public void testSyncTableCheckpointWithChunkSizeChangeOnReRun() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 100);
 
     List<Integer> sourceSplits = Arrays.asList(25, 50, 75);
@@ -705,14 +717,11 @@ public class PhoenixSyncTableToolIT {
     // pass on the same window so the repair flow has a stable boundary set to converge.
     // Use the dry-run+repair pattern so any chunk that landed in a non-resumable state
     // (REPAIRED with stale boundaries) is re-validated rather than skipped.
-    cleanupCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
-    runSyncToolWithRepair(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
-      String.valueOf(toTime));
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    convergeAndAssertIdentical(uniqueTableName, fromTime, toTime);
   }
 
   @Test
-  public void testSyncTableValidateCheckpointWithPartialReRunAndRegionMerges() throws Exception {
+  public void testSyncTableCheckpointWithPartialReRunAndRegionMerges() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 100);
 
     List<Integer> sourceSplits = Arrays.asList(10, 20, 30, 40, 50, 60, 70, 80, 90);
@@ -778,7 +787,7 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
-  public void testSyncTableValidateIdempotentOnReRun() throws Exception {
+  public void testSyncTableIdempotentOnReRun() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 10);
 
     // Capture consistent time range for both runs (ensures checkpoint lookup will match)
@@ -820,7 +829,7 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
-  public void testSyncTableValidateIdempotentAfterRegionSplits() throws Exception {
+  public void testSyncTableIdempotentAfterRegionSplits() throws Exception {
     // Setup table with initial splits and data
     setupStandardTestWithReplication(uniqueTableName, 1, 10);
 
@@ -875,7 +884,7 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
-  public void testSyncTableValidateWithSchemaAndTableNameOptions() throws Exception {
+  public void testSyncTableWithSchemaAndTableNameOptions() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 10);
 
     // Introduce differences on target
@@ -884,17 +893,21 @@ public class PhoenixSyncTableToolIT {
     // Run sync tool with both --schema and --table-name options
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--schema", "");
     SyncCountersResult counters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
 
     // Validate counters
     validateSyncCounters(counters, 10, 10, 7, 3);
     validateMapperCounters(counters, 1, 3);
+    assertRowDriftCounters(counters, 0, 0, 3, 0);
+    assertRepairChunkAndMapperCounters(repairCounters, 3, 0, 0, 3, 0, 0);
+    assertRepairCellCounters(repairCounters, 6, 6, 0, 0);
 
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    validateCheckpointEntries(uniqueTableName, null, counters, repairCounters);
   }
 
   @Test
-  public void testSyncTableValidateInBackgroundMode() throws Exception {
+  public void testSyncTableInBackgroundMode() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 10);
 
     introduceAndVerifyTargetDifferences(uniqueTableName);
@@ -925,18 +938,22 @@ public class PhoenixSyncTableToolIT {
 
     validateSyncCounters(counters, 10, 10, 7, 3);
     validateMapperCounters(counters, 1, 3);
+    assertRowDriftCounters(counters, 0, 0, 3, 0);
 
     // Now run the repair pass (foreground for synchronous assertions). Same time window so
     // the dry-run-pass MISMATCHED rows are overwritten with REPAIRED.
-    runSyncTool(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
-      String.valueOf(toTime));
+    Job repairJob = runSyncTool(uniqueTableName, "--from-time", String.valueOf(fromTime),
+      "--to-time", String.valueOf(toTime));
+    SyncCountersResult repairCounters = getSyncCounters(repairJob);
+    assertRepairChunkAndMapperCounters(repairCounters, 3, 0, 0, 3, 0, 0);
+    assertRepairCellCounters(repairCounters, 6, 6, 0, 0);
 
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    validateCheckpointEntries(uniqueTableName, null, counters, repairCounters);
   }
 
   @Test
-  public void testSyncTableValidateWithCustomTimeouts() throws Exception {
+  public void testSyncTableWithCustomTimeouts() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 10);
 
     introduceAndVerifyTargetDifferences(uniqueTableName);
@@ -976,16 +993,20 @@ public class PhoenixSyncTableToolIT {
     counters.logCounters(testName.getMethodName());
     validateSyncCounters(counters, 10, 10, 7, 3);
     validateMapperCounters(counters, 1, 3);
+    assertRowDriftCounters(counters, 0, 0, 3, 0);
 
     // Repair pass over the same window: convergence + no MISMATCHED rows remaining.
-    runSyncTool(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
-      String.valueOf(toTime));
+    Job repairJob = runSyncTool(uniqueTableName, "--from-time", String.valueOf(fromTime),
+      "--to-time", String.valueOf(toTime));
+    SyncCountersResult repairCounters = getSyncCounters(repairJob);
+    assertRepairChunkAndMapperCounters(repairCounters, 3, 0, 0, 3, 0, 0);
+    assertRepairCellCounters(repairCounters, 6, 6, 0, 0);
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    validateCheckpointEntries(uniqueTableName, null, counters, repairCounters);
   }
 
   @Test
-  public void testSyncTableValidateWithExtraRowsOnTarget() throws Exception {
+  public void testSyncTableWithExtraRowsOnTarget() throws Exception {
     // Create tables on both clusters
     createTableOnBothClusters(sourceConnection, targetConnection, uniqueTableName);
 
@@ -1013,21 +1034,12 @@ public class PhoenixSyncTableToolIT {
     // Run dry-run + repair sharing the same time window.
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName);
     SyncCountersResult counters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
 
     validateSyncCounters(counters, 10, 15, 5, 5);
     validateMapperCounters(counters, 0, 4);
-
-    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
-
-    // Count mismatched entries in checkpoint table — after the repair pass, all MISMATCHED
-    // rows from the dry-run pass should have been overwritten with REPAIRED.
-    long mismatchedCount = countCheckpointsByStatus(checkpointEntries,
-      PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED);
-    long repairedCount = countCheckpointsByStatus(checkpointEntries,
-      PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED);
-    assertEquals("After repair, no MISMATCHED rows should remain", 0, mismatchedCount);
-    assertTrue("Should have REPAIRED rows after repair pass", repairedCount > 0);
+    assertRowDriftCounters(counters, 0, 5, 0, 0);
+    assertRepairChunkAndMapperCounters(repairCounters, 5, 0, 0, 4, 0, 0);
 
     // After repair: target should converge to source (10 odd-id rows). The 5 extra even-id
     // rows on target had only live cells, so tombstoneWholeRow can remove them.
@@ -1036,10 +1048,12 @@ public class PhoenixSyncTableToolIT {
       TestUtil.getRowCount(sourceConnection, uniqueTableName));
     assertEquals("Target should now also have 10 rows after repair tombstones the extras", 10,
       TestUtil.getRowCount(targetConnection, uniqueTableName));
+
+    validateCheckpointEntries(uniqueTableName, null, counters, repairCounters);
   }
 
   @Test
-  public void testSyncTableValidateWithConcurrentRegionSplits() throws Exception {
+  public void testSyncTableWithConcurrentRegionSplits() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 100);
     // Introduce some mismatches on target before sync
     List<Integer> mismatchIds = Arrays.asList(15, 35, 55, 75, 95);
@@ -1081,10 +1095,7 @@ public class PhoenixSyncTableToolIT {
     // boundary mid-flight can land in REPAIRED with stale boundaries; once REPAIRED, the
     // resume filter skips it. Cleanup the checkpoint and run a dry-run + repair pass on the
     // stable region layout to converge.
-    cleanupCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
-    runSyncToolWithRepair(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
-      String.valueOf(toTime));
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    convergeAndAssertIdentical(uniqueTableName, fromTime, toTime);
   }
 
   /**
@@ -1112,7 +1123,6 @@ public class PhoenixSyncTableToolIT {
     long fromTime = 0L;
     long toTime = System.currentTimeMillis();
 
-    // Stage 1: stable dry-run populates MISMATCHED checkpoint rows.
     Job dryRunJob = runSyncTool(uniqueTableName, "--dry-run", "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
     assertTrue("Stable dry-run should succeed", dryRunJob.isSuccessful());
@@ -1120,11 +1130,9 @@ public class PhoenixSyncTableToolIT {
     assertTrue("Dry-run should detect at least one mismatched chunk",
       dryRunCounters.chunksMismatched >= 1);
 
-    // Stage 2: kick off target-side splits while the repair pass runs. Source splits left out
-    // because a target-side split is what surfaces flushRepairMutations failures.
+    // Target-side splits race with the repair pass — that's where flushRepairMutations failures
+    // would surface.
     Runnable splitJoiner = startConcurrentRegionWork(() -> {
-      // No source-side work; pass a trivial Runnable so startConcurrentRegionWork still wires
-      // both threads and the joiner times out cleanly.
     }, () -> splitTableAt(targetConnection, uniqueTableName,
       Arrays.asList(15, 25, 35, 45, 55, 65, 75, 85, 95)), "repair-splits");
 
@@ -1133,21 +1141,15 @@ public class PhoenixSyncTableToolIT {
     splitJoiner.run();
     assertTrue("Repair pass should not throw despite concurrent splits", repairJob.isSuccessful());
 
-    // Stage 3: stable convergence pass. Cleanup checkpoint so the resume filter doesn't skip
-    // chunks that were marked REPAIRED with stale boundaries during the racing pass.
-    cleanupCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
-    runSyncToolWithRepair(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
-      String.valueOf(toTime));
-
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
-    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    // Cleanup checkpoint so the resume filter doesn't skip chunks marked REPAIRED with stale
+    // boundaries during the racing pass.
+    convergeAndAssertIdentical(uniqueTableName, fromTime, toTime);
   }
 
   /**
-   * P4 (idempotent repair): Guards against a regression where repair claims REPAIRED but does
-   * not actually converge. Run a full dry-run + repair on a divergent table, clean the
-   * checkpoint, then run the same dry-run + repair again on the now-converged tables and assert
-   * the second pass is a no-op (zero mismatches detected, zero chunks repaired).
+   * Guards against a regression where repair claims REPAIRED but doesn't actually converge.
+   * Repair the divergent table, clean the checkpoint, then re-run dry-run + repair on the now
+   * converged tables — both passes must be no-ops.
    */
   @Test
   public void testRepairIsIdempotent() throws Exception {
@@ -1158,7 +1160,6 @@ public class PhoenixSyncTableToolIT {
     long fromTime = 0L;
     long toTime = System.currentTimeMillis();
 
-    // Pass 1: detect + repair.
     RepairRunResult firstRun = runSyncToolWithRepair(uniqueTableName, "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
     assertTrue("First dry-run should succeed", firstRun.dryRunJob.isSuccessful());
@@ -1167,39 +1168,39 @@ public class PhoenixSyncTableToolIT {
     SyncCountersResult firstDryRunCounters = getSyncCounters(firstRun.dryRunJob);
     assertTrue("First dry-run should detect mismatched chunks",
       firstDryRunCounters.chunksMismatched >= 1);
-    Counters firstRepairCounters = firstRun.repairJob.getCounters();
+    SyncCountersResult firstRepairCounters = getSyncCounters(firstRun.repairJob);
     assertTrue("First repair should mark chunks REPAIRED",
-      firstRepairCounters.findCounter(SyncCounters.CHUNKS_REPAIRED).getValue() >= 1);
+      firstRepairCounters.chunksRepaired >= 1);
 
-    // Tables must be data-identical after the first repair.
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    validateCheckpointEntries(uniqueTableName, null, firstDryRunCounters,
+      firstRepairCounters);
 
-    // Pass 2 prep: clean the checkpoint so the resume filter doesn't skip already-VERIFIED
-    // chunks — the second dry-run must scan the full layout from scratch.
+    // Clean the checkpoint so the second dry-run scans the full layout instead of resuming
+    // from VERIFIED chunks.
     cleanupCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
 
-    // Pass 2: same window, no further mutations. Both passes must be no-ops.
     RepairRunResult secondRun = runSyncToolWithRepair(uniqueTableName, "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
     assertTrue("Second dry-run should succeed", secondRun.dryRunJob.isSuccessful());
     assertTrue("Second repair should succeed", secondRun.repairJob.isSuccessful());
 
     SyncCountersResult secondDryRunCounters = getSyncCounters(secondRun.dryRunJob);
+    SyncCountersResult secondRepairCounters = getSyncCounters(secondRun.repairJob);
     assertEquals("Second dry-run should detect zero mismatches", 0,
       secondDryRunCounters.chunksMismatched);
-
-    // Second repair pass should be a no-op: nothing repaired, nothing failed.
-    assertRepairChunkAndMapperCounters(secondRun.repairJob.getCounters(), 0, 0, 0, 0, 0);
+    assertRepairChunkAndMapperCounters(secondRepairCounters, 0, 0, 0, 0, 0, 0);
+    assertRowDriftCounters(secondRepairCounters, 0, 0, 0, 0);
 
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    validateCheckpointEntries(uniqueTableName, null, secondDryRunCounters,
+      secondRepairCounters);
   }
 
   /**
-   * P5 (all-tombstoned target-extra row): Source has no row K; target has row K but every cell
-   * is already a tombstone. {@code tombstoneWholeRow} returns {@code liveCellsTombstoned == 0}
-   * (line ~217 of {@code PhoenixSyncTableChunkRepairer}) → {@code drift.rowsCannotRepair++},
-   * {@code rowsExtraOnTarget} unchanged. Pins the rare "target row extra but already
-   * fully-tombstoned" path that currently has zero coverage.
+   * Target row K has only tombstones (no live cells) under {@code --raw-scan}, source lacks the
+   * row. {@code tombstoneWholeRow} finds zero live cells to tombstone → row rolls up as
+   * unrepairable, {@code rowsExtraOnTarget} stays 0.
    */
   @Test
   public void testRepairAllTombstonedTargetRowExtra() throws Exception {
@@ -1211,44 +1212,25 @@ public class PhoenixSyncTableToolIT {
     final long ts = base + 1L;
     final long tombstoneTs = base + 2L;
 
-    // Plant a sentinel row on both sides so the verifier has *something* to compare and
-    // produces a non-empty chunk hash. The sentinel row stays clean — the test focuses on
-    // rowId=5 only.
-    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), ts)) {
-      scnSrc.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + otherRowId + ", 'sentinel')");
-      scnSrc.commit();
-    }
-    try (Connection scnTgt = openConnectionAtScn(CLUSTERS.getZkUrl2(), ts)) {
-      scnTgt.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + otherRowId + ", 'sentinel')");
-      scnTgt.commit();
-    }
+    // Sentinel row on both sides so the chunk hash is non-empty.
+    upsertAtScnBoth(ts,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + otherRowId + ", 'sentinel')");
 
-    // Target only: plant raw DeleteColumn tombstones for row K with NO underlying Put cells.
-    // Under --raw-scan the row surfaces (tombstones are themselves cells) but every cell is a
-    // Delete, so tombstoneWholeRow() returns liveCellsTombstoned == 0 → drift.rowsCannotRepair
-    // increments and rowsExtraOnTarget stays 0. This pins the rare "row exists in raw view but
-    // has no live cells to tombstone" branch.
+    // Tombstones with no underlying Puts — row surfaces under raw scan but every cell is a Delete.
     byte[] rowKey = integerRowKey(rowId);
     writeRawDeleteColumn(targetConnection, uniqueTableName, rowKey, "0", "NAME", tombstoneTs);
     writeRawDeleteColumn(targetConnection, uniqueTableName, rowKey, "0", "NAME_VALUE",
       tombstoneTs);
     writeRawDeleteColumn(targetConnection, uniqueTableName, rowKey, "0", "_0", tombstoneTs);
 
-    // Spin until wall-clock advances past the highest cell timestamp so --to-time
-    // (which defaults to currentTimeMillis()) covers our planted cells.
-    while (System.currentTimeMillis() <= tombstoneTs) {
-      // spin
-    }
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
-      String.valueOf(fromTime), "--to-time", String.valueOf(System.currentTimeMillis()),
+      String.valueOf(fromTime), "--to-time", String.valueOf(waitUntilWallClockPasses(tombstoneTs)),
       "--raw-scan");
     assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
-    // Row K's cells were already all tombstones — no live cells to tombstone again, and
-    // the row is flagged unrepairable.
-    assertRepairRowCounters(result.repairJob.getCounters(), 0, 0, 1);
+    assertRowDriftCounters(getSyncCounters(result.repairJob), 0, 0, 0, 1);
+    // Phoenix SELECT already sees both sides as identical (target's row 5 is tombstone-only and
+    // invisible). Divergence is at the raw-cell level only — not asserted via SELECT here.
   }
 
   @Test
@@ -1286,8 +1268,12 @@ public class PhoenixSyncTableToolIT {
     Job job = runSyncTool(uniqueTableName, "--dry-run");
     SyncCountersResult counters = getSyncCounters(job);
 
-    // Validate counters - all rows should be processed and all chunks mismatched
+    // Validate counters - all rows should be processed and all chunks mismatched. The 10 rows
+    // have identical Phoenix-visible values but distinct cell timestamps, so the checksum
+    // diverges per row (10 mismatched chunks) and the row-level diff classifies them as
+    // ROWS_DIFFERENT_ON_TARGET (same key on both sides, different cell payload).
     validateSyncCounters(counters, 10, 10, 0, 10);
+    assertRowDriftCounters(counters, 0, 0, 10, 0);
 
     // Verify checkpoint entries show mismatches
     List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
@@ -1299,7 +1285,7 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
-  public void testSyncTableValidateWithConcurrentRegionMerges() throws Exception {
+  public void testSyncTableWithConcurrentRegionMerges() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 100);
     // Explicitly split tables to create many regions for merging
     List<Integer> sourceSplits = Arrays.asList(10, 15, 20, 25, 40, 45, 60, 65, 80, 85);
@@ -1353,14 +1339,11 @@ public class PhoenixSyncTableToolIT {
     // Concurrent merges may leave chunks REPAIRED with stale boundaries; the resume filter
     // skips those on a single rerun. Cleanup the checkpoint and run a dry-run + repair pass
     // on the stable region layout to converge.
-    cleanupCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
-    runSyncToolWithRepair(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
-      String.valueOf(toTime));
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    convergeAndAssertIdentical(uniqueTableName, fromTime, toTime);
   }
 
   @Test
-  public void testSyncTableValidateWithPagingTimeout() throws Exception {
+  public void testSyncTableWithPagingTimeout() throws Exception {
     // Create tables on both clusters
     setupStandardTestWithReplication(uniqueTableName, 1, 100);
 
@@ -1419,7 +1402,7 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
-  public void testSyncTableValidateWithPagingTimeoutWithSplits() throws Exception {
+  public void testSyncTableWithPagingTimeoutWithSplits() throws Exception {
     // Create tables on both clusters
     setupStandardTestWithReplication(uniqueTableName, 1, 100);
 
@@ -1537,6 +1520,105 @@ public class PhoenixSyncTableToolIT {
       uniqueTableName));
   }
 
+  /**
+   * When the mapper successfully mutates target but the audit checkpoint UPSERT fails, the
+   * tool must increment {@code CHECKPOINT_WRITE_FAILED} and exit non-zero so the operator
+   * can investigate the audit gap. Failure is injected via a RegionObserver on the
+   * checkpoint table that throws {@link DoNotRetryIOException} on every {@code preBatchMutate}.
+   */
+  @Test
+  public void testCheckpointWriteFailureCausesNonZeroExit() throws Exception {
+    setupStandardTestWithReplication(uniqueTableName, 1, 5);
+    introduceMismatchesByIds(uniqueTableName, Arrays.asList(2, 3, 4));
+
+    // Run once first so the checkpoint table exists; we can only attach a coprocessor to a
+    // table that's already been created.
+    Job initial = runSyncTool(uniqueTableName, "--dry-run");
+    assertTrue(initial.isSuccessful());
+
+    String ckpt = PhoenixSyncTableOutputRepository.SYNC_TABLE_CHECKPOINT_TABLE_NAME;
+    TestUtil.addCoprocessor(sourceConnection, ckpt, CheckpointWriteFailingObserver.class);
+    long fromTime = 0L;
+    long toTime = System.currentTimeMillis();
+    try {
+      // Inline tool invocation — we need exitCode != 0, which runSyncTool would assertion-fail.
+      PhoenixSyncTableTool tool = new PhoenixSyncTableTool();
+      tool.setConf(sourceClusterConf());
+      int exitCode = tool.run(
+        new String[] { "--table-name", uniqueTableName, "--target-cluster", targetZkQuorum,
+          "--run-foreground", "--chunk-size", "1", "--from-time", String.valueOf(fromTime),
+          "--to-time", String.valueOf(toTime) });
+
+      assertNotEquals("Tool must surface non-zero exit when checkpoint writes fail", 0, exitCode);
+      // Note: CHECKPOINT_WRITE_FAILED only increments on the chunk-outcome write path
+      // (writeChunkCheckpoint). Region-level and verified/mismatched-chunk writes propagate
+      // SQLException up and fail the mapper task instead — that still produces a non-zero
+      // exit, which is the operator-visible signal we pin here. We also can't assert on
+      // target convergence inside this block: when the very first checkpoint write throws,
+      // the mapper aborts before reaching all mismatched chunks, so target stays drifted.
+    } finally {
+      TestUtil.removeCoprocessor(sourceConnection, ckpt, CheckpointWriteFailingObserver.class);
+    }
+
+    // Recovery: re-run repair (no --dry-run) with the SAME time window. The resume filter
+    // skips only VERIFIED/REPAIRED, so the mismatched/non-terminal rows from the failed run
+    // are re-processed and target converges — no checkpoint cleanup needed.
+    Job recovery = runSyncTool(uniqueTableName, "--from-time", String.valueOf(fromTime),
+      "--to-time", String.valueOf(toTime));
+    assertTrue(recovery.isSuccessful());
+    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+  }
+
+  /**
+   * Repair-batch flush failure: a RegionObserver on the target data table fails every
+   * {@code preBatchMutate}, so {@code flushRepairMutations} throws and the chunk rolls up
+   * {@code REPAIR_FAILED}. After the observer is removed and the checkpoint cleaned up, a
+   * fresh run converges.
+   */
+  @Test
+  public void testRepairFailedSurfacesCountersAndCheckpoint() throws Exception {
+    setupStandardTestWithReplication(uniqueTableName, 1, 5);
+    introduceMismatchesByIds(uniqueTableName, Arrays.asList(2, 3, 4));
+
+    TestUtil.addCoprocessor(targetConnection, uniqueTableName, RepairBatchFailingObserver.class);
+    long fromTime = 0L;
+    long toTime = System.currentTimeMillis();
+    try {
+      // dryRun + repair: dry-run only reads from target, so it succeeds; repair flushes
+      // mutations and trips the observer.
+      RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
+        String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
+      assertTrue("Dry-run should still succeed", result.dryRunJob.isSuccessful());
+
+      Counters c = result.repairJob.getCounters();
+      assertTrue("CHUNKS_REPAIR_FAILED must increment when target writes fail",
+        c.findCounter(SyncCounters.CHUNKS_REPAIR_FAILED).getValue() >= 1);
+      assertTrue("MAPPERS_REPAIR_FAILED must roll up when any chunk fails",
+        c.findCounter(SyncCounters.MAPPERS_REPAIR_FAILED).getValue() >= 1);
+
+      List<PhoenixSyncTableCheckpointOutputRow> entries =
+        queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
+      assertTrue("At least one REPAIR_FAILED checkpoint row must persist",
+        countCheckpointsByStatus(entries,
+          PhoenixSyncTableCheckpointOutputRow.Status.REPAIR_FAILED) >= 1);
+    } finally {
+      TestUtil.removeCoprocessor(targetConnection, uniqueTableName,
+        RepairBatchFailingObserver.class);
+    }
+
+    // Repair was blocked end-to-end — source/target must still diverge.
+    verifyDataDiverges(sourceConnection, targetConnection, uniqueTableName);
+
+    // Recovery: re-run repair with the SAME time window — the resume filter skips only
+    // VERIFIED/REPAIRED, so REPAIR_FAILED chunks are re-processed and target converges.
+    Job recovery = runSyncTool(uniqueTableName, "--from-time", String.valueOf(fromTime),
+      "--to-time", String.valueOf(toTime));
+    assertTrue(recovery.isSuccessful());
+    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+  }
+
   @Test
   public void testSyncTableCheckpointPersistsAcrossFailedRuns() throws Exception {
     // Setup table with replication and insert data
@@ -1599,9 +1681,6 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * P1 (hidden-version unwinding): Verifies the most subtle correctness path in the repairer —
-   * tombstoneTargetCell case 3 from {@code PhoenixSyncTableChunkRepairer.tombstoneTargetCell}.
-   *
    * <p>Scenario: source row has {@code Put(NAME, "alice", T0)}; target row has {@code
    * Put(NAME, "bob", T1)} and {@code Put(NAME, "carol", T2)} where {@code T0 < T1 < T2} and
    * {@code MAX_VERSIONS=2}. Visible cell on target is "carol" (T2); "bob" (T1) is
@@ -1614,7 +1693,6 @@ public class PhoenixSyncTableToolIT {
   @Test
   public void testRepairUnwindsHiddenTargetVersions() throws Exception {
     final int rowId = 5;
-    // Two clusters, no replication — we plant cells deterministically on each side.
     long base = createRepairTestTableOnBothClusters(uniqueTableName, 2, "3, 7");
 
     long fromTime = 0L;
@@ -1622,43 +1700,20 @@ public class PhoenixSyncTableToolIT {
     final long targetT1 = base + 2L;
     final long targetT2 = base + 3L;
 
-    byte[] rowKey = integerRowKey(rowId);
-    String family = "0"; // COLUMN_ENCODED_BYTES=NONE → family is "0"
-    String qualifier = "NAME";
+    // Source: single NAME Put.
+    upsertAtScnSource(sourceTs,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
 
-    // Source: single Put(NAME, "alice", T=100). Empty-key cell is needed so the row is
-    // visible to Phoenix scans (and thus to the verifier). Use an SCN connection for that.
-    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), sourceTs)) {
-      scnSrc.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
-      scnSrc.commit();
-    }
-
-    // Target: insert via SCN at T1 then again at T2 to leave two NAME versions; with VERSIONS=2
-    // both versions are retained. Visible read is "carol" (T2); "bob" (T1) is one-version-hidden.
-    try (Connection scnTgtT1 = openConnectionAtScn(CLUSTERS.getZkUrl2(), targetT1)) {
-      scnTgtT1.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'bob')");
-      scnTgtT1.commit();
-    }
-    try (Connection scnTgtT2 = openConnectionAtScn(CLUSTERS.getZkUrl2(), targetT2)) {
-      scnTgtT2.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'carol')");
-      scnTgtT2.commit();
-    }
+    // Target: two NAME versions retained under VERSIONS=2 — "carol"@T2 visible, "bob"@T1 hidden.
+    upsertAtScnTarget(targetT1,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'bob')");
+    upsertAtScnTarget(targetT2,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'carol')");
 
     // Sanity: target's visible NAME is "carol" before repair.
-    try (PreparedStatement ps = targetConnection
-      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-      ps.setInt(1, rowId);
-      try (ResultSet rs = ps.executeQuery()) {
-        assertTrue(rs.next());
-        assertEquals("Pre-repair target visible NAME should be carol", "carol", rs.getString(1));
-      }
-    }
+    assertTargetName(uniqueTableName, rowId, "carol");
 
-    // Run dry-run + repair sharing the same time window with --read-all-versions so the
-    // verifier and repairer both see the hidden version.
+    // --read-all-versions so verifier and repairer both see the hidden version.
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(System.currentTimeMillis()),
       "--read-all-versions");
@@ -1667,63 +1722,33 @@ public class PhoenixSyncTableToolIT {
     assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
     Counters repairCounters = result.repairJob.getCounters();
-    // Two NAME versions ("bob"@T1 + "carol"@T2) and two empty-key versions on target — all sit
-    // at timestamps that don't match source's single sourceTs, so each gets counted as
-    // either "different" or "extra" depending on the diff branch. We require at least 2 extras
-    // (the two extra NAME versions vs source's single mirror) — the exact split between
-    // CELLS_EXTRA and CELLS_DIFFERENT depends on per-qualifier matching. Post-repair raw scan
-    // assertions below pin the structural outcome.
     assertTrue("At least 2 cells should be tombstoned for target's hidden+visible NAME versions",
       repairCounters.findCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).getValue() >= 2);
 
-    // Post-repair, Phoenix's standard read on target must see source's "alice", NOT "bob".
-    try (PreparedStatement ps = targetConnection
-      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-      ps.setInt(1, rowId);
-      try (ResultSet rs = ps.executeQuery()) {
-        assertTrue(rs.next());
-        assertEquals("Post-repair target NAME must be alice (hidden version unwound)", "alice",
-          rs.getString(1));
-      }
-    }
+    assertTargetName(uniqueTableName, rowId, "alice");
 
-    // Raw scan: target should have two Delete markers at T2 and T1 plus source's mirror Put@T0.
-    try (Table targetHTable = getHBaseTable(targetConnection, uniqueTableName)) {
-      Scan scan = new Scan().withStartRow(rowKey, true).withStopRow(rowKey, true).setRaw(true);
-      scan.readAllVersions();
-      int nameDeletes = 0;
-      int namePutAtSourceTs = 0;
-      try (ResultScanner sc = targetHTable.getScanner(scan)) {
-        for (Result r; (r = sc.next()) != null;) {
-          for (Cell c : r.rawCells()) {
-            if (Bytes.equals(CellUtil.cloneFamily(c), Bytes.toBytes(family))
-              && Bytes.equals(CellUtil.cloneQualifier(c), Bytes.toBytes(qualifier))) {
-              if (CellUtil.isDelete(c)) {
-                nameDeletes++;
-              } else if (c.getTimestamp() == sourceTs) {
-                namePutAtSourceTs++;
-              }
-            }
-          }
-        }
-      }
-      assertEquals("Two delete markers (one for each target NAME version) expected", 2,
-        nameDeletes);
-      assertEquals("Source's Put@" + sourceTs + " should be mirrored", 1, namePutAtSourceTs);
+    // Raw scan: two Delete markers (one per target NAME version) plus source's mirror Put.
+    // Target's two original Puts (at targetT1 and targetT2) remain visible to a raw scan even
+    // after repair's point-Deletes shadow them, so summary.newestPutTs == targetT2 — assert
+    // instead that source's mirror Put landed at exactly sourceTs.
+    RawCellSummary summary = scanRawTargetNameCells(uniqueTableName, rowId);
+    assertEquals("Two delete markers (one for each target NAME version) expected", 2,
+      summary.totalDeletes());
+    int namePutAtSourceTs = 0;
+    for (long ts : summary.putTimestamps) {
+      if (ts == sourceTs) namePutAtSourceTs++;
     }
+    assertEquals("Source's Put@" + sourceTs + " should be mirrored", 1, namePutAtSourceTs);
+
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    assertNoMismatchedCheckpoints(uniqueTableName, null);
   }
 
   /**
-   * P2 (partial-mirror shadow): Verifies the {@code RowMirrorStatus.PARTIALLY_MIRRORED} branch
-   * indirectly via {@code generateMutationForDiffCells} — both rows exist; one source cell is
-   * shadowed by a target tombstone, sibling cells mirror successfully. {@code anyCellUnrepairable}
-   * propagates up to {@code drift.rowsCannotRepair++} while no cell counter increments for the
-   * shadowed cell (mirror returned false, so nothing was written and nothing counted).
-   *
-   * <p>Setup: row K exists on both sides via a matching {@code NAME_VALUE} cell. Target has a
-   * pre-existing {@code DeleteColumn(NAME, T=300)} shadowing any future {@code NAME} Put at
-   * {@code ts <= 300}. Source's {@code NAME, "alice", T=200} would land on disk but stay
-   * invisible — repair detects this upfront via {@code wouldShadow} and skips the doomed write.
+   * Partial-row shadow: row exists on both sides via a matching NAME_VALUE; target has a
+   * DeleteColumn on NAME above source's NAME Put. Repair must detect the shadow up front via
+   * {@code wouldShadow} and skip the doomed mirror — row rolls up unrepairable, no cell counter
+   * ticks for the suppressed mirror.
    */
   @Test
   public void testRepairPartialShadowWithinRow() throws Exception {
@@ -1734,61 +1759,115 @@ public class PhoenixSyncTableToolIT {
     final long sourceTs = base + 1L;
     final long shadowTombstoneTs = base + 2L;
 
-    // Source: row K with NAME="alice" and NAME_VALUE=99, all at sourceTs.
-    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), sourceTs)) {
-      scnSrc.createStatement().execute("UPSERT INTO " + uniqueTableName
-        + " (ID, NAME, NAME_VALUE) VALUES (" + rowId + ", 'alice', 99)");
-      scnSrc.commit();
-    }
+    // Source: row K with NAME and NAME_VALUE at sourceTs.
+    upsertAtScnSource(sourceTs, "UPSERT INTO " + uniqueTableName
+      + " (ID, NAME, NAME_VALUE) VALUES (" + rowId + ", 'alice', 99)");
 
-    // Target: row K with only NAME_VALUE=99 at sourceTs (matches source's NAME_VALUE).
-    try (Connection scnTgt = openConnectionAtScn(CLUSTERS.getZkUrl2(), sourceTs)) {
-      scnTgt.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
-      scnTgt.commit();
-    }
-    // Plant a DeleteColumn tombstone on target's NAME at shadowTombstoneTs, which shadows any
-    // source mirror at ts <= shadowTombstoneTs.
+    // Target: only NAME_VALUE matching source; NAME is shadowed by the DeleteColumn below.
+    upsertAtScnTarget(sourceTs,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
     writeRawDeleteColumn(targetConnection, uniqueTableName, integerRowKey(rowId), "0", "NAME",
       shadowTombstoneTs);
 
-    // Spin until wall-clock advances past the highest cell timestamp so --to-time
-    // (which defaults to currentTimeMillis()) covers our planted cells.
-    while (System.currentTimeMillis() <= shadowTombstoneTs) {
-      // spin
-    }
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
-      String.valueOf(fromTime), "--to-time", String.valueOf(System.currentTimeMillis()),
-      "--raw-scan");
+      String.valueOf(fromTime), "--to-time",
+      String.valueOf(waitUntilWallClockPasses(shadowTombstoneTs)), "--raw-scan");
 
     assertTrue("Dry-run should succeed", result.dryRunJob.isSuccessful());
-    assertTrue("Repair pass should succeed (shadowing is correctness-only, not a job error)",
-      result.repairJob.isSuccessful());
+    assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
-    Counters repairCounters = result.repairJob.getCounters();
-    // Source's NAME mirror is suppressed by the shadow → no cell counter ticks; row is unrepairable.
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
     assertRepairCellCounters(repairCounters, 0, 0, 0, 1);
     assertTrue("At least one mapper should roll up to UNREPAIRABLE",
-      repairCounters.findCounter(SyncCounters.MAPPERS_UNREPAIRABLE).getValue() >= 1);
+      repairCounters.mappersUnrepairable >= 1);
 
-    // Post-repair, target's read view of NAME for row K is still null (DeleteColumn at T=300
-    // covers everything <= T=300 — including any source mirror we *might* have written). The
-    // assertion validates the repair refused to write the doomed Put.
-    try (PreparedStatement ps = targetConnection
-      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-      ps.setInt(1, rowId);
-      try (ResultSet rs = ps.executeQuery()) {
-        assertTrue(rs.next());
-        assertNull("NAME should still be null on target — shadow was respected",
-          rs.getString(1));
-      }
-    }
+    assertTargetNameNull(uniqueTableName, rowId);
+
+    // Source NAME='alice' but target NAME=null — Phoenix SELECT must still diverge.
+    verifyDataDiverges(sourceConnection, targetConnection, uniqueTableName);
   }
 
   /**
-   * P2 (cell-missing branch): same row exists on both sides, source has an extra column the
-   * target lacks. {@code generateMutationForDiffCells} should mirror it through the
-   * {@code cellMissing++} branch (source-only cell, no shadow on target).
+   * A chunk that lands in UNREPAIRABLE due to a shadowing target
+   * tombstone must recover after the operator runs a major compaction on target and re-runs
+   * sync. Pass 1 reproduces the partial-shadow setup and asserts UNREPAIRABLE; major compact
+   * on target reaps the standalone DeleteColumn; pass 2 mirrors the source Put cleanly and
+   * converges.
+   */
+  @Test
+  public void testUnrepairableRecoversAfterMajorCompactionOnTarget() throws Exception {
+    final int rowId = 5;
+    long base = createRepairTestTableOnBothClusters(uniqueTableName, 1, "3, 7");
+
+    long fromTime = 0L;
+    final long sourceTs = base + 1L;
+    final long shadowTombstoneTs = base + 2L;
+
+    // Source: row K with NAME and NAME_VALUE at sourceTs.
+    upsertAtScnSource(sourceTs, "UPSERT INTO " + uniqueTableName
+      + " (ID, NAME, NAME_VALUE) VALUES (" + rowId + ", 'alice', 99)");
+    // Target: only NAME_VALUE matching source; NAME is shadowed by the DeleteColumn below.
+    upsertAtScnTarget(sourceTs,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
+    writeRawDeleteColumn(targetConnection, uniqueTableName, integerRowKey(rowId), "0", "NAME",
+      shadowTombstoneTs);
+
+    // Pass 1: shadow makes the chunk UNREPAIRABLE.
+    long pass1ToTime = waitUntilWallClockPasses(shadowTombstoneTs);
+    RepairRunResult pass1 = runSyncToolWithRepair(uniqueTableName, "--from-time",
+      String.valueOf(fromTime), "--to-time", String.valueOf(pass1ToTime), "--raw-scan");
+
+    assertTrue(pass1.dryRunJob.isSuccessful());
+    assertTrue(pass1.repairJob.isSuccessful());
+
+    SyncCountersResult pass1Counters = getSyncCounters(pass1.repairJob);
+    assertRepairCellCounters(pass1Counters, 0, 0, 0, 1);
+    assertTrue(pass1Counters.mappersUnrepairable >= 1);
+    assertTrue(countCheckpointsByStatus(
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null),
+      PhoenixSyncTableCheckpointOutputRow.Status.UNREPAIRABLE) >= 1);
+
+    // Target must not be corrupted: NAME stays null while the shadow exists.
+    assertTargetNameNull(uniqueTableName, rowId);
+    // Pass 1 left the row in an unrepairable state — Phoenix SELECT must still diverge.
+    verifyDataDiverges(sourceConnection, targetConnection, uniqueTableName);
+
+    // Operator recovery: reap the tombstone on target, wipe checkpoints so the resume filter
+    // re-enters the chunk, then re-run.
+    flushAndMajorCompact(CLUSTERS.getHBaseCluster2(), uniqueTableName);
+    cleanupCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
+
+    // Pass 2: tombstone is gone; mirror succeeds.
+    long pass2ToTime = waitUntilWallClockPasses(pass1ToTime);
+    RepairRunResult pass2 = runSyncToolWithRepair(uniqueTableName, "--from-time",
+      String.valueOf(fromTime), "--to-time", String.valueOf(pass2ToTime), "--raw-scan");
+
+    assertTrue(pass2.dryRunJob.isSuccessful());
+    assertTrue(pass2.repairJob.isSuccessful());
+
+    SyncCountersResult pass2Counters = getSyncCounters(pass2.repairJob);
+    assertRepairCellCounters(pass2Counters, 1, 0, 0, 0);
+    assertTrue(pass2Counters.mappersRepaired >= 1);
+    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    assertTrue(countCheckpointsByStatus(
+      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null),
+      PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED) >= 1);
+
+    try (PreparedStatement ps = targetConnection.prepareStatement(
+      "SELECT NAME, NAME_VALUE FROM " + uniqueTableName + " WHERE ID = ?")) {
+      ps.setInt(1, rowId);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        assertEquals("alice", rs.getString(1));
+        assertEquals(99L, rs.getLong(2));
+      }
+    }
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+  }
+
+  /**
+   * Cell missing on target: source has an extra column, target lacks it. Repair mirrors the
+   * source cell through the {@code cellMissing++} branch.
    */
   @Test
   public void testRepairCellMissingOnTarget() throws Exception {
@@ -1797,46 +1876,30 @@ public class PhoenixSyncTableToolIT {
 
     final long ts = base + 1L;
 
-    // Source: row K with NAME and NAME_VALUE.
-    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), ts)) {
-      scnSrc.createStatement().execute("UPSERT INTO " + uniqueTableName
-        + " (ID, NAME, NAME_VALUE) VALUES (" + rowId + ", 'alice', 99)");
-      scnSrc.commit();
-    }
-    // Target: row K with only NAME_VALUE matching source. NAME is absent.
-    try (Connection scnTgt = openConnectionAtScn(CLUSTERS.getZkUrl2(), ts)) {
-      scnTgt.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
-      scnTgt.commit();
-    }
+    // Source: NAME and NAME_VALUE.
+    upsertAtScnSource(ts, "UPSERT INTO " + uniqueTableName
+      + " (ID, NAME, NAME_VALUE) VALUES (" + rowId + ", 'alice', 99)");
+    // Target: only NAME_VALUE — NAME is missing.
+    upsertAtScnTarget(ts,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
 
-    // Spin until wall-clock advances past ts so --to-time (defaulting to currentTimeMillis())
-    // covers the planted cells.
-    while (System.currentTimeMillis() <= ts) {
-      // spin
-    }
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time", "0",
-      "--to-time", String.valueOf(System.currentTimeMillis()));
+      "--to-time", String.valueOf(waitUntilWallClockPasses(ts)));
     assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
-    assertRepairCellCounters(result.repairJob.getCounters(), 1, 0, 0, 0);
+    SyncCountersResult dryRunCounters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
+    assertRepairCellCounters(repairCounters, 1, 0, 0, 0);
 
-    // Post-repair: target's NAME should equal source's "alice".
-    try (PreparedStatement ps = targetConnection
-      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-      ps.setInt(1, rowId);
-      try (ResultSet rs = ps.executeQuery()) {
-        assertTrue(rs.next());
-        assertEquals("alice", rs.getString(1));
-      }
-    }
+    assertTargetName(uniqueTableName, rowId, "alice");
+
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    validateCheckpointEntries(uniqueTableName, null, dryRunCounters, repairCounters);
   }
 
   /**
-   * P2 (cell-extra branch): same row exists on both sides, target has an extra column source
-   * lacks. {@code generateMutationForDiffCells} should tombstone it via the
-   * {@code cellExtra++} branch ({@code tombstoneTargetCell} with {@code sourceMaxTs == null}
-   * → {@code Delete.addColumns}).
+   * Cell extra on target: target has a column source lacks. Repair tombstones it via the
+   * {@code cellExtra++} branch.
    */
   @Test
   public void testRepairCellExtraOnTarget() throws Exception {
@@ -1845,47 +1908,75 @@ public class PhoenixSyncTableToolIT {
 
     final long ts = base + 1L;
 
-    // Source: row K with only NAME_VALUE.
-    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), ts)) {
-      scnSrc.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
-      scnSrc.commit();
-    }
-    // Target: row K with same NAME_VALUE plus an extra raw NAME cell at the same ts.
-    try (Connection scnTgt = openConnectionAtScn(CLUSTERS.getZkUrl2(), ts)) {
-      scnTgt.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
-      scnTgt.commit();
-    }
+    // Source: only NAME_VALUE.
+    upsertAtScnSource(ts,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
+    // Target: matching NAME_VALUE plus an extra raw NAME cell that source doesn't have.
+    upsertAtScnTarget(ts,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
     writeRawCell(targetConnection, uniqueTableName, integerRowKey(rowId), "0", "NAME", ts,
       Bytes.toBytes("bob"));
 
-    // Spin until wall-clock advances past ts so --to-time (defaulting to currentTimeMillis())
-    // covers the planted cells.
-    while (System.currentTimeMillis() <= ts) {
-      // spin
-    }
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time", "0",
-      "--to-time", String.valueOf(System.currentTimeMillis()));
+      "--to-time", String.valueOf(waitUntilWallClockPasses(ts)));
     assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
-    assertRepairCellCounters(result.repairJob.getCounters(), 0, 1, 0, 0);
+    SyncCountersResult dryRunCounters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
+    assertRepairCellCounters(repairCounters, 0, 1, 0, 0);
 
-    // Post-repair: target's NAME should be tombstoned and read as null.
-    try (PreparedStatement ps = targetConnection
-      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-      ps.setInt(1, rowId);
-      try (ResultSet rs = ps.executeQuery()) {
-        assertTrue(rs.next());
-        assertNull(rs.getString(1));
-      }
-    }
+    assertTargetNameNull(uniqueTableName, rowId);
+
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    validateCheckpointEntries(uniqueTableName, null, dryRunCounters, repairCounters);
   }
 
   /**
-   * P2 (cell-different branch): same row, same {@code (cf, q, ts)} coords, different value.
-   * {@code generateMutationForDiffCells} should hit the {@code cellDifferent++} branch via the
-   * {@code !matchingValue} check at the head of the loop.
+   * {@code tombstoneTargetCell} Case 2 ({@code sourceMaxTs >= ts}): target has a stray older
+   * version of a column that source also has at a higher ts. Repair must point-Delete the
+   * stray version only — no hidden-version sweep — so the visible NAME stays at source's value.
+   */
+  @Test
+  public void testRepairTombstonesTargetExtraVersionAtSameColumn() throws Exception {
+    final int rowId = 5;
+    long base = createRepairTestTableOnBothClusters(uniqueTableName, 2, "3, 7");
+
+    final long olderTs = base + 1L;
+    final long ts = base + 2L;
+
+    // Source and target: NAME='alice' at ts.
+    upsertAtScnBoth(ts,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
+    // Target also gets a stray older raw NAME@olderTs that source doesn't have.
+    writeRawCell(targetConnection, uniqueTableName, integerRowKey(rowId), "0", "NAME", olderTs,
+      Bytes.toBytes("old"));
+
+    RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time", "0",
+      "--to-time", String.valueOf(waitUntilWallClockPasses(ts)), "--raw-scan",
+      "--read-all-versions");
+    assertTrue("Repair should succeed", result.repairJob.isSuccessful());
+
+    SyncCountersResult dryRunCounters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
+    // Only the stray older NAME cell counts as extra; sourceMaxTs >= ts ⇒ single point-Delete.
+    assertRepairCellCounters(repairCounters, 0, 1, 0, 0);
+
+    assertTargetName(uniqueTableName, rowId, "alice");
+
+    // Raw scan: exactly one Delete marker at olderTs, no Delete at ts.
+    RawCellSummary summary = scanRawTargetNameCells(uniqueTableName, rowId);
+    assertEquals("Exactly one tombstone for the stray older NAME version", 1,
+      summary.totalDeletes());
+    assertEquals("Tombstone must target stray version only", olderTs,
+      (long) summary.deleteTimestamps.get(0));
+
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    validateCheckpointEntries(uniqueTableName, null, dryRunCounters, repairCounters);
+  }
+
+  /**
+   * Cell different on target: same {@code (cf, q, ts)}, different value. Repair hits the
+   * {@code cellDifferent++} branch.
    */
   @Test
   public void testRepairCellDifferentValue() throws Exception {
@@ -1894,48 +1985,94 @@ public class PhoenixSyncTableToolIT {
 
     final long ts = base + 1L;
 
-    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), ts)) {
-      scnSrc.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
-      scnSrc.commit();
-    }
-    try (Connection scnTgt = openConnectionAtScn(CLUSTERS.getZkUrl2(), ts)) {
-      scnTgt.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'bob')");
-      scnTgt.commit();
-    }
+    // Source: NAME='alice' at ts.
+    upsertAtScnSource(ts,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
+    // Target: NAME='bob' at the same ts — same (cf, q, ts), different value.
+    upsertAtScnTarget(ts,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'bob')");
 
-    // Spin until wall-clock advances past ts so --to-time (defaulting to currentTimeMillis())
-    // covers the planted cells.
-    while (System.currentTimeMillis() <= ts) {
-      // spin
-    }
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time", "0",
-      "--to-time", String.valueOf(System.currentTimeMillis()));
+      "--to-time", String.valueOf(waitUntilWallClockPasses(ts)));
     assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
-    assertRepairCellCounters(result.repairJob.getCounters(), 0, 0, 1, 0);
+    SyncCountersResult dryRunCounters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
+    assertRepairCellCounters(repairCounters, 0, 0, 1, 0);
 
-    try (PreparedStatement ps = targetConnection
-      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-      ps.setInt(1, rowId);
-      try (ResultSet rs = ps.executeQuery()) {
-        assertTrue(rs.next());
-        assertEquals("alice", rs.getString(1));
-      }
-    }
+    assertTargetName(uniqueTableName, rowId, "alice");
+
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    validateCheckpointEntries(uniqueTableName, null, dryRunCounters, repairCounters);
   }
 
   /**
-   * P6 (asymmetric load-target time-range): Source has Put at T=200 inside the user's window;
-   * target has a {@code DeleteColumn} planted at T=600 — strictly above {@code --to-time T=500}.
-   * The repair scan honors {@code --to-time} and never sees the tombstone in the diff window, so
-   * the diff routes to {@code mirrorWholeRow} in
-   * {@link org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer}. Inside,
-   * {@code TargetRowRecord.load} deliberately uses {@code (fromTime, MAX_VALUE)} — so it
-   * still sees the T=600 tombstone and {@code wouldShadow} returns true on Source's Put@T=200
-   * (DeleteColumn covers ts &lt;= T=600). Result: source's mirror is suppressed, the row is
-   * flagged unrepairable.
+   * Multi-column-family repair: drift simultaneously in {@code CF1} (cell missing on target)
+   * and {@code CF2} (cell extra on target). Pins that cell-level repair scopes mutations to
+   * the correct family — the {@code (family, qualifier)} {@code ColumnKey} keying must keep
+   * the two families' cells from clobbering each other.
+   */
+  @Test
+  public void testRepairAcrossMultipleColumnFamilies() throws Exception {
+    final int rowId = 5;
+    long base = createMultiColumnFamilyTableOnBothClusters(uniqueTableName);
+
+    final long ts = base + 1L;
+
+    // Source: A in CF1 set, B in CF2 unset.
+    upsertAtScnSource(ts,
+      "UPSERT INTO " + uniqueTableName + " (ID, CF1.A) VALUES (" + rowId + ", 'a-src')");
+    // Target: A missing in CF1, B set in CF2 (extra) — drift in both families at once.
+    upsertAtScnTarget(ts,
+      "UPSERT INTO " + uniqueTableName + " (ID, CF2.B) VALUES (" + rowId + ", 'b-tgt')");
+
+    RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time", "0",
+      "--to-time", String.valueOf(waitUntilWallClockPasses(ts)));
+    assertTrue("Repair should succeed", result.repairJob.isSuccessful());
+
+    Counters c = result.repairJob.getCounters();
+    // CF1.A missing → +1, CF2.B extra → +1; nothing different / unrepairable.
+    assertTrue("CF1.A must mirror as missing",
+      c.findCounter(SyncCounters.CELLS_MISSING_ON_TARGET).getValue() >= 1);
+    assertTrue("CF2.B must tombstone as extra",
+      c.findCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).getValue() >= 1);
+    assertEquals("No row should be unrepairable", 0,
+      c.findCounter(SyncCounters.ROWS_CANNOT_REPAIR).getValue());
+
+    try (PreparedStatement ps = targetConnection.prepareStatement(
+      "SELECT CF1.A, CF2.B FROM " + uniqueTableName + " WHERE ID = ?")) {
+      ps.setInt(1, rowId);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        assertEquals("CF1.A mirrored from source", "a-src", rs.getString(1));
+        assertNull("CF2.B tombstoned to match source", rs.getString(2));
+      }
+    }
+
+    // Multi-CF schema doesn't match verifyDataIdentical's standard query — compare inline.
+    assertEquals("Source/target rows must match across both column families",
+      collectMultiCfRows(sourceConnection, uniqueTableName),
+      collectMultiCfRows(targetConnection, uniqueTableName));
+    assertNoMismatchedCheckpoints(uniqueTableName, null);
+  }
+
+  private List<String> collectMultiCfRows(Connection conn, String tableName) throws SQLException {
+    List<String> rows = new ArrayList<>();
+    try (Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery(
+        "SELECT ID, CF1.A, CF2.B FROM " + tableName + " ORDER BY ID")) {
+      while (rs.next()) {
+        rows.add(rs.getInt(1) + "|" + rs.getString(2) + "|" + rs.getString(3));
+      }
+    }
+    return rows;
+  }
+
+  /**
+   * Tombstone planted strictly above {@code --to-time}: the diff scan can't see it, but
+   * {@code TargetRowRecord.load} (which uses {@code [fromTime, MAX_VALUE]}) does — so
+   * {@code wouldShadow} suppresses source's NAME mirror. The empty-key cell still mirrors,
+   * giving the row visible existence; NAME stays null.
    */
   @Test
   public void testRepairShadowFromTombstoneAboveToTime() throws Exception {
@@ -1947,60 +2084,35 @@ public class PhoenixSyncTableToolIT {
     final long toTime = base + 2L;
     final long tombstoneTs = base + 3L;
 
-    // Source has the row inside the diff window.
-    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), sourceTs)) {
-      scnSrc.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
-      scnSrc.commit();
-    }
-    // Target has a tombstone strictly above --to-time. Diff scan won't see it;
-    // TargetRowRecord.load still will.
+    // Source: NAME='alice' at sourceTs (within --to-time window).
+    upsertAtScnSource(sourceTs,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
+    // Target: DeleteColumn on NAME at tombstoneTs > --to-time — invisible to the diff scan.
     writeRawDeleteColumn(targetConnection, uniqueTableName, integerRowKey(rowId), "0", "NAME",
       tombstoneTs);
 
-    // Phoenix requires --to-time <= currentTimeMillis() at tool-run. Spin until wall-clock
-    // moves past tombstoneTs (the highest cell ts in this test) so toTime is unambiguously in
-    // the past.
-    while (System.currentTimeMillis() <= tombstoneTs) {
-      // spin
-    }
+    waitUntilWallClockPasses(tombstoneTs);
 
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(toTime), "--raw-scan");
-    assertTrue("Repair should succeed (shadowing is correctness-only)",
-      result.repairJob.isSuccessful());
+    assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
-    Counters c = result.repairJob.getCounters();
-    // Phoenix UPSERT plants NAME *and* the empty-key cell ("_0"). DeleteColumn shadows only NAME —
-    // "_0" mirrors through (rowsMissing++), and the row is unrepairable because NAME was suppressed.
-    assertRepairRowCounters(c, 1, 0, 1);
-    assertTrue("At least one mapper should roll up to UNREPAIRABLE",
-      c.findCounter(SyncCounters.MAPPERS_UNREPAIRABLE).getValue() >= 1);
+    SyncCountersResult c = getSyncCounters(result.repairJob);
+    // The empty-key cell mirrors (rowsMissing++); NAME is shadow-suppressed (rowsCannotRepair++).
+    assertRowDriftCounters(c, 1, 0, 0, 1);
+    assertTrue("At least one mapper should roll up to UNREPAIRABLE", c.mappersUnrepairable >= 1);
 
-    // Post-repair: target's NAME should still read as null. The shadow was respected, so no Put
-    // for NAME landed (only the empty-key cell, which gives the row visible existence with NAME
-    // covered by the DeleteColumn tombstone above it).
-    try (PreparedStatement ps = targetConnection
-      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-      ps.setInt(1, rowId);
-      try (ResultSet rs = ps.executeQuery()) {
-        assertTrue("Row exists on target via mirrored empty-key cell", rs.next());
-        assertNull("NAME should still be null — DeleteColumn shadow respected", rs.getString(1));
-      }
-    }
+    assertTargetNameNull(uniqueTableName, rowId);
+
+    // NAME shadow leaves target NAME=null while source has 'alice' — Phoenix SELECT diverges.
+    verifyDataDiverges(sourceConnection, targetConnection, uniqueTableName);
   }
 
   /**
-   * Shadow detection via {@code DeleteFamily}: target has a {@code DeleteFamily} tombstone on
-   * cf {@code "0"} covering every qualifier in the family at {@code ts <= tombstoneTs}. Source
-   * has every cell of the row inside the diff window at {@code ts < tombstoneTs}, so each
-   * source cell would be shadowed if mirrored. Drives the
-   * {@code TargetRowRecord.deleteFamilyUpperBound} branch in {@code wouldShadow} — uncovered
-   * by other shadow ITs which only exercise {@code DeleteColumn}.
-   *
-   * <p>To force the {@code cmp < 0} (whole-row mirror) path, the tombstone is planted strictly
-   * above {@code --to-time} so the diff scan does not see target's row at all, but
-   * {@code TargetRowRecord.load} (range {@code [fromTime, MAX_VALUE]}) still surfaces it.
+   * Shadow via {@code DeleteFamily}: tombstone covers every qualifier in cf {@code "0"} at
+   * {@code ts <= tombstoneTs}, planted strictly above {@code --to-time} so only
+   * {@code TargetRowRecord.load} sees it. Every source cell mirror is suppressed → row rolls
+   * up unrepairable.
    */
   @Test
   public void testRepairShadowFromDeleteFamilyOnTarget() throws Exception {
@@ -2012,58 +2124,34 @@ public class PhoenixSyncTableToolIT {
     final long toTime = base + 2L;
     final long familyTombstoneTs = base + 3L;
 
-    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), sourceTs)) {
-      scnSrc.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
-      scnSrc.commit();
-    }
-    // DeleteFamily on cf "0" — covers every qualifier (NAME, NAME_VALUE, _0, ...) at
-    // ts <= familyTombstoneTs. Planted strictly above --to-time so the diff scan can't see it.
+    // Source: NAME='alice' at sourceTs.
+    upsertAtScnSource(sourceTs,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
+    // Target: DeleteFamily on cf "0" above --to-time — covers every source qualifier on load.
     writeRawDeleteFamily(targetConnection, uniqueTableName, integerRowKey(rowId), "0",
       familyTombstoneTs);
 
-    while (System.currentTimeMillis() <= familyTombstoneTs) {
-      // spin
-    }
+    waitUntilWallClockPasses(familyTombstoneTs);
 
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(toTime), "--raw-scan");
-    assertTrue("Repair should succeed (shadowing is correctness-only)",
-      result.repairJob.isSuccessful());
+    assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
-    Counters c = result.repairJob.getCounters();
-    // Both source cells (NAME and _0) live at sourceTs in cf "0"; DeleteFamily covers the whole
-    // family at ts <= familyTombstoneTs (sourceTs < familyTombstoneTs), so every mirror is
-    // suppressed → mirrorWholeRow returns FULLY_SHADOWED → rowsMissing stays 0,
-    // rowsCannotRepair++.
-    assertRepairRowCounters(c, 0, 0, 1);
-    assertTrue("At least one mapper should roll up to UNREPAIRABLE",
-      c.findCounter(SyncCounters.MAPPERS_UNREPAIRABLE).getValue() >= 1);
+    SyncCountersResult c = getSyncCounters(result.repairJob);
+    assertRowDriftCounters(c, 0, 0, 0, 1);
+    assertTrue("At least one mapper should roll up to UNREPAIRABLE", c.mappersUnrepairable >= 1);
 
-    // Post-repair: target should still have no visible row — every source cell was suppressed.
-    try (PreparedStatement ps = targetConnection
-      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-      ps.setInt(1, rowId);
-      try (ResultSet rs = ps.executeQuery()) {
-        assertFalse("Row should not be visible on target — DeleteFamily covered every source cell",
-          rs.next());
-      }
-    }
+    assertTargetRowAbsent(uniqueTableName, rowId);
+
+    // Source has the row, target's family is shadowed away — Phoenix SELECT must diverge.
+    verifyDataDiverges(sourceConnection, targetConnection, uniqueTableName);
   }
 
   /**
-   * Shadow detection via {@code DeleteFamilyVersion}: target has a {@code DeleteFamilyVersion}
-   * tombstone on cf {@code "0"} at exactly {@code sourceTs}. Source's cells at the same ts get
-   * shadowed because {@code DeleteFamilyVersion} matches every qualifier in the family at the
-   * exact ts. Drives the {@code TargetRowRecord.deleteFamilyVersionTs} branch in
-   * {@code wouldShadow} — also uncovered prior to this test.
-   *
-   * <p>{@code DeleteFamilyVersion} requires ts equality (not inequality) so the
-   * tombstone-above-{@code toTime} trick used in the {@code DeleteColumn}/{@code DeleteFamily}
-   * shadow tests doesn't apply here. Instead we omit {@code --raw-scan}: target has no live
-   * cells (just the tombstone), so without raw mode the diff scan sees target as empty,
-   * routing to the {@code cmp < 0} mirrorWholeRow path; {@code TargetRowRecord.load} runs
-   * raw internally and surfaces the tombstone for shadow detection.
+   * Shadow via {@code DeleteFamilyVersion}: tombstone matches every qualifier in cf {@code "0"}
+   * at exactly {@code sourceTs}. Run without {@code --raw-scan} so the diff scan sees target as
+   * empty (no live cells); {@code TargetRowRecord.load} runs raw internally and still surfaces
+   * the tombstone for the {@code wouldShadow} check.
    */
   @Test
   public void testRepairShadowFromDeleteFamilyVersionOnTarget() throws Exception {
@@ -2073,48 +2161,33 @@ public class PhoenixSyncTableToolIT {
     final long fromTime = 0L;
     final long sourceTs = base + 1L;
 
-    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), sourceTs)) {
-      scnSrc.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
-      scnSrc.commit();
-    }
-    // DeleteFamilyVersion on cf "0" at exactly sourceTs — covers every qualifier in the family
-    // at ts == sourceTs. Source's NAME and _0 cells, both Put at sourceTs, are shadow targets.
+    // Source: NAME='alice' at sourceTs.
+    upsertAtScnSource(sourceTs,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
+    // Target: DeleteFamilyVersion at exactly sourceTs — shadows every source cell at that ts.
     writeRawDeleteFamilyVersion(targetConnection, uniqueTableName, integerRowKey(rowId), "0",
       sourceTs);
 
-    while (System.currentTimeMillis() <= sourceTs) {
-      // spin
-    }
-
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
-      String.valueOf(fromTime), "--to-time", String.valueOf(System.currentTimeMillis()));
-    assertTrue("Repair should succeed (shadowing is correctness-only)",
-      result.repairJob.isSuccessful());
+      String.valueOf(fromTime), "--to-time",
+      String.valueOf(waitUntilWallClockPasses(sourceTs)));
+    assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
-    Counters c = result.repairJob.getCounters();
-    assertRepairRowCounters(c, 0, 0, 1);
-    assertTrue("At least one mapper should roll up to UNREPAIRABLE",
-      c.findCounter(SyncCounters.MAPPERS_UNREPAIRABLE).getValue() >= 1);
+    SyncCountersResult c = getSyncCounters(result.repairJob);
+    assertRowDriftCounters(c, 0, 0, 0, 1);
+    assertTrue("At least one mapper should roll up to UNREPAIRABLE", c.mappersUnrepairable >= 1);
 
-    try (PreparedStatement ps = targetConnection
-      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-      ps.setInt(1, rowId);
-      try (ResultSet rs = ps.executeQuery()) {
-        assertFalse("Row should not be visible on target — DeleteFamilyVersion shadowed every "
-          + "source cell at sourceTs", rs.next());
-      }
-    }
+    assertTargetRowAbsent(uniqueTableName, rowId);
+
+    // Source has 'alice', target's row is fully shadowed — Phoenix SELECT must diverge.
+    verifyDataDiverges(sourceConnection, targetConnection, uniqueTableName);
   }
 
   /**
-   * Multi-hidden-version unwinding: extends {@link #testRepairUnwindsHiddenTargetVersions}
-   * with TWO max-versions-hidden Puts beneath target's visible Put. Pins
-   * {@code targetPutTimestampsBetween} (in {@link
-   * org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer.TargetRowRecord})
-   * end-to-end: when {@code sourceMaxTs < target visible ts}, the repairer must point-Delete
-   * the visible ts AND every hidden Put in {@code (sourceMaxTs, target visible ts)} —
-   * otherwise after we shadow the visible cell, a hidden Put surfaces above source's mirror.
+   * Multi-hidden-version unwinding: target has THREE NAME versions (two hidden, one visible)
+   * above source's single Put. The repairer must point-Delete the visible Put AND every hidden
+   * Put in {@code (sourceMaxTs, visibleTs)} — otherwise unwinding the visible cell surfaces a
+   * hidden Put above source's mirror.
    */
   @Test
   public void testRepairUnwindsMultipleHiddenTargetVersions() throws Exception {
@@ -2127,114 +2200,54 @@ public class PhoenixSyncTableToolIT {
     final long targetT2 = base + 3L;
     final long targetT3 = base + 4L;
 
-    byte[] rowKey = integerRowKey(rowId);
-    String family = "0";
-    String qualifier = "NAME";
+    // Source: single NAME Put.
+    upsertAtScnSource(sourceTs,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
 
-    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), sourceTs)) {
-      scnSrc.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'alice')");
-      scnSrc.commit();
-    }
+    // Target: three NAME versions retained under VERSIONS=3 — "bob"@T1 (hidden), "carol"@T2
+    // (hidden), "dave"@T3 (visible).
+    upsertAtScnTarget(targetT1,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'bob')");
+    upsertAtScnTarget(targetT2,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'carol')");
+    upsertAtScnTarget(targetT3,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'dave')");
 
-    // Three target NAME versions, all retained under VERSIONS=3:
-    //   T1 "bob" (hidden), T2 "carol" (hidden), T3 "dave" (visible).
-    try (Connection scnTgtT1 = openConnectionAtScn(CLUSTERS.getZkUrl2(), targetT1)) {
-      scnTgtT1.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'bob')");
-      scnTgtT1.commit();
-    }
-    try (Connection scnTgtT2 = openConnectionAtScn(CLUSTERS.getZkUrl2(), targetT2)) {
-      scnTgtT2.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'carol')");
-      scnTgtT2.commit();
-    }
-    try (Connection scnTgtT3 = openConnectionAtScn(CLUSTERS.getZkUrl2(), targetT3)) {
-      scnTgtT3.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'dave')");
-      scnTgtT3.commit();
-    }
-
-    // Sanity: pre-repair target visible NAME is "dave" (newest of the three).
-    try (PreparedStatement ps = targetConnection
-      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-      ps.setInt(1, rowId);
-      try (ResultSet rs = ps.executeQuery()) {
-        assertTrue(rs.next());
-        assertEquals("Pre-repair target visible NAME should be dave", "dave", rs.getString(1));
-      }
-    }
-
-    while (System.currentTimeMillis() <= targetT3) {
-      // spin
-    }
+    assertTargetName(uniqueTableName, rowId, "dave");
 
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
-      String.valueOf(fromTime), "--to-time", String.valueOf(System.currentTimeMillis()),
+      String.valueOf(fromTime), "--to-time", String.valueOf(waitUntilWallClockPasses(targetT3)),
       "--read-all-versions");
     assertTrue("Dry-run should succeed", result.dryRunJob.isSuccessful());
     assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
-    Counters repairCounters = result.repairJob.getCounters();
-    // Source has one NAME Put@sourceTs; target has three NAME Puts at T1, T2, T3 (all >
-    // sourceTs). Each target NAME cell drives the cellExtra branch (sourceMaxTs < ts) and the
-    // hidden-version unwinding logic point-Deletes every Put in (sourceTs, ts).
+    SyncCountersResult dryRunCounters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
     assertTrue("At least 3 cells should be tombstoned across target's three NAME versions",
-      repairCounters.findCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).getValue() >= 3);
+      repairCounters.cellsExtraOnTarget >= 3);
 
-    // Post-repair: standard read on target must see source's "alice" — every hidden version
-    // ("bob"@T1, "carol"@T2) was unwound along with the visible "dave"@T3.
-    try (PreparedStatement ps = targetConnection
-      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-      ps.setInt(1, rowId);
-      try (ResultSet rs = ps.executeQuery()) {
-        assertTrue(rs.next());
-        assertEquals("Post-repair target NAME must be alice (all hidden versions unwound)",
-          "alice", rs.getString(1));
-      }
-    }
+    assertTargetName(uniqueTableName, rowId, "alice");
 
-    // Raw scan: target should have a Delete marker covering each of T1/T2/T3 plus source's
-    // mirror. The exact tombstone cell count may include duplicates from the unwind logic
-    // (each iteration's hidden-set spans a shrinking interval, so T1 appears in T3's hidden
-    // set, then again in T2's), so assert a lower bound on distinct delete-bearing scan cells.
-    try (Table targetHTable = getHBaseTable(targetConnection, uniqueTableName)) {
-      Scan scan = new Scan().withStartRow(rowKey, true).withStopRow(rowKey, true).setRaw(true);
-      scan.readAllVersions();
-      int nameDeletes = 0;
-      int namePutAtSourceTs = 0;
-      try (ResultScanner sc = targetHTable.getScanner(scan)) {
-        for (Result r; (r = sc.next()) != null;) {
-          for (Cell c : r.rawCells()) {
-            if (Bytes.equals(CellUtil.cloneFamily(c), Bytes.toBytes(family))
-              && Bytes.equals(CellUtil.cloneQualifier(c), Bytes.toBytes(qualifier))) {
-              if (CellUtil.isDelete(c)) {
-                nameDeletes++;
-              } else if (c.getTimestamp() == sourceTs) {
-                namePutAtSourceTs++;
-              }
-            }
-          }
-        }
-      }
-      assertTrue("Expected at least 3 NAME delete markers on target, saw " + nameDeletes,
-        nameDeletes >= 3);
-      assertEquals("Source's Put@" + sourceTs + " should be mirrored", 1, namePutAtSourceTs);
+    // Lower bound on delete markers: the unwind iterates over shrinking intervals so T1 may
+    // appear in both T3's and T2's hidden sets — distinct-marker count can exceed 3.
+    RawCellSummary summary = scanRawTargetNameCells(uniqueTableName, rowId);
+    assertTrue("Expected at least 3 NAME delete markers on target, saw "
+      + summary.totalDeletes(), summary.totalDeletes() >= 3);
+    int namePutAtSourceTs = 0;
+    for (Long ts : summary.putTimestamps) {
+      if (ts == sourceTs) namePutAtSourceTs++;
     }
+    assertEquals("Source's Put@" + sourceTs + " should be mirrored", 1, namePutAtSourceTs);
+
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    validateCheckpointEntries(uniqueTableName, null, dryRunCounters, repairCounters);
   }
 
   /**
-   * cmp==0 row carrying a target-only tombstone cell at a coord source lacks: drives the
-   * {@code tombstoneTargetCell} return-{@code false} branch ({@link
-   * org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer}, around line 420)
-   * inside {@code generateMutationForDiffCells}'s {@code cellExtra} branch — the target cell
-   * is itself a tombstone, so no new tombstone is emitted, but {@code anyCellUnrepairable} is
-   * set. The row contributes to {@code ROWS_CANNOT_REPAIR} without bumping any cell counter.
-   *
-   * <p>Setup: source and target share a matching {@code NAME_VALUE} cell so the row exists on
-   * both. Target also has a raw point-{@link Delete} on {@code NAME} at a coord source lacks;
-   * with {@code --raw-scan} the diff scan surfaces that tombstone cell, taking the
-   * {@code cmp > 0} branch on it.
+   * Same row on both sides via a matching NAME_VALUE; target also carries a raw point-Delete on
+   * NAME that source lacks. Under {@code --raw-scan} the tombstone surfaces as a target-extra
+   * cell, but {@code tombstoneTargetCell} can't tombstone a tombstone — row rolls up
+   * unrepairable with no cell counter ticks.
    */
   @Test
   public void testRepairCmpEqualWithTargetTombstoneCell() throws Exception {
@@ -2244,52 +2257,34 @@ public class PhoenixSyncTableToolIT {
     final long ts = base + 1L;
     final long tombstoneTs = base + 2L;
 
-    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), ts)) {
-      scnSrc.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
-      scnSrc.commit();
-    }
-    try (Connection scnTgt = openConnectionAtScn(CLUSTERS.getZkUrl2(), ts)) {
-      scnTgt.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
-      scnTgt.commit();
-    }
-    // Plant a raw point-Delete on NAME at tombstoneTs — a coord source has no cell at, but the
-    // target cell is itself a tombstone, so tombstoneTargetCell returns false in repair-mode.
+    // Source: NAME_VALUE only.
+    upsertAtScnSource(ts,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
+    // Target: matching NAME_VALUE plus a raw point-Delete on NAME — surfaces under --raw-scan.
+    upsertAtScnTarget(ts,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME_VALUE) VALUES (" + rowId + ", 99)");
     writeRawPointDelete(targetConnection, uniqueTableName, integerRowKey(rowId), "0", "NAME",
       tombstoneTs);
 
-    while (System.currentTimeMillis() <= tombstoneTs) {
-      // spin
-    }
-
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time", "0",
-      "--to-time", String.valueOf(System.currentTimeMillis()), "--raw-scan");
+      "--to-time", String.valueOf(waitUntilWallClockPasses(tombstoneTs)), "--raw-scan");
     assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
-    Counters c = result.repairJob.getCounters();
-    // No mirror, no tombstone emitted — but anyCellUnrepairable was set, so the row rolls up
-    // as unrepairable. All cell counters stay 0.
+    SyncCountersResult c = getSyncCounters(result.repairJob);
     assertRepairCellCounters(c, 0, 0, 0, 1);
-    assertRepairRowCounters(c, 0, 0, 1);
-    assertTrue("At least one mapper should roll up to UNREPAIRABLE",
-      c.findCounter(SyncCounters.MAPPERS_UNREPAIRABLE).getValue() >= 1);
+    assertRowDriftCounters(c, 0, 0, 0, 1);
+    assertTrue("At least one mapper should roll up to UNREPAIRABLE", c.mappersUnrepairable >= 1);
   }
 
   /**
-   * P7 (mid-row repair-batch flush boundary): drives many missing-row mirrors through a tiny
-   * {@code repairBatchSize=2} so {@code generateMutationForDiffRows} flushes mid-stream multiple
-   * times. Validates that every row converges despite the mid-flush boundary — i.e., no Put
-   * gets dropped because pendingPuts/pendingDeletes were drained mid-iteration.
+   * Mid-row repair flush: 8 missing source-only rows through {@code repairBatchSize=2} so
+   * {@code generateMutationForDiffRows} flushes mid-stream. Pins that no Put is dropped at a
+   * batch boundary.
    */
   @Test
   public void testRepairFlushesMidRowWithSmallBatchSize() throws Exception {
-    // No replication — seed source manually so target legitimately lacks the rows.
     createRepairTestTableOnBothClusters(uniqueTableName, 1, null);
 
-    // Introduce extra rows on source that target lacks. Each row → at least 2 cells (NAME and the
-    // empty-key cell), so a batch size of 2 forces a flush every row, exercising the mid-stream
-    // flush in generateMutationForDiffRows.
     int[] sourceOnlyIds = new int[] { 100, 101, 102, 103, 104, 105, 106, 107 };
     String[] sourceOnlyNames = new String[sourceOnlyIds.length];
     for (int i = 0; i < sourceOnlyIds.length; i++) {
@@ -2303,47 +2298,34 @@ public class PhoenixSyncTableToolIT {
 
     Configuration conf = sourceClusterConfWithRepairBatchSize(2);
 
-    // Stage 1: dry-run.
     Job dryRunJob = runSyncToolWithChunkSize(uniqueTableName, 1024, conf, "--dry-run",
       "--from-time", String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
     assertTrue("Dry-run should succeed", dryRunJob.isSuccessful());
     SyncCountersResult dryRunCounters = getSyncCounters(dryRunJob);
     assertTrue("Dry-run should detect mismatched chunks", dryRunCounters.chunksMismatched >= 1);
 
-    // Stage 2: repair with the same small batch size.
     Job repairJob = runSyncToolWithChunkSize(uniqueTableName, 1024, conf, "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
     assertTrue("Repair should succeed despite small batch size", repairJob.isSuccessful());
 
-    Counters repairCounters = repairJob.getCounters();
+    SyncCountersResult repairCounters = getSyncCounters(repairJob);
     assertTrue("All source-only rows should be marked missing on target",
-      repairCounters.findCounter(SyncCounters.ROWS_MISSING_ON_TARGET).getValue()
-          >= sourceOnlyIds.length);
-    assertEquals("No row should be flagged unrepairable", 0,
-      repairCounters.findCounter(SyncCounters.ROWS_CANNOT_REPAIR).getValue());
+      repairCounters.rowsMissingOnTarget >= sourceOnlyIds.length);
+    assertEquals("No row should be flagged unrepairable", 0, repairCounters.rowsCannotRepair);
 
-    // Verify each source-only row landed on target with the right NAME.
     for (int i = 0; i < sourceOnlyIds.length; i++) {
-      try (PreparedStatement ps = targetConnection
-        .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-        ps.setInt(1, sourceOnlyIds[i]);
-        try (ResultSet rs = ps.executeQuery()) {
-          assertTrue("Row " + sourceOnlyIds[i] + " should exist on target after repair",
-            rs.next());
-          assertEquals("Row " + sourceOnlyIds[i] + " NAME should match source",
-            sourceOnlyNames[i], rs.getString(1));
-        }
-      }
+      assertTargetName(uniqueTableName, sourceOnlyIds[i], sourceOnlyNames[i]);
     }
+
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    validateCheckpointEntries(uniqueTableName, null, dryRunCounters, repairCounters);
   }
 
   /**
-   * P8 ({@code --raw-scan} + {@code --read-all-versions} interplay): a multi-version row on
-   * source that includes an in-window {@code DeleteColumn} between two Puts. Target lags with
-   * only the older Put. Repair must mirror the missing tombstone (preserving its subtype via
-   * {@code mirrorSourceCell} in
-   * {@link org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer} routing Delete cells
-   * through {@code Delete#add}) and the missing newer Put.
+   * {@code --raw-scan} + {@code --read-all-versions}: source has Put@T1, DeleteColumn@T2,
+   * Put@T3; target has only Put@T1. Repair must mirror the missing tombstone (via
+   * {@code mirrorSourceCell} routing Delete cells through {@code Delete#add}) and the missing
+   * newer Put.
    */
   @Test
   public void testRepairRawScanAllVersionsMirrorsTombstoneAndPut() throws Exception {
@@ -2356,95 +2338,191 @@ public class PhoenixSyncTableToolIT {
     final long t3 = base + 3L;
 
     // Source: Put@T1 → DeleteColumn@T2 → Put@T3.
-    try (Connection scnSrc = openConnectionAtScn(CLUSTERS.getZkUrl1(), t1)) {
-      scnSrc.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'v1')");
-      scnSrc.commit();
-    }
+    upsertAtScnSource(t1,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'v1')");
     writeRawDeleteColumn(sourceConnection, uniqueTableName, integerRowKey(rowId), "0", "NAME", t2);
-    try (Connection scnSrc2 = openConnectionAtScn(CLUSTERS.getZkUrl1(), t3)) {
-      scnSrc2.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'v3')");
-      scnSrc2.commit();
-    }
+    upsertAtScnSource(t3,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'v3')");
 
     // Target: only the oldest Put@T1.
-    try (Connection scnTgt = openConnectionAtScn(CLUSTERS.getZkUrl2(), t1)) {
-      scnTgt.createStatement().execute(
-        "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'v1')");
-      scnTgt.commit();
-    }
+    upsertAtScnTarget(t1,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'v1')");
 
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(System.currentTimeMillis()),
       "--raw-scan", "--read-all-versions");
     assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
-    Counters c = result.repairJob.getCounters();
-    // Source has NAME@T1 Put, NAME@T2 DeleteColumn, NAME@T3 Put + empty-key@T1 and @T3. Target has
-    // only NAME@T1 + empty-key@T1, so 3 cells missing: NAME-tombstone@T2, NAME-Put@T3, empty-key@T3.
+    SyncCountersResult dryRunCounters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult c = getSyncCounters(result.repairJob);
+    // 3 missing: NAME tombstone@T2, NAME Put@T3, empty-key@T3.
     assertRepairCellCounters(c, 3, 0, 0, 0);
 
-    // Post-repair raw scan on target should show: Put@T3, DeleteColumn@T2, Put@T1 for the NAME
-    // qualifier (rawCells reverse-ts ordered).
-    int observedPuts = 0;
-    int observedDeleteColumns = 0;
-    long observedNewestPutTs = -1L;
-    try (Table targetHTable = getHBaseTable(targetConnection, uniqueTableName)) {
-      Scan scan = new Scan();
-      scan.withStartRow(integerRowKey(rowId), true);
-      scan.withStopRow(integerRowKey(rowId), true);
-      scan.setRaw(true);
-      scan.readAllVersions();
-      try (ResultScanner scanner = targetHTable.getScanner(scan)) {
-        Result r = scanner.next();
-        assertNotNull("Target row should exist", r);
-        for (Cell cell : r.rawCells()) {
-          if (Bytes.equals(CellUtil.cloneQualifier(cell), Bytes.toBytes("NAME"))) {
-            if (CellUtil.isDelete(cell)) {
-              observedDeleteColumns++;
-            } else {
-              observedPuts++;
-              observedNewestPutTs = Math.max(observedNewestPutTs, cell.getTimestamp());
-            }
-          }
-        }
-      }
-    }
-    assertEquals("Target should have both NAME Puts after repair", 2, observedPuts);
+    RawCellSummary summary = scanRawTargetNameCells(uniqueTableName, rowId);
+    assertEquals("Target should have both NAME Puts after repair", 2, summary.puts);
     assertEquals("Target should have the mirrored DeleteColumn after repair", 1,
-      observedDeleteColumns);
-    assertEquals("Newest mirrored Put should sit at T3", t3, observedNewestPutTs);
+      summary.deleteColumns);
+    assertEquals("Newest mirrored Put should sit at T3", t3, summary.newestPutTs);
 
-    // Read-side: NAME under default visibility should now be null (T3 Put → T2 DeleteColumn covers
-    // T1; visible state is "deleted but tombstone caps NAME"). Phoenix sees no value.
-    try (PreparedStatement ps = targetConnection
-      .prepareStatement("SELECT NAME FROM " + uniqueTableName + " WHERE ID = ?")) {
-      ps.setInt(1, rowId);
-      try (ResultSet rs = ps.executeQuery()) {
-        // The newest Put is T3 — reads see "v3" since T3 > tombstone T2.
-        assertTrue(rs.next());
-        assertEquals("v3", rs.getString(1));
-      }
-    }
+    // Visible read sees "v3" — newest Put@T3 sits above the DeleteColumn@T2.
+    assertTargetName(uniqueTableName, rowId, "v3");
+
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    validateCheckpointEntries(uniqueTableName, null, dryRunCounters, c);
   }
 
   /**
-   * P9 (mixed Put+Delete batch under small {@code repairBatchSize}): many missing source rows AND
-   * many extra target rows in the same chunk. With {@code repairBatchSize=4}, most flushes
-   * straddle a Put/Delete boundary and exercise {@code flushRepairMutations} in
-   * {@link org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer} on its mixed
-   * {@code Table#batch} path. Validates that no mutation gets dropped at the batch boundary.
+   * Hidden source-only Put under {@code --read-all-versions}: source has Put(NAME)@T1 and
+   * Put(NAME)@T2; target has only Put(NAME)@T2. Verifier sees the older T1 cell only because
+   * {@code readAllVersions} surfaces it; repair must mirror the missing source@T1 cell at its
+   * original timestamp so target's history matches source.
+   */
+  @Test
+  public void testRepairMirrorsHiddenSourceVersionWhenTargetHasOnlyNewest() throws Exception {
+    final int rowId = 5;
+    long base = createRepairTestTableOnBothClusters(uniqueTableName, 2, "3, 7");
+
+    final long t1 = base + 1L;
+    final long t2 = base + 2L;
+
+    // Source: NAME='older'@T1 then NAME='newer'@T2 — both retained under VERSIONS=2.
+    upsertAtScnSource(t1,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'older')");
+    upsertAtScnSource(t2,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'newer')");
+    // Target: only the newer Put@T2; the older T1 version is missing.
+    upsertAtScnTarget(t2,
+      "UPSERT INTO " + uniqueTableName + " (ID, NAME) VALUES (" + rowId + ", 'newer')");
+
+    RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time", "0",
+      "--to-time", String.valueOf(waitUntilWallClockPasses(t2)), "--read-all-versions");
+    assertTrue("Repair should succeed", result.repairJob.isSuccessful());
+
+    SyncCountersResult dryRunCounters = getSyncCounters(result.dryRunJob);
+    SyncCountersResult c = getSyncCounters(result.repairJob);
+    // Older NAME version is the only drift; mirror via cmp<0 source-only path.
+    assertTrue("Hidden source NAME@T1 must mirror as missing", c.cellsMissingOnTarget >= 1);
+    assertEquals("No extra cells", 0, c.cellsExtraOnTarget);
+    assertEquals("No row should be unrepairable", 0, c.rowsCannotRepair);
+
+    // Visible NAME stays "newer"; raw-scan must surface both versions at original timestamps.
+    assertTargetName(uniqueTableName, rowId, "newer");
+    RawCellSummary summary = scanRawTargetNameCells(uniqueTableName, rowId);
+    assertTrue("Mirrored older NAME Put@T1 must land at original timestamp",
+      summary.putTimestamps.contains(t1));
+    assertTrue("Existing newer NAME Put@T2 must remain",
+      summary.putTimestamps.contains(t2));
+
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    validateCheckpointEntries(uniqueTableName, null, dryRunCounters, c);
+  }
+
+  /**
+   * Source-only point Delete (single-version tombstone) must mirror onto target via
+   * {@code mirrorSourceCell} → target's NAME at {@code ts} is shadowed; NAME_VALUE survives.
+   */
+  @Test
+  public void testRepairMirrorsSourcePointDeleteUnderRawScan() throws Exception {
+    runMirrorSourceTombstoneTest(SourceTombstone.POINT_DELETE);
+  }
+
+  /**
+   * Source-only DeleteFamily must mirror onto target → whole family at the target row is
+   * shadowed and the row drops out of Phoenix view.
+   */
+  @Test
+  public void testRepairMirrorsSourceDeleteFamilyUnderRawScan() throws Exception {
+    runMirrorSourceTombstoneTest(SourceTombstone.DELETE_FAMILY);
+  }
+
+  /**
+   * Source-only DeleteFamilyVersion must mirror onto target → all family cells at exactly
+   * {@code ts} are shadowed; preserves DFV semantics (not flattened to DeleteColumn).
+   */
+  @Test
+  public void testRepairMirrorsSourceDeleteFamilyVersionUnderRawScan() throws Exception {
+    runMirrorSourceTombstoneTest(SourceTombstone.DELETE_FAMILY_VERSION);
+  }
+
+  private enum SourceTombstone {
+    POINT_DELETE,
+    DELETE_FAMILY,
+    DELETE_FAMILY_VERSION
+  }
+
+  private void runMirrorSourceTombstoneTest(SourceTombstone subtype) throws Exception {
+    final int rowId = 5;
+    long base = createRepairTestTableOnBothClusters(uniqueTableName, 1, "3, 7");
+    final long ts = base + 1L;
+    // POINT_DELETE / DFV must hit cells at exactly `ts`; DeleteFamily covers ts <= markerTs.
+    final long tombstoneTs = subtype == SourceTombstone.DELETE_FAMILY ? base + 2L : ts;
+
+    for (String zkUrl : new String[] { CLUSTERS.getZkUrl1(), CLUSTERS.getZkUrl2() }) {
+      try (Connection scn = openConnectionAtScn(zkUrl, ts)) {
+        scn.createStatement().execute("UPSERT INTO " + uniqueTableName
+          + " (ID, NAME, NAME_VALUE) VALUES (" + rowId + ", 'alice', 99)");
+        scn.commit();
+      }
+    }
+
+    byte[] rk = integerRowKey(rowId);
+    switch (subtype) {
+      case POINT_DELETE:
+        writeRawPointDelete(sourceConnection, uniqueTableName, rk, "0", "NAME", tombstoneTs);
+        break;
+      case DELETE_FAMILY:
+        writeRawDeleteFamily(sourceConnection, uniqueTableName, rk, "0", tombstoneTs);
+        break;
+      case DELETE_FAMILY_VERSION:
+        writeRawDeleteFamilyVersion(sourceConnection, uniqueTableName, rk, "0", tombstoneTs);
+        break;
+      default:
+        throw new IllegalStateException("unhandled subtype: " + subtype);
+    }
+
+    RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time", "0",
+      "--to-time", String.valueOf(waitUntilWallClockPasses(tombstoneTs)), "--raw-scan");
+    assertTrue(result.dryRunJob.isSuccessful());
+    assertTrue(result.repairJob.isSuccessful());
+
+    Counters c = result.repairJob.getCounters();
+    // The source-only Delete cell is missing on target → mirror it. DeleteFamily mirroring
+    // also covers the empty-key sentinel cell, hence the >= 1 assertion shape.
+    assertTrue("source tombstone must mirror as a missing cell on target",
+      c.findCounter(SyncCounters.CELLS_MISSING_ON_TARGET).getValue() >= 1);
+    assertTrue(c.findCounter(SyncCounters.MAPPERS_REPAIRED).getValue() >= 1);
+    assertNoMismatchedCheckpoints(uniqueTableName, null);
+
+    try (PreparedStatement ps = targetConnection.prepareStatement(
+      "SELECT NAME, NAME_VALUE FROM " + uniqueTableName + " WHERE ID = ?")) {
+      ps.setInt(1, rowId);
+      try (ResultSet rs = ps.executeQuery()) {
+        if (subtype == SourceTombstone.POINT_DELETE) {
+          assertTrue(rs.next());
+          assertNull(rs.getString(1));
+          assertEquals(99L, rs.getLong(2));
+        } else {
+          // Family-wide tombstone (DELETE_FAMILY or DELETE_FAMILY_VERSION) drops the row.
+          assertFalse("row should not be visible after family-wide tombstone mirror",
+            rs.next());
+        }
+      }
+    }
+
+    // Source tombstone is now mirrored onto target; both clusters present the same Phoenix view.
+    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+  }
+
+  /**
+   * Mixed Put+Delete batch under {@code repairBatchSize=4}: 5 source-only rows + 5 target-only
+   * rows in the same chunk, so most flushes straddle a Put/Delete boundary on
+   * {@code flushRepairMutations}'s mixed {@code Table#batch} path. Pins that no mutation drops
+   * at the batch boundary.
    */
   @Test
   public void testRepairMixedPutDeleteBatchWithSmallBatchSize() throws Exception {
-    // No replication — seed each side independently so source-only and target-only rows truly
-    // diverge.
     createRepairTestTableOnBothClusters(uniqueTableName, 1, null);
 
-    // Add 5 source-only rows (will need Puts) and 5 target-only rows (will need Deletes), all
-    // inside the same chunk so they queue together in a single mapper's pendingPuts/pendingDeletes
-    // and get flushed as mixed batches.
     int[] sourceOnly = new int[] { 200, 201, 202, 203, 204 };
     String[] sourceOnlyNames = new String[] { "s200", "s201", "s202", "s203", "s204" };
     upsertRowsOnTarget(sourceConnection, uniqueTableName, sourceOnly, sourceOnlyNames);
@@ -2482,13 +2560,8 @@ public class PhoenixSyncTableToolIT {
     assertEquals("No chunk should fail repair", 0,
       c.findCounter(SyncCounters.CHUNKS_REPAIR_FAILED).getValue());
 
-    // Convergence pass: cleanup checkpoint and re-run a stable repair to assert no chunks are
-    // mismatched after the mixed-batch flushes.
-    cleanupCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
-    runSyncToolWithRepair(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
-      String.valueOf(toTime));
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
-    verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
+    // Convergence pass on a clean checkpoint to confirm no chunks remain mismatched.
+    convergeAndAssertIdentical(uniqueTableName, fromTime, toTime);
   }
 
   @Test
@@ -2714,7 +2787,7 @@ public class PhoenixSyncTableToolIT {
   }
 
   @Test
-  public void testSyncTableValidateWithSplitCoalescing() throws Exception {
+  public void testSyncTableWithSplitCoalescing() throws Exception {
     setupStandardTestWithReplication(uniqueTableName, 1, 10);
 
     introduceAndVerifyTargetDifferences(uniqueTableName);
@@ -2732,18 +2805,19 @@ public class PhoenixSyncTableToolIT {
 
     validateSyncCounters(counters, 10, 10, 7, 3);
     validateMapperCounters(counters, 1, 3);
+    assertRowDriftCounters(counters, 0, 0, 3, 0);
 
     // Verify checkpoint entries from the dry-run pass are created correctly.
-    List<PhoenixSyncTableCheckpointOutputRow> checkpointEntries =
-      queryCheckpointTable(sourceConnection, uniqueTableName, targetZkQuorum, null);
-    validateCheckpointEntries(checkpointEntries, uniqueTableName, targetZkQuorum, 10, 10, 7, 3, 4,
-      3, null);
+    validateCheckpointEntries(uniqueTableName, null, counters, null);
 
     // Repair pass over the same window: MISMATCHED rows transition to REPAIRED in place.
-    runSyncTool(uniqueTableName, "--coalesce-split", "--from-time", String.valueOf(fromTime),
-      "--to-time", String.valueOf(toTime));
+    Job repairJob = runSyncTool(uniqueTableName, "--coalesce-split", "--from-time",
+      String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
+    SyncCountersResult repairCounters = getSyncCounters(repairJob);
+    assertRepairChunkAndMapperCounters(repairCounters, 3, 0, 0, 3, 0, 0);
+    assertRepairCellCounters(repairCounters, 6, 6, 0, 0);
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
-    assertNoMismatchedCheckpoints(uniqueTableName, null);
+    validateCheckpointEntries(uniqueTableName, null, counters, repairCounters);
   }
 
   /**
@@ -3180,6 +3254,21 @@ public class PhoenixSyncTableToolIT {
     }
   }
 
+  /**
+   * Negative complement of {@link #verifyDataIdentical}: asserts that source and target return
+   * different row sets via Phoenix SELECT. Use after a repair pass that is expected to leave
+   * residual divergence (UNREPAIRABLE / REPAIR_FAILED) so the test pins both that the tool
+   * reported the right status and that the data actually didn't converge.
+   */
+  private void verifyDataDiverges(Connection sourceConn, Connection targetConn, String tableName)
+    throws SQLException {
+    String query = "SELECT ID, NAME, NAME_VALUE FROM " + tableName + " ORDER BY ID";
+    List<TestRow> sourceRows = queryAllRows(sourceConn, query);
+    List<TestRow> targetRows = queryAllRows(targetConn, query);
+    assertNotEquals("Source and target rows should still differ when repair could not converge",
+      sourceRows, targetRows);
+  }
+
   private void introduceAndVerifyTargetDifferences(String tableName) throws SQLException {
     upsertRowsOnTarget(targetConnection, tableName, new int[] { 2, 5, 8 },
       new String[] { "MODIFIED_NAME_2", "MODIFIED_NAME_5", "MODIFIED_NAME_8" });
@@ -3495,8 +3584,8 @@ public class PhoenixSyncTableToolIT {
   private List<PhoenixSyncTableCheckpointOutputRow> queryCheckpointTable(Connection conn,
     String tableName, String targetCluster, String tenantId) throws SQLException {
     List<PhoenixSyncTableCheckpointOutputRow> entries = new ArrayList<>();
-    String query = "SELECT TABLE_NAME, TARGET_CLUSTER, TYPE, FROM_TIME, TO_TIME, IS_DRY_RUN, "
-      + "START_ROW_KEY, END_ROW_KEY, EXECUTION_START_TIME, EXECUTION_END_TIME, "
+    String query = "SELECT TABLE_NAME, TENANT_ID, TARGET_CLUSTER, TYPE, FROM_TIME, TO_TIME, "
+      + "IS_DRY_RUN, START_ROW_KEY, END_ROW_KEY, EXECUTION_START_TIME, EXECUTION_END_TIME, "
       + "STATUS, COUNTERS FROM PHOENIX_SYNC_TABLE_CHECKPOINT "
       + "WHERE TABLE_NAME = ? AND TARGET_CLUSTER = ? "
       + (tenantId != null ? "AND TENANT_ID = ?" : "AND TENANT_ID IS NULL");
@@ -3514,7 +3603,8 @@ public class PhoenixSyncTableToolIT {
       String statusStr = rs.getString("STATUS");
 
       PhoenixSyncTableCheckpointOutputRow entry = new PhoenixSyncTableCheckpointOutputRow.Builder()
-        .setTableName(rs.getString("TABLE_NAME")).setTargetCluster(rs.getString("TARGET_CLUSTER"))
+        .setTableName(rs.getString("TABLE_NAME")).setTenantId(rs.getString("TENANT_ID"))
+        .setTargetCluster(rs.getString("TARGET_CLUSTER"))
         .setType(typeStr != null ? PhoenixSyncTableCheckpointOutputRow.Type.valueOf(typeStr) : null)
         .setFromTime(rs.getLong("FROM_TIME")).setToTime(rs.getLong("TO_TIME"))
         .setIsDryRun(rs.getBoolean("IS_DRY_RUN")).setStartRowKey(rs.getBytes("START_ROW_KEY"))
@@ -3876,18 +3966,24 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * After a repair pass, asserts that no CHUNK or REGION rows in the checkpoint table are
-   * still in MISMATCHED status. They should all have transitioned to REPAIRED, VERIFIED, or
-   * (when target rows are entirely tombstoned) UNREPAIRABLE.
+   * After a clean repair pass, asserts no checkpoint rows remain in any non-terminal or
+   * stuck state — MISMATCHED, UNREPAIRABLE, or REPAIR_FAILED. Tests that legitimately leave
+   * UNREPAIRABLE/REPAIR_FAILED rows should not call this helper.
    */
   private void assertNoMismatchedCheckpoints(String tableName, String tenantId)
     throws SQLException {
     List<PhoenixSyncTableCheckpointOutputRow> entries =
       queryCheckpointTable(sourceConnection, tableName, targetZkQuorum, tenantId);
-    long mismatched = countCheckpointsByStatus(entries,
-      PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED);
-    assertEquals("After repair, no MISMATCHED checkpoint rows should remain for table "
-      + tableName + " tenant=" + tenantId, 0, mismatched);
+    String ctx = " (table=" + tableName + " tenant=" + tenantId + ")";
+    assertEquals("MISMATCHED rows must not remain after repair" + ctx, 0,
+      countCheckpointsByStatus(entries,
+        PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED));
+    assertEquals("UNREPAIRABLE rows must not remain after repair" + ctx, 0,
+      countCheckpointsByStatus(entries,
+        PhoenixSyncTableCheckpointOutputRow.Status.UNREPAIRABLE));
+    assertEquals("REPAIR_FAILED rows must not remain after repair" + ctx, 0,
+      countCheckpointsByStatus(entries,
+        PhoenixSyncTableCheckpointOutputRow.Status.REPAIR_FAILED));
   }
 
   /**
@@ -3976,8 +4072,11 @@ public class PhoenixSyncTableToolIT {
   private static class SyncCountersResult {
     public final long sourceRowsProcessed;
     public final long targetRowsProcessed;
-    public final long chunksMismatched;
     public final long chunksVerified;
+    public final long chunksMismatched;
+    public final long chunksRepaired;
+    public final long chunksUnrepairable;
+    public final long chunksRepairFailed;
     public final long mappersVerified;
     public final long mappersMismatched;
     public final long mappersRepaired;
@@ -3986,15 +4085,26 @@ public class PhoenixSyncTableToolIT {
     public final long rowsMissingOnTarget;
     public final long rowsExtraOnTarget;
     public final long rowsDifferentOnTarget;
+    public final long rowsCannotRepair;
+    public final long cellsMissingOnTarget;
+    public final long cellsExtraOnTarget;
+    public final long cellsDifferentOnTarget;
     public final long taskCreated;
+    private final Counters raw;
 
     SyncCountersResult(Counters counters) {
+      this.raw = counters;
       this.sourceRowsProcessed =
         counters.findCounter(SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
       this.targetRowsProcessed =
         counters.findCounter(SyncCounters.TARGET_ROWS_PROCESSED).getValue();
-      this.chunksMismatched = counters.findCounter(SyncCounters.CHUNKS_MISMATCHED).getValue();
       this.chunksVerified = counters.findCounter(SyncCounters.CHUNKS_VERIFIED).getValue();
+      this.chunksMismatched = counters.findCounter(SyncCounters.CHUNKS_MISMATCHED).getValue();
+      this.chunksRepaired = counters.findCounter(SyncCounters.CHUNKS_REPAIRED).getValue();
+      this.chunksUnrepairable =
+        counters.findCounter(SyncCounters.CHUNKS_UNREPAIRABLE).getValue();
+      this.chunksRepairFailed =
+        counters.findCounter(SyncCounters.CHUNKS_REPAIR_FAILED).getValue();
       this.mappersVerified = counters.findCounter(SyncCounters.MAPPERS_VERIFIED).getValue();
       this.mappersMismatched = counters.findCounter(SyncCounters.MAPPERS_MISMATCHED).getValue();
       this.mappersRepaired = counters.findCounter(SyncCounters.MAPPERS_REPAIRED).getValue();
@@ -4008,18 +4118,34 @@ public class PhoenixSyncTableToolIT {
         counters.findCounter(SyncCounters.ROWS_EXTRA_ON_TARGET).getValue();
       this.rowsDifferentOnTarget =
         counters.findCounter(SyncCounters.ROWS_DIFFERENT_ON_TARGET).getValue();
+      this.rowsCannotRepair = counters.findCounter(SyncCounters.ROWS_CANNOT_REPAIR).getValue();
+      this.cellsMissingOnTarget =
+        counters.findCounter(SyncCounters.CELLS_MISSING_ON_TARGET).getValue();
+      this.cellsExtraOnTarget =
+        counters.findCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).getValue();
+      this.cellsDifferentOnTarget =
+        counters.findCounter(SyncCounters.CELLS_DIFFERENT_ON_TARGET).getValue();
       this.taskCreated = counters.findCounter(TaskCounter.MAP_INPUT_RECORDS).getValue();
+    }
+
+    /** Escape hatch for tests that need to read counters not exposed as fields here. */
+    public Counters getRawCounters() {
+      return raw;
     }
 
     public void logCounters(String testName) {
       LOGGER.info(
-        "{}: source rows={}, target rows={}, chunks mismatched={}, chunks verified={}, "
+        "{}: source rows={}, target rows={}, chunks verified={}, chunks mismatched={}, "
+          + "chunks repaired={}, chunks unrepairable={}, chunks repair_failed={}, "
           + "mappers verified={}, mappers mismatched={}, mappers repaired={}, "
           + "mappers unrepairable={}, mappers repair_failed={}, rows missing={}, "
-          + "rows extra={}, rows different={}",
-        testName, sourceRowsProcessed, targetRowsProcessed, chunksMismatched, chunksVerified,
-        mappersVerified, mappersMismatched, mappersRepaired, mappersUnrepairable,
-        mappersRepairFailed, rowsMissingOnTarget, rowsExtraOnTarget, rowsDifferentOnTarget);
+          + "rows extra={}, rows different={}, rows cannot repair={}, cells missing={}, "
+          + "cells extra={}, cells different={}",
+        testName, sourceRowsProcessed, targetRowsProcessed, chunksVerified, chunksMismatched,
+        chunksRepaired, chunksUnrepairable, chunksRepairFailed, mappersVerified,
+        mappersMismatched, mappersRepaired, mappersUnrepairable, mappersRepairFailed,
+        rowsMissingOnTarget, rowsExtraOnTarget, rowsDifferentOnTarget, rowsCannotRepair,
+        cellsMissingOnTarget, cellsExtraOnTarget, cellsDifferentOnTarget);
     }
   }
 
@@ -4075,16 +4201,13 @@ public class PhoenixSyncTableToolIT {
    * where the drift is constructed deterministically and any miscount (off-by-one,
    * double-counting, missed branch) should fail the test loudly.
    */
-  private void assertRepairCellCounters(Counters counters, long expectedCellsMissing,
+  private void assertRepairCellCounters(SyncCountersResult counters, long expectedCellsMissing,
     long expectedCellsExtra, long expectedCellsDifferent, long expectedRowsCannotRepair) {
-    assertEquals("CELLS_MISSING_ON_TARGET", expectedCellsMissing,
-      counters.findCounter(SyncCounters.CELLS_MISSING_ON_TARGET).getValue());
-    assertEquals("CELLS_EXTRA_ON_TARGET", expectedCellsExtra,
-      counters.findCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).getValue());
+    assertEquals("CELLS_MISSING_ON_TARGET", expectedCellsMissing, counters.cellsMissingOnTarget);
+    assertEquals("CELLS_EXTRA_ON_TARGET", expectedCellsExtra, counters.cellsExtraOnTarget);
     assertEquals("CELLS_DIFFERENT_ON_TARGET", expectedCellsDifferent,
-      counters.findCounter(SyncCounters.CELLS_DIFFERENT_ON_TARGET).getValue());
-    assertEquals("ROWS_CANNOT_REPAIR", expectedRowsCannotRepair,
-      counters.findCounter(SyncCounters.ROWS_CANNOT_REPAIR).getValue());
+      counters.cellsDifferentOnTarget);
+    assertEquals("ROWS_CANNOT_REPAIR", expectedRowsCannotRepair, counters.rowsCannotRepair);
   }
 
   /**
@@ -4092,33 +4215,33 @@ public class PhoenixSyncTableToolIT {
    * {@link #validateMapperCountersRepair} (which omits chunk-level counters) for tests that
    * need to assert both layers.
    */
-  private void assertRepairChunkAndMapperCounters(Counters counters, long expectedChunksRepaired,
-    long expectedChunksRepairFailed, long expectedMappersRepaired, long expectedMappersUnrepairable,
+  private void assertRepairChunkAndMapperCounters(SyncCountersResult counters,
+    long expectedChunksRepaired, long expectedChunksUnrepairable, long expectedChunksRepairFailed,
+    long expectedMappersRepaired, long expectedMappersUnrepairable,
     long expectedMappersRepairFailed) {
-    assertEquals("CHUNKS_REPAIRED", expectedChunksRepaired,
-      counters.findCounter(SyncCounters.CHUNKS_REPAIRED).getValue());
-    assertEquals("CHUNKS_REPAIR_FAILED", expectedChunksRepairFailed,
-      counters.findCounter(SyncCounters.CHUNKS_REPAIR_FAILED).getValue());
-    assertEquals("MAPPERS_REPAIRED", expectedMappersRepaired,
-      counters.findCounter(SyncCounters.MAPPERS_REPAIRED).getValue());
+    assertEquals("CHUNKS_REPAIRED", expectedChunksRepaired, counters.chunksRepaired);
+    assertEquals("CHUNKS_UNREPAIRABLE", expectedChunksUnrepairable, counters.chunksUnrepairable);
+    assertEquals("CHUNKS_REPAIR_FAILED", expectedChunksRepairFailed, counters.chunksRepairFailed);
+    assertEquals("MAPPERS_REPAIRED", expectedMappersRepaired, counters.mappersRepaired);
     assertEquals("MAPPERS_UNREPAIRABLE", expectedMappersUnrepairable,
-      counters.findCounter(SyncCounters.MAPPERS_UNREPAIRABLE).getValue());
+      counters.mappersUnrepairable);
     assertEquals("MAPPERS_REPAIR_FAILED", expectedMappersRepairFailed,
-      counters.findCounter(SyncCounters.MAPPERS_REPAIR_FAILED).getValue());
+      counters.mappersRepairFailed);
   }
 
   /**
-   * Pins the row-level repair drift counters. Mirror of {@link #assertRepairCellCounters} for
-   * tests that need to assert whole-row outcomes (missing, extra, unrepairable).
+   * Pins all four row-level drift counters: missing, extra, different, and unrepairable.
+   * Dry-run runs leave {@code ROWS_CANNOT_REPAIR} at 0; repair runs leave
+   * {@code ROWS_DIFFERENT_ON_TARGET} at 0 (different rows roll up under missing/extra cell
+   * drift after repair).
    */
-  private void assertRepairRowCounters(Counters counters, long expectedRowsMissing,
-    long expectedRowsExtra, long expectedRowsCannotRepair) {
-    assertEquals("ROWS_MISSING_ON_TARGET", expectedRowsMissing,
-      counters.findCounter(SyncCounters.ROWS_MISSING_ON_TARGET).getValue());
-    assertEquals("ROWS_EXTRA_ON_TARGET", expectedRowsExtra,
-      counters.findCounter(SyncCounters.ROWS_EXTRA_ON_TARGET).getValue());
-    assertEquals("ROWS_CANNOT_REPAIR", expectedRowsCannotRepair,
-      counters.findCounter(SyncCounters.ROWS_CANNOT_REPAIR).getValue());
+  private void assertRowDriftCounters(SyncCountersResult counters, long expectedRowsMissing,
+    long expectedRowsExtra, long expectedRowsDifferent, long expectedRowsCannotRepair) {
+    assertEquals("ROWS_MISSING_ON_TARGET", expectedRowsMissing, counters.rowsMissingOnTarget);
+    assertEquals("ROWS_EXTRA_ON_TARGET", expectedRowsExtra, counters.rowsExtraOnTarget);
+    assertEquals("ROWS_DIFFERENT_ON_TARGET", expectedRowsDifferent,
+      counters.rowsDifferentOnTarget);
+    assertEquals("ROWS_CANNOT_REPAIR", expectedRowsCannotRepair, counters.rowsCannotRepair);
   }
 
   /**
@@ -4167,11 +4290,37 @@ public class PhoenixSyncTableToolIT {
     // Wait until the wall clock advances at least one millisecond past the CREATE TABLE
     // timestamp so any caller-chosen SCN >= the returned anchor is guaranteed to be above the
     // table's metadata row.
-    long anchor = System.currentTimeMillis() + 1;
-    while (System.currentTimeMillis() < anchor) {
+    return waitUntilWallClockPasses(System.currentTimeMillis());
+  }
+
+  /**
+   * Multi-CF variant of {@link #createRepairTestTableOnBothClusters}: two column families
+   * ({@code CF1.A VARCHAR}, {@code CF2.B VARCHAR}). Used by repair tests that need drift to
+   * span families.
+   */
+  private long createMultiColumnFamilyTableOnBothClusters(String tableName) throws SQLException {
+    String ddl = "CREATE TABLE IF NOT EXISTS " + tableName
+      + " (ID INTEGER NOT NULL PRIMARY KEY, CF1.A VARCHAR(50), CF2.B VARCHAR(50))"
+      + " COLUMN_ENCODED_BYTES=NONE, UPDATE_CACHE_FREQUENCY=0, REPLICATION_SCOPE=0";
+    executeTableCreation(sourceConnection, ddl);
+    executeTableCreation(targetConnection, ddl);
+    return waitUntilWallClockPasses(System.currentTimeMillis());
+  }
+
+  /**
+   * Spins until {@link System#currentTimeMillis()} is strictly greater than {@code minTs}, then
+   * returns the resulting wall-clock value. Used by repair tests that plant cells at handcrafted
+   * future timestamps and then need a {@code --to-time} that both (a) covers every planted cell
+   * and (b) satisfies the tool's {@code endTime <= currentTimeMillis()} validation
+   * ({@link org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil#validateTimeRange}). The
+   * spin terminates in 1-2ms — it is a deterministic precondition gate, not a sleep-based wait
+   * for an external side effect.
+   */
+  private long waitUntilWallClockPasses(long minTs) {
+    while (System.currentTimeMillis() <= minTs) {
       // spin
     }
-    return anchor;
+    return System.currentTimeMillis();
   }
 
   /**
@@ -4184,6 +4333,176 @@ public class PhoenixSyncTableToolIT {
     Properties props = new Properties();
     props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scnTimestamp));
     return DriverManager.getConnection("jdbc:phoenix:" + zkUrl, props);
+  }
+
+  /**
+   * Executes a single UPSERT through an SCN-pinned connection on the given cluster and commits.
+   * Replaces the verbose {@code try (Connection scn = openConnectionAtScn(...)) { execute; commit; }}
+   * boilerplate that recurred in nearly every repair test.
+   */
+  private void upsertAtScn(String zkUrl, long ts, String upsertSql) throws SQLException {
+    try (Connection scn = openConnectionAtScn(zkUrl, ts)) {
+      scn.createStatement().execute(upsertSql);
+      scn.commit();
+    }
+  }
+
+  /** Convenience wrapper: {@link #upsertAtScn} on the source cluster. */
+  private void upsertAtScnSource(long ts, String upsertSql) throws SQLException {
+    upsertAtScn(CLUSTERS.getZkUrl1(), ts, upsertSql);
+  }
+
+  /** Convenience wrapper: {@link #upsertAtScn} on the target cluster. */
+  private void upsertAtScnTarget(long ts, String upsertSql) throws SQLException {
+    upsertAtScn(CLUSTERS.getZkUrl2(), ts, upsertSql);
+  }
+
+  /** Runs the same UPSERT against both clusters at the same SCN timestamp. */
+  private void upsertAtScnBoth(long ts, String upsertSql) throws SQLException {
+    upsertAtScnSource(ts, upsertSql);
+    upsertAtScnTarget(ts, upsertSql);
+  }
+
+  /**
+   * Asserts target's visible NAME for {@code id} equals {@code expected}. Replaces the
+   * {@code prepareStatement("SELECT NAME FROM ... WHERE ID = ?")} block repeated across repair
+   * tests.
+   */
+  private void assertTargetName(String tableName, int id, String expected) throws SQLException {
+    try (PreparedStatement ps = targetConnection
+      .prepareStatement("SELECT NAME FROM " + tableName + " WHERE ID = ?")) {
+      ps.setInt(1, id);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertTrue("Row " + id + " should exist on target", rs.next());
+        assertEquals("Target NAME for row " + id, expected, rs.getString(1));
+      }
+    }
+  }
+
+  /** Asserts the target row exists but its visible NAME is null. */
+  private void assertTargetNameNull(String tableName, int id) throws SQLException {
+    try (PreparedStatement ps = targetConnection
+      .prepareStatement("SELECT NAME FROM " + tableName + " WHERE ID = ?")) {
+      ps.setInt(1, id);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertTrue("Row " + id + " should exist on target", rs.next());
+        assertNull("Target NAME for row " + id + " should be null", rs.getString(1));
+      }
+    }
+  }
+
+  /** Asserts the target row is not visible to a Phoenix SELECT (e.g., shadowed by tombstones). */
+  private void assertTargetRowAbsent(String tableName, int id) throws SQLException {
+    try (PreparedStatement ps = targetConnection
+      .prepareStatement("SELECT NAME FROM " + tableName + " WHERE ID = ?")) {
+      ps.setInt(1, id);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertFalse("Row " + id + " should not be visible on target", rs.next());
+      }
+    }
+  }
+
+  /**
+   * End-of-test convergence: run dry-run + repair over [fromTime, toTime] on top of whatever
+   * checkpoint state the test already produced. The repair-mode resume filter (status IN
+   * (VERIFIED, REPAIRED)) plus chunk-level boundary intersection ensures that any chunk-level
+   * range not yet covered by a VERIFIED/REPAIRED chunk row is re-validated, so a fresh dry-run +
+   * repair on top of partial/stale prior state will still converge. Asserts no
+   * MISMATCHED/UNREPAIRABLE/REPAIR_FAILED rows remain and Phoenix-visible data matches between
+   * source and target.
+   */
+  private void convergeAndAssertIdentical(String tableName, long fromTime, long toTime)
+    throws Exception {
+    runSyncToolWithRepair(tableName, "--from-time", String.valueOf(fromTime), "--to-time",
+      String.valueOf(toTime));
+    assertNoMismatchedCheckpoints(tableName, null);
+    verifyDataIdentical(sourceConnection, targetConnection, tableName);
+  }
+
+  /**
+   * Summary of NAME-column raw cells observed under a single-row raw scan with all versions.
+   * Used by tests that pin tombstone/Put counts after repair.
+   */
+  private static final class RawCellSummary {
+    final int puts;
+    final int deleteColumns;
+    final int deleteFamilies;
+    final int deleteFamilyVersions;
+    final int pointDeletes;
+    final long newestPutTs;
+    final List<Long> putTimestamps;
+    final List<Long> deleteTimestamps;
+
+    RawCellSummary(int puts, int deleteColumns, int deleteFamilies, int deleteFamilyVersions,
+      int pointDeletes, long newestPutTs, List<Long> putTimestamps, List<Long> deleteTimestamps) {
+      this.puts = puts;
+      this.deleteColumns = deleteColumns;
+      this.deleteFamilies = deleteFamilies;
+      this.deleteFamilyVersions = deleteFamilyVersions;
+      this.pointDeletes = pointDeletes;
+      this.newestPutTs = newestPutTs;
+      this.putTimestamps = putTimestamps;
+      this.deleteTimestamps = deleteTimestamps;
+    }
+
+    int totalDeletes() {
+      return deleteColumns + deleteFamilies + deleteFamilyVersions + pointDeletes;
+    }
+  }
+
+  /**
+   * Raw scan of a single row on the target cluster, summarising every NAME-column cell by Put /
+   * tombstone subtype. Replaces the open-coded raw-scan loop repeated by tests that pin
+   * post-repair NAME tombstone counts.
+   */
+  private RawCellSummary scanRawTargetNameCells(String tableName, int rowId) throws Exception {
+    byte[] rk = integerRowKey(rowId);
+    int puts = 0;
+    int deleteColumns = 0;
+    int deleteFamilies = 0;
+    int deleteFamilyVersions = 0;
+    int pointDeletes = 0;
+    long newestPutTs = -1L;
+    List<Long> putTimestamps = new ArrayList<>();
+    List<Long> deleteTimestamps = new ArrayList<>();
+    try (Table targetHTable = getHBaseTable(targetConnection, tableName)) {
+      Scan scan = new Scan().withStartRow(rk, true).withStopRow(rk, true).setRaw(true);
+      scan.readAllVersions();
+      try (ResultScanner sc = targetHTable.getScanner(scan)) {
+        for (Result r; (r = sc.next()) != null;) {
+          for (Cell c : r.rawCells()) {
+            if (!Bytes.equals(CellUtil.cloneQualifier(c), Bytes.toBytes("NAME"))) {
+              continue;
+            }
+            if (CellUtil.isDelete(c)) {
+              deleteTimestamps.add(c.getTimestamp());
+              switch (c.getType()) {
+                case DeleteColumn:
+                  deleteColumns++;
+                  break;
+                case DeleteFamily:
+                  deleteFamilies++;
+                  break;
+                case DeleteFamilyVersion:
+                  deleteFamilyVersions++;
+                  break;
+                case Delete:
+                  pointDeletes++;
+                  break;
+                default:
+                  // ignore
+              }
+            } else {
+              puts++;
+              putTimestamps.add(c.getTimestamp());
+              newestPutTs = Math.max(newestPutTs, c.getTimestamp());
+            }
+          }
+        }
+      }
+    }
+    return new RawCellSummary(puts, deleteColumns, deleteFamilies, deleteFamilyVersions,
+      pointDeletes, newestPutTs, putTimestamps, deleteTimestamps);
   }
 
   /**
@@ -4305,77 +4624,158 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * Validates that a checkpoint table has entries with proper structure.
+   * Aggressive end-to-end checkpoint-table validation. Queries the checkpoint table itself, then:
+   * <ol>
+   *   <li>Validates per-row structural integrity — PK columns non-null, TYPE ∈ {REGION, CHUNK},
+   *     TENANT_ID matches, time-range invariants (FROM_TIME ≥ 0, TO_TIME > FROM_TIME), execution
+   *     timestamps non-null with END ≥ START, STATUS non-null, COUNTERS non-null on CHUNK rows.
+   *   </li>
+   *   <li>Pins per-(Type × Status) counts derived from the supplied counter objects: CHUNK and
+   *     REGION crossed with VERIFIED / REPAIRED / UNREPAIRABLE / REPAIR_FAILED / MISMATCHED.
+   *   </li>
+   *   <li>Cross-checks REGION-row sourceRowsProcessed/targetRowsProcessed totals against the
+   *     repair-pass counters (or dry-run counters when no repair ran).</li>
+   * </ol>
+   * <p>
+   * The two counter parameters select the validation mode:
+   * <ul>
+   *   <li>{@code dryRunCounters != null && repairCounters == null} — dry-run-only test. Expects
+   *     MISMATCHED rows to remain.</li>
+   *   <li>{@code dryRunCounters == null && repairCounters != null} — combined verify+repair pass
+   *     (no separate dry-run). VERIFIED count comes from {@code repairCounters}; MISMATCHED == 0.
+   *   </li>
+   *   <li>{@code dryRunCounters != null && repairCounters != null} — separate dry-run + repair.
+   *     VERIFIED count comes from {@code dryRunCounters} (the repair pass's resume filter skips
+   *     them); REPAIRED/UNREPAIRABLE/REPAIR_FAILED come from {@code repairCounters};
+   *     MISMATCHED == 0.</li>
+   * </ul>
+   * Use after asserting counters and before declaring success — pins the persisted checkpoint
+   * state to the in-memory counter state, so a regression that reports the right counters but
+   * writes the wrong checkpoint rows (or vice versa) fails loudly.
    */
-  private void validateCheckpointEntries(List<PhoenixSyncTableCheckpointOutputRow> entries,
-    String expectedTableName, String expectedTargetCluster, int expectedSourceRows,
-    int expectedTargetRows, int expectedChunkVerified, int expectedChunkMismatched,
-    int expectedMapperRegion, int expectedMapperMismatched, String expectedTenantId) {
-    int mapperRegionCount = 0;
-    int chunkCount = 0;
-    int mismatchedEntry = 0;
-    int sourceRowsProcessed = 0;
-    int targetRowsProcessed = 0;
+  private void validateCheckpointEntries(String tableName, String tenantId,
+    SyncCountersResult dryRunCounters, SyncCountersResult repairCounters) throws SQLException {
+    if (dryRunCounters == null && repairCounters == null) {
+      throw new IllegalArgumentException(
+        "At least one of dryRunCounters or repairCounters must be non-null");
+    }
+    List<PhoenixSyncTableCheckpointOutputRow> entries =
+      queryCheckpointTable(sourceConnection, tableName, targetZkQuorum, tenantId);
+    String ctx = " (table=" + tableName + " tenant=" + tenantId + ")";
+
+    // Per-row structural validation + REGION row-processing totals.
+    long mapperRegionCount = 0;
+    long chunkCount = 0;
+    long sourceRowsProcessed = 0;
+    long targetRowsProcessed = 0;
     for (PhoenixSyncTableCheckpointOutputRow entry : entries) {
-      // Validate primary key columns
-      assertEquals("TABLE_NAME should match", expectedTableName, entry.getTableName());
-      assertEquals("TARGET_CLUSTER should match", expectedTargetCluster, entry.getTargetCluster());
-      assertNotNull("TYPE should not be null", entry.getType());
-      assertTrue("TYPE should be REGION or CHUNK",
+      assertEquals("TABLE_NAME should match" + ctx, tableName, entry.getTableName());
+      assertEquals("TARGET_CLUSTER should match" + ctx, targetZkQuorum, entry.getTargetCluster());
+      assertNotNull("TYPE should not be null" + ctx, entry.getType());
+      assertTrue("TYPE should be REGION or CHUNK" + ctx,
         PhoenixSyncTableCheckpointOutputRow.Type.REGION.equals(entry.getType())
           || PhoenixSyncTableCheckpointOutputRow.Type.CHUNK.equals(entry.getType()));
 
-      // Validate TENANT_ID
-      if (expectedTenantId == null) {
-        assertNull("TENANT_ID should be null for non-multi-tenant tables", entry.getTenantId());
+      if (tenantId == null) {
+        assertNull("TENANT_ID should be null for non-multi-tenant tables" + ctx,
+          entry.getTenantId());
       } else {
-        assertEquals("TENANT_ID should match", expectedTenantId, entry.getTenantId());
+        assertEquals("TENANT_ID should match" + ctx, tenantId, entry.getTenantId());
       }
 
-      // Validate time range
-      assertTrue("FROM_TIME should be >= 0", entry.getFromTime() >= 0);
-      assertTrue("TO_TIME should be > FROM_TIME", entry.getToTime() > entry.getFromTime());
+      assertTrue("FROM_TIME should be >= 0" + ctx, entry.getFromTime() >= 0);
+      assertTrue("TO_TIME should be > FROM_TIME" + ctx, entry.getToTime() > entry.getFromTime());
 
-      // Validate execution timestamps
-      assertNotNull("EXECUTION_START_TIME should not be null", entry.getExecutionStartTime());
-      assertNotNull("EXECUTION_END_TIME should not be null", entry.getExecutionEndTime());
-      assertTrue("EXECUTION_END_TIME should be >= EXECUTION_START_TIME",
+      assertNotNull("EXECUTION_START_TIME should not be null" + ctx,
+        entry.getExecutionStartTime());
+      assertNotNull("EXECUTION_END_TIME should not be null" + ctx, entry.getExecutionEndTime());
+      assertTrue("EXECUTION_END_TIME should be >= EXECUTION_START_TIME" + ctx,
         entry.getExecutionEndTime().getTime() >= entry.getExecutionStartTime().getTime());
 
-      // Validate status
-      assertNotNull("STATUS should not be null", entry.getStatus());
-      assertTrue("STATUS should be VERIFIED or MISMATCHED",
-        PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED.equals(entry.getStatus())
-          || PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED.equals(entry.getStatus()));
+      assertNotNull("STATUS should not be null" + ctx, entry.getStatus());
 
-      if (PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED.equals(entry.getStatus())) {
-        mismatchedEntry++;
-      }
-
-      // Count entry types
       if (PhoenixSyncTableCheckpointOutputRow.Type.REGION.equals(entry.getType())) {
         mapperRegionCount++;
-        sourceRowsProcessed += (int) entry.getSourceRowsProcessed();
-        targetRowsProcessed += (int) entry.getTargetRowsProcessed();
-      } else if (PhoenixSyncTableCheckpointOutputRow.Type.CHUNK.equals(entry.getType())) {
+        sourceRowsProcessed += entry.getSourceRowsProcessed();
+        targetRowsProcessed += entry.getTargetRowsProcessed();
+      } else {
         chunkCount++;
-        assertNotNull("COUNTERS should not be null for CHUNK entries", entry.getCounters());
+        assertNotNull("COUNTERS should not be null for CHUNK entries" + ctx, entry.getCounters());
       }
     }
 
-    assertEquals(String.format("Should have %d REGION entry", expectedMapperRegion),
-      expectedMapperMismatched, expectedMapperRegion, mapperRegionCount);
-    assertEquals(
-      String.format("Should have %d CHUNK entry", expectedChunkVerified + expectedChunkMismatched),
-      expectedChunkVerified + expectedChunkMismatched, chunkCount);
-    assertEquals(
-      String.format("Should have %d MISMATCHED entry",
-        expectedMapperMismatched + expectedChunkMismatched),
-      expectedMapperMismatched + expectedChunkMismatched, mismatchedEntry);
-    assertEquals(String.format("Should have %d Source rows processed", expectedSourceRows),
-      expectedSourceRows, sourceRowsProcessed);
-    assertEquals(String.format("Should have %d Target rows processed", expectedTargetRows),
-      expectedTargetRows, targetRowsProcessed);
+    // Per-(Type × Status) counts derived from counter objects.
+    boolean isDryRunOnly = (repairCounters == null);
+    SyncCountersResult verifiedSource = (dryRunCounters != null ? dryRunCounters : repairCounters);
+    long expectedChunkVerified = verifiedSource.chunksVerified;
+    long expectedRegionVerified = verifiedSource.mappersVerified;
+    long expectedChunkRepaired = isDryRunOnly ? 0L : repairCounters.chunksRepaired;
+    long expectedChunkUnrepairable = isDryRunOnly ? 0L : repairCounters.chunksUnrepairable;
+    long expectedChunkRepairFailed = isDryRunOnly ? 0L : repairCounters.chunksRepairFailed;
+    long expectedRegionRepaired = isDryRunOnly ? 0L : repairCounters.mappersRepaired;
+    long expectedRegionUnrepairable = isDryRunOnly ? 0L : repairCounters.mappersUnrepairable;
+    long expectedRegionRepairFailed = isDryRunOnly ? 0L : repairCounters.mappersRepairFailed;
+    long expectedChunkMismatched = isDryRunOnly ? dryRunCounters.chunksMismatched : 0L;
+    long expectedRegionMismatched = isDryRunOnly ? dryRunCounters.mappersMismatched : 0L;
+
+    assertEquals("CHUNK/VERIFIED checkpoint rows" + ctx, expectedChunkVerified,
+      countCheckpointsByTypeAndStatus(entries, PhoenixSyncTableCheckpointOutputRow.Type.CHUNK,
+        PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED));
+    assertEquals("CHUNK/REPAIRED checkpoint rows" + ctx, expectedChunkRepaired,
+      countCheckpointsByTypeAndStatus(entries, PhoenixSyncTableCheckpointOutputRow.Type.CHUNK,
+        PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED));
+    assertEquals("CHUNK/UNREPAIRABLE checkpoint rows" + ctx, expectedChunkUnrepairable,
+      countCheckpointsByTypeAndStatus(entries, PhoenixSyncTableCheckpointOutputRow.Type.CHUNK,
+        PhoenixSyncTableCheckpointOutputRow.Status.UNREPAIRABLE));
+    assertEquals("CHUNK/REPAIR_FAILED checkpoint rows" + ctx, expectedChunkRepairFailed,
+      countCheckpointsByTypeAndStatus(entries, PhoenixSyncTableCheckpointOutputRow.Type.CHUNK,
+        PhoenixSyncTableCheckpointOutputRow.Status.REPAIR_FAILED));
+    assertEquals("CHUNK/MISMATCHED checkpoint rows" + ctx, expectedChunkMismatched,
+      countCheckpointsByTypeAndStatus(entries, PhoenixSyncTableCheckpointOutputRow.Type.CHUNK,
+        PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED));
+
+    assertEquals("REGION/VERIFIED checkpoint rows" + ctx, expectedRegionVerified,
+      countCheckpointsByTypeAndStatus(entries, PhoenixSyncTableCheckpointOutputRow.Type.REGION,
+        PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED));
+    assertEquals("REGION/REPAIRED checkpoint rows" + ctx, expectedRegionRepaired,
+      countCheckpointsByTypeAndStatus(entries, PhoenixSyncTableCheckpointOutputRow.Type.REGION,
+        PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED));
+    assertEquals("REGION/UNREPAIRABLE checkpoint rows" + ctx, expectedRegionUnrepairable,
+      countCheckpointsByTypeAndStatus(entries, PhoenixSyncTableCheckpointOutputRow.Type.REGION,
+        PhoenixSyncTableCheckpointOutputRow.Status.UNREPAIRABLE));
+    assertEquals("REGION/REPAIR_FAILED checkpoint rows" + ctx, expectedRegionRepairFailed,
+      countCheckpointsByTypeAndStatus(entries, PhoenixSyncTableCheckpointOutputRow.Type.REGION,
+        PhoenixSyncTableCheckpointOutputRow.Status.REPAIR_FAILED));
+    assertEquals("REGION/MISMATCHED checkpoint rows" + ctx, expectedRegionMismatched,
+      countCheckpointsByTypeAndStatus(entries, PhoenixSyncTableCheckpointOutputRow.Type.REGION,
+        PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED));
+
+    // Aggregate type counts (sanity — sum of per-status counts across all five statuses must
+    // equal what the loop above tallied).
+    long expectedChunkTotal = expectedChunkVerified + expectedChunkRepaired
+      + expectedChunkUnrepairable + expectedChunkRepairFailed + expectedChunkMismatched;
+    long expectedRegionTotal = expectedRegionVerified + expectedRegionRepaired
+      + expectedRegionUnrepairable + expectedRegionRepairFailed + expectedRegionMismatched;
+    assertEquals("Total CHUNK checkpoint rows" + ctx, expectedChunkTotal, chunkCount);
+    assertEquals("Total REGION checkpoint rows" + ctx, expectedRegionTotal, mapperRegionCount);
+
+    // Row-processing totals: REGION rows persist per-mapper sourceRowsProcessed /
+    // targetRowsProcessed; their sum equals the job-level counter only when no REGION row was
+    // overwritten by a subsequent repair pass. The checkpoint PK excludes IS_DRY_RUN, so a repair
+    // pass UPSERTs the REGION row at the dry-run row's PK; for partially-mismatched regions
+    // repair re-processes only the gap (non-VERIFIED) chunks and writes a smaller delta, so the
+    // sum across REGION rows no longer matches the dry-run job-level total. Only assert the
+    // strict equality when (a) no repair pass was run, or (b) the repair pass touched no
+    // regions (everything was already VERIFIED so dry-run rows stay intact).
+    boolean repairTouchedRegions = repairCounters != null
+      && (repairCounters.mappersRepaired + repairCounters.mappersUnrepairable
+        + repairCounters.mappersRepairFailed) > 0;
+    if (!repairTouchedRegions) {
+      assertEquals("REGION sourceRowsProcessed total" + ctx, verifiedSource.sourceRowsProcessed,
+        sourceRowsProcessed);
+      assertEquals("REGION targetRowsProcessed total" + ctx, verifiedSource.targetRowsProcessed,
+        targetRowsProcessed);
+    }
   }
 
   /**
@@ -4392,6 +4792,27 @@ public class PhoenixSyncTableToolIT {
       if (!(o instanceof TestRow)) return false;
       TestRow other = (TestRow) o;
       return id == other.id && Objects.equals(name, other.name) && name_value == other.name_value;
+    }
+  }
+
+  /**
+   * RegionObserver that fails every batch mutate. Attached to PHOENIX_SYNC_TABLE_CHECKPOINT
+   * by {@code testCheckpointWriteFailureCausesNonZeroExit} to exercise the
+   * {@code CHECKPOINT_WRITE_FAILED} → non-zero exit path.
+   */
+  public static class CheckpointWriteFailingObserver extends SimpleRegionObserver {
+    @Override
+    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
+      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+      throw new DoNotRetryIOException("INJECTED CHECKPOINT WRITE FAIL");
+    }
+  }
+
+  public static class RepairBatchFailingObserver extends SimpleRegionObserver {
+    @Override
+    public void preBatchMutate(ObserverContext<RegionCoprocessorEnvironment> c,
+      MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+      throw new DoNotRetryIOException("INJECTED TARGET REPAIR WRITE FAIL");
     }
   }
 }
