@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import com.fasterxml.jackson.annotation.JsonPropertyOrder;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import java.util.List;
 import java.util.Set;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -32,15 +30,6 @@ import org.apache.phoenix.schema.PColumn;
  * against. This also makes attribute retrieval easier as an API rather than retrieving list of
  * Strings containing entire plan.
  */
-@JsonPropertyOrder({ "abstractExplainPlan", "splitsChunk", "estimatedRows", "estimatedSizeInBytes",
-  "iteratorTypeAndScanSize", "samplingRate", "useRoundRobinIterator", "hexStringRVCOffset",
-  "consistency", "hint", "serverSortedBy", "explainScanType", "tableName", "keyRanges",
-  "scanTimeRangeMin", "scanTimeRangeMax", "serverWhereFilter", "serverDistinctFilter",
-  "serverOffset", "serverRowLimit", "serverArrayElementProjection", "serverAggregate",
-  "clientFilterBy", "clientAggregate", "clientSortedBy", "clientAfterAggregate",
-  "clientDistinctFilter", "clientOffset", "clientRowLimit", "clientSequenceCount",
-  "clientCursorName", "clientSortAlgo", "rhsJoinQueryExplainPlan", "serverMergeColumns",
-  "regionLocations", "numRegionLocationLookups" })
 public class ExplainPlanAttributes {
 
   private final String abstractExplainPlan;
@@ -310,12 +299,10 @@ public class ExplainPlanAttributes {
     return rhsJoinQueryExplainPlan;
   }
 
-  @JsonSerialize(using = ServerMergeColumnsSerializer.class)
   public Set<PColumn> getServerMergeColumns() {
     return serverMergeColumns;
   }
 
-  @JsonSerialize(using = RegionLocationsListSerializer.class)
   public List<HRegionLocation> getRegionLocations() {
     return regionLocations;
   }
