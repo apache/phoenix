@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.checkIndexState;
 import static org.apache.phoenix.util.TestUtil.getRowCount;
@@ -35,13 +36,10 @@ import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.coprocessor.BaseScannerRegionObserver;
 import org.apache.phoenix.coprocessor.IndexRebuildRegionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
@@ -177,15 +175,10 @@ public class IndexExtendedIT extends BaseTest {
       String selectSql =
         String.format("SELECT ID FROM %s WHERE UPPER(NAME, 'en_US') ='UNAME2'", dataTableFullName);
 
-      ExplainPlan plan = conn.prepareStatement(selectSql).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
       // assert we are pulling from data table.
-      assertEquals(dataTableFullName, explainPlanAttributes.getTableName());
-      assertEquals("SERVER FILTER BY UPPER(NAME, 'en_US') = 'UNAME2'",
-        explainPlanAttributes.getServerWhereFilter());
+      assertPlan(conn, selectSql).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+        .table(dataTableFullName)
+        .serverWhereFilter("SERVER FILTER BY UPPER(NAME, 'en_US') = 'UNAME2'");
 
       ResultSet rs = stmt1.executeQuery(selectSql);
       assertTrue(rs.next());
@@ -195,13 +188,10 @@ public class IndexExtendedIT extends BaseTest {
       // run the index MR job.
       IndexToolIT.runIndexTool(useSnapshot, schemaName, dataTableName, indexTableName);
 
-      plan = conn.prepareStatement(selectSql).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-        .getExplainPlan();
-      explainPlanAttributes = plan.getPlanStepsAsAttributes();
       // assert we are pulling from index table.
       String expectedTableName =
         localIndex ? indexTableFullName + "(" + dataTableFullName + ")" : indexTableFullName;
-      assertEquals(expectedTableName, explainPlanAttributes.getTableName());
+      assertPlan(conn, selectSql).table(expectedTableName);
 
       rs = stmt.executeQuery(selectSql);
       assertTrue(rs.next());
@@ -259,13 +249,8 @@ public class IndexExtendedIT extends BaseTest {
       // deleted
       String query = "SELECT pk3 from " + dataTableFullName + " ORDER BY pk3";
 
-      ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(indexTableFullName, explainPlanAttributes.getTableName());
-      assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
+      assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+        .table(indexTableFullName).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
 
       ResultSet rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());

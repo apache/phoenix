@@ -80,7 +80,9 @@ public class FilterResultIterator extends LookAheadResultIterator {
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     delegate.explain(planSteps, explainPlanAttributesBuilder);
     explainPlanAttributesBuilder.setClientFilterBy(expression.toString());
-    planSteps.add("CLIENT FILTER BY " + expression.toString());
+    String step = "CLIENT FILTER BY " + expression.toString();
+    planSteps.add(step);
+    explainPlanAttributesBuilder.addClientStep(step);
   }
 
   @Override

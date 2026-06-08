@@ -17,10 +17,15 @@
  */
 package org.apache.phoenix.end2end.join;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+
+import java.sql.Connection;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
@@ -46,31 +51,52 @@ public class SortMergeJoinNoIndexIT extends SortMergeJoinIT {
     return virtualNameToRealNameMap;
   }
 
-  public SortMergeJoinNoIndexIT(String[] indexDDL, String[] plans) {
-    super(indexDDL, plans);
+  public SortMergeJoinNoIndexIT(String[] indexDDL) {
+    super(indexDDL);
   }
 
-  @Parameters(name = "SortMergeJoinNoIndexIT_{index}") // name is used by failsafe as file name in
-                                                       // reports
+  @Override
+  protected void assertSkipMergeOptimizationPlan(Connection conn, String query) throws Exception {
+    String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+    String supplier = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+    String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+    assertPlan(conn, query).abstractExplainPlan("SORT-MERGE-JOIN (LEFT)").sortMergeSkipMerge(false)
+      .lhs().scanType("FULL SCAN").table(supplier).end().rhs()
+      .abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(true)
+      .clientSortedBy("[\"I.supplier_id\"]").lhs().scanType("FULL SCAN").table(item).end().rhs()
+      .scanType("FULL SCAN").table(order).serverWhereFilter("SERVER FILTER BY QUANTITY < 5000")
+      .serverSortedBy("[\"O.item_id\"]").clientSortAlgo("CLIENT MERGE SORT").end().end();
+  }
+
+  @Override
+  protected void assertSelfJoinPlan(Connection conn, String query) throws Exception {
+    String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+    assertPlan(conn, query).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(false)
+      .lhs().scanType("FULL SCAN").table(item).end().rhs().scanType("FULL SCAN").table(item)
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").end();
+  }
+
+  @Override
+  protected void assertSetMaxRowsPlan(Connection conn, String query, int queryIndex)
+    throws Exception {
+    String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+    String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+    PhoenixPreparedStatement statement =
+      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
+    statement.setMaxRows(4);
+    ExplainPlanAttributes attributes =
+      statement.optimizeQuery().getExplainPlan().getPlanStepsAsAttributes();
+    assertPlan(attributes).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(false)
+      .clientRowLimit(4).lhs().scanType("FULL SCAN").table(item).end().rhs().scanType("FULL SCAN")
+      .table(order).serverSortedBy(queryIndex == 0 ? "[\"O.item_id\"]" : "[\"item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end();
+  }
+
+  // name is used by failsafe as file name in reports
+  @Parameters(name = "SortMergeJoinNoIndexIT_{index}")
   public static synchronized Collection<Object> data() {
     List<Object> testCases = Lists.newArrayList();
-    testCases.add(new String[][] { {},
-      { "SORT-MERGE-JOIN (LEFT) TABLES\n" + "    CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-        + JOIN_SUPPLIER_TABLE_FULL_NAME + "\n" + "AND\n" + "    SORT-MERGE-JOIN (INNER) TABLES\n"
-        + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + "\n"
-        + "    AND (SKIP MERGE)\n" + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-        + JOIN_ORDER_TABLE_FULL_NAME + "\n" + "            SERVER FILTER BY QUANTITY < 5000\n"
-        + "            SERVER SORTED BY [\"O.item_id\"]\n" + "        CLIENT MERGE SORT\n"
-        + "    CLIENT SORTED BY [\"I.supplier_id\"]",
-
-        "SORT-MERGE-JOIN (INNER) TABLES\n" + "    CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-          + JOIN_ITEM_TABLE_FULL_NAME + "\n" + "AND\n" + "    CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-          + JOIN_ORDER_TABLE_FULL_NAME + "\n" + "        SERVER SORTED BY [\"O.item_id\"]\n"
-          + "    CLIENT MERGE SORT\n" + "CLIENT 4 ROW LIMIT",
-
-        "SORT-MERGE-JOIN (INNER) TABLES\n" + "    CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-          + JOIN_ITEM_TABLE_FULL_NAME + "\n" + "AND\n" + "    CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-          + JOIN_ITEM_TABLE_FULL_NAME + "\n" + "        SERVER FILTER BY FIRST KEY ONLY" } });
+    testCases.add(new String[][] { {} });
     return testCases;
   }
 }

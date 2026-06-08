@@ -60,7 +60,9 @@ public class CursorResultIterator implements ResultIterator {
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     delegate.explain(planSteps, explainPlanAttributesBuilder);
     explainPlanAttributesBuilder.setClientCursorName(cursorName);
-    planSteps.add("CLIENT CURSOR " + cursorName);
+    String step = "CLIENT CURSOR " + cursorName;
+    planSteps.add(step);
+    explainPlanAttributesBuilder.addClientStep(step);
   }
 
   @Override

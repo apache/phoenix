@@ -25,10 +25,12 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_UNKNOWN_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.query.QueryConstants.CDC_EVENT_TYPE;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.getExplainAttributes;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -53,6 +55,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.FilterList;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -66,7 +69,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -147,10 +149,13 @@ public class CDCQueryIT extends CDCBaseIT {
 
   private void cdcIndexShouldNotBeUsedForDataTableQueries(Connection conn, String dataTableName,
     String cdcName) throws Exception {
-    ResultSet rs = conn.createStatement().executeQuery(
-      "EXPLAIN SELECT * FROM " + dataTableName + " WHERE PHOENIX_ROW_TIMESTAMP() < CURRENT_TIME()");
-    String explainPlan = QueryUtil.getExplainPlan(rs);
-    assertFalse(explainPlan.contains(cdcName));
+    String sql =
+      "SELECT * FROM " + dataTableName + " WHERE PHOENIX_ROW_TIMESTAMP() < CURRENT_TIME()";
+    ExplainPlanAttributes attributes = getExplainAttributes(conn, sql);
+    String scannedTable = attributes.getTableName();
+    assertNotNull(scannedTable);
+    assertFalse("CDC index " + cdcName + " should not be used, but plan scanned " + scannedTable,
+      scannedTable.contains(cdcName));
   }
 
   private boolean isDistinctPrefixFilterIncludedInFilterList(FilterList filterList) {

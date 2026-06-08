@@ -29,10 +29,12 @@ import static org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableInd
 import static org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TableOptions;
 import static org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewIndexOptions;
 import static org.apache.phoenix.query.PhoenixTestBuilder.SchemaBuilder.TenantViewOptions;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.getExplainAttributes;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertNotNull;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -50,7 +52,7 @@ import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.query.PhoenixTestBuilder.BasicDataWriter;
 import org.apache.phoenix.query.PhoenixTestBuilder.DataSupplier;
 import org.apache.phoenix.query.PhoenixTestBuilder.DataWriter;
@@ -60,7 +62,6 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Ignore;
@@ -746,11 +747,10 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
         injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis() + ttl * 1000 + 2);
         EnvironmentEdgeManager.injectEdge(injectEdge);
         String distinctQuery = "SELECT DISTINCT id1 FROM " + dataTableName;
+        ExplainPlanAttributes attributes = getExplainAttributes(conn, distinctQuery);
+        assertPlan(attributes).serverWhereFilter("SERVER FILTER BY EMPTY COLUMN ONLY");
+        assertNotNull(attributes.getServerDistinctFilter());
         try (ResultSet rs = conn.createStatement().executeQuery(distinctQuery)) {
-          PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-          String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-          assertTrue(explainPlan.contains("SERVER FILTER BY EMPTY COLUMN ONLY"));
-          assertTrue(explainPlan.contains("SERVER DISTINCT PREFIX FILTER OVER"));
           // all the rows should have been masked
           assertFalse(rs.next());
         }

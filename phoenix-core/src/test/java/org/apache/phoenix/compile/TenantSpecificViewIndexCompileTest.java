@@ -17,20 +17,22 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Calendar;
+import java.util.List;
 import java.util.Properties;
 import java.util.TimeZone;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
+import org.apache.phoenix.query.explain.ExplainPlanTestUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryTest {
@@ -49,11 +51,9 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
     conn.createStatement().execute("CREATE VIEW v(v2 VARCHAR) AS SELECT * FROM t WHERE k1 = 'a'");
     conn.createStatement().execute("CREATE INDEX i1 ON v(v2) INCLUDE(v1)");
 
-    ResultSet rs =
-      conn.createStatement().executeQuery("EXPLAIN SELECT v1,v2 FROM v WHERE v2 > 'a' ORDER BY v2");
-    assertEquals(
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]",
-      QueryUtil.getExplainPlan(rs));
+    assertPlan(conn, "SELECT v1,v2 FROM v WHERE v2 > 'a' ORDER BY v2")
+      .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("_IDX_T")
+      .keyRanges(" [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]");
   }
 
   @Test
@@ -69,35 +69,29 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
     // Query without predicate ordered by full row key
     String sql = "SELECT * FROM v1 ORDER BY k1, k2, k3";
-    String expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789']";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScan(conn, sql, " ['tenant123456789']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Predicate with valid partial PK
     sql = "SELECT * FROM v1 WHERE k1 = 'xyz' ORDER BY k1, k2, k3";
-    expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz']";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScan(conn, sql, " ['tenant123456789','xyz']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     sql = "SELECT * FROM v1 WHERE k1 > 'xyz' ORDER BY k1, k2, k3";
-    expectedExplainOutput =
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xy{'] - ['tenant123456789',*]";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScan(conn, sql, " ['tenant123456789','xy{'] - ['tenant123456789',*]");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     String datePredicate = createStaticDate();
     sql = "SELECT * FROM v1 WHERE k1 = 'xyz' AND k2 = '123456789012345' AND k3 < TO_DATE('"
       + datePredicate + "') ORDER BY k1, k2, k3";
-    expectedExplainOutput =
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz','123456789012345',*] - ['tenant123456789','xyz','123456789012345','2015-01-01 08:00:00.000']";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScan(conn, sql, " ['tenant123456789','xyz','123456789012345',*] - "
+      + "['tenant123456789','xyz','123456789012345','2015-01-01 08:00:00.000']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Predicate without valid partial PK
     sql = "SELECT * FROM v1 WHERE k2 < 'abcde1234567890' ORDER BY k1, k2, k3";
-    expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789']\n"
-      + "    SERVER FILTER BY K2 < 'abcde1234567890'";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScanWithFilter(conn, sql, " ['tenant123456789']",
+      "SERVER FILTER BY K2 < 'abcde1234567890'");
     assertOrderByHasBeenOptimizedOut(conn, sql);
   }
 
@@ -113,43 +107,36 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
     // Query without predicate ordered by full row key
     String sql = "SELECT * FROM v1 ORDER BY k2, k3";
-    String expectedExplainOutput =
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz']";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScan(conn, sql, " ['tenant123456789','xyz']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Query without predicate ordered by full row key, but without column view predicate
     sql = "SELECT * FROM v1 ORDER BY k2, k3";
-    expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz']";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScan(conn, sql, " ['tenant123456789','xyz']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Predicate with valid partial PK
     sql = "SELECT * FROM v1 WHERE k1 = 'xyz' ORDER BY k2, k3";
-    expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz']";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScan(conn, sql, " ['tenant123456789','xyz']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     sql = "SELECT * FROM v1 WHERE k2 < 'abcde1234567890' ORDER BY k2, k3";
-    expectedExplainOutput =
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz',*] - ['tenant123456789','xyz','abcde1234567890']";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScan(conn, sql,
+      " ['tenant123456789','xyz',*] - ['tenant123456789','xyz','abcde1234567890']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Predicate with full PK
     String datePredicate = createStaticDate();
     sql = "SELECT * FROM v1 WHERE k2 = '123456789012345' AND k3 < TO_DATE('" + datePredicate
       + "') ORDER BY k2, k3";
-    expectedExplainOutput =
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz','123456789012345',*] - ['tenant123456789','xyz','123456789012345','2015-01-01 08:00:00.000']";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScan(conn, sql, " ['tenant123456789','xyz','123456789012345',*] - "
+      + "['tenant123456789','xyz','123456789012345','2015-01-01 08:00:00.000']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Predicate with valid partial PK
     sql = "SELECT * FROM v1 WHERE k3 < TO_DATE('" + datePredicate + "') ORDER BY k2, k3";
-    expectedExplainOutput = "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz']\n"
-      + "    SERVER FILTER BY K3 < DATE '" + datePredicate + "'";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScanWithFilter(conn, sql, " ['tenant123456789','xyz']",
+      "SERVER FILTER BY K3 < DATE '" + datePredicate + "'");
     assertOrderByHasBeenOptimizedOut(conn, sql);
   }
 
@@ -166,30 +153,26 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
     // Query without predicate ordered by full row key
     String sql = "SELECT * FROM v1 ORDER BY k3 DESC";
-    String expectedExplainOutput =
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz','abcde']";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScan(conn, sql, " ['tenant123456789','xyz','abcde']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Query without predicate ordered by full row key, but without column view predicate
     sql = "SELECT * FROM v1 ORDER BY k3 DESC";
-    expectedExplainOutput =
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz','abcde']";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScan(conn, sql, " ['tenant123456789','xyz','abcde']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Query with predicate ordered by full row key
     sql = "SELECT * FROM v1 WHERE k3 <= TO_DATE('" + createStaticDate() + "') ORDER BY k3 DESC";
-    expectedExplainOutput =
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['tenant123456789','xyz','abcde',~'2015-01-01 08:00:00.000'] - ['tenant123456789','xyz','abcde',*]";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertRangeScan(conn, sql, " ['tenant123456789','xyz','abcde',~'2015-01-01 08:00:00.000'] - "
+      + "['tenant123456789','xyz','abcde',*]");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Query with predicate ordered by full row key with date in reverse order
     sql = "SELECT * FROM v1 WHERE k3 <= TO_DATE('" + createStaticDate() + "') ORDER BY k3";
-    expectedExplainOutput =
-      "CLIENT PARALLEL 1-WAY REVERSE RANGE SCAN OVER T ['tenant123456789','xyz','abcde',~'2015-01-01 08:00:00.000'] - ['tenant123456789','xyz','abcde',*]";
-    assertExplainPlanIsCorrect(conn, sql, expectedExplainOutput);
+    assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("T")
+      .clientSortedBy("REVERSE")
+      .keyRanges(" ['tenant123456789','xyz','abcde',~'2015-01-01 08:00:00.000'] - "
+        + "['tenant123456789','xyz','abcde',*]");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
   }
@@ -208,25 +191,26 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
     conn.createStatement().execute("CREATE VIEW v(v2 VARCHAR) AS SELECT * FROM t WHERE k2 = 'a'");
     conn.createStatement().execute("CREATE INDEX i1 ON v(v2)");
 
-    ResultSet rs = conn.createStatement()
-      .executeQuery("EXPLAIN SELECT v2 FROM v WHERE v2 > 'a' and k2 = 'a' ORDER BY v2,k2");
-    assertEquals(
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY",
-      QueryUtil.getExplainPlan(rs));
+    assertPlan(conn, "SELECT v2 FROM v WHERE v2 > 'a' and k2 = 'a' ORDER BY v2,k2")
+      .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("_IDX_T")
+      .keyRanges(" [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]")
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
 
     // Won't use index b/c v1 is not in index, but should optimize out k2 still from the order by
     // K2 will still be referenced in the filter, as these are automatically tacked on to the where
     // clause.
-    rs = conn.createStatement().executeQuery("EXPLAIN SELECT v1 FROM v WHERE v2 > 'a' ORDER BY k2");
-    assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER T ['me']\n"
-      + "    SERVER FILTER BY (V2 > 'a' AND K2 = 'a')", QueryUtil.getExplainPlan(rs));
+    assertPlan(conn, "SELECT v1 FROM v WHERE v2 > 'a' ORDER BY k2").iteratorType("PARALLEL 1-WAY")
+      .scanType("RANGE SCAN").table("T").keyRanges(" ['me']")
+      .serverWhereFilter("SERVER FILTER BY (V2 > 'a' AND K2 = 'a')");
 
     // If we match K2 against a constant not equal to it's view constant, we should get a degenerate
-    // plan
-    rs = conn.createStatement()
-      .executeQuery("EXPLAIN SELECT v1 FROM v WHERE v2 > 'a' and k2='b' ORDER BY k2");
-    assertEquals("DEGENERATE SCAN OVER V", QueryUtil.getExplainPlan(rs));
+    // plan. The DEGENERATE SCAN ExplainPlan does not populate structured attributes, so this
+    // single-literal check on the plan-steps text is retained.
+    List<String> degenerateSteps = ExplainPlanTestUtil.getPlanSteps(conn,
+      "SELECT v1 FROM v WHERE v2 > 'a' and k2='b' ORDER BY k2");
+    assertEquals(1, degenerateSteps.size());
+    assertTrue("expected DEGENERATE SCAN OVER V, got " + degenerateSteps,
+      degenerateSteps.get(0).contains("DEGENERATE SCAN OVER V"));
   }
 
   @Test
@@ -246,11 +230,9 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
     // Confirm that a read-only view on an updatable view still optimizes out the read-only parts of
     // the updatable view
-    ResultSet rs = conn.createStatement()
-      .executeQuery("EXPLAIN SELECT v2 FROM v2 WHERE v3 > 'a' and k2 = 'a' ORDER BY v3,k2");
-    assertEquals(
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER _IDX_T [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]",
-      QueryUtil.getExplainPlan(rs));
+    assertPlan(conn, "SELECT v2 FROM v2 WHERE v3 > 'a' and k2 = 'a' ORDER BY v3,k2")
+      .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("_IDX_T")
+      .keyRanges(" [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]");
   }
 
   // -----------------------------------------------------------------
@@ -265,10 +247,15 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
     return conn;
   }
 
-  private void assertExplainPlanIsCorrect(Connection conn, String sql, String expectedExplainOutput)
-    throws SQLException {
-    ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + sql);
-    assertEquals(expectedExplainOutput, QueryUtil.getExplainPlan(rs));
+  private void assertRangeScan(Connection conn, String sql, String keyRanges) throws SQLException {
+    assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("T")
+      .keyRanges(keyRanges);
+  }
+
+  private void assertRangeScanWithFilter(Connection conn, String sql, String keyRanges,
+    String serverWhereFilter) throws SQLException {
+    assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("T")
+      .keyRanges(keyRanges).serverWhereFilter(serverWhereFilter);
   }
 
   private void assertOrderByHasBeenOptimizedOut(Connection conn, String sql) throws SQLException {

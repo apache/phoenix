@@ -30,9 +30,12 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.getExplainAttributes;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -58,6 +61,7 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.RegionStatesCount;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
@@ -70,8 +74,8 @@ import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Before;
@@ -251,19 +255,25 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
 
   public static void assertExplainPlan(Connection conn, String selectSql, String dataTableFullName,
     String indexTableFullName) throws SQLException {
-    ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-    String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-    IndexToolIT.assertExplainPlan(false, actualExplainPlan, dataTableFullName, indexTableFullName);
+    // Verify the query is served by a RANGE SCAN over the index table and not the data table.
+    ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
+    assertPlan(attributes).scanType("RANGE SCAN");
+    String actualTable =
+      attributes.getTableName() == null ? null : attributes.getTableName().replaceAll(":", ".");
+    String expectedTable = SchemaUtil.normalizeIdentifier(indexTableFullName);
+    assertTrue("expected scanned table <" + actualTable + "> to use index <" + expectedTable + ">",
+      actualTable != null && actualTable.contains(expectedTable));
   }
 
   public static void assertExplainPlanWithLimit(Connection conn, String selectSql,
     String dataTableFullName, String indexTableFullName, int limit) throws SQLException {
-    ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-    String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-    IndexToolIT.assertExplainPlan(false, actualExplainPlan, dataTableFullName, indexTableFullName);
-    String expectedLimitPlan = String.format("SERVER %d ROW LIMIT", limit);
-    assertTrue(actualExplainPlan + "\n expected to contain \n" + expectedLimitPlan,
-      actualExplainPlan.contains(expectedLimitPlan));
+    ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
+    assertPlan(attributes).scanType("RANGE SCAN").serverRowLimit((long) limit);
+    String actualTable =
+      attributes.getTableName() == null ? null : attributes.getTableName().replaceAll(":", ".");
+    String expectedTable = SchemaUtil.normalizeIdentifier(indexTableFullName);
+    assertTrue("expected scanned table <" + actualTable + "> to use index <" + expectedTable + ">",
+      actualTable != null && actualTable.contains(expectedTable));
   }
 
   private void populateTable(String tableName) throws Exception {
@@ -398,9 +408,7 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
         + dataTableName + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('"
         + after.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the data table
-      rs = conn.createStatement().executeQuery("EXPLAIN " + noIndexQuery);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(explainPlan.contains("FULL SCAN OVER " + dataTableName));
+      assertPlan(conn, noIndexQuery).scanType("FULL SCAN").table(dataTableName);
       rs = conn.createStatement().executeQuery(noIndexQuery);
       assertTrue(rs.next());
       moveRegionsOfTable(dataTableName);
@@ -1447,11 +1455,7 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
       String selectSql =
         "SELECT id, val1, val3 from " + dataTableName + " WHERE val1 IN ('ab', 'bcc') ";
       // Verify that we will read from the index table
-      try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql)) {
-        String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-        String expectedExplainPlan = String.format("SKIP SCAN ON 2 KEYS OVER %s", indexName);
-        assertTrue(actualExplainPlan.contains(expectedExplainPlan));
-      }
+      assertPlan(conn, selectSql).scanType("SKIP SCAN ON 2 KEYS").table(indexName);
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
         assertTrue(rs.next());
         assertEquals("a", rs.getString("id"));
@@ -1474,16 +1478,11 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
 
       selectSql = "SELECT id, val3 from " + dataTableName
         + " WHERE val1 IN ('bc') AND val2 IN ('bcd', 'xcdf') AND val3 = 'bcde' ";
-      // Verify that we will read from the index table
-      try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql)) {
-        String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-        String expectedExplainPlan = String.format("SKIP SCAN ON 2 KEYS OVER %s", indexName);
-        String filter = "SERVER FILTER BY";
-        assertTrue(String.format("actual=%s", actualExplainPlan),
-          actualExplainPlan.contains(expectedExplainPlan));
-        assertTrue(String.format("actual=%s", actualExplainPlan),
-          actualExplainPlan.contains(filter));
-      }
+      // Verify that we will read from the index table with a server filter
+      ExplainPlanAttributes skipScanAttributes = getExplainAttributes(conn, selectSql);
+      assertPlan(skipScanAttributes).scanType("SKIP SCAN ON 2 KEYS").table(indexName);
+      assertNotNull("expected a server filter, plan=" + skipScanAttributes,
+        skipScanAttributes.getServerWhereFilter());
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
         assertTrue(rs.next());
         moveRegionsOfTable(dataTableName);
@@ -1525,17 +1524,14 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
 
       String selectSql =
         "SELECT id, val3 from " + dataTableName + " WHERE val1 = 'bc' and val2 = 'bcd' ";
-      // Verify that we will read from the index table
-      try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql)) {
-        String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-        String expectedExplainPlan = String.format("RANGE SCAN OVER %s", indexName);
-        String filter =
-          String.format("SERVER FILTER BY %s ONLY AND", encoded ? "FIRST KEY" : "EMPTY COLUMN");
-        assertTrue(String.format("actual=%s", actualExplainPlan),
-          actualExplainPlan.contains(expectedExplainPlan));
-        assertTrue(String.format("actual=%s", actualExplainPlan),
-          actualExplainPlan.contains(filter));
-      }
+      // Verify that we will read from the index table with a first-key-only/empty-column filter
+      ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
+      assertPlan(attributes).scanType("RANGE SCAN").table(indexName);
+      String expectedFilter =
+        String.format("SERVER FILTER BY %s ONLY AND", encoded ? "FIRST KEY" : "EMPTY COLUMN");
+      assertTrue("serverWhereFilter=" + attributes.getServerWhereFilter(),
+        attributes.getServerWhereFilter() != null
+          && attributes.getServerWhereFilter().contains(expectedFilter));
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
         assertTrue(rs.next());
         moveRegionsOfTable(dataTableName);
