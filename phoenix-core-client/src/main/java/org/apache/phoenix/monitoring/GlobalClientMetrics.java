@@ -35,6 +35,11 @@ import static org.apache.phoenix.monitoring.MetricType.COUNT_ROWS_SCANNED;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_CALLS;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_RETRIES;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_SCANNED_REGIONS;
+import static org.apache.phoenix.monitoring.MetricType.HA_CRR_CACHE_AGE_MS;
+import static org.apache.phoenix.monitoring.MetricType.HA_CRR_REFRESH_COUNT;
+import static org.apache.phoenix.monitoring.MetricType.HA_FAILOVER_COUNT;
+import static org.apache.phoenix.monitoring.MetricType.HA_FAILOVER_DURATION_MS;
+import static org.apache.phoenix.monitoring.MetricType.HA_MUTATION_BLOCKED_COUNT;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_CONNECTION_CREATED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_CONNECTION_ERROR_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_CONNECTION_FALLBACK_COUNTER;
@@ -49,6 +54,9 @@ import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_POOL2_TASK_EX
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_POOL2_TASK_QUEUE_WAIT_TIME;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_POOL2_TASK_REJECTED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_TASK_TIMEOUT_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.HA_POLLER_TICK_COUNT;
+import static org.apache.phoenix.monitoring.MetricType.HA_POLLER_TICK_FAILURES;
+import static org.apache.phoenix.monitoring.MetricType.HA_STALE_CRR_DETECTED_COUNT;
 import static org.apache.phoenix.monitoring.MetricType.HCONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.INDEX_COMMIT_FAILURE_SIZE;
 import static org.apache.phoenix.monitoring.MetricType.MEMORY_CHUNK_BYTES;
@@ -162,6 +170,17 @@ public enum GlobalClientMetrics {
   GLOBAL_HA_PARALLEL_CONNECTION_FALLBACK_COUNTER(HA_PARALLEL_CONNECTION_FALLBACK_COUNTER),
   GLOBAL_HA_PARALLEL_CONNECTION_ERROR_COUNTER(HA_PARALLEL_CONNECTION_ERROR_COUNTER),
   GLOBAL_HA_PARALLEL_CONNECTION_CREATED_COUNTER(HA_PARALLEL_CONNECTION_CREATED_COUNTER),
+
+  GLOBAL_HA_FAILOVER_COUNT(HA_FAILOVER_COUNT),
+  GLOBAL_HA_FAILOVER_DURATION_MS(HA_FAILOVER_DURATION_MS),
+  GLOBAL_HA_MUTATION_BLOCKED_COUNT(HA_MUTATION_BLOCKED_COUNT),
+  GLOBAL_HA_STALE_CRR_DETECTED_COUNT(HA_STALE_CRR_DETECTED_COUNT),
+  GLOBAL_HA_CRR_REFRESH_COUNT(HA_CRR_REFRESH_COUNT),
+  // GAUGE: most-recent-sample. Use getMetric().set(ageMs) at the sampling site;
+  // do NOT increment or update — that would accumulate and break gauge semantics.
+  GLOBAL_HA_CRR_CACHE_AGE_MS(HA_CRR_CACHE_AGE_MS),
+  GLOBAL_HA_POLLER_TICK_COUNT(HA_POLLER_TICK_COUNT),
+  GLOBAL_HA_POLLER_TICK_FAILURES(HA_POLLER_TICK_FAILURES),
 
   GLOBAL_CLIENT_METADATA_CACHE_MISS_COUNTER(CLIENT_METADATA_CACHE_MISS_COUNTER),
   GLOBAL_CLIENT_METADATA_CACHE_HIT_COUNTER(CLIENT_METADATA_CACHE_HIT_COUNTER),

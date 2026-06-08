@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_CACHE_AGE_MS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_REFRESH_COUNT;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 
@@ -629,6 +632,7 @@ public class HighAvailabilityGroup {
 
     LOG.info("Initial cluster role for HA group {} is {}", info, roleRecordFromEndpoint);
     roleRecord = roleRecordFromEndpoint;
+    lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
     state = State.READY;
   }
 
@@ -644,6 +648,11 @@ public class HighAvailabilityGroup {
         .setMessage("HA group is not ready!").setHaGroupInfo(info.toString()).build()
         .buildException();
     }
+    // GAUGE: most-recent-sample of "milliseconds since the last successful CRR refresh".
+    // Use set(...) to overwrite the prior sample; do NOT increment/update — that would turn
+    // the gauge into an accumulator and break "current age" semantics.
+    GLOBAL_HA_CRR_CACHE_AGE_MS.getMetric()
+      .set(System.currentTimeMillis() - lastClusterRoleRecordRefreshTime);
     return roleRecord.getPolicy().provide(this, properties, haurlInfo);
   }
 
@@ -1035,6 +1044,7 @@ public class HighAvailabilityGroup {
    * @throws SQLException if there is an error getting the ClusterRoleRecord
    */
   public boolean refreshClusterRoleRecord(boolean forceRefresh) throws SQLException {
+    GLOBAL_HA_CRR_REFRESH_COUNT.increment();
     // Allow concurrent reads to return fast in case refresh is not needed
     readLock.lock();
     try {
@@ -1057,6 +1067,8 @@ public class HighAvailabilityGroup {
 
       ClusterRoleRecord newRoleRecord = getClusterRoleRecordFromEndpoint();
       if (roleRecord == null) {
+        // First-load init path: no prior cache state to compare against, so this is not a
+        // failover transition and HA_FAILOVER_COUNT is intentionally NOT incremented here.
         roleRecord = newRoleRecord;
         lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
         state = State.READY;
@@ -1123,6 +1135,16 @@ public class HighAvailabilityGroup {
         // (e.g. to close existing connections)
         // The goal here is to gain higher availability even though existing resources against
         // previous ACTIVE cluster may have not been closed cleanly.
+      }
+      // Count the transition as a failover only when an active cluster is established
+      // or moves between peers. Operator-driven transitions to a no-active state
+      // (both clusters STANDBY) are not counted as failovers; recovery from no-active
+      // back to having an ACTIVE peer is counted.
+      if (
+        !oldRecord.getActiveUrl().equals(newRoleRecord.getActiveUrl())
+          && newRoleRecord.getActiveUrl().isPresent()
+      ) {
+        GLOBAL_HA_FAILOVER_COUNT.increment();
       }
       // Update the role record and the last refresh time
       roleRecord = newRoleRecord;

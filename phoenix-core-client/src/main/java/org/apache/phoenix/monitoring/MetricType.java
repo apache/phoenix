@@ -353,6 +353,35 @@ public enum MetricType {
     LogLevel.DEBUG, PLong.INSTANCE),
   HA_PARALLEL_CONNECTION_CREATED_COUNTER("hpccc",
     "Counter for the number of parallel phoenix connections that were created", LogLevel.DEBUG,
+    PLong.INSTANCE),
+  HA_FAILOVER_COUNT("hafc",
+    "Counter for cluster-level failover transitions (active URL flips between peers or recovers "
+      + "from no-active state) recorded at the CRR write site",
+    LogLevel.DEBUG, PLong.INSTANCE),
+  HA_FAILOVER_DURATION_MS("hafd",
+    "Total time in milliseconds spent in connection-level failover transitions, summed across "
+      + "all observing connections (per-connection observation, not per-cluster-event)",
+    LogLevel.DEBUG, PLong.INSTANCE),
+  HA_MUTATION_BLOCKED_COUNT("hambc",
+    "Counter for MutationBlockedIOException surfaces caught by wrapActionDuringFailover",
+    LogLevel.DEBUG, PLong.INSTANCE),
+  HA_STALE_CRR_DETECTED_COUNT("hascd",
+    "Counter for StaleClusterRoleRecordException surfaces caught by wrapActionDuringFailover",
+    LogLevel.DEBUG, PLong.INSTANCE),
+  HA_CRR_REFRESH_COUNT("hcrc", "Counter for refreshClusterRoleRecord invocations", LogLevel.DEBUG,
+    PLong.INSTANCE),
+  // GAUGE SEMANTICS: most-recent-sample, NOT an accumulator. Callers MUST use
+  // getMetric().set(ageMs) to overwrite the previous sample, never increment/update.
+  // Misuse will produce a monotonically-growing accumulator, which is the wrong shape for an
+  // "age since last refresh" gauge.
+  HA_CRR_CACHE_AGE_MS("hccg",
+    "Gauge: most-recent-sample of milliseconds since the last successful CRR refresh "
+      + "(use getMetric().set(ageMs))",
+    LogLevel.DEBUG, PLong.INSTANCE),
+  HA_POLLER_TICK_COUNT("hptc", "Counter for non-active CRR poller ticks executed", LogLevel.DEBUG,
+    PLong.INSTANCE),
+  HA_POLLER_TICK_FAILURES("hptf",
+    "Counter for non-active CRR poller tick failures (caught SQLException)", LogLevel.DEBUG,
     PLong.INSTANCE);
 
   private final String description;

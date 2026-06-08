@@ -18,6 +18,7 @@
 package org.apache.phoenix.jdbc;
 
 import org.apache.hadoop.hbase.client.RetriesExhaustedWithDetailsException;
+import org.apache.phoenix.exception.MutationBlockedIOException;
 import org.apache.phoenix.exception.StaleClusterRoleRecordException;
 
 /**
@@ -45,7 +46,40 @@ public class HighAvailabilityUtil {
     return false;
   }
 
+  /**
+   * Walks the throwable chain (including {@link RetriesExhaustedWithDetailsException} causes) to
+   * detect a {@link MutationBlockedIOException} surface. Mirrors the structure of
+   * {@link #isStaleClusterRoleRecordExceptionExistsInThrowable(Throwable)} so that batched mutation
+   * rejections wrapped at varying depth are still attributable to the mutation-block gate.
+   */
+  public static boolean isMutationBlockedIOExceptionExistsInThrowable(Throwable e) {
+    if (e == null) {
+      return false;
+    }
+    if (isGivenThrowableMutationBlockedException(e)) {
+      return true;
+    }
+
+    if (e instanceof RetriesExhaustedWithDetailsException) {
+      for (Throwable t : ((RetriesExhaustedWithDetailsException) e).getCauses()) {
+        if (isGivenThrowableMutationBlockedException(t)) {
+          return true;
+        }
+      }
+    }
+
+    if (e.getCause() != null) {
+      return isMutationBlockedIOExceptionExistsInThrowable(e.getCause());
+    }
+
+    return false;
+  }
+
   private static boolean isGivenThrowableStaleException(Throwable t) {
     return t instanceof StaleClusterRoleRecordException;
+  }
+
+  private static boolean isGivenThrowableMutationBlockedException(Throwable t) {
+    return t instanceof MutationBlockedIOException;
   }
 }

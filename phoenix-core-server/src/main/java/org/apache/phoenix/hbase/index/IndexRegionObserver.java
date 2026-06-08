@@ -115,6 +115,7 @@ import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
+import org.apache.phoenix.hbase.index.metrics.MetricsHaBypassSourceFactory;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSource;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
@@ -745,6 +746,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
       // Extract HAGroupName from the mutations
       Optional<ReplicationLogGroup> logGroup = getHAGroupFromBatch(c.getEnvironment(), miniBatchOp);
+
+      // Mutation batches that arrive without a resolvable HA group cannot be evaluated against
+      // the cluster-role-based mutation-block gate. Track the bypass globally (not per-table)
+      // so operators can spot regressions where a write path forgets to attach the
+      // _HAGroupName attribute. Scope is intentionally !logGroup.isPresent() regardless of
+      // dataTableName — system-HA-group writes WITH a haGroup are an *intended* gate exemption
+      // (state writes must proceed during a block window) and are not counted as bypasses.
+      if (!logGroup.isPresent()) {
+        try {
+          MetricsHaBypassSourceFactory.getInstance().incrementBypassedMutationBlockCount();
+        } catch (Throwable t) {
+          LOG.warn("Failed to increment bypassed mutation block count metric; continuing", t);
+        }
+      }
 
       // We don't want to check for mutation blocking for the system ha group table
       if (!dataTableName.equals(SYSTEM_HA_GROUP_NAME) && logGroup.isPresent()) {

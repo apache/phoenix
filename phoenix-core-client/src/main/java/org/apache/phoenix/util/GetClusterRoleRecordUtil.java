@@ -42,6 +42,7 @@ import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityGroup;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -216,6 +217,7 @@ public class GetClusterRoleRecordUtil {
       Runnable pollingTask = () -> {
         // Increment unconditionally so a failed tick still alternates next iteration.
         long tick = tickCount.getAndIncrement();
+        GlobalClientMetrics.GLOBAL_HA_POLLER_TICK_COUNT.increment();
         String tickUrl = selectUrlForTick(url1, url2, tick);
         try {
           ClusterRoleRecord polledCrr =
@@ -242,6 +244,7 @@ public class GetClusterRoleRecordUtil {
             }
           }
         } catch (SQLException e) {
+          GlobalClientMetrics.GLOBAL_HA_POLLER_TICK_FAILURES.increment();
           LOGGER.error(
             "Exception found while polling for ClusterRoleRecord on {} for HA group" + " {}: {}",
             tickUrl, haGroupName, e.getMessage());
