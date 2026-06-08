@@ -415,34 +415,34 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_MISMATCHED).getValue();
       long repairedMappers =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_REPAIRED).getValue();
-      long unrepairableMappers = counters
-        .findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_UNREPAIRABLE).getValue();
-      long repairFailedMappers = counters
-        .findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_REPAIR_FAILED).getValue();
+      long unrepairableMappers =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_UNREPAIRABLE).getValue();
+      long repairFailedMappers =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.MAPPERS_REPAIR_FAILED).getValue();
       long chunksVerified =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_VERIFIED).getValue();
       long chunksMismatched =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED).getValue();
       long chunksRepaired =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_REPAIRED).getValue();
-      long chunksUnrepairable = counters
-        .findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_UNREPAIRABLE).getValue();
-      long chunksRepairFailed = counters
-        .findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_REPAIR_FAILED).getValue();
+      long chunksUnrepairable =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_UNREPAIRABLE).getValue();
+      long chunksRepairFailed =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CHUNKS_REPAIR_FAILED).getValue();
       long sourceRowsProcessed =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
       long targetRowsProcessed =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.TARGET_ROWS_PROCESSED).getValue();
-      long rowsMissingOnTarget = counters
-        .findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_MISSING_ON_TARGET).getValue();
-      long rowsExtraOnTarget = counters
-        .findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_EXTRA_ON_TARGET).getValue();
-      long rowsCannotRepair = counters
-        .findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_CANNOT_REPAIR).getValue();
+      long rowsMissingOnTarget =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_MISSING_ON_TARGET).getValue();
+      long rowsExtraOnTarget =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_EXTRA_ON_TARGET).getValue();
+      long rowsCannotRepair =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_CANNOT_REPAIR).getValue();
       long cellsMissingOnTarget = counters
         .findCounter(PhoenixSyncTableMapper.SyncCounters.CELLS_MISSING_ON_TARGET).getValue();
-      long cellsExtraOnTarget = counters
-        .findCounter(PhoenixSyncTableMapper.SyncCounters.CELLS_EXTRA_ON_TARGET).getValue();
+      long cellsExtraOnTarget =
+        counters.findCounter(PhoenixSyncTableMapper.SyncCounters.CELLS_EXTRA_ON_TARGET).getValue();
       long cellsDifferentOnTarget = counters
         .findCounter(PhoenixSyncTableMapper.SyncCounters.CELLS_DIFFERENT_ON_TARGET).getValue();
       long checkpointWriteFailed = counters
@@ -457,21 +457,19 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
           + "Rows Missing On Target: {}, \n Rows Extra On Target: {}, \n"
           + "Rows Cannot Repair: {}, \n"
           + "Cells Missing On Target: {}, \n Cells Extra On Target: {}, \n"
-          + "Cells Different On Target: {}, \n"
-          + "Checkpoint Write Failed: {}",
+          + "Cells Different On Target: {}, \n" + "Checkpoint Write Failed: {}",
         taskCreated, verifiedMappers, mismatchedMappers, repairedMappers, unrepairableMappers,
         repairFailedMappers, chunksVerified, chunksMismatched, chunksRepaired, chunksUnrepairable,
         chunksRepairFailed, sourceRowsProcessed, targetRowsProcessed, rowsMissingOnTarget,
         rowsExtraOnTarget, rowsCannotRepair, cellsMissingOnTarget, cellsExtraOnTarget,
         cellsDifferentOnTarget, checkpointWriteFailed);
       if (checkpointWriteFailed > 0) {
-        LOGGER.error(
-          "{} chunk(s) had a successful repair attempt but FAILED to write a checkpoint row "
+        LOGGER
+          .error("{} chunk(s) had a successful repair attempt but FAILED to write a checkpoint row "
             + "for table {}. Target data was mutated but the audit trail is incomplete. "
             + "Investigate the checkpoint table state before relying on it; affected chunks "
             + "will be re-attempted on the next invocation since they have no terminal "
-            + "checkpoint status.",
-          checkpointWriteFailed, qTable);
+            + "checkpoint status.", checkpointWriteFailed, qTable);
         return false;
       }
     } else {

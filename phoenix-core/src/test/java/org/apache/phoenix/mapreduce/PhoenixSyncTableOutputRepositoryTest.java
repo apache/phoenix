@@ -763,11 +763,11 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     for (int i = 0; i < statuses.length; i++) {
       byte[] startKey = Bytes.toBytes(String.format("region%02d_start", i));
       byte[] endKey = Bytes.toBytes(String.format("region%02d_end", i));
-      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
-        .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION)
-        .setFromTime(0L).setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey)
-        .setEndRowKey(endKey).setStatus(statuses[i]).setExecutionStartTime(timestamp)
-        .setExecutionEndTime(timestamp).build());
+      repository.checkpointSyncTableResult(
+        new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+          .setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L).setToTime(1000L)
+          .setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey).setStatus(statuses[i])
+          .setExecutionStartTime(timestamp).setExecutionEndTime(timestamp).build());
     }
 
     // Repair mode should skip only fully-done regions (VERIFIED + REPAIRED) so the mapper
@@ -776,10 +776,10 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
       repository.getProcessedMapperRegions(tableName, targetCluster, 0L, 1000L, null, false);
     assertEquals("Repair mode should return only VERIFIED + REPAIRED regions", 2,
       repairResults.size());
-    assertArrayEquals("First should be region00 (VERIFIED)",
-      Bytes.toBytes("region00_start"), repairResults.get(0).getStartRowKey());
-    assertArrayEquals("Second should be region02 (REPAIRED)",
-      Bytes.toBytes("region02_start"), repairResults.get(1).getStartRowKey());
+    assertArrayEquals("First should be region00 (VERIFIED)", Bytes.toBytes("region00_start"),
+      repairResults.get(0).getStartRowKey());
+    assertArrayEquals("Second should be region02 (REPAIRED)", Bytes.toBytes("region02_start"),
+      repairResults.get(1).getStartRowKey());
   }
 
   @Test
@@ -792,11 +792,11 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     for (int i = 0; i < statuses.length; i++) {
       byte[] startKey = Bytes.toBytes(String.format("region%02d_start", i));
       byte[] endKey = Bytes.toBytes(String.format("region%02d_end", i));
-      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
-        .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.REGION)
-        .setFromTime(0L).setToTime(1000L).setIsDryRun(true).setStartRowKey(startKey)
-        .setEndRowKey(endKey).setStatus(statuses[i]).setExecutionStartTime(timestamp)
-        .setExecutionEndTime(timestamp).build());
+      repository.checkpointSyncTableResult(
+        new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+          .setTargetCluster(targetCluster).setType(Type.REGION).setFromTime(0L).setToTime(1000L)
+          .setIsDryRun(true).setStartRowKey(startKey).setEndRowKey(endKey).setStatus(statuses[i])
+          .setExecutionStartTime(timestamp).setExecutionEndTime(timestamp).build());
     }
 
     // Dry-run mode does not filter by status; resume should skip every region the previous
@@ -821,21 +821,21 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     for (int i = 0; i < statuses.length; i++) {
       byte[] startKey = Bytes.toBytes(String.format("chunk%02d_start", i));
       byte[] endKey = Bytes.toBytes(String.format("chunk%02d_end", i));
-      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
-        .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK)
-        .setFromTime(0L).setToTime(1000L).setIsDryRun(false).setStartRowKey(startKey)
-        .setEndRowKey(endKey).setStatus(statuses[i]).setExecutionStartTime(timestamp)
-        .setExecutionEndTime(timestamp).build());
+      repository.checkpointSyncTableResult(
+        new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+          .setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L).setToTime(1000L)
+          .setIsDryRun(false).setStartRowKey(startKey).setEndRowKey(endKey).setStatus(statuses[i])
+          .setExecutionStartTime(timestamp).setExecutionEndTime(timestamp).build());
     }
 
-    List<PhoenixSyncTableCheckpointOutputRow> repairResults = repository.getProcessedChunks(
-      tableName, targetCluster, 0L, 1000L, null, mapperStart, mapperEnd, false);
+    List<PhoenixSyncTableCheckpointOutputRow> repairResults = repository
+      .getProcessedChunks(tableName, targetCluster, 0L, 1000L, null, mapperStart, mapperEnd, false);
     assertEquals("Repair mode should return only VERIFIED + REPAIRED chunks", 2,
       repairResults.size());
-    assertArrayEquals("First should be chunk00 (VERIFIED)",
-      Bytes.toBytes("chunk00_start"), repairResults.get(0).getStartRowKey());
-    assertArrayEquals("Second should be chunk02 (REPAIRED)",
-      Bytes.toBytes("chunk02_start"), repairResults.get(1).getStartRowKey());
+    assertArrayEquals("First should be chunk00 (VERIFIED)", Bytes.toBytes("chunk00_start"),
+      repairResults.get(0).getStartRowKey());
+    assertArrayEquals("Second should be chunk02 (REPAIRED)", Bytes.toBytes("chunk02_start"),
+      repairResults.get(1).getStartRowKey());
   }
 
   @Test
@@ -850,15 +850,15 @@ public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
     for (int i = 0; i < statuses.length; i++) {
       byte[] startKey = Bytes.toBytes(String.format("chunk%02d_start", i));
       byte[] endKey = Bytes.toBytes(String.format("chunk%02d_end", i));
-      repository.checkpointSyncTableResult(new PhoenixSyncTableCheckpointOutputRow.Builder()
-        .setTableName(tableName).setTargetCluster(targetCluster).setType(Type.CHUNK)
-        .setFromTime(0L).setToTime(1000L).setIsDryRun(true).setStartRowKey(startKey)
-        .setEndRowKey(endKey).setStatus(statuses[i]).setExecutionStartTime(timestamp)
-        .setExecutionEndTime(timestamp).build());
+      repository.checkpointSyncTableResult(
+        new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+          .setTargetCluster(targetCluster).setType(Type.CHUNK).setFromTime(0L).setToTime(1000L)
+          .setIsDryRun(true).setStartRowKey(startKey).setEndRowKey(endKey).setStatus(statuses[i])
+          .setExecutionStartTime(timestamp).setExecutionEndTime(timestamp).build());
     }
 
-    List<PhoenixSyncTableCheckpointOutputRow> dryRunResults = repository.getProcessedChunks(
-      tableName, targetCluster, 0L, 1000L, null, mapperStart, mapperEnd, true);
+    List<PhoenixSyncTableCheckpointOutputRow> dryRunResults = repository
+      .getProcessedChunks(tableName, targetCluster, 0L, 1000L, null, mapperStart, mapperEnd, true);
     assertEquals("Dry-run mode should return all statuses", statuses.length, dryRunResults.size());
   }
 

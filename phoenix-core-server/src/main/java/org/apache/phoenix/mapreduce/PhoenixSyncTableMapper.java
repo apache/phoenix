@@ -231,8 +231,7 @@ public class PhoenixSyncTableMapper
     long targetRowsBefore = context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).getValue();
     long rowsMissingBefore = context.getCounter(SyncCounters.ROWS_MISSING_ON_TARGET).getValue();
     long rowsExtraBefore = context.getCounter(SyncCounters.ROWS_EXTRA_ON_TARGET).getValue();
-    long rowsDifferentBefore =
-      context.getCounter(SyncCounters.ROWS_DIFFERENT_ON_TARGET).getValue();
+    long rowsDifferentBefore = context.getCounter(SyncCounters.ROWS_DIFFERENT_ON_TARGET).getValue();
     long rowsCannotRepairBefore = context.getCounter(SyncCounters.ROWS_CANNOT_REPAIR).getValue();
     long cellsMissingBefore = context.getCounter(SyncCounters.CELLS_MISSING_ON_TARGET).getValue();
     long cellsExtraBefore = context.getCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).getValue();
@@ -299,11 +298,11 @@ public class PhoenixSyncTableMapper
    * @param regionEndTime      Region processing end time
    * @param verifiedChunks     Number of verified chunks
    * @param mismatchedChunks   Number of mismatched chunks
-   * @param unrepairableChunks Number of chunks where any row landed in ROWS_CANNOT_REPAIR;
-   *                           if > 0 (and no repair-failed chunks) the region rolls up to
-   *                           UNREPAIRABLE, signalling operator intervention is needed
-   * @param repairFailedChunks Number of chunks whose repair threw an IOException; if > 0 the
-   *                           region rolls up to REPAIR_FAILED (highest precedence)
+   * @param unrepairableChunks Number of chunks where any row landed in ROWS_CANNOT_REPAIR; if > 0
+   *                           (and no repair-failed chunks) the region rolls up to UNREPAIRABLE,
+   *                           signalling operator intervention is needed
+   * @param repairFailedChunks Number of chunks whose repair threw an IOException; if > 0 the region
+   *                           rolls up to REPAIR_FAILED (highest precedence)
    * @param counters           Formatted counter string
    * @param context            Mapper context
    */
@@ -314,14 +313,14 @@ public class PhoenixSyncTableMapper
 
     // Region rolls up its child chunks' outcomes into one of five statuses, in precedence
     // order (most-severe wins):
-    //   REPAIR_FAILED — at least one chunk threw during merge-scan or flush.
-    //   UNREPAIRABLE  — repair completed but at least one chunk has rows that cannot be
-    //                   repaired (target tombstones shadow source Puts, or target row is
-    //                   entirely tombstones). Operator action (typically major compaction
-    //                   on target) needed before a re-run can converge.
-    //   MISMATCHED    — drift was detected but repair was not attempted (dry-run mode).
-    //   REPAIRED      — drift was detected and every chunk's repair fully succeeded.
-    //   VERIFIED      — every chunk matched; no drift in this region.
+    // REPAIR_FAILED — at least one chunk threw during merge-scan or flush.
+    // UNREPAIRABLE — repair completed but at least one chunk has rows that cannot be
+    // repaired (target tombstones shadow source Puts, or target row is
+    // entirely tombstones). Operator action (typically major compaction
+    // on target) needed before a re-run can converge.
+    // MISMATCHED — drift was detected but repair was not attempted (dry-run mode).
+    // REPAIRED — drift was detected and every chunk's repair fully succeeded.
+    // VERIFIED — every chunk matched; no drift in this region.
     // The resume filter on re-invocation skips VERIFIED and REPAIRED — UNREPAIRABLE,
     // MISMATCHED, and REPAIR_FAILED chunks are re-entered as gaps and re-attempted.
     PhoenixSyncTableCheckpointOutputRow.Status status;
@@ -445,8 +444,7 @@ public class PhoenixSyncTableMapper
         // Target scan boundary: covers extra-on-target rows that fall before the first
         // source chunk, between consecutive source chunks, or after the last. Both verify
         // and repair use the same range so repair sees the same cells the verifier hashed.
-        byte[] targetStart =
-          previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey;
+        byte[] targetStart = previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey;
         byte[] targetEnd = isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey;
         boolean targetEndInclusive = !isLastChunkOfRegion;
         ChunkInfo targetChunk = getTargetChunkWithSourceBoundary(targetConnection, targetStart,
@@ -473,10 +471,10 @@ public class PhoenixSyncTableMapper
             .formatChunk(sourceChunk.rowCount, targetChunk.rowCount, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
           handleVerifiedChunk(sourceChunk, context, counters);
         } else {
-          ChunkRepairRequest request = new ChunkRepairRequest(sourceChunk.startKey,
-            sourceChunk.endKey, targetStart, targetEnd, isTargetStartKeyInclusive,
-            targetEndInclusive, sourceChunk.rowCount, targetChunk.rowCount,
-            sourceChunk.executionStartTime, isDryRun);
+          ChunkRepairRequest request =
+            new ChunkRepairRequest(sourceChunk.startKey, sourceChunk.endKey, targetStart, targetEnd,
+              isTargetStartKeyInclusive, targetEndInclusive, sourceChunk.rowCount,
+              targetChunk.rowCount, sourceChunk.executionStartTime, isDryRun);
           ChunkRepairResult result = chunkRepairer.repair(request, context::progress);
           if (isDryRun) {
             // Dry-run: write CHUNK/MISMATCHED with real row-level drift in COUNTERS so the
@@ -805,13 +803,13 @@ public class PhoenixSyncTableMapper
 
   /**
    * Translates a {@link ChunkRepairResult} into MapReduce side effects: bumps the cell/row drift
-   * counters, builds the chunk-level checkpoint row (REPAIRED / UNREPAIRABLE / REPAIR_FAILED),
-   * and writes it via {@link #writeChunkCheckpoint} so the outcome counter is bumped only on a
+   * counters, builds the chunk-level checkpoint row (REPAIRED / UNREPAIRABLE / REPAIR_FAILED), and
+   * writes it via {@link #writeChunkCheckpoint} so the outcome counter is bumped only on a
    * successful checkpoint write (audit row and counter stay consistent).
-   *
-   * <p>{@code CHUNKS_MISMATCHED} is bumped here too: it tracks every chunk where source and
-   * target hashes differed — the drift-detected signal — regardless of whether repair ran.
-   * Without this, repair-mode {@link #recordRegionCompletion} would see {@code mismatchedChunks
+   * <p>
+   * {@code CHUNKS_MISMATCHED} is bumped here too: it tracks every chunk where source and target
+   * hashes differed — the drift-detected signal — regardless of whether repair ran. Without this,
+   * repair-mode {@link #recordRegionCompletion} would see {@code mismatchedChunks
    * == 0} for fully-repaired regions and roll them up as VERIFIED instead of REPAIRED.
    */
   private void recordRepairOutcome(ChunkInfo sourceChunk, ChunkRepairRequest request,
@@ -859,20 +857,20 @@ public class PhoenixSyncTableMapper
   }
 
   /**
-   * Writes a chunk-level checkpoint row and bumps the matching outcome counter. The outcome
-   * counter is bumped only after a successful checkpoint write, so on-disk audit and in-memory
-   * counters stay in sync.
-   *
-   * <p>If the checkpoint write throws {@link SQLException}, the failure is logged and the
-   * {@link SyncCounters#CHECKPOINT_WRITE_FAILED} counter is bumped, but the exception is
-   * NOT propagated. Reasons:
+   * Writes a chunk-level checkpoint row and bumps the matching outcome counter. The outcome counter
+   * is bumped only after a successful checkpoint write, so on-disk audit and in-memory counters
+   * stay in sync.
+   * <p>
+   * If the checkpoint write throws {@link SQLException}, the failure is logged and the
+   * {@link SyncCounters#CHECKPOINT_WRITE_FAILED} counter is bumped, but the exception is NOT
+   * propagated. Reasons:
    * <ul>
-   *   <li>Target's data was already mutated during the merge — failing the mapper task
-   *       wouldn't roll that back, and would trigger a MapReduce retry that re-verifies
-   *       against already-mutated target state (audit trail loss).</li>
-   *   <li>Other chunks in this mapper still deserve a chance to be processed.</li>
-   *   <li>The {@code CHECKPOINT_WRITE_FAILED} counter surfaces the audit-row gap to
-   *       operators and drives a non-zero exit at job end.</li>
+   * <li>Target's data was already mutated during the merge — failing the mapper task wouldn't roll
+   * that back, and would trigger a MapReduce retry that re-verifies against already-mutated target
+   * state (audit trail loss).</li>
+   * <li>Other chunks in this mapper still deserve a chance to be processed.</li>
+   * <li>The {@code CHECKPOINT_WRITE_FAILED} counter surfaces the audit-row gap to operators and
+   * drives a non-zero exit at job end.</li>
    * </ul>
    */
   private void writeChunkCheckpoint(PhoenixSyncTableCheckpointOutputRow row,

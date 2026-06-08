@@ -167,10 +167,10 @@ public class PhoenixSyncTableCheckpointOutputRow {
       "%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d,%s=%d";
 
     /**
-     * Formats chunk counters as comma-separated key=value pairs. Always emits all nine
-     * counters; unpopulated counters are 0 so operators querying the checkpoint table see
-     * a uniform format. {@code ROWS_DIFFERENT_ON_TARGET} is populated only in dry-run;
-     * cell-level counters and {@code ROWS_CANNOT_REPAIR} are populated only in repair mode.
+     * Formats chunk counters as comma-separated key=value pairs. Always emits all nine counters;
+     * unpopulated counters are 0 so operators querying the checkpoint table see a uniform format.
+     * {@code ROWS_DIFFERENT_ON_TARGET} is populated only in dry-run; cell-level counters and
+     * {@code ROWS_CANNOT_REPAIR} are populated only in repair mode.
      */
     public static String formatChunk(long sourceRows, long targetRows, long rowsMissingOnTarget,
       long rowsExtraOnTarget, long rowsDifferentOnTarget, long rowsCannotRepair,
@@ -189,14 +189,13 @@ public class PhoenixSyncTableCheckpointOutputRow {
     }
 
     /**
-     * Formats mapper (region-level) counters as comma-separated key=value pairs. The seven
-     * drift counters are the per-region sum of the same fields emitted by
-     * {@link #formatChunk}.
+     * Formats mapper (region-level) counters as comma-separated key=value pairs. The seven drift
+     * counters are the per-region sum of the same fields emitted by {@link #formatChunk}.
      */
     public static String formatMapper(long chunksVerified, long chunksMismatched, long sourceRows,
-      long targetRows, long rowsMissingOnTarget, long rowsExtraOnTarget,
-      long rowsDifferentOnTarget, long rowsCannotRepair, long cellsMissingOnTarget,
-      long cellsExtraOnTarget, long cellsDifferentOnTarget) {
+      long targetRows, long rowsMissingOnTarget, long rowsExtraOnTarget, long rowsDifferentOnTarget,
+      long rowsCannotRepair, long cellsMissingOnTarget, long cellsExtraOnTarget,
+      long cellsDifferentOnTarget) {
       return String.format(FORMAT_MAPPER,
         PhoenixSyncTableMapper.SyncCounters.CHUNKS_VERIFIED.name(), chunksVerified,
         PhoenixSyncTableMapper.SyncCounters.CHUNKS_MISMATCHED.name(), chunksMismatched,

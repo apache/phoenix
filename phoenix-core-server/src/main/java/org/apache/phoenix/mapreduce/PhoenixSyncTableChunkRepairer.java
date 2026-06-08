@@ -53,33 +53,31 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Performs row-level repair for a mismatched chunk by merge-scanning source and target
- * cluster data and applying targeted mutations to target.
- *
- * <p>The two scan ranges may differ: the verifier reads target over a wider range than
- * source (covers extra-on-target rows that fall between consecutive source chunks);
- * repair must mirror the same boundaries so those extras are visible here as
- * {@code cmp > 0} rows and get deleted.
- *
- * <p>Merge-scan contract: both scanners return rows in ascending key order (HBase guarantee).
+ * Performs row-level repair for a mismatched chunk by merge-scanning source and target cluster data
+ * and applying targeted mutations to target.
+ * <p>
+ * The two scan ranges may differ: the verifier reads target over a wider range than source (covers
+ * extra-on-target rows that fall between consecutive source chunks); repair must mirror the same
+ * boundaries so those extras are visible here as {@code cmp > 0} rows and get deleted.
+ * <p>
+ * Merge-scan contract: both scanners return rows in ascending key order (HBase guarantee).
  * <ul>
- *   <li>{@code cmp == 0} (same row): compare cells; repair only differing cells.</li>
- *   <li>{@code cmp <  0} (source-only): mirror all source cells onto target.</li>
- *   <li>{@code cmp >  0} (target-only): tombstone target cells within {@code [fromTime, toTime]}.</li>
+ * <li>{@code cmp == 0} (same row): compare cells; repair only differing cells.</li>
+ * <li>{@code cmp <  0} (source-only): mirror all source cells onto target.</li>
+ * <li>{@code cmp >  0} (target-only): tombstone target cells within
+ * {@code [fromTime, toTime]}.</li>
  * </ul>
  * Cells outside {@code [fromTime, toTime]} are never read (scan time range), so never mutated.
- *
- * <p>Tombstone semantics: HBase has four tombstone subtypes ({@code Delete},
- * {@code DeleteColumn}, {@code DeleteFamily}, {@code DeleteFamilyVersion}). Source Puts
- * we mirror onto target may be silently shadowed by an existing target tombstone; in that
- * case the mirror is suppressed and the row carries unrepairable drift (operator must
- * major-compact target to reap shadowing tombstones before a re-run can converge). See
- * {@link TargetRowRecord}.
+ * <p>
+ * Tombstone semantics: HBase has four tombstone subtypes ({@code Delete}, {@code DeleteColumn},
+ * {@code DeleteFamily}, {@code DeleteFamilyVersion}). Source Puts we mirror onto target may be
+ * silently shadowed by an existing target tombstone; in that case the mirror is suppressed and the
+ * row carries unrepairable drift (operator must major-compact target to reap shadowing tombstones
+ * before a re-run can converge). See {@link TargetRowRecord}.
  */
 public final class PhoenixSyncTableChunkRepairer {
 
-  private static final Logger LOGGER =
-    LoggerFactory.getLogger(PhoenixSyncTableChunkRepairer.class);
+  private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixSyncTableChunkRepairer.class);
 
   private final Connection sourceConnection;
   private final Connection targetConnection;
@@ -108,11 +106,11 @@ public final class PhoenixSyncTableChunkRepairer {
   }
 
   /**
-   * Repairs one mismatched chunk. Returns a {@link ChunkRepairResult} carrying the
-   * terminal status and accumulated {@link DriftCounters}; never throws on per-chunk
-   * scan/flush failure (returns {@link ChunkRepairResult.Status#REPAIR_FAILED}). The
-   * only declared {@link SQLException} surfaces from {@link Connection#unwrap}, which
-   * indicates a misconfigured connection rather than a per-chunk fault.
+   * Repairs one mismatched chunk. Returns a {@link ChunkRepairResult} carrying the terminal status
+   * and accumulated {@link DriftCounters}; never throws on per-chunk scan/flush failure (returns
+   * {@link ChunkRepairResult.Status#REPAIR_FAILED}). The only declared {@link SQLException}
+   * surfaces from {@link Connection#unwrap}, which indicates a misconfigured connection rather than
+   * a per-chunk fault.
    */
   public ChunkRepairResult repair(ChunkRepairRequest req, Progressable progress)
     throws SQLException {
@@ -159,16 +157,16 @@ public final class PhoenixSyncTableChunkRepairer {
 
     ChunkRepairResult result = ChunkRepairResult.completed(drift);
     LOGGER.info("Completed repair for chunk source=[{}, {}] with status={}: {}",
-      Bytes.toStringBinary(req.sourceStart), Bytes.toStringBinary(req.sourceEnd),
-      result.status, drift.toLogString());
+      Bytes.toStringBinary(req.sourceStart), Bytes.toStringBinary(req.sourceEnd), result.status,
+      drift.toLogString());
     return result;
   }
 
   /**
-   * Dry-run merge-walk: bumps the three row-level drift counters and logs each diverged row;
-   * never touches target. {@code rowsDifferentOnTarget} flags rows present on both sides whose
-   * contents differ — verifier-only signal, not produced in repair mode (which reports cell
-   * granularity instead).
+   * Dry-run merge-walk: bumps the three row-level drift counters and logs each diverged row; never
+   * touches target. {@code rowsDifferentOnTarget} flags rows present on both sides whose contents
+   * differ — verifier-only signal, not produced in repair mode (which reports cell granularity
+   * instead).
    */
   private void walkAndCountDrift(ResultScanner sourceScanner, ResultScanner targetScanner,
     DriftCounters drift, Progressable progress) throws IOException {
@@ -207,14 +205,12 @@ public final class PhoenixSyncTableChunkRepairer {
    * each time the batch reaches {@link #repairBatchSize}, and finally draining the tail. Per
    * branch:
    * <ul>
-   *   <li>{@code cmp == 0} — diff cells; record cell-level drift and any row-unrepairable
-   *       flag.</li>
-   *   <li>{@code cmp <  0} — mirror the source row onto target; bump {@code rowsMissing} unless
-   *       the whole row was shadowed, and {@code rowsCannotRepair} unless every cell was
-   *       mirrored.</li>
-   *   <li>{@code cmp >  0} — tombstone the extra row on target; bump {@code rowsExtra} when at
-   *       least one live cell was tombstoned, else {@code rowsCannotRepair} (row was already
-   *       all tombstones).</li>
+   * <li>{@code cmp == 0} — diff cells; record cell-level drift and any row-unrepairable flag.</li>
+   * <li>{@code cmp <  0} — mirror the source row onto target; bump {@code rowsMissing} unless the
+   * whole row was shadowed, and {@code rowsCannotRepair} unless every cell was mirrored.</li>
+   * <li>{@code cmp >  0} — tombstone the extra row on target; bump {@code rowsExtra} when at least
+   * one live cell was tombstoned, else {@code rowsCannotRepair} (row was already all
+   * tombstones).</li>
    * </ul>
    */
   private void repairDiffRows(ResultScanner sourceScanner, ResultScanner targetScanner,
@@ -295,9 +291,9 @@ public final class PhoenixSyncTableChunkRepairer {
 
   /**
    * Whole-row content equality check used by dry-run row-level diffing. Delegates to
-   * {@link Result#compareResults(Result, Result, boolean)} which throws on any cell-level
-   * mismatch (family, qualifier, timestamp, type, value); we map the throw to {@code false}
-   * so the cmp==0 path can flag the row without producing repair mutations.
+   * {@link Result#compareResults(Result, Result, boolean)} which throws on any cell-level mismatch
+   * (family, qualifier, timestamp, type, value); we map the throw to {@code false} so the cmp==0
+   * path can flag the row without producing repair mutations.
    */
   private boolean rowsEqual(Result src, Result tgt) {
     try {
@@ -309,8 +305,8 @@ public final class PhoenixSyncTableChunkRepairer {
   }
 
   /**
-   * Mirrors every source cell of a row that is missing on target. Each cell is
-   * shadow-checked against target's per-row record (see {@link TargetRowRecord}).
+   * Mirrors every source cell of a row that is missing on target. Each cell is shadow-checked
+   * against target's per-row record (see {@link TargetRowRecord}).
    */
   private RowMirrorStatus mirrorWholeRow(Result sourceResult, Table targetHTable,
     List<Put> pendingPuts, List<Delete> pendingDeletes) throws IOException {
@@ -325,17 +321,16 @@ public final class PhoenixSyncTableChunkRepairer {
     if (mirrored == 0) {
       return RowMirrorStatus.FULLY_SHADOWED;
     }
-    return rowRepairBuffer.anyCellUnrepairable ? RowMirrorStatus.PARTIALLY_MIRRORED
+    return rowRepairBuffer.anyCellUnrepairable
+      ? RowMirrorStatus.PARTIALLY_MIRRORED
       : RowMirrorStatus.FULLY_MIRRORED;
   }
 
   /**
-   * Tombstones every live cell of a row that is extra on target. Skips cells that are
-   * themselves already tombstones (see {@link #tombstoneTargetCell}).
-   *
-   * @return the number of live cells that contributed a tombstone marker. {@code 0} means
-   *         the row was already entirely tombstones; the caller records this as
-   *         {@code ROWS_CANNOT_REPAIR}.
+   * Tombstones every live cell of a row that is extra on target. Skips cells that are themselves
+   * already tombstones (see {@link #tombstoneTargetCell}).
+   * @return the number of live cells that contributed a tombstone marker. {@code 0} means the row
+   *         was already entirely tombstones; the caller records this as {@code ROWS_CANNOT_REPAIR}.
    */
   private int tombstoneWholeRow(Result targetResult, Table targetHTable, List<Put> pendingPuts,
     List<Delete> pendingDeletes) throws IOException {
@@ -356,17 +351,17 @@ public final class PhoenixSyncTableChunkRepairer {
   /**
    * Diffs cells of two rows present on both clusters in lock-step using {@link CellComparator}
    * order and emits {@link Put}/{@link Delete} mutations.
-   *
-   * <p>Branches:
+   * <p>
+   * Branches:
    * <ul>
-   *   <li>same coords + matching value → no drift</li>
-   *   <li>same coords + different value → different++; mirror source cell (shadow-checked)</li>
-   *   <li>source-only cell → missing++; mirror source cell (shadow-checked)</li>
-   *   <li>target-only live cell → extra++; tombstone target cell</li>
-   *   <li>target-only tombstone cell → skip; row carries unrepairable drift</li>
+   * <li>same coords + matching value → no drift</li>
+   * <li>same coords + different value → different++; mirror source cell (shadow-checked)</li>
+   * <li>source-only cell → missing++; mirror source cell (shadow-checked)</li>
+   * <li>target-only live cell → extra++; tombstone target cell</li>
+   * <li>target-only tombstone cell → skip; row carries unrepairable drift</li>
    * </ul>
-   * Mirrors suppressed by shadowing do NOT bump the cell counter (nothing was written);
-   * the row-level signal flows through {@link RowDriftInfo#rowCannotRepair}.
+   * Mirrors suppressed by shadowing do NOT bump the cell counter (nothing was written); the
+   * row-level signal flows through {@link RowDriftInfo#rowCannotRepair}.
    */
   private RowDriftInfo generateMutationForDiffCells(Result sourceResult, Result targetResult,
     Table targetHTable, List<Put> pendingPuts, List<Delete> pendingDeletes) throws IOException {
@@ -399,7 +394,9 @@ public final class PhoenixSyncTableChunkRepairer {
       if (cmp == 0) {
         // Same coordinates, compare values.
         if (!CellUtil.matchingValue(sourceCells[sourceIdx], targetCells[targetIdx])) {
-          if (mirrorSourceCellUnlessShadowed(sourceCells[sourceIdx], targetHTable, rowRepairBuffer)) {
+          if (
+            mirrorSourceCellUnlessShadowed(sourceCells[sourceIdx], targetHTable, rowRepairBuffer)
+          ) {
             cellDifferent++;
           }
         }
@@ -413,8 +410,10 @@ public final class PhoenixSyncTableChunkRepairer {
         sourceIdx++;
       } else {
         // extra on target
-        if (tombstoneTargetCell(targetCells[targetIdx++], targetHTable, rowRepairBuffer,
-          sourceMaxTsByColumn)) {
+        if (
+          tombstoneTargetCell(targetCells[targetIdx++], targetHTable, rowRepairBuffer,
+            sourceMaxTsByColumn)
+        ) {
           cellExtra++;
         } else {
           rowRepairBuffer.anyCellUnrepairable = true;
@@ -428,15 +427,20 @@ public final class PhoenixSyncTableChunkRepairer {
       sourceIdx++;
     }
     while (targetIdx < targetCells.length) {
-      if (tombstoneTargetCell(targetCells[targetIdx++], targetHTable, rowRepairBuffer,
-        sourceMaxTsByColumn)) {
+      if (
+        tombstoneTargetCell(targetCells[targetIdx++], targetHTable, rowRepairBuffer,
+          sourceMaxTsByColumn)
+      ) {
         cellExtra++;
       } else {
         rowRepairBuffer.anyCellUnrepairable = true;
       }
     }
 
-    if (cellMissing == 0 && cellExtra == 0 && cellDifferent == 0 && !rowRepairBuffer.anyCellUnrepairable) {
+    if (
+      cellMissing == 0 && cellExtra == 0 && cellDifferent == 0
+        && !rowRepairBuffer.anyCellUnrepairable
+    ) {
       return RowDriftInfo.NONE;
     }
     rowRepairBuffer.flush(pendingPuts, pendingDeletes);
@@ -446,8 +450,8 @@ public final class PhoenixSyncTableChunkRepairer {
 
   /**
    * Routes a source cell to the right mutation kind. Tombstone cells go through
-   * {@link Delete#add(Cell)} (preserves the exact tombstone subtype); under {@code --raw-scan}
-   * this matters because {@link Put#add(Cell)} rejects non-Put cells.
+   * {@link Delete#add(Cell)} (preserves the exact tombstone subtype); under {@code --raw-scan} this
+   * matters because {@link Put#add(Cell)} rejects non-Put cells.
    */
   private void mirrorSourceCell(Cell cell, RowRepairBuffer rowRepairBuffer) throws IOException {
     if (CellUtil.isDelete(cell)) {
@@ -458,9 +462,8 @@ public final class PhoenixSyncTableChunkRepairer {
   }
 
   /**
-   * Mirrors a source cell onto target unless an existing target tombstone would shadow it.
-   * Shadow detection runs only if source has Put cells; tombstoned source cells always mirror.
-   *
+   * Mirrors a source cell onto target unless an existing target tombstone would shadow it. Shadow
+   * detection runs only if source has Put cells; tombstoned source cells always mirror.
    * @return {@code true} if mirrored, {@code false} if suppressed (caller marks the row
    *         unrepairable).
    */
@@ -471,7 +474,9 @@ public final class PhoenixSyncTableChunkRepairer {
     // diverged. e.g. src Put(name, T=200) vs tgt DeleteColumn(name, T=300) covering
     // ts<=300. Skip the write and flag the row unrepairable; operator must major-compact
     // target to reap the shadow. Source tombstones can't be shadowed, hence skip the check.
-    if (!CellUtil.isDelete(cell) && rowRepairBuffer.targetRowRecord(targetHTable).wouldShadow(cell)) {
+    if (
+      !CellUtil.isDelete(cell) && rowRepairBuffer.targetRowRecord(targetHTable).wouldShadow(cell)
+    ) {
       rowRepairBuffer.anyCellUnrepairable = true;
       return false;
     }
@@ -480,17 +485,17 @@ public final class PhoenixSyncTableChunkRepairer {
   }
 
   /**
-   * Tombstones a target-only cell to make target's read view at this column match source's.
-   * Skips cells that are themselves already tombstones.
+   * Tombstones a target-only cell to make target's read view at this column match source's. Skips
+   * cells that are themselves already tombstones.
+   * <p>
+   * Called only when source has no cell at this target cell's exact {@code (cf, q, ts)}. If source
+   * does have a cell at the same {@code (cf, q, ts)}, the caller takes the mirroring path instead
+   * <p>
+   * Tombstone subtype depends on what source has at this {@code (cf, q)}. Examples assume
+   * {@code MAX_VERSIONS=3} and show only the relevant column.
+   * <p>
+   * <b>Case 1 — Source has no cell at this column:</b>
    *
-   * <p>Called only when source has no cell at this target cell's exact
-   * {@code (cf, q, ts)}. If source does have a cell at the same {@code (cf, q, ts)},
-   * the caller takes the mirroring path instead
-   *
-   * <p>Tombstone subtype depends on what source has at this {@code (cf, q)}. Examples
-   * assume {@code MAX_VERSIONS=3} and show only the relevant column.
-   *
-   * <p><b>Case 1 — Source has no cell at this column:</b>
    * <pre>
    *   source row: (no NAME)
    *   target row: Put(NAME, "carol")@900 visible
@@ -498,8 +503,9 @@ public final class PhoenixSyncTableChunkRepairer {
    *   action    : DeleteColumn(NAME)@900   (covers ts <= 900, wipes "bob" too)
    *   result    : target reads no NAME — matches source.
    * </pre>
+   * <p>
+   * <b>Case 2 — {@code sourceMaxTs >= targetTs}:</b>
    *
-   * <p><b>Case 2 — {@code sourceMaxTs >= targetTs}:</b>
    * <pre>
    *   source row: Put(NAME, "alice")@500       (sourceMaxTs = 500)
    *   target row: Put(NAME, "old",  )@200      (input cell; source has nothing at @200)
@@ -507,8 +513,9 @@ public final class PhoenixSyncTableChunkRepairer {
    *   result    : "old"@200 is shadowed;
    *              Put(NAME, "alice")@500 would already have been mirrored
    * </pre>
+   * <p>
+   * <b>Case 3 — {@code sourceMaxTs < targetTs}:</b>
    *
-   * <p><b>Case 3 — {@code sourceMaxTs < targetTs}:</b>
    * <pre>
    *   source row: Put(NAME, "alice")@300       (sourceMaxTs = 300)
    *   target row: Put(NAME, "carol")@900 visible
@@ -519,11 +526,11 @@ public final class PhoenixSyncTableChunkRepairer {
    *   result    : target's "alice"@300 is the highest live version — matches source.
    * </pre>
    *
-   * @return true if the cell was a live cell that contributed a tombstone marker, false if
-   *         the cell was already a tombstone and was skipped.
+   * @return true if the cell was a live cell that contributed a tombstone marker, false if the cell
+   *         was already a tombstone and was skipped.
    */
-  private boolean tombstoneTargetCell(Cell cell, Table targetHTable, RowRepairBuffer rowRepairBuffer,
-    Map<ColumnKey, Long> sourceMaxTsByColumn) throws IOException {
+  private boolean tombstoneTargetCell(Cell cell, Table targetHTable,
+    RowRepairBuffer rowRepairBuffer, Map<ColumnKey, Long> sourceMaxTsByColumn) throws IOException {
     if (CellUtil.isDelete(cell)) {
       return false;
     }
@@ -548,9 +555,8 @@ public final class PhoenixSyncTableChunkRepairer {
 
   /**
    * Builds a row-level HBase scan for repair. Honors the user's {@code --raw-scan} and
-   * {@code --read-all-versions} flags; adds bulk caching plus Phoenix TTL /
-   * {@code IS_STRICT_TTL} attributes so the cells visited here are the same cells the
-   * verifier hashed.
+   * {@code --read-all-versions} flags; adds bulk caching plus Phoenix TTL / {@code IS_STRICT_TTL}
+   * attributes so the cells visited here are the same cells the verifier hashed.
    */
   private Scan createRepairScan(byte[] startKey, byte[] endKey, boolean isStartKeyInclusive,
     boolean isEndKeyInclusive, PhoenixConnection phoenixConn) throws IOException, SQLException {
@@ -571,17 +577,16 @@ public final class PhoenixSyncTableChunkRepairer {
 
   /**
    * Flushes the accumulated Put and Delete batches to target as a single mixed RPC via
-   * {@link Table#batch}. The mixed batch (rather than separate {@code put()} +
-   * {@code delete()} calls) closes the inter-RPC window where a JVM/regionserver crash
-   * between the two could leave target with Puts applied but matching Deletes missing.
-   *
-   * <p>{@link Table#batch} does NOT throw for partial failures — per-mutation failures
-   * (e.g. {@code NotServingRegionException} from a region split mid-batch,
-   * {@code WrongRegionException} from a merge) land in the {@code results} array as
-   * {@link Throwable} entries. We surface the first such failure as {@link IOException}
-   * so the caller treats this chunk as {@code REPAIR_FAILED} rather than silently
-   * marking it {@code REPAIRED}; on re-run the resume filter excludes
-   * {@code REPAIR_FAILED} and the chunk re-enters as an unprocessed gap.
+   * {@link Table#batch}. The mixed batch (rather than separate {@code put()} + {@code delete()}
+   * calls) closes the inter-RPC window where a JVM/regionserver crash between the two could leave
+   * target with Puts applied but matching Deletes missing.
+   * <p>
+   * {@link Table#batch} does NOT throw for partial failures — per-mutation failures (e.g.
+   * {@code NotServingRegionException} from a region split mid-batch, {@code WrongRegionException}
+   * from a merge) land in the {@code results} array as {@link Throwable} entries. We surface the
+   * first such failure as {@link IOException} so the caller treats this chunk as
+   * {@code REPAIR_FAILED} rather than silently marking it {@code REPAIRED}; on re-run the resume
+   * filter excludes {@code REPAIR_FAILED} and the chunk re-enters as an unprocessed gap.
    */
   private void flushRepairMutations(Table targetHTable, List<Put> puts, List<Delete> deletes)
     throws IOException {
@@ -611,26 +616,26 @@ public final class PhoenixSyncTableChunkRepairer {
     if (failureCount > 0) {
       Throwable firstFailure = (Throwable) results[firstFailureIdx];
       Row failedRow = mutations.get(firstFailureIdx);
-      throw new IOException(String.format(
-        "Repair batch had %d/%d mutation failure(s); first failure on row %s: %s",
-        failureCount, results.length, Bytes.toStringBinary(failedRow.getRow()),
-        firstFailure.getMessage()), firstFailure);
+      throw new IOException(
+        String.format("Repair batch had %d/%d mutation failure(s); first failure on row %s: %s",
+          failureCount, results.length, Bytes.toStringBinary(failedRow.getRow()),
+          firstFailure.getMessage()),
+        firstFailure);
     }
     puts.clear();
     deletes.clear();
   }
 
   /**
-   * Inputs to a chunk repair attempt. Source range is the chunk boundary; target range may
-   * be wider so the repair scan sees the same cells (including extra-on-target rows between
-   * consecutive source chunks) that the verifier hashed.
-   *
-   * <p>{@link #verifySourceRows} / {@link #verifyTargetRows} are the row counts the verifier
-   * recorded; threaded into the COUNTERS column on the resulting checkpoint row.
-   * {@link #verifyStartTime} is the timestamp captured when verification began for this
-   * chunk; reused as EXECUTION_START_TIME on the REPAIRED/UNREPAIRABLE/REPAIR_FAILED
-   * checkpoint row so the row spans the full verify+repair lifecycle that overwrites the
-   * MISMATCHED row.
+   * Inputs to a chunk repair attempt. Source range is the chunk boundary; target range may be wider
+   * so the repair scan sees the same cells (including extra-on-target rows between consecutive
+   * source chunks) that the verifier hashed.
+   * <p>
+   * {@link #verifySourceRows} / {@link #verifyTargetRows} are the row counts the verifier recorded;
+   * threaded into the COUNTERS column on the resulting checkpoint row. {@link #verifyStartTime} is
+   * the timestamp captured when verification began for this chunk; reused as EXECUTION_START_TIME
+   * on the REPAIRED/UNREPAIRABLE/REPAIR_FAILED checkpoint row so the row spans the full
+   * verify+repair lifecycle that overwrites the MISMATCHED row.
    */
   public static final class ChunkRepairRequest {
     public final byte[] sourceStart;
@@ -661,8 +666,8 @@ public final class PhoenixSyncTableChunkRepairer {
   }
 
   /**
-   * Outcome of a chunk repair attempt. Carries the terminal status, accumulated drift
-   * counters, end-of-attempt timestamp, and the failure exception when status is
+   * Outcome of a chunk repair attempt. Carries the terminal status, accumulated drift counters,
+   * end-of-attempt timestamp, and the failure exception when status is
    * {@link Status#REPAIR_FAILED}. Status precedence (most-severe wins):
    * {@link Status#REPAIR_FAILED} &gt; {@link Status#UNREPAIRABLE} &gt; {@link Status#REPAIRED}.
    */
@@ -699,10 +704,10 @@ public final class PhoenixSyncTableChunkRepairer {
   }
 
   /**
-   * Per-chunk aggregate of six drift counters — three row-level
-   * ({@code rowsMissingOnTarget}, {@code rowsExtraOnTarget}, {@code rowsCannotRepair}) and
-   * three cell-level ({@code cellsMissing/Extra/DifferentOnTarget}). Pure accumulator; the
-   * caller maps fields onto MapReduce job counters and the checkpoint COUNTERS string.
+   * Per-chunk aggregate of six drift counters — three row-level ({@code rowsMissingOnTarget},
+   * {@code rowsExtraOnTarget}, {@code rowsCannotRepair}) and three cell-level
+   * ({@code cellsMissing/Extra/DifferentOnTarget}). Pure accumulator; the caller maps fields onto
+   * MapReduce job counters and the checkpoint COUNTERS string.
    */
   public static final class DriftCounters {
     public long rowsMissingOnTarget;
@@ -731,14 +736,14 @@ public final class PhoenixSyncTableChunkRepairer {
   }
 
   /**
-   * Per-row snapshot of target's tombstones and Puts. Two queries:
-   * {@link #wouldShadow} (shadow detection) and {@link #targetPutTimestampsBetween}
-   * (hidden-version discovery). For examples of how callers use these, see the
-   * doc on {@link RowRepairBuffer#targetRowRecord}; for scan shape and time-range
-   * rationale, see {@link #load}.
+   * Per-row snapshot of target's tombstones and Puts. Two queries: {@link #wouldShadow} (shadow
+   * detection) and {@link #targetPutTimestampsBetween} (hidden-version discovery). For examples of
+   * how callers use these, see the doc on {@link RowRepairBuffer#targetRowRecord}; for scan shape
+   * and time-range rationale, see {@link #load}.
+   * <p>
+   * HBase has four tombstone subtypes; each is recorded into its own map because shadow scope
+   * differs:
    *
-   * <p>HBase has four tombstone subtypes; each is recorded into its own map because
-   * shadow scope differs:
    * <pre>
    *   Delete               shadows Put at (cf, q, ts == T) exactly
    *   DeleteColumn         shadows Puts at (cf, q, ts &lt;= T)
@@ -756,20 +761,18 @@ public final class PhoenixSyncTableChunkRepairer {
 
     /**
      * Builds a {@link TargetRowRecord} from a single-row HBase scan.
-     *
-     * <p><b>raw=true + all-versions</b> are forced regardless of user flags so tombstones
-     * and max-versions-filtered older Puts (the two things this record exists to capture)
-     * are surfaced.
-     *
-     * <p><b>Time range {@code [fromTime, MAX_VALUE]}</b>:
+     * <p>
+     * <b>raw=true + all-versions</b> are forced regardless of user flags so tombstones and
+     * max-versions-filtered older Puts (the two things this record exists to capture) are surfaced.
+     * <p>
+     * <b>Time range {@code [fromTime, MAX_VALUE]}</b>:
      * <ul>
-     *   <li>Lower bound = {@code fromTime}: cells below the verify window can't affect
-     *       repair inside the window.</li>
-     *   <li>Upper bound = {@code MAX_VALUE} (NOT {@code toTime}): a tombstone at
-     *       {@code ts >= toTime} can still shadow a Put we mirror at {@code ts} in window
-     *       during application reads, so we must see it. e.g. window
-     *       {@code [0, 600)}, tgt has DeleteColumn@900, src wants Put@500 — without the
-     *       wide upper bound we'd miss the 900 tombstone and write a doomed mirror.</li>
+     * <li>Lower bound = {@code fromTime}: cells below the verify window can't affect repair inside
+     * the window.</li>
+     * <li>Upper bound = {@code MAX_VALUE} (NOT {@code toTime}): a tombstone at {@code ts >= toTime}
+     * can still shadow a Put we mirror at {@code ts} in window during application reads, so we must
+     * see it. e.g. window {@code [0, 600)}, tgt has DeleteColumn@900, src wants Put@500 — without
+     * the wide upper bound we'd miss the 900 tombstone and write a doomed mirror.</li>
      * </ul>
      */
     static TargetRowRecord load(byte[] rowKey, Table targetHTable, long fromTime)
@@ -806,9 +809,8 @@ public final class PhoenixSyncTableChunkRepairer {
 
     /**
      * Records one tombstone into its per-subtype map for {@link #wouldShadow} to query.
-     * {@code <=ts} delete subtypes ({@code DeleteColumn}, {@code DeleteFamily}) collapse to
-     * the max ts; exact-ts subtypes ({@code Delete}, {@code DeleteFamilyVersion})
-     * accumulate into a set.
+     * {@code <=ts} delete subtypes ({@code DeleteColumn}, {@code DeleteFamily}) collapse to the max
+     * ts; exact-ts subtypes ({@code Delete}, {@code DeleteFamilyVersion}) accumulate into a set.
      */
     private void recordTombstone(Cell tombstone) {
       long ts = tombstone.getTimestamp();
@@ -859,9 +861,9 @@ public final class PhoenixSyncTableChunkRepairer {
 
     /**
      * Returns target's Put timestamps at {@code (cf, q)} that are strictly greater than
-     * {@code lowerExclusive} and strictly less than {@code upperExclusive}. Used to find
-     * hidden (max-versions-filtered) target versions sitting between source's max ts and
-     * target's visible ts so they can be point-Deleted.
+     * {@code lowerExclusive} and strictly less than {@code upperExclusive}. Used to find hidden
+     * (max-versions-filtered) target versions sitting between source's max ts and target's visible
+     * ts so they can be point-Deleted.
      */
     Set<Long> targetPutTimestampsBetween(byte[] family, byte[] qualifier, long lowerExclusive,
       long upperExclusive) {
@@ -904,8 +906,7 @@ public final class PhoenixSyncTableChunkRepairer {
 
   /**
    * Per-row scratch buffer: lazily-built {@link Put}/{@link Delete} mutations, lazily-loaded
-   * {@link TargetRowRecord}, and an unrepairable-drift flag the caller reads after the
-   * merge.
+   * {@link TargetRowRecord}, and an unrepairable-drift flag the caller reads after the merge.
    */
   final class RowRepairBuffer {
     private final byte[] rowKey;
@@ -935,25 +936,27 @@ public final class PhoenixSyncTableChunkRepairer {
     /**
      * Returns the cached {@link TargetRowRecord} for this row, loading on first call via
      * {@link TargetRowRecord#load} (one raw all-versions scan, time range
-     * {@code [fromTime, MAX_VALUE]}). Cache scope is the buffer's lifetime — i.e. the
-     * current row — so repeated cell-level lookups within the row pay one round-trip total.
+     * {@code [fromTime, MAX_VALUE]}). Cache scope is the buffer's lifetime — i.e. the current row —
+     * so repeated cell-level lookups within the row pay one round-trip total.
+     * <p>
+     * Two consumers:
+     * <p>
+     * <b>Shadow detection</b> — {@link #mirrorSourceCellUnlessShadowed} asks
+     * {@link TargetRowRecord#wouldShadow} before mirroring a source Put, to skip writes that
+     * target's existing tombstones would render invisible.
      *
-     * <p>Two consumers:
-     *
-     * <p><b>Shadow detection</b> — {@link #mirrorSourceCellUnlessShadowed} asks
-     * {@link TargetRowRecord#wouldShadow} before mirroring a source Put, to skip writes
-     * that target's existing tombstones would render invisible.
      * <pre>
      *   target row state: DeleteColumn(NAME)@T=900   (covers ts &lt;= 900)
      *   source row state: Put(NAME, "alice")@T=500
      *   wouldShadow(srcPut@500) → true
      *   ⇒ skip mirror, mark row unrepairable; operator must major-compact target
      * </pre>
+     * <p>
+     * <b>Hidden-version discovery</b> — {@link #tombstoneTargetCell} asks
+     * {@link TargetRowRecord#targetPutTimestampsBetween} for max-versions-filtered Puts sitting
+     * between source's max ts and target's visible ts, so each can be point-Deleted before they
+     * surface above source's mirror.
      *
-     * <p><b>Hidden-version discovery</b> — {@link #tombstoneTargetCell} asks
-     * {@link TargetRowRecord#targetPutTimestampsBetween} for max-versions-filtered Puts
-     * sitting between source's max ts and target's visible ts, so each can be point-Deleted
-     * before they surface above source's mirror.
      * <pre>
      *   target row state (MAX_VERSIONS=3):
      *     Put(NAME, "carol")@T=900   visible
@@ -983,8 +986,8 @@ public final class PhoenixSyncTableChunkRepairer {
   }
 
   /**
-   * Cell-level drift counts produced by per-row diff. Three counters partition the cell
-   * differences into disjoint buckets — source-only, target-only-live, same-coord-diff-value.
+   * Cell-level drift counts produced by per-row diff. Three counters partition the cell differences
+   * into disjoint buckets — source-only, target-only-live, same-coord-diff-value.
    */
   static final class CellDriftCounts {
     static final CellDriftCounts NONE = new CellDriftCounts(0, 0, 0);

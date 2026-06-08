@@ -26,7 +26,6 @@ import static org.apache.phoenix.query.QueryServices.CONNECTION_QUERY_SERVICE_ME
 import static org.apache.phoenix.query.QueryServices.INTERNAL_CONNECTION_MAX_ALLOWED_CONNECTIONS;
 import static org.apache.phoenix.query.QueryServices.QUERY_SERVICES_NAME;
 import static org.apache.phoenix.util.PhoenixRuntime.clearAllConnectionQueryServiceMetrics;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
