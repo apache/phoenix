@@ -82,7 +82,13 @@
     <hbase-2.6.0.runtime.version>2.6.1-hadoop3</hbase-2.6.0.runtime.version>
     <hbase-2.6.3.runtime.version>2.6.3-hadoop3</hbase-2.6.3.runtime.version>
     <hbase-2.6.5.runtime.version>2.6.5-hadoop3</hbase-2.6.5.runtime.version>
-    <!-- TODO(PHOENIX-7873): flip to 2.6.6-hadoop3 when HBase 2.6.6 GA is on Maven Central -->
+    <!--
+      TODO(PHOENIX-7873): HBase 2.6.6 is not yet GA on Maven Central, so the 2.6 profile
+      builds against a locally-installed 2.6.6-SNAPSHOT. At GA: (1) flip this value to
+      2.6.6-hadoop3, (2) flip the matching <hbase26.compat.version> in
+      phoenix-hbase-compat-2.6.6/pom.xml, then (3) remove both TODO comments. The two markers
+      must change together; find them with: grep -rn 'TODO(PHOENIX-7873)'.
+    -->
     <hbase-2.6.runtime.version>2.6.6-SNAPSHOT</hbase-2.6.runtime.version>
 
     <compileSource>1.8</compileSource>
