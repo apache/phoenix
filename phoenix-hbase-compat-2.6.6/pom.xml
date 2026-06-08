@@ -28,7 +28,12 @@
   <description>Compatibility module for HBase 2.6.6+</description>
 
   <properties>
-    <!-- TODO(PHOENIX-7873): flip to 2.6.6-hadoop3 when HBase 2.6.6 GA is on Maven Central -->
+    <!--
+      TODO(PHOENIX-7873): HBase 2.6.6 is not yet GA on Maven Central. This compat module is
+      built against a locally-installed 2.6.6-SNAPSHOT until then. At GA: flip this value to
+      2.6.6-hadoop3 in lockstep with <hbase-2.6.runtime.version> in the root pom.xml, then
+      remove both TODO comments. Find them with: grep -rn 'TODO(PHOENIX-7873)'.
+    -->
     <hbase26.compat.version>2.6.6-SNAPSHOT</hbase26.compat.version>
   </properties>
 
