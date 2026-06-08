@@ -34,4 +34,14 @@ public class CompatDelegateFilter extends FilterBase {
     return delegate.filterKeyValue(v);
   }
 
+  @Override
+  public Cell getHintForRejectedRow(Cell firstRowCell) throws IOException {
+    return delegate.getHintForRejectedRow(firstRowCell);
+  }
+
+  @Override
+  public Cell getSkipHint(Cell skippedCell) throws IOException {
+    return delegate.getSkipHint(skippedCell);
+  }
+
 }

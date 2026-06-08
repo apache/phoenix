@@ -37,4 +37,20 @@ public abstract class CompatPagingFilter extends FilterBase {
     }
     return super.filterKeyValue(v);
   }
+
+  @Override
+  public Cell getHintForRejectedRow(Cell firstRowCell) throws IOException {
+    if (delegate != null) {
+      return delegate.getHintForRejectedRow(firstRowCell);
+    }
+    return super.getHintForRejectedRow(firstRowCell);
+  }
+
+  @Override
+  public Cell getSkipHint(Cell skippedCell) throws IOException {
+    if (delegate != null) {
+      return delegate.getSkipHint(skippedCell);
+    }
+    return super.getSkipHint(skippedCell);
+  }
 }
