@@ -21,6 +21,7 @@ import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertMutatio
 import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -148,7 +149,8 @@ public class CostBasedDecisionIT extends BaseTest {
       assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
       assertEquals(indexName + "(" + tableName + ")", explainPlanAttributes.getTableName());
       assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
-      assertEquals("SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" <= 'z'",
+      assertTrue(explainPlanAttributes.isServerFirstKeyOnlyProjection());
+      assertEquals("SERVER FILTER BY \"ROWKEY\" <= 'z'",
         explainPlanAttributes.getServerWhereFilter());
       assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]",
         explainPlanAttributes.getServerAggregate());
@@ -355,12 +357,12 @@ public class CostBasedDecisionIT extends BaseTest {
       // Use the optimal plan based on cost when stats become available.
       assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES")
         .iteratorType("PARALLEL").scanType("RANGE SCAN").table(indexName + "(" + tableName + ")")
-        .keyRanges(" [1]").serverMergeColumns("[0.C2]")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" <= 'z'")
+        .keyRanges(" [1]").serverMergeColumns("[0.C2]").serverFirstKeyOnlyProjection(true)
+        .serverWhereFilter("SERVER FILTER BY \"ROWKEY\" <= 'z'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
         .clientSortAlgo("CLIENT MERGE SORT").rhs().iteratorType("PARALLEL").scanType("RANGE SCAN")
         .table(indexName + "(" + tableName + ")").keyRanges(" [1]").serverMergeColumns("[0.C2]")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" >= 'a'")
+        .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" >= 'a'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
         .clientSortAlgo("CLIENT MERGE SORT");
     } finally {
@@ -409,13 +411,13 @@ public class CostBasedDecisionIT extends BaseTest {
       // Use the optimal plan based on cost when stats become available.
       assertPlan(conn, query).iteratorType("PARALLEL 626-WAY").scanType("RANGE SCAN")
         .table(indexName + "(" + tableName + ")").keyRanges(" [1,'X0'] - [1,'X1']")
-        .serverMergeColumns("[0.C2]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverMergeColumns("[0.C2]").serverFirstKeyOnlyProjection(true)
         .serverSortedBy("[\"T1.:ROWKEY\"]").clientSortAlgo("CLIENT MERGE SORT")
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"T1.:ROWKEY\" IN (T2.MRK)").subPlanCount(1)
         .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .table(indexName + "(" + tableName + ")").keyRanges(" [1]").serverMergeColumns("[0.C2]")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND \"ROWKEY\" <= 'z'")
+        .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" <= 'z'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
         .clientSortAlgo("CLIENT MERGE SORT");
     } finally {
@@ -440,8 +442,7 @@ public class CostBasedDecisionIT extends BaseTest {
       String hintedQuery = query.replaceFirst("SELECT",
         "SELECT  /*+ INDEX(" + tableName + " " + tableName + "_idx) */");
       String dataPlan = "[C1]";
-      String indexPlan =
-        "SERVER FILTER BY FIRST KEY ONLY AND (\"ROWKEY\" >= 1 AND \"ROWKEY\" <= 10)";
+      String indexPlan = "SERVER FILTER BY (\"ROWKEY\" >= 1 AND \"ROWKEY\" <= 10)";
 
       // Use the index table plan that opts out order-by when stats are not available.
       ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
@@ -503,7 +504,7 @@ public class CostBasedDecisionIT extends BaseTest {
         .clientAggregate("CLIENT AGGREGATE INTO SINGLE ROW").lhs().iteratorType("PARALLEL 1-WAY")
         .scanType("FULL SCAN").table(testTable500).serverWhereFilter("SERVER FILTER BY COL1 < 200")
         .end().rhs().iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(testTable1000)
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
+        .serverFirstKeyOnlyProjection(true);
     }
   }
 

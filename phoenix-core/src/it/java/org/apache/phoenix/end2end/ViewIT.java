@@ -967,9 +967,7 @@ public class ViewIT extends SplitSystemCatalogIT {
         assertPlan(conn, query).scanType("RANGE SCAN")
           .iteratorType("PARALLEL " + (saltBuckets == null ? 1 : saltBuckets) + "-WAY")
           .table(viewIndexFullName1 + "(" + fullTableName + ")").keyRanges(" [1,51]")
-          .serverWhereFilterAnyOf("SERVER FILTER BY FIRST KEY ONLY",
-            "SERVER FILTER BY EMPTY COLUMN ONLY")
-          .clientSortAlgo("CLIENT MERGE SORT");
+          .serverProjectionFilterAnyOf().clientSortAlgo("CLIENT MERGE SORT");
       } else if (saltBuckets == null) {
         assertPlan(conn, query).scanType("RANGE SCAN").iteratorType("PARALLEL 1-WAY")
           .table(viewIndexPhysicalName).keyRanges(" [" + Short.MIN_VALUE + ",51]")
@@ -1012,23 +1010,17 @@ public class ViewIT extends SplitSystemCatalogIT {
 
       if (localIndex) {
         physicalTableName = fullTableName;
-        assertPlan(conn, query).scanType("RANGE SCAN")
-          .serverWhereFilterAnyOf("SERVER FILTER BY FIRST KEY ONLY",
-            "SERVER FILTER BY EMPTY COLUMN ONLY")
+        assertPlan(conn, query).scanType("RANGE SCAN").serverProjectionFilterAnyOf()
           .iteratorType("PARALLEL " + (saltBuckets == null ? 1 : saltBuckets) + "-WAY")
           .table(viewIndexFullName2 + "(" + fullTableName + ")").keyRanges(" [" + (2) + ",'foo']");
       } else if (saltBuckets == null) {
         physicalTableName = viewIndexPhysicalName;
-        assertPlan(conn, query).scanType("RANGE SCAN")
-          .serverWhereFilterAnyOf("SERVER FILTER BY FIRST KEY ONLY",
-            "SERVER FILTER BY EMPTY COLUMN ONLY")
+        assertPlan(conn, query).scanType("RANGE SCAN").serverProjectionFilterAnyOf()
           .iteratorType("PARALLEL 1-WAY").table(viewIndexPhysicalName)
           .keyRanges(" [" + (Short.MIN_VALUE + 1) + ",'foo']").clientSortAlgo(null);
       } else {
         physicalTableName = viewIndexPhysicalName;
-        assertPlan(conn, query).scanType("RANGE SCAN")
-          .serverWhereFilterAnyOf("SERVER FILTER BY FIRST KEY ONLY",
-            "SERVER FILTER BY EMPTY COLUMN ONLY")
+        assertPlan(conn, query).scanType("RANGE SCAN").serverProjectionFilterAnyOf()
           .iteratorType("PARALLEL " + saltBuckets + "-WAY").table(viewIndexPhysicalName)
           .keyRanges(" [X'00'," + (Short.MIN_VALUE + 1) + ",'foo'] - ["
             + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (saltBuckets - 1) }) + ","
