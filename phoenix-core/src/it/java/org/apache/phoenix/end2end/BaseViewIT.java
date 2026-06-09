@@ -223,7 +223,8 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
     }
     assertPlan(conn, query).iteratorType(iteratorTypeAndScanSize).scanType("RANGE SCAN")
       .table(expectedTableName).clientSortAlgo(clientSortAlgo).keyRanges(keyRanges)
-      .serverFirstKeyOnlyProjection(firstKeyOnlyProjection);
+      .serverFirstKeyOnlyProjection(firstKeyOnlyProjection).serverEmptyColumnOnlyProjection(false)
+      .serverWhereFilter(null);
 
     String viewIndexName2 = "I_" + generateUniqueName();
     if (localIndex) {
