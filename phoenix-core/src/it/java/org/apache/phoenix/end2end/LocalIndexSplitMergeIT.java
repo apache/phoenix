@@ -143,15 +143,14 @@ public class LocalIndexSplitMergeIT extends BaseTest {
 
         assertPlan(conn1, query).iteratorType("PARALLEL " + (4 + i) + "-WAY").scanType("RANGE SCAN")
           .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1]")
-          .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
+          .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
 
         query = "SELECT t_id,k1,k3 FROM " + tableName;
         assertPlan(conn1, query)
           .iteratorType(
             "PARALLEL " + ((strings[3 * i].compareTo("j") < 0) ? (4 + i) : (4 + i - 1)) + "-WAY")
           .scanType("RANGE SCAN").table(fullIndexName + "_2(" + indexPhysicalTableName + ")")
-          .keyRanges(" [2]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-          .clientSortAlgo("CLIENT MERGE SORT");
+          .keyRanges(" [2]").serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
 
         rs = conn1.createStatement().executeQuery(query);
         Thread.sleep(1000);
@@ -229,12 +228,12 @@ public class LocalIndexSplitMergeIT extends BaseTest {
 
       assertPlan(conn1, query).iteratorType("PARALLEL 3-WAY").scanType("RANGE SCAN")
         .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1]")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
+        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
 
       query = "SELECT t_id,k1,k3 FROM " + tableName;
       assertPlan(conn1, query).iteratorType("PARALLEL 3-WAY").scanType("RANGE SCAN")
         .table(fullIndexName + "_2(" + indexPhysicalTableName + ")").keyRanges(" [2]")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
+        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
 
       rs = conn1.createStatement().executeQuery(query);
       Thread.sleep(1000);

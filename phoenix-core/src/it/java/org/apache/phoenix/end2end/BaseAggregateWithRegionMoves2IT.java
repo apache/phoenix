@@ -139,7 +139,7 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
       .table(tableName)
       .keyRanges(
         " ['000001111122222','333334444455555',0,*] - ['000001111122222','333334444455555',0,1]")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverFirstKeyOnlyProjection(true)
       .serverAggregate(
         "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [MATCH_STATUS, EXTERNAL_DATASOURCE_KEY]")
       .clientFilterBy("COUNT(1) > 1");
@@ -183,7 +183,7 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
     assertEquals(4, rs.getLong(2));
     assertFalse(rs.next());
     assertPlan(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY").clientSortedBy("REVERSE")
-      .scanType("FULL SCAN").table(tableName).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .scanType("FULL SCAN").table(tableName).serverFirstKeyOnlyProjection(true)
       .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]");
   }
 
@@ -235,7 +235,7 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
     assertEquals(10, rs.getLong(2));
     assertFalse(rs.next());
     assertPlan(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY").clientSortedBy("REVERSE")
-      .scanType("FULL SCAN").table(tableName).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .scanType("FULL SCAN").table(tableName).serverFirstKeyOnlyProjection(true)
       .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]");
   }
 
@@ -437,7 +437,7 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
     assertEquals(2, rs.getDouble(2), 1e-6);
     assertFalse(rs.next());
     assertPlan(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-      .table(tableName).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .table(tableName).serverFirstKeyOnlyProjection(true)
       .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]");
     TestUtil.analyzeTable(conn, tableName);
     List<KeyRange> splits = TestUtil.getAllSplits(conn, tableName);

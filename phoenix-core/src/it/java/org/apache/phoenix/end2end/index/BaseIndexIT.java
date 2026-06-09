@@ -154,8 +154,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY");
       if (!uncovered) {
         // Optimizer would not select the uncovered index for this query
-        basePlan.serverWhereFilter(
-          columnEncoded ? "SERVER FILTER BY FIRST KEY ONLY" : "SERVER FILTER BY EMPTY COLUMN ONLY");
+        basePlan.serverProjectionFilter(columnEncoded);
       }
       if (localIndex) {
         basePlan.table(fullIndexName + "(" + fullTableName + ")").keyRanges(" [1]")
@@ -572,9 +571,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
       String query =
         "SELECT" + (uncovered ? " /*+ INDEX(" + fullTableName + " " + indexName + ")*/ " : " ")
           + "int_pk from " + fullTableName;
-      ExplainPlanTestUtil.ExplainPlanAssert basePlan =
-        assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").serverWhereFilter(
-          columnEncoded ? "SERVER FILTER BY FIRST KEY ONLY" : "SERVER FILTER BY EMPTY COLUMN ONLY");
+      ExplainPlanTestUtil.ExplainPlanAssert basePlan = assertPlan(conn, query)
+        .iteratorType("PARALLEL 1-WAY").serverProjectionFilter(columnEncoded);
       if (localIndex) {
         basePlan.scanType("RANGE SCAN").table(fullIndexName + "(" + fullTableName + ")")
           .clientSortAlgo("CLIENT MERGE SORT").keyRanges(" [1]");
@@ -593,8 +591,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       query = "SELECT date_col from " + fullTableName + " order by date_col";
-      basePlan = assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").serverWhereFilter(
-        columnEncoded ? "SERVER FILTER BY FIRST KEY ONLY" : "SERVER FILTER BY EMPTY COLUMN ONLY");
+      basePlan = assertPlan(conn, query).iteratorType("PARALLEL 1-WAY")
+        .serverProjectionFilter(columnEncoded);
       if (localIndex) {
         basePlan.scanType("RANGE SCAN").table(fullIndexName + "(" + fullTableName + ")")
           .clientSortAlgo("CLIENT MERGE SORT").keyRanges(" [1]");
@@ -910,8 +908,8 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
       // make sure the index is working as expected
       query = "SELECT" + (uncovered ? " /*+ INDEX(" + testTable + " " + indexName + ")*/ " : " ")
         + "* FROM " + testTable;
-      ExplainPlanTestUtil.ExplainPlanAssert basePlan = assertPlan(conn, query).serverWhereFilter(
-        columnEncoded ? "SERVER FILTER BY FIRST KEY ONLY" : "SERVER FILTER BY EMPTY COLUMN ONLY");
+      ExplainPlanTestUtil.ExplainPlanAssert basePlan =
+        assertPlan(conn, query).serverProjectionFilter(columnEncoded);
       if (localIndex) {
         basePlan.iteratorType("PARALLEL 2-WAY").scanType("RANGE SCAN")
           .table(fullIndexName + "(" + testTable + ")").keyRanges(" [1]")

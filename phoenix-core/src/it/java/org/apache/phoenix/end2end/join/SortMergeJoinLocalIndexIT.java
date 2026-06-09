@@ -64,7 +64,7 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
     String supplierIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_SUPPLIER_INDEX);
     assertPlan(conn, query).abstractExplainPlan("SORT-MERGE-JOIN (LEFT)").sortMergeSkipMerge(false)
       .lhs().scanType("RANGE SCAN").table(supplierIndex + "(" + supplier + ")").keyRanges(" [1]")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"S.:supplier_id\"]")
+      .serverFirstKeyOnlyProjection(true).serverSortedBy("[\"S.:supplier_id\"]")
       .clientSortAlgo("CLIENT MERGE SORT").end().rhs()
       .abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(true)
       .clientSortedBy("[\"I.0:supplier_id\"]").lhs().scanType("RANGE SCAN")
@@ -80,11 +80,10 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
     String itemIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_ITEM_INDEX);
     assertPlan(conn, query).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(false)
       .lhs().scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"I1.:item_id\"]")
+      .serverFirstKeyOnlyProjection(true).serverSortedBy("[\"I1.:item_id\"]")
       .clientSortAlgo("CLIENT MERGE SORT").end().rhs().scanType("RANGE SCAN")
-      .table(itemIndex + "(" + item + ")").keyRanges(" [1]")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"I2.:item_id\"]")
-      .clientSortAlgo("CLIENT MERGE SORT").end();
+      .table(itemIndex + "(" + item + ")").keyRanges(" [1]").serverFirstKeyOnlyProjection(true)
+      .serverSortedBy("[\"I2.:item_id\"]").clientSortAlgo("CLIENT MERGE SORT").end();
   }
 
   @Override
@@ -100,9 +99,8 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
       statement.optimizeQuery().getExplainPlan().getPlanStepsAsAttributes();
     assertPlan(attributes).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(false)
       .clientRowLimit(4).lhs().scanType("RANGE SCAN").table(itemIndex + "(" + item + ")")
-      .keyRanges(" [1]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-      .serverSortedBy("[\"I.:item_id\"]").clientSortAlgo("CLIENT MERGE SORT").end().rhs()
-      .scanType("FULL SCAN").table(order)
+      .keyRanges(" [1]").serverFirstKeyOnlyProjection(true).serverSortedBy("[\"I.:item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end().rhs().scanType("FULL SCAN").table(order)
       .serverSortedBy(queryIndex == 0 ? "[\"O.item_id\"]" : "[\"item_id\"]")
       .clientSortAlgo("CLIENT MERGE SORT").end();
   }
