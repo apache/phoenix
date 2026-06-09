@@ -73,15 +73,14 @@ public class HashJoinNoIndexIT extends HashJoinIT {
       .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"I.item_id\"]")
       .clientSortAlgo("CLIENT MERGE SORT").clientSortedBy("[SUM(O.QUANTITY) DESC]").subPlanCount(1)
       .subPlan(0).abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0").scanType("FULL SCAN")
-      .table(item).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").end();
+      .table(item).serverFirstKeyOnlyProjection(true).end();
   }
 
   @Override
   protected void assertLeftJoinWithAggPlan3(Connection conn, String query) throws Exception {
     String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
     String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
-    assertPlan(conn, query).scanType("FULL SCAN").table(item)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+    assertPlan(conn, query).scanType("FULL SCAN").table(item).serverFirstKeyOnlyProjection(true)
       .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"I.item_id\"]")
       .clientSortedBy("[SUM(O.QUANTITY) DESC NULLS LAST, \"I.item_id\"]").subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0").scanType("FULL SCAN").table(order).end();
@@ -101,8 +100,7 @@ public class HashJoinNoIndexIT extends HashJoinIT {
   protected void assertRightJoinWithAggPlan2(Connection conn, String query) throws Exception {
     String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
     String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
-    assertPlan(conn, query).scanType("FULL SCAN").table(item)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+    assertPlan(conn, query).scanType("FULL SCAN").table(item).serverFirstKeyOnlyProjection(true)
       .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"I.item_id\"]")
       .clientSortedBy("[SUM(O.QUANTITY) DESC NULLS LAST, \"I.item_id\"]").subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0").scanType("FULL SCAN").table(order).end();
@@ -156,7 +154,7 @@ public class HashJoinNoIndexIT extends HashJoinIT {
     assertPlan(conn, query).scanType("FULL SCAN").table(item)
       .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"I1.item_id\" IN (\"I2.item_id\")")
       .subPlanCount(1).subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0")
-      .scanType("FULL SCAN").table(item).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").end();
+      .scanType("FULL SCAN").table(item).serverFirstKeyOnlyProjection(true).end();
   }
 
   @Override
@@ -228,15 +226,14 @@ public class HashJoinNoIndexIT extends HashJoinIT {
       .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [O.IID]")
       .clientSortAlgo("CLIENT MERGE SORT").clientSortedBy("[SUM(O.QUANTITY) DESC]").subPlanCount(1)
       .subPlan(0).abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)")
-      .scanType("FULL SCAN").table(item).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").end();
+      .scanType("FULL SCAN").table(item).serverFirstKeyOnlyProjection(true).end();
   }
 
   @Override
   protected void assertSubqueryAggPlan3(Connection conn, String query) throws Exception {
     String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
     String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
-    assertPlan(conn, query).scanType("FULL SCAN").table(item)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+    assertPlan(conn, query).scanType("FULL SCAN").table(item).serverFirstKeyOnlyProjection(true)
       .serverSortedBy("[O.Q DESC NULLS LAST, I.IID]").clientSortAlgo("CLIENT MERGE SORT")
       .subPlanCount(1).subPlan(0).abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0")
       .scanType("FULL SCAN").table(order)
@@ -248,11 +245,10 @@ public class HashJoinNoIndexIT extends HashJoinIT {
   protected void assertSubqueryAggPlan4(Connection conn, String query) throws Exception {
     String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
     String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
-    assertPlan(conn, query).scanType("FULL SCAN").table(item)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[O.Q DESC, I.IID]")
-      .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
-      .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0").scanType("FULL SCAN").table(order)
-      .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]")
+    assertPlan(conn, query).scanType("FULL SCAN").table(item).serverFirstKeyOnlyProjection(true)
+      .serverSortedBy("[O.Q DESC, I.IID]").clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1)
+      .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0").scanType("FULL SCAN")
+      .table(order).serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]")
       .clientSortAlgo("CLIENT MERGE SORT").end();
   }
 

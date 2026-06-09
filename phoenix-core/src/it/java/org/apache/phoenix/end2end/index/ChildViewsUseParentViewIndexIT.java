@@ -164,10 +164,10 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
     String sql =
       "SELECT A0, A1, A2, A4 FROM " + viewName + " WHERE A4 IN ('1', '2', '3') ORDER BY A4, A2";
     String childViewScanKey = isChildView ? ",'Y'" : "";
-    assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").scanType("SKIP SCAN ON 3 KEYS")
-      .table("_IDX_" + baseTableName).keyRanges(" [" + Short.MIN_VALUE + ",'1'" + childViewScanKey
-        + "] - [" + Short.MIN_VALUE + ",'3'" + childViewScanKey + "]");
+    assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").serverFirstKeyOnlyProjection(true)
+      .scanType("SKIP SCAN ON 3 KEYS").table("_IDX_" + baseTableName)
+      .keyRanges(" [" + Short.MIN_VALUE + ",'1'" + childViewScanKey + "] - [" + Short.MIN_VALUE
+        + ",'3'" + childViewScanKey + "]");
 
     ResultSet rs = conn.createStatement().executeQuery(sql);
     assertTrue(rs.next());
@@ -261,9 +261,8 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
     String sql = "SELECT WO_ID FROM " + viewName
       + " WHERE WO_ID IN ('003xxxxxxxxxxx1', '003xxxxxxxxxxx2', '003xxxxxxxxxxx3', '003xxxxxxxxxxx4', '003xxxxxxxxxxx5') "
       + " AND (A_DATE > TO_DATE('2016-01-01 06:00:00.0')) " + " ORDER BY WO_ID, A_DATE DESC";
-    assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").scanType("SKIP SCAN ON 5 RANGES")
-      .table("_IDX_" + baseTableName)
+    assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").serverFirstKeyOnlyProjection(true)
+      .scanType("SKIP SCAN ON 5 RANGES").table("_IDX_" + baseTableName)
       .keyRanges(" [" + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx1',*] - ["
         + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~'2016-01-01 06:00:00.000']");
 

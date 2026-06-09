@@ -256,8 +256,7 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
     collectStatistics(conn, fullTableName);
     assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(1).estimatedRows(0L)
       .estimatedBytes(20L).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-      .table(physicalTableName).serverWhereFilter(
-        "SERVER FILTER BY " + (columnEncoded ? "FIRST KEY ONLY" : "EMPTY COLUMN ONLY"));
+      .table(physicalTableName).serverProjectionFilter(columnEncoded);
     conn.close();
   }
 

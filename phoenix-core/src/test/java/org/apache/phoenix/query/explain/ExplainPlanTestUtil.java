@@ -343,6 +343,42 @@ public final class ExplainPlanTestUtil {
       return this;
     }
 
+    public ExplainPlanAssert serverFirstKeyOnlyProjection(boolean expected) {
+      assertEquals(at("serverFirstKeyOnlyProjection"), expected,
+        attributes.isServerFirstKeyOnlyProjection());
+      return this;
+    }
+
+    /**
+     * Assert when {@code firstKeyOnly} is true the scan carries the {@code FIRST KEY ONLY}
+     * projection, otherwise it carries the {@code EMPTY COLUMN ONLY} projection. Convenience for
+     * callers that pick the expected kind from a flag.
+     */
+    public ExplainPlanAssert serverProjectionFilter(boolean firstKeyOnly) {
+      return firstKeyOnly
+        ? serverFirstKeyOnlyProjection(true)
+        : serverEmptyColumnOnlyProjection(true);
+    }
+
+    /**
+     * Assert either the {@code FIRST KEY ONLY} or the {@code EMPTY COLUMN ONLY} projection
+     * optimization is present.
+     */
+    public ExplainPlanAssert serverProjectionFilterAnyOf() {
+      assertTrue(
+        at("serverFirstKeyOnlyProjection|serverEmptyColumnOnlyProjection")
+          + " expected one to be true",
+        attributes.isServerFirstKeyOnlyProjection()
+          || attributes.isServerEmptyColumnOnlyProjection());
+      return this;
+    }
+
+    public ExplainPlanAssert serverEmptyColumnOnlyProjection(boolean expected) {
+      assertEquals(at("serverEmptyColumnOnlyProjection"), expected,
+        attributes.isServerEmptyColumnOnlyProjection());
+      return this;
+    }
+
     public ExplainPlanAssert useRoundRobinIterator(boolean expected) {
       assertEquals(at("useRoundRobinIterator"), expected, attributes.isUseRoundRobinIterator());
       return this;

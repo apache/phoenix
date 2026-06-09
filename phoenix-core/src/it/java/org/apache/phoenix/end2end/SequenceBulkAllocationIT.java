@@ -824,7 +824,7 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
 
     // Assert output for Explain Plain result is as expected
     assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(tableName)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSequenceCount(1);
+      .serverFirstKeyOnlyProjection(true).clientSequenceCount(1);
   }
 
   /**

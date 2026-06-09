@@ -202,14 +202,14 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
     String clientSortAlgo;
     String expectedTableName;
     String keyRanges;
-    String serverFilterBy;
+    boolean firstKeyOnlyProjection;
 
     if (localIndex) {
       iteratorTypeAndScanSize = "PARALLEL " + (saltBuckets == null ? 1 : saltBuckets) + "-WAY";
       expectedTableName = fullTableName;
       keyRanges = "[1,51]";
       clientSortAlgo = "CLIENT MERGE SORT";
-      serverFilterBy = "SERVER FILTER BY FIRST KEY ONLY";
+      firstKeyOnlyProjection = true;
     } else {
       iteratorTypeAndScanSize =
         saltBuckets == null ? "PARALLEL 1-WAY" : "PARALLEL " + saltBuckets + "-WAY";
@@ -219,11 +219,11 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         : " [0," + Short.MIN_VALUE + ",51] - [" + (saltBuckets - 1) + "," + Short.MIN_VALUE
           + ",51]";
       clientSortAlgo = saltBuckets == null ? null : "CLIENT MERGE SORT";
-      serverFilterBy = null;
+      firstKeyOnlyProjection = false;
     }
     assertPlan(conn, query).iteratorType(iteratorTypeAndScanSize).scanType("RANGE SCAN")
       .table(expectedTableName).clientSortAlgo(clientSortAlgo).keyRanges(keyRanges)
-      .serverWhereFilter(serverFilterBy);
+      .serverFirstKeyOnlyProjection(firstKeyOnlyProjection);
 
     String viewIndexName2 = "I_" + generateUniqueName();
     if (localIndex) {
@@ -269,8 +269,8 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
       clientSortAlgo = saltBuckets == null ? null : "CLIENT MERGE SORT";
     }
     assertPlan(conn, query).table(physicalTableName).iteratorType(iteratorTypeAndScanSize)
-      .scanType("RANGE SCAN").keyRanges(keyRanges)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo(clientSortAlgo);
+      .scanType("RANGE SCAN").keyRanges(keyRanges).serverFirstKeyOnlyProjection(true)
+      .clientSortAlgo(clientSortAlgo);
 
     conn.close();
     return new Pair<>(physicalTableName, scan);
