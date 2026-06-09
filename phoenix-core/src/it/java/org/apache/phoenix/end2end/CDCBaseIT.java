@@ -634,8 +634,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     for (String tid : tenantids) {
       try (Connection conn = committer.getConnection(tid)) {
         // Initial inserts for two rows at the same timestamp (one batch, multiple data rows).
-        changes.add(addChange(conn, tableName,
-          new ChangeRow(tid, ts, rowid1, new TreeMap<String, Object>() {
+        changes.add(
+          addChange(conn, tableName, new ChangeRow(tid, ts, rowid1, new TreeMap<String, Object>() {
             {
               put("V1", 1L);
               put("V2", 10L);
@@ -643,8 +643,8 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
               put("B.VB", 100L);
             }
           })));
-        changes.add(addChange(conn, tableName,
-          new ChangeRow(tid, ts, rowid2, new TreeMap<String, Object>() {
+        changes.add(
+          addChange(conn, tableName, new ChangeRow(tid, ts, rowid2, new TreeMap<String, Object>() {
             {
               put("V1", 200L);
               put("V2", 2000L);
