@@ -131,6 +131,24 @@ public abstract class ExplainTable {
     return 0;
   }
 
+  /**
+   * Logical name used to render a table or index in EXPLAIN output. Shared by both the scan
+   * {@code OVER} line's local index decoration and the per scan {@code INDEX} line.
+   * @param table the scanned table or index
+   * @return the display name with any child-view local-index prefix stripped
+   */
+  private static String getExplainIndexName(PTable table) {
+    String indexName = table.getName().getString();
+    if (
+      table.getIndexType() == PTable.IndexType.LOCAL && table.getViewIndexId() != null
+        && indexName.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)
+    ) {
+      int lastIndexOf = indexName.lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+      indexName = indexName.substring(lastIndexOf + 1);
+    }
+    return indexName;
+  }
+
   protected void explain(String prefix, List<String> planSteps,
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
     List<HRegionLocation> regionLocations) {
@@ -157,15 +175,7 @@ public abstract class ExplainTable {
 
     String tableName = tableRef.getTable().getPhysicalName().getString();
     if (tableRef.getTable().getIndexType() == PTable.IndexType.LOCAL) {
-      String indexName = tableRef.getTable().getName().getString();
-      if (
-        tableRef.getTable().getViewIndexId() != null
-          && indexName.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)
-      ) {
-        int lastIndexOf = indexName.lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
-        indexName = indexName.substring(lastIndexOf + 1);
-      }
-      tableName = indexName + "(" + tableName + ")";
+      tableName = getExplainIndexName(tableRef.getTable()) + "(" + tableName + ")";
     }
     buf.append("OVER ").append(tableName);
 
@@ -189,15 +199,7 @@ public abstract class ExplainTable {
     }
 
     PTable.IndexType indexType = tableRef.getTable().getIndexType();
-    String explainIndexName = tableRef.getTable().getName().getString();
-    if (
-      indexType == PTable.IndexType.LOCAL && tableRef.getTable().getViewIndexId() != null
-        && explainIndexName.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)
-    ) {
-      int lastIndexOf =
-        explainIndexName.lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
-      explainIndexName = explainIndexName.substring(lastIndexOf + 1);
-    }
+    String explainIndexName = getExplainIndexName(tableRef.getTable());
     String indexKind = null;
     if (indexType != null) {
       switch (indexType) {
