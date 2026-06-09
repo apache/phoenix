@@ -60,8 +60,10 @@ public class SequenceResultIterator extends DelegateResultIterator {
     super.explain(planSteps, explainPlanAttributesBuilder);
     int nSequences = sequenceManager.getSequenceCount();
     explainPlanAttributesBuilder.setClientSequenceCount(nSequences);
-    planSteps
-      .add("CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S"));
+    String step =
+      "CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S");
+    planSteps.add(step);
+    explainPlanAttributesBuilder.addClientStep(step);
   }
 
   @Override

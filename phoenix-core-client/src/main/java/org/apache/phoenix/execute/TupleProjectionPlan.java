@@ -147,10 +147,12 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
     List<String> planSteps = Lists.newArrayList(explainPlan.getPlanSteps());
     ExplainPlanAttributes explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
     if (postFilter != null) {
-      planSteps.add("CLIENT FILTER BY " + postFilter.toString());
+      String step = "CLIENT FILTER BY " + postFilter.toString();
+      planSteps.add(step);
       ExplainPlanAttributesBuilder newBuilder =
         new ExplainPlanAttributesBuilder(explainPlanAttributes);
       newBuilder.setClientFilterBy(postFilter.toString());
+      newBuilder.addClientStep(step);
       explainPlanAttributes = newBuilder.build();
     }
 

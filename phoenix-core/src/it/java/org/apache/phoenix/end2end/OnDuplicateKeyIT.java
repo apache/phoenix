@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -48,7 +49,7 @@ import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -561,10 +562,13 @@ public class OnDuplicateKeyIT extends ParallelStatsDisabledIT {
     ResultSet rs;
     String selectSql = "SELECT * FROM " + tableName + " WHERE counter1 >= 0";
     if (isIndexCreated) {
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      IndexToolIT.assertExplainPlan(this.indexDDL.contains("local"), actualExplainPlan, tableName,
-        tableName + "_IDX");
+      // Verify the query is served by a RANGE SCAN over the index table. For a local index the
+      // scanned name carries the data table in parentheses, e.g. IDX(DATA).
+      boolean localIndex = this.indexDDL.contains("local");
+      String index = SchemaUtil.normalizeIdentifier(tableName + "_IDX");
+      String expectedTable =
+        localIndex ? index + "(" + SchemaUtil.normalizeIdentifier(tableName) + ")" : index;
+      assertPlan(conn, selectSql).scanType("RANGE SCAN").tableContains(expectedTable);
     }
     rs = conn.createStatement().executeQuery(selectSql);
     assertTrue(rs.next());

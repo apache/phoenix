@@ -24,6 +24,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.KEY_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.schema.PTableType.SYSTEM;
 import static org.apache.phoenix.schema.PTableType.TABLE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -61,7 +62,6 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -694,19 +694,14 @@ public class TenantSpecificTablesDDLIT extends BaseTenantSpecificTablesIT {
       String sql = "SELECT /*+ INDEX(" + fullGrandChildViewName + " " + viewIndexName + ")*/ "
         + "val2, id2, val1, id3, id1 FROM " + fullGrandChildViewName
         + " WHERE id2 = 'a2' AND (id1 = 'a1' OR id1 = 'b1') AND id3 = 3";
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + sql);
-      String actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan
-        .contains("1-WAY POINT LOOKUP ON 2 KEYS OVER " + physicalViewIndexTableName));
-      rs = stmt.executeQuery(sql);
+      assertPlan(conn, sql).scanType("POINT LOOKUP ON 2 KEYS")
+        .tableContains(physicalViewIndexTableName);
+      ResultSet rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
       assertFalse(rs.next());
       sql = "SELECT val2, id2, val1, id3, id1 FROM " + fullGrandChildViewName
         + " WHERE id2 = 'a2' AND (id1 = 'a1' OR id1 = 'b1') AND id3 = 3";
-      rs = stmt.executeQuery("EXPLAIN " + sql);
-      actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(
-        actualQueryPlan.contains("1-WAY POINT LOOKUP ON 2 KEYS OVER " + fullDataTableName));
+      assertPlan(conn, sql).scanType("POINT LOOKUP ON 2 KEYS").table(fullDataTableName);
       rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
       assertFalse(rs.next());

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -31,9 +32,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.Properties;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.types.PChar;
@@ -137,20 +135,14 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
     assertEquals("abc", rs.getString(2));
     assertFalse(rs.next());
 
-    ExplainPlan plan = conn.prepareStatement(queryBuilder.build())
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(tableName, explainPlanAttributes.getTableName());
-    assertEquals(
-      " ['000001111122222','333334444455555',0,*] - ['000001111122222','333334444455555',0,1]",
-      explainPlanAttributes.getKeyRanges());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-    assertEquals(
-      "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [MATCH_STATUS, EXTERNAL_DATASOURCE_KEY]",
-      explainPlanAttributes.getServerAggregate());
-    assertEquals("COUNT(1) > 1", explainPlanAttributes.getClientFilterBy());
+    assertPlan(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+      .table(tableName)
+      .keyRanges(
+        " ['000001111122222','333334444455555',0,*] - ['000001111122222','333334444455555',0,1]")
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverAggregate(
+        "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [MATCH_STATUS, EXTERNAL_DATASOURCE_KEY]")
+      .clientFilterBy("COUNT(1) > 1");
   }
 
   @Test
@@ -190,16 +182,9 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
     assertEquals("a", rs.getString(1));
     assertEquals(4, rs.getLong(2));
     assertFalse(rs.next());
-    ExplainPlan plan = conn.prepareStatement(queryBuilder.build())
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("REVERSE", explainPlanAttributes.getClientSortedBy());
-    assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(tableName, explainPlanAttributes.getTableName());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-    assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]",
-      explainPlanAttributes.getServerAggregate());
+    assertPlan(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY").clientSortedBy("REVERSE")
+      .scanType("FULL SCAN").table(tableName).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]");
   }
 
   @Test
@@ -249,16 +234,9 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
     assertEquals("a", rs.getString(1));
     assertEquals(10, rs.getLong(2));
     assertFalse(rs.next());
-    ExplainPlan plan = conn.prepareStatement(queryBuilder.build())
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("REVERSE", explainPlanAttributes.getClientSortedBy());
-    assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(tableName, explainPlanAttributes.getTableName());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-    assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]",
-      explainPlanAttributes.getServerAggregate());
+    assertPlan(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY").clientSortedBy("REVERSE")
+      .scanType("FULL SCAN").table(tableName).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]");
   }
 
   @Test
@@ -304,13 +282,8 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
     assertEquals("a", rs.getString(1));
     assertEquals(10, rs.getLong(2));
     assertFalse(rs.next());
-    ExplainPlan plan = conn.prepareStatement(queryBuilder.build())
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("REVERSE", explainPlanAttributes.getClientSortedBy());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(tableName, explainPlanAttributes.getTableName());
+    assertPlan(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY").clientSortedBy("REVERSE")
+      .scanType("RANGE SCAN").table(tableName);
   }
 
   @Test
@@ -463,15 +436,9 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
     assertEquals("n", rs.getString(1));
     assertEquals(2, rs.getDouble(2), 1e-6);
     assertFalse(rs.next());
-    ExplainPlan plan = conn.prepareStatement(queryBuilder.build())
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(tableName, explainPlanAttributes.getTableName());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-    assertEquals("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]",
-      explainPlanAttributes.getServerAggregate());
+    assertPlan(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+      .table(tableName).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]");
     TestUtil.analyzeTable(conn, tableName);
     List<KeyRange> splits = TestUtil.getAllSplits(conn, tableName);
     // nGuideposts when stats are enabled, 4 when disabled
@@ -527,9 +494,6 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
       assertEquals("entityId3", rs.getString(1));
       assertEquals(1.4, rs.getDouble(2), 0.001);
       assertFalse(rs.next());
-
-      String expectedPhoenixPlan = "";
-      validateQueryPlan(conn, queryBuilder, expectedPhoenixPlan, null);
     }
   }
 

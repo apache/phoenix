@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.B_VALUE;
 import static org.apache.phoenix.util.TestUtil.C_VALUE;
@@ -40,11 +41,11 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Properties;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -54,8 +55,6 @@ import org.junit.rules.TestName;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
@@ -68,12 +67,10 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
   public TestName name = new TestName();
 
   private String[] indexDDL;
-  private String[] plans;
+  private PlanSpec[] plans;
   private String tableName;
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(DerivedTableIT.class);
-
-  public DerivedTableIT(String[] indexDDL, String[] plans) {
+  public DerivedTableIT(String[] indexDDL, PlanSpec[] plans) {
     this.indexDDL = indexDDL;
     this.plans = plans;
   }
@@ -92,13 +89,6 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
         conn.createStatement().execute(ddl);
       }
     }
-    String[] newplan = new String[plans.length];
-    if (plans != null && plans.length > 0) {
-      for (int i = 0; i < plans.length; i++) {
-        newplan[i] = plans[i].replace(dynamicTableName, tableName);
-      }
-      plans = newplan;
-    }
   }
 
   @After
@@ -108,31 +98,53 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
     assertFalse("refCount leaked", refCountLeaked);
   }
 
+  /** Structured EXPLAIN plan expectations for a derived-table query */
+  private static final class PlanSpec {
+    final String iteratorType;
+    final String tableSuffix;
+    final String serverAggregate;
+    final String[] clientSteps;
+
+    PlanSpec(String iteratorType, String tableSuffix, String serverAggregate,
+      String... clientSteps) {
+      this.iteratorType = iteratorType;
+      this.tableSuffix = tableSuffix;
+      this.serverAggregate = serverAggregate;
+      this.clientSteps = clientSteps;
+    }
+  }
+
+  private void verifyPlan(Connection conn, String query, PlanSpec spec) throws SQLException {
+    assertPlan(conn, query).iteratorType(spec.iteratorType).scanType("FULL SCAN")
+      .table(tableName + spec.tableSuffix).serverAggregate(spec.serverAggregate)
+      .clientSteps(spec.clientSteps);
+  }
+
   @Parameters(name = "DerivedTableIT_{index}") // name is used by failsafe as file name in reports
   public static synchronized Collection<Object> data() {
     List<Object> testCases = Lists.newArrayList();
-    testCases.add(new String[][] {
-      { "CREATE INDEX " + dynamicTableName + "_DERIVED_IDX ON " + dynamicTableName
+    testCases.add(new Object[] {
+      new String[] { "CREATE INDEX " + dynamicTableName + "_DERIVED_IDX ON " + dynamicTableName
         + " (a_byte) INCLUDE (A_STRING, B_STRING)" },
-      { "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dynamicTableName + "_DERIVED_IDX \n"
-        + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"A_STRING\", \"B_STRING\"]\n"
-        + "CLIENT MERGE SORT\n" + "CLIENT SORTED BY [\"B_STRING\"]\n" + "CLIENT SORTED BY [A]\n"
-        + "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" + "CLIENT SORTED BY [A DESC]",
-
-        "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + dynamicTableName + "_DERIVED_IDX \n"
-          + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"A_STRING\", \"B_STRING\"]\n"
-          + "CLIENT MERGE SORT\n" + "CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY [A]\n"
-          + "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]\n" + "CLIENT SORTED BY [A DESC]" } });
-    testCases.add(new String[][] { {},
-      { "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + dynamicTableName + " \n"
-        + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n"
-        + "CLIENT MERGE SORT\n" + "CLIENT SORTED BY [B_STRING]\n" + "CLIENT SORTED BY [A]\n"
-        + "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]\n" + "CLIENT SORTED BY [A DESC]",
-
-        "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + dynamicTableName + " \n"
-          + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]\n"
-          + "CLIENT MERGE SORT\n" + "CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY [A]\n"
-          + "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]\n" + "CLIENT SORTED BY [A DESC]" } });
+      new PlanSpec[] {
+        new PlanSpec("PARALLEL 1-WAY", "_DERIVED_IDX",
+          "SERVER AGGREGATE INTO DISTINCT ROWS BY [\"A_STRING\", \"B_STRING\"]",
+          "CLIENT MERGE SORT", "CLIENT SORTED BY [\"B_STRING\"]", "CLIENT SORTED BY [A]",
+          "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]", "CLIENT SORTED BY [A DESC]"),
+        new PlanSpec("PARALLEL 1-WAY", "_DERIVED_IDX",
+          "SERVER AGGREGATE INTO DISTINCT ROWS BY [\"A_STRING\", \"B_STRING\"]",
+          "CLIENT MERGE SORT", "CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY [A]",
+          "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]", "CLIENT SORTED BY [A DESC]") } });
+    testCases.add(new Object[] { new String[] {},
+      new PlanSpec[] {
+        new PlanSpec("PARALLEL 4-WAY", "",
+          "SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]", "CLIENT MERGE SORT",
+          "CLIENT SORTED BY [B_STRING]", "CLIENT SORTED BY [A]",
+          "CLIENT AGGREGATE INTO DISTINCT ROWS BY [A]", "CLIENT SORTED BY [A DESC]"),
+        new PlanSpec("PARALLEL 4-WAY", "",
+          "SERVER AGGREGATE INTO DISTINCT ROWS BY [A_STRING, B_STRING]", "CLIENT MERGE SORT",
+          "CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY [A]",
+          "CLIENT DISTINCT ON [COLLECTDISTINCT(B)]", "CLIENT SORTED BY [A DESC]") } });
     return testCases;
   }
 
@@ -384,12 +396,7 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN WITH REGIONS " + query);
-      String explainPlanOutput = QueryUtil.getExplainPlan(rs);
-      LOGGER.info("Explain plan output: {}", explainPlanOutput);
-      String[] splitExplainPlan = explainPlanOutput.split("\\n \\(region locations = \\[region=");
-      String[] secondSplitExplainPlan = splitExplainPlan[1].split("]\\)");
-      assertEquals(plans[0], splitExplainPlan[0] + secondSplitExplainPlan[1]);
+      verifyPlan(conn, query, plans[0]);
 
       // distinct b (groupby a, b) groupby a orderby a
       query = "SELECT DISTINCT COLLECTDISTINCT(t.b) FROM (SELECT b_string b, a_string a FROM "
@@ -411,12 +418,7 @@ public class DerivedTableIT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN WITH REGIONS " + query);
-      explainPlanOutput = QueryUtil.getExplainPlan(rs);
-      LOGGER.info("Explain plan output: {}", explainPlanOutput);
-      splitExplainPlan = explainPlanOutput.split("\\n \\(region locations = \\[region=");
-      secondSplitExplainPlan = splitExplainPlan[1].split("]\\)");
-      assertEquals(plans[1], splitExplainPlan[0] + secondSplitExplainPlan[1]);
+      verifyPlan(conn, query, plans[1]);
 
       // (orderby) groupby
       query = "SELECT t.a_string, count(*) FROM (SELECT * FROM " + tableName

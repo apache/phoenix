@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
 import static org.apache.phoenix.mapreduce.index.IndexUpgradeTool.ROLLBACK_OP;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -83,7 +84,6 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -1072,9 +1072,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         conn.createStatement()
           .execute("CREATE TABLE " + table + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-        assertTrue(QueryUtil
-          .getExplainPlan(conn.createStatement().executeQuery("explain select * from " + table))
-          .contains(NS + ":" + TBL));
+        assertPlan(conn, "select * from " + table).tableContains(NS + ":" + TBL);
 
         conn.createStatement().execute("DROP TABLE " + table);
       }
@@ -1085,9 +1083,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         conn.createStatement()
           .execute("CREATE TABLE " + table + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-        assertTrue(QueryUtil
-          .getExplainPlan(conn.createStatement().executeQuery("explain select * from " + table))
-          .contains(NS + "." + TBL));
+        assertPlan(conn, "select * from " + table).tableContains(NS + "." + TBL);
 
         conn.createStatement().execute("DROP TABLE " + table);
       }
@@ -1098,9 +1094,7 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
         conn.createStatement()
           .execute("CREATE TABLE " + table + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-        assertTrue(QueryUtil
-          .getExplainPlan(conn.createStatement().executeQuery("explain select * from " + table))
-          .contains(NS + ":" + NS + "." + TBL));
+        assertPlan(conn, "select * from " + table).tableContains(NS + ":" + NS + "." + TBL);
 
         conn.createStatement().execute("DROP TABLE " + table);
       }

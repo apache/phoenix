@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.io.IOException;
@@ -42,23 +42,15 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.coprocessor.RegionObserver;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.index.BaseLocalIndexIT;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public class FlappingLocalIndexIT extends BaseLocalIndexIT {
-
-  private static final Logger LOGGER = LoggerFactory.getLogger(FlappingLocalIndexIT.class);
 
   public FlappingLocalIndexIT(boolean isNamespaceMapped) {
     super(isNamespaceMapped);
@@ -173,25 +165,13 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
 
       String query = "SELECT * FROM " + tableName + " where v1 like 'a%'";
 
-      String explainPlanOutput = QueryUtil
-        .getExplainPlan(conn1.createStatement().executeQuery("EXPLAIN WITH REGIONS " + query));
-      LOGGER.info("Explain plan output: {}", explainPlanOutput);
-      // MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN is set as 2
-      assertTrue("Expected total " + numRegions + " regions",
-        explainPlanOutput.contains("...total size = " + numRegions));
-
-      ExplainPlan plan = conn1.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL " + numRegions + "-WAY",
-        explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(indexTableName + "(" + indexPhysicalTableName + ")",
-        explainPlanAttributes.getTableName());
-      assertEquals(" [1,'a'] - [1,'b']", explainPlanAttributes.getKeyRanges());
-      assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-      assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
-      assertEquals(trimmedRegionLocations, explainPlanAttributes.getRegionLocations().size());
+      // MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN is set as 2 so getRegionLocations() is trimmed. The
+      // full number of regions is reported via regionLocationsTotalSize.
+      assertPlan(conn1, query).iteratorType("PARALLEL " + numRegions + "-WAY")
+        .scanType("RANGE SCAN").table(indexTableName + "(" + indexPhysicalTableName + ")")
+        .keyRanges(" [1,'a'] - [1,'b']").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .clientSortAlgo("CLIENT MERGE SORT").regionLocationCount(trimmedRegionLocations)
+        .regionLocationsTotalSize(numRegions);
 
       rs = conn1.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -209,17 +189,10 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
       assertFalse(rs.next());
       query = "SELECT t_id, k1, k2,V1 FROM " + tableName + " where v1='a'";
 
-      plan = conn1.prepareStatement(query).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-        .getExplainPlan();
-      explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL " + numRegions + "-WAY",
-        explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(indexTableName + "(" + indexPhysicalTableName + ")",
-        explainPlanAttributes.getTableName());
-      assertEquals(" [1,'a']", explainPlanAttributes.getKeyRanges());
-      assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-      assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
+      assertPlan(conn1, query).iteratorType("PARALLEL " + numRegions + "-WAY")
+        .scanType("RANGE SCAN").table(indexTableName + "(" + indexPhysicalTableName + ")")
+        .keyRanges(" [1,'a']").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .clientSortAlgo("CLIENT MERGE SORT");
 
       rs = conn1.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -233,18 +206,10 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
       assertFalse(rs.next());
       query = "SELECT t_id, k1, k2,V1, k3 FROM " + tableName + " where v1<='z' order by k3";
 
-      plan = conn1.prepareStatement(query).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-        .getExplainPlan();
-      explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL " + numRegions + "-WAY",
-        explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(indexTableName + "(" + indexPhysicalTableName + ")",
-        explainPlanAttributes.getTableName());
-      assertEquals(" [1,*] - [1,'z']", explainPlanAttributes.getKeyRanges());
-      assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-      assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
-      assertEquals("[\"K3\"]", explainPlanAttributes.getServerSortedBy());
+      assertPlan(conn1, query).iteratorType("PARALLEL " + numRegions + "-WAY")
+        .scanType("RANGE SCAN").table(indexTableName + "(" + indexPhysicalTableName + ")")
+        .keyRanges(" [1,*] - [1,'z']").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .clientSortAlgo("CLIENT MERGE SORT").serverSortedBy("[\"K3\"]");
 
       rs = conn1.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -263,18 +228,10 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
 
       query = "SELECT t_id, k1, k2,v1 from " + tableName + " order by V1,t_id";
 
-      plan = conn1.prepareStatement(query).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-        .getExplainPlan();
-      explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL " + numRegions + "-WAY",
-        explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(indexTableName + "(" + indexPhysicalTableName + ")",
-        explainPlanAttributes.getTableName());
-      assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
-      assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-      assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
-      assertNull(explainPlanAttributes.getServerSortedBy());
+      assertPlan(conn1, query).iteratorType("PARALLEL " + numRegions + "-WAY")
+        .scanType("RANGE SCAN").table(indexTableName + "(" + indexPhysicalTableName + ")")
+        .keyRanges(" [1]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .clientSortAlgo("CLIENT MERGE SORT").serverSortedBy(null);
 
       rs = conn1.createStatement().executeQuery(query);
       assertTrue(rs.next());

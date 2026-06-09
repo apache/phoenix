@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -47,8 +48,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.hbase.util.VersionInfo;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -381,14 +380,12 @@ public class OnDuplicateKey2IT extends ParallelStatsDisabledIT {
     }
     assertFalse(resultSet.next());
 
-    ExplainPlan plan =
-      preparedStatement.unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(indexDDL.contains("index")
+    String expectedTable = indexDDL.contains("index")
       ? (indexDDL.contains("local index")
         ? tableName + "_IDX(" + tableName + ")"
         : tableName + "_IDX")
-      : tableName, explainPlanAttributes.getTableName());
+      : tableName;
+    assertPlan(preparedStatement.unwrap(PhoenixPreparedStatement.class)).table(expectedTable);
   }
 
   private static void validateMultiRowDelete(String tableName, Connection conn,
