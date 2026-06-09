@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.salted;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -31,7 +32,6 @@ import java.sql.SQLException;
 import java.util.Properties;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -80,9 +80,7 @@ public class SaltedTableIT extends BaseSaltedTableIT {
       ResultSet rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(1, rs.getInt("a_integer"));
-      query = "explain " + query;
-      rs = conn.createStatement().executeQuery(query);
-      assertTrue(QueryUtil.getExplainPlan(rs).contains("POINT LOOKUP ON 1 KEY"));
+      assertPlan(conn, query).scanType("POINT LOOKUP ON 1 KEY");
     }
   }
 
@@ -108,10 +106,8 @@ public class SaltedTableIT extends BaseSaltedTableIT {
         assertEquals(i, rs.getInt("A"));
         assertEquals(i + 10, rs.getInt("B"));
         assertFalse(rs.next());
-        query = "explain " + query;
-        rs = conn.createStatement().executeQuery(query);
-        assertTrue(QueryUtil.getExplainPlan(rs)
-          .contains("CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER"));
+        assertPlan(conn, query).iteratorType("PARALLEL").scanType("POINT LOOKUP ON 1 KEY")
+          .table(tableName);
       }
     }
   }

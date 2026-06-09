@@ -92,7 +92,9 @@ public class OffsetResultIterator extends DelegateResultIterator {
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     super.explain(planSteps, explainPlanAttributesBuilder);
     explainPlanAttributesBuilder.setClientOffset(offset);
-    planSteps.add("CLIENT OFFSET " + offset);
+    String step = "CLIENT OFFSET " + offset;
+    planSteps.add(step);
+    explainPlanAttributesBuilder.addClientStep(step);
   }
 
   @Override
