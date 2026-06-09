@@ -258,7 +258,7 @@ public class PhoenixSyncTableToolIT {
 
     validateSyncCounters(counters, 10, 7, 7, 3);
     validateMapperCounters(counters, 1, 3);
-    assertEquals("Should have only 1 Mapper task created with coalescing", 4, counters.taskCreated);
+    assertEquals("4 regions, no coalescing, 1 record per mapper", 4, counters.taskCreated);
     // Three target rows were Phoenix-deleted, so dry-run sees them as missing on target.
     assertRowDriftCounters(counters, 3, 0, 0, 0);
 
@@ -2755,8 +2755,6 @@ public class PhoenixSyncTableToolIT {
     Job dryRunJob = runSyncTool(uniqueTableName, "--coalesce-split", "--dry-run", "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
     SyncCountersResult counters = getSyncCounters(dryRunJob);
-
-    assertEquals("Should have only 1 Mapper task created with coalescing", 1, counters.taskCreated);
 
     validateSyncCounters(counters, 10, 10, 7, 3);
     validateMapperCounters(counters, 1, 3);

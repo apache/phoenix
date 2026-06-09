@@ -103,6 +103,7 @@ public class PhoenixSyncTableMapper
   private PTable pTable;
   private byte[] physicalTableName;
   private List<KeyRange> regionKeyRanges;
+  private int currentRangeIndex;
   private PhoenixSyncTableOutputRepository syncTableOutputRepository;
   private PhoenixSyncTableChunkRepairer chunkRepairer;
 
@@ -140,11 +141,14 @@ public class PhoenixSyncTableMapper
 
   /**
    * Extracts region key ranges from the PhoenixInputSplit. Handles both single-region splits and
-   * coalesced splits with multiple regions.
+   * coalesced splits with multiple regions. The mapper processes one region per {@code map()} call,
+   * driven by {@link PhoenixNoOpPerRangeRecordReader} which emits one record per region so YARN
+   * gets per-region progress visibility.
    */
   private void extractRegionBoundariesFromSplit(Context context) {
     PhoenixInputSplit split = (PhoenixInputSplit) context.getInputSplit();
     regionKeyRanges = split.getKeyRanges();
+    currentRangeIndex = 0;
 
     if (regionKeyRanges == null || regionKeyRanges.isEmpty()) {
       throw new IllegalStateException(String.format(
@@ -178,24 +182,31 @@ public class PhoenixSyncTableMapper
   }
 
   /**
-   * Processes mapper region(s) by comparing chunks between source and target clusters. For
-   * coalesced splits, processes each region sequentially. Gets already processed chunks from
-   * checkpoint table, resumes from check pointed progress and records final status for chunks &
-   * mapper (VERIFIED/MISMATCHED).
+   * Processes one mapper region per call by comparing chunks between source and target clusters.
+   * The {@link PhoenixNoOpPerRangeRecordReader} emits one record per region in the split, so for a
+   * coalesced split with N regions this method runs N times - giving YARN per-region progress
+   * visibility instead of jumping from 0% to 100% only when the whole split completes. Gets already
+   * processed chunks from checkpoint table, resumes from check pointed progress and records final
+   * status for chunks & mapper (VERIFIED/MISMATCHED).
    */
   @Override
   protected void map(NullWritable key, DBInputFormat.NullDBWritable value, Context context)
     throws IOException, InterruptedException {
+    LOGGER.info("Mapper being called");
     context.getCounter(PhoenixJobCounters.INPUT_RECORDS).increment(1);
+    if (currentRangeIndex >= regionKeyRanges.size()) {
+      throw new IllegalStateException(
+        String.format("map() called %d times but split for table %s only has %d regions",
+          currentRangeIndex + 1, tableName, regionKeyRanges.size()));
+    }
     try {
-      // Process each region in the split (one or multiple for coalesced splits)
-      for (KeyRange keyRange : regionKeyRanges) {
-        byte[] regionStart = keyRange.getLowerRange();
-        byte[] regionEnd = keyRange.getUpperRange();
-        LOGGER.info("Processing region [{}, {}) from split for table {}",
-          Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd), tableName);
-        processRegion(regionStart, regionEnd, context);
-      }
+      KeyRange keyRange = regionKeyRanges.get(currentRangeIndex++);
+      byte[] regionStart = keyRange.getLowerRange();
+      byte[] regionEnd = keyRange.getUpperRange();
+      LOGGER.info("Processing region {}/{} [{}, {}) from split for table {}", currentRangeIndex,
+        regionKeyRanges.size(), Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd),
+        tableName);
+      processRegion(regionStart, regionEnd, context);
     } catch (SQLException | IOException e) {
       tryClosingResources();
       throw new RuntimeException("Error processing PhoenixSyncTableMapper", e);

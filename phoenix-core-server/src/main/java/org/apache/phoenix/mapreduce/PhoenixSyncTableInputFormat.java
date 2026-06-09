@@ -46,8 +46,9 @@ import org.slf4j.LoggerFactory;
 /**
  * InputFormat designed for PhoenixSyncTableTool that generates splits based on HBase region
  * boundaries. Filters out already-processed mapper regions using checkpoint data, enabling
- * resumable sync jobs. Uses {@link PhoenixNoOpSingleRecordReader} to invoke the mapper once per
- * split (region).
+ * resumable sync jobs. Uses {@link PhoenixNoOpPerRangeRecordReader} to invoke the mapper once per
+ * region within a split (one call for a single-region split, N calls for an N-region coalesced
+ * split).
  */
 public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> {
 
@@ -65,20 +66,23 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
   }
 
   /**
-   * Returns a {@link PhoenixNoOpSingleRecordReader} that emits exactly one dummy record per split.
+   * Returns a {@link PhoenixNoOpPerRangeRecordReader} that emits one dummy record per region in the
+   * split.
    * <p>
    * PhoenixSyncTableMapper doesn't need actual row data from the RecordReader - it extracts region
    * boundaries from the InputSplit and delegates all scanning to the PhoenixSyncTableRegionScanner
-   * coprocessor. Using PhoenixNoOpSingleRecordReader ensures that {@code map()} is called exactly
-   * once per region no matter what scan looks like, avoiding the overhead of the default
-   * PhoenixRecordReader which would call {@code map()} for every row of scan.
+   * coprocessor. Using PhoenixNoOpPerRangeRecordReader ensures that {@code map()} is called once
+   * per region regardless of scan content, avoiding the overhead of the default PhoenixRecordReader
+   * which would call {@code map()} for every row of scan. Emitting one record per region (rather
+   * than one per split) also gives YARN per-region progress visibility for coalesced splits, which
+   * would otherwise jump from 0% to 100% only at completion.
    * @param split Input Split
-   * @return A PhoenixNoOpSingleRecordReader instance
+   * @return A PhoenixNoOpPerRangeRecordReader instance
    */
   @Override
   public RecordReader<NullWritable, DBWritable> createRecordReader(InputSplit split,
     TaskAttemptContext context) {
-    return new PhoenixNoOpSingleRecordReader();
+    return new PhoenixNoOpPerRangeRecordReader();
   }
 
   /**
