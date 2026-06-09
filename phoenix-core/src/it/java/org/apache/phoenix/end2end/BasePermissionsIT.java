@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -85,7 +86,6 @@ import org.junit.runners.MethodSorters;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.phoenix.thirdparty.com.google.common.base.Joiner;
 import org.apache.phoenix.thirdparty.com.google.common.base.Throwables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -754,12 +754,13 @@ public abstract class BasePermissionsIT extends BaseTest {
           ResultSet rs = stmt.executeQuery(readTableSQL);
           assertNotNull(rs);
           int i = 0;
-          String explainPlan = Joiner.on(" ")
-            .join(((PhoenixStatement) stmt).getQueryPlan().getExplainPlan().getPlanSteps());
+          String scannedTable = ((PhoenixStatement) stmt).getQueryPlan().getExplainPlan()
+            .getPlanStepsAsAttributes().getTableName();
           rs = stmt.executeQuery(readTableSQL);
           if (tenantId != null) {
             rs.next();
-            assertFalse(explainPlan.contains("_IDX_"));
+            assertFalse("expected scanned table <" + scannedTable + "> to not be a view index",
+              scannedTable != null && scannedTable.contains("_IDX_"));
             assertEquals(((PhoenixConnection) conn).getTenantId().toString(), tenantId);
             // For tenant ID "o3", the value in table will be 3
             assertEquals(Character.toString(tenantId.charAt(1)), rs.getString(1));
@@ -796,9 +797,7 @@ public abstract class BasePermissionsIT extends BaseTest {
           ResultSet rs = stmt.executeQuery(readTableSQL);
           assertNotNull(rs);
           int i = 0;
-          String explainPlan = Joiner.on(" ")
-            .join(((PhoenixStatement) stmt).getQueryPlan().getExplainPlan().getPlanSteps());
-          assertTrue(explainPlan.contains("_IDX_"));
+          assertPlan(((PhoenixStatement) stmt).getQueryPlan()).tableContains("_IDX_");
           rs = stmt.executeQuery(readTableSQL);
           if (tenantId != null) {
             rs.next();

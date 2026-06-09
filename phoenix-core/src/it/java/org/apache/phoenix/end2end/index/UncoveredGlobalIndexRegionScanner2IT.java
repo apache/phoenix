@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end.index;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -66,7 +67,6 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
@@ -377,9 +377,7 @@ public class UncoveredGlobalIndexRegionScanner2IT extends BaseTest {
         + dataTableName + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the data table
-      rs = conn.createStatement().executeQuery("EXPLAIN " + noIndexQuery);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(explainPlan.contains("FULL SCAN OVER " + dataTableName));
+      assertPlan(conn, noIndexQuery).scanType("FULL SCAN").table(dataTableName);
       rs = conn.createStatement().executeQuery(noIndexQuery);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -587,9 +585,8 @@ public class UncoveredGlobalIndexRegionScanner2IT extends BaseTest {
         + dataTableName + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the data table
-      rs = conn.createStatement().executeQuery("EXPLAIN " + noIndexQuery);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(explainPlan.contains(salted ? "RANGE" : "FULL" + " SCAN OVER " + dataTableName));
+      assertPlan(conn, noIndexQuery).scanType(salted ? "RANGE SCAN" : "FULL SCAN")
+        .table(dataTableName);
       rs = conn.createStatement().executeQuery(noIndexQuery);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));

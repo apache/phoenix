@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.index;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.schema.PTable.QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
@@ -53,7 +54,6 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Test;
@@ -108,11 +108,9 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
 
       String selectFromData = "SELECT /*+ NO_INDEX */ PK1, INT_PK, V1, V2, V4 FROM " + tableName
         + " where V2 >= 3 and V4 LIKE 'V4%'";
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromData);
-      String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualExplainPlan.contains(tableName));
+      assertPlan(conn, selectFromData).table(tableName);
 
-      rs = conn.createStatement().executeQuery(selectFromData);
+      ResultSet rs = conn.createStatement().executeQuery(selectFromData);
       assertTrue(rs.next());
       assertEquals("PK2", rs.getString(1));
       assertEquals(2, rs.getInt(2));
@@ -123,9 +121,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
 
       String selectFromIndex =
         "SELECT PK1, INT_PK, V1, V2, V4 FROM " + tableName + " where V2 >= 3 and V4 LIKE 'V4%'";
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromIndex);
-      actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualExplainPlan.contains(idxName));
+      assertPlan(conn, selectFromIndex).table(idxName);
 
       rs = conn.createStatement().executeQuery(selectFromIndex);
       assertTrue(rs.next());
@@ -166,11 +162,9 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
 
       String selectFromIndex =
         "SELECT PK1, INT_PK, V1, V2, V4, V_NEW FROM " + tableName + " where V1='V199' AND V2=100";
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromIndex);
-      String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualExplainPlan.contains(idxName));
+      assertPlan(conn, selectFromIndex).table(idxName);
 
-      rs = conn.createStatement().executeQuery(selectFromIndex);
+      ResultSet rs = conn.createStatement().executeQuery(selectFromIndex);
       assertTrue(rs.next());
       assertEquals("PK99", rs.getString(1));
       assertEquals(99, rs.getInt(2));
@@ -207,9 +201,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       String selectFromIndex = "SELECT PK1, INT_PK, V1, V4 FROM " + tableName + " where V1='V11'";
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromIndex);
-      String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualExplainPlan.contains(idxName));
+      assertPlan(conn, selectFromIndex).table(idxName);
 
       rs = conn.createStatement().executeQuery(selectFromIndex);
       assertTrue(rs.next());
@@ -408,9 +400,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
 
       String selectFromIndex = "SELECT PK1, INT_PK, A.V2, B.V3, A.V4, B.V5 FROM " + tableName
         + " where A.V4='V42' and B.V3 >= 3";
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromIndex);
-      String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualExplainPlan.contains(idxName));
+      assertPlan(conn, selectFromIndex).table(idxName);
       rs = conn.createStatement().executeQuery(selectFromIndex);
       assertTrue(rs.next());
       assertEquals("PK2", rs.getString(1));
@@ -442,11 +432,9 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
       conn.commit();
       String selectFromData = "SELECT /*+ NO_INDEX */ PK1, INT_PK, V1, V2, V4 FROM " + tableName
         + " where INT_PK = 1 and V4 LIKE 'UpdatedV4'";
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromData);
-      String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualExplainPlan.contains(tableName));
+      assertPlan(conn, selectFromData).table(tableName);
 
-      rs = conn.createStatement().executeQuery(selectFromData);
+      ResultSet rs = conn.createStatement().executeQuery(selectFromData);
       assertTrue(rs.next());
       assertEquals("PK1", rs.getString(1));
       assertEquals(1, rs.getInt(2));
@@ -456,9 +444,7 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
 
       String selectFromIndex =
         "SELECT PK1, INT_PK, V1, V2, V4 FROM " + tableName + " where V2 >= 2 and V4 = 'UpdatedV4'";
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromIndex);
-      actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualExplainPlan.contains(idxName));
+      assertPlan(conn, selectFromIndex).table(idxName);
 
       rs = conn.createStatement().executeQuery(selectFromIndex);
       assertTrue(rs.next());

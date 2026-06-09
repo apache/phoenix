@@ -120,5 +120,6 @@ public class SegmentResultIterator extends BaseResultIterator {
   public void explain(List<String> planSteps,
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     planSteps.add("CLIENT SEGMENT SCAN");
+    explainPlanAttributesBuilder.addClientStep("CLIENT SEGMENT SCAN");
   }
 }

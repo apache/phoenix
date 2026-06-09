@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.ROW2;
 import static org.apache.phoenix.util.TestUtil.ROW3;
 import static org.apache.phoenix.util.TestUtil.ROW4;
@@ -37,9 +38,6 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
 import org.apache.hadoop.hbase.util.Bytes;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -81,15 +79,9 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
-      ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("REVERSE", explainPlanAttributes.getClientSortedBy());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(tableName, explainPlanAttributes.getTableName());
-      assertEquals("SERVER FILTER BY FIRST KEY ONLY AND ENTITY_ID >= '00A323122312312'",
-        explainPlanAttributes.getServerWhereFilter());
+      assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").clientSortedBy("REVERSE")
+        .scanType("FULL SCAN").table(tableName)
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND ENTITY_ID >= '00A323122312312'");
 
       PreparedStatement statement = conn.prepareStatement("SELECT entity_id FROM " + tableName
         + " WHERE organization_id = ? AND entity_id >= ? ORDER BY organization_id DESC, entity_id DESC");
@@ -185,17 +177,9 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
       assertEquals(1, rs.getInt(1));
       assertFalse(rs.next());
 
-      ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("SERIAL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("REVERSE", explainPlanAttributes.getClientSortedBy());
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(indexName, explainPlanAttributes.getTableName());
-      assertEquals(" [not null]", explainPlanAttributes.getKeyRanges());
-      assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-      assertEquals(1, explainPlanAttributes.getServerRowLimit().intValue());
-      assertEquals(1, explainPlanAttributes.getClientRowLimit().intValue());
+      assertPlan(conn, query).iteratorType("SERIAL 1-WAY").clientSortedBy("REVERSE")
+        .scanType("RANGE SCAN").table(indexName).keyRanges(" [not null]")
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverRowLimit(1L).clientRowLimit(1);
     }
 
   }

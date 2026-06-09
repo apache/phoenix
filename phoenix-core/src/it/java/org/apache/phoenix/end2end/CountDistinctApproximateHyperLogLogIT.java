@@ -17,14 +17,12 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.*;
 
 import java.sql.*;
 import java.util.Properties;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
@@ -124,14 +122,9 @@ public class CountDistinctApproximateHyperLogLogIT extends ParallelStatsDisabled
     String query = "SELECT APPROX_COUNT_DISTINCT(i1||i2) FROM " + tableName;
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       prepareTableWithValues(conn, 100);
-      ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals(tableName, explainPlanAttributes.getTableName());
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-      assertEquals("SERVER AGGREGATE INTO SINGLE ROW", explainPlanAttributes.getServerAggregate());
+      assertPlan(conn, query).table(tableName).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW");
     }
   }
 

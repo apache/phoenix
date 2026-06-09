@@ -27,18 +27,16 @@ import java.util.regex.Pattern;
  */
 public final class ExplainTextNormalizer {
 
-  // CLIENT 5-CHUNK -> CLIENT <N>-CHUNK ; matches any non-negative integer immediately before
-  // -CHUNK.
+  // Matches any non-negative integer immediately before -CHUNK.
   private static final Pattern CHUNK_COUNT = Pattern.compile("\\b\\d+-CHUNK\\b");
 
-  // PARALLEL 400-WAY -> PARALLEL <N>-WAY ; matches the iterator parallelism count.
+  // Matches the iterator parallelism count.
   private static final Pattern WAY_COUNT = Pattern.compile("\\b\\d+-WAY\\b");
 
-  // 1234 ROWS 5678 BYTES (stats-row-count gated; we strip when present).
+  // Matches the stats-row-count gated row count and byte count.
   private static final Pattern ROWS_BYTES = Pattern.compile("\\d+ ROWS \\d+ BYTES\\s*");
 
-  // " (region locations = [...]) " emitted via planSteps.add(regionLocationPlan); the line always
-  // begins with the leading-space form of ExplainTable.REGION_LOCATIONS.
+  // Matches the region locations line.
   private static final String REGION_LOCATIONS_PREFIX = " (region locations = ";
 
   /**

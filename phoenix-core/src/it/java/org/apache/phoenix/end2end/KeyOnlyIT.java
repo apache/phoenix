@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
@@ -32,9 +33,6 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.List;
 import java.util.Properties;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -145,15 +143,8 @@ public class KeyOnlyIT extends ParallelStatsEnabledIT {
     assertEquals(0, rs.getInt(1));
     assertFalse(rs.next());
 
-    ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-      .optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals("SERIAL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(tableName, explainPlanAttributes.getTableName());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-    assertEquals(1, explainPlanAttributes.getServerRowLimit().intValue());
-    assertEquals(1, explainPlanAttributes.getClientRowLimit().intValue());
+    assertPlan(conn, query).iteratorType("SERIAL 1-WAY").scanType("FULL SCAN").table(tableName)
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverRowLimit(1L).clientRowLimit(1);
   }
 
   @Test

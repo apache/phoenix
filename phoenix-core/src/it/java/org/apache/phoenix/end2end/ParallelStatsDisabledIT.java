@@ -17,20 +17,16 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.Map;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.QueryBuilder;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -71,13 +67,5 @@ public abstract class ParallelStatsDisabledIT extends BaseTest {
       assertTrue(e.getMessage().contains(expectedPhoenixExceptionMsg));
     }
     return rs;
-  }
-
-  public static void validateQueryPlan(Connection conn, QueryBuilder queryBuilder,
-    String expectedPhoenixPlan, String expectedSparkPlan) throws SQLException {
-    if (StringUtils.isNotBlank(expectedPhoenixPlan)) {
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + queryBuilder.build());
-      assertEquals(expectedPhoenixPlan, QueryUtil.getExplainPlan(rs));
-    }
   }
 }
