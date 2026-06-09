@@ -63,6 +63,9 @@ public final class ExplainJsonNormalizer {
     if (obj.has("splitsChunk")) {
       obj.set("splitsChunk", NullNode.getInstance());
     }
+    if (obj.has("regionsPlanned")) {
+      obj.set("regionsPlanned", NullNode.getInstance());
+    }
     if (obj.has("estimatedRows")) {
       obj.set("estimatedRows", NullNode.getInstance());
     }

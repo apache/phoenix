@@ -641,6 +641,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
   }
 
   @Override
+  protected int getSplitCount() {
+    return splits == null ? 0 : splits.size();
+  }
+
+  @Override
   public List<List<Scan>> getScans() {
     if (scans == null) return Collections.emptyList();
     else return scans;

@@ -175,6 +175,33 @@ public final class ExplainPlanTestUtil {
       return this;
     }
 
+    /** Assert the chosen per-scan index (or data table) name. */
+    public ExplainPlanAssert indexName(String expected) {
+      assertEquals(at("indexName"), expected, attributes.getIndexName());
+      return this;
+    }
+
+    /**
+     * Assert the per-scan index kind token: {@code "LOCAL"}, {@code "GLOBAL"}, or
+     * {@code "UNCOVERED GLOBAL"} (null for a data-table target).
+     */
+    public ExplainPlanAssert indexKind(String expected) {
+      assertEquals(at("indexKind"), expected, attributes.getIndexKind());
+      return this;
+    }
+
+    /** Assert the salt bucket count of the scanned table (null when not salted). */
+    public ExplainPlanAssert saltBuckets(Integer expected) {
+      assertEquals(at("saltBuckets"), expected, attributes.getSaltBuckets());
+      return this;
+    }
+
+    /** Assert the number of regions the scan is planned to hit (null when unknown). */
+    public ExplainPlanAssert regionsPlanned(Integer expected) {
+      assertEquals(at("regionsPlanned"), expected, attributes.getRegionsPlanned());
+      return this;
+    }
+
     /** Assert the hex-string row-value-constructor offset marker. */
     public ExplainPlanAssert hexStringRVCOffset(String expected) {
       assertEquals(at("hexStringRVCOffset"), expected, attributes.getHexStringRVCOffset());
