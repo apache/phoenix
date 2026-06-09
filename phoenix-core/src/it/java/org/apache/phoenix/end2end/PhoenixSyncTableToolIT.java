@@ -171,7 +171,7 @@ public class PhoenixSyncTableToolIT {
 
     // Pin the time window so the dry-run and repair share the same checkpoint PK.
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     // Phase 1: dry-run only — verify checkpoint table sees only VERIFIED/MISMATCHED rows.
     Job dryRunJob = runSyncToolWithChunkSize(uniqueTableName, 1024, "--dry-run", "--from-time",
@@ -493,7 +493,7 @@ public class PhoenixSyncTableToolIT {
           targetRows);
       });
     }
-    String toTime = String.valueOf(System.currentTimeMillis());
+    String toTime = String.valueOf(waitUntilWallClockPasses(System.currentTimeMillis()));
 
     for (String tenantId : tenantIds) {
       Connection tenantSourceConn = getTenantConnection(sourceConnection, tenantId);
@@ -537,12 +537,15 @@ public class PhoenixSyncTableToolIT {
     // Insert data BEFORE the time range window
     insertTestData(sourceConnection, uniqueTableName, 1, 10);
 
-    long startTime = System.currentTimeMillis();
+    // HBase Scan.setTimeRange is half-open [from, to); Phoenix UPSERT batches commit at one
+    // ms-resolution timestamp. Wait for the wall clock to advance past the just-committed
+    // boundary cells so they land strictly outside the [startTime, endTime) window.
+    long startTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     // Insert data WITHIN the time range window
     insertTestData(sourceConnection, uniqueTableName, 11, 20);
 
-    long endTime = System.currentTimeMillis();
+    long endTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     // Insert data AFTER the time range window
     insertTestData(sourceConnection, uniqueTableName, 21, 30);
@@ -589,7 +592,7 @@ public class PhoenixSyncTableToolIT {
 
     // Capture consistent time range for both runs
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     PartialRerunSetup setup = setupPartialRerun(uniqueTableName, fromTime, toTime, 1, 0.75);
     validateSyncCountersWithMinChunk(setup.firstRunCounters, 100, 100, 1, 1);
@@ -669,7 +672,7 @@ public class PhoenixSyncTableToolIT {
     introduceMismatchesByIds(uniqueTableName, mismatchIds);
 
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     // First run with large chunk size, then delete 75% of chunks for partial rerun.
     int largeChunkSize = 10240;
@@ -734,7 +737,7 @@ public class PhoenixSyncTableToolIT {
     introduceMismatchesByIds(uniqueTableName, mismatchIds);
 
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     PartialRerunSetup setup = setupPartialRerun(uniqueTableName, fromTime, toTime, 1, 0.75);
     SyncCountersResult counters1 = setup.firstRunCounters;
@@ -793,7 +796,7 @@ public class PhoenixSyncTableToolIT {
 
     // Capture consistent time range for both runs (ensures checkpoint lookup will match)
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     // Run sync tool for the FIRST time
     Job job1 = runSyncTool(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
@@ -841,7 +844,7 @@ public class PhoenixSyncTableToolIT {
 
     // Capture consistent time range for both runs
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     // Run sync tool for the FIRST time (no differences, all chunks verified)
     Job job1 = runSyncToolWithChunkSize(uniqueTableName, 1024, "--from-time",
@@ -920,7 +923,7 @@ public class PhoenixSyncTableToolIT {
     // Pin the time window so the background dry-run pass and the repair pass below share
     // the same checkpoint PK and the repair pass overwrites MISMATCHED → REPAIRED in place.
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     Configuration conf = sourceClusterConf();
     String[] args = new String[] { "--table-name", uniqueTableName, "--target-cluster",
@@ -978,7 +981,7 @@ public class PhoenixSyncTableToolIT {
     conf.setInt(QueryServices.SYNC_TABLE_RPC_RETRIES_COUNTER, customRpcRetries);
 
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
     Job job = runSyncToolWithChunkSize(uniqueTableName, 1, conf, "--dry-run", "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
 
@@ -1066,7 +1069,7 @@ public class PhoenixSyncTableToolIT {
 
     // Capture time range for the sync
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     // Run splits on source/target concurrently with the sync.
     Runnable splitJoiner = startConcurrentRegionWork(
@@ -1126,7 +1129,7 @@ public class PhoenixSyncTableToolIT {
     introduceMismatchesByIds(uniqueTableName, mismatchIds);
 
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     Job dryRunJob = runSyncTool(uniqueTableName, "--dry-run", "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
@@ -1163,7 +1166,7 @@ public class PhoenixSyncTableToolIT {
     introduceMismatchesByIds(uniqueTableName, mismatchIds);
 
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     RepairRunResult firstRun = runSyncToolWithRepair(uniqueTableName, "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
@@ -1300,7 +1303,7 @@ public class PhoenixSyncTableToolIT {
 
     // Capture time range for the sync
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     // Run merges on source/target concurrently with the sync.
     Runnable mergeJoiner =
@@ -1354,7 +1357,7 @@ public class PhoenixSyncTableToolIT {
     conf.setLong(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, 1);
 
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     // Dry-run with paging to assert chunk-count expansion under mid-chunk timeouts.
     Job job = runSyncToolWithChunkSize(uniqueTableName, chunkSize, conf, "--dry-run", "--from-time",
@@ -1421,7 +1424,7 @@ public class PhoenixSyncTableToolIT {
       "splits");
 
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     // Dry-run sync while splits are happening — drift must remain on target so the chunk-count
     // assertion below has work to do (otherwise an inline repair would converge mid-pass).
@@ -1472,7 +1475,8 @@ public class PhoenixSyncTableToolIT {
     // Try to run sync tool on a NON-EXISTENT table
     String nonExistentTable = "NON_EXISTENT_TABLE_" + System.currentTimeMillis();
     String[] args = new String[] { "--table-name", nonExistentTable, "--target-cluster",
-      targetZkQuorum, "--run-foreground", "--to-time", String.valueOf(System.currentTimeMillis()) };
+      targetZkQuorum, "--run-foreground", "--to-time",
+      String.valueOf(waitUntilWallClockPasses(System.currentTimeMillis())) };
 
     assertSyncToolFails(args,
       String.format("Table %s does not exist, mapper setup should fail", nonExistentTable));
@@ -1485,9 +1489,9 @@ public class PhoenixSyncTableToolIT {
 
     // Try to run sync tool with INVALID target cluster ZK quorum.
     String invalidTargetZk = "invalid-zk-host:2181:/hbase";
-    String[] args =
-      new String[] { "--table-name", uniqueTableName, "--target-cluster", invalidTargetZk,
-        "--run-foreground", "--to-time", String.valueOf(System.currentTimeMillis()) };
+    String[] args = new String[] { "--table-name", uniqueTableName, "--target-cluster",
+      invalidTargetZk, "--run-foreground", "--to-time",
+      String.valueOf(waitUntilWallClockPasses(System.currentTimeMillis())) };
 
     assertSyncToolFails(args,
       String.format("Target cluster %s is invalid, mapper setup should fail", invalidTargetZk));
@@ -1505,7 +1509,8 @@ public class PhoenixSyncTableToolIT {
     // Don't create table on target - this will cause mapper map() to fail
     // when trying to scan the non-existent target table
     String[] args = new String[] { "--table-name", uniqueTableName, "--target-cluster",
-      targetZkQuorum, "--run-foreground", "--to-time", String.valueOf(System.currentTimeMillis()) };
+      targetZkQuorum, "--run-foreground", "--to-time",
+      String.valueOf(waitUntilWallClockPasses(System.currentTimeMillis())) };
 
     assertSyncToolFails(args,
       String.format(
@@ -1530,7 +1535,7 @@ public class PhoenixSyncTableToolIT {
     // never get overwritten — leaving stale MISMATCHED rows that the post-recovery validation
     // would (correctly) flag.
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     // Run once first so the checkpoint table exists; we can only attach a coprocessor to a
     // table that's already been created.
@@ -1582,7 +1587,7 @@ public class PhoenixSyncTableToolIT {
 
     TestUtil.addCoprocessor(targetConnection, uniqueTableName, RepairBatchFailingObserver.class);
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
     try {
       // dryRun + repair: dry-run only reads from target, so it succeeds; repair flushes
       // mutations and trips the observer.
@@ -1626,7 +1631,7 @@ public class PhoenixSyncTableToolIT {
 
     // Capture time range for both runs (ensures checkpoint lookup will match)
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     // First run + 75% deletion preamble (shared with other partial-rerun tests)
     PartialRerunSetup setup = setupPartialRerun(uniqueTableName, fromTime, toTime, 1, 0.75);
@@ -1720,9 +1725,9 @@ public class PhoenixSyncTableToolIT {
     assertTargetName(uniqueTableName, rowId, "carol");
 
     // --read-all-versions so verifier and repairer both see the hidden version.
-    RepairRunResult result =
-      runSyncToolWithRepair(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
-        String.valueOf(System.currentTimeMillis()), "--read-all-versions");
+    RepairRunResult result = runSyncToolWithRepair(uniqueTableName, "--from-time",
+      String.valueOf(fromTime), "--to-time",
+      String.valueOf(waitUntilWallClockPasses(System.currentTimeMillis())), "--read-all-versions");
 
     assertTrue("Dry-run should succeed", result.dryRunJob.isSuccessful());
     assertTrue("Repair should succeed", result.repairJob.isSuccessful());
@@ -2306,7 +2311,7 @@ public class PhoenixSyncTableToolIT {
     sourceConnection.commit();
 
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     Configuration conf = sourceClusterConfWithRepairBatchSize(2);
 
@@ -2361,7 +2366,8 @@ public class PhoenixSyncTableToolIT {
 
     RepairRunResult result =
       runSyncToolWithRepair(uniqueTableName, "--from-time", String.valueOf(fromTime), "--to-time",
-        String.valueOf(System.currentTimeMillis()), "--raw-scan", "--read-all-versions");
+        String.valueOf(waitUntilWallClockPasses(System.currentTimeMillis())), "--raw-scan",
+        "--read-all-versions");
     assertTrue("Repair should succeed", result.repairJob.isSuccessful());
 
     SyncCountersResult dryRunCounters = getSyncCounters(result.dryRunJob);
@@ -2475,7 +2481,7 @@ public class PhoenixSyncTableToolIT {
     targetConnection.commit();
 
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     Configuration conf = sourceClusterConfWithRepairBatchSize(4);
 
@@ -2744,7 +2750,7 @@ public class PhoenixSyncTableToolIT {
     // Enable split coalescing via command-line parameter, all regions will be coalesced into one
     // mapper. Use a pinned window so the dry-run and repair share the same checkpoint PK.
     long fromTime = 0L;
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     Job dryRunJob = runSyncTool(uniqueTableName, "--coalesce-split", "--dry-run", "--from-time",
       String.valueOf(fromTime), "--to-time", String.valueOf(toTime));
@@ -2783,7 +2789,7 @@ public class PhoenixSyncTableToolIT {
     waitForReplication(targetConnection, uniqueTableName, 10);
     verifyDataIdentical(sourceConnection, targetConnection, uniqueTableName);
 
-    long toTime = System.currentTimeMillis();
+    long toTime = waitUntilWallClockPasses(System.currentTimeMillis());
 
     long maxLookbackAgeSeconds = 5;
     Configuration conf = sourceClusterConf();
@@ -3784,7 +3790,7 @@ public class PhoenixSyncTableToolIT {
    */
   private long captureBaselineChunkCount(String tableName, int chunkSize) throws Exception {
     Job baselineJob = runSyncToolWithChunkSize(tableName, chunkSize, "--dry-run", "--from-time",
-      "0", "--to-time", String.valueOf(System.currentTimeMillis()));
+      "0", "--to-time", String.valueOf(waitUntilWallClockPasses(System.currentTimeMillis())));
     long chunkCount = baselineJob.getCounters().findCounter(SyncCounters.CHUNKS_VERIFIED).getValue()
       + baselineJob.getCounters().findCounter(SyncCounters.CHUNKS_MISMATCHED).getValue();
     cleanupCheckpointTable(sourceConnection, tableName, targetZkQuorum, null);
@@ -3837,7 +3843,8 @@ public class PhoenixSyncTableToolIT {
   private RepairRunResult runSyncToolWithRepair(String tableName, int chunkSize,
     String... additionalArgs) throws Exception {
     long fromTime = parseLongFlag(additionalArgs, "--from-time", 0L);
-    long toTime = parseLongFlag(additionalArgs, "--to-time", System.currentTimeMillis());
+    long toTime = parseLongFlag(additionalArgs, "--to-time",
+      waitUntilWallClockPasses(System.currentTimeMillis()));
     String[] pinnedArgs = ensureTimeArgs(additionalArgs, fromTime, toTime);
 
     String[] dryRunArgs = appendArg(pinnedArgs, "--dry-run");
@@ -3947,12 +3954,13 @@ public class PhoenixSyncTableToolIT {
     List<String> additionalArgsList = Arrays.asList(additionalArgs);
     argsList.addAll(additionalArgsList);
 
-    // If --to-time is not explicitly provided in additionalArgs, add current time
-    // This is needed because the default is now (current time - 1 hour) which won't
-    // capture data inserted immediately before running the sync tool
+    // If --to-time is not explicitly provided in additionalArgs, add current time. The default
+    // is now (current time - 1 hour) which won't capture data inserted immediately before
+    // running the sync tool. Wait for the wall clock to advance past the just-committed cells
+    // so they fall strictly inside the half-open Scan.setTimeRange(from, to) upper bound.
     if (!additionalArgsList.contains("--to-time")) {
       argsList.add("--to-time");
-      argsList.add(String.valueOf(System.currentTimeMillis()));
+      argsList.add(String.valueOf(waitUntilWallClockPasses(System.currentTimeMillis())));
     }
 
     String[] args = argsList.toArray(new String[0]);
