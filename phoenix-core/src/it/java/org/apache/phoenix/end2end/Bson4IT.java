@@ -642,9 +642,9 @@ public class Bson4IT extends ParallelStatsDisabledIT {
           .append("browserling", new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
           .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft"))
           .append("track[0].shot[2][0].city.problem[2]",
-            new BsonDocument().append("$ADD", new BsonArray(Arrays.asList(
-              new BsonString("track[0].shot[2][0].city.problem[2]"),
-              new BsonDouble(529.435))))))
+            new BsonDocument().append("$ADD",
+              new BsonArray(Arrays.asList(new BsonString("track[0].shot[2][0].city.problem[2]"),
+                new BsonDouble(529.435))))))
         .append("$UNSET",
           new BsonDocument().append("track[0].shot[2][0].city.flame", new BsonNull()));
 
@@ -728,9 +728,9 @@ public class Bson4IT extends ParallelStatsDisabledIT {
           .append("new_field1", new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
           .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft_new_val"))
           .append("track[0].shot[2][0].city.problem[2]",
-            new BsonDocument().append("$ADD", new BsonArray(Arrays.asList(
-              new BsonString("track[0].shot[2][0].city.problem[2]"),
-              new BsonInt32(123))))));
+            new BsonDocument().append("$ADD",
+              new BsonArray(Arrays.asList(new BsonString("track[0].shot[2][0].city.problem[2]"),
+                new BsonInt32(123))))));
 
       stmt = conn.prepareStatement(
         "UPSERT INTO " + tableName + " VALUES (?) ON DUPLICATE KEY UPDATE COL = CASE WHEN"
@@ -832,9 +832,9 @@ public class Bson4IT extends ParallelStatsDisabledIT {
           .append("browserling", new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
           .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft"))
           .append("track[0].shot[2][0].city.problem[2]",
-            new BsonDocument().append("$ADD", new BsonArray(Arrays.asList(
-              new BsonString("track[0].shot[2][0].city.problem[2]"),
-              new BsonDouble(529.435))))))
+            new BsonDocument().append("$ADD",
+              new BsonArray(Arrays.asList(new BsonString("track[0].shot[2][0].city.problem[2]"),
+                new BsonDouble(529.435))))))
         .append("$UNSET",
           new BsonDocument().append("track[0].shot[2][0].city.flame", new BsonNull()));
 
@@ -914,9 +914,9 @@ public class Bson4IT extends ParallelStatsDisabledIT {
           .append("new_field1", new BsonBinary(PDouble.INSTANCE.toBytes(-505169340.54880095)))
           .append("track[0].shot[2][0].city.standard[5]", new BsonString("soft_new_val"))
           .append("track[0].shot[2][0].city.problem[2]",
-            new BsonDocument().append("$ADD", new BsonArray(Arrays.asList(
-              new BsonString("track[0].shot[2][0].city.problem[2]"),
-              new BsonInt32(123))))));
+            new BsonDocument().append("$ADD",
+              new BsonArray(Arrays.asList(new BsonString("track[0].shot[2][0].city.problem[2]"),
+                new BsonInt32(123))))));
 
       stmt = conn.prepareStatement(
         "UPSERT INTO " + tableName + " VALUES (?) ON DUPLICATE KEY UPDATE_ONLY COL = CASE WHEN"
