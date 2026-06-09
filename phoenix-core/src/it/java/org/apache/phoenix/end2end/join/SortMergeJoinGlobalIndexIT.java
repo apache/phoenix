@@ -65,9 +65,8 @@ public class SortMergeJoinGlobalIndexIT extends SortMergeJoinIT {
       .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"S.:supplier_id\"]")
       .clientSortAlgo("CLIENT MERGE SORT").end().rhs()
       .abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(true)
-      .clientSortedBy("[\"I.0:supplier_id\"]").lhs()
-      .scanType("FULL SCAN").table(itemIndex).serverSortedBy("[\"I.:item_id\"]")
-      .clientSortAlgo("CLIENT MERGE SORT").end().rhs()
+      .clientSortedBy("[\"I.0:supplier_id\"]").lhs().scanType("FULL SCAN").table(itemIndex)
+      .serverSortedBy("[\"I.:item_id\"]").clientSortAlgo("CLIENT MERGE SORT").end().rhs()
       .scanType("FULL SCAN").table(order).serverWhereFilter("SERVER FILTER BY QUANTITY < 5000")
       .serverSortedBy("[\"O.item_id\"]").clientSortAlgo("CLIENT MERGE SORT").end().end();
   }
@@ -96,8 +95,8 @@ public class SortMergeJoinGlobalIndexIT extends SortMergeJoinIT {
     assertPlan(attributes).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(false)
       .clientRowLimit(4).lhs().scanType("FULL SCAN").table(itemIndex)
       .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"I.:item_id\"]")
-      .clientSortAlgo("CLIENT MERGE SORT").end().rhs().scanType("FULL SCAN")
-      .table(order).serverSortedBy(queryIndex == 0 ? "[\"O.item_id\"]" : "[\"item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end().rhs().scanType("FULL SCAN").table(order)
+      .serverSortedBy(queryIndex == 0 ? "[\"O.item_id\"]" : "[\"item_id\"]")
       .clientSortAlgo("CLIENT MERGE SORT").end();
   }
 

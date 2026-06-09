@@ -35,16 +35,16 @@ import org.apache.phoenix.schema.PColumn;
  * Strings containing entire plan.
  */
 @JsonPropertyOrder({ "abstractExplainPlan", "hint", "explainScanType", "consistency", "tableName",
-  "keyRanges", "scanTimeRangeMin", "scanTimeRangeMax", "splitsChunk", "useRoundRobinIterator",
-  "samplingRate", "hexStringRVCOffset", "iteratorTypeAndScanSize", "estimatedRows",
-  "estimatedSizeInBytes", "serverWhereFilter", "serverDistinctFilter", "serverMergeColumns",
-  "serverArrayElementProjection", "serverAggregate", "serverGroupByLimit", "serverSortedBy",
-  "serverOffset", "serverRowLimit", "clientFilterBy", "clientAggregate", "clientDistinctFilter",
-  "clientAfterAggregate", "clientSortAlgo", "clientSortedBy", "clientOffset", "clientRowLimit",
-  "clientSequenceCount", "clientCursorName", "clientSteps", "lhsJoinQueryExplainPlan",
-  "rhsJoinQueryExplainPlan", "subPlans", "dynamicServerFilter", "afterJoinFilter",
-  "joinScannerLimit", "sortMergeSkipMerge", "regionLocations", "regionLocationsTotalSize",
-  "numRegionLocationLookups" })
+  "keyRanges", "indexName", "indexKind", "saltBuckets", "regionsPlanned", "scanTimeRangeMin",
+  "scanTimeRangeMax", "splitsChunk", "useRoundRobinIterator", "samplingRate", "hexStringRVCOffset",
+  "iteratorTypeAndScanSize", "estimatedRows", "estimatedSizeInBytes", "serverWhereFilter",
+  "serverDistinctFilter", "serverMergeColumns", "serverArrayElementProjection", "serverAggregate",
+  "serverGroupByLimit", "serverSortedBy", "serverOffset", "serverRowLimit", "clientFilterBy",
+  "clientAggregate", "clientDistinctFilter", "clientAfterAggregate", "clientSortAlgo",
+  "clientSortedBy", "clientOffset", "clientRowLimit", "clientSequenceCount", "clientCursorName",
+  "clientSteps", "lhsJoinQueryExplainPlan", "rhsJoinQueryExplainPlan", "subPlans",
+  "dynamicServerFilter", "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge",
+  "regionLocations", "regionLocationsTotalSize", "numRegionLocationLookups" })
 public class ExplainPlanAttributes {
 
   // Plan identity and scan-level metadata
@@ -54,6 +54,10 @@ public class ExplainPlanAttributes {
   private final Consistency consistency;
   private final String tableName;
   private final String keyRanges;
+  private final String indexName;
+  private final String indexKind;
+  private final Integer saltBuckets;
+  private final Integer regionsPlanned;
   private final Long scanTimeRangeMin;
   private final Long scanTimeRangeMax;
   private final Integer splitsChunk;
@@ -113,6 +117,10 @@ public class ExplainPlanAttributes {
     this.consistency = null;
     this.tableName = null;
     this.keyRanges = null;
+    this.indexName = null;
+    this.indexKind = null;
+    this.saltBuckets = null;
+    this.regionsPlanned = null;
     this.scanTimeRangeMin = null;
     this.scanTimeRangeMax = null;
     this.splitsChunk = null;
@@ -155,8 +163,9 @@ public class ExplainPlanAttributes {
   }
 
   public ExplainPlanAttributes(String abstractExplainPlan, Hint hint, String explainScanType,
-    Consistency consistency, String tableName, String keyRanges, Long scanTimeRangeMin,
-    Long scanTimeRangeMax, Integer splitsChunk, boolean useRoundRobinIterator, Double samplingRate,
+    Consistency consistency, String tableName, String keyRanges, String indexName, String indexKind,
+    Integer saltBuckets, Integer regionsPlanned, Long scanTimeRangeMin, Long scanTimeRangeMax,
+    Integer splitsChunk, boolean useRoundRobinIterator, Double samplingRate,
     String hexStringRVCOffset, String iteratorTypeAndScanSize, Long estimatedRows,
     Long estimatedSizeInBytes, String serverWhereFilter, String serverDistinctFilter,
     Set<PColumn> serverMergeColumns, boolean serverArrayElementProjection, String serverAggregate,
@@ -175,6 +184,10 @@ public class ExplainPlanAttributes {
     this.consistency = consistency;
     this.tableName = tableName;
     this.keyRanges = keyRanges;
+    this.indexName = indexName;
+    this.indexKind = indexKind;
+    this.saltBuckets = saltBuckets;
+    this.regionsPlanned = regionsPlanned;
     this.scanTimeRangeMin = scanTimeRangeMin;
     this.scanTimeRangeMax = scanTimeRangeMax;
     this.splitsChunk = splitsChunk;
@@ -240,6 +253,22 @@ public class ExplainPlanAttributes {
 
   public String getKeyRanges() {
     return keyRanges;
+  }
+
+  public String getIndexName() {
+    return indexName;
+  }
+
+  public String getIndexKind() {
+    return indexKind;
+  }
+
+  public Integer getSaltBuckets() {
+    return saltBuckets;
+  }
+
+  public Integer getRegionsPlanned() {
+    return regionsPlanned;
   }
 
   public Long getScanTimeRangeMin() {
@@ -411,6 +440,10 @@ public class ExplainPlanAttributes {
     private Consistency consistency;
     private String tableName;
     private String keyRanges;
+    private String indexName;
+    private String indexKind;
+    private Integer saltBuckets;
+    private Integer regionsPlanned;
     private Long scanTimeRangeMin;
     private Long scanTimeRangeMax;
     private Integer splitsChunk;
@@ -462,6 +495,10 @@ public class ExplainPlanAttributes {
       this.consistency = explainPlanAttributes.getConsistency();
       this.tableName = explainPlanAttributes.getTableName();
       this.keyRanges = explainPlanAttributes.getKeyRanges();
+      this.indexName = explainPlanAttributes.getIndexName();
+      this.indexKind = explainPlanAttributes.getIndexKind();
+      this.saltBuckets = explainPlanAttributes.getSaltBuckets();
+      this.regionsPlanned = explainPlanAttributes.getRegionsPlanned();
       this.scanTimeRangeMin = explainPlanAttributes.getScanTimeRangeMin();
       this.scanTimeRangeMax = explainPlanAttributes.getScanTimeRangeMax();
       this.splitsChunk = explainPlanAttributes.getSplitsChunk();
@@ -531,6 +568,26 @@ public class ExplainPlanAttributes {
 
     public ExplainPlanAttributesBuilder setKeyRanges(String keyRanges) {
       this.keyRanges = keyRanges;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setIndexName(String indexName) {
+      this.indexName = indexName;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setIndexKind(String indexKind) {
+      this.indexKind = indexKind;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setSaltBuckets(Integer saltBuckets) {
+      this.saltBuckets = saltBuckets;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setRegionsPlanned(Integer regionsPlanned) {
+      this.regionsPlanned = regionsPlanned;
       return this;
     }
 
@@ -743,15 +800,16 @@ public class ExplainPlanAttributes {
 
     public ExplainPlanAttributes build() {
       return new ExplainPlanAttributes(abstractExplainPlan, hint, explainScanType, consistency,
-        tableName, keyRanges, scanTimeRangeMin, scanTimeRangeMax, splitsChunk,
-        useRoundRobinIterator, samplingRate, hexStringRVCOffset, iteratorTypeAndScanSize,
-        estimatedRows, estimatedSizeInBytes, serverWhereFilter, serverDistinctFilter,
-        serverMergeColumns, serverArrayElementProjection, serverAggregate, serverGroupByLimit,
-        serverSortedBy, serverOffset, serverRowLimit, clientFilterBy, clientAggregate,
-        clientDistinctFilter, clientAfterAggregate, clientSortAlgo, clientSortedBy, clientOffset,
-        clientRowLimit, clientSequenceCount, clientCursorName, clientSteps, lhsJoinQueryExplainPlan,
-        rhsJoinQueryExplainPlan, subPlans, dynamicServerFilter, afterJoinFilter, joinScannerLimit,
-        sortMergeSkipMerge, regionLocations, regionLocationsTotalSize, numRegionLocationLookups);
+        tableName, keyRanges, indexName, indexKind, saltBuckets, regionsPlanned, scanTimeRangeMin,
+        scanTimeRangeMax, splitsChunk, useRoundRobinIterator, samplingRate, hexStringRVCOffset,
+        iteratorTypeAndScanSize, estimatedRows, estimatedSizeInBytes, serverWhereFilter,
+        serverDistinctFilter, serverMergeColumns, serverArrayElementProjection, serverAggregate,
+        serverGroupByLimit, serverSortedBy, serverOffset, serverRowLimit, clientFilterBy,
+        clientAggregate, clientDistinctFilter, clientAfterAggregate, clientSortAlgo, clientSortedBy,
+        clientOffset, clientRowLimit, clientSequenceCount, clientCursorName, clientSteps,
+        lhsJoinQueryExplainPlan, rhsJoinQueryExplainPlan, subPlans, dynamicServerFilter,
+        afterJoinFilter, joinScannerLimit, sortMergeSkipMerge, regionLocations,
+        regionLocationsTotalSize, numRegionLocationLookups);
     }
   }
 }
