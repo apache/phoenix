@@ -129,11 +129,10 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
     String query = "SELECT t_id from " + tableName + " offset " + offset;
     if (!isSalted) {
       assertPlan(conn, query).scanType("FULL SCAN").table(tableName)
-        .serverWhereFilter("SERVER FILTER BY EMPTY COLUMN ONLY").iteratorType("SERIAL 1-WAY")
-        .serverOffset(offset);
+        .serverEmptyColumnOnlyProjection(true).iteratorType("SERIAL 1-WAY").serverOffset(offset);
     } else {
       assertPlan(conn, query).scanType("FULL SCAN").table(tableName)
-        .serverWhereFilter("SERVER FILTER BY EMPTY COLUMN ONLY").iteratorType("PARALLEL 10-WAY")
+        .serverEmptyColumnOnlyProjection(true).iteratorType("PARALLEL 10-WAY")
         .clientSortAlgo("CLIENT MERGE SORT").clientOffset(offset);
     }
 

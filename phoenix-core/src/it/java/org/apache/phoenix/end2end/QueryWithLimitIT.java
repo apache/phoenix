@@ -90,7 +90,7 @@ public class QueryWithLimitIT extends BaseTest {
       assertFalse(rs.next());
 
       assertPlan(conn, query).iteratorType("SERIAL 1-WAY").scanType("FULL SCAN").table(tableName)
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverRowLimit(1L).clientRowLimit(1);
+        .serverFirstKeyOnlyProjection(true).serverRowLimit(1L).clientRowLimit(1);
     } finally {
       conn.close();
     }

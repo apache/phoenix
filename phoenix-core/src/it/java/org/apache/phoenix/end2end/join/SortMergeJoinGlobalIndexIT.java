@@ -61,9 +61,8 @@ public class SortMergeJoinGlobalIndexIT extends SortMergeJoinIT {
     String itemIndex = getSchemaName() + ".idx_item";
     String supplierIndex = getSchemaName() + ".idx_supplier";
     assertPlan(conn, query).abstractExplainPlan("SORT-MERGE-JOIN (LEFT)").sortMergeSkipMerge(false)
-      .lhs().scanType("FULL SCAN").table(supplierIndex)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"S.:supplier_id\"]")
-      .clientSortAlgo("CLIENT MERGE SORT").end().rhs()
+      .lhs().scanType("FULL SCAN").table(supplierIndex).serverFirstKeyOnlyProjection(true)
+      .serverSortedBy("[\"S.:supplier_id\"]").clientSortAlgo("CLIENT MERGE SORT").end().rhs()
       .abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(true)
       .clientSortedBy("[\"I.0:supplier_id\"]").lhs().scanType("FULL SCAN").table(itemIndex)
       .serverSortedBy("[\"I.:item_id\"]").clientSortAlgo("CLIENT MERGE SORT").end().rhs()
@@ -75,11 +74,10 @@ public class SortMergeJoinGlobalIndexIT extends SortMergeJoinIT {
   protected void assertSelfJoinPlan(Connection conn, String query) throws Exception {
     String itemIndex = getSchemaName() + ".idx_item";
     assertPlan(conn, query).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(false)
-      .lhs().scanType("FULL SCAN").table(itemIndex)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"I1.:item_id\"]")
-      .clientSortAlgo("CLIENT MERGE SORT").end().rhs().scanType("FULL SCAN").table(itemIndex)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"I2.:item_id\"]")
-      .clientSortAlgo("CLIENT MERGE SORT").end();
+      .lhs().scanType("FULL SCAN").table(itemIndex).serverFirstKeyOnlyProjection(true)
+      .serverSortedBy("[\"I1.:item_id\"]").clientSortAlgo("CLIENT MERGE SORT").end().rhs()
+      .scanType("FULL SCAN").table(itemIndex).serverFirstKeyOnlyProjection(true)
+      .serverSortedBy("[\"I2.:item_id\"]").clientSortAlgo("CLIENT MERGE SORT").end();
   }
 
   @Override
@@ -94,7 +92,7 @@ public class SortMergeJoinGlobalIndexIT extends SortMergeJoinIT {
       statement.optimizeQuery().getExplainPlan().getPlanStepsAsAttributes();
     assertPlan(attributes).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(false)
       .clientRowLimit(4).lhs().scanType("FULL SCAN").table(itemIndex)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"I.:item_id\"]")
+      .serverFirstKeyOnlyProjection(true).serverSortedBy("[\"I.:item_id\"]")
       .clientSortAlgo("CLIENT MERGE SORT").end().rhs().scanType("FULL SCAN").table(order)
       .serverSortedBy(queryIndex == 0 ? "[\"O.item_id\"]" : "[\"item_id\"]")
       .clientSortAlgo("CLIENT MERGE SORT").end();

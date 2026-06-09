@@ -1566,12 +1566,10 @@ public class GlobalIndexCheckerIT extends BaseTest {
         "SELECT id, val3 from " + dataTableName + " WHERE val1 = 'bc' and val2 = 'bcd' ";
       // Verify that we will read from the index table with a first-key-only/empty-column filter
       ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
-      assertPlan(attributes).scanType("RANGE SCAN").table(indexName);
-      String expectedFilter =
-        String.format("SERVER FILTER BY %s ONLY AND", encoded ? "FIRST KEY" : "EMPTY COLUMN");
-      assertTrue("serverWhereFilter=" + attributes.getServerWhereFilter(),
-        attributes.getServerWhereFilter() != null
-          && attributes.getServerWhereFilter().contains(expectedFilter));
+      assertPlan(attributes).scanType("RANGE SCAN").table(indexName)
+        .serverProjectionFilter(encoded);
+      assertNotNull("serverWhereFilter=" + attributes.getServerWhereFilter(),
+        attributes.getServerWhereFilter());
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
         assertTrue(rs.next());
         assertEquals("b", rs.getString("id"));

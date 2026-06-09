@@ -143,9 +143,10 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   public void testSkipScanKeys() throws Exception {
     verifyQuery("skipScanKeys", "SELECT host FROM ptsdb3 WHERE host IN ('na1','na2','na3')",
       text("CLIENT PARALLEL <N>-WAY SKIP SCAN ON 3 KEYS OVER PTSDB3 [~'na3'] - [~'na1']",
-        "    INDEX PTSDB3", "    REGIONS PLANNED <N>", "    SERVER FILTER BY FIRST KEY ONLY"),
-      scanAttrs("SKIP SCAN ON 3 KEYS ", "PTSDB3", " [~'na3'] - [~'na1']").put("serverWhereFilter",
-        "SERVER FILTER BY FIRST KEY ONLY"));
+        "    INDEX PTSDB3", "    REGIONS PLANNED <N>",
+        "    SERVER PROJECTION FILTER BY FIRST KEY ONLY"),
+      scanAttrs("SKIP SCAN ON 3 KEYS ", "PTSDB3", " [~'na3'] - [~'na1']")
+        .put("serverFirstKeyOnlyProjection", true));
   }
 
   @Test
@@ -157,10 +158,11 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       text(
         "CLIENT PARALLEL <N>-WAY SKIP SCAN ON 6 RANGES OVER PTSDB"
           + " ['na1','a','2013-01-01'] - ['na3','b','2013-01-02']",
-        "    INDEX PTSDB", "    REGIONS PLANNED <N>", "    SERVER FILTER BY FIRST KEY ONLY"),
+        "    INDEX PTSDB", "    REGIONS PLANNED <N>",
+        "    SERVER PROJECTION FILTER BY FIRST KEY ONLY"),
       scanAttrs("SKIP SCAN ON 6 RANGES ", "PTSDB",
-        " ['na1','a','2013-01-01'] - ['na3','b','2013-01-02']").put("serverWhereFilter",
-          "SERVER FILTER BY FIRST KEY ONLY"));
+        " ['na1','a','2013-01-01'] - ['na3','b','2013-01-02']").put("serverFirstKeyOnlyProjection",
+          true));
   }
 
   @Test
@@ -176,9 +178,8 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     verifyQuery("reverseScan",
       "SELECT inst,\"DATE\" FROM ptsdb2 WHERE inst = 'na1' ORDER BY inst DESC, \"DATE\" DESC",
       text("CLIENT PARALLEL <N>-WAY REVERSE RANGE SCAN OVER PTSDB2 ['na1']", "    INDEX PTSDB2",
-        "    REGIONS PLANNED <N>", "    SERVER FILTER BY FIRST KEY ONLY"),
-      scanAttrs("RANGE SCAN ", "PTSDB2", " ['na1']")
-        .put("serverWhereFilter", "SERVER FILTER BY FIRST KEY ONLY")
+        "    REGIONS PLANNED <N>", "    SERVER PROJECTION FILTER BY FIRST KEY ONLY"),
+      scanAttrs("RANGE SCAN ", "PTSDB2", " ['na1']").put("serverFirstKeyOnlyProjection", true)
         .put("clientSortedBy", "REVERSE"));
   }
 
@@ -187,19 +188,19 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     verifyQuery("smallHint",
       "SELECT /*+ SMALL */ host FROM ptsdb3 WHERE host IN ('na1','na2','na3')",
       text("CLIENT PARALLEL <N>-WAY SMALL SKIP SCAN ON 3 KEYS OVER PTSDB3 [~'na3'] - [~'na1']",
-        "    INDEX PTSDB3", "    REGIONS PLANNED <N>", "    SERVER FILTER BY FIRST KEY ONLY"),
+        "    INDEX PTSDB3", "    REGIONS PLANNED <N>",
+        "    SERVER PROJECTION FILTER BY FIRST KEY ONLY"),
       scanAttrs("SKIP SCAN ON 3 KEYS ", "PTSDB3", " [~'na3'] - [~'na1']").put("hint", "SMALL")
-        .put("serverWhereFilter", "SERVER FILTER BY FIRST KEY ONLY"));
+        .put("serverFirstKeyOnlyProjection", true));
   }
 
   @Test
   public void testAggregateSingleRow() throws Exception {
     verifyQuery("aggregateSingleRow", "SELECT count(*) FROM atable",
       text("CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "    INDEX ATABLE",
-        "    REGIONS PLANNED <N>", "    SERVER FILTER BY FIRST KEY ONLY",
+        "    REGIONS PLANNED <N>", "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
         "    SERVER AGGREGATE INTO SINGLE ROW"),
-      scanAttrs("FULL SCAN ", "ATABLE", "")
-        .put("serverWhereFilter", "SERVER FILTER BY FIRST KEY ONLY")
+      scanAttrs("FULL SCAN ", "ATABLE", "").put("serverFirstKeyOnlyProjection", true)
         .put("serverAggregate", "SERVER AGGREGATE INTO SINGLE ROW"));
   }
 
@@ -319,10 +320,11 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL"
         + " AND \"DATE\" >= to_date('2013-01-01')",
       text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER PTSDB [null,not null]", "    INDEX PTSDB",
-        "    REGIONS PLANNED <N>",
-        "    SERVER FILTER BY FIRST KEY ONLY AND \"DATE\" >= DATE '2013-01-01 00:00:00.000'"),
-      scanAttrs("RANGE SCAN ", "PTSDB", " [null,not null]").put("serverWhereFilter",
-        "SERVER FILTER BY FIRST KEY ONLY AND \"DATE\" >= DATE '2013-01-01 00:00:00.000'"));
+        "    REGIONS PLANNED <N>", "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
+        "    SERVER FILTER BY \"DATE\" >= DATE '2013-01-01 00:00:00.000'"),
+      scanAttrs("RANGE SCAN ", "PTSDB", " [null,not null]")
+        .put("serverFirstKeyOnlyProjection", true)
+        .put("serverWhereFilter", "SERVER FILTER BY \"DATE\" >= DATE '2013-01-01 00:00:00.000'"));
   }
 
   @Test
@@ -331,12 +333,11 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       "SELECT host FROM PTSDB WHERE inst IS NOT NULL AND host IS NULL"
         + " AND \"DATE\" >= to_date('2013-01-01')",
       text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER PTSDB [not null]", "    INDEX PTSDB",
-        "    REGIONS PLANNED <N>",
-        "    SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL"
-          + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')"),
-      scanAttrs("RANGE SCAN ", "PTSDB", " [not null]").put("serverWhereFilter",
-        "SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL"
-          + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')"));
+        "    REGIONS PLANNED <N>", "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
+        "    SERVER FILTER BY (HOST IS NULL" + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')"),
+      scanAttrs("RANGE SCAN ", "PTSDB", " [not null]").put("serverFirstKeyOnlyProjection", true)
+        .put("serverWhereFilter",
+          "SERVER FILTER BY (HOST IS NULL" + " AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')"));
   }
 
   @Test
@@ -347,10 +348,11 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       text(
         "CLIENT PARALLEL <N>-WAY SKIP SCAN ON 2 RANGES OVER PTSDB"
           + " ['na','a','2013-01-01'] - ['nb','b','2013-01-02']",
-        "    INDEX PTSDB", "    REGIONS PLANNED <N>", "    SERVER FILTER BY FIRST KEY ONLY"),
+        "    INDEX PTSDB", "    REGIONS PLANNED <N>",
+        "    SERVER PROJECTION FILTER BY FIRST KEY ONLY"),
       scanAttrs("SKIP SCAN ON 2 RANGES ", "PTSDB",
-        " ['na','a','2013-01-01'] - ['nb','b','2013-01-02']").put("serverWhereFilter",
-          "SERVER FILTER BY FIRST KEY ONLY"));
+        " ['na','a','2013-01-01'] - ['nb','b','2013-01-02']").put("serverFirstKeyOnlyProjection",
+          true));
   }
 
   @Test
@@ -359,10 +361,11 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       "SELECT inst,host FROM PTSDB WHERE REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1', 'na2','na3')",
       text("CLIENT PARALLEL <N>-WAY SKIP SCAN ON 3 RANGES OVER PTSDB ['na1'] - ['na4']",
         "    INDEX PTSDB", "    REGIONS PLANNED <N>",
-        "    SERVER FILTER BY FIRST KEY ONLY AND"
-          + " REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')"),
-      scanAttrs("SKIP SCAN ON 3 RANGES ", "PTSDB", " ['na1'] - ['na4']").put("serverWhereFilter",
-        "SERVER FILTER BY FIRST KEY ONLY AND REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')"));
+        "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
+        "    SERVER FILTER BY REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')"),
+      scanAttrs("SKIP SCAN ON 3 RANGES ", "PTSDB", " ['na1'] - ['na4']")
+        .put("serverFirstKeyOnlyProjection", true).put("serverWhereFilter",
+          "SERVER FILTER BY REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')"));
   }
 
   @Test
@@ -598,9 +601,10 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     verifyMutation("deleteServer", "DELETE FROM atable WHERE entity_id = 'abc'", true,
       text("DELETE ROWS SERVER SELECT", "CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE",
         "    INDEX ATABLE", "    REGIONS PLANNED <N>",
-        "    SERVER FILTER BY FIRST KEY ONLY AND ENTITY_ID = 'abc'"),
+        "    SERVER PROJECTION FILTER BY FIRST KEY ONLY", "    SERVER FILTER BY ENTITY_ID = 'abc'"),
       scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan", "DELETE ROWS SERVER SELECT")
-        .put("serverWhereFilter", "SERVER FILTER BY FIRST KEY ONLY AND ENTITY_ID = 'abc'"));
+        .put("serverFirstKeyOnlyProjection", true)
+        .put("serverWhereFilter", "SERVER FILTER BY ENTITY_ID = 'abc'"));
   }
 
   @Test
@@ -608,19 +612,20 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     verifyMutation("deleteClient", "DELETE FROM atable WHERE entity_id = 'abc'", false,
       text("DELETE ROWS CLIENT SELECT", "CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE",
         "    INDEX ATABLE", "    REGIONS PLANNED <N>",
-        "    SERVER FILTER BY FIRST KEY ONLY AND ENTITY_ID = 'abc'"),
+        "    SERVER PROJECTION FILTER BY FIRST KEY ONLY", "    SERVER FILTER BY ENTITY_ID = 'abc'"),
       scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan", "DELETE ROWS CLIENT SELECT")
-        .put("serverWhereFilter", "SERVER FILTER BY FIRST KEY ONLY AND ENTITY_ID = 'abc'"));
+        .put("serverFirstKeyOnlyProjection", true)
+        .put("serverWhereFilter", "SERVER FILTER BY ENTITY_ID = 'abc'"));
   }
 
   @Test
   public void testSequenceNextValue() throws Exception {
     verifyQuery("sequenceNextValue", "SELECT NEXT VALUE FOR " + SEQ + " FROM atable",
       text("CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "    INDEX ATABLE",
-        "    REGIONS PLANNED <N>", "    SERVER FILTER BY FIRST KEY ONLY",
+        "    REGIONS PLANNED <N>", "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
         "CLIENT RESERVE VALUES FROM 1 SEQUENCE"),
-      scanAttrs("FULL SCAN ", "ATABLE", "")
-        .put("serverWhereFilter", "SERVER FILTER BY FIRST KEY ONLY").put("clientSequenceCount", 1)
+      scanAttrs("FULL SCAN ", "ATABLE", "").put("serverFirstKeyOnlyProjection", true)
+        .put("clientSequenceCount", 1)
         .set("clientSteps", clientSteps("CLIENT RESERVE VALUES FROM 1 SEQUENCE")));
   }
 
@@ -924,7 +929,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     } catch (AssertionError expected) {
       String msg = expected.getMessage();
       assertTrue(msg.contains("Text mismatch for case 'x'"));
-      assertTrue(msg.contains("SERVER FILTER BY FIRST KEY ONLY"));
+      assertTrue(msg.contains("SERVER PROJECTION FILTER BY FIRST KEY ONLY"));
       assertTrue(msg.contains("SERVER FILTER BY (X = 9)"));
     } catch (Exception e) {
       fail("Unexpected exception type: " + e);
@@ -1001,6 +1006,8 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     n.putNull("serverOffset");
     n.putNull("serverRowLimit");
     n.put("serverArrayElementProjection", false);
+    n.put("serverFirstKeyOnlyProjection", false);
+    n.put("serverEmptyColumnOnlyProjection", false);
     n.putNull("serverAggregate");
     n.putNull("clientFilterBy");
     n.putNull("clientAggregate");
@@ -1068,10 +1075,9 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
 
   private static ExplainPlan samplePlan(String way, String scanType) {
     ExplainPlanAttributes a = new ExplainPlanAttributesBuilder().setIteratorTypeAndScanSize(way)
-      .setExplainScanType(scanType).setTableName("T")
-      .setServerWhereFilter("SERVER FILTER BY FIRST KEY ONLY").build();
+      .setExplainScanType(scanType).setTableName("T").setServerFirstKeyOnlyProjection(true).build();
     return new ExplainPlan(Arrays.asList("CLIENT " + way + " " + scanType.trim() + " OVER T",
-      "    SERVER FILTER BY FIRST KEY ONLY"), a);
+      "    SERVER PROJECTION FILTER BY FIRST KEY ONLY"), a);
   }
 
   private static PColumn column(String family, String name) {

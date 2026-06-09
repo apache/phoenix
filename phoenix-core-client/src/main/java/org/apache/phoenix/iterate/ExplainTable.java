@@ -287,23 +287,23 @@ public abstract class ExplainTable {
         whereFilterStr = Bytes.toString(expBytes);
       }
     }
+    if (firstKeyOnlyFilter != null) {
+      planSteps.add("    SERVER PROJECTION FILTER BY FIRST KEY ONLY");
+      if (explainPlanAttributesBuilder != null) {
+        explainPlanAttributesBuilder.setServerFirstKeyOnlyProjection(true);
+      }
+    }
+    if (emptyColumnOnlyFilter != null) {
+      planSteps.add("    SERVER PROJECTION FILTER BY EMPTY COLUMN ONLY");
+      if (explainPlanAttributesBuilder != null) {
+        explainPlanAttributesBuilder.setServerEmptyColumnOnlyProjection(true);
+      }
+    }
     if (whereFilterStr != null) {
-      String serverWhereFilter =
-        "SERVER FILTER BY " + (firstKeyOnlyFilter == null ? "" : "FIRST KEY ONLY AND ")
-          + (emptyColumnOnlyFilter == null ? "" : "EMPTY COLUMN ONLY AND ") + whereFilterStr;
+      String serverWhereFilter = "SERVER FILTER BY " + whereFilterStr;
       planSteps.add("    " + serverWhereFilter);
       if (explainPlanAttributesBuilder != null) {
         explainPlanAttributesBuilder.setServerWhereFilter(serverWhereFilter);
-      }
-    } else if (firstKeyOnlyFilter != null) {
-      planSteps.add("    SERVER FILTER BY FIRST KEY ONLY");
-      if (explainPlanAttributesBuilder != null) {
-        explainPlanAttributesBuilder.setServerWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
-      }
-    } else if (emptyColumnOnlyFilter != null) {
-      planSteps.add("    SERVER FILTER BY EMPTY COLUMN ONLY");
-      if (explainPlanAttributesBuilder != null) {
-        explainPlanAttributesBuilder.setServerWhereFilter("SERVER FILTER BY EMPTY COLUMN ONLY");
       }
     }
     if (distinctFilter != null) {
