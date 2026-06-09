@@ -58,7 +58,7 @@ public class ReadOnlyProps implements Iterable<Entry<String, String>> {
     this(EMPTY_PROPS, iterator);
   }
 
-  private ReadOnlyProps() {
+  public ReadOnlyProps() {
     this.props = ImmutableMap.of();
     this.overrideProps = ImmutableMap.of();
   }
