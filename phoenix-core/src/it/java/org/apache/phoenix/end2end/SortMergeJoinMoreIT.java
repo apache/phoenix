@@ -429,15 +429,14 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
         assertPlan(conn, q).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(true)
           .clientAggregate("CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]")
           .lhs().iteratorType("PARALLEL").scanType("SKIP SCAN ON 2 RANGES")
-          .table(eventCountTableName).keyRanges(lhsKeyRanges)
-          .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+          .table(eventCountTableName).keyRanges(lhsKeyRanges).serverFirstKeyOnlyProjection(true)
           .serverDistinctFilter("SERVER DISTINCT PREFIX FILTER OVER [BUCKET, TIMESTAMP, LOCATION]")
           .serverAggregate(
             "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, TIMESTAMP, LOCATION]")
           .clientSortAlgo("CLIENT MERGE SORT").clientSortedBy("[BUCKET, TIMESTAMP]").end().rhs()
           .iteratorType("PARALLEL").scanType("SKIP SCAN ON 2 RANGES").table(t[i])
-          .keyRanges(rhsKeyRanges)
-          .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND SRC_LOCATION = DST_LOCATION")
+          .keyRanges(rhsKeyRanges).serverFirstKeyOnlyProjection(true)
+          .serverWhereFilter("SERVER FILTER BY SRC_LOCATION = DST_LOCATION")
           .serverDistinctFilter(
             "SERVER DISTINCT PREFIX FILTER OVER [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]")
           .serverAggregate(

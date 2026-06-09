@@ -748,7 +748,7 @@ public class EmptyColumnIT extends ParallelStatsDisabledIT {
         EnvironmentEdgeManager.injectEdge(injectEdge);
         String distinctQuery = "SELECT DISTINCT id1 FROM " + dataTableName;
         ExplainPlanAttributes attributes = getExplainAttributes(conn, distinctQuery);
-        assertPlan(attributes).serverWhereFilter("SERVER FILTER BY EMPTY COLUMN ONLY");
+        assertPlan(attributes).serverEmptyColumnOnlyProjection(true);
         assertNotNull(attributes.getServerDistinctFilter());
         try (ResultSet rs = conn.createStatement().executeQuery(distinctQuery)) {
           // all the rows should have been masked

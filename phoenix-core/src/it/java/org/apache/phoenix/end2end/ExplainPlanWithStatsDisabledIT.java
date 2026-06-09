@@ -256,7 +256,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
       assertPlan(conn, query).scanType("RANGE SCAN").table("FOO")
         .keyRanges(
           " [X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
+        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
     }
   }
 
@@ -276,7 +276,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
       assertPlan(conn, query).useRoundRobinIterator(true).scanType("RANGE SCAN").table(tableName)
         .keyRanges(
           " [X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
+        .serverFirstKeyOnlyProjection(true);
     }
   }
 
@@ -341,32 +341,32 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
       assertTrue(rs.next());
       assertEquals(53, rs.getInt(1));
       assertPlan(conn, query).scanType("RANGE SCAN").table(tableName).keyRanges(" [*] - ['b']")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-        .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW").numRegionLocationLookups(2);
+        .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
+        .numRegionLocationLookups(2);
 
       query = "select count(*) from " + tableName + " where PK1 <= 'cd'";
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(128, rs.getInt(1));
       assertPlan(conn, query).scanType("RANGE SCAN").table(tableName).keyRanges(" [*] - ['cd']")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-        .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW").numRegionLocationLookups(3);
+        .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
+        .numRegionLocationLookups(3);
 
       query = "select count(*) from " + tableName + " where PK1 LIKE 'ef%'";
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(25, rs.getInt(1));
       assertPlan(conn, query).scanType("RANGE SCAN").table(tableName).keyRanges(" ['ef'] - ['eg']")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-        .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW").numRegionLocationLookups(1);
+        .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
+        .numRegionLocationLookups(1);
 
       query = "select count(*) from " + tableName + " where PK1 > 'de'";
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(75, rs.getInt(1));
       assertPlan(conn, query).scanType("RANGE SCAN").table(tableName).keyRanges(" ['de'] - [*]")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-        .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW").numRegionLocationLookups(1);
+        .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
+        .numRegionLocationLookups(1);
     }
   }
 
@@ -461,8 +461,8 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         assertEquals(50, rs.getInt(1));
 
         assertPlan(tenantConn, query).scanType("RANGE SCAN").table(tableName).keyRanges(" ['ab12']")
-          .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-          .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW").numRegionLocationLookups(1);
+          .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
+          .numRegionLocationLookups(1);
       }
 
       try (Connection tenantConn = getTenantConnection("cd12")) {

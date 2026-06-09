@@ -82,7 +82,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
       assertPlan(conn, query).scanType("RANGE SCAN").table("FOO")
         .keyRanges(
           " [X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
+        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
     } finally {
       conn.close();
     }
@@ -107,7 +107,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
       assertPlan(conn, query).useRoundRobinIterator(true).scanType("RANGE SCAN").table(tableName)
         .keyRanges(
           " [X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
+        .serverFirstKeyOnlyProjection(true);
     } finally {
       conn.close();
     }
@@ -126,8 +126,8 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
       // The SERIAL hint is ignored for a non-rowkey ORDER BY, so the iterator stays PARALLEL and a
       // server sort + client merge sort are planned.
       assertPlan(conn, query).iteratorType("PARALLEL").scanType("RANGE SCAN").table("FOO")
-        .keyRanges(" ['a']").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-        .serverSortedBy("[B, C]").clientSortAlgo("CLIENT MERGE SORT");
+        .keyRanges(" ['a']").serverFirstKeyOnlyProjection(true).serverSortedBy("[B, C]")
+        .clientSortAlgo("CLIENT MERGE SORT");
     } finally {
       conn.close();
     }

@@ -73,7 +73,7 @@ public class SortMergeJoinNoIndexIT extends SortMergeJoinIT {
     String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
     assertPlan(conn, query).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(false)
       .lhs().scanType("FULL SCAN").table(item).end().rhs().scanType("FULL SCAN").table(item)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").end();
+      .serverFirstKeyOnlyProjection(true).end();
   }
 
   @Override
