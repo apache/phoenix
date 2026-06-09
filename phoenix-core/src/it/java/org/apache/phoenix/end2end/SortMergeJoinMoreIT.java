@@ -434,8 +434,8 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
           .serverDistinctFilter("SERVER DISTINCT PREFIX FILTER OVER [BUCKET, TIMESTAMP, LOCATION]")
           .serverAggregate(
             "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, TIMESTAMP, LOCATION]")
-          .clientSortAlgo("CLIENT MERGE SORT").clientSortedBy("[BUCKET, TIMESTAMP]")
-          .end().rhs().iteratorType("PARALLEL").scanType("SKIP SCAN ON 2 RANGES").table(t[i])
+          .clientSortAlgo("CLIENT MERGE SORT").clientSortedBy("[BUCKET, TIMESTAMP]").end().rhs()
+          .iteratorType("PARALLEL").scanType("SKIP SCAN ON 2 RANGES").table(t[i])
           .keyRanges(rhsKeyRanges)
           .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND SRC_LOCATION = DST_LOCATION")
           .serverDistinctFilter(
