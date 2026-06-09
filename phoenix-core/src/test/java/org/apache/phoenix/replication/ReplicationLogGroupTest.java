@@ -802,8 +802,9 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     }
     logGroup.sync(); // Sync to commit the appends to the current writer.
 
-    // Force a rotation to close the current writer.
-    activeLog.forceRotation();
+    // Close the log synchronously so the writer's trailer is durably written before we open the
+    // file for reading.
+    activeLog.close(true);
 
     assertTrue("Log file should exist", localFs.exists(logPath));
 
@@ -863,6 +864,10 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       // Force a rotation to close the current writer.
       activeLog.forceRotation();
     }
+
+    // Close the log group synchronously so all pending async closes from the rotations above
+    // finish (trailers durably written) before we open the files for reading.
+    logGroup.close();
 
     // Verify all log files exist
     for (Path logPath : logPaths) {
@@ -928,6 +933,10 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       logGroup.sync();
       activeLog.forceRotation();
     }
+
+    // Close the log group synchronously so all pending async closes from the rotations above
+    // finish (trailers durably written) before we open the files for reading.
+    logGroup.close();
 
     // Verify all log files exist
     for (Path logPath : logPaths) {

@@ -418,7 +418,6 @@ public class ReplicationLog {
   @VisibleForTesting
   protected void forceRotation() {
     new LogRotationTask().run();
-    checkAndReplaceWriter(false);
   }
 
   protected FileSystem getFileSystem(URI uri) throws IOException {
