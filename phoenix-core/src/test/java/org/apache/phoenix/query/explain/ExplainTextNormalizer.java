@@ -33,8 +33,11 @@ public final class ExplainTextNormalizer {
   // Matches the iterator parallelism count.
   private static final Pattern WAY_COUNT = Pattern.compile("\\b\\d+-WAY\\b");
 
-  // Matches the stats-row-count gated row count and byte count.
+  // Matches the stats row and byte counts.
   private static final Pattern ROWS_BYTES = Pattern.compile("\\d+ ROWS \\d+ BYTES\\s*");
+
+  // Matches the planned regions count on the REGIONS PLANNED line.
+  private static final Pattern REGIONS_PLANNED = Pattern.compile("REGIONS PLANNED \\d+");
 
   // Matches the region locations line.
   private static final String REGION_LOCATIONS_PREFIX = " (region locations = ";
@@ -62,6 +65,7 @@ public final class ExplainTextNormalizer {
       normalized = CHUNK_COUNT.matcher(normalized).replaceAll("<N>-CHUNK");
       normalized = WAY_COUNT.matcher(normalized).replaceAll("<N>-WAY");
       normalized = ROWS_BYTES.matcher(normalized).replaceAll("");
+      normalized = REGIONS_PLANNED.matcher(normalized).replaceAll("REGIONS PLANNED <N>");
       normalized = aliases.rewrite(normalized);
       out.add(normalized);
     }
