@@ -212,7 +212,7 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
       prepareTableWithValues(conn, 100);
       String query = "SELECT i1, i2 FROM " + tableName + " tablesample (45) ";
       assertPlan(conn, query).iteratorType("PARALLEL").scanType("FULL SCAN").samplingRate(0.45d)
-        .table(tableName).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
+        .table(tableName).serverFirstKeyOnlyProjection(true);
     }
   }
 
@@ -227,9 +227,9 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
           + tableName + " tablesample (2) where i2<6000";
       assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES").scanType("RANGE SCAN")
         .table(tableName).keyRanges(" [*] - [2]").samplingRate(1.0d)
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").rhs().scanType("FULL SCAN")
-        .table(tableName).samplingRate(0.02d)
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND I2 < 6000").end();
+        .serverFirstKeyOnlyProjection(true).rhs().scanType("FULL SCAN").table(tableName)
+        .samplingRate(0.02d).serverFirstKeyOnlyProjection(true)
+        .serverWhereFilter("SERVER FILTER BY I2 < 6000").end();
     } finally {
       conn.close();
     }
@@ -245,12 +245,10 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
         + joinedTableName + " as B tablesample (75) where A.i1=B.i1";
 
       assertPlan(conn, query).scanType("FULL SCAN").table(tableName).samplingRate(0.45d)
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-        .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
+        .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY A.I1 IN (B.I1)").subPlanCount(1).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)").scanType("FULL SCAN")
-        .table(joinedTableName).samplingRate(0.75d)
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").end();
+        .table(joinedTableName).samplingRate(0.75d).serverFirstKeyOnlyProjection(true).end();
     } finally {
       conn.close();
     }

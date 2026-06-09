@@ -160,15 +160,14 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
 
     if (indexSaltBuckets == null) {
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-        .table(indexTableFullName).keyRanges(" [~'y']")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
+        .table(indexTableFullName).keyRanges(" [~'y']").serverFirstKeyOnlyProjection(true);
     } else {
       assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("RANGE SCAN")
         .table(indexTableFullName)
         .keyRanges(" [X'00',~'y'] - ["
           + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (indexSaltBuckets - 1) })
           + ",~'y']")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
+        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
     }
 
     // Will use index, so rows returned in DESC order.
@@ -185,15 +184,14 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     assertFalse(rs.next());
     if (indexSaltBuckets == null) {
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-        .table(indexTableFullName).keyRanges(" [*] - [~'x']")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
+        .table(indexTableFullName).keyRanges(" [*] - [~'x']").serverFirstKeyOnlyProjection(true);
     } else {
       assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("RANGE SCAN")
         .table(indexTableFullName)
         .keyRanges(" [X'00',*] - ["
           + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (indexSaltBuckets - 1) })
           + ",~'x']")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
+        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
     }
 
     // Use data table, since point lookup trumps order by
@@ -232,12 +230,12 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     query = "SELECT * FROM " + dataTableFullName + " ORDER BY v DESC LIMIT 1";
     if (indexSaltBuckets == null) {
       assertPlan(conn, query).iteratorType("SERIAL 1-WAY").scanType("FULL SCAN")
-        .table(indexTableFullName).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-        .serverRowLimit(1L).clientRowLimit(1);
+        .table(indexTableFullName).serverFirstKeyOnlyProjection(true).serverRowLimit(1L)
+        .clientRowLimit(1);
     } else {
       assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("FULL SCAN")
-        .table(indexTableFullName).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-        .serverRowLimit(1L).clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(1);
+        .table(indexTableFullName).serverFirstKeyOnlyProjection(true).serverRowLimit(1L)
+        .clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(1);
     }
   }
 }

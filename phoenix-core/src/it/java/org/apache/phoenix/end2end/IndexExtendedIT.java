@@ -250,7 +250,7 @@ public class IndexExtendedIT extends BaseTest {
       String query = "SELECT pk3 from " + dataTableFullName + " ORDER BY pk3";
 
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-        .table(indexTableFullName).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
+        .table(indexTableFullName).serverFirstKeyOnlyProjection(true);
 
       ResultSet rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());

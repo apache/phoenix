@@ -80,8 +80,8 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").clientSortedBy("REVERSE")
-        .scanType("FULL SCAN").table(tableName)
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND ENTITY_ID >= '00A323122312312'");
+        .scanType("FULL SCAN").table(tableName).serverFirstKeyOnlyProjection(true)
+        .serverWhereFilter("SERVER FILTER BY ENTITY_ID >= '00A323122312312'");
 
       PreparedStatement statement = conn.prepareStatement("SELECT entity_id FROM " + tableName
         + " WHERE organization_id = ? AND entity_id >= ? ORDER BY organization_id DESC, entity_id DESC");
@@ -179,7 +179,7 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
 
       assertPlan(conn, query).iteratorType("SERIAL 1-WAY").clientSortedBy("REVERSE")
         .scanType("RANGE SCAN").table(indexName).keyRanges(" [not null]")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverRowLimit(1L).clientRowLimit(1);
+        .serverFirstKeyOnlyProjection(true).serverRowLimit(1L).clientRowLimit(1);
     }
 
   }

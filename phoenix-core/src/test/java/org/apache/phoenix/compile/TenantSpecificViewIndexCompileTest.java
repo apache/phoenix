@@ -194,7 +194,7 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
     assertPlan(conn, "SELECT v2 FROM v WHERE v2 > 'a' and k2 = 'a' ORDER BY v2,k2")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("_IDX_T")
       .keyRanges(" [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
+      .serverFirstKeyOnlyProjection(true);
 
     // Won't use index b/c v1 is not in index, but should optimize out k2 still from the order by
     // K2 will still be referenced in the filter, as these are automatically tacked on to the where

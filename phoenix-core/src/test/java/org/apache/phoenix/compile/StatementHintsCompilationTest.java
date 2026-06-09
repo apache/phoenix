@@ -103,7 +103,8 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
     assertPlan(conn, query).scanType("RANGE SCAN").table("EH")
       .keyRanges(" ['111111111111111','foo            ','2012-11-01 00:00:00.000']"
         + " - ['111111111111111','fop            ','2012-11-30 00:00:00.000']")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND (CREATED_DATE >= DATE"
+      .serverFirstKeyOnlyProjection(true)
+      .serverWhereFilter("SERVER FILTER BY (CREATED_DATE >= DATE"
         + " '2012-11-01 00:00:00.000' AND CREATED_DATE < DATE '2012-11-30 00:00:00.000')")
       .serverSortedBy("[ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID]")
       .serverRowLimit(100L).clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(100);

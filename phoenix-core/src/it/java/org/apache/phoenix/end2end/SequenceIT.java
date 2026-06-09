@@ -823,7 +823,7 @@ public class SequenceIT extends ParallelStatsDisabledIT {
       DriverManager.getConnection(getUrl(), PropertiesUtil.deepCopy(TEST_PROPERTIES));
     String query = "SELECT NEXT VALUE FOR " + sequenceName + " FROM " + tableName;
     assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(tableName)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSequenceCount(1);
+      .serverFirstKeyOnlyProjection(true).clientSequenceCount(1);
 
     ResultSet rs = conn.createStatement().executeQuery(
       "SELECT sequence_name, current_value FROM \"SYSTEM\".\"SEQUENCE\" WHERE sequence_name='"

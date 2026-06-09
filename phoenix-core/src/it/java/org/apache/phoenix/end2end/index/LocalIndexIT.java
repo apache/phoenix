@@ -443,7 +443,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     assertPlan(conn, "SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
       .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,3,4]")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
+      .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
 
     // 3. same prefix length, but there's a column not on the index
     assertPlan(conn, "SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v3 = 1")
@@ -455,9 +455,8 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       "SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v1 = 3 AND v3 = 1")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,3,4,3]")
-        .serverMergeColumns("[0.V3]")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND \"V3\" = 1")
-        .clientSortAlgo("CLIENT MERGE SORT");
+        .serverMergeColumns("[0.V3]").serverFirstKeyOnlyProjection(true)
+        .serverWhereFilter("SERVER FILTER BY \"V3\" = 1").clientSortAlgo("CLIENT MERGE SORT");
   }
 
   @Test
@@ -486,7 +485,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     assertPlan(conn, "SELECT pk1, pk2, pk3, v1 FROM " + tableName + " WHERE pk1 = 2 AND pk3 = 3")
       .iteratorType("PARALLEL").scanType("RANGE SCAN")
       .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,2,3]")
-      .serverMergeColumns("[0.V1]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
       .clientSortAlgo("CLIENT MERGE SORT");
   }
 
@@ -513,7 +512,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     // 1. COUNT(*) should still use the index - fewer bytes to scan
     assertPlan(conn, "SELECT COUNT(*) FROM " + tableName).iteratorType("PARALLEL 1-WAY")
       .scanType("RANGE SCAN").table(fullIndexName + "(" + indexPhysicalTableName + ")")
-      .keyRanges(" [1]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .keyRanges(" [1]").serverFirstKeyOnlyProjection(true)
       .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW");
 
     // 2. All column projected, no filtering by indexed column, not using the index
@@ -523,8 +522,8 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     // 3. if the index can avoid a sort operation, use it
     assertPlan(conn, "SELECT * FROM " + tableName + " ORDER BY v2").iteratorType("PARALLEL 1-WAY")
       .scanType("RANGE SCAN").table(fullIndexName + "(" + indexPhysicalTableName + ")")
-      .keyRanges(" [1]").serverMergeColumns("[0.V1]")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
+      .keyRanges(" [1]").serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
+      .clientSortAlgo("CLIENT MERGE SORT");
 
     // 4. but can't use the index if not ORDERing by a prefix of the index key.
     assertPlan(conn, "SELECT * FROM " + tableName + " ORDER BY v3").iteratorType("PARALLEL 1-WAY")
@@ -535,7 +534,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v2 = 2 ORDER BY v3")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
       .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,2]")
-      .serverMergeColumns("[0.V1]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
       .clientSortAlgo("CLIENT MERGE SORT");
 
     // 6. Filtering by a non-indexed column will not use the index
@@ -551,24 +550,23 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     // 8. Filtering along a prefix of the index key can use the index
     assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v2 = 2").iteratorType("PARALLEL 1-WAY")
       .scanType("RANGE SCAN").table(fullIndexName + "(" + indexPhysicalTableName + ")")
-      .keyRanges(" [1,2]").serverMergeColumns("[0.V1]")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
+      .keyRanges(" [1,2]").serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
+      .clientSortAlgo("CLIENT MERGE SORT");
 
     // 9. Make sure a gap in the index columns still uses the index as long as a prefix is specified
     assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v2 = 2 AND v4 = 4")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
       .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,2]")
-      .serverMergeColumns("[0.V1]")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND TO_INTEGER(\"V4\") = 4")
+      .serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
+      .serverWhereFilter("SERVER FILTER BY TO_INTEGER(\"V4\") = 4")
       .clientSortAlgo("CLIENT MERGE SORT");
 
     // 10. Use index even when also filtering on non-indexed column
     assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v2 = 2 AND v1 = 3")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
       .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,2]")
-      .serverMergeColumns("[0.V1]")
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND \"V1\" = 3.0")
-      .clientSortAlgo("CLIENT MERGE SORT");
+      .serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
+      .serverWhereFilter("SERVER FILTER BY \"V1\" = 3.0").clientSortAlgo("CLIENT MERGE SORT");
 
     // 11. Another case of not using a prefix of the index key
     assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v1 = 3 AND v3 = 1 AND v4 = 1")
@@ -780,7 +778,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       String query = "SELECT * FROM " + tableName + " ORDER BY V1";
       assertPlan(conn1, query).scanType("RANGE SCAN")
         .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1]")
-        .serverMergeColumns("[0.K3]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT");
 
       ResultSet rs = conn1.createStatement().executeQuery(query);
@@ -799,7 +797,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       query = "SELECT * FROM " + tableName + " ORDER BY V1 DESC NULLS LAST";
       assertPlan(conn1, query).scanType("RANGE SCAN").clientSortedBy("REVERSE")
         .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1]")
-        .serverMergeColumns("[0.K3]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT");
 
       rs = conn1.createStatement().executeQuery(query);
@@ -840,7 +838,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       String query = "SELECT V1 FROM " + tableName + " ORDER BY V1 DESC NULLS LAST";
       assertPlan(conn1, query).scanType("RANGE SCAN").clientSortedBy("REVERSE")
         .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1]")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
+        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
 
       ResultSet rs = conn1.createStatement().executeQuery(query);
       String v = "zz";
@@ -885,7 +883,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       String query = "SELECT t_id, k1, k2, k3, V1 FROM " + tableName + " where v1='a'";
       assertPlan(conn1, query).scanType("RANGE SCAN")
         .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,'a']")
-        .serverMergeColumns("[0.K3]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT");
 
       rs = conn1.createStatement().executeQuery(query);
@@ -904,7 +902,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       query = "SELECT t_id, k1, k2, k3, V1 from " + tableName + "  where v1<='z' order by V1,t_id";
       assertPlan(conn1, query).scanType("RANGE SCAN")
         .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,*] - [1,'z']")
-        .serverMergeColumns("[0.K3]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT");
 
       rs = conn1.createStatement().executeQuery(query);
@@ -936,7 +934,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       query = "SELECT t_id, V1, k3 from " + tableName + "  where v1 <='z' group by v1,t_id, k3";
       assertPlan(conn1, query).scanType("RANGE SCAN")
         .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,*] - [1,'z']")
-        .serverMergeColumns("[0.K3]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]")
         .clientSortAlgo("CLIENT MERGE SORT");
 
@@ -962,7 +960,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
 
       assertPlan(conn1, query).scanType("RANGE SCAN")
         .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,*] - [1,'z']")
-        .serverMergeColumns("[0.K3]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"V1\"]")
         .clientSortAlgo("CLIENT MERGE SORT");
 
@@ -1009,7 +1007,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     assertPlan(conn1, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
       .table(
         SchemaUtil.getPhysicalTableName(Bytes.toBytes(indexTableName), isNamespaceMapped) + "2")
-      .keyRanges(" ['a']").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
+      .keyRanges(" ['a']").serverFirstKeyOnlyProjection(true);
     conn1.close();
   }
 

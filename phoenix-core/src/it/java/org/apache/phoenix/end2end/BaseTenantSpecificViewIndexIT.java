@@ -195,7 +195,7 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
       expectedTableName = "_IDX_" + tableName;
     }
     assertPlan(conn, "SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'")
-      .iteratorType(iteratorTypeAndScanSize).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .iteratorType(iteratorTypeAndScanSize).serverFirstKeyOnlyProjection(true)
       .scanType("RANGE SCAN").clientSortAlgo(clientSortAlgo).table(expectedTableName)
       .keyRanges(keyRanges);
   }
@@ -209,8 +209,7 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
       .execute("UPSERT INTO " + viewName + "(k2,v1,v2) VALUES (-1, 'blah', 'superblah')");
     conn.commit();
     assertPlan(conn, "SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'")
-      .iteratorType("PARALLEL 1-WAY").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-      .scanType("RANGE SCAN")
+      .iteratorType("PARALLEL 1-WAY").serverFirstKeyOnlyProjection(true).scanType("RANGE SCAN")
       .table(SchemaUtil.getTableName(SchemaUtil.getSchemaNameFromFullName(viewName), indexName)
         + "(" + tableName + ")")
       .keyRanges(" [1," + tenantId + ",'" + valuePrefix + "v2-1']")

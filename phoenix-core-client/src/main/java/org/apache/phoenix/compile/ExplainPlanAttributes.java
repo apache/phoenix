@@ -38,7 +38,8 @@ import org.apache.phoenix.schema.PColumn;
   "keyRanges", "indexName", "indexKind", "saltBuckets", "regionsPlanned", "scanTimeRangeMin",
   "scanTimeRangeMax", "splitsChunk", "useRoundRobinIterator", "samplingRate", "hexStringRVCOffset",
   "iteratorTypeAndScanSize", "estimatedRows", "estimatedSizeInBytes", "serverWhereFilter",
-  "serverDistinctFilter", "serverMergeColumns", "serverArrayElementProjection", "serverAggregate",
+  "serverDistinctFilter", "serverMergeColumns", "serverArrayElementProjection",
+  "serverFirstKeyOnlyProjection", "serverEmptyColumnOnlyProjection", "serverAggregate",
   "serverGroupByLimit", "serverSortedBy", "serverOffset", "serverRowLimit", "clientFilterBy",
   "clientAggregate", "clientDistinctFilter", "clientAfterAggregate", "clientSortAlgo",
   "clientSortedBy", "clientOffset", "clientRowLimit", "clientSequenceCount", "clientCursorName",
@@ -73,6 +74,8 @@ public class ExplainPlanAttributes {
   private final String serverDistinctFilter;
   private final Set<PColumn> serverMergeColumns;
   private final boolean serverArrayElementProjection;
+  private final boolean serverFirstKeyOnlyProjection;
+  private final boolean serverEmptyColumnOnlyProjection;
   private final String serverAggregate;
   private final Integer serverGroupByLimit;
   private final String serverSortedBy;
@@ -134,6 +137,8 @@ public class ExplainPlanAttributes {
     this.serverDistinctFilter = null;
     this.serverMergeColumns = null;
     this.serverArrayElementProjection = false;
+    this.serverFirstKeyOnlyProjection = false;
+    this.serverEmptyColumnOnlyProjection = false;
     this.serverAggregate = null;
     this.serverGroupByLimit = null;
     this.serverSortedBy = null;
@@ -168,9 +173,10 @@ public class ExplainPlanAttributes {
     Integer splitsChunk, boolean useRoundRobinIterator, Double samplingRate,
     String hexStringRVCOffset, String iteratorTypeAndScanSize, Long estimatedRows,
     Long estimatedSizeInBytes, String serverWhereFilter, String serverDistinctFilter,
-    Set<PColumn> serverMergeColumns, boolean serverArrayElementProjection, String serverAggregate,
-    Integer serverGroupByLimit, String serverSortedBy, Integer serverOffset, Long serverRowLimit,
-    String clientFilterBy, String clientAggregate, String clientDistinctFilter,
+    Set<PColumn> serverMergeColumns, boolean serverArrayElementProjection,
+    boolean serverFirstKeyOnlyProjection, boolean serverEmptyColumnOnlyProjection,
+    String serverAggregate, Integer serverGroupByLimit, String serverSortedBy, Integer serverOffset,
+    Long serverRowLimit, String clientFilterBy, String clientAggregate, String clientDistinctFilter,
     String clientAfterAggregate, String clientSortAlgo, String clientSortedBy, Integer clientOffset,
     Integer clientRowLimit, Integer clientSequenceCount, String clientCursorName,
     List<String> clientSteps, ExplainPlanAttributes lhsJoinQueryExplainPlan,
@@ -201,6 +207,8 @@ public class ExplainPlanAttributes {
     this.serverDistinctFilter = serverDistinctFilter;
     this.serverMergeColumns = serverMergeColumns;
     this.serverArrayElementProjection = serverArrayElementProjection;
+    this.serverFirstKeyOnlyProjection = serverFirstKeyOnlyProjection;
+    this.serverEmptyColumnOnlyProjection = serverEmptyColumnOnlyProjection;
     this.serverAggregate = serverAggregate;
     this.serverGroupByLimit = serverGroupByLimit;
     this.serverSortedBy = serverSortedBy;
@@ -322,6 +330,14 @@ public class ExplainPlanAttributes {
 
   public boolean isServerArrayElementProjection() {
     return serverArrayElementProjection;
+  }
+
+  public boolean isServerFirstKeyOnlyProjection() {
+    return serverFirstKeyOnlyProjection;
+  }
+
+  public boolean isServerEmptyColumnOnlyProjection() {
+    return serverEmptyColumnOnlyProjection;
   }
 
   public String getServerAggregate() {
@@ -457,6 +473,8 @@ public class ExplainPlanAttributes {
     private String serverDistinctFilter;
     private Set<PColumn> serverMergeColumns;
     private boolean serverArrayElementProjection;
+    private boolean serverFirstKeyOnlyProjection;
+    private boolean serverEmptyColumnOnlyProjection;
     private String serverAggregate;
     private Integer serverGroupByLimit;
     private String serverSortedBy;
@@ -512,6 +530,9 @@ public class ExplainPlanAttributes {
       this.serverDistinctFilter = explainPlanAttributes.getServerDistinctFilter();
       this.serverMergeColumns = explainPlanAttributes.getServerMergeColumns();
       this.serverArrayElementProjection = explainPlanAttributes.isServerArrayElementProjection();
+      this.serverFirstKeyOnlyProjection = explainPlanAttributes.isServerFirstKeyOnlyProjection();
+      this.serverEmptyColumnOnlyProjection =
+        explainPlanAttributes.isServerEmptyColumnOnlyProjection();
       this.serverAggregate = explainPlanAttributes.getServerAggregate();
       this.serverGroupByLimit = explainPlanAttributes.getServerGroupByLimit();
       this.serverSortedBy = explainPlanAttributes.getServerSortedBy();
@@ -654,6 +675,18 @@ public class ExplainPlanAttributes {
     public ExplainPlanAttributesBuilder
       setServerArrayElementProjection(boolean serverArrayElementProjection) {
       this.serverArrayElementProjection = serverArrayElementProjection;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder
+      setServerFirstKeyOnlyProjection(boolean serverFirstKeyOnlyProjection) {
+      this.serverFirstKeyOnlyProjection = serverFirstKeyOnlyProjection;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder
+      setServerEmptyColumnOnlyProjection(boolean serverEmptyColumnOnlyProjection) {
+      this.serverEmptyColumnOnlyProjection = serverEmptyColumnOnlyProjection;
       return this;
     }
 
@@ -803,7 +836,8 @@ public class ExplainPlanAttributes {
         tableName, keyRanges, indexName, indexKind, saltBuckets, regionsPlanned, scanTimeRangeMin,
         scanTimeRangeMax, splitsChunk, useRoundRobinIterator, samplingRate, hexStringRVCOffset,
         iteratorTypeAndScanSize, estimatedRows, estimatedSizeInBytes, serverWhereFilter,
-        serverDistinctFilter, serverMergeColumns, serverArrayElementProjection, serverAggregate,
+        serverDistinctFilter, serverMergeColumns, serverArrayElementProjection,
+        serverFirstKeyOnlyProjection, serverEmptyColumnOnlyProjection, serverAggregate,
         serverGroupByLimit, serverSortedBy, serverOffset, serverRowLimit, clientFilterBy,
         clientAggregate, clientDistinctFilter, clientAfterAggregate, clientSortAlgo, clientSortedBy,
         clientOffset, clientRowLimit, clientSequenceCount, clientCursorName, clientSteps,

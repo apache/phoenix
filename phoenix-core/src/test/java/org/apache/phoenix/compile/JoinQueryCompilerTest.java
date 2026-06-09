@@ -82,7 +82,7 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
         + " s ON s.\"supplier_id\" = i.\"supplier_id\" WHERE i.name LIKE 'T%'";
     // RIGHT JOIN drives the scan over SUPPLIER, with the rest of the join tree nested as sub-plans.
     assertPlan(conn, query).scanType("FULL SCAN").table(JOIN_SUPPLIER_TABLE_DISPLAY_NAME)
-      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverFirstKeyOnlyProjection(true)
       .afterJoinFilter("AFTER-JOIN SERVER FILTER BY I.NAME LIKE 'T%'").subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0").scanType("FULL SCAN")
       .table(JOIN_ORDER_TABLE_DISPLAY_NAME).subPlanCount(2).subPlan(0)
