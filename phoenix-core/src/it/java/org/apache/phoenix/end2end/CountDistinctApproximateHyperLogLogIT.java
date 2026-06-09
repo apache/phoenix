@@ -123,8 +123,7 @@ public class CountDistinctApproximateHyperLogLogIT extends ParallelStatsDisabled
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       prepareTableWithValues(conn, 100);
       assertPlan(conn, query).table(tableName).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
-        .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW");
+        .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW");
     }
   }
 

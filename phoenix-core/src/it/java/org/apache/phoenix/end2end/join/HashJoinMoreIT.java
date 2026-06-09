@@ -782,12 +782,13 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
 
         assertPlan(conn, q).scanType("SKIP SCAN ON 2 RANGES").table("EVENT_COUNT").keyRanges(
           " [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']")
-          .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+          .serverFirstKeyOnlyProjection(true)
           .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"E.TIMESTAMP\", E.BUCKET]")
           .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
           .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)")
           .scanType("SKIP SCAN ON 2 RANGES").table(t[i]).keyRanges(innerKeyRanges)
-          .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND SRC_LOCATION = DST_LOCATION")
+          .serverFirstKeyOnlyProjection(true)
+          .serverWhereFilter("SERVER FILTER BY SRC_LOCATION = DST_LOCATION")
           .clientSortAlgo("CLIENT MERGE SORT").end();
 
         ResultSet rs = conn.createStatement().executeQuery(q);
