@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -41,7 +42,6 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.RowValueConstructorOffsetNotCoercibleException;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -1079,16 +1079,8 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
 
   @Test
   public void testOffsetExplain() throws SQLException {
-    String sql =
-      "EXPLAIN SELECT * FROM " + DATA_TABLE_NAME + "  LIMIT 2 OFFSET (k1,k2,k3)=(2, 3, 2)";
-    try (Statement statement = conn.createStatement(); ResultSet rs = statement.executeQuery(sql)) {
-      StringBuilder explainStringBuilder = new StringBuilder();
-      while (rs.next()) {
-        String explain = rs.getString(1);
-        explainStringBuilder.append(explain);
-      }
-      assertTrue(explainStringBuilder.toString().contains("With RVC Offset"));
-    }
+    String sql = "SELECT * FROM " + DATA_TABLE_NAME + "  LIMIT 2 OFFSET (k1,k2,k3)=(2, 3, 2)";
+    assertPlan(conn, sql).hexStringRVCOffset("0x828383");
   }
 
   @Test
@@ -1271,12 +1263,8 @@ public class RowValueConstructorOffsetIT extends ParallelStatsDisabledIT {
       "SELECT /*+ INDEX(%s %s)*/ %s FROM %s "
         + "WHERE t_id = 'b' AND k1 = 2 AND k2 = 3 OFFSET (%s)=('a', 1, 2)",
       TABLE_NAME, INDEX_NAME, TABLE_ROW_KEY, TABLE_NAME, TABLE_ROW_KEY);
-    try (Statement statement = conn.createStatement()) {
-      ResultSet rs = statement.executeQuery("EXPLAIN " + sql);
-      String actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      // As hinted plan is not applicable so use data plan which is point lookup
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + TABLE_NAME));
-    }
+    // As hinted plan is not applicable so use data plan which is point lookup
+    assertPlan(conn, sql).scanType("POINT LOOKUP ON 1 KEY").table(TABLE_NAME);
   }
 
   @Test

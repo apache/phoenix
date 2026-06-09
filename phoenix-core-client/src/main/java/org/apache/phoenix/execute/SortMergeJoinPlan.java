@@ -192,10 +192,6 @@ public class SortMergeJoinPlan implements QueryPlan {
     ExplainPlan lhsExplainPlan = lhsPlan.getExplainPlan();
     List<String> lhsPlanSteps = lhsExplainPlan.getPlanSteps();
     ExplainPlanAttributes lhsPlanAttributes = lhsExplainPlan.getPlanStepsAsAttributes();
-    ExplainPlanAttributesBuilder lhsPlanBuilder =
-      new ExplainPlanAttributesBuilder(lhsPlanAttributes);
-    lhsPlanBuilder
-      .setAbstractExplainPlan("SORT-MERGE-JOIN (" + joinType.toString().toUpperCase() + ")");
 
     for (String step : lhsPlanSteps) {
       steps.add("    " + step);
@@ -205,15 +201,20 @@ public class SortMergeJoinPlan implements QueryPlan {
     ExplainPlan rhsExplainPlan = rhsPlan.getExplainPlan();
     List<String> rhsPlanSteps = rhsExplainPlan.getPlanSteps();
     ExplainPlanAttributes rhsPlanAttributes = rhsExplainPlan.getPlanStepsAsAttributes();
-    ExplainPlanAttributesBuilder rhsPlanBuilder =
-      new ExplainPlanAttributesBuilder(rhsPlanAttributes);
-
-    lhsPlanBuilder.setRhsJoinQueryExplainPlan(rhsPlanBuilder.build());
 
     for (String step : rhsPlanSteps) {
       steps.add("    " + step);
     }
-    return new ExplainPlan(steps, lhsPlanBuilder.build());
+
+    // Build a synthetic root that holds the join operator and its two operands as separate
+    // child plans so nested sort-merge-joins can be represented.
+    ExplainPlanAttributesBuilder rootBuilder = new ExplainPlanAttributesBuilder();
+    rootBuilder
+      .setAbstractExplainPlan("SORT-MERGE-JOIN (" + joinType.toString().toUpperCase() + ")");
+    rootBuilder.setSortMergeSkipMerge(rhsSchema.getFieldCount() == 0);
+    rootBuilder.setLhsJoinQueryExplainPlan(lhsPlanAttributes);
+    rootBuilder.setRhsJoinQueryExplainPlan(rhsPlanAttributes);
+    return new ExplainPlan(steps, rootBuilder.build());
   }
 
   @Override
