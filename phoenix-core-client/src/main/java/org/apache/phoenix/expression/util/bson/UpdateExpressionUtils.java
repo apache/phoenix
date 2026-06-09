@@ -98,7 +98,8 @@ public class UpdateExpressionUtils {
   public static void updateExpression(final BsonDocument updateExpression,
     final BsonDocument bsonDocument) {
 
-    LOGGER.debug("Update Expression: {} , current bsonDocument: {}", updateExpression, bsonDocument);
+    LOGGER.debug("Update Expression: {} , current bsonDocument: {}", updateExpression,
+      bsonDocument);
 
     if (updateExpression.containsKey("$SET")) {
       executeSetExpression((BsonDocument) updateExpression.get("$SET"), bsonDocument);
