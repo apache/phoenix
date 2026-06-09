@@ -32,47 +32,46 @@ import org.apache.hadoop.io.Writable;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 
 /**
- * Filter for CDC data table scans that prunes redundant cell versions. For each row, given a set of
- * change timestamps (from the CDC batch), this filter includes only:
+ * Filter for CDC data table scans that prunes redundant cell versions. For each data row the filter
+ * is given the {@code [min, max]} band of change timestamps for that row (the oldest and newest CDC
+ * change seen in the current scan). Per column (family:qualifier), with cells delivered in
+ * timestamp-descending order, it includes only:
  * <ul>
- * <li>Cells at a change timestamp (the change itself)</li>
- * <li>The first cell below each change timestamp per column (the pre-image)</li>
- * <li>All DeleteFamily markers (needed for CDC deletion tracking)</li>
+ * <li>cells whose timestamp is within {@code [min, max]} (the change cells), and</li>
+ * <li>the first cell strictly below {@code min} (the pre-image for the oldest change), and</li>
+ * <li>all DeleteFamily / DeleteFamilyVersion markers (needed for CDC deletion tracking).</li>
  * </ul>
- * All other cell versions are skipped, reducing network I/O, memory, and processing overhead.
- * <p>
- * Within each column (family:qualifier), HBase delivers cells in timestamp-descending order. The
- * filter maintains a pointer into the sorted change timestamps and tracks whether a pre-image is
- * still needed, advancing through the timestamps as cells arrive.
+ * Cells newer than {@code max}, and all but the first cell older than {@code min}, are skipped,
+ * reducing network I/O, memory, and processing overhead on the data table scan.
  */
 public class CDCVersionFilter extends FilterBase implements Writable {
 
-  private Map<ImmutableBytesPtr, long[]> timestampMap;
+  private Map<ImmutableBytesPtr, long[]> rangeMap;
 
   // Per-row state
-  private long[] currentTimestamps;
+  private long[] currentRange;
   private byte[] currentRowKey;
 
   // Per-column state
   private byte[] prevFamily;
   private byte[] prevQualifier;
-  private int tsIdx;
-  private boolean needPreImage;
+
+  private boolean belowMinEmitted;
 
   public CDCVersionFilter() {
   }
 
   /**
-   * @param timestampMap mapping of data row key to sorted (descending) array of change timestamps
-   *                     for that row
+   * @param rangeMap mapping of data row key to a 2-element {@code [min, max]} array giving the
+   *                 oldest and newest change timestamp for that row
    */
-  public CDCVersionFilter(Map<ImmutableBytesPtr, long[]> timestampMap) {
-    this.timestampMap = timestampMap;
+  public CDCVersionFilter(Map<ImmutableBytesPtr, long[]> rangeMap) {
+    this.rangeMap = rangeMap;
   }
 
   @Override
   public void reset() throws IOException {
-    currentTimestamps = null;
+    currentRange = null;
     currentRowKey = null;
     resetColumnState();
   }
@@ -80,8 +79,7 @@ public class CDCVersionFilter extends FilterBase implements Writable {
   private void resetColumnState() {
     prevFamily = null;
     prevQualifier = null;
-    tsIdx = 0;
-    needPreImage = false;
+    belowMinEmitted = false;
   }
 
   private boolean isNewRow(Cell cell) {
@@ -95,7 +93,7 @@ public class CDCVersionFilter extends FilterBase implements Writable {
   private void onNewRow(Cell cell) {
     currentRowKey = CellUtil.cloneRow(cell);
     ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(currentRowKey);
-    currentTimestamps = timestampMap != null ? timestampMap.get(rowKeyPtr) : null;
+    currentRange = rangeMap != null ? rangeMap.get(rowKeyPtr) : null;
     resetColumnState();
   }
 
@@ -129,7 +127,7 @@ public class CDCVersionFilter extends FilterBase implements Writable {
       onNewRow(cell);
     }
 
-    if (currentTimestamps == null || currentTimestamps.length == 0) {
+    if (currentRange == null) {
       return ReturnCode.INCLUDE;
     }
 
@@ -140,36 +138,24 @@ public class CDCVersionFilter extends FilterBase implements Writable {
 
     if (isNewColumn(cell)) {
       trackColumn(cell);
-      tsIdx = 0;
-      needPreImage = false;
+      belowMinEmitted = false;
     }
 
     long cellTs = cell.getTimestamp();
+    long minChangeTs = currentRange[0];
+    long maxChangeTs = currentRange[1];
 
-    // Advance past change timestamps that are above this cell's timestamp.
-    // These timestamps had no cell for this column, but we still need a pre-image
-    // below them (the first cell we encounter serves as pre-image for all of them).
-    while (tsIdx < currentTimestamps.length && currentTimestamps[tsIdx] > cellTs) {
-      needPreImage = true;
-      tsIdx++;
+    if (cellTs > maxChangeTs) {
+      return ReturnCode.SKIP;
     }
-
-    if (tsIdx < currentTimestamps.length && cellTs == currentTimestamps[tsIdx]) {
-      needPreImage = true;
-      tsIdx++;
+    if (cellTs >= minChangeTs) {
       return ReturnCode.INCLUDE;
     }
-
-    if (needPreImage) {
-      needPreImage = false;
+    if (!belowMinEmitted) {
+      belowMinEmitted = true;
       return ReturnCode.INCLUDE;
     }
-
-    if (tsIdx >= currentTimestamps.length) {
-      return ReturnCode.NEXT_COL;
-    }
-
-    return ReturnCode.SKIP;
+    return ReturnCode.NEXT_COL;
   }
 
   @Override
@@ -187,20 +173,18 @@ public class CDCVersionFilter extends FilterBase implements Writable {
 
   @Override
   public void write(DataOutput out) throws IOException {
-    if (timestampMap == null) {
+    if (rangeMap == null) {
       out.writeInt(0);
       return;
     }
-    out.writeInt(timestampMap.size());
-    for (Map.Entry<ImmutableBytesPtr, long[]> entry : timestampMap.entrySet()) {
+    out.writeInt(rangeMap.size());
+    for (Map.Entry<ImmutableBytesPtr, long[]> entry : rangeMap.entrySet()) {
       ImmutableBytesPtr key = entry.getKey();
-      long[] timestamps = entry.getValue();
+      long[] range = entry.getValue();
       out.writeInt(key.getLength());
       out.write(key.get(), key.getOffset(), key.getLength());
-      out.writeInt(timestamps.length);
-      for (long ts : timestamps) {
-        out.writeLong(ts);
-      }
+      out.writeLong(range[0]);
+      out.writeLong(range[1]);
     }
   }
 
@@ -210,7 +194,7 @@ public class CDCVersionFilter extends FilterBase implements Writable {
     if (numRows < 0) {
       throw new IOException("Invalid CDCVersionFilter row count: " + numRows);
     }
-    timestampMap = new HashMap<>();
+    rangeMap = new HashMap<>();
     for (int i = 0; i < numRows; i++) {
       int keyLen = in.readInt();
       if (keyLen < 0) {
@@ -218,15 +202,9 @@ public class CDCVersionFilter extends FilterBase implements Writable {
       }
       byte[] keyBytes = new byte[keyLen];
       in.readFully(keyBytes);
-      int numTs = in.readInt();
-      if (numTs < 0) {
-        throw new IOException("Invalid CDCVersionFilter timestamp count: " + numTs);
-      }
-      long[] timestamps = new long[numTs];
-      for (int j = 0; j < numTs; j++) {
-        timestamps[j] = in.readLong();
-      }
-      timestampMap.put(new ImmutableBytesPtr(keyBytes), timestamps);
+      long minChangeTs = in.readLong();
+      long maxChangeTs = in.readLong();
+      rangeMap.put(new ImmutableBytesPtr(keyBytes), new long[] { minChangeTs, maxChangeTs });
     }
   }
 }

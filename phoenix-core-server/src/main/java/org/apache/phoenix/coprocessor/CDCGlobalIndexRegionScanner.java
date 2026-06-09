@@ -32,7 +32,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeSet;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilder;
 import org.apache.hadoop.hbase.CellBuilderFactory;
@@ -133,9 +132,9 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
       return null;
     }
     CDCUtil.setupScanForCDC(dataScan);
-    Map<ImmutableBytesPtr, long[]> timestampMap = buildDataRowTimestampMap(dataRowKeys);
-    if (!timestampMap.isEmpty()) {
-      CDCVersionFilter versionFilter = new CDCVersionFilter(timestampMap);
+    Map<ImmutableBytesPtr, long[]> changeRangeMap = buildDataRowChangeRangeMap(dataRowKeys);
+    if (!changeRangeMap.isEmpty()) {
+      CDCVersionFilter versionFilter = new CDCVersionFilter(changeRangeMap);
       Filter existingFilter = dataScan.getFilter();
       if (existingFilter != null) {
         dataScan.setFilter(
@@ -147,12 +146,13 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
     return dataScan;
   }
 
-  private Map<ImmutableBytesPtr, long[]> buildDataRowTimestampMap(Collection<byte[]> dataRowKeys) {
+  private Map<ImmutableBytesPtr, long[]>
+    buildDataRowChangeRangeMap(Collection<byte[]> dataRowKeys) {
     Set<ImmutableBytesPtr> scopedRowKeys = new HashSet<>(dataRowKeys.size());
     for (byte[] dataRowKey : dataRowKeys) {
       scopedRowKeys.add(new ImmutableBytesPtr(dataRowKey));
     }
-    Map<ImmutableBytesPtr, TreeSet<Long>> tempMap = new HashMap<>();
+    Map<ImmutableBytesPtr, long[]> result = new HashMap<>();
     for (List<Cell> indexRow : indexRows) {
       if (indexRow.isEmpty()) {
         continue;
@@ -168,18 +168,17 @@ public class CDCGlobalIndexRegionScanner extends UncoveredGlobalIndexRegionScann
         continue;
       }
       long changeTs = firstCell.getTimestamp();
-      tempMap.computeIfAbsent(dataRowKeyPtr, k -> new TreeSet<>(Collections.reverseOrder()))
-        .add(changeTs);
-    }
-    Map<ImmutableBytesPtr, long[]> result = new HashMap<>(tempMap.size());
-    for (Map.Entry<ImmutableBytesPtr, TreeSet<Long>> entry : tempMap.entrySet()) {
-      TreeSet<Long> tsSet = entry.getValue();
-      long[] tsArray = new long[tsSet.size()];
-      int i = 0;
-      for (long ts : tsSet) {
-        tsArray[i++] = ts;
+      long[] range = result.get(dataRowKeyPtr);
+      if (range == null) {
+        result.put(dataRowKeyPtr, new long[] { changeTs, changeTs });
+      } else {
+        if (changeTs < range[0]) {
+          range[0] = changeTs;
+        }
+        if (changeTs > range[1]) {
+          range[1] = changeTs;
+        }
       }
-      result.put(entry.getKey(), tsArray);
     }
     return result;
   }
