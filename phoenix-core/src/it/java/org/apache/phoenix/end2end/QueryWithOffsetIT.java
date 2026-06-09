@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -33,9 +34,6 @@ import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Properties;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Before;
@@ -129,20 +127,14 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
     initTableValues(conn);
     updateStatistics(conn);
     String query = "SELECT t_id from " + tableName + " offset " + offset;
-    ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-      .optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(tableName, explainPlanAttributes.getTableName());
-    assertEquals("SERVER FILTER BY EMPTY COLUMN ONLY",
-      explainPlanAttributes.getServerWhereFilter());
     if (!isSalted) {
-      assertEquals("SERIAL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals(offset, explainPlanAttributes.getServerOffset().intValue());
+      assertPlan(conn, query).scanType("FULL SCAN").table(tableName)
+        .serverWhereFilter("SERVER FILTER BY EMPTY COLUMN ONLY").iteratorType("SERIAL 1-WAY")
+        .serverOffset(offset);
     } else {
-      assertEquals("PARALLEL 10-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
-      assertEquals(offset, explainPlanAttributes.getClientOffset().intValue());
+      assertPlan(conn, query).scanType("FULL SCAN").table(tableName)
+        .serverWhereFilter("SERVER FILTER BY EMPTY COLUMN ONLY").iteratorType("PARALLEL 10-WAY")
+        .clientSortAlgo("CLIENT MERGE SORT").clientOffset(offset);
     }
 
     ResultSet rs = conn.createStatement().executeQuery(query);
@@ -152,22 +144,16 @@ public class QueryWithOffsetIT extends ParallelStatsDisabledIT {
       assertEquals(STRINGS[offset + i - 1], rs.getString(1));
     }
     query = "SELECT t_id from " + tableName + " ORDER BY v1 offset " + offset;
-    plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-      .getExplainPlan();
-    explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(tableName, explainPlanAttributes.getTableName());
-    assertEquals("[C2.V1]", explainPlanAttributes.getServerSortedBy());
-    assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
-    assertEquals(offset, explainPlanAttributes.getClientOffset().intValue());
     if (!isSalted) {
       // When Parallel stats is actually disabled, it is PARALLEL 4-WAY
       // CLIENT PARALLEL 4-WAY FULL SCAN OVER T_N000001
       // SERVER SORTED BY [C2.V1] CLIENT MERGE SORT CLIENT OFFSET 10
       // When enabled, it is 5-WAY
-      assertEquals("PARALLEL 4-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
+      assertPlan(conn, query).scanType("FULL SCAN").table(tableName).serverSortedBy("[C2.V1]")
+        .clientSortAlgo("CLIENT MERGE SORT").clientOffset(offset).iteratorType("PARALLEL 4-WAY");
     } else {
-      assertEquals("PARALLEL 10-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
+      assertPlan(conn, query).scanType("FULL SCAN").table(tableName).serverSortedBy("[C2.V1]")
+        .clientSortAlgo("CLIENT MERGE SORT").clientOffset(offset).iteratorType("PARALLEL 10-WAY");
     }
     conn.close();
   }

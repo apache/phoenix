@@ -47,8 +47,6 @@ import java.util.Properties;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.mapreduce.CounterGroup;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixParserException;
@@ -59,12 +57,12 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.explain.ExplainPlanTestUtil;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.After;
 import org.junit.Assert;
@@ -110,7 +108,7 @@ public class PartialIndexIT extends BaseTest {
       { false, true, true } });
   }
 
-  public static void assertPlan(PhoenixResultSet rs, String schemaName, String tableName) {
+  public static void assertCurrentTable(PhoenixResultSet rs, String schemaName, String tableName) {
     PTable table = rs.getContext().getCurrentTable().getTable();
     assertTrue(table.getSchemaName().getString().equals(schemaName)
       && table.getTableName().getString().equals(tableName));
@@ -239,7 +237,7 @@ public class PartialIndexIT extends BaseTest {
       String selectSql = "SELECT  D from " + dataTableName + " WHERE A > 60";
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is used
-      assertPlan((PhoenixResultSet) rs, "", indexTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", indexTableName);
       assertTrue(rs.next());
       assertEquals("b", rs.getString(1));
       assertFalse(rs.next());
@@ -251,7 +249,7 @@ public class PartialIndexIT extends BaseTest {
       selectSql = "SELECT  D from " + dataTableName + " WHERE A = 50";
       rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is not used
-      assertPlan((PhoenixResultSet) rs, "", dataTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", dataTableName);
       // explain plan verify to check if partial index is not used
       rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
       assertTrue(rs.next());
@@ -289,7 +287,7 @@ public class PartialIndexIT extends BaseTest {
       // Retrieve update row from the data table and verify that the index table is not used
       selectSql = "SELECT  ID from " + dataTableName + " WHERE A = 0";
       rs = conn.createStatement().executeQuery(selectSql);
-      assertPlan((PhoenixResultSet) rs, "", dataTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", dataTableName);
       assertTrue(rs.next());
       assertEquals("id2", rs.getString(1));
       // explain plan verify to check if partial index is not used
@@ -336,7 +334,7 @@ public class PartialIndexIT extends BaseTest {
 
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is used
-      assertPlan((PhoenixResultSet) rs, "", indexTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", indexTableName);
       assertTrue(rs.next());
       assertEquals("a", rs.getString(1));
       assertFalse(rs.next());
@@ -348,7 +346,7 @@ public class PartialIndexIT extends BaseTest {
       selectSql = "SELECT  D from " + dataTableName + " WHERE A > 100";
       rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is not used
-      assertPlan((PhoenixResultSet) rs, "", dataTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", dataTableName);
       // explain plan verify to check if partial index is not used
       rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
       assertTrue(rs.next());
@@ -424,7 +422,7 @@ public class PartialIndexIT extends BaseTest {
 
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is used
-      assertPlan((PhoenixResultSet) rs, "", indexTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", indexTableName);
       assertTrue(rs.next());
       assertEquals(70, rs.getInt(1));
       assertEquals("a", rs.getString(2));
@@ -457,7 +455,7 @@ public class PartialIndexIT extends BaseTest {
 
       rs = conn.createStatement().executeQuery("SELECT Count(*) from " + dataTableName);
       // Verify that the index table is not used
-      assertPlan((PhoenixResultSet) rs, "", dataTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", dataTableName);
       assertTrue(rs.next());
       assertEquals(5, rs.getInt(1));
       // explain plan verify to check if partial index is not used
@@ -515,7 +513,7 @@ public class PartialIndexIT extends BaseTest {
         "SELECT D from " + dataTableName + " WHERE B is not NULL AND D like '%cde_'";
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is used
-      assertPlan((PhoenixResultSet) rs, "", indexTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", indexTableName);
       assertTrue(rs.next());
       assertEquals("abcdef", rs.getString(1));
       assertFalse(rs.next());
@@ -545,7 +543,7 @@ public class PartialIndexIT extends BaseTest {
       selectSql = "SELECT Count(*) from " + dataTableName;
       rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is not used
-      assertPlan((PhoenixResultSet) rs, "", dataTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", dataTableName);
       assertTrue(rs.next());
       assertEquals(5, rs.getInt(1));
       // explain plan verify to check if partial index is not used
@@ -605,7 +603,7 @@ public class PartialIndexIT extends BaseTest {
           + "', 'yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is used
-      assertPlan((PhoenixResultSet) rs, "", indexTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", indexTableName);
       assertTrue(rs.next());
       assertEquals(0, rs.getInt(1));
       assertTrue(rs.next());
@@ -624,7 +622,7 @@ public class PartialIndexIT extends BaseTest {
 
       rs = conn.createStatement().executeQuery("SELECT Count(*) from " + dataTableName);
       // Verify that the index table is not used
-      assertPlan((PhoenixResultSet) rs, "", dataTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", dataTableName);
       assertTrue(rs.next());
       assertEquals(4, rs.getInt(1));
       // explain plan verify to check if partial index is not used
@@ -645,7 +643,7 @@ public class PartialIndexIT extends BaseTest {
 
       rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is used
-      assertPlan((PhoenixResultSet) rs, "", indexTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", indexTableName);
       assertTrue(rs.next());
       assertEquals(0, rs.getInt(1));
       assertFalse(rs.next());
@@ -723,7 +721,7 @@ public class PartialIndexIT extends BaseTest {
         // Verify that query uses the tenant view index
         ResultSet rs = tenantConn.createStatement()
           .executeQuery("SELECT KV1 FROM  " + tenantViewName + " WHERE PK3 = 5");
-        assertPlan((PhoenixResultSet) rs, "", tenantViewIndexName);
+        assertCurrentTable((PhoenixResultSet) rs, "", tenantViewIndexName);
         assertTrue(rs.next());
         assertEquals("KV10", rs.getString(1));
         assertFalse(rs.next());
@@ -732,7 +730,7 @@ public class PartialIndexIT extends BaseTest {
         // where clause does not contain the query where clause
         rs = tenantConn.createStatement()
           .executeQuery("SELECT KV1 FROM  " + tenantViewName + " WHERE PK3 = 4");
-        assertPlan((PhoenixResultSet) rs, "", tenantViewName);
+        assertCurrentTable((PhoenixResultSet) rs, "", tenantViewName);
         assertTrue(rs.next());
         assertEquals("KV8", rs.getString(1));
         assertFalse(rs.next());
@@ -740,7 +738,7 @@ public class PartialIndexIT extends BaseTest {
         // Verify that the tenant view index has only one row
         rs =
           tenantConn.createStatement().executeQuery("SELECT Count(*) FROM  " + tenantViewIndexName);
-        assertPlan((PhoenixResultSet) rs, "", tenantViewIndexName);
+        assertCurrentTable((PhoenixResultSet) rs, "", tenantViewIndexName);
         assertTrue(rs.next());
         assertEquals(1, rs.getInt(1));
       }
@@ -751,7 +749,7 @@ public class PartialIndexIT extends BaseTest {
         // Verify that the query uses the global view index
         ResultSet rs = tenantConn.createStatement()
           .executeQuery("SELECT KV1 FROM  " + tenantViewName + " WHERE PK3 = 1 AND KV3 = 'KV3'");
-        assertPlan((PhoenixResultSet) rs, "", tenantViewName + "#" + globalViewIndexName);
+        assertCurrentTable((PhoenixResultSet) rs, "", tenantViewName + "#" + globalViewIndexName);
         assertTrue(rs.next());
         assertEquals("KV1", rs.getString(1));
         assertFalse(rs.next());
@@ -760,14 +758,14 @@ public class PartialIndexIT extends BaseTest {
       // Verify that the query uses the global view index
       ResultSet rs = conn.createStatement()
         .executeQuery("SELECT KV1 FROM  " + globalViewName + " WHERE PK3 = 1 AND KV3 = 'KV3'");
-      assertPlan((PhoenixResultSet) rs, "", globalViewIndexName);
+      assertCurrentTable((PhoenixResultSet) rs, "", globalViewIndexName);
       assertTrue(rs.next());
       assertEquals("KV1", rs.getString(1));
       assertFalse(rs.next());
 
       // Verify that the global view index has five rows
       rs = conn.createStatement().executeQuery("SELECT Count(*) FROM  " + globalViewIndexName);
-      assertPlan((PhoenixResultSet) rs, "", globalViewIndexName);
+      assertCurrentTable((PhoenixResultSet) rs, "", globalViewIndexName);
       assertTrue(rs.next());
       assertEquals(5, rs.getInt(1));
     }
@@ -801,7 +799,7 @@ public class PartialIndexIT extends BaseTest {
       String selectSql = "SELECT  D from " + dataTableName + " WHERE A > 60";
       // Verify that the partial index table is used
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
-      assertPlan((PhoenixResultSet) rs, "", partialIndexTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", partialIndexTableName);
       assertTrue(rs.next());
       assertEquals("b", rs.getString(1));
       assertFalse(rs.next());
@@ -813,7 +811,7 @@ public class PartialIndexIT extends BaseTest {
       selectSql = "SELECT  D from " + dataTableName + " WHERE A < 50";
       // Verify that the full index table is used
       rs = conn.createStatement().executeQuery(selectSql);
-      assertPlan((PhoenixResultSet) rs, "", fullIndexTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", fullIndexTableName);
       assertTrue(rs.next());
       assertEquals("a", rs.getString(1));
       assertFalse(rs.next());
@@ -855,7 +853,7 @@ public class PartialIndexIT extends BaseTest {
         + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) > 60";
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is used
-      assertPlan((PhoenixResultSet) rs, "", indexTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", indexTableName);
       assertTrue(rs.next());
       assertEquals("b", rs.getString(1));
       assertFalse(rs.next());
@@ -864,7 +862,7 @@ public class PartialIndexIT extends BaseTest {
         + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) = 50";
       rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is not used
-      assertPlan((PhoenixResultSet) rs, "", dataTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", dataTableName);
 
       // Add more rows to test the index write path
       conn.createStatement().execute("upsert into " + dataTableName
@@ -896,7 +894,7 @@ public class PartialIndexIT extends BaseTest {
       selectSql = "SELECT  ID from " + dataTableName
         + " WHERE (CAST(TO_NUMBER(JSON_VALUE(jsoncol, '$.info.age')) AS INTEGER)) = 0";
       rs = conn.createStatement().executeQuery(selectSql);
-      assertPlan((PhoenixResultSet) rs, "", dataTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", dataTableName);
       assertTrue(rs.next());
       assertEquals("id2", rs.getString(1));
 
@@ -943,7 +941,7 @@ public class PartialIndexIT extends BaseTest {
           + " WHERE A > 60 AND JSON_EXISTS(jsoncol, '$.info.address.exists')";
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is used
-      assertPlan((PhoenixResultSet) rs, "", indexTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", indexTableName);
       assertTrue(rs.next());
       assertEquals(70, rs.getInt(1));
       assertEquals("a", rs.getString(2));
@@ -969,7 +967,7 @@ public class PartialIndexIT extends BaseTest {
 
       rs = conn.createStatement().executeQuery("SELECT Count(*) from " + dataTableName);
       // Verify that the index table is not used
-      assertPlan((PhoenixResultSet) rs, "", dataTableName);
+      assertCurrentTable((PhoenixResultSet) rs, "", dataTableName);
       assertTrue(rs.next());
       assertEquals(5, rs.getInt(1));
 
@@ -1014,26 +1012,23 @@ public class PartialIndexIT extends BaseTest {
       // Index hint provided and query plan using partial index is usable
       String selectSql = "SELECT  /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ "
         + "A from " + dataTableName + " WHERE id2 = 100 AND id1 = 'id12'";
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + selectSql);
-      String actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + indexTableName));
-      rs = stmt.executeQuery(selectSql);
+      ExplainPlanTestUtil.assertPlan(conn, selectSql).scanType("POINT LOOKUP ON 1 KEY")
+        .table(indexTableName);
+      ResultSet rs = stmt.executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(2, rs.getInt(1));
       assertFalse(rs.next());
       // Index hint provided but query plan using partial index is not usable so, no data
       selectSql = "SELECT  /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ " + "A from "
         + dataTableName + " WHERE id2 = 10 AND id1 = 'id11'";
-      rs = stmt.executeQuery("EXPLAIN " + selectSql);
-      actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + indexTableName));
+      ExplainPlanTestUtil.assertPlan(conn, selectSql).scanType("POINT LOOKUP ON 1 KEY")
+        .table(indexTableName);
       rs = stmt.executeQuery(selectSql);
       assertFalse(rs.next());
       // No index hint so, use data table only as its point lookup
       selectSql = "SELECT A from " + dataTableName + " WHERE id2 = 10 AND id1 = 'id11'";
-      rs = stmt.executeQuery("EXPLAIN " + selectSql);
-      actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + dataTableName));
+      ExplainPlanTestUtil.assertPlan(conn, selectSql).scanType("POINT LOOKUP ON 1 KEY")
+        .table(dataTableName);
       rs = stmt.executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(1, rs.getInt(1));
@@ -1192,13 +1187,9 @@ public class PartialIndexIT extends BaseTest {
 
   private static void verifyIndexUsed(PreparedStatement preparedStatement,
     String partialIndexTableName, int buckets) throws SQLException {
-    ExplainPlan plan =
-      preparedStatement.unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(partialIndexTableName, explainPlanAttributes.getTableName());
-    assertEquals("PARALLEL " + buckets + "-WAY",
-      explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+    ExplainPlanTestUtil.assertPlan(preparedStatement.unwrap(PhoenixPreparedStatement.class))
+      .table(partialIndexTableName).iteratorType("PARALLEL " + buckets + "-WAY")
+      .scanType("RANGE SCAN");
   }
 
   private static String toStringLiteral(byte[] b) {

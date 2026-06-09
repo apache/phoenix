@@ -123,34 +123,46 @@ public class ClientScanPlan extends ClientProcessingPlan {
     ExplainPlanAttributesBuilder newBuilder =
       new ExplainPlanAttributesBuilder(explainPlanAttributes);
     if (where != null) {
-      planSteps.add("CLIENT FILTER BY " + where.toString());
+      String step = "CLIENT FILTER BY " + where.toString();
+      planSteps.add(step);
       newBuilder.setClientFilterBy(where.toString());
+      newBuilder.addClientStep(step);
     }
     if (!orderBy.getOrderByExpressions().isEmpty()) {
       if (offset != null) {
-        planSteps.add("CLIENT OFFSET " + offset);
+        String step = "CLIENT OFFSET " + offset;
+        planSteps.add(step);
         newBuilder.setClientOffset(offset);
+        newBuilder.addClientStep(step);
       }
-      planSteps
-        .add("CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
-          + " SORTED BY " + orderBy.getOrderByExpressions().toString());
+      String step =
+        "CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
+          + " SORTED BY " + orderBy.getOrderByExpressions().toString();
+      planSteps.add(step);
       newBuilder.setClientRowLimit(limit);
       newBuilder.setClientSortedBy(orderBy.getOrderByExpressions().toString());
+      newBuilder.addClientStep(step);
     } else {
       if (offset != null) {
-        planSteps.add("CLIENT OFFSET " + offset);
+        String step = "CLIENT OFFSET " + offset;
+        planSteps.add(step);
         newBuilder.setClientOffset(offset);
+        newBuilder.addClientStep(step);
       }
       if (limit != null) {
-        planSteps.add("CLIENT " + limit + " ROW LIMIT");
+        String step = "CLIENT " + limit + " ROW LIMIT";
+        planSteps.add(step);
         newBuilder.setClientRowLimit(limit);
+        newBuilder.addClientStep(step);
       }
     }
     if (context.getSequenceManager().getSequenceCount() > 0) {
       int nSequences = context.getSequenceManager().getSequenceCount();
-      planSteps.add(
-        "CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S"));
+      String step =
+        "CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S");
+      planSteps.add(step);
       newBuilder.setClientSequenceCount(nSequences);
+      newBuilder.addClientStep(step);
     }
 
     return new ExplainPlan(planSteps, newBuilder.build());

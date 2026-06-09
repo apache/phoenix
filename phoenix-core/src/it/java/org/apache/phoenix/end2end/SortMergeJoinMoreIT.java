@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
@@ -30,7 +31,6 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -419,40 +419,32 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
           + "         ) L\n" + "     ON L.BUCKET = E.BUCKET AND L.TIMESTAMP = E.TIMESTAMP\n"
           + " ) C\n" + " GROUP BY C.BUCKET, C.TIMESTAMP ORDER BY C.BUCKET, C.TIMESTAMP";
 
-        String p = i == 0
-          ? "SORT-MERGE-JOIN (INNER) TABLES\n"
-            + "    CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + eventCountTableName
-            + " [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']\n"
-            + "        SERVER FILTER BY FIRST KEY ONLY\n"
-            + "        SERVER DISTINCT PREFIX FILTER OVER [BUCKET, TIMESTAMP, LOCATION]\n"
-            + "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, TIMESTAMP, LOCATION]\n"
-            + "    CLIENT MERGE SORT\n" + "    CLIENT SORTED BY [BUCKET, TIMESTAMP]\n"
-            + "AND (SKIP MERGE)\n" + "    CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + t[i]
-            + " [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']\n"
-            + "        SERVER FILTER BY FIRST KEY ONLY AND SRC_LOCATION = DST_LOCATION\n"
-            + "        SERVER DISTINCT PREFIX FILTER OVER [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n"
-            + "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n"
-            + "    CLIENT MERGE SORT\n" + "    CLIENT SORTED BY [BUCKET, \"TIMESTAMP\"]\n"
-            + "CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]"
-          : "SORT-MERGE-JOIN (INNER) TABLES\n"
-            + "    CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + eventCountTableName
-            + " [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']\n"
-            + "        SERVER FILTER BY FIRST KEY ONLY\n"
-            + "        SERVER DISTINCT PREFIX FILTER OVER [BUCKET, TIMESTAMP, LOCATION]\n"
-            + "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, TIMESTAMP, LOCATION]\n"
-            + "    CLIENT MERGE SORT\n" + "    CLIENT SORTED BY [BUCKET, TIMESTAMP]\n"
-            + "AND (SKIP MERGE)\n" + "    CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + t[i]
-            + " [X'00','5SEC',1462993420000000001,'Tr/Bal'] - [X'01','5SEC',1462993520000000000,'Tr/Bal']\n"
-            + "        SERVER FILTER BY FIRST KEY ONLY AND SRC_LOCATION = DST_LOCATION\n"
-            + "        SERVER DISTINCT PREFIX FILTER OVER [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n"
-            + "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]\n"
-            + "    CLIENT MERGE SORT\n"
-            + "CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]";
+        String lhsKeyRanges =
+          " [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']";
+        String rhsKeyRanges = i == 0
+          ? lhsKeyRanges
+          : " [X'00','5SEC',1462993420000000001,'Tr/Bal'] - [X'01','5SEC',1462993520000000000,'Tr/Bal']";
+        String rhsClientSortedBy = i == 0 ? "[BUCKET, \"TIMESTAMP\"]" : null;
 
-        ResultSet rs = conn.createStatement().executeQuery("explain " + q);
-        assertEquals(p, QueryUtil.getExplainPlan(rs));
+        assertPlan(conn, q).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(true)
+          .clientAggregate("CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY [E.BUCKET, E.TIMESTAMP]")
+          .lhs().iteratorType("PARALLEL").scanType("SKIP SCAN ON 2 RANGES")
+          .table(eventCountTableName).keyRanges(lhsKeyRanges)
+          .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+          .serverDistinctFilter("SERVER DISTINCT PREFIX FILTER OVER [BUCKET, TIMESTAMP, LOCATION]")
+          .serverAggregate(
+            "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, TIMESTAMP, LOCATION]")
+          .clientSortAlgo("CLIENT MERGE SORT").clientSortedBy("[BUCKET, TIMESTAMP]")
+          .end().rhs().iteratorType("PARALLEL").scanType("SKIP SCAN ON 2 RANGES").table(t[i])
+          .keyRanges(rhsKeyRanges)
+          .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND SRC_LOCATION = DST_LOCATION")
+          .serverDistinctFilter(
+            "SERVER DISTINCT PREFIX FILTER OVER [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]")
+          .serverAggregate(
+            "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [BUCKET, \"TIMESTAMP\", SRC_LOCATION, DST_LOCATION]")
+          .clientSortAlgo("CLIENT MERGE SORT").clientSortedBy(rhsClientSortedBy).end();
 
-        rs = conn.createStatement().executeQuery(q);
+        ResultSet rs = conn.createStatement().executeQuery(q);
         assertTrue(rs.next());
         assertEquals("5SEC", rs.getString(1));
         assertEquals(1462993430000000000L, rs.getLong(2));
@@ -721,12 +713,8 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
       + "JOIN " + peopleTable + " ds ON ds.PERSON_ID = l.LOCALID";
 
     for (String q : new String[] { query1, query2 }) {
-      ResultSet rs = conn.createStatement().executeQuery("explain " + q);
-      String plan = QueryUtil.getExplainPlan(rs);
-      assertFalse("Tables should not be sorted over their PKs:\n" + plan,
-        plan.contains("SERVER SORTED BY"));
-
-      rs = conn.createStatement().executeQuery(q);
+      assertPlan(conn, q).lhs().serverSortedBy(null).end().rhs().serverSortedBy(null).end();
+      ResultSet rs = conn.createStatement().executeQuery(q);
       assertTrue(rs.next());
       assertEquals(2, rs.getInt(1));
       assertFalse(rs.next());

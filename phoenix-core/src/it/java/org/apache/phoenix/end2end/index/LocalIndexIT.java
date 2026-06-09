@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.getByteRowEstimates;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.junit.Assert.assertArrayEquals;
@@ -56,14 +57,11 @@ import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.CommonFSUtils;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.end2end.ExplainPlanWithStatsEnabledIT.Estimate;
 import org.apache.phoenix.hbase.index.IndexRegionSplitPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.query.QueryConstants;
@@ -73,7 +71,6 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
@@ -438,54 +435,29 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       .execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(pk1,pk2,v1,v2)");
 
     // 1. same prefix length, no other restrictions, but v3 is in the SELECT. Use the main table.
-    ExplainPlan explainPlan =
-      conn.prepareStatement("SELECT * FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4")
-        .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(physicalTableName.toString(), explainPlanAttributes.getTableName());
-    assertEquals(" [3,4]", explainPlanAttributes.getKeyRanges());
+    assertPlan(conn, "SELECT * FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4")
+      .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(physicalTableName.toString())
+      .keyRanges(" [3,4]");
 
     // 2. same prefix length, no other restrictions. Only index columns used. Use the index.
-    explainPlan =
-      conn.prepareStatement("SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4")
-        .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(fullIndexName + "(" + indexPhysicalTableName + ")",
-      explainPlanAttributes.getTableName());
-    assertEquals(" [1,3,4]", explainPlanAttributes.getKeyRanges());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-    assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
+    assertPlan(conn, "SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4")
+      .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,3,4]")
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
 
     // 3. same prefix length, but there's a column not on the index
-    explainPlan =
-      conn.prepareStatement("SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v3 = 1")
-        .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(physicalTableName.toString(), explainPlanAttributes.getTableName());
-    assertEquals(" [3,4]", explainPlanAttributes.getKeyRanges());
-    assertEquals("SERVER FILTER BY V3 = 1", explainPlanAttributes.getServerWhereFilter());
+    assertPlan(conn, "SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v3 = 1")
+      .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(physicalTableName.toString())
+      .keyRanges(" [3,4]").serverWhereFilter("SERVER FILTER BY V3 = 1");
 
     // 4. Longer prefix on the index, use it.
-    explainPlan = conn
-      .prepareStatement(
-        "SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v1 = 3 AND v3 = 1")
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(fullIndexName + "(" + indexPhysicalTableName + ")",
-      explainPlanAttributes.getTableName());
-    assertEquals(" [1,3,4,3]", explainPlanAttributes.getKeyRanges());
-    assertEquals("[0.V3]", explainPlanAttributes.getServerMergeColumns().toString());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY AND \"V3\" = 1",
-      explainPlanAttributes.getServerWhereFilter());
-    assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
+    assertPlan(conn,
+      "SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v1 = 3 AND v3 = 1")
+        .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,3,4,3]")
+        .serverMergeColumns("[0.V3]")
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND \"V3\" = 1")
+        .clientSortAlgo("CLIENT MERGE SORT");
   }
 
   @Test
@@ -511,13 +483,11 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       .execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(pk1,pk3)");
 
     // 1. Still use the index
-    ResultSet rs = conn.createStatement().executeQuery(
-      "EXPLAIN SELECT pk1, pk2, pk3, v1 FROM " + tableName + " WHERE pk1 = 2 AND pk3 = 3");
-    assertEquals("CLIENT PARALLEL 16-WAY RANGE SCAN OVER " + fullIndexName + "("
-      + indexPhysicalTableName + ") [1,2,3]\n" + "    SERVER MERGE [0.V1]\n"
-      + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-      QueryUtil.getExplainPlan(rs));
-    rs.close();
+    assertPlan(conn, "SELECT pk1, pk2, pk3, v1 FROM " + tableName + " WHERE pk1 = 2 AND pk3 = 3")
+      .iteratorType("PARALLEL").scanType("RANGE SCAN")
+      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,2,3]")
+      .serverMergeColumns("[0.V1]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .clientSortAlgo("CLIENT MERGE SORT");
   }
 
   @Test
@@ -541,90 +511,69 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       .execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v2, v3, v4)");
 
     // 1. COUNT(*) should still use the index - fewer bytes to scan
-    ResultSet rs = conn.createStatement().executeQuery("EXPLAIN SELECT COUNT(*) FROM " + tableName);
-    assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName + "("
-      + indexPhysicalTableName + ") [1]\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
-      + "    SERVER AGGREGATE INTO SINGLE ROW", QueryUtil.getExplainPlan(rs));
-    rs.close();
+    assertPlan(conn, "SELECT COUNT(*) FROM " + tableName).iteratorType("PARALLEL 1-WAY")
+      .scanType("RANGE SCAN").table(fullIndexName + "(" + indexPhysicalTableName + ")")
+      .keyRanges(" [1]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW");
 
     // 2. All column projected, no filtering by indexed column, not using the index
-    rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName);
-    assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName,
-      QueryUtil.getExplainPlan(rs));
-    rs.close();
+    assertPlan(conn, "SELECT * FROM " + tableName).iteratorType("PARALLEL 1-WAY")
+      .scanType("FULL SCAN").table(physicalTableName.toString());
 
     // 3. if the index can avoid a sort operation, use it
-    rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " ORDER BY v2");
-    assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName + "("
-      + indexPhysicalTableName + ") [1]\n" + "    SERVER MERGE [0.V1]\n"
-      + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-      QueryUtil.getExplainPlan(rs));
-    rs.close();
+    assertPlan(conn, "SELECT * FROM " + tableName + " ORDER BY v2").iteratorType("PARALLEL 1-WAY")
+      .scanType("RANGE SCAN").table(fullIndexName + "(" + indexPhysicalTableName + ")")
+      .keyRanges(" [1]").serverMergeColumns("[0.V1]")
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
 
     // 4. but can't use the index if not ORDERing by a prefix of the index key.
-    rs = conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " ORDER BY v3");
-    assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName + "\n"
-      + "    SERVER SORTED BY [V3]\n" + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
-    rs.close();
+    assertPlan(conn, "SELECT * FROM " + tableName + " ORDER BY v3").iteratorType("PARALLEL 1-WAY")
+      .scanType("FULL SCAN").table(physicalTableName.toString()).serverSortedBy("[V3]")
+      .clientSortAlgo("CLIENT MERGE SORT");
 
     // 5. If we pin the prefix of the index key we use the index avoiding sorting on the postfix
-    rs = conn.createStatement()
-      .executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2 ORDER BY v3");
-    assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName + "("
-      + indexPhysicalTableName + ") [1,2]\n" + "    SERVER MERGE [0.V1]\n"
-      + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-      QueryUtil.getExplainPlan(rs));
-    rs.close();
+    assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v2 = 2 ORDER BY v3")
+      .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,2]")
+      .serverMergeColumns("[0.V1]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .clientSortAlgo("CLIENT MERGE SORT");
 
     // 6. Filtering by a non-indexed column will not use the index
-    rs =
-      conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v1 = 3");
-    assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName + "\n"
-      + "    SERVER FILTER BY V1 = 3.0", QueryUtil.getExplainPlan(rs));
-    rs.close();
+    assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v1 = 3").iteratorType("PARALLEL 1-WAY")
+      .scanType("FULL SCAN").table(physicalTableName.toString())
+      .serverWhereFilter("SERVER FILTER BY V1 = 3.0");
 
     // 7. Also don't use an index if not filtering on a prefix of the key
-    rs =
-      conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v3 = 1");
-    assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName + "\n"
-      + "    SERVER FILTER BY V3 = 1", QueryUtil.getExplainPlan(rs));
-    rs.close();
+    assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v3 = 1").iteratorType("PARALLEL 1-WAY")
+      .scanType("FULL SCAN").table(physicalTableName.toString())
+      .serverWhereFilter("SERVER FILTER BY V3 = 1");
 
     // 8. Filtering along a prefix of the index key can use the index
-    rs =
-      conn.createStatement().executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2");
-    assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName + "("
-      + indexPhysicalTableName + ") [1,2]\n" + "    SERVER MERGE [0.V1]\n"
-      + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-      QueryUtil.getExplainPlan(rs));
-    rs.close();
+    assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v2 = 2").iteratorType("PARALLEL 1-WAY")
+      .scanType("RANGE SCAN").table(fullIndexName + "(" + indexPhysicalTableName + ")")
+      .keyRanges(" [1,2]").serverMergeColumns("[0.V1]")
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
 
     // 9. Make sure a gap in the index columns still uses the index as long as a prefix is specified
-    rs = conn.createStatement()
-      .executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2 AND v4 = 4");
-    assertEquals(
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName + "(" + indexPhysicalTableName
-        + ") [1,2]\n" + "    SERVER MERGE [0.V1]\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY AND TO_INTEGER(\"V4\") = 4\n" + "CLIENT MERGE SORT",
-      QueryUtil.getExplainPlan(rs));
-    rs.close();
+    assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v2 = 2 AND v4 = 4")
+      .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,2]")
+      .serverMergeColumns("[0.V1]")
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND TO_INTEGER(\"V4\") = 4")
+      .clientSortAlgo("CLIENT MERGE SORT");
 
     // 10. Use index even when also filtering on non-indexed column
-    rs = conn.createStatement()
-      .executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v2 = 2 AND v1 = 3");
-    assertEquals(
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName + "(" + indexPhysicalTableName
-        + ") [1,2]\n" + "    SERVER MERGE [0.V1]\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY AND \"V1\" = 3.0\n" + "CLIENT MERGE SORT",
-      QueryUtil.getExplainPlan(rs));
-    rs.close();
+    assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v2 = 2 AND v1 = 3")
+      .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,2]")
+      .serverMergeColumns("[0.V1]")
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND \"V1\" = 3.0")
+      .clientSortAlgo("CLIENT MERGE SORT");
 
     // 11. Another case of not using a prefix of the index key
-    rs = conn.createStatement()
-      .executeQuery("EXPLAIN SELECT * FROM " + tableName + " WHERE v1 = 3 AND v3 = 1 AND v4 = 1");
-    assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + physicalTableName + "\n"
-      + "    SERVER FILTER BY (V1 = 3.0 AND V3 = 1 AND V4 = 1)", QueryUtil.getExplainPlan(rs));
-    rs.close();
+    assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v1 = 3 AND v3 = 1 AND v4 = 1")
+      .iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(physicalTableName.toString())
+      .serverWhereFilter("SERVER FILTER BY (V1 = 3.0 AND V3 = 1 AND V4 = 1)");
   }
 
   @Test
@@ -829,19 +778,12 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         .execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
 
       String query = "SELECT * FROM " + tableName + " ORDER BY V1";
-      ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
+      assertPlan(conn1, query).scanType("RANGE SCAN")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1]")
+        .serverMergeColumns("[0.K3]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .clientSortAlgo("CLIENT MERGE SORT");
 
-      Admin admin =
-        driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-      int numRegions = admin.getRegions(physicalTableName).size();
-
-      assertEquals(
-        "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER " + fullIndexName + "("
-          + indexPhysicalTableName + ") [1]\n" + "    SERVER MERGE [0.K3]\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-        QueryUtil.getExplainPlan(rs));
-
-      rs = conn1.createStatement().executeQuery(query);
+      ResultSet rs = conn1.createStatement().executeQuery(query);
       String v = "";
       int i = 0;
       while (rs.next()) {
@@ -855,12 +797,10 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       rs.close();
 
       query = "SELECT * FROM " + tableName + " ORDER BY V1 DESC NULLS LAST";
-      rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-      assertEquals(
-        "CLIENT PARALLEL " + numRegions + "-WAY REVERSE RANGE SCAN OVER " + fullIndexName + "("
-          + indexPhysicalTableName + ") [1]\n" + "    SERVER MERGE [0.K3]\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(conn1, query).scanType("RANGE SCAN").clientSortedBy("REVERSE")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1]")
+        .serverMergeColumns("[0.K3]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .clientSortAlgo("CLIENT MERGE SORT");
 
       rs = conn1.createStatement().executeQuery(query);
       v = "zz";
@@ -898,17 +838,11 @@ public class LocalIndexIT extends BaseLocalIndexIT {
         .execute("CREATE LOCAL INDEX " + indexName + " ON " + tableName + "(v1)");
 
       String query = "SELECT V1 FROM " + tableName + " ORDER BY V1 DESC NULLS LAST";
-      ResultSet rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
+      assertPlan(conn1, query).scanType("RANGE SCAN").clientSortedBy("REVERSE")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1]")
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSortAlgo("CLIENT MERGE SORT");
 
-      Admin admin =
-        driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-      int numRegions = admin.getRegions(physicalTableName).size();
-
-      assertEquals("CLIENT PARALLEL " + numRegions + "-WAY REVERSE RANGE SCAN OVER " + fullIndexName
-        + "(" + indexPhysicalTableName + ") [1]\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
-        + "CLIENT MERGE SORT", QueryUtil.getExplainPlan(rs));
-
-      rs = conn1.createStatement().executeQuery(query);
+      ResultSet rs = conn1.createStatement().executeQuery(query);
       String v = "zz";
       int i = 0;
       while (rs.next()) {
@@ -948,18 +882,11 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       ResultSet rs = conn1.createStatement().executeQuery("SELECT COUNT(*) FROM " + indexTableName);
       assertTrue(rs.next());
 
-      Admin admin =
-        driver.getConnectionQueryServices(getUrl(), TestUtil.TEST_PROPERTIES).getAdmin();
-      int numRegions = admin.getRegions(physicalTableName).size();
-
       String query = "SELECT t_id, k1, k2, k3, V1 FROM " + tableName + " where v1='a'";
-      rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-
-      assertEquals(
-        "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER " + fullIndexName + "("
-          + indexPhysicalTableName + ") [1,'a']\n" + "    SERVER MERGE [0.K3]\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(conn1, query).scanType("RANGE SCAN")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,'a']")
+        .serverMergeColumns("[0.K3]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .clientSortAlgo("CLIENT MERGE SORT");
 
       rs = conn1.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -975,13 +902,10 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       assertFalse(rs.next());
 
       query = "SELECT t_id, k1, k2, k3, V1 from " + tableName + "  where v1<='z' order by V1,t_id";
-      rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-
-      assertEquals(
-        "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER " + fullIndexName + "("
-          + indexPhysicalTableName + ") [1,*] - [1,'z']\n" + "    SERVER MERGE [0.K3]\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(conn1, query).scanType("RANGE SCAN")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,*] - [1,'z']")
+        .serverMergeColumns("[0.K3]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .clientSortAlgo("CLIENT MERGE SORT");
 
       rs = conn1.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -1010,13 +934,11 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       assertEquals("z", rs.getString("V1"));
 
       query = "SELECT t_id, V1, k3 from " + tableName + "  where v1 <='z' group by v1,t_id, k3";
-      rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-
-      assertEquals("CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER " + fullIndexName + "("
-        + indexPhysicalTableName + ") [1,*] - [1,'z']\n" + "    SERVER MERGE [0.K3]\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY\n"
-        + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]\nCLIENT MERGE SORT",
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(conn1, query).scanType("RANGE SCAN")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,*] - [1,'z']")
+        .serverMergeColumns("[0.K3]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]")
+        .clientSortAlgo("CLIENT MERGE SORT");
 
       rs = conn1.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -1038,13 +960,11 @@ public class LocalIndexIT extends BaseLocalIndexIT {
 
       query = "SELECT v1,sum(k3) from " + tableName + " where v1 <='z'  group by v1 order by v1";
 
-      rs = conn1.createStatement().executeQuery("EXPLAIN " + query);
-      assertEquals(
-        "CLIENT PARALLEL " + numRegions + "-WAY RANGE SCAN OVER " + fullIndexName + "("
-          + indexPhysicalTableName + ") [1,*] - [1,'z']\n" + "    SERVER MERGE [0.K3]\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n"
-          + "    SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"V1\"]\nCLIENT MERGE SORT",
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(conn1, query).scanType("RANGE SCAN")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,*] - [1,'z']")
+        .serverMergeColumns("[0.K3]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"V1\"]")
+        .clientSortAlgo("CLIENT MERGE SORT");
 
       PhoenixStatement stmt = conn1.createStatement().unwrap(PhoenixStatement.class);
       rs = stmt.executeQuery(query);
@@ -1086,10 +1006,10 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     conn1.createStatement()
       .execute("CREATE INDEX " + indexName + "2" + " ON " + tableName + "(v1)");
     String query = "SELECT t_id, k1, k2,V1 FROM " + tableName + " where v1='a'";
-    ResultSet rs1 = conn1.createStatement().executeQuery("EXPLAIN " + query);
-    assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-      + SchemaUtil.getPhysicalTableName(Bytes.toBytes(indexTableName), isNamespaceMapped) + "2"
-      + " ['a']\n" + "    SERVER FILTER BY FIRST KEY ONLY", QueryUtil.getExplainPlan(rs1));
+    assertPlan(conn1, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+      .table(
+        SchemaUtil.getPhysicalTableName(Bytes.toBytes(indexTableName), isNamespaceMapped) + "2")
+      .keyRanges(" ['a']").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
     conn1.close();
   }
 

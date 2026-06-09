@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Sets.newHashSet;
-import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -29,9 +29,6 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import org.apache.hadoop.hbase.util.Pair;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
@@ -159,22 +156,10 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
     } else {
       conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + viewName + "(v2)");
     }
+    // sanity check that we can upsert after index is there
     conn.createStatement()
-      .execute("UPSERT INTO " + viewName + "(k2,v1,v2) VALUES (-1, 'blah', 'superblah')"); // sanity
-                                                                                           // check
-                                                                                           // that
-                                                                                           // we can
-                                                                                           // upsert
-                                                                                           // after
-                                                                                           // index
-                                                                                           // is
-                                                                                           // there
+      .execute("UPSERT INTO " + viewName + "(k2,v1,v2) VALUES (-1, 'blah', 'superblah')");
     conn.commit();
-    ExplainPlan plan = conn
-      .prepareStatement(
-        "SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'")
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
     final String iteratorTypeAndScanSize;
     final String clientSortAlgo;
     final String expectedTableName;
@@ -209,42 +194,27 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
       }
       expectedTableName = "_IDX_" + tableName;
     }
-    assertEquals(iteratorTypeAndScanSize, explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(clientSortAlgo, explainPlanAttributes.getClientSortAlgo());
-    assertEquals(expectedTableName, explainPlanAttributes.getTableName());
-    assertEquals(keyRanges, explainPlanAttributes.getKeyRanges());
+    assertPlan(conn, "SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'")
+      .iteratorType(iteratorTypeAndScanSize).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .scanType("RANGE SCAN").clientSortAlgo(clientSortAlgo).table(expectedTableName)
+      .keyRanges(keyRanges);
   }
 
   private void createAndVerifyIndexNonStringTenantId(Connection conn, String viewName,
     String tableName, String tenantId, String valuePrefix) throws SQLException {
     String indexName = generateUniqueName();
     conn.createStatement().execute("CREATE LOCAL INDEX " + indexName + " ON " + viewName + "(v2)");
+    // sanity check that we can upsert after index is there
     conn.createStatement()
-      .execute("UPSERT INTO " + viewName + "(k2,v1,v2) VALUES (-1, 'blah', 'superblah')"); // sanity
-                                                                                           // check
-                                                                                           // that
-                                                                                           // we can
-                                                                                           // upsert
-                                                                                           // after
-                                                                                           // index
-                                                                                           // is
-                                                                                           // there
+      .execute("UPSERT INTO " + viewName + "(k2,v1,v2) VALUES (-1, 'blah', 'superblah')");
     conn.commit();
-    ExplainPlan plan = conn
-      .prepareStatement(
-        "SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'")
-      .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(SchemaUtil.getTableName(SchemaUtil.getSchemaNameFromFullName(viewName), indexName)
-      + "(" + tableName + ")", explainPlanAttributes.getTableName());
-    assertEquals(" [1," + tenantId + ",'" + valuePrefix + "v2-1']",
-      explainPlanAttributes.getKeyRanges());
-    assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
+    assertPlan(conn, "SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'")
+      .iteratorType("PARALLEL 1-WAY").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .scanType("RANGE SCAN")
+      .table(SchemaUtil.getTableName(SchemaUtil.getSchemaNameFromFullName(viewName), indexName)
+        + "(" + tableName + ")")
+      .keyRanges(" [1," + tenantId + ",'" + valuePrefix + "v2-1']")
+      .clientSortAlgo("CLIENT MERGE SORT");
   }
 
   private Connection createTenantConnection(String tenantId) throws SQLException {
@@ -253,7 +223,6 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
     return DriverManager.getConnection(getUrl(), props);
   }
 
-  @SuppressWarnings("unchecked")
   private void verifyViewData(Connection conn, String viewName, String valuePrefix)
     throws SQLException {
     String query = "SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'";

@@ -18,6 +18,7 @@
 package org.apache.phoenix.query.explain;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.NullNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.Iterator;
@@ -39,8 +40,8 @@ public final class ExplainJsonNormalizer {
    */
   public JsonNode normalize(JsonNode node) {
     // Temp-alias state is shared across the entire tree (top-level + recursive
-    // rhsJoinQueryExplainPlan) so that an alias appearing in multiple string fields renumbers
-    // consistently.
+    // lhsJoinQueryExplainPlan / rhsJoinQueryExplainPlan) so that an alias appearing in multiple
+    // string fields renumbers consistently.
     return normalize(node, new TempAliasRenumberer());
   }
 
@@ -52,6 +53,9 @@ public final class ExplainJsonNormalizer {
 
     if (obj.has("regionLocations")) {
       obj.set("regionLocations", NullNode.getInstance());
+    }
+    if (obj.has("regionLocationsTotalSize")) {
+      obj.set("regionLocationsTotalSize", NullNode.getInstance());
     }
     if (obj.has("numRegionLocationLookups")) {
       obj.put("numRegionLocationLookups", 0);
@@ -91,9 +95,22 @@ public final class ExplainJsonNormalizer {
       obj.put(u.getKey(), u.getValue());
     }
 
+    JsonNode lhs = obj.get("lhsJoinQueryExplainPlan");
+    if (lhs != null && lhs.isObject()) {
+      normalize(lhs, aliases);
+    }
+
     JsonNode rhs = obj.get("rhsJoinQueryExplainPlan");
     if (rhs != null && rhs.isObject()) {
       normalize(rhs, aliases);
+    }
+
+    JsonNode subPlans = obj.get("subPlans");
+    if (subPlans != null && subPlans.isArray()) {
+      ArrayNode subPlansArray = (ArrayNode) subPlans;
+      for (JsonNode subPlan : subPlansArray) {
+        normalize(subPlan, aliases);
+      }
     }
 
     return obj;

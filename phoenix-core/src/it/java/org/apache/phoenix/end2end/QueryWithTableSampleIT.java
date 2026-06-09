@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -26,12 +27,8 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Properties;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.PhoenixParserException;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.Test;
@@ -56,7 +53,7 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
       prepareTableWithValues(conn, 100);
       String query = "SELECT i1, i2 FROM " + tableName + " tablesample 15 ";
 
-      ResultSet rs = conn.createStatement().executeQuery(query);
+      conn.createStatement().executeQuery(query);
     } finally {
       conn.close();
     }
@@ -70,7 +67,7 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
       prepareTableWithValues(conn, 100);
       String query = "SELECT i1, i2 FROM " + tableName + " tablesample (175) ";
 
-      ResultSet rs = conn.createStatement().executeQuery(query);
+      conn.createStatement().executeQuery(query);
     } finally {
       conn.close();
     }
@@ -214,14 +211,8 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       prepareTableWithValues(conn, 100);
       String query = "SELECT i1, i2 FROM " + tableName + " tablesample (45) ";
-      ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(0.45D, explainPlanAttributes.getSamplingRate(), 0D);
-      assertEquals(tableName, explainPlanAttributes.getTableName());
-      assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
+      assertPlan(conn, query).iteratorType("PARALLEL").scanType("FULL SCAN").samplingRate(0.45d)
+        .table(tableName).serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY");
     }
   }
 
@@ -231,17 +222,14 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
     Connection conn = DriverManager.getConnection(getUrl(), props);
     try {
       prepareTableWithValues(conn, 100);
-      String query = "EXPLAIN SELECT * FROM " + tableName
-        + " tablesample (100) where i1<2 union all SELECT * FROM " + tableName
-        + " tablesample (2) where i2<6000";
-      ResultSet rs = conn.createStatement().executeQuery(query);
-
-      assertEquals(
-        "UNION ALL OVER 2 QUERIES\n" + "    CLIENT PARALLEL 1-WAY 1.0-SAMPLED RANGE SCAN OVER "
-          + tableName + " [*] - [2]\n" + "        SERVER FILTER BY FIRST KEY ONLY\n"
-          + "    CLIENT PARALLEL 1-WAY 0.02-SAMPLED FULL SCAN OVER " + tableName + "\n"
-          + "        SERVER FILTER BY FIRST KEY ONLY AND I2 < 6000",
-        QueryUtil.getExplainPlan(rs));
+      String query =
+        "SELECT * FROM " + tableName + " tablesample (100) where i1<2 union all SELECT * FROM "
+          + tableName + " tablesample (2) where i2<6000";
+      assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES").scanType("RANGE SCAN")
+        .table(tableName).keyRanges(" [*] - [2]").samplingRate(1.0d)
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").rhs().scanType("FULL SCAN")
+        .table(tableName).samplingRate(0.02d)
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY AND I2 < 6000").end();
     } finally {
       conn.close();
     }
@@ -253,17 +241,16 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
     Connection conn = DriverManager.getConnection(getUrl(), props);
     try {
       prepareTableWithValues(conn, 100);
-      String query = "EXPLAIN SELECT count(*) FROM " + tableName + " as A tablesample (45), "
+      String query = "SELECT count(*) FROM " + tableName + " as A tablesample (45), "
         + joinedTableName + " as B tablesample (75) where A.i1=B.i1";
-      System.out.println(query);
-      ResultSet rs = conn.createStatement().executeQuery(query);
 
-      assertEquals("CLIENT PARALLEL 1-WAY 0.45-SAMPLED FULL SCAN OVER " + tableName + "\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY\n" + "    SERVER AGGREGATE INTO SINGLE ROW\n"
-        + "    PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)\n"
-        + "        CLIENT PARALLEL 1-WAY 0.75-SAMPLED FULL SCAN OVER " + joinedTableName + "\n"
-        + "            SERVER FILTER BY FIRST KEY ONLY\n"
-        + "    DYNAMIC SERVER FILTER BY A.I1 IN (B.I1)", QueryUtil.getExplainPlan(rs));
+      assertPlan(conn, query).scanType("FULL SCAN").table(tableName).samplingRate(0.45d)
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+        .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
+        .dynamicServerFilter("DYNAMIC SERVER FILTER BY A.I1 IN (B.I1)").subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)").scanType("FULL SCAN")
+        .table(joinedTableName).samplingRate(0.75d)
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").end();
     } finally {
       conn.close();
     }

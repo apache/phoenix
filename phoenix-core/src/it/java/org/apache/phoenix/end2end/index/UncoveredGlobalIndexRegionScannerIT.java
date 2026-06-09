@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -48,7 +49,6 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -241,9 +241,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         + dataTableName + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the data table
-      rs = conn.createStatement().executeQuery("EXPLAIN " + noIndexQuery);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(explainPlan.contains("FULL SCAN OVER " + dataTableName));
+      assertPlan(conn, noIndexQuery).scanType("FULL SCAN").table(dataTableName);
       rs = conn.createStatement().executeQuery(noIndexQuery);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -421,9 +419,8 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         + dataTableName + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the data table
-      rs = conn.createStatement().executeQuery("EXPLAIN " + noIndexQuery);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(explainPlan.contains(salted ? "RANGE" : "FULL" + " SCAN OVER " + dataTableName));
+      assertPlan(conn, noIndexQuery).scanType(salted ? "RANGE SCAN" : "FULL SCAN")
+        .table(dataTableName);
       rs = conn.createStatement().executeQuery(noIndexQuery);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -867,24 +864,18 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       // Index hint is incorrect as full index name with schema is used
       String sql = "SELECT /*+ INDEX(" + fullDataTableName + " " + fullIndexName
         + ")*/ val2, val3 from " + fullDataTableName + " WHERE id = 'a'";
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + sql);
-      String actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + fullDataTableName));
-      rs = stmt.executeQuery(sql);
+      assertPlan(conn, sql).scanType("POINT LOOKUP ON 1 KEY").table(fullDataTableName);
+      ResultSet rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
       // No explicit index hint and being point lookup no index will be used
       sql = "SELECT val2, val3 from " + fullDataTableName + " WHERE id = 'a'";
-      rs = stmt.executeQuery("EXPLAIN " + sql);
-      actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + fullDataTableName));
+      assertPlan(conn, sql).scanType("POINT LOOKUP ON 1 KEY").table(fullDataTableName);
       rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
       // Index hint with point lookup over data table, still index should be used
       sql = "SELECT /*+ INDEX(" + fullDataTableName + " " + indexName + ")*/ val2, val3 from "
         + fullDataTableName + " WHERE id = 'a'";
-      rs = stmt.executeQuery("EXPLAIN " + sql);
-      actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("FULL SCAN OVER " + fullIndexName));
+      assertPlan(conn, sql).scanType("FULL SCAN").table(fullIndexName);
       rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
     }

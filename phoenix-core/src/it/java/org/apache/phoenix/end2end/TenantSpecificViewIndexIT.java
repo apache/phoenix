@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -41,7 +42,6 @@ import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -358,27 +358,27 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
       viewConn.createStatement()
         .execute("CREATE VIEW IF NOT EXISTS " + viewName + " AS SELECT * FROM " + tableName);
 
-      String query = "EXPLAIN SELECT PARENT_ID FROM " + viewName + " WHERE PARENT_TYPE='001' "
+      String expectedIndexName = SchemaUtil.getTableName(SCHEMA1, "IDX");
+      String query1 = "SELECT PARENT_ID FROM " + viewName + " WHERE PARENT_TYPE='001' "
         + "AND (CREATED_DATE > to_date('2011-01-01') AND CREATED_DATE < to_date('2016-10-31'))"
         + "ORDER BY PARENT_TYPE,CREATED_DATE LIMIT 501";
+      assertPlan(viewConn, query1).iteratorType("SERIAL").scanType("RANGE SCAN")
+        .table(expectedIndexName)
+        .keyRanges(" ['tenant1        ','001','2011-01-01 00:00:00.001']"
+          + " - ['tenant1        ','001','2016-10-31 00:00:00.000']")
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverRowLimit(501L)
+        .clientRowLimit(501).clientSteps("CLIENT 501 ROW LIMIT");
 
-      ResultSet rs = viewConn.createStatement().executeQuery(query);
-      String exptectedIndexName = SchemaUtil.getTableName(SCHEMA1, "IDX");
-      String expectedPlanFormat = "CLIENT SERIAL 1-WAY RANGE SCAN OVER " + exptectedIndexName
-        + " ['tenant1        ','001','%s 00:00:00.001'] - ['tenant1        ','001','%s 00:00:00.000']"
-        + "\n" + "    SERVER FILTER BY FIRST KEY ONLY" + "\n" + "    SERVER 501 ROW LIMIT" + "\n"
-        + "CLIENT 501 ROW LIMIT";
-      assertEquals(String.format(expectedPlanFormat, "2011-01-01", "2016-10-31"),
-        QueryUtil.getExplainPlan(rs));
-
-      query = "EXPLAIN SELECT PARENT_ID FROM " + viewName + " WHERE PARENT_TYPE='001' "
+      String query2 = "SELECT PARENT_ID FROM " + viewName + " WHERE PARENT_TYPE='001' "
         + " AND (CREATED_DATE >= to_date('2011-01-01') AND CREATED_DATE <= to_date('2016-01-01'))"
         + " AND (CREATED_DATE > to_date('2012-10-21') AND CREATED_DATE < to_date('2016-10-31')) "
         + "ORDER BY PARENT_TYPE,CREATED_DATE LIMIT 501";
-
-      rs = viewConn.createStatement().executeQuery(query);
-      assertEquals(String.format(expectedPlanFormat, "2012-10-21", "2016-01-01"),
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(viewConn, query2).iteratorType("SERIAL").scanType("RANGE SCAN")
+        .table(expectedIndexName)
+        .keyRanges(" ['tenant1        ','001','2012-10-21 00:00:00.001']"
+          + " - ['tenant1        ','001','2016-01-01 00:00:00.000']")
+        .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverRowLimit(501L)
+        .clientRowLimit(501).clientSteps("CLIENT 501 ROW LIMIT");
     }
   }
 

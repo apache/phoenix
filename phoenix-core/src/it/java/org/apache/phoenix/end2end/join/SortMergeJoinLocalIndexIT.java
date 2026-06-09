@@ -17,10 +17,16 @@
  */
 package org.apache.phoenix.end2end.join;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+
+import java.sql.Connection;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.util.SchemaUtil;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
@@ -45,48 +51,74 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
     return virtualNameToRealNameMap;
   }
 
-  public SortMergeJoinLocalIndexIT(String[] indexDDL, String[] plans) {
-    super(indexDDL, plans);
+  public SortMergeJoinLocalIndexIT(String[] indexDDL) {
+    super(indexDDL);
   }
 
-  @Parameters(name = "SortMergeJoinLocalIndexIT_{index}") // name is used by failsafe as file name
-                                                          // in reports
+  @Override
+  protected void assertSkipMergeOptimizationPlan(Connection conn, String query) throws Exception {
+    String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+    String supplier = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
+    String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+    String itemIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_ITEM_INDEX);
+    String supplierIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_SUPPLIER_INDEX);
+    assertPlan(conn, query).abstractExplainPlan("SORT-MERGE-JOIN (LEFT)").sortMergeSkipMerge(false)
+      .lhs().scanType("RANGE SCAN").table(supplierIndex + "(" + supplier + ")").keyRanges(" [1]")
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"S.:supplier_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end().rhs()
+      .abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(true)
+      .clientSortedBy("[\"I.0:supplier_id\"]").lhs()
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .serverSortedBy("[\"I.:item_id\"]").clientSortAlgo("CLIENT MERGE SORT")
+      .end().rhs().scanType("FULL SCAN").table(order)
+      .serverWhereFilter("SERVER FILTER BY QUANTITY < 5000").serverSortedBy("[\"O.item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end().end();
+  }
+
+  @Override
+  protected void assertSelfJoinPlan(Connection conn, String query) throws Exception {
+    String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+    String itemIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_ITEM_INDEX);
+    assertPlan(conn, query).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(false)
+      .lhs().scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"I1.:item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end().rhs().scanType("RANGE SCAN")
+      .table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"I2.:item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end();
+  }
+
+  @Override
+  protected void assertSetMaxRowsPlan(Connection conn, String query, int queryIndex)
+    throws Exception {
+    String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
+    String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
+    String itemIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_ITEM_INDEX);
+    PhoenixPreparedStatement statement =
+      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class);
+    statement.setMaxRows(4);
+    ExplainPlanAttributes attributes =
+      statement.optimizeQuery().getExplainPlan().getPlanStepsAsAttributes();
+    assertPlan(attributes).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(false)
+      .clientRowLimit(4).lhs().scanType("RANGE SCAN").table(itemIndex + "(" + item + ")")
+      .keyRanges(" [1]").serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY")
+      .serverSortedBy("[\"I.:item_id\"]").clientSortAlgo("CLIENT MERGE SORT").end().rhs()
+      .scanType("FULL SCAN").table(order)
+      .serverSortedBy(queryIndex == 0 ? "[\"O.item_id\"]" : "[\"item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end();
+  }
+
+  // name is used by failsafe as file name in reports
+  @Parameters(name = "SortMergeJoinLocalIndexIT_{index}")
   public static synchronized Collection<Object> data() {
     List<Object> testCases = Lists.newArrayList();
-    testCases.add(new String[][] {
-      { "CREATE LOCAL INDEX " + JOIN_CUSTOMER_INDEX + " ON " + JOIN_CUSTOMER_TABLE_FULL_NAME
+    testCases.add(new String[][] { {
+      "CREATE LOCAL INDEX " + JOIN_CUSTOMER_INDEX + " ON " + JOIN_CUSTOMER_TABLE_FULL_NAME
         + "(name)",
-        "CREATE LOCAL INDEX " + JOIN_ITEM_INDEX + " ON " + JOIN_ITEM_TABLE_FULL_NAME + "(name) "
-          + "INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
-        "CREATE LOCAL INDEX " + JOIN_SUPPLIER_INDEX + " ON " + JOIN_SUPPLIER_TABLE_FULL_NAME
-          + " (name)" },
-      { "SORT-MERGE-JOIN (LEFT) TABLES\n" + "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-        + JOIN_SUPPLIER_INDEX_FULL_NAME + "(" + JOIN_SUPPLIER_TABLE_FULL_NAME + ") [1]\n"
-        + "        SERVER FILTER BY FIRST KEY ONLY\n"
-        + "        SERVER SORTED BY [\"S.:supplier_id\"]\n" + "    CLIENT MERGE SORT\n" + "AND\n"
-        + "    SORT-MERGE-JOIN (INNER) TABLES\n" + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-        + JOIN_ITEM_INDEX_FULL_NAME + "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n"
-        + "            SERVER SORTED BY [\"I.:item_id\"]\n" + "        CLIENT MERGE SORT\n"
-        + "    AND (SKIP MERGE)\n" + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-        + JOIN_ORDER_TABLE_FULL_NAME + "\n" + "            SERVER FILTER BY QUANTITY < 5000\n"
-        + "            SERVER SORTED BY [\"O.item_id\"]\n" + "        CLIENT MERGE SORT\n"
-        + "    CLIENT SORTED BY [\"I.0:supplier_id\"]",
-
-        "SORT-MERGE-JOIN (INNER) TABLES\n" + "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-          + JOIN_ITEM_INDEX_FULL_NAME + "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n"
-          + "        SERVER FILTER BY FIRST KEY ONLY\n"
-          + "        SERVER SORTED BY [\"I.:item_id\"]\n" + "    CLIENT MERGE SORT\n" + "AND\n"
-          + "    CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n"
-          + "        SERVER SORTED BY [\"O.item_id\"]\n" + "    CLIENT MERGE SORT\n"
-          + "CLIENT 4 ROW LIMIT",
-
-        "SORT-MERGE-JOIN (INNER) TABLES\n" + "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-          + JOIN_ITEM_INDEX_FULL_NAME + "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n"
-          + "        SERVER FILTER BY FIRST KEY ONLY\n"
-          + "        SERVER SORTED BY [\"I1.:item_id\"]\n" + "    CLIENT MERGE SORT\n" + "AND\n"
-          + "    CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME + "("
-          + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" + "        SERVER FILTER BY FIRST KEY ONLY\n"
-          + "        SERVER SORTED BY [\"I2.:item_id\"]\n" + "    CLIENT MERGE SORT" } });
+      "CREATE LOCAL INDEX " + JOIN_ITEM_INDEX + " ON " + JOIN_ITEM_TABLE_FULL_NAME + "(name) "
+        + "INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
+      "CREATE LOCAL INDEX " + JOIN_SUPPLIER_INDEX + " ON " + JOIN_SUPPLIER_TABLE_FULL_NAME
+        + " (name)" } });
     return testCases;
   }
 }

@@ -17,10 +17,13 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.getExplainAttributes;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -29,8 +32,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -232,8 +235,12 @@ public class DistinctPrefixFilterIT extends ParallelStatsDisabledIT {
   }
 
   private void testPlan(String query, boolean optimizable) throws Exception {
-    ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-    assertEquals(optimizable, QueryUtil.getExplainPlan(rs).contains(PREFIX));
+    ExplainPlanAttributes attributes = getExplainAttributes(conn, query);
+    if (optimizable) {
+      assertNotNull(attributes.getServerDistinctFilter());
+    } else {
+      assertNull(attributes.getServerDistinctFilter());
+    }
   }
 
   @Test
