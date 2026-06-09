@@ -763,7 +763,7 @@ public class HighAvailabilityGroup {
    * lifecycle management is confined to this class because an HA group is a shared resource.
    * Someone calling close on this would make it unusable, since the state would become closed.
    */
-  void close() {
+  public void close() {
     state = State.CLOSED;
   }
 

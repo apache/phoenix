@@ -26,6 +26,7 @@ import static org.apache.phoenix.util.PhoenixRuntime.CURRENT_SCN_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.PHOENIX_TEST_DRIVER_URL_PARAM;
+import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.util.TestUtil.ATABLE_NAME;
 import static org.apache.phoenix.util.TestUtil.A_VALUE;
 import static org.apache.phoenix.util.TestUtil.BINARY_NAME;
@@ -148,8 +149,14 @@ import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
+import org.apache.phoenix.jdbc.HighAvailabilityGroup;
+import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
+import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
+import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixMonitoredConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixDriver;
 import org.apache.phoenix.jdbc.PhoenixEmbeddedDriver;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.schema.NewerTableAlreadyExistsException;
@@ -337,18 +344,41 @@ public abstract class BaseTest {
     return conf.get(QueryServices.ZOOKEEPER_PORT_ATTRIB);
   }
 
+  private static String haGroupName;
+  private static HighAvailabilityGroup haGroup;
   protected static String url;
   protected static PhoenixTestDriver driver;
   protected static boolean clusterInitialized = false;
   protected static HBaseTestingUtility utility;
   protected static final Configuration config = HBaseConfiguration.create();
+  protected static HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS;
 
   protected static String getUrl() {
     if (!clusterInitialized) {
       throw new IllegalStateException(
         "Cluster must be initialized before attempting to get the URL");
     }
+    if (Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))) {
+      url = CLUSTERS.getJdbcHAUrlWithoutPrincipal() + ";" + PHOENIX_TEST_DRIVER_URL_PARAM;
+    }
     return url;
+  }
+
+  protected static String getActiveUrl() {
+    if (!clusterInitialized) {
+      throw new IllegalStateException(
+        "Cluster must be initialized before attempting to get the URL");
+    }
+    java.util.Optional<String> activeUrl;
+    if (Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))) {
+      activeUrl = haGroup.getRoleRecord().getActiveUrl();
+      if (activeUrl.isPresent()) {
+        return activeUrl.get() + ";" + PHOENIX_TEST_DRIVER_URL_PARAM;
+      } else {
+        return CLUSTERS.getJdbcUrl1(haGroup) + ";" + PHOENIX_TEST_DRIVER_URL_PARAM;
+      }
+    }
+    return getUrl();
   }
 
   protected static String getUrl(String principal) throws Exception {
@@ -378,6 +408,48 @@ public abstract class BaseTest {
       return initMiniCluster(conf, overrideProps);
     } else {
       return initClusterDistributedMode(conf, overrideProps);
+    }
+  }
+
+  /**
+   * Set up HA cluster for testing in single-cluster mode.
+   * This mode tests HA connection code paths (FailoverPhoenixConnection) without the
+   * resource overhead of running two physical HBase clusters.
+   * Both ACTIVE and STANDBY URLs point to the same physical cluster.
+   */
+  public static void setUpTestClusterForHA(ReadOnlyProps serverProps, ReadOnlyProps clientProps)
+    throws Exception {
+    CLUSTERS = new HighAvailabilityTestingUtility.HBaseTestingUtilityPair(serverProps);
+    CLUSTERS.start(true);  // true = single-cluster mode (only starts cluster1)
+    driver = newTestDriver(clientProps);
+    DriverManager.registerDriver(driver);
+    haGroupName = TEST_PROPERTIES.getProperty(PHOENIX_HA_GROUP_ATTR);
+    // Use single-cluster initialization (only cluster1 is running)
+    CLUSTERS.initClusterRoleRecordFor1Cluster(haGroupName, HighAvailabilityPolicy.FAILOVER);
+    clusterInitialized = true;
+    Properties haGroupProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    for (Entry<String, String> entry : clientProps) {
+      haGroupProps.setProperty(entry.getKey(), entry.getValue());
+    }
+    haGroup = getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), haGroupProps);
+    LOGGER.info("Initialized HA group {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
+  }
+
+  /**
+   * Tear down HA cluster resources.
+   * Should be called in @AfterClass when using HA mode.
+   */
+  public static void tearDownForHA() throws Exception {
+    if (Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))) {
+      try {
+        DriverManager.deregisterDriver(PhoenixDriver.INSTANCE);
+        CLUSTERS.close();
+        haGroup.close();
+        driver.getConnectionQueryServices(CLUSTERS.getJdbcUrl1(haGroup), haGroup.getProperties()).close();
+        driver.getConnectionQueryServices(CLUSTERS.getJdbcUrl2(haGroup), haGroup.getProperties()).close();
+      } catch (Exception e) {
+        LOGGER.error("Fail to tear down the HA group and the CQS. Will ignore", e);
+      }
     }
   }
 
@@ -1713,6 +1785,9 @@ public abstract class BaseTest {
   }
 
   public static HBaseTestingUtility getUtility() {
+    if (Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))) {
+      return CLUSTERS.getHBaseCluster1();
+    }
     return utility;
   }
 

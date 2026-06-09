@@ -73,6 +73,7 @@ import org.apache.phoenix.end2end.ServerMetadataCacheTestImpl;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.hbase.index.write.TestTrackingParallelWriterIndexCommitter;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
@@ -111,10 +112,15 @@ public class HighAvailabilityTestingUtility {
     private static String HA_DIR = "/phoenixHA";
 
     public HBaseTestingUtilityPair() {
+
+      this(new ReadOnlyProps());
+    }
+
+    public HBaseTestingUtilityPair(ReadOnlyProps overrideProps) {
       Configuration conf1 = hbaseCluster1.getConfiguration();
       Configuration conf2 = hbaseCluster2.getConfiguration();
-      setUpDefaultHBaseConfig(conf1);
-      setUpDefaultHBaseConfig(conf2);
+      setUpDefaultHBaseConfig(conf1, overrideProps);
+      setUpDefaultHBaseConfig(conf2, overrideProps);
     }
 
     /**
@@ -122,8 +128,21 @@ public class HighAvailabilityTestingUtility {
      * @throws Exception if fails to start either cluster
      */
     public void start() throws Exception {
+      start(false);
+    }
+
+    /**
+     * Start HBase cluster(s) for HA testing.
+     * @param singleClusterMode if true, only start cluster1 and point all ACTIVE/STANDBY URLs to it.
+     *                          This mode is used to test HA connection code paths without the
+     *                          resource overhead of running two physical clusters.
+     */
+    public void start(boolean singleClusterMode) throws Exception {
       hbaseCluster1.startMiniCluster();
-      hbaseCluster2.startMiniCluster();
+
+      if (!singleClusterMode) {
+        hbaseCluster2.startMiniCluster();
+      }
 
       /*
        * Note that in hbase2 testing utility these give inconsistent results, one gives ip other
@@ -132,43 +151,89 @@ public class HighAvailabilityTestingUtility {
        */
 
       String confAddress1 = hbaseCluster1.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
-      String confAddress2 = hbaseCluster2.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
 
       zkUrl1 = String.format("%s\\:%d::/hbase", confAddress1,
         hbaseCluster1.getZkCluster().getClientPort());
-      zkUrl2 = String.format("%s\\:%d::/hbase", confAddress2,
-        hbaseCluster2.getZkCluster().getClientPort());
 
       hdfsUrl1 = hbaseCluster1.getConfiguration().get(FileSystem.FS_DEFAULT_NAME_KEY) + HA_DIR;
-      hdfsUrl2 = hbaseCluster2.getConfiguration().get(FileSystem.FS_DEFAULT_NAME_KEY) + HA_DIR;
 
       masterAddress1 =
         hbaseCluster1.getConfiguration().get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:");
-      masterAddress2 =
-        hbaseCluster2.getConfiguration().get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:");
 
-      haAdmin1 = new PhoenixHAAdmin(getZkUrl1(), hbaseCluster1.getConfiguration(),
-        HighAvailibilityCuratorProvider.INSTANCE, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
-      haAdmin2 = new PhoenixHAAdmin(getZkUrl2(), hbaseCluster2.getConfiguration(),
-        HighAvailibilityCuratorProvider.INSTANCE, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
+      if (singleClusterMode) {
+        // In single-cluster mode, point cluster2 URLs to the SAME machine as cluster1
+        // but use a different hostname alias (localhost vs 127.0.0.1) so the URL strings
+        // differ. This satisfies HighAvailabilityGroup URL validation (which requires
+        // distinct URL strings) while routing all traffic to the single running cluster.
+        // JDBCUtil.formatUrl() does NOT normalize hostname-to-IP, so the strings remain
+        // different after normalization.
+        // Pick the alias separately for ZK and master, since MiniHBase populates
+        // ZOOKEEPER_QUORUM and MASTER_ADDRS_KEY independently and they may report
+        // different host strings (e.g., one "localhost", the other "127.0.0.1").
+        String zkAlias = "localhost".equals(confAddress1) ? "127.0.0.1" : "localhost";
 
-      admin1 = hbaseCluster1.getConnection().getAdmin();
-      admin2 = hbaseCluster2.getConnection().getAdmin();
+        zkUrl2 = String.format("%s\\:%d::/hbase", zkAlias,
+          hbaseCluster1.getZkCluster().getClientPort());
 
-      // Enable replication between the two HBase clusters.
-      ReplicationPeerConfig replicationPeerConfig1 =
-        ReplicationPeerConfig.newBuilder().setClusterKey(hbaseCluster2.getClusterKey()).build();
-      ReplicationPeerConfig replicationPeerConfig2 =
-        ReplicationPeerConfig.newBuilder().setClusterKey(hbaseCluster1.getClusterKey()).build();
+        hdfsUrl2 = hdfsUrl1;  // HDFS is shared, so use the same URL
 
-      admin1.addReplicationPeer(PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT, replicationPeerConfig1);
-      admin2.addReplicationPeer(PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT, replicationPeerConfig2);
+        // Rebuild masterAddress2 with the alias hostname but the same port as cluster1.
+        String rawMasterAddr1 = hbaseCluster1.getConfiguration().get(HConstants.MASTER_ADDRS_KEY);
+        int colonIdx = rawMasterAddr1.indexOf(':');
+        String masterHost = rawMasterAddr1.substring(0, colonIdx);
+        String masterPort = rawMasterAddr1.substring(colonIdx + 1);
+        String masterAlias = "localhost".equals(masterHost) ? "127.0.0.1" : "localhost";
+        masterAddress2 = (masterAlias + ":" + masterPort).replaceAll(":", "\\\\:");
 
-      LOG.info(
-        "MiniHBase DR cluster pair is ready for testing.  Cluster Urls [{},{}] "
-          + "and Master Urls [{}, {}] and HDFS Urls [{}, {}]",
-        getZkUrl1(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), getHdfsUrl1(),
-        getHdfsUrl2());
+        haAdmin1 = new PhoenixHAAdmin(getZkUrl1(), hbaseCluster1.getConfiguration(),
+          HighAvailibilityCuratorProvider.INSTANCE, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
+        haAdmin2 = haAdmin1;  // Point to same admin (admin clients bypass URL validation)
+
+        admin1 = hbaseCluster1.getConnection().getAdmin();
+        admin2 = admin1;  // Point to same admin
+
+        LOG.info(
+          "MiniHBase single cluster ready for HA testing. Cluster Urls [{}, {}] "
+            + "Master Urls [{}, {}] HDFS Url [{}] "
+            + "(cluster2 URLs use loopback aliases zk='{}' master='{}' "
+            + "pointing to the same cluster1 process)",
+          getZkUrl1(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), getHdfsUrl1(),
+          zkAlias, masterAlias);
+      } else {
+        // Dual-cluster mode (original behavior for true failover testing)
+        String confAddress2 = hbaseCluster2.getConfiguration().get(HConstants.ZOOKEEPER_QUORUM);
+
+        zkUrl2 = String.format("%s\\:%d::/hbase", confAddress2,
+          hbaseCluster2.getZkCluster().getClientPort());
+
+        hdfsUrl2 = hbaseCluster2.getConfiguration().get(FileSystem.FS_DEFAULT_NAME_KEY) + HA_DIR;
+
+        masterAddress2 =
+          hbaseCluster2.getConfiguration().get(HConstants.MASTER_ADDRS_KEY).replaceAll(":", "\\\\:");
+
+        haAdmin1 = new PhoenixHAAdmin(getZkUrl1(), hbaseCluster1.getConfiguration(),
+          HighAvailibilityCuratorProvider.INSTANCE, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
+        haAdmin2 = new PhoenixHAAdmin(getZkUrl2(), hbaseCluster2.getConfiguration(),
+          HighAvailibilityCuratorProvider.INSTANCE, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
+
+        admin1 = hbaseCluster1.getConnection().getAdmin();
+        admin2 = hbaseCluster2.getConnection().getAdmin();
+
+        // Enable replication between the two HBase clusters.
+        ReplicationPeerConfig replicationPeerConfig1 =
+          ReplicationPeerConfig.newBuilder().setClusterKey(hbaseCluster2.getClusterKey()).build();
+        ReplicationPeerConfig replicationPeerConfig2 =
+          ReplicationPeerConfig.newBuilder().setClusterKey(hbaseCluster1.getClusterKey()).build();
+
+        admin1.addReplicationPeer(PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT, replicationPeerConfig1);
+        admin2.addReplicationPeer(PHOENIX_HA_GROUP_STORE_PEER_ID_DEFAULT, replicationPeerConfig2);
+
+        LOG.info(
+          "MiniHBase DR cluster pair is ready for testing.  Cluster Urls [{},{}] "
+            + "and Master Urls [{}, {}] and HDFS Urls [{}, {}]",
+          getZkUrl1(), getZkUrl2(), getMasterAddress1(), getMasterAddress2(), getHdfsUrl1(),
+          getHdfsUrl2());
+      }
       logClustersStates();
     }
 
@@ -1027,7 +1092,7 @@ public class HighAvailabilityTestingUtility {
     }
 
     /** Sets up the default HBase configuration for Phoenix HA testing. */
-    private static void setUpDefaultHBaseConfig(Configuration conf) {
+    private static void setUpDefaultHBaseConfig(Configuration conf, ReadOnlyProps overrideProps) {
       // Set Phoenix HA timeout for ZK client to be a smaller number
       conf.setInt(PHOENIX_HA_ZK_CONNECTION_TIMEOUT_MS_KEY, 1000);
       conf.setInt(PHOENIX_HA_ZK_SESSION_TIMEOUT_MS_KEY, 1000);
@@ -1085,6 +1150,10 @@ public class HighAvailabilityTestingUtility {
       // Enabling Prewarming of HAGroupStoreClient cache
       conf.setBoolean(HA_GROUP_STORE_CLIENT_PREWARM_ENABLED, true);
 
+      // override any defaults based on overrideProps
+      for (java.util.Map.Entry<String, String> entry : overrideProps) {
+        conf.set(entry.getKey(), entry.getValue());
+      }
     }
   }
 

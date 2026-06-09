@@ -313,7 +313,22 @@ public class TestUtil {
   /**
    * Read-only properties used by all tests
    */
-  public static final Properties TEST_PROPERTIES = new Properties() {
+  private static Properties props_for_HA;
+  static {
+    if (Boolean.parseBoolean(System.getProperty("phoenix.ha.profile.active"))) {
+      props_for_HA = org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHATestProperties();
+      props_for_HA.setProperty(
+        org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR,
+        "HA_GROUP_" + generateUniqueName());
+    } else {
+      props_for_HA = new Properties();
+    }
+  }
+
+  /**
+   * Read-only properties used by all tests
+   */
+  public static final Properties TEST_PROPERTIES = new Properties(props_for_HA) {
     @Override
     public String put(Object key, Object value) {
       throw new UnsupportedOperationException();
