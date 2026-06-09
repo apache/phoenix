@@ -3076,16 +3076,7 @@ public class PhoenixSyncTableToolIT {
     return new ArrayList<>(uniqueChunksToDelete.values());
   }
 
-  /**
-   * Deletes mapper and chunk checkpoint entries to simulate partial rerun scenarios.
-   * @param conn            Connection to use
-   * @param tableName       Table name
-   * @param targetZkQuorum  Target cluster ZK quorum
-   * @param tenantId        Tenant ID
-   * @param mappersToDelete List of mapper entries to delete
-   * @param chunksToDelete  List of chunk entries to delete
-   * @return Total number of entries deleted
-   */
+  /** Deletes the given mapper + chunk checkpoint rows; used by partial-rerun fixtures. */
   private int deleteCheckpointEntries(Connection conn, String tableName, String targetZkQuorum,
     String tenantId, List<PhoenixSyncTableCheckpointOutputRow> mappersToDelete,
     List<PhoenixSyncTableCheckpointOutputRow> chunksToDelete) throws SQLException {
@@ -3197,14 +3188,8 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * Waits for a specific row's content to be replicated to the target cluster. This is more precise
-   * than waitForReplication() when dealing with UPDATEs where the row count doesn't change but the
-   * content does.
-   * @param targetConn   Target cluster connection
-   * @param tableName    Table name
-   * @param rowId        The ID of the row to check
-   * @param expectedName The expected NAME value
-   * @throws Exception if replication times out or query fails
+   * Polls target until the row's NAME matches {@code expectedName} — use this for UPDATEs where row
+   * count is unchanged so {@link #waitForReplication} can't tell drift from convergence.
    */
   private void waitForRowContentReplication(Connection targetConn, String tableName, int rowId,
     String expectedName) throws Exception {
@@ -3611,16 +3596,8 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * Unified method to delete a single checkpoint entry by start row key and optional type. Handles
-   * NULL/empty start keys for first region boundaries.
-   * @param conn          Connection to use
-   * @param tableName     Table name
-   * @param targetCluster Target cluster ZK quorum
-   * @param tenantId      Tenant ID (nullable)
-   * @param type          Entry type (REGION or CHUNK), or null to delete regardless of type
-   * @param startRowKey   Start row key to match
-   * @param autoCommit    Whether to commit after delete
-   * @return Number of rows deleted
+   * Deletes a single checkpoint entry by start row key. Pass {@code type=null} to match any type;
+   * NULL/empty {@code startRowKey} matches the first-region boundary row.
    */
   private int deleteSingleCheckpointEntry(Connection conn, String tableName, String targetCluster,
     String tenantId, PhoenixSyncTableCheckpointOutputRow.Type type, byte[] startRowKey,
@@ -3723,19 +3700,16 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * Returns a fresh, mutable copy of the source cluster's HBase {@link Configuration}. Tests that
-   * need to override individual settings (paging, timeouts, etc.) should use this helper rather
-   * than constructing the Configuration inline so that any future change to the base config flows
-   * through one place.
+   * Returns a fresh, mutable copy of the source cluster's HBase {@link Configuration} — use this
+   * (not an inline constructor) so future base-config changes flow through one place.
    */
   private static Configuration sourceClusterConf() {
     return new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
   }
 
   /**
-   * Builds a {@link PhoenixSyncTableTool}, runs it with the supplied args, and asserts the run
-   * surfaces failure as a non-zero exit code rather than a thrown exception. Used by the
-   * failure-mode tests that previously hand-rolled this same try/run/assertTrue/catch-fail block.
+   * Runs the tool and asserts failure surfaces as a non-zero exit code rather than a thrown
+   * exception. Used by failure-mode tests.
    */
   private void assertSyncToolFails(String[] args, String failureContext) {
     PhoenixSyncTableTool tool = new PhoenixSyncTableTool();
@@ -3750,13 +3724,11 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * Upserts a "MODIFIED_NAME_<id>" row on target for each id in {@code mismatchIds}. Replaces the
-   * common pattern {@code for (int id : ids) upsertRowsOnTarget(..., new int[]{id}, new
-   * String[]{"MODIFIED_NAME_"+id})} which defeated the batch-upsert path of
-   * {@link #upsertRowsOnTarget}.
+   * Batch-upserts {@code "MODIFIED_NAME_<id>"} on target for each id, then waits for replication so
+   * the modify is observable before the test asserts on it.
    */
   private void introduceMismatchesByIds(String tableName, List<Integer> mismatchIds)
-    throws SQLException {
+    throws Exception {
     int[] ids = new int[mismatchIds.size()];
     String[] names = new String[mismatchIds.size()];
     for (int i = 0; i < mismatchIds.size(); i++) {
@@ -3764,24 +3736,16 @@ public class PhoenixSyncTableToolIT {
       names[i] = "MODIFIED_NAME_" + mismatchIds.get(i);
     }
     upsertRowsOnTarget(targetConnection, tableName, ids, names);
+    // Confirm each modified NAME is observable on target — replication can race the upsert's
+    // cell timestamp and silently no-op the modify, which would later flake as "0 mismatched".
+    for (int i = 0; i < ids.length; i++) {
+      waitForRowContentReplication(targetConnection, tableName, ids[i], names[i]);
+    }
   }
 
   /**
-   * Starts two daemon-style threads that perform region mutations (splits or merges) on the source
-   * and target clusters and returns a {@link Runnable} the caller invokes to join them with a
-   * 30-second timeout. Both worker {@link Runnable}s are wrapped in try/catch so that an unexpected
-   * exception is logged rather than killing the JVM thread silently.
-   * <p>
-   * Usage:
-   *
-   * <pre>
-   *   Runnable joiner = startConcurrentRegionWork(sourceWork, targetWork, "splits");
-   *   ... run main sync work ...
-   *   joiner.run();
-   * </pre>
-   * <p>
-   * Caller is responsible for invoking the returned joiner; tests should always join before
-   * asserting on cluster state, otherwise late-arriving region mutations can race the assertions.
+   * Returns a joiner the caller MUST run to await the worker threads — late-arriving region
+   * mutations otherwise race the test's assertions.
    */
   private Runnable startConcurrentRegionWork(Runnable sourceWork, Runnable targetWork,
     String label) {
@@ -3928,11 +3892,7 @@ public class PhoenixSyncTableToolIT {
     return result;
   }
 
-  /**
-   * Counts checkpoint entries (both REGION and CHUNK rows) in the given status. Replaces the ad-hoc
-   * {@code for (entry : entries) if (status.equals(entry.getStatus())) count++} loops that recurred
-   * across several tests.
-   */
+  /** Counts checkpoint entries (REGION + CHUNK) in the given status. */
   private static long countCheckpointsByStatus(List<PhoenixSyncTableCheckpointOutputRow> entries,
     PhoenixSyncTableCheckpointOutputRow.Status status) {
     long count = 0;
@@ -4242,13 +4202,10 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * Spins until {@link System#currentTimeMillis()} is strictly greater than {@code minTs}, then
-   * returns the resulting wall-clock value. Used by repair tests that plant cells at handcrafted
-   * future timestamps and then need a {@code --to-time} that both (a) covers every planted cell and
-   * (b) satisfies the tool's {@code endTime <= currentTimeMillis()} validation
-   * ({@link org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil#validateTimeRange}). The spin
-   * terminates in 1-2ms — it is a deterministic precondition gate, not a sleep-based wait for an
-   * external side effect.
+   * Spins until {@code System.currentTimeMillis() > minTs} and returns the new wall clock. Used for
+   * {@code --to-time} when tests plant cells at handcrafted future timestamps — the value must
+   * cover every planted cell and satisfy {@code endTime <= currentTimeMillis()}
+   * ({@link org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil#validateTimeRange}).
    */
   private long waitUntilWallClockPasses(long minTs) {
     while (System.currentTimeMillis() <= minTs) {
@@ -4269,11 +4226,7 @@ public class PhoenixSyncTableToolIT {
     return DriverManager.getConnection("jdbc:phoenix:" + zkUrl, props);
   }
 
-  /**
-   * Executes a single UPSERT through an SCN-pinned connection on the given cluster and commits.
-   * Replaces the verbose {@code try (Connection scn = openConnectionAtScn(...)) { execute; commit;
-   * }} boilerplate that recurred in nearly every repair test.
-   */
+  /** Executes a single UPSERT through an SCN-pinned connection on the given cluster and commits. */
   private void upsertAtScn(String zkUrl, long ts, String upsertSql) throws SQLException {
     try (Connection scn = openConnectionAtScn(zkUrl, ts)) {
       scn.createStatement().execute(upsertSql);
@@ -4297,11 +4250,7 @@ public class PhoenixSyncTableToolIT {
     upsertAtScnTarget(ts, upsertSql);
   }
 
-  /**
-   * Asserts target's visible NAME for {@code id} equals {@code expected}. Replaces the
-   * {@code prepareStatement("SELECT NAME FROM ... WHERE ID = ?")} block repeated across repair
-   * tests.
-   */
+  /** Asserts target's visible NAME for {@code id} equals {@code expected}. */
   private void assertTargetName(String tableName, int id, String expected) throws SQLException {
     try (PreparedStatement ps =
       targetConnection.prepareStatement("SELECT NAME FROM " + tableName + " WHERE ID = ?")) {
@@ -4387,9 +4336,8 @@ public class PhoenixSyncTableToolIT {
   }
 
   /**
-   * Raw scan of a single row on the target cluster, summarising every NAME-column cell by Put /
-   * tombstone subtype. Replaces the open-coded raw-scan loop repeated by tests that pin post-repair
-   * NAME tombstone counts.
+   * Raw scan of a single row on target, summarising every NAME-column cell by Put / tombstone
+   * subtype. Used by repair tests that pin post-repair NAME tombstone counts.
    */
   private RawCellSummary scanRawTargetNameCells(String tableName, int rowId) throws Exception {
     byte[] rk = integerRowKey(rowId);
