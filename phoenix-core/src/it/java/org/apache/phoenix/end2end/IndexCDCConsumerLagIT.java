@@ -51,7 +51,16 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * the consumer had no batch to process. Asserts only that the sampler keeps emitting during an idle
  * window — a binary check that's robust to JVM scheduler/GC jitter and to histogram snapshot
  * timing. Value-correctness of the watermark math is covered deterministically by
- * {@code IndexCDCConsumerStateTest}.
+ * {@code IndexCDCConsumerProgressTest}.
+ * <p>
+ * <b>Integration branches NOT directly asserted here:</b> the {@code !isParentReplay} suppression
+ * of {@code progress.recordProcessed} / {@code recordEmptyPoll}; the
+ * {@code maxDataVisibilityRetries} skip path; the resume-from-tracker watermark seed; the
+ * empty-poll query-start timestamp choice. Each is a simple guard at a well-defined call site, but
+ * a deterministic IT for any of them would need forced region splits, tracker corruption, or
+ * data-visibility mocks beyond what is justified for this regression IT. Existing
+ * {@code MultiTenantEventualIndexIT*} exercises split-and-replay end-to-end and would surface
+ * functional breakage in those branches.
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexCDCConsumerLagIT extends ParallelStatsDisabledIT {
@@ -147,7 +156,7 @@ public class IndexCDCConsumerLagIT extends ParallelStatsDisabledIT {
     // Binary flow check — pre-fix, delta during idle was 0 because the metric was only emitted
     // on non-empty batch completion. Post-fix, the sampler fires on a clock so at least one
     // sample must land in any non-trivial idle window. Numerical value-correctness of those
-    // samples is asserted deterministically in IndexCDCConsumerStateTest.
+    // samples is asserted deterministically in IndexCDCConsumerProgressTest.
     assertTrue("Sampler must continue emitting during idle; delta=" + delta, delta >= 1);
   }
 }

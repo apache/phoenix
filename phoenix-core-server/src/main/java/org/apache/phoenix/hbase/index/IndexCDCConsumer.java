@@ -165,6 +165,10 @@ public class IndexCDCConsumer implements Runnable {
   private final MetricsIndexCDCConsumerSource metricSource;
   private final long lagSampleIntervalMs;
   private final IndexCDCConsumerProgress progress;
+  // Flipped true once hasEventuallyConsistentIndexes() confirms this region actually has an EC
+  // index. Until then sleepWithLagSampling does not emit, so tables that immediately exit "no EC
+  // index" produce no cold-start lag samples into the global / per-table histograms.
+  private volatile boolean lagEmissionEnabled = false;
   private volatile boolean stopped = false;
   private Thread consumerThread;
   private boolean hasParentPartitions = false;
@@ -275,15 +279,17 @@ public class IndexCDCConsumer implements Runnable {
 
   /**
    * Sleeps for up to {@code totalMillis}, emitting a {@code cdcIndexUpdateLag} sample at the start
-   * of each {@code lagSampleIntervalMs} slice. Aborts immediately when stopped. Used for all
-   * consumer-thread sleeps so the lag metric stays non-silent across idle, failure, startup, and
-   * parent-replay phases.
+   * of each {@code lagSampleIntervalMs} slice once {@link #lagEmissionEnabled} is set. Aborts
+   * immediately when stopped. Used for all consumer-thread sleeps so the lag metric stays
+   * non-silent across idle, failure, post-startup, and parent-replay phases.
    */
   private void sleepWithLagSampling(long totalMillis) throws InterruptedException {
     long deadline = EnvironmentEdgeManager.currentTimeMillis() + totalMillis;
     while (!stopped) {
       long now = EnvironmentEdgeManager.currentTimeMillis();
-      metricSource.updateCdcLag(dataTableName, progress.currentLagMs(now));
+      if (lagEmissionEnabled) {
+        metricSource.updateCdcLag(dataTableName, progress.currentLagMs(now));
+      }
       long remaining = deadline - now;
       if (remaining <= 0) {
         return;
@@ -438,6 +444,9 @@ public class IndexCDCConsumer implements Runnable {
           dataTableName);
         return;
       }
+      // Only enable lag sampling once we've confirmed this table actually has an EC index,
+      // so non-EC-indexed tables don't pollute the lag histograms with cold-start samples.
+      lagEmissionEnabled = true;
       LOG.info(
         "IndexCDCConsumer started for table {} region {}"
           + " [batchSize: {}, pollIntervalMs: {}, timestampBufferMs: {}, startupDelayMs: {},"
@@ -967,7 +976,11 @@ public class IndexCDCConsumer implements Runnable {
       long newLastTimestamp = lastProcessedTimestamp;
       boolean hasMoreRows = true;
       int retryCount = 0;
+      // Captured immediately before each query so the empty-poll watermark cannot over-advance
+      // past what the query's own (now - timestampBufferMs) upper bound actually proved empty.
+      long lastQueryStartTime = newLastTimestamp;
       while (hasMoreRows && batchMutations.isEmpty()) {
+        lastQueryStartTime = EnvironmentEdgeManager.currentTimeMillis();
         try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
           setStatementParams(scanInfo, partitionId, isParentReplay, newLastTimestamp, ps);
           Pair<Long, Boolean> result =
@@ -981,9 +994,9 @@ public class IndexCDCConsumer implements Runnable {
           }
         }
       }
-      // Empty own-partition poll proves we are caught up to (now - timestampBufferMs).
+      // Empty own-partition poll proves we are caught up to (queryStart - timestampBufferMs).
       if (!hasMoreRows && !isParentReplay) {
-        progress.recordEmptyPoll(EnvironmentEdgeManager.currentTimeMillis());
+        progress.recordEmptyPoll(lastQueryStartTime);
       }
       // With predefined LIMIT, there might be more rows with the same timestamp that were not
       // included in this batch.
@@ -1081,7 +1094,11 @@ public class IndexCDCConsumer implements Runnable {
       long[] lastScannedTimestamp = { lastProcessedTimestamp };
       boolean hasMoreRows = true;
       int retryCount = 0;
+      // Captured immediately before each query so the empty-poll watermark cannot over-advance
+      // past what the query's own (now - timestampBufferMs) upper bound actually proved empty.
+      long lastQueryStartTime = newLastTimestamp;
       while (hasMoreRows && batchStates.isEmpty()) {
+        lastQueryStartTime = EnvironmentEdgeManager.currentTimeMillis();
         try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
           setStatementParams(scanInfo, partitionId, isParentReplay, newLastTimestamp, ps);
           Pair<Long, Boolean> result =
@@ -1096,6 +1113,10 @@ public class IndexCDCConsumer implements Runnable {
                   + " to {} after {} retries — data table mutations may have failed",
                 dataTableName, partitionId, newLastTimestamp, lastScannedTimestamp[0], retryCount);
               newLastTimestamp = lastScannedTimestamp[0];
+              // NOTE: durable tracker advances below (newLastTimestamp > lastProcessedTimestamp)
+              // but progress.recordProcessed is skipped (batchStates.isEmpty()). The in-memory
+              // watermark lags durable state until the next empty poll heals it — over-reports
+              // lag temporarily (safe direction, self-healing).
               break;
             } else {
               // CDC index entries are written but the data is not yet visible.
@@ -1106,9 +1127,9 @@ public class IndexCDCConsumer implements Runnable {
           }
         }
       }
-      // Empty own-partition poll proves we are caught up to (now - timestampBufferMs).
+      // Empty own-partition poll proves we are caught up to (queryStart - timestampBufferMs).
       if (!hasMoreRows && !isParentReplay) {
-        progress.recordEmptyPoll(EnvironmentEdgeManager.currentTimeMillis());
+        progress.recordEmptyPoll(lastQueryStartTime);
       }
       if (newLastTimestamp > lastProcessedTimestamp) {
         String sameTimestampQuery = String.format(

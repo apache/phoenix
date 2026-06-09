@@ -17,7 +17,16 @@
  */
 package org.apache.phoenix.hbase.index;
 
-/** Observable progress of an {@link IndexCDCConsumer}. */
+/**
+ * Observable progress of an {@link IndexCDCConsumer}.
+ * <p>
+ * Thread-safety: <b>single-writer.</b> The owning consumer thread is the only writer of
+ * {@link #recordProcessed} / {@link #recordEmptyPoll}; the same thread also reads via
+ * {@link #currentLagMs}. {@code volatile} fields provide safe publication for an off-thread
+ * observer (e.g. JMX scraper) that may read {@link #getEffectiveWatermark} or
+ * {@link #getLastEmptyPollEndTime}, but no off-thread <i>writer</i> is supported. Watermark is
+ * monotonic; lag is clamped to zero on clock regressions.
+ */
 final class IndexCDCConsumerProgress {
 
   // Wall-clock time at consumer construction; floor for currentLagMs before any signal.
@@ -27,7 +36,9 @@ final class IndexCDCConsumerProgress {
 
   // Latest CDC event timestamp this consumer has acknowledged for its own partition.
   private volatile long lastProcessedTimestamp = 0L;
-  // Wall-clock time at the end of the most recent empty own-partition CDC poll.
+  // Wall-clock time captured immediately before the most recent own-partition CDC poll that
+  // returned zero rows. Equals the upper bound of the poll's "no events exist below" proof:
+  // (lastEmptyPollEndTime - timestampBufferMs) is the latest CDC ts the consumer is caught up to.
   private volatile long lastEmptyPollEndTime = 0L;
   // Highest own-partition CDC timestamp the consumer is confirmed caught up to (monotonic).
   private volatile long effectiveWatermark = 0L;
@@ -37,18 +48,20 @@ final class IndexCDCConsumerProgress {
     this.timestampBufferMs = timestampBufferMs;
   }
 
-  /** Record progress from a successful own-partition batch. */
-  synchronized void recordProcessed(long ts) {
+  /**
+   * Record progress from a successful own-partition batch. Single-writer (consumer thread only).
+   */
+  void recordProcessed(long ts) {
     if (ts > lastProcessedTimestamp) {
       lastProcessedTimestamp = ts;
     }
     advanceWatermark();
   }
 
-  /** Record an own-partition CDC poll that returned zero rows. */
-  synchronized void recordEmptyPoll(long pollEndWallClock) {
-    if (pollEndWallClock > lastEmptyPollEndTime) {
-      lastEmptyPollEndTime = pollEndWallClock;
+  /** Record an own-partition CDC poll that returned zero rows. Single-writer. */
+  void recordEmptyPoll(long queryStartWallClock) {
+    if (queryStartWallClock > lastEmptyPollEndTime) {
+      lastEmptyPollEndTime = queryStartWallClock;
     }
     advanceWatermark();
   }
