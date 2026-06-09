@@ -122,6 +122,33 @@ public abstract class ExplainTable {
     return buf.toString();
   }
 
+  /**
+   * Number of region scan splits the plan will hit, used to render the {@code REGIONS PLANNED}
+   * per-scan line.
+   * @return the split count, or 0 when unknown
+   */
+  protected int getSplitCount() {
+    return 0;
+  }
+
+  /**
+   * Logical name used to render a table or index in EXPLAIN output. Shared by both the scan
+   * {@code OVER} line's local index decoration and the per scan {@code INDEX} line.
+   * @param table the scanned table or index
+   * @return the display name with any child-view local-index prefix stripped
+   */
+  private static String getExplainIndexName(PTable table) {
+    String indexName = table.getName().getString();
+    if (
+      table.getIndexType() == PTable.IndexType.LOCAL && table.getViewIndexId() != null
+        && indexName.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)
+    ) {
+      int lastIndexOf = indexName.lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
+      indexName = indexName.substring(lastIndexOf + 1);
+    }
+    return indexName;
+  }
+
   protected void explain(String prefix, List<String> planSteps,
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
     List<HRegionLocation> regionLocations) {
@@ -148,15 +175,7 @@ public abstract class ExplainTable {
 
     String tableName = tableRef.getTable().getPhysicalName().getString();
     if (tableRef.getTable().getIndexType() == PTable.IndexType.LOCAL) {
-      String indexName = tableRef.getTable().getName().getString();
-      if (
-        tableRef.getTable().getViewIndexId() != null
-          && indexName.contains(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR)
-      ) {
-        int lastIndexOf = indexName.lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR);
-        indexName = indexName.substring(lastIndexOf + 1);
-      }
-      tableName = indexName + "(" + tableName + ")";
+      tableName = getExplainIndexName(tableRef.getTable()) + "(" + tableName + ")";
     }
     buf.append("OVER ").append(tableName);
 
@@ -178,6 +197,45 @@ public abstract class ExplainTable {
         explainPlanAttributesBuilder.setKeyRanges(appendKeyRanges());
       }
     }
+
+    PTable.IndexType indexType = tableRef.getTable().getIndexType();
+    String explainIndexName = getExplainIndexName(tableRef.getTable());
+    String indexKind = null;
+    if (indexType != null) {
+      switch (indexType) {
+        case LOCAL:
+          indexKind = "LOCAL";
+          break;
+        case GLOBAL:
+          indexKind = "GLOBAL";
+          break;
+        case UNCOVERED_GLOBAL:
+          indexKind = "UNCOVERED GLOBAL";
+          break;
+        default:
+          indexKind = null;
+      }
+    }
+    planSteps.add("    INDEX " + explainIndexName + (indexKind == null ? "" : " " + indexKind));
+    Integer bucketNum = tableRef.getTable().getBucketNum();
+    if (bucketNum != null) {
+      planSteps.add("    SALT BUCKETS " + bucketNum);
+    }
+    int splitCount = getSplitCount();
+    if (splitCount > 0) {
+      planSteps.add("    REGIONS PLANNED " + splitCount);
+    }
+    if (explainPlanAttributesBuilder != null) {
+      explainPlanAttributesBuilder.setIndexName(explainIndexName);
+      explainPlanAttributesBuilder.setIndexKind(indexKind);
+      if (bucketNum != null) {
+        explainPlanAttributesBuilder.setSaltBuckets(bucketNum);
+      }
+      if (splitCount > 0) {
+        explainPlanAttributesBuilder.setRegionsPlanned(splitCount);
+      }
+    }
+
     if (context.getScan() != null && tableRef.getTable().getRowTimestampColPos() != -1) {
       TimeRange range = context.getScan().getTimeRange();
       planSteps.add("    ROW TIMESTAMP FILTER [" + range.getMin() + ", " + range.getMax() + ")");

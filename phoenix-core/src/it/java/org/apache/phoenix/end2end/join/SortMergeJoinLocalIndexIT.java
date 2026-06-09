@@ -67,10 +67,9 @@ public class SortMergeJoinLocalIndexIT extends SortMergeJoinIT {
       .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").serverSortedBy("[\"S.:supplier_id\"]")
       .clientSortAlgo("CLIENT MERGE SORT").end().rhs()
       .abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(true)
-      .clientSortedBy("[\"I.0:supplier_id\"]").lhs()
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
-      .serverSortedBy("[\"I.:item_id\"]").clientSortAlgo("CLIENT MERGE SORT")
-      .end().rhs().scanType("FULL SCAN").table(order)
+      .clientSortedBy("[\"I.0:supplier_id\"]").lhs().scanType("RANGE SCAN")
+      .table(itemIndex + "(" + item + ")").keyRanges(" [1]").serverSortedBy("[\"I.:item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end().rhs().scanType("FULL SCAN").table(order)
       .serverWhereFilter("SERVER FILTER BY QUANTITY < 5000").serverSortedBy("[\"O.item_id\"]")
       .clientSortAlgo("CLIENT MERGE SORT").end().end();
   }
