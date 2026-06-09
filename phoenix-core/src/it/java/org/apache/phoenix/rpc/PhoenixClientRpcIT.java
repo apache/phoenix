@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.rpc;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -32,9 +33,9 @@ import java.util.Properties;
 import org.apache.hadoop.hbase.ipc.CallRunner;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.AfterClass;
@@ -102,12 +103,11 @@ public class PhoenixClientRpcIT extends BaseTest {
       stmt.setString(1, "v1");
 
       // verify that the query does a range scan on the index table
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + selectSql);
-      assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + indexFullName + " ['v1']",
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(stmt.unwrap(PhoenixPreparedStatement.class)).scanType("RANGE SCAN")
+        .tableContains(indexFullName).keyRanges(" ['v1']");
 
       // verify that the correct results are returned
-      rs = stmt.executeQuery();
+      ResultSet rs = stmt.executeQuery();
       assertTrue(rs.next());
       assertEquals("k1", rs.getString(1));
       assertEquals("v2", rs.getString(2));

@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.assertRawCellCount;
 import static org.apache.phoenix.util.TestUtil.assertRawRowCount;
 import static org.apache.phoenix.util.TestUtil.assertRowExistsAtSCN;
@@ -28,7 +29,6 @@ import static org.junit.Assert.assertFalse;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
@@ -44,8 +44,8 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.After;
 import org.junit.Assert;
@@ -390,9 +390,9 @@ public class MaxLookbackIT extends BaseTest {
 
   public static void assertExplainPlan(Connection conn, String selectSql, String dataTableFullName,
     String indexTableFullName) throws SQLException {
-    ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-    String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-    IndexToolIT.assertExplainPlan(false, actualExplainPlan, dataTableFullName, indexTableFullName);
+    // Verify the query is served by a RANGE SCAN over the (global) index table.
+    assertPlan(conn, selectSql).scanType("RANGE SCAN")
+      .tableContains(SchemaUtil.normalizeIdentifier(indexTableFullName));
   }
 
 }

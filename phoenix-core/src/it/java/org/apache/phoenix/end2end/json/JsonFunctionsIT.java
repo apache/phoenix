@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.json;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -40,7 +41,6 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Properties;
 import org.apache.commons.io.FileUtils;
-import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -110,7 +110,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       rs = conn.createStatement().executeQuery(query);
       assertFalse(rs.next());
 
-      // check if the explain plan indicates server side execution
+      // Check here for the JSON server side projection
       rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       assertTrue(QueryUtil.getExplainPlan(rs).contains("    SERVER JSON FUNCTION PROJECTION"));
     }
@@ -367,12 +367,10 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       String selectSql =
         "SELECT JSON_VALUE(JSONCOL,'$.type'), " + "JSON_VALUE(JSONCOL,'$.info.address.town') FROM "
           + tableName + " WHERE JSON_VALUE(JSONCOL,'$.type') = 'Basic'";
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      IndexToolIT.assertExplainPlan(false, actualExplainPlan, tableName, indexName);
+      assertPlan(conn, selectSql).scanType("RANGE SCAN").table(indexName);
       // Validate the total count of rows
       String countSql = "SELECT COUNT(1) FROM " + tableName;
-      rs = conn.createStatement().executeQuery(countSql);
+      ResultSet rs = conn.createStatement().executeQuery(countSql);
       assertTrue(rs.next());
       assertEquals(5, rs.getInt(1));
       // Delete the rows
@@ -569,7 +567,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       String explainPlan = QueryUtil.getExplainPlan(rs);
       assertFalse(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
-      assertFalse(explainPlan.contains("    SERVER ARRAY ELEMENT PROJECTION"));
+      assertPlan(conn, query).serverArrayElementProjection(false);
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(conn.createArrayOf("INTEGER", new Integer[] { 1, 2 }), rs.getArray(1));
@@ -583,7 +581,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       explainPlan = QueryUtil.getExplainPlan(rs);
       assertTrue(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
-      assertTrue(explainPlan.contains("    SERVER ARRAY ELEMENT PROJECTION"));
+      assertPlan(conn, query).serverArrayElementProjection(true);
 
       // only Array optimization and not Json
       query = "SELECT arr[1], jsoncol, JSON_VALUE(jsoncol, '$.type')" + " FROM " + tableName
@@ -591,7 +589,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       explainPlan = QueryUtil.getExplainPlan(rs);
       assertFalse(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
-      assertTrue(explainPlan.contains("    SERVER ARRAY ELEMENT PROJECTION"));
+      assertPlan(conn, query).serverArrayElementProjection(true);
 
       // only Json optimization and not Array Index
       query = "SELECT arr, arr[1], JSON_VALUE(jsoncol, '$.type')" + " FROM " + tableName
@@ -599,7 +597,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       explainPlan = QueryUtil.getExplainPlan(rs);
       assertTrue(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
-      assertFalse(explainPlan.contains("    SERVER ARRAY ELEMENT PROJECTION"));
+      assertPlan(conn, query).serverArrayElementProjection(false);
     }
   }
 

@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.createGroupByTestTable;
 import static org.junit.Assert.assertEquals;
@@ -32,10 +33,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Map;
 import java.util.Properties;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -191,13 +189,8 @@ public class SpillableGroupByIT extends BaseOwnClusterIT {
     rs.close();
     stmt.close();
     String query = "SELECT * FROM " + tableName;
-    ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-      .optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(new Integer(1), explainPlanAttributes.getSplitsChunk());
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(tableName, explainPlanAttributes.getTableName());
+    assertPlan(conn, query).splitsChunk(1).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+      .table(tableName);
     conn.close();
   }
 

@@ -24,7 +24,6 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.NoSuchElementException;
 import java.util.Set;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Consistency;
@@ -53,7 +52,6 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
-import org.apache.phoenix.schema.RowKeySchema;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
@@ -288,8 +286,11 @@ public abstract class ExplainTable {
       }
       if (explainPlanAttributesBuilder != null) {
         explainPlanAttributesBuilder.setServerOffset(offset);
-        if (pageFilter != null) {
-          explainPlanAttributesBuilder.setServerRowLimit(pageFilter.getPageSize());
+        // Populate the attribute whenever a "SERVER n ROW LIMIT" step is emitted, including the
+        // uncovered-index/server-merge path where the limit originates from the INDEX_LIMIT scan
+        // attribute rather than a PageFilter.
+        if (limit != null) {
+          explainPlanAttributesBuilder.setServerRowLimit(limit);
         }
       }
     }
@@ -365,7 +366,8 @@ public abstract class ExplainTable {
           regionLocations.subList(0, maxLimitRegionLoc);
         if (explainPlanAttributesBuilder != null) {
           explainPlanAttributesBuilder
-            .setRegionLocations(Collections.unmodifiableList(trimmedRegionLocations));
+            .setRegionLocations(Collections.unmodifiableList(trimmedRegionLocations))
+            .setRegionLocationsTotalSize(originalSize);
         }
         buf.append(trimmedRegionLocations);
         buf.append("...total size = ");
@@ -374,7 +376,8 @@ public abstract class ExplainTable {
         buf.append(regionLocations);
         if (explainPlanAttributesBuilder != null) {
           explainPlanAttributesBuilder
-            .setRegionLocations(Collections.unmodifiableList(regionLocations));
+            .setRegionLocations(Collections.unmodifiableList(regionLocations))
+            .setRegionLocationsTotalSize(regionLocations.size());
         }
       }
       buf.append(") ");
@@ -418,6 +421,7 @@ public abstract class ExplainTable {
     }
   }
 
+  @SuppressWarnings("rawtypes")
   private void appendPKColumnValue(StringBuilder buf, byte[] range, Boolean isNull, int slotIndex,
     boolean changeViewIndexId) {
     if (Boolean.TRUE.equals(isNull)) {
@@ -449,53 +453,11 @@ public abstract class ExplainTable {
     }
   }
 
+  @SuppressWarnings("rawtypes")
   private Long getViewIndexValue(PDataType type, byte[] range) {
     boolean useLongViewIndex = MetaDataUtil.getViewIndexIdDataType().equals(type);
     Object s = type.toObject(range);
     return (useLongViewIndex ? (Long) s : (Short) s) + Short.MAX_VALUE + 2;
-  }
-
-  private static class RowKeyValueIterator implements Iterator<byte[]> {
-    private final RowKeySchema schema;
-    private ImmutableBytesWritable ptr = new ImmutableBytesWritable();
-    private int position = 0;
-    private final int maxOffset;
-    private byte[] nextValue;
-
-    public RowKeyValueIterator(RowKeySchema schema, byte[] rowKey) {
-      this.schema = schema;
-      this.maxOffset = schema.iterator(rowKey, ptr);
-      iterate();
-    }
-
-    private void iterate() {
-      if (schema.next(ptr, position++, maxOffset) == null) {
-        nextValue = null;
-      } else {
-        nextValue = ptr.copyBytes();
-      }
-    }
-
-    @Override
-    public boolean hasNext() {
-      return nextValue != null;
-    }
-
-    @Override
-    public byte[] next() {
-      if (nextValue == null) {
-        throw new NoSuchElementException();
-      }
-      byte[] value = nextValue;
-      iterate();
-      return value;
-    }
-
-    @Override
-    public void remove() {
-      throw new UnsupportedOperationException();
-    }
-
   }
 
   private void appendScanRow(StringBuilder buf, Bound bound) {

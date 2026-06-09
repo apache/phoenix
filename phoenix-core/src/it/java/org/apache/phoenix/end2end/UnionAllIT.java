@@ -17,10 +17,10 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -30,7 +30,6 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
 import java.util.Properties;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
@@ -38,7 +37,6 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -643,35 +641,16 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
       assertEquals(1, rhsPlanAttributes.getClientRowLimit().intValue());
       assertEquals("CLIENT MERGE SORT", rhsPlanAttributes.getClientSortAlgo());
 
-      String limitPlan = "UNION ALL OVER 2 QUERIES\n" + "    CLIENT SERIAL 1-WAY FULL SCAN OVER "
-        + tableName1 + "\n" + "        SERVER 2 ROW LIMIT\n" + "    CLIENT 2 ROW LIMIT\n"
-        + "    CLIENT SERIAL 1-WAY FULL SCAN OVER " + tableName2 + "\n"
-        + "        SERVER 2 ROW LIMIT\n" + "    CLIENT 2 ROW LIMIT\n" + "CLIENT 2 ROW LIMIT";
-
+      // Each branch emits a SERIAL 1-WAY FULL SCAN with SERVER 2 ROW LIMIT and an inner CLIENT 2
+      // ROW LIMIT, and the union root carries an outer CLIENT 2 ROW LIMIT. The outer wrap shows
+      // up as a second "CLIENT 2 ROW LIMIT" entry in the root's clientSteps.
       ddl = "select a_string, col1 from " + tableName1 + " union all select a_string, col1 from "
         + tableName2 + " limit 2";
-      plan = conn.prepareStatement(ddl).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-        .getExplainPlan();
-      explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("UNION ALL OVER 2 QUERIES", explainPlanAttributes.getAbstractExplainPlan());
-      assertEquals("SERIAL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(tableName1, explainPlanAttributes.getTableName());
-      assertNull(explainPlanAttributes.getServerSortedBy());
-      assertEquals(2L, explainPlanAttributes.getServerRowLimit().longValue());
-      assertEquals(2, explainPlanAttributes.getClientRowLimit().intValue());
-      rhsPlanAttributes = explainPlanAttributes.getRhsJoinQueryExplainPlan();
-      assertEquals("SERIAL 1-WAY", rhsPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", rhsPlanAttributes.getExplainScanType());
-      assertEquals(tableName2, rhsPlanAttributes.getTableName());
-      assertNull(rhsPlanAttributes.getServerSortedBy());
-      assertEquals(2L, rhsPlanAttributes.getServerRowLimit().longValue());
-      assertEquals(2, rhsPlanAttributes.getClientRowLimit().intValue());
-
-      Statement stmt = conn.createStatement();
-      stmt.setMaxRows(2);
-      ResultSet rs = stmt.executeQuery("explain " + ddl);
-      assertEquals(limitPlan, QueryUtil.getExplainPlan(rs));
+      assertPlan(conn, ddl).abstractExplainPlan("UNION ALL OVER 2 QUERIES").iteratorType("SERIAL")
+        .scanType("FULL SCAN").table(tableName1).serverSortedBy(null).serverRowLimit(2L)
+        .clientRowLimit(2).clientSteps("CLIENT 2 ROW LIMIT", "CLIENT 2 ROW LIMIT").rhs()
+        .iteratorType("SERIAL").scanType("FULL SCAN").table(tableName2).serverSortedBy(null)
+        .serverRowLimit(2L).clientRowLimit(2).clientSteps("CLIENT 2 ROW LIMIT");
 
       ddl = "select a_string, col1 from " + tableName1 + " union all select a_string, col1 from "
         + tableName2;

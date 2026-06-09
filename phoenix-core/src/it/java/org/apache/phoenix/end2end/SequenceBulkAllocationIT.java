@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -37,10 +38,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.After;
@@ -825,14 +823,8 @@ public class SequenceBulkAllocationIT extends ParallelStatsDisabledIT {
     String query = "SELECT NEXT 1000 VALUES FOR  " + sequenceName + "  FROM " + tableName;
 
     // Assert output for Explain Plain result is as expected
-    ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-      .optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals(tableName, explainPlanAttributes.getTableName());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-    assertEquals(1, explainPlanAttributes.getClientSequenceCount().intValue());
+    assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(tableName)
+      .serverWhereFilter("SERVER FILTER BY FIRST KEY ONLY").clientSequenceCount(1);
   }
 
   /**

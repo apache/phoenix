@@ -793,7 +793,9 @@ public class DeleteCompiler {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-      return new ExplainPlan(Collections.singletonList("DELETE SINGLE ROW"));
+      ExplainPlanAttributes attributes =
+        new ExplainPlanAttributesBuilder().setAbstractExplainPlan("DELETE SINGLE ROW").build();
+      return new ExplainPlan(Collections.singletonList("DELETE SINGLE ROW"), attributes);
     }
 
     @Override
