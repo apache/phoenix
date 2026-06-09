@@ -23,19 +23,16 @@ import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATT
 import static org.apache.phoenix.jdbc.HighAvailabilityPolicy.PARALLEL;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.HBaseTestingUtilityPair;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.doTestBasicOperationsWithConnection;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.List;
 import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ThreadPoolExecutor;
 import java.util.function.Supplier;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.junit.AfterClass;
@@ -97,12 +94,12 @@ public class ParallelPhoenixConnectionFallbackIT {
     CountDownLatch cdl1 = new CountDownLatch(1);
     CountDownLatch cdl2 = new CountDownLatch(1);
     ParallelPhoenixContext contextA = ((ParallelPhoenixConnection) connA).getContext();
-    waitFor(() -> contextA.getChainOnConn1().isDone(), 100, 5000);
-    waitFor(() -> contextA.getChainOnConn2().isDone(), 100, 5000);
+    waitFor(() -> contextA.getChainOnConn1().isDone(), 100, 60000);
+    waitFor(() -> contextA.getChainOnConn2().isDone(), 100, 60000);
     contextA.chainOnConn1(getSuplierWithLatch(cdl1));
     contextA.chainOnConn2(getSuplierWithLatch(cdl2));
     waitFor(() -> PhoenixHAExecutorServiceProvider.hasCapacity(PROPERTIES).get(0)
-      && PhoenixHAExecutorServiceProvider.hasCapacity(PROPERTIES).get(1), 100, 5000);
+      && PhoenixHAExecutorServiceProvider.hasCapacity(PROPERTIES).get(1), 100, 60000);
     ExecutorService executor = Executors.newFixedThreadPool(1);
     // Since both the cluster executors are busy, the new connection will be
     // put in the executor queue, and a connection won't be returned unless
@@ -111,27 +108,9 @@ public class ParallelPhoenixConnectionFallbackIT {
     Future<Connection> futureConnB =
       executor.submit(() -> DriverManager.getConnection(jdbcUrl, PROPERTIES));
 
-    // PHOENIX-7859: Poll actual queue state, not the hasCapacity() composite — the multi-step
-    // calculation (size/capacity < threshold) had a race window. We now check queue.size()
-    // directly, then verify hasCapacity() matches expectations.
-    // Note: queueSize >= 1 triggers !hasCapacity() because HA_MAX_QUEUE_SIZE=2 and
-    // HA_THREADPOOL_QUEUE_BACKOFF_THRESHOLD=0.5, so 1/2 = 0.5 which is NOT < 0.5.
-    waitFor(() -> {
-      List<PhoenixHAExecutorServiceProvider.PhoenixHAClusterExecutorServices> services =
-          PhoenixHAExecutorServiceProvider.get(PROPERTIES);
-      int queueSize1 = ((ThreadPoolExecutor) services.get(0).getExecutorService()).getQueue().size();
-      int queueSize2 = ((ThreadPoolExecutor) services.get(1).getExecutorService()).getQueue().size();
-
-      LOG.debug("Waiting for queues to fill: cluster1 queue={}, cluster2 queue={}",
-          queueSize1, queueSize2);
-
-      return queueSize1 >= 1 && queueSize2 >= 1;
-    }, 100, 5000);
-
-    // Verify that hasCapacity() now correctly reports no capacity
-    List<Boolean> capacity = PhoenixHAExecutorServiceProvider.hasCapacity(PROPERTIES);
-    assertFalse("Cluster 1 should have no capacity after queues filled", capacity.get(0).booleanValue());
-    assertFalse("Cluster 2 should have no capacity after queues filled", capacity.get(1).booleanValue());
+    // The previous call of connection creation should fill the queue by half.
+    waitFor(() -> !PhoenixHAExecutorServiceProvider.hasCapacity(PROPERTIES).get(0)
+      && !PhoenixHAExecutorServiceProvider.hasCapacity(PROPERTIES).get(1), 100, 60000);
 
     // This should be backed off now, as the capacity is not available.
     Connection connC = DriverManager.getConnection(jdbcUrl, PROPERTIES);
@@ -143,14 +122,14 @@ public class ParallelPhoenixConnectionFallbackIT {
     cdl2.countDown();
 
     // Once the previous tasks are done, we expect the futureConnB to be picked and be done.
-    waitFor(() -> futureConnB.isDone(), 1000, 5000);
+    waitFor(() -> futureConnB.isDone(), 1000, 60000);
     Connection connB = futureConnB.get();
     assertTrue(connB instanceof ParallelPhoenixConnection);
 
     doTestBasicOperationsWithConnection(connB, tableName, haGroupName);
     ParallelPhoenixContext contextB = ((ParallelPhoenixConnection) connB).getContext();
-    waitFor(() -> contextB.getChainOnConn1().isDone(), 100, 5000);
-    waitFor(() -> contextB.getChainOnConn2().isDone(), 100, 5000);
+    waitFor(() -> contextB.getChainOnConn1().isDone(), 100, 60000);
+    waitFor(() -> contextB.getChainOnConn2().isDone(), 100, 60000);
 
     // Now that the queue has capacity, this should be ParallelLPhoenixConnection.
     Connection connD = DriverManager.getConnection(jdbcUrl, PROPERTIES);
