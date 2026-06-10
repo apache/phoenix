@@ -258,9 +258,9 @@ public class Bson2IT extends ParallelStatsDisabledIT {
        */
 
       updateExp = "{\n" + "  \"$SET\": {\n" + "    \"Id1\": \"12345\",\n"
-        + "    \"NestedList1[0]\": \"NestedList1[0] + 12.22\",\n"
+        + "    \"NestedList1[0]\": { \"$ADD\": [ \"NestedList1[0]\", 12.22 ] },\n"
         + "    \"NestedList1[3]\": null,\n" + "    \"NestedList1[4]\": true,\n"
-        + "    \"attr_5[0]\": \"attr_5[0] - 10\"\n" + "  }\n" + "}";
+        + "    \"attr_5[0]\": { \"$SUBTRACT\": [ \"attr_5[0]\", 10 ] }\n" + "  }\n" + "}";
 
       stmt = conn.prepareStatement("UPSERT INTO " + tableName
         + " VALUES (?,?) ON DUPLICATE KEY UPDATE COL = BSON_UPDATE_EXPRESSION(COL, '" + updateExp
