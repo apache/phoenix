@@ -2552,14 +2552,16 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       assertPlan(conn, "SELECT k,j from t3 b join t1 a ON k = j where a.col1 || a.col2 = 'foobar'")
         .scanType("FULL SCAN").table("T3").serverFirstKeyOnlyProjection(true)
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY B.J IN (\"A.:K\")").subPlanCount(1)
-        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0").scanType("RANGE SCAN")
-        .table("IDX").keyRanges(" ['foobar']").serverFirstKeyOnlyProjection(true).end();
+        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .scanType("RANGE SCAN").table("IDX").keyRanges(" ['foobar']")
+        .serverFirstKeyOnlyProjection(true).end();
       assertPlan(conn,
         "SELECT a.k,b.k from t2 b join t1 a ON a.k = b.k where a.col1 || a.col2 = 'foobar'")
           .scanType("FULL SCAN").table("T2").serverFirstKeyOnlyProjection(true)
           .dynamicServerFilter("DYNAMIC SERVER FILTER BY B.K IN (\"A.:K\")").subPlanCount(1)
-          .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0").scanType("RANGE SCAN")
-          .table("IDX").keyRanges(" ['foobar']").serverFirstKeyOnlyProjection(true).end();
+          .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+          .scanType("RANGE SCAN").table("IDX").keyRanges(" ['foobar']")
+          .serverFirstKeyOnlyProjection(true).end();
     } finally {
       conn.close();
     }
@@ -7215,7 +7217,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         .serverSortedBy("[D.V2]").clientSortAlgo("CLIENT MERGE SORT")
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY (\"D.K1\", \"D.K2\", \"D.K3\", \"D.K4\")"
           + " IN (($2.$4, $2.$5, $2.$6, $2.$7))")
-        .subPlanCount(1).subPlan(0).abstractExplainPlan("SKIP-SCAN-JOIN TABLE 0")
+        .subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .scanType("RANGE SCAN").table("I").keyRanges(" ['XXX']").serverFirstKeyOnlyProjection(true)
         .end();
     }
@@ -7244,7 +7247,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY (\"TAB_PHOENIX_6986.K1\","
           + " \"TAB_PHOENIX_6986.K2\", \"TAB_PHOENIX_6986.K3\", \"TAB_PHOENIX_6986.K4\")"
           + " IN (($2.$4, $2.$5, $2.$6, $2.$7))")
-        .subPlanCount(1).subPlan(0).abstractExplainPlan("SKIP-SCAN-JOIN TABLE 0")
+        .subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .scanType("RANGE SCAN").table("IDX_PHOENIX_6986").keyRanges(" ['XXX']")
         .serverFirstKeyOnlyProjection(true).end();
     }

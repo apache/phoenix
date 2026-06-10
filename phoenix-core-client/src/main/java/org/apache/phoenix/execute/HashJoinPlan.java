@@ -43,6 +43,7 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
@@ -99,6 +100,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
   private final SelectStatement statement;
   private final HashJoinInfo joinInfo;
+  private JoinCompiler.Strategy strategy;
   private final SubPlan[] subPlans;
   private final boolean recompileWhereClause;
   private final Set<TableRef> tableRefs;
@@ -115,9 +117,10 @@ public class HashJoinPlan extends DelegateQueryPlan {
   private boolean hasSubPlansWithPersistentCache;
 
   public static HashJoinPlan create(SelectStatement statement, QueryPlan plan,
-    HashJoinInfo joinInfo, SubPlan[] subPlans) throws SQLException {
-    if (!(plan instanceof HashJoinPlan)) return new HashJoinPlan(statement, plan, joinInfo,
-      subPlans, joinInfo == null, Collections.<ImmutableBytesPtr, ServerCache> emptyMap());
+    HashJoinInfo joinInfo, SubPlan[] subPlans, JoinCompiler.Strategy strategy) throws SQLException {
+    if (!(plan instanceof HashJoinPlan))
+      return new HashJoinPlan(statement, plan, joinInfo, subPlans, joinInfo == null,
+        Collections.<ImmutableBytesPtr, ServerCache> emptyMap(), strategy);
 
     HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
     assert (hashJoinPlan.joinInfo == null && hashJoinPlan.delegate instanceof BaseQueryPlan);
@@ -130,16 +133,18 @@ public class HashJoinPlan extends DelegateQueryPlan {
       mergedSubPlans[i++] = subPlan;
     }
     return new HashJoinPlan(statement, hashJoinPlan.delegate, joinInfo, mergedSubPlans, true,
-      hashJoinPlan.dependencies);
+      hashJoinPlan.dependencies, strategy);
   }
 
   private HashJoinPlan(SelectStatement statement, QueryPlan plan, HashJoinInfo joinInfo,
     SubPlan[] subPlans, boolean recompileWhereClause,
-    Map<ImmutableBytesPtr, ServerCache> dependencies) throws SQLException {
+    Map<ImmutableBytesPtr, ServerCache> dependencies, JoinCompiler.Strategy strategy)
+    throws SQLException {
     super(plan);
     this.dependencies.putAll(dependencies);
     this.statement = statement;
     this.joinInfo = joinInfo;
+    this.strategy = strategy;
     this.subPlans = subPlans;
     this.recompileWhereClause = recompileWhereClause;
     this.tableRefs = Sets.newHashSetWithExpectedSize(subPlans.length + plan.getSourceRefs().size());
@@ -380,6 +385,14 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
   public HashJoinInfo getJoinInfo() {
     return joinInfo;
+  }
+
+  public JoinCompiler.Strategy getStrategy() {
+    return strategy;
+  }
+
+  public void setStrategy(JoinCompiler.Strategy strategy) {
+    this.strategy = strategy;
   }
 
   public SubPlan[] getSubPlans() {
@@ -683,18 +696,41 @@ public class HashJoinPlan extends DelegateQueryPlan {
       }
     }
 
+    /**
+     * Builds the join operator line (without leading indentation) for this subplan, with the chosen
+     * {@link JoinCompiler.Strategy} and the {@code SKIP MERGE} / {@code DELAYED EVALUATION}
+     * decorators rendered as a single trailing SQL comment.
+     */
+    private String buildHeader(HashJoinPlan parent) {
+      boolean isHashJoin = hashExpressions != null;
+      String op = isHashJoin
+        ? "PARALLEL " + parent.joinInfo.getJoinTypes()[index].toString().toUpperCase()
+          + "-JOIN TABLE " + index
+        : "SKIP-SCAN-JOIN TABLE " + index;
+      JoinCompiler.Strategy strategy = parent.getStrategy();
+      if (strategy == null) {
+        return op;
+      }
+      StringBuilder comment = new StringBuilder("/* HASH BUILD ");
+      comment.append(strategy == JoinCompiler.Strategy.HASH_BUILD_LEFT ? "LEFT" : "RIGHT");
+      if (isHashJoin) {
+        boolean skipMerge = parent.joinInfo.getSchemas()[index].getFieldCount() == 0;
+        boolean earlyEvaluation = parent.joinInfo.earlyEvaluation()[index];
+        if (skipMerge) {
+          comment.append(", SKIP MERGE");
+        }
+        if (!earlyEvaluation) {
+          comment.append(", DELAYED EVALUATION");
+        }
+      }
+      comment.append(" */");
+      return op + "  " + comment;
+    }
+
     @Override
     public List<String> getPreSteps(HashJoinPlan parent) throws SQLException {
       List<String> steps = Lists.newArrayList();
-      boolean earlyEvaluation = parent.joinInfo.earlyEvaluation()[index];
-      boolean skipMerge = parent.joinInfo.getSchemas()[index].getFieldCount() == 0;
-      if (hashExpressions != null) {
-        steps.add("    PARALLEL " + parent.joinInfo.getJoinTypes()[index].toString().toUpperCase()
-          + "-JOIN TABLE " + index + (earlyEvaluation ? "" : "(DELAYED EVALUATION)")
-          + (skipMerge ? " (SKIP MERGE)" : ""));
-      } else {
-        steps.add("    SKIP-SCAN-JOIN TABLE " + index);
-      }
+      steps.add("    " + buildHeader(parent));
       for (String step : plan.getExplainPlan().getPlanSteps()) {
         steps.add("        " + step);
       }
@@ -703,17 +739,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
     @Override
     public ExplainPlanAttributes getPreStepsAsAttributes(HashJoinPlan parent) throws SQLException {
-      boolean earlyEvaluation = parent.joinInfo.earlyEvaluation()[index];
-      boolean skipMerge = parent.joinInfo.getSchemas()[index].getFieldCount() == 0;
-      String header;
-      if (hashExpressions != null) {
-        header = "PARALLEL " + parent.joinInfo.getJoinTypes()[index].toString().toUpperCase()
-          + "-JOIN TABLE " + index + (earlyEvaluation ? "" : "(DELAYED EVALUATION)")
-          + (skipMerge ? " (SKIP MERGE)" : "");
-      } else {
-        header = "SKIP-SCAN-JOIN TABLE " + index;
-      }
-      return subPlanAttributesWithHeader(plan, header);
+      return subPlanAttributesWithHeader(plan, buildHeader(parent));
     }
 
     @Override

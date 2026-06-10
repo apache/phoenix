@@ -483,7 +483,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       "SELECT /*+ USE_SORT_MERGE_JOIN */ a.a_string, b.a_string FROM atable a"
         + " JOIN atable b ON a.organization_id = b.organization_id"
         + " WHERE a.organization_id = '00D000000000001'",
-      text("SORT-MERGE-JOIN (INNER) TABLES",
+      text("SORT-MERGE-JOIN (INNER) TABLES  /* SORT_MERGE */",
         "    CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE ['00D000000000001']",
         "        INDEX ATABLE", "        REGIONS PLANNED <N>", "AND",
         "    CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "        INDEX ATABLE",
@@ -496,7 +496,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     // HashJoinPlan root attributes come from the delegate scan. Each hash/skip-scan child
     // is recorded under subPlans with its join header on abstractExplainPlan.
     ObjectNode child = scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan",
-      "PARALLEL INNER-JOIN TABLE 0");
+      "PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */");
     ObjectNode expected = scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']");
     expected.set("subPlans", mapper.createArrayNode().add(child));
     expected.put("dynamicServerFilter",
@@ -506,7 +506,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
         + " JOIN atable b ON a.organization_id = b.organization_id"
         + " WHERE a.organization_id = '00D000000000001'",
       text("CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE ['00D000000000001']", "    INDEX ATABLE",
-        "    REGIONS PLANNED <N>", "    PARALLEL INNER-JOIN TABLE 0",
+        "    REGIONS PLANNED <N>", "    PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */",
         "        CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "            INDEX ATABLE",
         "            REGIONS PLANNED <N>",
         "    DYNAMIC SERVER FILTER BY A.ORGANIZATION_ID IN (B.ORGANIZATION_ID)"),
@@ -517,10 +517,10 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   public void testHashJoinSemiInSubquery() throws Exception {
     // Phoenix temp aliases are renamed by first appearance so this case asserts on the canonical
     // "$1.$2" form.
-    ObjectNode child =
-      scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan", "SKIP-SCAN-JOIN TABLE 0")
-        .put("serverWhereFilter", "SERVER FILTER BY A_INTEGER = 1")
-        .put("serverAggregate", "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [ORGANIZATION_ID]");
+    ObjectNode child = scanAttrs("FULL SCAN ", "ATABLE", "")
+      .put("abstractExplainPlan", "SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+      .put("serverWhereFilter", "SERVER FILTER BY A_INTEGER = 1")
+      .put("serverAggregate", "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [ORGANIZATION_ID]");
     ObjectNode expected = scanAttrs("FULL SCAN ", "ATABLE", "");
     expected.set("subPlans", mapper.createArrayNode().add(child));
     expected.put("dynamicServerFilter",
@@ -529,7 +529,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       "SELECT a_string FROM atable"
         + " WHERE organization_id IN (SELECT organization_id FROM atable WHERE a_integer = 1)",
       text("CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "    INDEX ATABLE",
-        "    REGIONS PLANNED <N>", "    SKIP-SCAN-JOIN TABLE 0",
+        "    REGIONS PLANNED <N>", "    SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */",
         "        CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "            INDEX ATABLE",
         "            REGIONS PLANNED <N>", "            SERVER FILTER BY A_INTEGER = 1",
         "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [ORGANIZATION_ID]",
@@ -539,7 +539,13 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
 
   @Test
   public void testUnionAll() throws Exception {
+    // The union composes each branch recursively from its own getExplainPlan() into the subPlans
+    // list.
+    ObjectNode lhs = scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']");
     ObjectNode rhs = scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000002']");
+    ObjectNode expected = defaultAttrs();
+    expected.put("abstractExplainPlan", "UNION ALL OVER 2 QUERIES");
+    expected.set("subPlans", mapper.createArrayNode().add(lhs).add(rhs));
     verifyQuery("unionAll",
       "SELECT a_string FROM atable WHERE organization_id = '00D000000000001'" + " UNION ALL"
         + " SELECT a_string FROM atable WHERE organization_id = '00D000000000002'",
@@ -548,9 +554,50 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
         "        INDEX ATABLE", "        REGIONS PLANNED <N>",
         "    CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE ['00D000000000002']",
         "        INDEX ATABLE", "        REGIONS PLANNED <N>"),
-      scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']")
-        .put("abstractExplainPlan", "UNION ALL OVER 2 QUERIES")
-        .set("rhsJoinQueryExplainPlan", rhs));
+      expected);
+  }
+
+  @Test
+  public void testUnionAllOfHashJoins() throws Exception {
+    // A UNION ALL whose branches are each hash joins. Exercises recursive explain composition end
+    // to end and
+    // confirms each branch carries its own subPlans and dynamicServerFilter.
+    ObjectNode joinChild1 = scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan",
+      "PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */");
+    ObjectNode branch1 = scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']");
+    branch1.set("subPlans", mapper.createArrayNode().add(joinChild1));
+    branch1.put("dynamicServerFilter",
+      "DYNAMIC SERVER FILTER BY A.ORGANIZATION_ID IN (B.ORGANIZATION_ID)");
+    ObjectNode joinChild2 = scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan",
+      "PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */");
+    ObjectNode branch2 = scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000002']");
+    branch2.set("subPlans", mapper.createArrayNode().add(joinChild2));
+    branch2.put("dynamicServerFilter",
+      "DYNAMIC SERVER FILTER BY A.ORGANIZATION_ID IN (B.ORGANIZATION_ID)");
+    ObjectNode expected = defaultAttrs();
+    expected.put("abstractExplainPlan", "UNION ALL OVER 2 QUERIES");
+    expected.set("subPlans", mapper.createArrayNode().add(branch1).add(branch2));
+    verifyQuery("unionAllOfHashJoins",
+      "SELECT a.a_string AS s1, b.a_string AS s2 FROM atable a"
+        + " JOIN atable b ON a.organization_id = b.organization_id"
+        + " WHERE a.organization_id = '00D000000000001'" + " UNION ALL"
+        + " SELECT a.a_string AS s1, b.a_string AS s2 FROM atable a"
+        + " JOIN atable b ON a.organization_id = b.organization_id"
+        + " WHERE a.organization_id = '00D000000000002'",
+      text("UNION ALL OVER 2 QUERIES",
+        "    CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE ['00D000000000001']",
+        "        INDEX ATABLE", "        REGIONS PLANNED <N>",
+        "        PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */",
+        "            CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "                INDEX ATABLE",
+        "                REGIONS PLANNED <N>",
+        "        DYNAMIC SERVER FILTER BY A.ORGANIZATION_ID IN (B.ORGANIZATION_ID)",
+        "    CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE ['00D000000000002']",
+        "        INDEX ATABLE", "        REGIONS PLANNED <N>",
+        "        PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */",
+        "            CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "                INDEX ATABLE",
+        "                REGIONS PLANNED <N>",
+        "        DYNAMIC SERVER FILTER BY A.ORGANIZATION_ID IN (B.ORGANIZATION_ID)"),
+      expected);
   }
 
   @Test

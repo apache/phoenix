@@ -782,12 +782,14 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
           .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1)
           .subPlan(0).scanType("RANGE SCAN").tableContains(indexName + "(" + tableName + ")")
           .keyRanges(" [1]").serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
-          .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)").end();
+          .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT, SKIP MERGE */")
+          .end();
       } else {
         assertPlan(conn, query).scanType("RANGE SCAN").tableContains(indexName)
           .keyRanges(" ['1David']").serverFirstKeyOnlyProjection(true).subPlanCount(1).subPlan(0)
           .scanType("FULL SCAN").tableContains(indexName).serverFirstKeyOnlyProjection(true)
-          .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0 (SKIP MERGE)").end();
+          .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT, SKIP MERGE */")
+          .end();
       }
 
       rs = conn.createStatement().executeQuery(query);
