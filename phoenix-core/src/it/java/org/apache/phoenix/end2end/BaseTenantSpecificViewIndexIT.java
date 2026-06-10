@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Properties;
 import java.util.Set;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SchemaUtil;
@@ -197,7 +198,8 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
     assertPlan(conn, "SELECT k1, k2, v2 FROM " + viewName + " WHERE v2='" + valuePrefix + "v2-1'")
       .iteratorType(iteratorTypeAndScanSize).serverFirstKeyOnlyProjection(true)
       .scanType("RANGE SCAN").clientSortAlgo(clientSortAlgo).table(expectedTableName)
-      .keyRanges(keyRanges);
+      .keyRanges(keyRanges).indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+      .indexRejectedNone();
   }
 
   private void createAndVerifyIndexNonStringTenantId(Connection conn, String viewName,
@@ -213,7 +215,8 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
       .table(SchemaUtil.getTableName(SchemaUtil.getSchemaNameFromFullName(viewName), indexName)
         + "(" + tableName + ")")
       .keyRanges(" [1," + tenantId + ",'" + valuePrefix + "v2-1']")
-      .clientSortAlgo("CLIENT MERGE SORT");
+      .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+      .indexRejectedNone();
   }
 
   private Connection createTenantConnection(String tenantId) throws SQLException {

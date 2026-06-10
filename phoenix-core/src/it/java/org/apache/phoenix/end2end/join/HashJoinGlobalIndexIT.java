@@ -26,6 +26,7 @@ import java.util.Map;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.junit.experimental.categories.Category;
 import org.junit.runners.Parameterized.Parameters;
 
@@ -226,7 +227,8 @@ public class HashJoinGlobalIndexIT extends HashJoinIT {
       .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [I.NAME]")
       .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("FULL SCAN").table(idxItem).serverFirstKeyOnlyProjection(true).end();
+      .scanType("FULL SCAN").table(idxItem).serverFirstKeyOnlyProjection(true)
+      .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone().end();
   }
 
   @Override
@@ -238,7 +240,8 @@ public class HashJoinGlobalIndexIT extends HashJoinIT {
       .clientSortAlgo("CLIENT MERGE SORT").clientSortedBy("[SUM(O.QUANTITY) DESC]").subPlanCount(1)
       .subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT, SKIP MERGE */")
-      .scanType("FULL SCAN").table(idxItem).serverFirstKeyOnlyProjection(true).end();
+      .scanType("FULL SCAN").table(idxItem).serverFirstKeyOnlyProjection(true)
+      .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone().end();
   }
 
   @Override
@@ -251,7 +254,8 @@ public class HashJoinGlobalIndexIT extends HashJoinIT {
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
       .scanType("FULL SCAN").table(order)
       .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]")
-      .clientSortAlgo("CLIENT MERGE SORT").end();
+      .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_DATA_TABLE)
+      .indexRejectedNone().end();
   }
 
   @Override
@@ -263,7 +267,8 @@ public class HashJoinGlobalIndexIT extends HashJoinIT {
       .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD LEFT */")
       .scanType("FULL SCAN").table(order)
       .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]")
-      .clientSortAlgo("CLIENT MERGE SORT").end();
+      .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_DATA_TABLE)
+      .indexRejectedNone().end();
   }
 
   @Override
@@ -282,7 +287,10 @@ public class HashJoinGlobalIndexIT extends HashJoinIT {
       .scanType("FULL SCAN").table(idxItem).serverWhereFilter("SERVER FILTER BY \"NAME\" != 'T3'")
       .subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD LEFT */")
-      .scanType("FULL SCAN").table(supplier).end().end().end();
+      .scanType("FULL SCAN").table(supplier).indexRule(OptimizerReasons.RULE_ONLY_CANDIDATE)
+      .indexRejectedCount(1)
+      .indexRejected(0, "idx_supplier", OptimizerReasons.REASON_DOES_NOT_COVER_PROJECTION).end()
+      .end().end();
   }
 
   @Override

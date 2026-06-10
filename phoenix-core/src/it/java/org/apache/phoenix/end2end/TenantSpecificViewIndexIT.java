@@ -37,6 +37,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PNameFactory;
@@ -367,7 +368,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         .keyRanges(" ['tenant1        ','001','2011-01-01 00:00:00.001']"
           + " - ['tenant1        ','001','2016-10-31 00:00:00.000']")
         .serverFirstKeyOnlyProjection(true).serverRowLimit(501L).clientRowLimit(501)
-        .clientSteps("CLIENT 501 ROW LIMIT");
+        .clientSteps("CLIENT 501 ROW LIMIT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+        .indexRejectedNone();
 
       String query2 = "SELECT PARENT_ID FROM " + viewName + " WHERE PARENT_TYPE='001' "
         + " AND (CREATED_DATE >= to_date('2011-01-01') AND CREATED_DATE <= to_date('2016-01-01'))"
@@ -378,7 +380,8 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         .keyRanges(" ['tenant1        ','001','2012-10-21 00:00:00.001']"
           + " - ['tenant1        ','001','2016-01-01 00:00:00.000']")
         .serverFirstKeyOnlyProjection(true).serverRowLimit(501L).clientRowLimit(501)
-        .clientSteps("CLIENT 501 ROW LIMIT");
+        .clientSteps("CLIENT 501 ROW LIMIT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+        .indexRejectedNone();
     }
   }
 

@@ -39,6 +39,7 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
@@ -118,10 +119,12 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       if (localIndex) {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
           .table(fullIndexName + "(" + fullTableName + ")").keyRanges(" [1]")
-          .clientSortAlgo("CLIENT MERGE SORT");
+          .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
+          .indexRejectedNone();
       } else {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-          .table(fullIndexName);
+          .table(fullIndexName).indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
+          .indexRejectedNone();
       }
 
       ResultSet rs = conn.createStatement().executeQuery(query);
@@ -189,7 +192,8 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
           .table(fullIndexName + "(" + fullTableName + ")").keyRanges(" [1,'chara',4]")
           .serverMergeColumns(
             "[B.VARCHAR_COL2, B.CHAR_COL2, B.INT_COL2, B.DECIMAL_COL2, B.DATE_COL]")
-          .clientSortAlgo("CLIENT MERGE SORT");
+          .clientSortAlgo("CLIENT MERGE SORT")
+          .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
         rs = conn.createStatement().executeQuery(query);
         assertTrue(rs.next());
         assertEquals("varchar_b", rs.getString(1));
@@ -289,10 +293,12 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       if (localIndex) {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
           .table(fullIndexName + "(" + fullTableName + ")").keyRanges(" [1]")
-          .clientSortAlgo("CLIENT MERGE SORT");
+          .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
+          .indexRejectedNone();
       } else {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-          .table(fullIndexName);
+          .table(fullIndexName).indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
+          .indexRejectedNone();
       }
 
       rs = conn.createStatement().executeQuery(query);
@@ -312,10 +318,12 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       if (localIndex) {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
           .table(fullIndexName + "(" + fullTableName + ")").keyRanges(" [1]")
-          .clientSortAlgo("CLIENT MERGE SORT");
+          .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
+          .indexRejectedNone();
       } else {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-          .table(fullIndexName);
+          .table(fullIndexName).indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
+          .indexRejectedNone();
       }
 
       rs = conn.createStatement().executeQuery(query);
@@ -335,10 +343,12 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       if (localIndex) {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
           .table(fullIndexName + "(" + fullTableName + ")").keyRanges(" [1]")
-          .clientSortAlgo("CLIENT MERGE SORT");
+          .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
+          .indexRejectedNone();
       } else {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-          .table(fullIndexName);
+          .table(fullIndexName).indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
+          .indexRejectedNone();
       }
 
       rs = conn.createStatement().executeQuery(query);
@@ -408,10 +418,12 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       if (localIndex) {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
           .table(fullIndexName + "(" + fullTableName + ")").keyRanges(" [1]")
-          .serverProjectionFilter(columnEncoded).clientSortAlgo("CLIENT MERGE SORT");
+          .serverProjectionFilter(columnEncoded).clientSortAlgo("CLIENT MERGE SORT")
+          .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
       } else {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-          .table(fullIndexName).serverProjectionFilter(columnEncoded);
+          .table(fullIndexName).serverProjectionFilter(columnEncoded)
+          .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
       }
       // make sure the data table looks like what we expect
       rs = conn.createStatement().executeQuery(query);
@@ -534,10 +546,12 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       if (localIndex) {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
           .table(fullIndexName + "(" + fullTableName + ")").keyRanges(" [1]")
-          .serverProjectionFilter(columnEncoded).clientSortAlgo("CLIENT MERGE SORT");
+          .serverProjectionFilter(columnEncoded).clientSortAlgo("CLIENT MERGE SORT")
+          .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
       } else {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-          .table(fullIndexName).serverProjectionFilter(columnEncoded);
+          .table(fullIndexName).serverProjectionFilter(columnEncoded)
+          .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
       }
 
       // check that the data table matches as expected

@@ -51,6 +51,7 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -108,7 +109,9 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
 
       String selectFromData = "SELECT /*+ NO_INDEX */ PK1, INT_PK, V1, V2, V4 FROM " + tableName
         + " where V2 >= 3 and V4 LIKE 'V4%'";
-      assertPlan(conn, selectFromData).table(tableName);
+      assertPlan(conn, selectFromData).table(tableName).indexRule(OptimizerReasons.RULE_DATA_TABLE)
+        .indexRejectedCount(1)
+        .indexRejected(0, idxName, OptimizerReasons.REASON_EXCLUDED_BY_NO_INDEX_HINT);
 
       ResultSet rs = conn.createStatement().executeQuery(selectFromData);
       assertTrue(rs.next());
@@ -121,7 +124,8 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
 
       String selectFromIndex =
         "SELECT PK1, INT_PK, V1, V2, V4 FROM " + tableName + " where V2 >= 3 and V4 LIKE 'V4%'";
-      assertPlan(conn, selectFromIndex).table(idxName);
+      assertPlan(conn, selectFromIndex).table(idxName)
+        .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
 
       rs = conn.createStatement().executeQuery(selectFromIndex);
       assertTrue(rs.next());
@@ -162,7 +166,8 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
 
       String selectFromIndex =
         "SELECT PK1, INT_PK, V1, V2, V4, V_NEW FROM " + tableName + " where V1='V199' AND V2=100";
-      assertPlan(conn, selectFromIndex).table(idxName);
+      assertPlan(conn, selectFromIndex).table(idxName)
+        .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
 
       ResultSet rs = conn.createStatement().executeQuery(selectFromIndex);
       assertTrue(rs.next());
@@ -201,7 +206,8 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       String selectFromIndex = "SELECT PK1, INT_PK, V1, V4 FROM " + tableName + " where V1='V11'";
-      assertPlan(conn, selectFromIndex).table(idxName);
+      assertPlan(conn, selectFromIndex).table(idxName)
+        .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
 
       rs = conn.createStatement().executeQuery(selectFromIndex);
       assertTrue(rs.next());
@@ -400,7 +406,8 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
 
       String selectFromIndex = "SELECT PK1, INT_PK, A.V2, B.V3, A.V4, B.V5 FROM " + tableName
         + " where A.V4='V42' and B.V3 >= 3";
-      assertPlan(conn, selectFromIndex).table(idxName);
+      assertPlan(conn, selectFromIndex).table(idxName)
+        .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
       rs = conn.createStatement().executeQuery(selectFromIndex);
       assertTrue(rs.next());
       assertEquals("PK2", rs.getString(1));
@@ -432,7 +439,9 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
       conn.commit();
       String selectFromData = "SELECT /*+ NO_INDEX */ PK1, INT_PK, V1, V2, V4 FROM " + tableName
         + " where INT_PK = 1 and V4 LIKE 'UpdatedV4'";
-      assertPlan(conn, selectFromData).table(tableName);
+      assertPlan(conn, selectFromData).table(tableName).indexRule(OptimizerReasons.RULE_DATA_TABLE)
+        .indexRejectedCount(1)
+        .indexRejected(0, idxName, OptimizerReasons.REASON_EXCLUDED_BY_NO_INDEX_HINT);
 
       ResultSet rs = conn.createStatement().executeQuery(selectFromData);
       assertTrue(rs.next());
@@ -444,7 +453,8 @@ public class SingleCellIndexIT extends ParallelStatsDisabledIT {
 
       String selectFromIndex =
         "SELECT PK1, INT_PK, V1, V2, V4 FROM " + tableName + " where V2 >= 2 and V4 = 'UpdatedV4'";
-      assertPlan(conn, selectFromIndex).table(idxName);
+      assertPlan(conn, selectFromIndex).table(idxName)
+        .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
 
       rs = conn.createStatement().executeQuery(selectFromIndex);
       assertTrue(rs.next());
