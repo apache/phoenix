@@ -225,11 +225,11 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
       String query =
         "SELECT * FROM " + tableName + " tablesample (100) where i1<2 union all SELECT * FROM "
           + tableName + " tablesample (2) where i2<6000";
-      assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES").scanType("RANGE SCAN")
-        .table(tableName).keyRanges(" [*] - [2]").samplingRate(1.0d)
-        .serverFirstKeyOnlyProjection(true).rhs().scanType("FULL SCAN").table(tableName)
-        .samplingRate(0.02d).serverFirstKeyOnlyProjection(true)
-        .serverWhereFilter("SERVER FILTER BY I2 < 6000").end();
+      assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES").subPlanCount(2)
+        .subPlan(0).scanType("RANGE SCAN").table(tableName).keyRanges(" [*] - [2]")
+        .samplingRate(1.0d).serverFirstKeyOnlyProjection(true).end().subPlan(1)
+        .scanType("FULL SCAN").table(tableName).samplingRate(0.02d)
+        .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY I2 < 6000").end();
     } finally {
       conn.close();
     }
@@ -247,8 +247,9 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
       assertPlan(conn, query).scanType("FULL SCAN").table(tableName).samplingRate(0.45d)
         .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY A.I1 IN (B.I1)").subPlanCount(1).subPlan(0)
-        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)").scanType("FULL SCAN")
-        .table(joinedTableName).samplingRate(0.75d).serverFirstKeyOnlyProjection(true).end();
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT, SKIP MERGE */")
+        .scanType("FULL SCAN").table(joinedTableName).samplingRate(0.75d)
+        .serverFirstKeyOnlyProjection(true).end();
     } finally {
       conn.close();
     }
