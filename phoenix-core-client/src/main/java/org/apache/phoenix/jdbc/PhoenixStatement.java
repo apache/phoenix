@@ -1263,7 +1263,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       return new BaseMutationPlan(context, this.getOperation()) {
         @Override
         public ExplainPlan getExplainPlan() throws SQLException {
-          return new ExplainPlan(Collections.singletonList("Truncate Table"));
+          return new ExplainPlan(Collections.singletonList("TRUNCATE TABLE"));
         }
 
         @Override
