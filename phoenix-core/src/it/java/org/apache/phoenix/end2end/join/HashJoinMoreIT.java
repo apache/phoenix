@@ -294,8 +294,9 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
 
       assertPlan(conn, query).scanType("FULL SCAN").table(tempTableWithCompositePK)
         .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
-        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0").scanType("FULL SCAN")
-        .table(tempTableWithCompositePK).clientSortAlgo("CLIENT MERGE SORT").end();
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .scanType("FULL SCAN").table(tempTableWithCompositePK).clientSortAlgo("CLIENT MERGE SORT")
+        .end();
 
       // Two parts of PK but only one leading part
       query =
@@ -319,8 +320,9 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
       assertPlan(conn, query).scanType("FULL SCAN").table(tempTableWithCompositePK)
         .clientSortAlgo("CLIENT MERGE SORT")
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY LHS.COL0 IN (RHS.COL2)").subPlanCount(1)
-        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0").scanType("FULL SCAN")
-        .table(tempTableWithCompositePK).clientSortAlgo("CLIENT MERGE SORT").end();
+        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .scanType("FULL SCAN").table(tempTableWithCompositePK).clientSortAlgo("CLIENT MERGE SORT")
+        .end();
 
       // Two leading parts of PK
       query =
@@ -354,7 +356,8 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
         .clientSortAlgo("CLIENT MERGE SORT")
         .dynamicServerFilter(
           "DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1) IN ((RHS.COL1, RHS.COL2))")
-        .subPlanCount(1).subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0")
+        .subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .scanType("FULL SCAN").table(tempTableWithCompositePK).clientSortAlgo("CLIENT MERGE SORT")
         .end();
 
@@ -390,7 +393,8 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
         .clientSortAlgo("CLIENT MERGE SORT")
         .dynamicServerFilter(
           "DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1, LHS.COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))")
-        .subPlanCount(1).subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0")
+        .subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .scanType("FULL SCAN").table(tempTableWithCompositePK).clientSortAlgo("CLIENT MERGE SORT")
         .end();
     } finally {
@@ -785,7 +789,7 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
           .serverFirstKeyOnlyProjection(true)
           .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"E.TIMESTAMP\", E.BUCKET]")
           .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
-          .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)")
+          .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT, SKIP MERGE */")
           .scanType("SKIP SCAN ON 2 RANGES").table(t[i]).keyRanges(innerKeyRanges)
           .serverFirstKeyOnlyProjection(true)
           .serverWhereFilter("SERVER FILTER BY SRC_LOCATION = DST_LOCATION")

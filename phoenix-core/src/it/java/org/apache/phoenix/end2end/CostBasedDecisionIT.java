@@ -334,13 +334,13 @@ public class CostBasedDecisionIT extends BaseTest {
         + " where rowkey <= 'z' GROUP BY c1 " + "UNION ALL SELECT c1, max(rowkey), max(c2) FROM "
         + tableName + " where rowkey >= 'a' GROUP BY c1";
       // Use the default plan when stats are not available.
-      assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES")
-        .iteratorType("PARALLEL").scanType("RANGE SCAN").table(tableName).keyRanges(" [*] - ['z']")
+      assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES").subPlanCount(2)
+        .subPlan(0).iteratorType("PARALLEL").scanType("RANGE SCAN").table(tableName)
+        .keyRanges(" [*] - ['z']").serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
+        .clientSortAlgo("CLIENT MERGE SORT").end().subPlan(1).iteratorType("PARALLEL")
+        .scanType("RANGE SCAN").table(tableName).keyRanges(" ['a'] - [*]")
         .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
-        .clientSortAlgo("CLIENT MERGE SORT").rhs().iteratorType("PARALLEL").scanType("RANGE SCAN")
-        .table(tableName).keyRanges(" ['a'] - [*]")
-        .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
-        .clientSortAlgo("CLIENT MERGE SORT");
+        .clientSortAlgo("CLIENT MERGE SORT").end();
 
       PreparedStatement stmt =
         conn.prepareStatement("UPSERT INTO " + tableName + " (rowkey, c1, c2) VALUES (?, ?, ?)");
@@ -355,16 +355,17 @@ public class CostBasedDecisionIT extends BaseTest {
       conn.createStatement().execute("UPDATE STATISTICS " + tableName);
 
       // Use the optimal plan based on cost when stats become available.
-      assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES")
-        .iteratorType("PARALLEL").scanType("RANGE SCAN").table(indexName + "(" + tableName + ")")
-        .keyRanges(" [1]").serverMergeColumns("[0.C2]").serverFirstKeyOnlyProjection(true)
-        .serverWhereFilter("SERVER FILTER BY \"ROWKEY\" <= 'z'")
-        .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
-        .clientSortAlgo("CLIENT MERGE SORT").rhs().iteratorType("PARALLEL").scanType("RANGE SCAN")
+      assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES").subPlanCount(2)
+        .subPlan(0).iteratorType("PARALLEL").scanType("RANGE SCAN")
         .table(indexName + "(" + tableName + ")").keyRanges(" [1]").serverMergeColumns("[0.C2]")
-        .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" >= 'a'")
+        .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" <= 'z'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
-        .clientSortAlgo("CLIENT MERGE SORT");
+        .clientSortAlgo("CLIENT MERGE SORT").end().subPlan(1).iteratorType("PARALLEL")
+        .scanType("RANGE SCAN").table(indexName + "(" + tableName + ")").keyRanges(" [1]")
+        .serverMergeColumns("[0.C2]").serverFirstKeyOnlyProjection(true)
+        .serverWhereFilter("SERVER FILTER BY \"ROWKEY\" >= 'a'")
+        .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
+        .clientSortAlgo("CLIENT MERGE SORT").end();
     } finally {
       conn.close();
     }
@@ -391,7 +392,7 @@ public class CostBasedDecisionIT extends BaseTest {
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(tableName)
         .serverWhereFilter("SERVER FILTER BY C1 LIKE 'X0%'")
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY T1.ROWKEY IN (T2.MRK)").subPlanCount(1)
-        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0")
+        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(tableName)
         .keyRanges(" [*] - ['z']").serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
         .clientSortAlgo("CLIENT MERGE SORT");
@@ -414,7 +415,7 @@ public class CostBasedDecisionIT extends BaseTest {
         .serverMergeColumns("[0.C2]").serverFirstKeyOnlyProjection(true)
         .serverSortedBy("[\"T1.:ROWKEY\"]").clientSortAlgo("CLIENT MERGE SORT")
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"T1.:ROWKEY\" IN (T2.MRK)").subPlanCount(1)
-        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0")
+        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .table(indexName + "(" + tableName + ")").keyRanges(" [1]").serverMergeColumns("[0.C2]")
         .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" <= 'z'")
@@ -517,7 +518,7 @@ public class CostBasedDecisionIT extends BaseTest {
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       assertPlan(conn, q).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(testTable1000)
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY T2.ID IN (T1.COL1)").subPlanCount(1)
-        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0")
+        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD LEFT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable500)
         .keyRanges(" [201] - [*]");
     }
@@ -535,7 +536,7 @@ public class CostBasedDecisionIT extends BaseTest {
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       assertPlan(conn, q).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(testTable990)
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY T1.ID IN (T2.COL1)").subPlanCount(1)
-        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0")
+        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(testTable1000);
     }
   }
@@ -548,7 +549,8 @@ public class CostBasedDecisionIT extends BaseTest {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       assertPlan(conn, q).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(testTable1000)
-        .subPlanCount(1).subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0")
+        .subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD LEFT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable500)
         .keyRanges(" [201] - [*]");
     }
@@ -562,7 +564,8 @@ public class CostBasedDecisionIT extends BaseTest {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       assertPlan(conn, q).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(testTable1000)
-        .subPlanCount(1).subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0")
+        .subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD LEFT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable500)
         .keyRanges(" [201] - [*]");
     }
@@ -582,8 +585,8 @@ public class CostBasedDecisionIT extends BaseTest {
       assertPlan(conn, q).iteratorType("PARALLEL 1001-WAY").scanType("FULL SCAN")
         .table(testTable1000).serverSortedBy("[T1.COL1]").clientSortAlgo("CLIENT MERGE SORT")
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY T2.ID IN (T1.ID)").subPlanCount(1).subPlan(0)
-        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0").iteratorType("PARALLEL 1-WAY")
-        .scanType("FULL SCAN").table(testTable500);
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD LEFT */")
+        .iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(testTable500);
     }
   }
 
@@ -637,7 +640,7 @@ public class CostBasedDecisionIT extends BaseTest {
       assertPlan(conn, q).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").lhs()
         .iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(testTable1000)
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY T1.ID IN (T2.COL1)").subPlanCount(1)
-        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0")
+        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable500)
         .keyRanges(" [201] - [*]").end().end().rhs().iteratorType("PARALLEL 1-WAY")
         .scanType("RANGE SCAN").table(testTable990).keyRanges(" [*] - [100]");
@@ -656,11 +659,13 @@ public class CostBasedDecisionIT extends BaseTest {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
       assertPlan(conn, q).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(testTable1000)
-        .subPlanCount(2).subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0")
+        .subPlanCount(2).subPlan(0)
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable500)
         .keyRanges(" [201] - [*]").end().subPlan(1)
-        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 1").iteratorType("PARALLEL 1-WAY")
-        .scanType("RANGE SCAN").table(testTable990).keyRanges(" [*] - [100]");
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 1  /* HASH BUILD RIGHT */")
+        .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable990)
+        .keyRanges(" [*] - [100]");
     }
   }
 
@@ -677,8 +682,8 @@ public class CostBasedDecisionIT extends BaseTest {
       assertPlan(conn, q).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").lhs()
         .iteratorType("PARALLEL 1001-WAY").scanType("FULL SCAN").table(testTable1000)
         .serverSortedBy("[T1.COL1]").clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
-        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0").iteratorType("PARALLEL 1-WAY")
-        .scanType("FULL SCAN").table(testTable990).end().end().rhs()
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(testTable990).end().end().rhs()
         .iteratorType("PARALLEL 991-WAY").scanType("FULL SCAN").table(testTable990)
         .serverSortedBy("[T3.COL2]").clientSortAlgo("CLIENT MERGE SORT");
     }
