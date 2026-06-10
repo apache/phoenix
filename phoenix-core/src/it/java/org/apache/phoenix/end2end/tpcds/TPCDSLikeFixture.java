@@ -26,7 +26,7 @@ import java.util.Random;
 
 /**
  * Shared deterministic TPC-DS derived fixture for {@link TPCDSLikeSingleChannelIT} and
- * {@link TpcdsLikeCrossChannelIT}.
+ * {@link TPCDSLikeCrossChannelIT}.
  * <p>
  * The schema is a trimmed subset of the TPC-DS v4.0.0 schema, only the tables and columns touched
  * by the adapted queries, with the following uniform Phoenix adaptation rules applied:
@@ -89,9 +89,17 @@ public final class TPCDSLikeFixture {
     loaded = true;
   }
 
+  /**
+   * Both schemas must carry data. A partial prior run or manual cleanup can leave the base schema
+   * populated while {@link #SCHEMA_INDEXED} is empty.
+   */
   private static boolean tablesPopulated(Connection conn) {
+    return rowsPresent(conn, SCHEMA) && rowsPresent(conn, SCHEMA_INDEXED);
+  }
+
+  private static boolean rowsPresent(Connection conn, String s) {
     try (Statement st = conn.createStatement();
-      ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM " + SCHEMA + ".STORE_SALES")) {
+      ResultSet rs = st.executeQuery("SELECT COUNT(*) FROM " + s + ".STORE_SALES")) {
       return rs.next() && rs.getInt(1) > 0;
     } catch (SQLException e) {
       return false;
@@ -700,8 +708,8 @@ public final class TPCDSLikeFixture {
   }
 
   private static void loadStoreReturns(Connection conn, String s, Random rnd) throws SQLException {
-    // Return roughly every 4th store_sales row, reusing its (item, ticket) so the natural join key
-    // lines up with store_sales.
+    // Return every other store_sales row (even tickets), reusing its (item, ticket) so the natural
+    // join key lines up with store_sales.
     String sql = "UPSERT INTO " + s + ".STORE_RETURNS (sr_item_sk, sr_ticket_number,"
       + " sr_returned_date_sk, sr_customer_sk, sr_cdemo_sk, sr_hdemo_sk, sr_addr_sk, sr_store_sk,"
       + " sr_reason_sk, sr_return_quantity, sr_return_amt, sr_net_loss, sr_fee)"

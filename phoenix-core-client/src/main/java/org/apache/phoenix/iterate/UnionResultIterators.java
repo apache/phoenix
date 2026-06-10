@@ -157,6 +157,9 @@ public class UnionResultIterators implements ResultIterators {
    * sub-plan execution. The branch text steps are indented one level and, when a builder is
    * supplied, the branches' structured attributes are collected onto the builder's {@code subPlans}
    * list.
+   * <p>
+   * Every branch contributes exactly one entry in branch order, so {@code getSubPlans().size()}
+   * always equals {@code plans.size()}.
    */
   public static void explainBranches(List<QueryPlan> plans, List<String> planSteps,
     ExplainPlanAttributesBuilder builder) throws SQLException {
@@ -169,12 +172,11 @@ public class UnionResultIterators implements ResultIterators {
       }
       if (subPlans != null) {
         ExplainPlanAttributes attributes = explainPlan.getPlanStepsAsAttributes();
-        if (attributes != null && attributes != ExplainPlanAttributes.getDefaultExplainPlan()) {
-          subPlans.add(attributes);
-        }
+        subPlans
+          .add(attributes != null ? attributes : ExplainPlanAttributes.getDefaultExplainPlan());
       }
     }
-    if (subPlans != null && !subPlans.isEmpty()) {
+    if (subPlans != null) {
       builder.setSubPlans(subPlans);
     }
   }

@@ -42,10 +42,10 @@ public final class TPCDSLikeExpectedRegenerator {
     all.putAll(TPCDSLikeCrossChannelIT.queries());
     try (Connection conn = DriverManager.getConnection(url)) {
       TPCDSLikeFixture.load(conn);
-      System.out.println("// ===== TpcdsLikeSingleChannelIT / TpcdsLikeCrossChannelIT expected"
+      System.out.println("// ===== TPCDSLikeSingleChannelIT / TPCDSLikeCrossChannelIT expected"
         + " arrays (regenerated) =====");
       for (Map.Entry<String, String> e : all.entrySet()) {
-        // Queries are written against TpcdsLikeFixture.SCHEMA, which is what load() populates.
+        // Queries are written against TPCDSLikeFixture.SCHEMA, which is what load() populates.
         System.out.println(TPCDSLikeAssertions.captureLiteral(conn, e.getKey(), e.getValue()));
       }
     }
