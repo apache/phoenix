@@ -486,7 +486,7 @@ public class QueryCompiler {
           joinTypes, starJoinVector, tables, fieldPositions, postJoinFilterExpression,
           QueryUtil.getOffsetLimit(limit, offset));
         return HashJoinPlan.create(joinTable.getOriginalJoinSelectStatement(), plan, joinInfo,
-          hashPlans);
+          hashPlans, JoinCompiler.Strategy.HASH_BUILD_RIGHT);
       }
       case HASH_BUILD_LEFT: {
         JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
@@ -562,7 +562,8 @@ public class QueryCompiler {
           hashExpressions);
         return HashJoinPlan.create(joinTable.getOriginalJoinSelectStatement(), rhsPlan, joinInfo,
           new HashSubPlan[] { new HashSubPlan(0, lhsPlan, hashExpressions, false,
-            usePersistentCache, keyRangeExpressions.getFirst(), keyRangeExpressions.getSecond()) });
+            usePersistentCache, keyRangeExpressions.getFirst(), keyRangeExpressions.getSecond()) },
+          JoinCompiler.Strategy.HASH_BUILD_LEFT);
       }
       case SORT_MERGE: {
         JoinTable lhsJoin = joinTable.createSubJoinTable(statement.getConnection());
@@ -895,7 +896,7 @@ public class QueryCompiler {
         subPlans[i++] = new WhereClauseSubPlan(compileSubquery(stmt, false), stmt,
           subqueryNode.expectSingleRow());
       }
-      plan = HashJoinPlan.create(planSelect, plan, null, subPlans);
+      plan = HashJoinPlan.create(planSelect, plan, null, subPlans, null);
     }
 
     if (innerPlan != null) {

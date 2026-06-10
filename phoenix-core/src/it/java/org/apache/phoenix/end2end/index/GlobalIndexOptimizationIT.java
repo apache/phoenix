@@ -240,7 +240,8 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
         .table(dataTableName).serverWhereFilter("SERVER FILTER BY K3 > 1")
         .serverSortedBy("[" + dataTableName + ".V1, " + dataTableName + ".T_ID]")
         .clientSortAlgo("CLIENT MERGE SORT");
-      skipScanJoinPlan.subPlanCount(1).subPlan(0).abstractExplainPlan("SKIP-SCAN-JOIN TABLE 0")
+      skipScanJoinPlan.subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .scanType("RANGE SCAN").table(indexTableName).keyRanges(" [*] - ['z']")
         .serverFirstKeyOnlyProjection(true).end();
       // The dynamic server filter references compiler-generated positional aliases ($N.$N) whose

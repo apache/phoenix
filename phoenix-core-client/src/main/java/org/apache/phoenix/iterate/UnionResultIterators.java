@@ -21,6 +21,7 @@ import java.sql.SQLException;
 import java.util.Collections;
 import java.util.List;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.QueryPlan;
@@ -43,10 +44,12 @@ public class UnionResultIterators implements ResultIterators {
   private final List<OverAllQueryMetrics> overAllQueryMetricsList;
   private boolean closed;
   private final StatementContext parentStmtCtx;
+  private final List<QueryPlan> plans;
 
   public UnionResultIterators(List<QueryPlan> plans, StatementContext parentStmtCtx)
     throws SQLException {
     this.parentStmtCtx = parentStmtCtx;
+    this.plans = plans;
     int nPlans = plans.size();
     iterators = Lists.newArrayListWithExpectedSize(nPlans);
     splits = Lists.newArrayListWithExpectedSize(nPlans * 30);
@@ -125,8 +128,10 @@ public class UnionResultIterators implements ResultIterators {
 
   @Override
   public void explain(List<String> planSteps) {
-    for (PeekingResultIterator iterator : iterators) {
-      iterator.explain(planSteps);
+    try {
+      explainBranches(plans, planSteps, null);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
     }
   }
 
@@ -138,22 +143,41 @@ public class UnionResultIterators implements ResultIterators {
   @Override
   public void explain(List<String> planSteps,
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
-    boolean moreThanOneIters = false;
-    ExplainPlanAttributesBuilder lhsPointer = null;
-    // For more than one iterators, explainPlanAttributes will create
-    // chain of objects as lhs and rhs query plans.
-    for (PeekingResultIterator iterator : iterators) {
-      if (moreThanOneIters) {
-        ExplainPlanAttributesBuilder rhsBuilder = new ExplainPlanAttributesBuilder();
-        iterator.explain(planSteps, rhsBuilder);
-        ExplainPlanAttributes rhsPlans = rhsBuilder.build();
-        lhsPointer.setRhsJoinQueryExplainPlan(rhsPlans);
-        lhsPointer = rhsBuilder;
-      } else {
-        iterator.explain(planSteps, explainPlanAttributesBuilder);
-        lhsPointer = explainPlanAttributesBuilder;
+    try {
+      explainBranches(plans, planSteps, explainPlanAttributesBuilder);
+    } catch (SQLException e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  /**
+   * Single source of truth for composing a union's branches into the explain output. Each branch is
+   * rendered from its own {@link QueryPlan#getExplainPlan()} (rather than from its iterator) so the
+   * full sub-plan structure of each branch is preserved, and so explaining a union does not trigger
+   * sub-plan execution. The branch text steps are indented one level and, when a builder is
+   * supplied, the branches' structured attributes are collected onto the builder's {@code subPlans}
+   * list.
+   * <p>
+   * Every branch contributes exactly one entry in branch order, so {@code getSubPlans().size()}
+   * always equals {@code plans.size()}.
+   */
+  public static void explainBranches(List<QueryPlan> plans, List<String> planSteps,
+    ExplainPlanAttributesBuilder builder) throws SQLException {
+    List<ExplainPlanAttributes> subPlans =
+      builder == null ? null : Lists.newArrayListWithExpectedSize(plans.size());
+    for (QueryPlan plan : plans) {
+      ExplainPlan explainPlan = plan.getExplainPlan();
+      for (String step : explainPlan.getPlanSteps()) {
+        planSteps.add("    " + step);
       }
-      moreThanOneIters = true;
+      if (subPlans != null) {
+        ExplainPlanAttributes attributes = explainPlan.getPlanStepsAsAttributes();
+        subPlans
+          .add(attributes != null ? attributes : ExplainPlanAttributes.getDefaultExplainPlan());
+      }
+    }
+    if (subPlans != null) {
+      builder.setSubPlans(subPlans);
     }
   }
 }
