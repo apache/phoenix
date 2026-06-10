@@ -408,13 +408,10 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       if (localIndex) {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
           .table(fullIndexName + "(" + fullTableName + ")").keyRanges(" [1]")
-          .serverWhereFilter(
-            "SERVER FILTER BY " + (columnEncoded ? "FIRST KEY" : "EMPTY COLUMN") + " ONLY")
-          .clientSortAlgo("CLIENT MERGE SORT");
+          .serverProjectionFilter(columnEncoded).clientSortAlgo("CLIENT MERGE SORT");
       } else {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-          .table(fullIndexName).serverWhereFilter(
-            "SERVER FILTER BY " + (columnEncoded ? "FIRST KEY" : "EMPTY COLUMN") + " ONLY");
+          .table(fullIndexName).serverProjectionFilter(columnEncoded);
       }
       // make sure the data table looks like what we expect
       rs = conn.createStatement().executeQuery(query);
@@ -537,13 +534,10 @@ public class MutableIndexIT extends ParallelStatsDisabledIT {
       if (localIndex) {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
           .table(fullIndexName + "(" + fullTableName + ")").keyRanges(" [1]")
-          .serverWhereFilter(
-            "SERVER FILTER BY " + (columnEncoded ? "FIRST KEY" : "EMPTY COLUMN") + " ONLY")
-          .clientSortAlgo("CLIENT MERGE SORT");
+          .serverProjectionFilter(columnEncoded).clientSortAlgo("CLIENT MERGE SORT");
       } else {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-          .table(fullIndexName).serverWhereFilter(
-            "SERVER FILTER BY " + (columnEncoded ? "FIRST KEY" : "EMPTY COLUMN") + " ONLY");
+          .table(fullIndexName).serverProjectionFilter(columnEncoded);
       }
 
       // check that the data table matches as expected
