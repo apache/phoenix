@@ -41,6 +41,7 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
+import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
@@ -98,6 +99,7 @@ public class SortMergeJoinPlan implements QueryPlan {
    * {@link JoinType#Left}.
    */
   private final JoinType joinType;
+  private JoinCompiler.Strategy strategy = JoinCompiler.Strategy.SORT_MERGE;
   private final QueryPlan lhsPlan;
   private final QueryPlan rhsPlan;
   private final List<Expression> lhsKeyExpressions;
@@ -188,7 +190,8 @@ public class SortMergeJoinPlan implements QueryPlan {
   @Override
   public ExplainPlan getExplainPlan() throws SQLException {
     List<String> steps = Lists.newArrayList();
-    steps.add("SORT-MERGE-JOIN (" + joinType.toString().toUpperCase() + ") TABLES");
+    steps
+      .add("SORT-MERGE-JOIN (" + joinType.toString().toUpperCase() + ") TABLES  /* SORT_MERGE */");
     ExplainPlan lhsExplainPlan = lhsPlan.getExplainPlan();
     List<String> lhsPlanSteps = lhsExplainPlan.getPlanSteps();
     ExplainPlanAttributes lhsPlanAttributes = lhsExplainPlan.getPlanStepsAsAttributes();
@@ -301,6 +304,14 @@ public class SortMergeJoinPlan implements QueryPlan {
 
   public JoinType getJoinType() {
     return joinType;
+  }
+
+  public JoinCompiler.Strategy getStrategy() {
+    return strategy;
+  }
+
+  public void setStrategy(JoinCompiler.Strategy strategy) {
+    this.strategy = strategy;
   }
 
   private static SQLException closeIterators(ResultIterator lhsIterator,
