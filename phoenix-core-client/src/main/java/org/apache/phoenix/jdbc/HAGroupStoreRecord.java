@@ -76,11 +76,11 @@ public class HAGroupStoreRecord {
         case ABORT_TO_ACTIVE_NOT_IN_SYNC:
         case ACTIVE_IN_SYNC:
         case ACTIVE_NOT_IN_SYNC:
+        case ACTIVE_NOT_IN_SYNC_TO_STANDBY:
         case ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER:
         case ACTIVE_WITH_OFFLINE_PEER:
           return ClusterRoleRecord.ClusterRole.ACTIVE;
         case ACTIVE_IN_SYNC_TO_STANDBY:
-        case ACTIVE_NOT_IN_SYNC_TO_STANDBY:
           return ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY;
         case ABORT_TO_STANDBY:
         case DEGRADED_STANDBY:
@@ -114,7 +114,7 @@ public class HAGroupStoreRecord {
       ACTIVE_IN_SYNC_TO_STANDBY.allowedTransitions =
         ImmutableSet.of(ABORT_TO_ACTIVE_IN_SYNC, STANDBY);
       STANDBY_TO_ACTIVE.allowedTransitions = ImmutableSet.of(ABORT_TO_STANDBY, ACTIVE_IN_SYNC);
-      DEGRADED_STANDBY.allowedTransitions = ImmutableSet.of(STANDBY);
+      DEGRADED_STANDBY.allowedTransitions = ImmutableSet.of(STANDBY, STANDBY_TO_ACTIVE);
       ACTIVE_WITH_OFFLINE_PEER.allowedTransitions = ImmutableSet.of(ACTIVE_NOT_IN_SYNC);
       ABORT_TO_ACTIVE_IN_SYNC.allowedTransitions = ImmutableSet.of(ACTIVE_IN_SYNC);
       ABORT_TO_ACTIVE_NOT_IN_SYNC.allowedTransitions = ImmutableSet.of(ACTIVE_NOT_IN_SYNC);

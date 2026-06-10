@@ -145,16 +145,17 @@ public class HAGroupStoreManagerIT extends HABaseIT {
     assertFalse(haGroupStoreManager.isMutationBlocked(haGroupName1));
     assertFalse(haGroupStoreManager.isMutationBlocked(haGroupName2));
 
-    // Update only second group to ACTIVE_NOT_IN_SYNC_TO_STANDBY
+    // Move only the second group into a mutation-blocking drain state
+    // (ACTIVE_IN_SYNC_TO_STANDBY maps to ACTIVE_TO_STANDBY, which blocks mutations).
     HAGroupStoreRecord transitionRecord2 = new HAGroupStoreRecord("1.0", haGroupName2,
-      HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY, 0L,
+      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, 0L,
       HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, CLUSTERS.getMasterAddress1(),
       CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
 
     haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName2, transitionRecord2, 0);
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
 
-    // Global mutations should be blocked due to second group
+    // Blocking is per-group: only the second group is blocked; the first stays writable.
     assertFalse(haGroupStoreManager.isMutationBlocked(haGroupName1));
     assertTrue(haGroupStoreManager.isMutationBlocked(haGroupName2));
   }
