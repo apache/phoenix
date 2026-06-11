@@ -24,6 +24,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_ROLE_2;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_URL_1;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_URL_2;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.HA_GROUP_NAME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.HDFS_URL_1;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.HDFS_URL_2;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.POLICY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VERSION;
@@ -73,7 +75,12 @@ import org.slf4j.LoggerFactory;
 public class PhoenixHAAdminToolIT extends HABaseIT {
   private static final Logger LOG = LoggerFactory.getLogger(PhoenixHAAdminToolIT.class);
   private static final PrintStream STDOUT = System.out;
+  private static final PrintStream STDERR = System.err;
   private static final ByteArrayOutputStream STDOUT_CAPTURE = new ByteArrayOutputStream();
+
+  // A ZK URL with a negative port: JDBCUtil.formatUrl rejects it as a parse failure (not merely
+  // unreachable), which is what exercises the URL-validation and tolerance paths.
+  private static final String MALFORMED_URL = "nohost:-1";
 
   private String haGroupName;
   private PhoenixHAAdminTool adminTool;
@@ -189,8 +196,9 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
 
   @After
   public void after() throws Exception {
-    // reset STDOUT in case it was captured for testing
+    // reset STDOUT/STDERR in case they were captured for testing
     System.setOut(STDOUT);
+    System.setErr(STDERR);
 
     // Clean up all HA group records from both clusters after each test
     try {
@@ -308,8 +316,8 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
       if (rs.next()) {
         return new SystemTableRecord(rs.getString(HA_GROUP_NAME), rs.getString(ZK_URL_1),
           rs.getString(ZK_URL_2), rs.getString(CLUSTER_URL_1), rs.getString(CLUSTER_URL_2),
-          rs.getString(CLUSTER_ROLE_1), rs.getString(CLUSTER_ROLE_2), rs.getString(POLICY),
-          rs.getLong(VERSION));
+          rs.getString(CLUSTER_ROLE_1), rs.getString(CLUSTER_ROLE_2), rs.getString(HDFS_URL_1),
+          rs.getString(HDFS_URL_2), rs.getString(POLICY), rs.getLong(VERSION));
       }
     }
     return null;
@@ -323,17 +331,22 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     final String zkUrl2;
     final String clusterUrl1;
     final String clusterUrl2;
+    final String hdfsUrl1;
+    final String hdfsUrl2;
     final String policy;
     final long version;
 
     SystemTableRecord(String haGroupName, String zkUrl1, String zkUrl2, String clusterUrl1,
-      String clusterUrl2, String clusterRole1, String clusterRole2, String policy, long version) {
+      String clusterUrl2, String clusterRole1, String clusterRole2, String hdfsUrl1,
+      String hdfsUrl2, String policy, long version) {
       // Note: haGroupName, clusterRole1, and clusterRole2 are intentionally not stored
       // as they are not currently needed for verification
       this.zkUrl1 = zkUrl1;
       this.zkUrl2 = zkUrl2;
       this.clusterUrl1 = clusterUrl1;
       this.clusterUrl2 = clusterUrl2;
+      this.hdfsUrl1 = hdfsUrl1;
+      this.hdfsUrl2 = hdfsUrl2;
       this.policy = policy;
       this.version = version;
     }
@@ -722,7 +735,10 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     LOG.info("NOT setting up listener - simulating stuck failover where reader doesn't react");
 
     // === EXECUTE INITIATE-FAILOVER COMMAND WITH SHORT TIMEOUT ===
-    System.setOut(new PrintStream(STDOUT_CAPTURE));
+    // Capture both stdout and stderr: the recovery guidance is written to stderr.
+    PrintStream capture = new PrintStream(STDOUT_CAPTURE);
+    System.setOut(capture);
+    System.setErr(capture);
 
     PhoenixHAAdminTool cluster1AdminTool = new PhoenixHAAdminTool();
     cluster1AdminTool.setConf(CLUSTERS.getHBaseCluster1().getConfiguration());
@@ -743,6 +759,12 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     // Verify command output indicates timeout
     assertTrue("Output should indicate transition incomplete",
       output.contains("Failover transition incomplete") || output.contains("Timeout"));
+
+    // On timeout, operators should be pointed at manual recovery and the runbook.
+    assertTrue("Timeout output should reference the failover runbook",
+      output.contains("FAILOVER_RUNBOOK.md"));
+    assertTrue("Timeout output should suggest abort-failover on the standby",
+      output.contains("abort-failover"));
 
     // === VERIFY INTERMEDIATE STATE ===
     // Cluster1 should be stuck in ACTIVE_IN_SYNC_TO_STANDBY (not reached STANDBY)
@@ -807,8 +829,9 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
 
     // Update peer ZK URL, cluster URL, and peer cluster URL using auto-increment version
     String newPeerZkUrl = "localhost:9999:/test";
-    String newClusterUrl = "localhost:16020,localhost:16021,localhost:16022";
-    String newPeerClusterUrl = "localhost:16030,localhost:16031,localhost:16032";
+    // Multi-master URL form is comma-separated hosts with a single shared port.
+    String newClusterUrl = "host1,host2,host3:16020";
+    String newPeerClusterUrl = "host4,host5,host6:16030";
 
     int ret = ToolRunner.run(adminTool, new String[] { "update", "-g", updateHaGroupName, "-pz",
       newPeerZkUrl, "-c", newClusterUrl, "-pc", newPeerClusterUrl, "-av" });
@@ -877,6 +900,10 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
         systemRecord.clusterUrl1);
       assertEquals("System table CLUSTER_URL_2 should be updated (peer cluster)", newPeerClusterUrl,
         systemRecord.clusterUrl2);
+      assertEquals("System table HDFS_URL_1 should pair with local cluster slot",
+        CLUSTERS.getHdfsUrl1(), systemRecord.hdfsUrl1);
+      assertEquals("System table HDFS_URL_2 should pair with peer cluster slot",
+        CLUSTERS.getHdfsUrl2(), systemRecord.hdfsUrl2);
     } else {
       // Local cluster is in position 2, peer is in position 1
       assertEquals("System table ZK_URL_2 should remain unchanged (local cluster)",
@@ -887,6 +914,10 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
         systemRecord.clusterUrl2);
       assertEquals("System table CLUSTER_URL_1 should be updated (peer cluster)", newPeerClusterUrl,
         systemRecord.clusterUrl1);
+      assertEquals("System table HDFS_URL_2 should pair with local cluster slot",
+        CLUSTERS.getHdfsUrl1(), systemRecord.hdfsUrl2);
+      assertEquals("System table HDFS_URL_1 should pair with peer cluster slot",
+        CLUSTERS.getHdfsUrl2(), systemRecord.hdfsUrl1);
     }
 
     // Verify policy and roles remain unchanged in system table
@@ -1039,5 +1070,136 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
 
     assertEquals("create command should return RET_ARGUMENT_ERROR when --policy is missing",
       RET_ARGUMENT_ERROR, ret);
+  }
+
+  /**
+   * get output should include the HDFS URL and Peer HDFS URL of the record.
+   */
+  @Test(timeout = 180000)
+  public void testGetCommandShowsHdfsUrls() throws Exception {
+    System.setOut(new PrintStream(STDOUT_CAPTURE));
+
+    int ret = ToolRunner.run(adminTool, new String[] { "get", "-g", "prod_cluster_alpha" });
+    assertEquals(RET_SUCCESS, ret);
+
+    String output = STDOUT_CAPTURE.toString();
+    LOG.info("Got stdout from get command: \n++++++++\n{}++++++++\n", output);
+    assertTrue("Output should label HDFS URL", output.contains("HDFS URL:"));
+    assertTrue("Output should label Peer HDFS URL", output.contains("Peer HDFS URL:"));
+    assertTrue("Output should show the local HDFS URL value",
+      output.contains(CLUSTERS.getHdfsUrl1()));
+    assertTrue("Output should show the peer HDFS URL value",
+      output.contains(CLUSTERS.getHdfsUrl2()));
+  }
+
+  /**
+   * update accepts HDFS URL fields on their own and persists them to ZK.
+   */
+  @Test(timeout = 180000)
+  public void testUpdateCommandHdfsUrlsOnly() throws Exception {
+    HAGroupStoreManager manager =
+      new HAGroupStoreManager(CLUSTERS.getHBaseCluster1().getConfiguration());
+    Optional<HAGroupStoreRecord> initialOpt = manager.getHAGroupStoreRecord(haGroupName);
+    assertTrue("Initial record should exist", initialOpt.isPresent());
+    long initialVersion = initialOpt.get().getAdminCRRVersion();
+
+    System.setOut(new PrintStream(STDOUT_CAPTURE));
+    String newHdfsUrl = "hdfs://newlocal:8020";
+    String newPeerHdfsUrl = "hdfs://newpeer:8020";
+    int ret = ToolRunner.run(adminTool, new String[] { "update", "-g", haGroupName, "-hdfsurl",
+      newHdfsUrl, "-phdfsurl", newPeerHdfsUrl, "-av" });
+    assertEquals("HDFS-only update should succeed", RET_SUCCESS, ret);
+
+    Thread.sleep(2000);
+    Optional<HAGroupStoreRecord> updatedOpt = manager.getHAGroupStoreRecord(haGroupName);
+    assertTrue("Record should exist after update", updatedOpt.isPresent());
+    HAGroupStoreRecord updated = updatedOpt.get();
+    assertEquals("Version should increment", initialVersion + 1, updated.getAdminCRRVersion());
+    assertEquals("HDFS URL should be updated", newHdfsUrl, updated.getHdfsUrl());
+    assertEquals("Peer HDFS URL should be updated", newPeerHdfsUrl, updated.getPeerHdfsUrl());
+  }
+
+  /**
+   * update rejects a malformed URL field, but --force stores it as-is (recovery path).
+   */
+  @Test(timeout = 180000)
+  public void testUpdateRejectsMalformedPeerZkUrlUnlessForced() throws Exception {
+    // Initialize the ZK znode from the @Before system-table row so -av can read the version.
+    new HAGroupStoreManager(CLUSTERS.getHBaseCluster1().getConfiguration())
+      .getHAGroupStoreRecord(haGroupName);
+
+    System.setOut(new PrintStream(STDOUT_CAPTURE));
+    int ret = ToolRunner.run(adminTool,
+      new String[] { "update", "-g", haGroupName, "-pz", MALFORMED_URL, "-av" });
+    assertEquals("Malformed peer ZK URL should be rejected", RET_ARGUMENT_ERROR, ret);
+
+    STDOUT_CAPTURE.reset();
+    int forcedRet = ToolRunner.run(adminTool,
+      new String[] { "update", "-g", haGroupName, "-pz", MALFORMED_URL, "-av", "-F" });
+    assertEquals("Malformed peer ZK URL should be accepted with --force", RET_SUCCESS, forcedRet);
+  }
+
+  /**
+   * create rejects a malformed URL field and writes nothing.
+   */
+  @Test(timeout = 180000)
+  public void testCreateRejectsMalformedUrl() throws Exception {
+    String createGroup = "testCreateBadUrl_" + System.currentTimeMillis();
+    System.setOut(new PrintStream(STDOUT_CAPTURE));
+
+    int ret = ToolRunner.run(adminTool,
+      new String[] { "create", "-g", createGroup, "-p", "FAILOVER", "-zk1", CLUSTERS.getZkUrl1(),
+        "-c1", MALFORMED_URL, "-cr1", "ACTIVE", "-zk2", CLUSTERS.getZkUrl2(), "-c2",
+        CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1", CLUSTERS.getHdfsUrl1(), "-hdfs2",
+        CLUSTERS.getHdfsUrl2() });
+    assertEquals("Malformed cluster-url-1 should be rejected on create", RET_ARGUMENT_ERROR, ret);
+
+    assertTrue("No row should be created for a rejected create",
+      querySystemTable(createGroup, CLUSTERS.getZkUrl1()) == null);
+  }
+
+  /**
+   * A single SYSTEM.HA_GROUP row with an unparseable ZK URL must not break `list` enumeration.
+   */
+  @Test(timeout = 180000)
+  public void testListSkipsRowWithMalformedZkUrl() throws Exception {
+    String badRowGroup = "testBadZkRow_" + System.currentTimeMillis();
+    // Store malformed ZK URLs, but connect via the real local cluster (overrideConnZkUrl).
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(badRowGroup, MALFORMED_URL, MALFORMED_URL,
+      CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY,
+      CLUSTERS.getZkUrl1(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+
+    System.setOut(new PrintStream(STDOUT_CAPTURE));
+    int ret = ToolRunner.run(adminTool, new String[] { "list" });
+    assertEquals("list must not crash when one row has a malformed ZK URL", RET_SUCCESS, ret);
+
+    String output = STDOUT_CAPTURE.toString();
+    assertTrue("Valid group should still be listed", output.contains("prod_cluster_alpha"));
+    assertTrue("Bad-URL row should be skipped from enumeration", !output.contains(badRowGroup));
+  }
+
+  /**
+   * get-cluster-role-record renders a malformed stored cluster URL as &lt;invalid&gt; rather than
+   * crashing.
+   */
+  @Test(timeout = 180000)
+  public void testGetClusterRoleRecordMarksInvalidUrl() throws Exception {
+    String badUrlGroup = "testCrrBadUrl_" + System.currentTimeMillis();
+    // Local cluster URL is unparseable; zk URLs are valid so the group still enumerates.
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(badUrlGroup, CLUSTERS.getZkUrl1(),
+      CLUSTERS.getZkUrl2(), MALFORMED_URL, CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+
+    System.setOut(new PrintStream(STDOUT_CAPTURE));
+    int ret =
+      ToolRunner.run(adminTool, new String[] { "get-cluster-role-record", "-g", badUrlGroup });
+
+    assertEquals("get-cluster-role-record must not crash on a malformed stored URL", RET_SUCCESS,
+      ret);
+    String output = STDOUT_CAPTURE.toString();
+    LOG.info("Got stdout from get-cluster-role-record (bad url): \n++++++++\n{}++++++++\n", output);
+    assertTrue("Output should mark the malformed URL <invalid>", output.contains("<invalid>"));
   }
 }
