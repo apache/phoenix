@@ -225,7 +225,7 @@ public class PhoenixConnection
     boolean isRunningUpgrade) throws SQLException {
     this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(),
       connection.getMutationState(), isDescRowKeyOrderUpgrade, isRunningUpgrade,
-      connection.buildingIndex, true, connection.haGroup);
+      connection.buildingIndex, true, connection.getHAGroup());
     this.isAutoCommit = connection.isAutoCommit;
     this.isAutoFlush = connection.isAutoFlush;
     this.sampler = connection.sampler;
@@ -240,7 +240,7 @@ public class PhoenixConnection
     throws SQLException {
     this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(),
       mutationState, connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade(),
-      connection.buildingIndex, true, connection.haGroup);
+      connection.buildingIndex, true, connection.getHAGroup());
   }
 
   public PhoenixConnection(PhoenixConnection connection, long scn) throws SQLException {
@@ -250,7 +250,7 @@ public class PhoenixConnection
   public PhoenixConnection(PhoenixConnection connection, Properties props) throws SQLException {
     this(connection.getQueryServices(), connection.getURL(), props, connection.getMutationState(),
       connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade(),
-      connection.buildingIndex, true, connection.haGroup);
+      connection.buildingIndex, true, connection.getHAGroup());
     this.isAutoCommit = connection.isAutoCommit;
     this.isAutoFlush = connection.isAutoFlush;
     this.sampler = connection.sampler;
@@ -270,7 +270,7 @@ public class PhoenixConnection
   public PhoenixConnection(PhoenixConnection connection, ConnectionQueryServices services,
     Properties info) throws SQLException {
     this(services, connection.url, info, null, connection.isDescVarLengthRowKeyUpgrade(),
-      connection.isRunningUpgrade(), connection.buildingIndex, true, connection.haGroup);
+      connection.isRunningUpgrade(), connection.buildingIndex, true, connection.getHAGroup());
   }
 
   private PhoenixConnection(ConnectionQueryServices services, String url, Properties info,
