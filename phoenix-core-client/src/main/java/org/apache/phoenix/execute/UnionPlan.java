@@ -40,6 +40,7 @@ import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.iterate.ConcatResultIterator;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.iterate.OffsetResultIterator;
@@ -242,6 +243,9 @@ public class UnionPlan implements QueryPlan {
     // branch is preserved and explaining the union does not trigger sub-plan execution.
     UnionResultIterators.explainBranches(plans, steps, builder);
     addUnionTailLines(steps, builder);
+    if (getContext().isRoot()) {
+      ExplainTable.populateTopOfPlanAttributes(builder, getContext(), getTableRef());
+    }
     return new ExplainPlan(steps, builder.build());
   }
 

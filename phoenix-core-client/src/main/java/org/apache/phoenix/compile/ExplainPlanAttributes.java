@@ -35,19 +35,28 @@ import org.apache.phoenix.schema.PColumn;
  * against. This also makes attribute retrieval easier as an API rather than retrieving list of
  * Strings containing entire plan.
  */
-@JsonPropertyOrder({ "abstractExplainPlan", "hint", "explainScanType", "consistency", "tableName",
-  "keyRanges", "indexName", "indexKind", "indexRule", "indexRejected", "saltBuckets",
-  "regionsPlanned", "scanTimeRangeMin", "scanTimeRangeMax", "splitsChunk", "useRoundRobinIterator",
-  "samplingRate", "hexStringRVCOffset", "iteratorTypeAndScanSize", "estimatedRows",
-  "estimatedSizeInBytes", "serverWhereFilter", "serverDistinctFilter", "serverMergeColumns",
-  "serverArrayElementProjection", "serverFirstKeyOnlyProjection", "serverEmptyColumnOnlyProjection",
-  "serverAggregate", "serverGroupByLimit", "serverSortedBy", "serverOffset", "serverRowLimit",
-  "clientFilterBy", "clientAggregate", "clientDistinctFilter", "clientAfterAggregate",
-  "clientSortAlgo", "clientSortedBy", "clientOffset", "clientRowLimit", "clientSequenceCount",
-  "clientCursorName", "clientSteps", "lhsJoinQueryExplainPlan", "rhsJoinQueryExplainPlan",
-  "subPlans", "dynamicServerFilter", "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge",
+@JsonPropertyOrder({ "tenantId", "viewName", "viewBaseName", "cdcScopes", "txnProvider", "rewrites",
+  "abstractExplainPlan", "hint", "explainScanType", "consistency", "tableName", "keyRanges",
+  "indexName", "indexKind", "indexRule", "indexRejected", "saltBuckets", "regionsPlanned",
+  "scanTimeRangeMin", "scanTimeRangeMax", "splitsChunk", "useRoundRobinIterator", "samplingRate",
+  "hexStringRVCOffset", "iteratorTypeAndScanSize", "estimatedRows", "estimatedSizeInBytes",
+  "serverWhereFilter", "serverDistinctFilter", "serverMergeColumns", "serverArrayElementProjection",
+  "serverFirstKeyOnlyProjection", "serverEmptyColumnOnlyProjection", "serverAggregate",
+  "serverGroupByLimit", "serverSortedBy", "serverOffset", "serverRowLimit", "clientFilterBy",
+  "clientAggregate", "clientDistinctFilter", "clientAfterAggregate", "clientSortAlgo",
+  "clientSortedBy", "clientOffset", "clientRowLimit", "clientSequenceCount", "clientCursorName",
+  "clientSteps", "lhsJoinQueryExplainPlan", "rhsJoinQueryExplainPlan", "subPlans",
+  "dynamicServerFilter", "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge",
   "regionLocations", "regionLocationsTotalSize", "numRegionLocationLookups" })
 public class ExplainPlanAttributes {
+
+  // Top-of-plan disclosures (populated only on the root plan)
+  private final String tenantId;
+  private final String viewName;
+  private final String viewBaseName;
+  private final String cdcScopes;
+  private final String txnProvider;
+  private final List<String> rewrites;
 
   // Plan identity and scan-level metadata
   private final String abstractExplainPlan;
@@ -117,6 +126,12 @@ public class ExplainPlanAttributes {
   private static final ExplainPlanAttributes EXPLAIN_PLAN_INSTANCE = new ExplainPlanAttributes();
 
   private ExplainPlanAttributes() {
+    this.tenantId = null;
+    this.viewName = null;
+    this.viewBaseName = null;
+    this.cdcScopes = null;
+    this.txnProvider = null;
+    this.rewrites = null;
     this.abstractExplainPlan = null;
     this.hint = null;
     this.explainScanType = null;
@@ -172,23 +187,33 @@ public class ExplainPlanAttributes {
     this.numRegionLocationLookups = 0;
   }
 
-  public ExplainPlanAttributes(String abstractExplainPlan, Hint hint, String explainScanType,
-    Consistency consistency, String tableName, String keyRanges, String indexName, String indexKind,
-    String indexRule, List<RejectedIndexEntry> indexRejected, Integer saltBuckets,
-    Integer regionsPlanned, Long scanTimeRangeMin, Long scanTimeRangeMax, Integer splitsChunk,
-    boolean useRoundRobinIterator, Double samplingRate, String hexStringRVCOffset,
-    String iteratorTypeAndScanSize, Long estimatedRows, Long estimatedSizeInBytes,
-    String serverWhereFilter, String serverDistinctFilter, Set<PColumn> serverMergeColumns,
-    boolean serverArrayElementProjection, boolean serverFirstKeyOnlyProjection,
-    boolean serverEmptyColumnOnlyProjection, String serverAggregate, Integer serverGroupByLimit,
-    String serverSortedBy, Integer serverOffset, Long serverRowLimit, String clientFilterBy,
-    String clientAggregate, String clientDistinctFilter, String clientAfterAggregate,
-    String clientSortAlgo, String clientSortedBy, Integer clientOffset, Integer clientRowLimit,
-    Integer clientSequenceCount, String clientCursorName, List<String> clientSteps,
-    ExplainPlanAttributes lhsJoinQueryExplainPlan, ExplainPlanAttributes rhsJoinQueryExplainPlan,
-    List<ExplainPlanAttributes> subPlans, String dynamicServerFilter, String afterJoinFilter,
-    Long joinScannerLimit, boolean sortMergeSkipMerge, List<HRegionLocation> regionLocations,
+  public ExplainPlanAttributes(String tenantId, String viewName, String viewBaseName,
+    String cdcScopes, String txnProvider, List<String> rewrites, String abstractExplainPlan,
+    Hint hint, String explainScanType, Consistency consistency, String tableName, String keyRanges,
+    String indexName, String indexKind, String indexRule, List<RejectedIndexEntry> indexRejected,
+    Integer saltBuckets, Integer regionsPlanned, Long scanTimeRangeMin, Long scanTimeRangeMax,
+    Integer splitsChunk, boolean useRoundRobinIterator, Double samplingRate,
+    String hexStringRVCOffset, String iteratorTypeAndScanSize, Long estimatedRows,
+    Long estimatedSizeInBytes, String serverWhereFilter, String serverDistinctFilter,
+    Set<PColumn> serverMergeColumns, boolean serverArrayElementProjection,
+    boolean serverFirstKeyOnlyProjection, boolean serverEmptyColumnOnlyProjection,
+    String serverAggregate, Integer serverGroupByLimit, String serverSortedBy, Integer serverOffset,
+    Long serverRowLimit, String clientFilterBy, String clientAggregate, String clientDistinctFilter,
+    String clientAfterAggregate, String clientSortAlgo, String clientSortedBy, Integer clientOffset,
+    Integer clientRowLimit, Integer clientSequenceCount, String clientCursorName,
+    List<String> clientSteps, ExplainPlanAttributes lhsJoinQueryExplainPlan,
+    ExplainPlanAttributes rhsJoinQueryExplainPlan, List<ExplainPlanAttributes> subPlans,
+    String dynamicServerFilter, String afterJoinFilter, Long joinScannerLimit,
+    boolean sortMergeSkipMerge, List<HRegionLocation> regionLocations,
     Integer regionLocationsTotalSize, int numRegionLocationLookups) {
+    this.tenantId = tenantId;
+    this.viewName = viewName;
+    this.viewBaseName = viewBaseName;
+    this.cdcScopes = cdcScopes;
+    this.txnProvider = txnProvider;
+    this.rewrites = (rewrites == null || rewrites.isEmpty())
+      ? null
+      : Collections.unmodifiableList(new ArrayList<>(rewrites));
     this.abstractExplainPlan = abstractExplainPlan;
     this.hint = hint;
     this.explainScanType = explainScanType;
@@ -246,6 +271,30 @@ public class ExplainPlanAttributes {
     this.regionLocations = regionLocations;
     this.regionLocationsTotalSize = regionLocationsTotalSize;
     this.numRegionLocationLookups = numRegionLocationLookups;
+  }
+
+  public String getTenantId() {
+    return tenantId;
+  }
+
+  public String getViewName() {
+    return viewName;
+  }
+
+  public String getViewBaseName() {
+    return viewBaseName;
+  }
+
+  public String getCdcScopes() {
+    return cdcScopes;
+  }
+
+  public String getTxnProvider() {
+    return txnProvider;
+  }
+
+  public List<String> getRewrites() {
+    return rewrites;
   }
 
   public String getAbstractExplainPlan() {
@@ -467,6 +516,12 @@ public class ExplainPlanAttributes {
   }
 
   public static class ExplainPlanAttributesBuilder {
+    private String tenantId;
+    private String viewName;
+    private String viewBaseName;
+    private String cdcScopes;
+    private String txnProvider;
+    private List<String> rewrites;
     private String abstractExplainPlan;
     private HintNode.Hint hint;
     private String explainScanType;
@@ -526,6 +581,13 @@ public class ExplainPlanAttributes {
     }
 
     public ExplainPlanAttributesBuilder(ExplainPlanAttributes explainPlanAttributes) {
+      this.tenantId = explainPlanAttributes.getTenantId();
+      this.viewName = explainPlanAttributes.getViewName();
+      this.viewBaseName = explainPlanAttributes.getViewBaseName();
+      this.cdcScopes = explainPlanAttributes.getCdcScopes();
+      this.txnProvider = explainPlanAttributes.getTxnProvider();
+      List<String> srcRewrites = explainPlanAttributes.getRewrites();
+      this.rewrites = srcRewrites == null ? null : new ArrayList<>(srcRewrites);
       this.abstractExplainPlan = explainPlanAttributes.getAbstractExplainPlan();
       this.hint = explainPlanAttributes.getHint();
       this.explainScanType = explainPlanAttributes.getExplainScanType();
@@ -582,6 +644,44 @@ public class ExplainPlanAttributes {
       this.regionLocations = explainPlanAttributes.getRegionLocations();
       this.regionLocationsTotalSize = explainPlanAttributes.getRegionLocationsTotalSize();
       this.numRegionLocationLookups = explainPlanAttributes.getNumRegionLocationLookups();
+    }
+
+    public ExplainPlanAttributesBuilder setTenantId(String tenantId) {
+      this.tenantId = tenantId;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setViewName(String viewName) {
+      this.viewName = viewName;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setViewBaseName(String viewBaseName) {
+      this.viewBaseName = viewBaseName;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setCdcScopes(String cdcScopes) {
+      this.cdcScopes = cdcScopes;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setTxnProvider(String txnProvider) {
+      this.txnProvider = txnProvider;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setRewrites(List<String> rewrites) {
+      this.rewrites = rewrites == null ? null : new ArrayList<>(rewrites);
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder addRewrite(String rewrite) {
+      if (this.rewrites == null) {
+        this.rewrites = new ArrayList<>();
+      }
+      this.rewrites.add(rewrite);
+      return this;
     }
 
     public ExplainPlanAttributesBuilder setAbstractExplainPlan(String abstractExplainPlan) {
@@ -864,17 +964,18 @@ public class ExplainPlanAttributes {
     }
 
     public ExplainPlanAttributes build() {
-      return new ExplainPlanAttributes(abstractExplainPlan, hint, explainScanType, consistency,
-        tableName, keyRanges, indexName, indexKind, indexRule, indexRejected, saltBuckets,
-        regionsPlanned, scanTimeRangeMin, scanTimeRangeMax, splitsChunk, useRoundRobinIterator,
-        samplingRate, hexStringRVCOffset, iteratorTypeAndScanSize, estimatedRows,
-        estimatedSizeInBytes, serverWhereFilter, serverDistinctFilter, serverMergeColumns,
-        serverArrayElementProjection, serverFirstKeyOnlyProjection, serverEmptyColumnOnlyProjection,
-        serverAggregate, serverGroupByLimit, serverSortedBy, serverOffset, serverRowLimit,
-        clientFilterBy, clientAggregate, clientDistinctFilter, clientAfterAggregate, clientSortAlgo,
-        clientSortedBy, clientOffset, clientRowLimit, clientSequenceCount, clientCursorName,
-        clientSteps, lhsJoinQueryExplainPlan, rhsJoinQueryExplainPlan, subPlans,
-        dynamicServerFilter, afterJoinFilter, joinScannerLimit, sortMergeSkipMerge, regionLocations,
+      return new ExplainPlanAttributes(tenantId, viewName, viewBaseName, cdcScopes, txnProvider,
+        rewrites, abstractExplainPlan, hint, explainScanType, consistency, tableName, keyRanges,
+        indexName, indexKind, indexRule, indexRejected, saltBuckets, regionsPlanned,
+        scanTimeRangeMin, scanTimeRangeMax, splitsChunk, useRoundRobinIterator, samplingRate,
+        hexStringRVCOffset, iteratorTypeAndScanSize, estimatedRows, estimatedSizeInBytes,
+        serverWhereFilter, serverDistinctFilter, serverMergeColumns, serverArrayElementProjection,
+        serverFirstKeyOnlyProjection, serverEmptyColumnOnlyProjection, serverAggregate,
+        serverGroupByLimit, serverSortedBy, serverOffset, serverRowLimit, clientFilterBy,
+        clientAggregate, clientDistinctFilter, clientAfterAggregate, clientSortAlgo, clientSortedBy,
+        clientOffset, clientRowLimit, clientSequenceCount, clientCursorName, clientSteps,
+        lhsJoinQueryExplainPlan, rhsJoinQueryExplainPlan, subPlans, dynamicServerFilter,
+        afterJoinFilter, joinScannerLimit, sortMergeSkipMerge, regionLocations,
         regionLocationsTotalSize, numRegionLocationLookups);
     }
   }

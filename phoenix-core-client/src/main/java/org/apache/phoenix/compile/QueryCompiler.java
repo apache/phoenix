@@ -121,6 +121,7 @@ public class QueryCompiler {
   private final Map<TableRef, QueryPlan> dataPlans;
   private final boolean costBased;
   private final StatementContext parentContext;
+  private StatementContext prebuiltContext;
 
   public QueryCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver,
     boolean projectTuples, boolean optimizeSubquery, Map<TableRef, QueryPlan> dataPlans)
@@ -268,6 +269,9 @@ public class QueryCompiler {
     ColumnResolver resolver = FromCompiler.getResolver(tableRef);
     StatementContext context =
       new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
+    if (prebuiltContext != null) {
+      context.adoptRewriteState(prebuiltContext);
+    }
     plans = UnionCompiler.convertToTupleProjectionPlan(plans, tableRef, context);
     QueryPlan plan = compileSingleFlatQuery(context, select, false, false, null, false, true);
     plan = new UnionPlan(context, select, tableRef, plan.getProjector(), plan.getLimit(),
@@ -290,7 +294,7 @@ public class QueryCompiler {
   public QueryPlan compileSelect(SelectStatement select) throws SQLException {
     StatementContext context = createStatementContext();
     if (parentContext != null) {
-      parentContext.addSubStatementContext(context);
+      parentContext.addSubStatementContext(context, false);
     }
     QueryPlan dataPlanForCDC = getExistingDataPlanForCDC();
     if (dataPlanForCDC != null) {
@@ -313,15 +317,30 @@ public class QueryCompiler {
       context.setCDCIncludeScopes(cdcIncludeScopes);
     }
     if (select.isJoin()) {
-      JoinTable joinTable = JoinCompiler.compile(statement, select, context.getResolver());
+      JoinTable joinTable = JoinCompiler.compile(statement, select, context.getResolver(), context);
       return compileJoinQuery(context, joinTable, false, false, null);
     } else {
       return compileSingleQuery(context, select, false, true);
     }
   }
 
+  /**
+   * Supplies the pre-built top level {@link StatementContext} used by
+   * {@link org.apache.phoenix.util.ParseNodeUtil#rewrite} so the breadcrumbs recorded by the early
+   * rewrite pass are carried onto the compilation context.
+   */
+  public QueryCompiler withRewriteContext(StatementContext prebuiltContext) {
+    this.prebuiltContext = prebuiltContext;
+    return this;
+  }
+
   private StatementContext createStatementContext() {
-    return new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
+    StatementContext context =
+      new StatementContext(statement, resolver, bindManager, scan, sequenceManager);
+    if (prebuiltContext != null) {
+      context.adoptRewriteState(prebuiltContext);
+    }
+    return context;
   }
 
   /**
@@ -384,6 +403,7 @@ public class QueryCompiler {
     return bestPlan;
   }
 
+  @SuppressWarnings("unchecked")
   protected QueryPlan compileJoinQuery(JoinCompiler.Strategy strategy, StatementContext context,
     JoinTable joinTable, boolean asSubquery, boolean projectPKColumns, List<OrderByNode> orderBy)
     throws SQLException {
@@ -491,6 +511,9 @@ public class QueryCompiler {
       case HASH_BUILD_LEFT: {
         JoinSpec lastJoinSpec = joinSpecs.get(joinSpecs.size() - 1);
         JoinType type = lastJoinSpec.getType();
+        if (type == JoinType.Right) {
+          context.addAppliedRewrite("RIGHT JOIN AS LEFT JOIN");
+        }
         JoinTable rhsJoinTable = lastJoinSpec.getRhsJoinTable();
         Table rhsTable = rhsJoinTable.getLeftTable();
         JoinTable lhsJoin = joinTable.createSubJoinTable(statement.getConnection());
@@ -571,6 +594,7 @@ public class QueryCompiler {
         JoinType type = lastJoinSpec.getType();
         JoinTable rhsJoin = lastJoinSpec.getRhsJoinTable();
         if (type == JoinType.Right) {
+          context.addAppliedRewrite("RIGHT JOIN AS LEFT JOIN");
           JoinTable temp = lhsJoin;
           lhsJoin = rhsJoin;
           rhsJoin = temp;
@@ -696,14 +720,19 @@ public class QueryCompiler {
 
   protected QueryPlan compileSubquery(SelectStatement subquerySelectStatement,
     boolean pushDownMaxRows, StatementContext parentContext) throws SQLException {
-    PhoenixConnection phoenixConnection = this.statement.getConnection();
-    RewriteResult rewriteResult = ParseNodeUtil.rewrite(subquerySelectStatement, phoenixConnection);
+    // Pre-build a context so the subquery's early rewrite pass records breadcrumbs that are then
+    // adopted by the subquery's compilation context.
+    StatementContext rewriteContext =
+      new StatementContext(this.statement, FromCompiler.EMPTY_TABLE_RESOLVER, bindManager,
+        new Scan(), new SequenceManager(this.statement));
+    RewriteResult rewriteResult = ParseNodeUtil.rewrite(subquerySelectStatement, rewriteContext);
     int maxRows = this.statement.getMaxRows();
-    this.statement.setMaxRows(pushDownMaxRows ? maxRows : 0); // overwrite maxRows to avoid its
-                                                              // impact on inner queries.
+    // overwrite maxRows to avoid its impact on inner queries.
+    this.statement.setMaxRows(pushDownMaxRows ? maxRows : 0);
     QueryPlan queryPlan =
       new QueryCompiler(this.statement, rewriteResult.getRewrittenSelectStatement(),
-        rewriteResult.getColumnResolver(), bindManager, false, optimizeSubquery, null).compile();
+        rewriteResult.getColumnResolver(), bindManager, false, optimizeSubquery, null)
+          .withRewriteContext(rewriteContext).compile();
     if (optimizeSubquery) {
       queryPlan =
         statement.getConnection().getQueryServices().getOptimizer().optimize(statement, queryPlan);

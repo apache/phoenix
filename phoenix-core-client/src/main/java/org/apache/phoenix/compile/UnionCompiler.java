@@ -118,6 +118,7 @@ public class UnionCompiler {
     return new TableRef(null, tempTable, 0, false);
   }
 
+  @SuppressWarnings("rawtypes")
   private static void compareExperssions(int i, Expression expression,
     List<TargetDataExpression> targetTypes) throws SQLException {
     PDataType type = expression.getDataType();
@@ -164,6 +165,7 @@ public class UnionCompiler {
     return new TupleProjector(exprs);
   }
 
+  @SuppressWarnings("rawtypes")
   private static class TargetDataExpression {
     private PDataType type;
     private Integer maxLength;
@@ -247,6 +249,9 @@ public class UnionCompiler {
       // subquery) could not compile out the outer query's group by or order by, we would
       // not perform any special processing on the output of the subqueries.
       innerUnionPlan.disableSupportOrderByOptimize();
+    } else {
+      // The order-by merge optimization is preserved. Record a top-of-plan breadcrumb.
+      statementContextCreator.get().addAppliedRewrite("UNION ORDER BY MERGE");
     }
   }
 

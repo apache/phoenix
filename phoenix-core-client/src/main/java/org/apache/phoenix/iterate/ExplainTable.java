@@ -23,6 +23,7 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import org.apache.hadoop.hbase.HRegionLocation;
@@ -34,6 +35,7 @@ import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -55,10 +57,12 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.StringUtil;
@@ -171,6 +175,100 @@ public abstract class ExplainTable {
       indexName = indexName.substring(lastIndexOf + 1);
     }
     return indexName;
+  }
+
+  /**
+   * Populate the top-of-plan disclosure attributes on the supplied builder. Should be invoked only
+   * for a root plan (i.e. when {@code context.isRoot()}).
+   * @param builder  the attributes builder to populate (no-op when null)
+   * @param context  the root statement context
+   * @param tableRef the plan's primary table reference (may be null)
+   */
+  public static void populateTopOfPlanAttributes(ExplainPlanAttributesBuilder builder,
+    StatementContext context, TableRef tableRef) {
+    if (builder == null || context == null) {
+      return;
+    }
+    if (context.getConnection() != null && context.getConnection().getTenantId() != null) {
+      builder.setTenantId(context.getConnection().getTenantId().getString());
+    }
+    PTable table = tableRef == null ? null : tableRef.getTable();
+    if (table != null) {
+      if (table.getType() == PTableType.VIEW) {
+        builder.setViewName(table.getName().getString());
+        if (table.getBaseTableLogicalName() != null) {
+          builder.setViewBaseName(table.getBaseTableLogicalName().getString());
+        }
+      }
+      if (table.isTransactional() && table.getTransactionProvider() != null) {
+        builder.setTxnProvider(table.getTransactionProvider().name());
+      }
+    }
+    String cdcScopes = context.getEncodedCdcIncludeScopes();
+    if (cdcScopes == null && table != null && table.getType() == PTableType.CDC) {
+      Set<PTable.CDCChangeScope> scopes = table.getCDCIncludeScopes();
+      if (scopes != null && !scopes.isEmpty()) {
+        cdcScopes = CDCUtil.makeChangeScopeStringFromEnums(scopes);
+      }
+    }
+    if (cdcScopes != null) {
+      builder.setCdcScopes(cdcScopes);
+    }
+    // Aggregate rewrite breadcrumbs across the context and its sub-contexts, deduping while
+    // preserving first occurrence order. The derived table flatten count is rendered as a
+    // trailing breadcrumb when non-zero.
+    Set<String> rewrites = new LinkedHashSet<>();
+    int flattenCount = collectAppliedRewrites(context, rewrites);
+    if (flattenCount > 0) {
+      rewrites.add("DERIVED TABLE FLATTENED " + flattenCount);
+    }
+    if (!rewrites.isEmpty()) {
+      builder.setRewrites(new ArrayList<>(rewrites));
+    }
+  }
+
+  private static int collectAppliedRewrites(StatementContext context, Set<String> out) {
+    int flattenCount = context.getDerivedTableFlattenCount();
+    out.addAll(context.getAppliedRewrites());
+    for (StatementContext sub : context.getSubStatementContexts()) {
+      flattenCount += collectAppliedRewrites(sub, out);
+    }
+    return flattenCount;
+  }
+
+  /**
+   * Render the top-of-plan disclosure lines from the populated attributes and insert them at the
+   * head of {@code planSteps}.
+   * @param planSteps the rendered plan step lines to prepend onto (no-op when null)
+   * @param attrs     the already-populated root plan attributes (no-op when null)
+   */
+  public static void renderTopOfPlanText(List<String> planSteps, ExplainPlanAttributes attrs) {
+    if (planSteps == null || attrs == null) {
+      return;
+    }
+    List<String> lines = new ArrayList<>();
+    if (attrs.getTenantId() != null) {
+      lines.add("TENANT '" + attrs.getTenantId() + "'");
+    }
+    if (attrs.getViewName() != null) {
+      StringBuilder viewLine = new StringBuilder("VIEW ").append(attrs.getViewName());
+      if (attrs.getViewBaseName() != null) {
+        viewLine.append(" OVER ").append(attrs.getViewBaseName());
+      }
+      lines.add(viewLine.toString());
+    }
+    if (attrs.getCdcScopes() != null) {
+      lines.add("CDC SCOPE " + attrs.getCdcScopes());
+    }
+    if (attrs.getTxnProvider() != null) {
+      lines.add("TXN " + attrs.getTxnProvider());
+    }
+    if (attrs.getRewrites() != null) {
+      for (String rewrite : attrs.getRewrites()) {
+        lines.add("REWRITE " + rewrite);
+      }
+    }
+    planSteps.addAll(0, lines);
   }
 
   protected void explain(String prefix, List<String> planSteps,
@@ -384,7 +482,7 @@ public abstract class ExplainTable {
         explainPlanAttributesBuilder.setServerOffset(offset);
         // Populate the attribute whenever a "SERVER n ROW LIMIT" step is emitted, including the
         // uncovered-index/server-merge path where the limit originates from the INDEX_LIMIT scan
-        // attribute rather than a PageFilter.
+        // attribute.
         if (limit != null) {
           explainPlanAttributesBuilder.setServerRowLimit(limit);
         }

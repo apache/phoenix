@@ -22,6 +22,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.ComparisonExpression;
@@ -288,6 +289,8 @@ public class RVCOffsetCompiler {
     // Note the use of ByteUtil.nextKey() to generate exclusive offset
     CompiledOffset compiledOffset =
       new CompiledOffset(Optional.<Integer> absent(), Optional.of(key));
+
+    context.addAppliedRewrite("RVC OFFSET 0x" + Bytes.toHex(key));
 
     return compiledOffset;
   }

@@ -46,6 +46,12 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
 
   public IndexExpressionParseNodeRewriter(PTable index, String alias, PhoenixConnection connection,
     Map<String, UDFParseNode> udfParseNodes) throws SQLException {
+    this(index, alias, connection, udfParseNodes, null);
+  }
+
+  public IndexExpressionParseNodeRewriter(PTable index, String alias, PhoenixConnection connection,
+    Map<String, UDFParseNode> udfParseNodes, StatementContext breadcrumbContext)
+    throws SQLException {
     indexedParseNodeToColumnParseNodeMap =
       Maps.newHashMapWithExpectedSize(index.getColumns().size());
     NamedTableNode tableNode =
@@ -74,6 +80,10 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
         columnParseNode = NODE_FACTORY.cast(columnParseNode, expressionDataType, null, null);
       }
       indexedParseNodeToColumnParseNodeMap.put(indexedParseNode, columnParseNode);
+      if (breadcrumbContext != null) {
+        breadcrumbContext.addAppliedRewrite("INDEX EXPRESSION " + expressionStr + " AS " + colName);
+        breadcrumbContext.addIndexExpressionSubstitution(indexedParseNode, colName);
+      }
     }
   }
 

@@ -31,6 +31,7 @@ import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.execute.visitor.ByteCountVisitor;
 import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.LimitingResultIterator;
 import org.apache.phoenix.iterate.OffsetResultIterator;
@@ -165,6 +166,9 @@ public class ClientScanPlan extends ClientProcessingPlan {
       newBuilder.addClientStep(step);
     }
 
+    if (context.isRoot()) {
+      ExplainTable.populateTopOfPlanAttributes(newBuilder, context, getTableRef());
+    }
     return new ExplainPlan(planSteps, newBuilder.build());
   }
 
