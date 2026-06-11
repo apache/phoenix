@@ -99,8 +99,18 @@ public class ValidateLastDDLTimestampUtil {
     }
     String infoString = getInfoString(conn.getTenantId(), tableRefs);
     try (Admin admin = conn.getQueryServices().getAdmin()) {
-      // get all live region servers
+      // Get all live region servers. Although this method is typically reached only when
+      // LAST_DDL_TIMESTAMP_VALIDATION_ENABLED is true (which gates CQSI init-time refresh),
+      // the gating is enforced by callers, not this method itself. Defensively populate the
+      // list inline if null so the retry path is reserved for genuine failures.
       List<ServerName> regionServers = conn.getQueryServices().getLiveRegionServers();
+      if (regionServers == null || regionServers.isEmpty()) {
+        conn.getQueryServices().refreshLiveRegionServers();
+        regionServers = conn.getQueryServices().getLiveRegionServers();
+        if (regionServers == null || regionServers.isEmpty()) {
+          throw new SQLException("No live region servers available to validate DDL timestamp");
+        }
+      }
       // pick one at random
       ServerName regionServer =
         regionServers.get(ThreadLocalRandom.current().nextInt(regionServers.size()));
