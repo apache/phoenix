@@ -201,16 +201,18 @@ public class QueryOptimizer {
 
       if (replacement != null) {
         select = rewriteQueryWithIndexReplacement(statement.getConnection(), resolver, select,
-          replacement);
+          replacement, dataPlan.getContext());
       }
     }
 
     // Re-compile the plan with option "optimizeSubquery" turned on, so that enclosed
-    // sub-queries can be optimized recursively.
+    // sub-queries can be optimized recursively. Carry forward the top-of-plan rewrite breadcrumbs
+    // recorded on the data plan's context so they survive the recompile onto the optimized plan's
+    // context.
     QueryCompiler compiler = new QueryCompiler(statement, select,
       FromCompiler.getResolverForQuery(select, statement.getConnection()), targetColumns,
       parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), true, true, dataPlans,
-      dataPlan.getContext());
+      dataPlan.getContext()).withRewriteContext(dataPlan.getContext());
     return Collections.singletonList(compiler.compile());
   }
 
@@ -218,9 +220,23 @@ public class QueryOptimizer {
     PTable index) throws SQLException {
     StatementContext context = new StatementContext(dataPlan.getContext());
     context.setResolver(FromCompiler.getResolver(dataPlan.getTableRef()));
-    return WhereCompiler.contains(
-      index.getIndexWhereExpression(dataPlan.getContext().getConnection()),
-      WhereCompiler.transformDNF(select.getWhere(), context));
+    boolean usable =
+      WhereCompiler.contains(index.getIndexWhereExpression(dataPlan.getContext().getConnection()),
+        WhereCompiler.transformDNF(select.getWhere(), context));
+    StatementContext rootContext = dataPlan.getContext();
+    String tableName = dataPlan.getTableRef().getTable().getName().getString();
+    String indexName = index.getName().getString();
+    // Dedupe so the breadcrumb is recorded once per table and index pair even when the optimizer
+    // scores the same index across multiple candidate paths.
+    if (rootContext.markPartialIndexChecked(tableName, indexName)) {
+      // Name the index in the breadcrumb so multiple partial indexes stay distinct after the
+      // rewrite list is deduped by string. Otherwise they collapse into a single ambiguous line.
+      rootContext.addAppliedRewrite(usable
+        ? "PARTIAL INDEX " + indexName + " APPLICABLE"
+        : "PARTIAL INDEX " + indexName
+          + " NOT APPLICABLE -- index WHERE not implied by query WHERE");
+    }
+    return usable;
   }
 
   private List<QueryPlan> getApplicablePlansForSingleFlatQuery(QueryPlan dataPlan,
@@ -281,12 +297,9 @@ public class QueryOptimizer {
         QueryPlan> singletonList(recordDecision(dataPlan, OptimizerReasons.RULE_DATA_TABLE, state));
     }
     // The targetColumns is set for UPSERT SELECT to ensure that the proper type conversion takes
-    // place.
-    // For a SELECT, it is empty. In this case, we want to set the targetColumns to match the
-    // projection
-    // from the dataPlan to ensure that the metadata for when an index is used matches the metadata
-    // for
-    // when the data table is used.
+    // place. For a SELECT, it is empty. In this case, we want to set the targetColumns to match
+    // the projection from the dataPlan to ensure that the metadata for when an index is used
+    // matches the metadata for when the data table is used.
     if (targetColumns.isEmpty()) {
       List<? extends ColumnProjector> projectors = dataPlan.getProjector().getColumnProjectors();
       List<PDatum> targetDatums = Lists.newArrayListWithExpectedSize(projectors.size());
@@ -314,8 +327,10 @@ public class QueryOptimizer {
             stopAtBestPlan && hintedPlan.isApplicable()
               && (index.getIndexWhere() == null || isPartialIndexUsable(select, dataPlan, index))
           ) {
-            return Collections
+            List<QueryPlan> hinted = Collections
               .singletonList(recordDecision(hintedPlan, OptimizerReasons.RULE_HINT, state));
+            carryForwardRewrites(dataPlan.getContext(), hinted);
+            return hinted;
           }
           plans.add(0, hintedPlan);
         }
@@ -338,7 +353,9 @@ public class QueryOptimizer {
       ) {
         // Query can't possibly return anything so just return this plan.
         if (plan.isDegenerate()) {
-          return Collections.singletonList(plan);
+          List<QueryPlan> degenerate = Collections.singletonList(plan);
+          carryForwardRewrites(dataPlan.getContext(), degenerate);
+          return degenerate;
         }
         plans.add(plan);
       } else if (plan == null) {
@@ -364,9 +381,34 @@ public class QueryOptimizer {
     }
 
     // OrderPlans
-    return hintedPlan == null
+    List<QueryPlan> orderedPlans = hintedPlan == null
       ? orderPlansBestToWorst(select, applicablePlans, stopAtBestPlan, state, forCDC)
       : applicablePlans;
+    carryForwardRewrites(dataPlan.getContext(), orderedPlans);
+    return orderedPlans;
+  }
+
+  /**
+   * Carry the rewrite breadcrumbs recorded on the data plan's context onto the candidate plans'
+   * contexts. The partial index applicability decisions are recorded once per index on the shared
+   * root context while scoring plans, so that all of them stay visible even though only one wins.
+   */
+  private static void carryForwardRewrites(StatementContext from, List<QueryPlan> plans) {
+    List<String> rewrites = from.getAppliedRewrites();
+    if (rewrites.isEmpty()) {
+      return;
+    }
+    for (QueryPlan plan : plans) {
+      StatementContext to = plan.getContext();
+      if (to == from) {
+        continue;
+      }
+      for (String rewrite : rewrites) {
+        if (!to.getAppliedRewrites().contains(rewrite)) {
+          to.addAppliedRewrite(rewrite);
+        }
+      }
+    }
   }
 
   private QueryPlan getHintedQueryPlan(PhoenixStatement statement, SelectStatement select,
@@ -631,11 +673,12 @@ public class QueryOptimizer {
                 new Hint[] { Hint.INDEX, Hint.NO_CHILD_PARENT_JOIN_OPTIMIZATION }),
               FACTORY.hint("NO_INDEX"));
             SelectStatement query = FACTORY.select(dataSelect, hint, outerWhere);
-            RewriteResult rewriteResult = ParseNodeUtil.rewrite(query, statement.getConnection());
+            RewriteResult rewriteResult = ParseNodeUtil.rewrite(query, dataPlan.getContext());
             QueryPlan plan =
               new QueryCompiler(statement, rewriteResult.getRewrittenSelectStatement(),
                 rewriteResult.getColumnResolver(), targetColumns, parallelIteratorFactory,
-                dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans).compile();
+                dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans)
+                  .withRewriteContext(dataPlan.getContext()).compile();
             return AddPlanResult.success(plan);
           }
         }
@@ -908,9 +951,7 @@ public class QueryOptimizer {
     return null;
   }
 
-  /**
-   * The bound-PK-column count for {@code plan}.
-   */
+  /** The bound-PK-column count for {@code plan}. */
   private static int adjustedBoundCount(QueryPlan plan, int boundRanges) {
     PTable table = plan.getTableRef().getTable();
     int boundCount = plan.getContext().getScanRanges().getBoundPkColumnCount();
@@ -1002,7 +1043,8 @@ public class QueryOptimizer {
 
   private static SelectStatement rewriteQueryWithIndexReplacement(
     final PhoenixConnection connection, final ColumnResolver resolver, final SelectStatement select,
-    final Map<TableRef, TableRef> replacement) throws SQLException {
+    final Map<TableRef, TableRef> replacement, final StatementContext breadcrumbContext)
+    throws SQLException {
     TableNode from = select.getFrom();
     TableNode newFrom = from.accept(new QueryOptimizerTableNode(resolver, replacement));
     if (from == newFrom) {
@@ -1015,7 +1057,8 @@ public class QueryOptimizer {
       // replace expressions with corresponding matching columns for functional indexes
       indexSelect = ParseNodeRewriter.rewrite(indexSelect,
         new IndexExpressionParseNodeRewriter(indexTableRef.getTable(),
-          indexTableRef.getTableAlias(), connection, indexSelect.getUdfParseNodes()));
+          indexTableRef.getTableAlias(), connection, indexSelect.getUdfParseNodes(),
+          breadcrumbContext));
     }
 
     return indexSelect;

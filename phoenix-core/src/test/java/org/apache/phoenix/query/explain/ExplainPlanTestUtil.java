@@ -19,6 +19,7 @@ package org.apache.phoenix.query.explain;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
@@ -184,7 +185,7 @@ public final class ExplainPlanTestUtil {
 
     /**
      * Assert the per-scan index kind token: {@code "LOCAL"}, {@code "GLOBAL"}, or
-     * {@code "UNCOVERED GLOBAL"} (null for a data-table target).
+     * {@code "UNCOVERED GLOBAL"}.
      */
     public ExplainPlanAssert indexKind(String expected) {
       assertEquals(at("indexKind"), expected, attributes.getIndexKind());
@@ -193,8 +194,7 @@ public final class ExplainPlanTestUtil {
 
     /**
      * Assert the optimizer's index-selection rule label, e.g. one of the
-     * {@code OptimizerReasons.RULE_*} constants (null when the plan did not participate in
-     * optimizer index selection).
+     * {@code OptimizerReasons.RULE_*} constants.
      */
     public ExplainPlanAssert indexRule(String expected) {
       assertEquals(at("indexRule"), expected, attributes.getIndexRule());
@@ -203,7 +203,7 @@ public final class ExplainPlanTestUtil {
 
     /**
      * Assert the index-selection rule label starts with {@code prefix}. Useful for the functional
-     * index {@code "matches <expr>"} rule whose suffix is expression-dependent.
+     * index {@code "matches <expr>"} rule whose suffix is expression dependent.
      */
     public ExplainPlanAssert indexRuleStartsWith(String prefix) {
       String actual = attributes.getIndexRule();
@@ -584,6 +584,108 @@ public final class ExplainPlanTestUtil {
       assertTrue(at("subPlans") + " has no index " + i + " (size=" + subPlans.size() + ")",
         i >= 0 && i < subPlans.size());
       return new ExplainPlanAssert(subPlans.get(i), this, context + ".subPlan[" + i + "]");
+    }
+
+    /** Assert the tenant id disclosed at the top of the plan. */
+    public ExplainPlanAssert tenant(String expected) {
+      assertEquals(at("tenantId"), expected, attributes.getTenantId());
+      return this;
+    }
+
+    /** Assert that no tenant id disclosure was emitted. */
+    public ExplainPlanAssert tenantNone() {
+      assertNull(at("tenantId") + " expected none but was " + attributes.getTenantId(),
+        attributes.getTenantId());
+      return this;
+    }
+
+    /** Assert the view name and its base (physical) table name disclosed at the top of the plan. */
+    public ExplainPlanAssert view(String expectedName, String expectedBaseName) {
+      assertEquals(at("viewName"), expectedName, attributes.getViewName());
+      assertEquals(at("viewBaseName"), expectedBaseName, attributes.getViewBaseName());
+      return this;
+    }
+
+    /** Assert the view name disclosed at the top of the plan. */
+    public ExplainPlanAssert viewName(String expected) {
+      assertEquals(at("viewName"), expected, attributes.getViewName());
+      return this;
+    }
+
+    /** Assert that no view disclosure was emitted. */
+    public ExplainPlanAssert viewNone() {
+      assertNull(at("viewName") + " expected none but was " + attributes.getViewName(),
+        attributes.getViewName());
+      return this;
+    }
+
+    /** Assert the CDC change scopes disclosed at the top of the plan. */
+    public ExplainPlanAssert cdcScopes(String expected) {
+      assertEquals(at("cdcScopes"), expected, attributes.getCdcScopes());
+      return this;
+    }
+
+    /** Assert that no CDC scope disclosure was emitted. */
+    public ExplainPlanAssert cdcScopesNone() {
+      assertNull(at("cdcScopes") + " expected none but was " + attributes.getCdcScopes(),
+        attributes.getCdcScopes());
+      return this;
+    }
+
+    /** Assert the transaction provider disclosed at the top of the plan. */
+    public ExplainPlanAssert txnProvider(String expected) {
+      assertEquals(at("txnProvider"), expected, attributes.getTxnProvider());
+      return this;
+    }
+
+    /** Assert that no transaction provider disclosure was emitted. */
+    public ExplainPlanAssert txnProviderNone() {
+      assertNull(at("txnProvider") + " expected none but was " + attributes.getTxnProvider(),
+        attributes.getTxnProvider());
+      return this;
+    }
+
+    /** Assert the number of distinct rewrite breadcrumbs disclosed at the top of the plan. */
+    public ExplainPlanAssert rewriteCount(int expected) {
+      List<String> rewrites = attributes.getRewrites();
+      int actual = rewrites == null ? 0 : rewrites.size();
+      assertEquals(at("rewrites.size"), expected, actual);
+      return this;
+    }
+
+    /** Assert the i-th rewrite breadcrumb. */
+    public ExplainPlanAssert rewrite(int i, String expected) {
+      List<String> rewrites = attributes.getRewrites();
+      assertNotNull(at("rewrites") + " must not be null", rewrites);
+      assertTrue(at("rewrites") + " has no index " + i + " (size=" + rewrites.size() + ")",
+        i >= 0 && i < rewrites.size());
+      assertEquals(at("rewrites[" + i + "]"), expected, rewrites.get(i));
+      return this;
+    }
+
+    /** Assert the entire ordered rewrite breadcrumb list matches {@code expected}. */
+    public ExplainPlanAssert rewrites(String... expected) {
+      List<String> actual = attributes.getRewrites();
+      List<String> actualOrEmpty = actual == null ? Collections.<String> emptyList() : actual;
+      assertEquals(at("rewrites"), Arrays.asList(expected), actualOrEmpty);
+      return this;
+    }
+
+    /** Assert the rewrite breadcrumb list contains {@code expected}. */
+    public ExplainPlanAssert rewriteContains(String expected) {
+      List<String> rewrites = attributes.getRewrites();
+      assertNotNull(at("rewrites") + " must not be null", rewrites);
+      assertTrue(at("rewrites") + " expected to contain '" + expected + "' but was " + rewrites,
+        rewrites.contains(expected));
+      return this;
+    }
+
+    /** Assert that no rewrite breadcrumbs were disclosed (null or empty). */
+    public ExplainPlanAssert rewritesNone() {
+      List<String> rewrites = attributes.getRewrites();
+      assertTrue(at("rewrites") + " expected none but was " + rewrites,
+        rewrites == null || rewrites.isEmpty());
+      return this;
     }
 
     /**

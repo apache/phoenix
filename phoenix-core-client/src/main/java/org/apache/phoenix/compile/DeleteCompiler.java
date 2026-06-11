@@ -59,6 +59,7 @@ import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -595,9 +596,13 @@ public class DeleteCompiler {
       delete.getLimit(), null, delete.getBindCount(), false, false,
       Collections.<SelectStatement> emptyList(), delete.getUdfParseNodes());
     select = StatementNormalizer.normalize(select, resolverToBe);
-
+    // Pre-build a context so the early rewrite pass records top of plan breadcrumbs that are
+    // adopted by the DELETE data query plan's compilation context.
+    StatementContext rewriteContext =
+      new StatementContext(statement, FromCompiler.EMPTY_TABLE_RESOLVER,
+        new BindManager(statement.getParameters()), new Scan(), new SequenceManager(statement));
     SelectStatement transformedSelect =
-      SubqueryRewriter.transform(select, resolverToBe, connection);
+      SubqueryRewriter.transform(select, resolverToBe, connection, rewriteContext);
     boolean hasPreProcessing = transformedSelect != select;
     if (transformedSelect != select) {
       resolverToBe = FromCompiler.getResolverForQuery(transformedSelect, connection, false,
@@ -624,7 +629,8 @@ public class DeleteCompiler {
     QueryOptimizer optimizer = new QueryOptimizer(services);
     QueryCompiler compiler =
       new QueryCompiler(statement, select, resolverToBe, Collections.<PColumn> emptyList(),
-        parallelIteratorFactoryToBe, new SequenceManager(statement));
+        parallelIteratorFactoryToBe, new SequenceManager(statement))
+          .withRewriteContext(rewriteContext);
     final QueryPlan dataPlan = compiler.compile();
     // TODO: the select clause should know that there's a sub query, but doesn't seem to currently
     queryPlans = Lists.newArrayList(!clientSideIndexes.isEmpty()
@@ -793,9 +799,12 @@ public class DeleteCompiler {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-      ExplainPlanAttributes attributes =
-        new ExplainPlanAttributesBuilder().setAbstractExplainPlan("DELETE SINGLE ROW").build();
-      return new ExplainPlan(Collections.singletonList("DELETE SINGLE ROW"), attributes);
+      ExplainPlanAttributesBuilder builder =
+        new ExplainPlanAttributesBuilder().setAbstractExplainPlan("DELETE SINGLE ROW");
+      if (getContext().isRoot()) {
+        ExplainTable.populateTopOfPlanAttributes(builder, getContext(), getTargetRef());
+      }
+      return new ExplainPlan(Collections.singletonList("DELETE SINGLE ROW"), builder.build());
     }
 
     @Override
@@ -978,6 +987,9 @@ public class DeleteCompiler {
       newBuilder.setAbstractExplainPlan("DELETE ROWS SERVER SELECT");
       planSteps.add("DELETE ROWS SERVER SELECT");
       planSteps.addAll(queryPlanSteps);
+      if (getContext().isRoot()) {
+        ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());
+      }
       return new ExplainPlan(planSteps, newBuilder.build());
     }
 
@@ -1113,6 +1125,9 @@ public class DeleteCompiler {
       newBuilder.setAbstractExplainPlan("DELETE ROWS CLIENT SELECT");
       planSteps.add("DELETE ROWS CLIENT SELECT");
       planSteps.addAll(queryPlanSteps);
+      if (getContext().isRoot()) {
+        ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());
+      }
       return new ExplainPlan(planSteps, newBuilder.build());
     }
 

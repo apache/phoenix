@@ -80,6 +80,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.BaseMutationPlan;
+import org.apache.phoenix.compile.BindManager;
 import org.apache.phoenix.compile.CloseStatementCompiler;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.CreateFunctionCompiler;
@@ -93,6 +94,7 @@ import org.apache.phoenix.compile.DropSequenceCompiler;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExpressionProjector;
+import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.ListJarsQueryPlan;
 import org.apache.phoenix.compile.MutationPlan;
@@ -865,12 +867,18 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       if (!getUdfParseNodes().isEmpty()) {
         phoenixStatement.throwIfUnallowedUserDefinedFunctions(getUdfParseNodes());
       }
-
-      RewriteResult rewriteResult = ParseNodeUtil.rewrite(this, phoenixStatement.getConnection());
+      // Pre-build the top-level StatementContext so the early SubselectRewriter/SubqueryRewriter
+      // pass can record top of plan rewrite breadcrumbs onto it. The same accumulator is then
+      // adopted by the compilation context via QueryCompiler.withRewriteContext.
+      StatementContext rewriteContext = new StatementContext(phoenixStatement,
+        FromCompiler.EMPTY_TABLE_RESOLVER, new BindManager(phoenixStatement.getParameters()),
+        new Scan(), new SequenceManager(phoenixStatement));
+      RewriteResult rewriteResult = ParseNodeUtil.rewrite(this, rewriteContext);
       QueryPlan queryPlan = new QueryCompiler(phoenixStatement,
         rewriteResult.getRewrittenSelectStatement(), rewriteResult.getColumnResolver(),
         Collections.<PDatum> emptyList(), phoenixStatement.getConnection().getIteratorFactory(),
-        new SequenceManager(phoenixStatement), true, false, null).compile();
+        new SequenceManager(phoenixStatement), true, false, null).withRewriteContext(rewriteContext)
+          .compile();
       queryPlan.getContext().getSequenceManager().validateSequences(seqAction);
       return queryPlan;
     }
@@ -887,6 +895,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       return true;
     }
 
+    @SuppressWarnings("rawtypes")
     @Override
     public PDataType getDataType() {
       return PVarchar.INSTANCE;
@@ -994,14 +1003,17 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
           stmt.getConnection().getQueryServices().getOptimizer().optimize(stmt, dataPlan);
       }
       final StatementPlan plan = compilePlan;
-      List<String> planSteps = plan.getExplainPlan().getPlanSteps();
+      ExplainPlan explainPlan = plan.getExplainPlan();
+      // Prepend the top-of-plan disclosure blocks. This is the only place the disclosure text is
+      // emitted.
+      List<String> planSteps = new ArrayList<>(explainPlan.getPlanSteps());
+      ExplainTable.renderTopOfPlanText(planSteps, explainPlan.getPlanStepsAsAttributes());
       ExplainType explainType = getExplainType();
       if (explainType == ExplainType.DEFAULT) {
-        List<String> updatedExplainPlanSteps = new ArrayList<>(planSteps);
-        updatedExplainPlanSteps.removeIf(
+        planSteps.removeIf(
           planStep -> planStep != null && planStep.contains(ExplainTable.REGION_LOCATIONS));
-        planSteps = Collections.unmodifiableList(updatedExplainPlanSteps);
       }
+      planSteps = Collections.unmodifiableList(planSteps);
       List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
       Long estimatedBytesToScan = plan.getEstimatedBytesToScan();
       Long estimatedRowsToScan = plan.getEstimatedRowsToScan();
@@ -1303,6 +1315,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(cdcObjName, dataTable, includeScopes, props, ifNotExists, bindCount);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1464,6 +1477,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(cursor, select);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1481,6 +1495,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(cursor);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1495,6 +1510,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(cursor);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1509,6 +1525,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(cursor, isNext, fetchLimit);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1604,6 +1621,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(schema, pattern);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1621,6 +1639,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(pattern);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1637,6 +1656,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(tableName);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1801,6 +1821,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         isGrantStatement);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -2428,6 +2449,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
   }
 
+  @SuppressWarnings("rawtypes")
   public Format getFormatter(PDataType type) {
     return connection.getFormatter(type);
   }
@@ -3000,10 +3022,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
   private void setLastUpdateCount(int lastUpdateCount) {
     this.lastUpdateCount = lastUpdateCount;
-  }
-
-  private String getLastUpdateTable() {
-    return lastUpdateTable;
   }
 
   private void setLastUpdateTable(String lastUpdateTable) {

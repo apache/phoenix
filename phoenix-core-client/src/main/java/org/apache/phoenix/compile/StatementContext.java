@@ -39,6 +39,7 @@ import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.SlowestScanMetricsQueue;
 import org.apache.phoenix.monitoring.TopNTreeMultiMap;
+import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -101,6 +102,11 @@ public class StatementContext {
   private boolean hasRawRowSizeFunction = false;
   private final SlowestScanMetricsQueue slowestScanMetricsQueue;
   private final int slowestScanMetricsCount;
+  private List<String> appliedRewrites;
+  private int derivedTableFlattenCount;
+  private List<Pair<ParseNode, String>> indexExpressionSubstitutions;
+  private Set<Pair<String, String>> partialIndexCheckedSet;
+  private StatementContext parentContext;
 
   public StatementContext(PhoenixStatement statement) {
     this(statement, new Scan());
@@ -132,11 +138,16 @@ public class StatementContext {
     this.isClientSideUpsertSelect = context.isClientSideUpsertSelect;
     this.isUncoveredIndex = context.isUncoveredIndex;
     this.hasFirstValidResult = new AtomicBoolean(context.getHasFirstValidResult());
-    this.subStatementContexts = Sets.newHashSet();
+    this.subStatementContexts = Sets.newLinkedHashSet();
     this.totalSegmentsFunction = context.totalSegmentsFunction;
     this.totalSegmentsValue = context.totalSegmentsValue;
     this.hasRowSizeFunction = context.hasRowSizeFunction;
     this.hasRawRowSizeFunction = context.hasRawRowSizeFunction;
+    this.appliedRewrites = context.appliedRewrites;
+    this.derivedTableFlattenCount = context.derivedTableFlattenCount;
+    this.indexExpressionSubstitutions = context.indexExpressionSubstitutions;
+    this.partialIndexCheckedSet = context.partialIndexCheckedSet;
+    this.parentContext = context.parentContext;
   }
 
   /**
@@ -198,7 +209,12 @@ public class StatementContext {
       : SlowestScanMetricsQueue.NOOP_SLOWEST_SCAN_METRICS_QUEUE;
     this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();
     this.hasFirstValidResult = new AtomicBoolean(false);
-    this.subStatementContexts = Sets.newHashSet();
+    this.subStatementContexts = Sets.newLinkedHashSet();
+    this.appliedRewrites = new ArrayList<>();
+    this.derivedTableFlattenCount = 0;
+    this.indexExpressionSubstitutions = new ArrayList<>();
+    this.partialIndexCheckedSet = Sets.newHashSet();
+    this.parentContext = null;
   }
 
   /**
@@ -453,11 +469,78 @@ public class StatementContext {
   }
 
   public void addSubStatementContext(StatementContext sub) {
+    addSubStatementContext(sub, true);
+  }
+
+  public void addSubStatementContext(StatementContext sub, boolean linkParentForDisclosure) {
     subStatementContexts.add(sub);
+    if (linkParentForDisclosure) {
+      sub.parentContext = this;
+    }
   }
 
   public Set<StatementContext> getSubStatementContexts() {
     return subStatementContexts;
+  }
+
+  /**
+   * Records a top-of-plan rewrite breadcrumb (e.g. "STAR JOIN ON 2 RIGHT LEGS"). Breadcrumbs are
+   * diagnostic only and never affect the compiled plan.
+   */
+  public void addAppliedRewrite(String rewrite) {
+    appliedRewrites.add(rewrite);
+  }
+
+  public List<String> getAppliedRewrites() {
+    return appliedRewrites;
+  }
+
+  /**
+   * Adopt the rewrite breadcrumb accumulator (and related diagnostic state) of another context by
+   * sharing its references. Used to carry breadcrumbs recorded by the early
+   * {@link SubselectRewriter}/{@link SubqueryRewriter} pass on a pre-built context across the
+   * rewrite boundary onto the actual compilation context.
+   */
+  public void adoptRewriteState(StatementContext source) {
+    this.appliedRewrites = source.appliedRewrites;
+    this.derivedTableFlattenCount = source.derivedTableFlattenCount;
+    this.indexExpressionSubstitutions = source.indexExpressionSubstitutions;
+    this.partialIndexCheckedSet = source.partialIndexCheckedSet;
+  }
+
+  public void incrementDerivedTableFlattenCount() {
+    derivedTableFlattenCount++;
+  }
+
+  public int getDerivedTableFlattenCount() {
+    return derivedTableFlattenCount;
+  }
+
+  /** Structured pairs recorded when a functional index expression is substituted. */
+  public List<Pair<ParseNode, String>> getIndexExpressionSubstitutions() {
+    return indexExpressionSubstitutions;
+  }
+
+  public void addIndexExpressionSubstitution(ParseNode source, String indexColumnName) {
+    indexExpressionSubstitutions.add(new Pair<>(source, indexColumnName));
+  }
+
+  /**
+   * Dedup set used by the optimizer so a partial index applicability breadcrumb is recorded only
+   * once per (table, index) pair even when the same index is scored across multiple paths.
+   * @return true if the pair had not been recorded before
+   */
+  public boolean markPartialIndexChecked(String tableName, String indexName) {
+    return partialIndexCheckedSet.add(new Pair<>(tableName, indexName));
+  }
+
+  public StatementContext getParentContext() {
+    return parentContext;
+  }
+
+  /** Returns true if this is the top-level (root) statement context, i.e. it has no parent. */
+  public boolean isRoot() {
+    return parentContext == null;
   }
 
   public boolean hasTotalSegmentsFunction() {

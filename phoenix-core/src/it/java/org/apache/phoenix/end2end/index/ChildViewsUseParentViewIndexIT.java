@@ -269,7 +269,6 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
       .keyRanges(" [" + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx1',*] - ["
         + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~'2016-01-01 06:00:00.000']")
       .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
-
     ResultSet rs = conn.createStatement().executeQuery(sql);
     for (int i = 0; i < expectedRows; ++i) {
       assertTrue(rs.next());
