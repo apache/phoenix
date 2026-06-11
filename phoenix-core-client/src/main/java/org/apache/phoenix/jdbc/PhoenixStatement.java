@@ -1018,29 +1018,37 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       Long estimatedBytesToScan = plan.getEstimatedBytesToScan();
       Long estimatedRowsToScan = plan.getEstimatedRowsToScan();
       Long estimateInfoTimestamp = plan.getEstimateInfoTimestamp();
+      // The three estimate columns are plan totals, not per-step values. Emit them only on the
+      // top-of-plan. Subsequent rows carry just the plan step column.
+      boolean firstRow = true;
       for (String planStep : planSteps) {
         byte[] row = PVarchar.INSTANCE.toBytes(planStep);
-        List<Cell> cells = Lists.newArrayListWithCapacity(3);
+        // The top-of-plan row carries the plan step plus up to three estimate cells. Every other
+        // row carries only the plan step.
+        List<Cell> cells = Lists.newArrayListWithCapacity(firstRow ? 4 : 1);
         cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_COLUMN,
           MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-        if (estimatedBytesToScan != null) {
-          cells.add(
-            PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_BYTES_ESTIMATE,
-              MetaDataProtocol.MIN_TABLE_TIMESTAMP, PLong.INSTANCE.toBytes(estimatedBytesToScan)));
-        }
-        if (estimatedRowsToScan != null) {
-          cells.add(
-            PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ROWS_ESTIMATE,
-              MetaDataProtocol.MIN_TABLE_TIMESTAMP, PLong.INSTANCE.toBytes(estimatedRowsToScan)));
-        }
-        if (estimateInfoTimestamp != null) {
-          cells.add(
-            PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ESTIMATE_INFO_TS,
-              MetaDataProtocol.MIN_TABLE_TIMESTAMP, PLong.INSTANCE.toBytes(estimateInfoTimestamp)));
+        if (firstRow) {
+          if (estimatedBytesToScan != null) {
+            cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY,
+              EXPLAIN_PLAN_BYTES_ESTIMATE, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+              PLong.INSTANCE.toBytes(estimatedBytesToScan)));
+          }
+          if (estimatedRowsToScan != null) {
+            cells.add(
+              PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ROWS_ESTIMATE,
+                MetaDataProtocol.MIN_TABLE_TIMESTAMP, PLong.INSTANCE.toBytes(estimatedRowsToScan)));
+          }
+          if (estimateInfoTimestamp != null) {
+            cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY,
+              EXPLAIN_PLAN_ESTIMATE_INFO_TS, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+              PLong.INSTANCE.toBytes(estimateInfoTimestamp)));
+          }
         }
         Collections.sort(cells, CellComparator.getInstance());
         Tuple tuple = new MultiKeyValueTuple(cells);
         tuples.add(tuple);
+        firstRow = false;
       }
       final Long estimatedBytes = estimatedBytesToScan;
       final Long estimatedRows = estimatedRowsToScan;
