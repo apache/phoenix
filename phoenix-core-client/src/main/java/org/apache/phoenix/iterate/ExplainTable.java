@@ -43,6 +43,9 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
+import org.apache.phoenix.optimize.OptimizerDecision;
+import org.apache.phoenix.optimize.OptimizerReasons;
+import org.apache.phoenix.optimize.RejectedIndexEntry;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
@@ -132,6 +135,27 @@ public abstract class ExplainTable {
   }
 
   /**
+   * The optimizer's index selection rationale for the plan this scan belongs to, used to render the
+   * per-scan {@code INDEX} rule comment and the {@code !INDEX} rejection comments. Returns
+   * {@code null} when the plan did not participate in optimizer index selection (DML, DDL, and
+   * non-optimizer plans).
+   * @return the decision, or {@code null} when unavailable
+   */
+  protected OptimizerDecision getOptimizerDecision() {
+    return null;
+  }
+
+  /**
+   * Whether {@code rule} is a default rule whose {@code INDEX} comment is suppressed. The default
+   * rules are {@link OptimizerReasons#RULE_DATA_TABLE} (no candidate indexes considered) and
+   * {@link OptimizerReasons#RULE_ONLY_CANDIDATE} (a single viable candidate).
+   */
+  private static boolean isDefaultRule(String rule) {
+    return OptimizerReasons.RULE_DATA_TABLE.equals(rule)
+      || OptimizerReasons.RULE_ONLY_CANDIDATE.equals(rule);
+  }
+
+  /**
    * Logical name used to render a table or index in EXPLAIN output. Shared by both the scan
    * {@code OVER} line's local index decoration and the per scan {@code INDEX} line.
    * @param table the scanned table or index
@@ -216,7 +240,21 @@ public abstract class ExplainTable {
           indexKind = null;
       }
     }
-    planSteps.add("    INDEX " + explainIndexName + (indexKind == null ? "" : " " + indexKind));
+    OptimizerDecision decision = getOptimizerDecision();
+    StringBuilder indexLine = new StringBuilder("    INDEX ").append(explainIndexName);
+    if (indexKind != null) {
+      indexLine.append(" ").append(indexKind);
+    }
+    if (decision != null && !isDefaultRule(decision.getRule())) {
+      indexLine.append("  /* ").append(decision.getRule()).append(" */");
+    }
+    planSteps.add(indexLine.toString());
+    if (decision != null) {
+      for (RejectedIndexEntry rejected : decision.getRejectedIndexes()) {
+        planSteps
+          .add("    /* !INDEX " + rejected.getName() + " -- " + rejected.getReason() + " */");
+      }
+    }
     Integer bucketNum = tableRef.getTable().getBucketNum();
     if (bucketNum != null) {
       planSteps.add("    SALT BUCKETS " + bucketNum);

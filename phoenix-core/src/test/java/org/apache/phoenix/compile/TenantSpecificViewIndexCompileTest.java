@@ -29,6 +29,7 @@ import java.util.Calendar;
 import java.util.List;
 import java.util.Properties;
 import java.util.TimeZone;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.explain.ExplainPlanTestUtil;
 import org.apache.phoenix.util.DateUtil;
@@ -53,7 +54,8 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
     assertPlan(conn, "SELECT v1,v2 FROM v WHERE v2 > 'a' ORDER BY v2")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("_IDX_T")
-      .keyRanges(" [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]");
+      .keyRanges(" [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]")
+      .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS);
   }
 
   @Test
@@ -172,7 +174,8 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
     assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("T")
       .clientSortedBy("REVERSE")
       .keyRanges(" ['tenant123456789','xyz','abcde',~'2015-01-01 08:00:00.000'] - "
-        + "['tenant123456789','xyz','abcde',*]");
+        + "['tenant123456789','xyz','abcde',*]")
+      .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
   }
@@ -194,14 +197,17 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
     assertPlan(conn, "SELECT v2 FROM v WHERE v2 > 'a' and k2 = 'a' ORDER BY v2,k2")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("_IDX_T")
       .keyRanges(" [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]")
-      .serverFirstKeyOnlyProjection(true);
+      .serverFirstKeyOnlyProjection(true).indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS);
 
     // Won't use index b/c v1 is not in index, but should optimize out k2 still from the order by
     // K2 will still be referenced in the filter, as these are automatically tacked on to the where
     // clause.
+    // The index i1 is rejected because it does not cover v1, leaving the data table as the only
+    // surviving candidate.
     assertPlan(conn, "SELECT v1 FROM v WHERE v2 > 'a' ORDER BY k2").iteratorType("PARALLEL 1-WAY")
       .scanType("RANGE SCAN").table("T").keyRanges(" ['me']")
-      .serverWhereFilter("SERVER FILTER BY (V2 > 'a' AND K2 = 'a')");
+      .serverWhereFilter("SERVER FILTER BY (V2 > 'a' AND K2 = 'a')")
+      .indexRule(OptimizerReasons.RULE_ONLY_CANDIDATE).indexRejectedCount(1);
 
     // If we match K2 against a constant not equal to it's view constant, we should get a degenerate
     // plan. The DEGENERATE SCAN ExplainPlan does not populate structured attributes, so this
@@ -232,7 +238,8 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
     // the updatable view
     assertPlan(conn, "SELECT v2 FROM v2 WHERE v3 > 'a' and k2 = 'a' ORDER BY v3,k2")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("_IDX_T")
-      .keyRanges(" [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]");
+      .keyRanges(" [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]")
+      .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS);
   }
 
   // -----------------------------------------------------------------
@@ -249,13 +256,14 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
   private void assertRangeScan(Connection conn, String sql, String keyRanges) throws SQLException {
     assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("T")
-      .keyRanges(keyRanges);
+      .keyRanges(keyRanges).indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
   }
 
   private void assertRangeScanWithFilter(Connection conn, String sql, String keyRanges,
     String serverWhereFilter) throws SQLException {
     assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("T")
-      .keyRanges(keyRanges).serverWhereFilter(serverWhereFilter);
+      .keyRanges(keyRanges).serverWhereFilter(serverWhereFilter)
+      .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
   }
 
   private void assertOrderByHasBeenOptimizedOut(Connection conn, String sql) throws SQLException {

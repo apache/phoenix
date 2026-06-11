@@ -34,6 +34,7 @@ import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -107,7 +108,8 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
       .serverWhereFilter("SERVER FILTER BY (CREATED_DATE >= DATE"
         + " '2012-11-01 00:00:00.000' AND CREATED_DATE < DATE '2012-11-30 00:00:00.000')")
       .serverSortedBy("[ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID]")
-      .serverRowLimit(100L).clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(100);
+      .serverRowLimit(100L).clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(100)
+      .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
   }
 
   @Test
