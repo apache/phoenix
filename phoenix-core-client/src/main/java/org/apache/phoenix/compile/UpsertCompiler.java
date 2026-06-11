@@ -1256,6 +1256,7 @@ public class UpsertCompiler {
       planSteps.addAll(queryPlanSteps);
       if (getContext().isRoot()) {
         ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());
+        ExplainTable.populateTopOfPlanEstimates(newBuilder, this);
       }
       return new ExplainPlan(planSteps, newBuilder.build());
     }
@@ -1445,6 +1446,7 @@ public class UpsertCompiler {
         ExplainPlanAttributesBuilder builder =
           new ExplainPlanAttributesBuilder(ExplainPlanAttributes.getDefaultExplainPlan());
         ExplainTable.populateTopOfPlanAttributes(builder, getContext(), getTargetRef());
+        ExplainTable.populateTopOfPlanEstimates(builder, this);
         return new ExplainPlan(planSteps, builder.build());
       }
       return new ExplainPlan(planSteps);
@@ -1573,6 +1575,7 @@ public class UpsertCompiler {
       planSteps.addAll(queryPlanSteps);
       if (getContext().isRoot()) {
         ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());
+        ExplainTable.populateTopOfPlanEstimates(newBuilder, this);
       }
       return new ExplainPlan(planSteps, newBuilder.build());
     }
