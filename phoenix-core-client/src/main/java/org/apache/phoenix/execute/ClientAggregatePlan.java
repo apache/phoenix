@@ -311,6 +311,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
 
     if (context.isRoot()) {
       ExplainTable.populateTopOfPlanAttributes(newBuilder, context, getTableRef());
+      ExplainTable.populateTopOfPlanEstimates(newBuilder, this);
     }
     return new ExplainPlan(planSteps, newBuilder.build());
   }

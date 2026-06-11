@@ -168,6 +168,7 @@ public class ClientScanPlan extends ClientProcessingPlan {
 
     if (context.isRoot()) {
       ExplainTable.populateTopOfPlanAttributes(newBuilder, context, getTableRef());
+      ExplainTable.populateTopOfPlanEstimates(newBuilder, this);
     }
     return new ExplainPlan(planSteps, newBuilder.build());
   }

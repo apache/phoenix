@@ -220,6 +220,7 @@ public class SortMergeJoinPlan implements QueryPlan {
     rootBuilder.setRhsJoinQueryExplainPlan(rhsPlanAttributes);
     if (getContext().isRoot()) {
       ExplainTable.populateTopOfPlanAttributes(rootBuilder, getContext(), getTableRef());
+      ExplainTable.populateTopOfPlanEstimates(rootBuilder, this);
     }
     return new ExplainPlan(steps, rootBuilder.build());
   }
