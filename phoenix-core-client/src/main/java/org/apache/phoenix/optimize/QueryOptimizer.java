@@ -327,8 +327,10 @@ public class QueryOptimizer {
             stopAtBestPlan && hintedPlan.isApplicable()
               && (index.getIndexWhere() == null || isPartialIndexUsable(select, dataPlan, index))
           ) {
-            return Collections
+            List<QueryPlan> hinted = Collections
               .singletonList(recordDecision(hintedPlan, OptimizerReasons.RULE_HINT, state));
+            carryForwardRewrites(dataPlan.getContext(), hinted);
+            return hinted;
           }
           plans.add(0, hintedPlan);
         }
@@ -351,7 +353,9 @@ public class QueryOptimizer {
       ) {
         // Query can't possibly return anything so just return this plan.
         if (plan.isDegenerate()) {
-          return Collections.singletonList(plan);
+          List<QueryPlan> degenerate = Collections.singletonList(plan);
+          carryForwardRewrites(dataPlan.getContext(), degenerate);
+          return degenerate;
         }
         plans.add(plan);
       } else if (plan == null) {
@@ -377,9 +381,34 @@ public class QueryOptimizer {
     }
 
     // OrderPlans
-    return hintedPlan == null
+    List<QueryPlan> orderedPlans = hintedPlan == null
       ? orderPlansBestToWorst(select, applicablePlans, stopAtBestPlan, state, forCDC)
       : applicablePlans;
+    carryForwardRewrites(dataPlan.getContext(), orderedPlans);
+    return orderedPlans;
+  }
+
+  /**
+   * Carry the rewrite breadcrumbs recorded on the data plan's context onto the candidate plans'
+   * contexts. The partial index applicability decisions are recorded once per index on the shared
+   * root context while scoring plans, so that all of them stay visible even though only one wins.
+   */
+  private static void carryForwardRewrites(StatementContext from, List<QueryPlan> plans) {
+    List<String> rewrites = from.getAppliedRewrites();
+    if (rewrites.isEmpty()) {
+      return;
+    }
+    for (QueryPlan plan : plans) {
+      StatementContext to = plan.getContext();
+      if (to == from) {
+        continue;
+      }
+      for (String rewrite : rewrites) {
+        if (!to.getAppliedRewrites().contains(rewrite)) {
+          to.addAppliedRewrite(rewrite);
+        }
+      }
+    }
   }
 
   private QueryPlan getHintedQueryPlan(PhoenixStatement statement, SelectStatement select,
