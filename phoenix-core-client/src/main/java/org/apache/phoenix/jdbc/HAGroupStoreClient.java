@@ -673,6 +673,29 @@ public class HAGroupStoreClient implements Closeable {
     valuesClause.append("?");
     parameters.add(haGroupName);
 
+    // Choose a deterministic slot order keyed on the formatted ZK URL (slot 1 = the smaller URL),
+    // independent of which cluster is local, so both clusters write identical rows and each slot
+    // keeps its ZK/CLUSTER/ROLE/HDFS columns pointing at one cluster (the read path resolves a
+    // cluster's HDFS URL by matching its ZK URL slot).
+    String localZk =
+      record.getZkUrl() != null ? JDBCUtil.formatUrl(record.getZkUrl(), RegistryType.ZK) : null;
+    String peerZk = record.getPeerZKUrl() != null
+      ? JDBCUtil.formatUrl(record.getPeerZKUrl(), RegistryType.ZK)
+      : null;
+    boolean localFirst = StringUtils.isBlank(peerZk)
+      || (StringUtils.isNotBlank(localZk) && localZk.compareTo(peerZk) <= 0);
+
+    String zkUrl1 = localFirst ? localZk : peerZk;
+    String zkUrl2 = localFirst ? peerZk : localZk;
+    ClusterRoleRecord.ClusterRole role1 =
+      localFirst ? record.getClusterRole() : record.getPeerClusterRole();
+    ClusterRoleRecord.ClusterRole role2 =
+      localFirst ? record.getPeerClusterRole() : record.getClusterRole();
+    String clusterUrl1 = localFirst ? record.getClusterUrl() : record.getPeerClusterUrl();
+    String clusterUrl2 = localFirst ? record.getPeerClusterUrl() : record.getClusterUrl();
+    String hdfsUrl1 = localFirst ? record.getHdfsUrl() : record.getPeerHdfsUrl();
+    String hdfsUrl2 = localFirst ? record.getPeerHdfsUrl() : record.getHdfsUrl();
+
     // Update non-null fields only.
     if (record.getPolicy() != null) {
       updateQuery.append(", ").append(POLICY);
@@ -680,40 +703,52 @@ public class HAGroupStoreClient implements Closeable {
       parameters.add(record.getPolicy().toString());
     }
 
-    if (record.getClusterRole() != null) {
+    if (role1 != null) {
       updateQuery.append(", ").append(CLUSTER_ROLE_1);
       valuesClause.append(", ?");
-      parameters.add(record.getClusterRole().name());
+      parameters.add(role1.name());
     }
 
-    if (record.getPeerClusterRole() != null) {
+    if (role2 != null) {
       updateQuery.append(", ").append(CLUSTER_ROLE_2);
       valuesClause.append(", ?");
-      parameters.add(record.getPeerClusterRole().name());
+      parameters.add(role2.name());
     }
 
-    if (record.getClusterUrl() != null) {
+    if (clusterUrl1 != null) {
       updateQuery.append(", ").append(CLUSTER_URL_1);
       valuesClause.append(", ?");
-      parameters.add(record.getClusterUrl());
+      parameters.add(clusterUrl1);
     }
 
-    if (record.getPeerClusterUrl() != null) {
+    if (clusterUrl2 != null) {
       updateQuery.append(", ").append(CLUSTER_URL_2);
       valuesClause.append(", ?");
-      parameters.add(record.getPeerClusterUrl());
+      parameters.add(clusterUrl2);
     }
 
-    if (record.getZkUrl() != null) {
+    if (zkUrl1 != null) {
       updateQuery.append(", ").append(ZK_URL_1);
       valuesClause.append(", ?");
-      parameters.add(record.getZkUrl());
+      parameters.add(zkUrl1);
     }
 
-    if (record.getPeerZKUrl() != null) {
+    if (zkUrl2 != null) {
       updateQuery.append(", ").append(ZK_URL_2);
       valuesClause.append(", ?");
-      parameters.add(record.getPeerZKUrl());
+      parameters.add(zkUrl2);
+    }
+
+    if (hdfsUrl1 != null) {
+      updateQuery.append(", ").append(HDFS_URL_1);
+      valuesClause.append(", ?");
+      parameters.add(hdfsUrl1);
+    }
+
+    if (hdfsUrl2 != null) {
+      updateQuery.append(", ").append(HDFS_URL_2);
+      valuesClause.append(", ?");
+      parameters.add(hdfsUrl2);
     }
 
     if (record.getAdminCRRVersion() > 0) {
@@ -794,11 +829,17 @@ public class HAGroupStoreClient implements Closeable {
       ClusterRoleRecord.ClusterRole peerClusterRole = peerZkRecord != null
         ? peerZkRecord.getClusterRole()
         : ClusterRoleRecord.ClusterRole.UNKNOWN;
-      // Create SystemTableHAGroupRecord from ZK data
+      // Create SystemTableHAGroupRecord from ZK data. Format the ZK URLs so they match the
+      // normalized values getSystemTableHAGroupRecord() reads back; otherwise the equality check
+      // below never matches and the sync rewrites (and logs) the row every cycle.
+      String formattedZkUrl = JDBCUtil.formatUrl(this.zkUrl, RegistryType.ZK);
+      String formattedPeerZkUrl = StringUtils.isNotBlank(zkRecord.getPeerZKUrl())
+        ? JDBCUtil.formatUrl(zkRecord.getPeerZKUrl(), RegistryType.ZK)
+        : zkRecord.getPeerZKUrl();
       SystemTableHAGroupRecord newSystemTableRecord =
         new SystemTableHAGroupRecord(HighAvailabilityPolicy.valueOf(zkRecord.getPolicy()),
           zkRecord.getClusterRole(), peerClusterRole, zkRecord.getClusterUrl(),
-          zkRecord.getPeerClusterUrl(), this.zkUrl, zkRecord.getPeerZKUrl(), zkRecord.getHdfsUrl(),
+          zkRecord.getPeerClusterUrl(), formattedZkUrl, formattedPeerZkUrl, zkRecord.getHdfsUrl(),
           zkRecord.getPeerHdfsUrl(), zkRecord.getAdminCRRVersion());
 
       // Read existing record from system table to check if update is needed
