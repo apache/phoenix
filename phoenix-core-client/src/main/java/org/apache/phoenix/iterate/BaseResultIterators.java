@@ -1850,8 +1850,8 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
         buf.append(estimatedRows).append(" ROWS ");
         buf.append(estimatedSize).append(" BYTES ");
         if (explainPlanAttributesBuilder != null) {
-          explainPlanAttributesBuilder.setEstimatedRows(estimatedRows);
-          explainPlanAttributesBuilder.setEstimatedSizeInBytes(estimatedSize);
+          explainPlanAttributesBuilder.setScanEstimatedRows(estimatedRows);
+          explainPlanAttributesBuilder.setScanEstimatedSizeInBytes(estimatedSize);
         }
       }
     }

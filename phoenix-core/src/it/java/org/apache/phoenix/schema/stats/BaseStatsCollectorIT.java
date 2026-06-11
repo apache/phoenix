@@ -254,8 +254,8 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
     conn.createStatement()
       .execute("CREATE TABLE " + fullTableName + " ( k CHAR(1) PRIMARY KEY )" + tableDDLOptions);
     collectStatistics(conn, fullTableName);
-    assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(1).estimatedRows(0L)
-      .estimatedBytes(20L).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+    assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(1).scanEstimatedRows(0L)
+      .scanEstimatedBytes(20L).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
       .table(physicalTableName).serverProjectionFilter(columnEncoded);
     conn.close();
   }
@@ -276,22 +276,22 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
 
     assertPlan(conn, "SELECT v2 FROM " + fullTableName + " WHERE v2='foo'")
       .splitsChunk(columnEncoded && !mutable ? 4 : 3)
-      .estimatedRows(columnEncoded && !mutable ? 1L : 0L)
-      .estimatedBytes(columnEncoded && !mutable ? 38L : 20L).iteratorType("PARALLEL 3-WAY")
+      .scanEstimatedRows(columnEncoded && !mutable ? 1L : 0L)
+      .scanEstimatedBytes(columnEncoded && !mutable ? 38L : 20L).iteratorType("PARALLEL 3-WAY")
       .scanType("FULL SCAN").table(physicalTableName)
       .serverWhereFilter("SERVER FILTER BY B.V2 = 'foo'").clientSortAlgo("CLIENT MERGE SORT");
 
     long estimatedSizeInBytes = columnEncoded ? 28
       : TransactionFactory.Provider.OMID.name().equals(transactionProvider) ? 38
       : 34;
-    assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(4).estimatedRows(1L)
-      .estimatedBytes(estimatedSizeInBytes).iteratorType("PARALLEL 3-WAY").scanType("FULL SCAN")
+    assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(4).scanEstimatedRows(1L)
+      .scanEstimatedBytes(estimatedSizeInBytes).iteratorType("PARALLEL 3-WAY").scanType("FULL SCAN")
       .table(physicalTableName).serverWhereFilter(null).clientSortAlgo("CLIENT MERGE SORT");
 
     assertPlan(conn, "SELECT * FROM " + fullTableName + " WHERE k = 'a'").splitsChunk(1)
-      .estimatedRows(1L).estimatedBytes(columnEncoded ? 204L : 202L).iteratorType("PARALLEL 1-WAY")
-      .scanType("POINT LOOKUP ON 1 KEY").table(physicalTableName).serverWhereFilter(null)
-      .clientSortAlgo("CLIENT MERGE SORT");
+      .scanEstimatedRows(1L).scanEstimatedBytes(columnEncoded ? 204L : 202L)
+      .iteratorType("PARALLEL 1-WAY").scanType("POINT LOOKUP ON 1 KEY").table(physicalTableName)
+      .serverWhereFilter(null).clientSortAlgo("CLIENT MERGE SORT");
 
     conn.close();
   }
@@ -309,7 +309,8 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
     Array array;
     conn = upsertValues(props, fullTableName);
     collectStatistics(conn, fullTableName);
-    Long rows1 = assertPlan(conn, "SELECT k FROM " + fullTableName).attributes().getEstimatedRows();
+    Long rows1 =
+      assertPlan(conn, "SELECT k FROM " + fullTableName).attributes().getScanEstimatedRows();
     stmt = upsertStmt(conn, fullTableName);
     stmt.setString(1, "z");
     s = new String[] { "xyz", "def", "ghi", "jkll", null, null, "xxx" };
@@ -321,7 +322,8 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
     stmt.execute();
     conn.commit();
     collectStatistics(conn, fullTableName);
-    Long rows2 = assertPlan(conn, "SELECT k FROM " + fullTableName).attributes().getEstimatedRows();
+    Long rows2 =
+      assertPlan(conn, "SELECT k FROM " + fullTableName).attributes().getScanEstimatedRows();
     assertNotEquals(rows1, rows2);
     conn.close();
   }
@@ -573,8 +575,8 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
       : (TransactionFactory.Provider.OMID.name().equals(transactionProvider)) ? 25044
       : 12420;
 
-    assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(26).estimatedRows(25L)
-      .estimatedBytes(sizeInBytes).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+    assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(26).scanEstimatedRows(25L)
+      .scanEstimatedBytes(sizeInBytes).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
       .table(physicalTableName);
 
     ConnectionQueryServices services = conn.unwrap(PhoenixConnection.class).getQueryServices();
@@ -636,8 +638,8 @@ public abstract class BaseStatsCollectorIT extends BaseTest {
     assertEquals(0, rs.getLong(1));
     assertFalse(rs.next());
 
-    assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(1).estimatedRows(null)
-      .estimatedBytes(null).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+    assertPlan(conn, "SELECT * FROM " + fullTableName).splitsChunk(1).scanEstimatedRows(null)
+      .scanEstimatedBytes(null).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
       .table(physicalTableName);
   }
 

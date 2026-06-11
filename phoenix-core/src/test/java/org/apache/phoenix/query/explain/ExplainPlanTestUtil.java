@@ -451,6 +451,17 @@ public final class ExplainPlanTestUtil {
       return this;
     }
 
+    public ExplainPlanAssert scanEstimatedRows(Long expected) {
+      assertEquals(at("scanEstimatedRows"), expected, attributes.getScanEstimatedRows());
+      return this;
+    }
+
+    public ExplainPlanAssert scanEstimatedBytes(Long expected) {
+      assertEquals(at("scanEstimatedSizeInBytes"), expected,
+        attributes.getScanEstimatedSizeInBytes());
+      return this;
+    }
+
     public ExplainPlanAssert estimatedRows(Long expected) {
       assertEquals(at("estimatedRows"), expected, attributes.getEstimatedRows());
       return this;
@@ -458,6 +469,11 @@ public final class ExplainPlanTestUtil {
 
     public ExplainPlanAssert estimatedBytes(Long expected) {
       assertEquals(at("estimatedSizeInBytes"), expected, attributes.getEstimatedSizeInBytes());
+      return this;
+    }
+
+    public ExplainPlanAssert estimateInfoTs(Long expected) {
+      assertEquals(at("estimateInfoTs"), expected, attributes.getEstimateInfoTs());
       return this;
     }
 

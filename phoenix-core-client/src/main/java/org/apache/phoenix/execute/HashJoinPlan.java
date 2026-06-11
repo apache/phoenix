@@ -363,6 +363,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
     }
     if (getContext().isRoot()) {
       ExplainTable.populateTopOfPlanAttributes(builder, getContext(), getTableRef());
+      ExplainTable.populateTopOfPlanEstimates(builder, this);
     }
     return new ExplainPlan(planSteps, builder.build());
   }

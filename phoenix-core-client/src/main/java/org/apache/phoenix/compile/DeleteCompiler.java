@@ -801,6 +801,7 @@ public class DeleteCompiler {
         new ExplainPlanAttributesBuilder().setAbstractExplainPlan("DELETE SINGLE ROW");
       if (getContext().isRoot()) {
         ExplainTable.populateTopOfPlanAttributes(builder, getContext(), getTargetRef());
+        ExplainTable.populateTopOfPlanEstimates(builder, this);
       }
       return new ExplainPlan(Collections.singletonList("DELETE SINGLE ROW"), builder.build());
     }
@@ -987,6 +988,7 @@ public class DeleteCompiler {
       planSteps.addAll(queryPlanSteps);
       if (getContext().isRoot()) {
         ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());
+        ExplainTable.populateTopOfPlanEstimates(newBuilder, this);
       }
       return new ExplainPlan(planSteps, newBuilder.build());
     }
@@ -1125,6 +1127,7 @@ public class DeleteCompiler {
       planSteps.addAll(queryPlanSteps);
       if (getContext().isRoot()) {
         ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());
+        ExplainTable.populateTopOfPlanEstimates(newBuilder, this);
       }
       return new ExplainPlan(planSteps, newBuilder.build());
     }
