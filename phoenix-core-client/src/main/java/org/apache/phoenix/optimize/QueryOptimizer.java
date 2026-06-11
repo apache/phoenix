@@ -229,9 +229,12 @@ public class QueryOptimizer {
     // Dedupe so the breadcrumb is recorded once per table and index pair even when the optimizer
     // scores the same index across multiple candidate paths.
     if (rootContext.markPartialIndexChecked(tableName, indexName)) {
+      // Name the index in the breadcrumb so multiple partial indexes stay distinct after the
+      // rewrite list is deduped by string. Otherwise they collapse into a single ambiguous line.
       rootContext.addAppliedRewrite(usable
-        ? "PARTIAL INDEX APPLICABLE"
-        : "PARTIAL INDEX NOT APPLICABLE -- index WHERE not implied by query WHERE");
+        ? "PARTIAL INDEX " + indexName + " APPLICABLE"
+        : "PARTIAL INDEX " + indexName
+          + " NOT APPLICABLE -- index WHERE not implied by query WHERE");
     }
     return usable;
   }

@@ -138,7 +138,7 @@ public class StatementContext {
     this.isClientSideUpsertSelect = context.isClientSideUpsertSelect;
     this.isUncoveredIndex = context.isUncoveredIndex;
     this.hasFirstValidResult = new AtomicBoolean(context.getHasFirstValidResult());
-    this.subStatementContexts = Sets.newHashSet();
+    this.subStatementContexts = Sets.newLinkedHashSet();
     this.totalSegmentsFunction = context.totalSegmentsFunction;
     this.totalSegmentsValue = context.totalSegmentsValue;
     this.hasRowSizeFunction = context.hasRowSizeFunction;
@@ -209,7 +209,7 @@ public class StatementContext {
       : SlowestScanMetricsQueue.NOOP_SLOWEST_SCAN_METRICS_QUEUE;
     this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();
     this.hasFirstValidResult = new AtomicBoolean(false);
-    this.subStatementContexts = Sets.newHashSet();
+    this.subStatementContexts = Sets.newLinkedHashSet();
     this.appliedRewrites = new ArrayList<>();
     this.derivedTableFlattenCount = 0;
     this.indexExpressionSubstitutions = new ArrayList<>();

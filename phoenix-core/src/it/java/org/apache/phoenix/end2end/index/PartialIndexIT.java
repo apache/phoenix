@@ -304,6 +304,36 @@ public class PartialIndexIT extends BaseTest {
   }
 
   @Test
+  public void testPartialIndexBreadcrumbsAreDistinctPerIndex() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      conn.createStatement()
+        .execute("create table " + dataTableName + " (id varchar not null primary key, "
+          + "A integer, B integer, C double, D varchar) COLUMN_ENCODED_BYTES=0"
+          + (salted ? ", SALT_BUCKETS=4" : ""));
+      // Two partial indexes on the same table with different WHERE predicates. The index is
+      // created on an empty table so it is active immediately without an async rebuild.
+      String indexName1 = generateUniqueName();
+      String indexName2 = generateUniqueName();
+      conn.createStatement()
+        .execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ") + "INDEX "
+          + indexName1 + " on " + dataTableName + " (A) " + (uncovered ? "" : "INCLUDE (B, C, D)")
+          + " WHERE A > 50");
+      conn.createStatement()
+        .execute("CREATE " + (uncovered ? "UNCOVERED " : " ") + (local ? "LOCAL " : " ") + "INDEX "
+          + indexName2 + " on " + dataTableName + " (B) " + (uncovered ? "" : "INCLUDE (A, C, D)")
+          + " WHERE B > 50");
+      // A query whose WHERE implies both index WHERE clauses makes the optimizer evaluate both
+      // partial indexes, so both applicability decisions are recorded. Each breadcrumb names its
+      // index.
+      String selectSql = "SELECT D from " + dataTableName + " WHERE A > 60 AND B > 60";
+      ExplainPlanTestUtil.assertPlan(conn, selectSql)
+        .rewriteContains("PARTIAL INDEX " + indexName1 + " APPLICABLE")
+        .rewriteContains("PARTIAL INDEX " + indexName2 + " APPLICABLE");
+    }
+  }
+
+  @Test
   public void testComparisonOfColumns() throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       String dataTableName = generateUniqueName();
