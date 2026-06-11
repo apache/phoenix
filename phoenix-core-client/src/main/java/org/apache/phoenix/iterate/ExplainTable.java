@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.iterate;
 
+import java.sql.SQLException;
 import java.text.Format;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -41,6 +42,7 @@ import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
@@ -225,6 +227,22 @@ public abstract class ExplainTable {
     if (!rewrites.isEmpty()) {
       builder.setRewrites(new ArrayList<>(rewrites));
     }
+  }
+
+  /**
+   * Populate the plan-total estimate attributes on the supplied builder from the given plan. Should
+   * be invoked only for a root plan.
+   * @param builder the attributes builder to populate (no-op when null)
+   * @param plan    the plan to read estimates from (no-op when null)
+   */
+  public static void populateTopOfPlanEstimates(ExplainPlanAttributesBuilder builder,
+    StatementPlan plan) throws SQLException {
+    if (builder == null || plan == null) {
+      return;
+    }
+    builder.setEstimatedRows(plan.getEstimatedRowsToScan());
+    builder.setEstimatedSizeInBytes(plan.getEstimatedBytesToScan());
+    builder.setEstimateInfoTs(plan.getEstimateInfoTimestamp());
   }
 
   private static int collectAppliedRewrites(StatementContext context, Set<String> out) {

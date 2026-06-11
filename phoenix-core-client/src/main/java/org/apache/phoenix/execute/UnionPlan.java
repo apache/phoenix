@@ -245,6 +245,7 @@ public class UnionPlan implements QueryPlan {
     addUnionTailLines(steps, builder);
     if (getContext().isRoot()) {
       ExplainTable.populateTopOfPlanAttributes(builder, getContext(), getTableRef());
+      ExplainTable.populateTopOfPlanEstimates(builder, this);
     }
     return new ExplainPlan(steps, builder.build());
   }

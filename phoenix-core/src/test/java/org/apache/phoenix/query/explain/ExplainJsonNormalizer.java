@@ -66,11 +66,20 @@ public final class ExplainJsonNormalizer {
     if (obj.has("regionsPlanned")) {
       obj.set("regionsPlanned", NullNode.getInstance());
     }
+    if (obj.has("scanEstimatedRows")) {
+      obj.set("scanEstimatedRows", NullNode.getInstance());
+    }
+    if (obj.has("scanEstimatedSizeInBytes")) {
+      obj.set("scanEstimatedSizeInBytes", NullNode.getInstance());
+    }
     if (obj.has("estimatedRows")) {
       obj.set("estimatedRows", NullNode.getInstance());
     }
     if (obj.has("estimatedSizeInBytes")) {
       obj.set("estimatedSizeInBytes", NullNode.getInstance());
+    }
+    if (obj.has("estimateInfoTs")) {
+      obj.set("estimateInfoTs", NullNode.getInstance());
     }
 
     JsonNode iter = obj.get("iteratorTypeAndScanSize");
