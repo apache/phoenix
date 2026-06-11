@@ -20,6 +20,7 @@ package org.apache.phoenix.optimize;
 import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -156,7 +157,7 @@ public class QueryOptimizer {
         && (select.getWhere() == null || !select.getWhere().hasSubquery())
     ) {
       return getApplicablePlansForSingleFlatQuery(dataPlan, statement, targetColumns,
-        parallelIteratorFactory, stopAtBestPlan);
+        parallelIteratorFactory, stopAtBestPlan, new DecisionState());
     }
 
     Map<TableRef, QueryPlan> dataPlans = null;
@@ -224,7 +225,8 @@ public class QueryOptimizer {
 
   private List<QueryPlan> getApplicablePlansForSingleFlatQuery(QueryPlan dataPlan,
     PhoenixStatement statement, List<? extends PDatum> targetColumns,
-    ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
+    ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan, DecisionState state)
+    throws SQLException {
     SelectStatement select = (SelectStatement) dataPlan.getStatement();
     String indexHint = select.getHint().getHint(Hint.INDEX);
     // Exit early if we have a point lookup w/o index hint as we can't get better than that
@@ -232,7 +234,8 @@ public class QueryOptimizer {
       indexHint == null && dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan
         && dataPlan.isApplicable()
     ) {
-      return Collections.<QueryPlan> singletonList(dataPlan);
+      return Collections.<QueryPlan> singletonList(
+        recordDecision(dataPlan, OptimizerReasons.RULE_POINT_LOOKUP, state));
     }
 
     ColumnResolver indexResolver = null;
@@ -271,7 +274,11 @@ public class QueryOptimizer {
       dataPlan.isApplicable() && (indexes.isEmpty() || dataPlan.isDegenerate()
         || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX))
     ) {
-      return Collections.<QueryPlan> singletonList(dataPlan);
+      if (select.getHint().hasHint(Hint.NO_INDEX)) {
+        state.rejectAll(indexes, OptimizerReasons.REASON_EXCLUDED_BY_NO_INDEX_HINT);
+      }
+      return Collections.<
+        QueryPlan> singletonList(recordDecision(dataPlan, OptimizerReasons.RULE_DATA_TABLE, state));
     }
     // The targetColumns is set for UPSERT SELECT to ensure that the proper type conversion takes
     // place.
@@ -297,7 +304,7 @@ public class QueryOptimizer {
     if (!forCDC) {
       plans.add(dataPlan);
       hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns,
-        parallelIteratorFactory, plans);
+        parallelIteratorFactory, plans, state);
       if (hintedPlan != null) {
         PTable index = hintedPlan.getTableRef().getTable();
         // Ignore any index hint with a CDC index as it is a truncated index, it only
@@ -307,7 +314,8 @@ public class QueryOptimizer {
             stopAtBestPlan && hintedPlan.isApplicable()
               && (index.getIndexWhere() == null || isPartialIndexUsable(select, dataPlan, index))
           ) {
-            return Collections.singletonList(hintedPlan);
+            return Collections
+              .singletonList(recordDecision(hintedPlan, OptimizerReasons.RULE_HINT, state));
           }
           plans.add(0, hintedPlan);
         }
@@ -321,8 +329,9 @@ public class QueryOptimizer {
         // the data table mutations outside the max lookback window
         continue;
       }
-      QueryPlan plan = addPlan(statement, translatedIndexSelect, index, targetColumns,
+      AddPlanResult result = addPlan(statement, translatedIndexSelect, index, targetColumns,
         parallelIteratorFactory, dataPlan, false, indexResolver);
+      QueryPlan plan = result.plan;
       if (
         plan != null
           && (index.getIndexWhere() == null || isPartialIndexUsable(select, dataPlan, index))
@@ -332,6 +341,12 @@ public class QueryOptimizer {
           return Collections.singletonList(plan);
         }
         plans.add(plan);
+      } else if (plan == null) {
+        // Index candidate could not be built into a usable plan; record why it was rejected.
+        state.reject(result.rejection);
+      } else {
+        // Plan built, but the partial-index predicate is not satisfied by this query's WHERE.
+        state.reject(index, OptimizerReasons.REASON_PARTIAL_INDEX_PREDICATE_NOT_SATISFIED);
       }
     }
 
@@ -350,13 +365,14 @@ public class QueryOptimizer {
 
     // OrderPlans
     return hintedPlan == null
-      ? orderPlansBestToWorst(select, applicablePlans, stopAtBestPlan)
+      ? orderPlansBestToWorst(select, applicablePlans, stopAtBestPlan, state, forCDC)
       : applicablePlans;
   }
 
   private QueryPlan getHintedQueryPlan(PhoenixStatement statement, SelectStatement select,
     List<PTable> indexes, List<? extends PDatum> targetColumns,
-    ParallelIteratorFactory parallelIteratorFactory, List<QueryPlan> plans) throws SQLException {
+    ParallelIteratorFactory parallelIteratorFactory, List<QueryPlan> plans, DecisionState state)
+    throws SQLException {
     QueryPlan dataPlan = plans.get(0);
     String indexHint = select.getHint().getHint(Hint.INDEX);
     if (indexHint == null) {
@@ -395,11 +411,12 @@ public class QueryOptimizer {
           // Hinted index is applicable, so return it's index
           PTable index = indexes.get(indexPos);
           indexes.remove(indexPos);
-          QueryPlan plan = addPlan(statement, select, index, targetColumns, parallelIteratorFactory,
-            dataPlan, true, null);
-          if (plan != null) {
-            return plan;
+          AddPlanResult result = addPlan(statement, select, index, targetColumns,
+            parallelIteratorFactory, dataPlan, true, null);
+          if (result.plan != null) {
+            return result.plan;
           }
+          state.reject(result.rejection);
         }
         startIndex = endIndex + 1;
       }
@@ -416,7 +433,7 @@ public class QueryOptimizer {
     return -1;
   }
 
-  private QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index,
+  private AddPlanResult addPlan(PhoenixStatement statement, SelectStatement select, PTable index,
     List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory,
     QueryPlan dataPlan, boolean isHinted, ColumnResolver indexResolver) throws SQLException {
     String tableAlias = dataPlan.getTableRef().getTableAlias();
@@ -436,7 +453,7 @@ public class QueryOptimizer {
       isHinted, indexSelect, resolver);
   }
 
-  private QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index,
+  private AddPlanResult addPlan(PhoenixStatement statement, SelectStatement select, PTable index,
     List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory,
     QueryPlan dataPlan, boolean isHinted, SelectStatement indexSelect, ColumnResolver resolver)
     throws SQLException {
@@ -547,7 +564,7 @@ public class QueryOptimizer {
               indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))
         ) {
           if (plan.getProjector().getColumnCount() == nColumns) {
-            return plan;
+            return AddPlanResult.success(plan);
           } else {
             String schemaNameStr =
               index.getSchemaName() == null ? null : index.getSchemaName().getString();
@@ -619,15 +636,15 @@ public class QueryOptimizer {
               new QueryCompiler(statement, rewriteResult.getRewrittenSelectStatement(),
                 rewriteResult.getColumnResolver(), targetColumns, parallelIteratorFactory,
                 dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans).compile();
-            return plan;
+            return AddPlanResult.success(plan);
           }
         }
       } catch (RowValueConstructorOffsetNotCoercibleException e) {
         // Could not coerce the user provided RVC Offset so we do not have a plan to add.
-        return null;
+        return AddPlanResult.rejected(index, OptimizerReasons.REASON_DEGENERATE_RANGE);
       }
     }
-    return null;
+    return AddPlanResult.rejected(index, OptimizerReasons.REASON_DOES_NOT_COVER_PROJECTION);
   }
 
   // returns true if we can still use the index
@@ -650,9 +667,11 @@ public class QueryOptimizer {
    * @return list of plans ordered from best to worst.
    */
   private List<QueryPlan> orderPlansBestToWorst(SelectStatement select, List<QueryPlan> plans,
-    boolean stopAtBestPlan) {
+    boolean stopAtBestPlan, DecisionState state, boolean forCDC) {
     final QueryPlan dataPlan = plans.get(0);
     if (plans.size() == 1) {
+      recordDecision(plans.get(0),
+        forCDC ? OptimizerReasons.RULE_CDC_INDEX : OptimizerReasons.RULE_ONLY_CANDIDATE, state);
       return plans;
     }
 
@@ -666,6 +685,14 @@ public class QueryOptimizer {
       // Return ordered list based on cost if stats are available; otherwise fall
       // back to static ordering.
       if (!plans.get(0).getCost().isUnknown()) {
+        QueryPlan costWinner = plans.get(0);
+        for (int i = 1; i < plans.size(); i++) {
+          PTable losingTable = plans.get(i).getTableRef().getTable();
+          if (losingTable.getType() == PTableType.INDEX) {
+            state.reject(losingTable, OptimizerReasons.REASON_COST_BASED_LOSS);
+          }
+        }
+        recordDecision(costWinner, OptimizerReasons.RULE_COST_BASED, state);
         return stopAtBestPlan ? plans.subList(0, 1) : plans;
       }
     }
@@ -789,7 +816,152 @@ public class QueryOptimizer {
 
     });
 
+    // Capture the optimizer's rationale for the chosen plan without altering the ordering above.
+    QueryPlan winner = bestCandidates.get(0);
+    QueryPlan runnerUp =
+      bestCandidates.size() > 1 ? bestCandidates.get(1) : firstOther(plans, winner);
+    tagComparatorRejections(winner, plans, boundRanges, state);
+    recordDecision(winner, labelComparatorRule(winner, runnerUp, boundRanges), state);
+
     return stopAtBestPlan ? bestCandidates.subList(0, 1) : bestCandidates;
+  }
+
+  /**
+   * Outcome of attempting to build an index candidate plan in {@link #addPlan}. Carries either the
+   * successfully built {@code plan} or a {@code rejection} explaining why the candidate index was
+   * not usable.
+   */
+  private static final class AddPlanResult {
+    final QueryPlan plan;
+    final RejectedIndexEntry rejection;
+
+    private AddPlanResult(QueryPlan plan, RejectedIndexEntry rejection) {
+      this.plan = plan;
+      this.rejection = rejection;
+    }
+
+    static AddPlanResult success(QueryPlan plan) {
+      return new AddPlanResult(plan, null);
+    }
+
+    static AddPlanResult rejected(PTable index, String reason) {
+      return new AddPlanResult(null,
+        new RejectedIndexEntry(index.getTableName().getString(), reason));
+    }
+  }
+
+  /**
+   * Accumulates the rejected index entries gathered while selecting an index for a single flat
+   * query. Rejections are deduplicated by index name.
+   */
+  private static final class DecisionState {
+    private final List<RejectedIndexEntry> rejections = new ArrayList<>();
+
+    void reject(String name, String reason) {
+      for (RejectedIndexEntry existing : rejections) {
+        if (existing.getName().equals(name)) {
+          return;
+        }
+      }
+      rejections.add(new RejectedIndexEntry(name, reason));
+    }
+
+    void reject(PTable index, String reason) {
+      reject(index.getTableName().getString(), reason);
+    }
+
+    void reject(RejectedIndexEntry entry) {
+      if (entry != null) {
+        reject(entry.getName(), entry.getReason());
+      }
+    }
+
+    void rejectAll(List<PTable> indexes, String reason) {
+      for (PTable index : indexes) {
+        reject(index, reason);
+      }
+    }
+
+    List<RejectedIndexEntry> getRejections() {
+      return rejections;
+    }
+  }
+
+  /**
+   * Records the optimizer's index selection rationale on the chosen plan and returns it so callers
+   * can use this inline at a {@code return} site.
+   */
+  private static QueryPlan recordDecision(QueryPlan winner, String rule, DecisionState state) {
+    winner.setOptimizerDecision(
+      new OptimizerDecision(winner.getTableRef().getTable().getTableName().getString(), rule,
+        state == null ? null : state.getRejections()));
+    return winner;
+  }
+
+  /** First plan in {@code plans} that is not {@code exclude}, or {@code null} if there is none. */
+  private static QueryPlan firstOther(List<QueryPlan> plans, QueryPlan exclude) {
+    for (QueryPlan plan : plans) {
+      if (plan != exclude) {
+        return plan;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * The bound-PK-column count for {@code plan}.
+   */
+  private static int adjustedBoundCount(QueryPlan plan, int boundRanges) {
+    PTable table = plan.getTableRef().getTable();
+    int boundCount = plan.getContext().getScanRanges().getBoundPkColumnCount();
+    boundCount += table.getViewIndexId() == null ? 0 : (boundRanges - 1);
+    boundCount -= plan.getContext().getScanRanges().isSalted() ? 1 : 0;
+    return boundCount;
+  }
+
+  /**
+   * Returns the {@code RULE_*} label for the chosen plan by replaying the comparator ladder in
+   * {@link #orderPlansBestToWorst} against the runner up and returning the first decisive branch.
+   */
+  private static String labelComparatorRule(QueryPlan winner, QueryPlan runnerUp, int boundRanges) {
+    if (runnerUp == null) {
+      return OptimizerReasons.RULE_ONLY_CANDIDATE;
+    }
+    PTable winnerTable = winner.getTableRef().getTable();
+    PTable runnerUpTable = runnerUp.getTableRef().getTable();
+    if (adjustedBoundCount(winner, boundRanges) != adjustedBoundCount(runnerUp, boundRanges)) {
+      return OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS;
+    }
+    if (winner.getGroupBy() != null && runnerUp.getGroupBy() != null) {
+      if (winner.getGroupBy().isOrderPreserving() != runnerUp.getGroupBy().isOrderPreserving()) {
+        return OptimizerReasons.RULE_ORDER_PRESERVING;
+      }
+    }
+    if (winnerTable.getIndexWhere() != null && runnerUpTable.getIndexWhere() == null) {
+      return OptimizerReasons.RULE_PARTIAL_INDEX_APPLICABLE;
+    }
+    return OptimizerReasons.RULE_NON_LOCAL_PREFERRED;
+  }
+
+  /** Tags every index candidate that lost to {@code winner} with a rejection reason. */
+  private static void tagComparatorRejections(QueryPlan winner, List<QueryPlan> plans,
+    int boundRanges, DecisionState state) {
+    int winnerBound = adjustedBoundCount(winner, boundRanges);
+    boolean winnerNonLocal = winner.getTableRef().getTable().getIndexType() != IndexType.LOCAL;
+    for (QueryPlan plan : plans) {
+      if (plan == winner) {
+        continue;
+      }
+      PTable table = plan.getTableRef().getTable();
+      if (table.getType() != PTableType.INDEX) {
+        continue;
+      }
+      if (adjustedBoundCount(plan, boundRanges) < winnerBound) {
+        state.reject(table, OptimizerReasons.REASON_NO_PK_PREFIX_BOUND);
+      } else if (table.getIndexType() == IndexType.LOCAL && winnerNonLocal) {
+        state.reject(table, OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE);
+      }
+    }
   }
 
   private static class WhereConditionRewriter extends AndRewriterBooleanParseNodeVisitor {
