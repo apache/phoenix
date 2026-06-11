@@ -45,6 +45,7 @@ import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.TableNotFoundException;
@@ -367,7 +368,8 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       String selectSql =
         "SELECT JSON_VALUE(JSONCOL,'$.type'), " + "JSON_VALUE(JSONCOL,'$.info.address.town') FROM "
           + tableName + " WHERE JSON_VALUE(JSONCOL,'$.type') = 'Basic'";
-      assertPlan(conn, selectSql).scanType("RANGE SCAN").table(indexName);
+      assertPlan(conn, selectSql).scanType("RANGE SCAN").table(indexName)
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
       // Validate the total count of rows
       String countSql = "SELECT COUNT(1) FROM " + tableName;
       ResultSet rs = conn.createStatement().executeQuery(countSql);
@@ -567,7 +569,8 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       String explainPlan = QueryUtil.getExplainPlan(rs);
       assertFalse(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
-      assertPlan(conn, query).serverArrayElementProjection(false);
+      assertPlan(conn, query).serverArrayElementProjection(false)
+        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(conn.createArrayOf("INTEGER", new Integer[] { 1, 2 }), rs.getArray(1));
@@ -581,7 +584,8 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       explainPlan = QueryUtil.getExplainPlan(rs);
       assertTrue(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
-      assertPlan(conn, query).serverArrayElementProjection(true);
+      assertPlan(conn, query).serverArrayElementProjection(true)
+        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       // only Array optimization and not Json
       query = "SELECT arr[1], jsoncol, JSON_VALUE(jsoncol, '$.type')" + " FROM " + tableName
@@ -589,7 +593,8 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       explainPlan = QueryUtil.getExplainPlan(rs);
       assertFalse(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
-      assertPlan(conn, query).serverArrayElementProjection(true);
+      assertPlan(conn, query).serverArrayElementProjection(true)
+        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       // only Json optimization and not Array Index
       query = "SELECT arr, arr[1], JSON_VALUE(jsoncol, '$.type')" + " FROM " + tableName
@@ -597,7 +602,8 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       explainPlan = QueryUtil.getExplainPlan(rs);
       assertTrue(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
-      assertPlan(conn, query).serverArrayElementProjection(false);
+      assertPlan(conn, query).serverArrayElementProjection(false)
+        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
     }
   }
 

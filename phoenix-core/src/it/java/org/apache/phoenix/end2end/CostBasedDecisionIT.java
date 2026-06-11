@@ -31,6 +31,7 @@ import java.util.Properties;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -79,7 +80,9 @@ public class CostBasedDecisionIT extends BaseTest {
       String query =
         "SELECT rowkey, c1, c2 FROM " + tableName + " where c1 LIKE 'X0%' ORDER BY rowkey";
       // Use the data table plan that opts out order-by when stats are not available.
-      assertPlan(conn, query).scanType("FULL SCAN");
+      assertPlan(conn, query).scanType("FULL SCAN")
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedCount(1).indexRejected(
+          0, tableName + "_IDX", OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE);
 
       PreparedStatement stmt =
         conn.prepareStatement("UPSERT INTO " + tableName + " (rowkey, c1, c2) VALUES (?, ?, ?)");
@@ -94,7 +97,8 @@ public class CostBasedDecisionIT extends BaseTest {
       conn.createStatement().execute("UPDATE STATISTICS " + tableName);
 
       // Use the index table plan that has a lower cost when stats become available.
-      assertPlan(conn, query).scanType("RANGE SCAN");
+      assertPlan(conn, query).scanType("RANGE SCAN").indexRule(OptimizerReasons.RULE_COST_BASED)
+        .indexRejectedNone();
     } finally {
       conn.close();
     }
@@ -243,7 +247,8 @@ public class CostBasedDecisionIT extends BaseTest {
         .keyRanges(" [2,*] - [2,9,000]")
         .serverWhereFilter(
           "SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)")
-        .clientSortAlgo("CLIENT MERGE SORT");
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
+        .indexRejectedNone();
 
       PreparedStatement stmt = conn
         .prepareStatement("UPSERT INTO " + tableName + " (rowkey, c1, c2, c3) VALUES (?, ?, ?, ?)");
@@ -262,7 +267,9 @@ public class CostBasedDecisionIT extends BaseTest {
         .scanType("RANGE SCAN").table(indexName1 + "(" + tableName + ")")
         .keyRanges(" [1,10] - [1,20]")
         .serverWhereFilter("SERVER FILTER BY (\"C2\" < 9000 AND \"C3\" < 5000)")
-        .clientSortAlgo("CLIENT MERGE SORT");
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
+        .indexRejectedCount(1)
+        .indexRejected(0, indexName2, OptimizerReasons.REASON_COST_BASED_LOSS);
     } finally {
       conn.close();
     }
@@ -292,7 +299,8 @@ public class CostBasedDecisionIT extends BaseTest {
         .keyRanges(" [2,*] - [2,9,000]")
         .serverWhereFilter(
           "SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)")
-        .clientSortAlgo("CLIENT MERGE SORT");
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
+        .indexRejectedNone();
 
       PreparedStatement stmt = conn
         .prepareStatement("UPSERT INTO " + tableName + " (rowkey, c1, c2, c3) VALUES (?, ?, ?, ?)");
@@ -311,7 +319,9 @@ public class CostBasedDecisionIT extends BaseTest {
         .iteratorType("PARALLEL").scanType("RANGE SCAN").table(indexName1 + "(" + tableName + ")")
         .keyRanges(" [1,10] - [1,20]")
         .serverWhereFilter("SERVER FILTER BY (\"C2\" < 9000 AND \"C3\" < 5000)")
-        .clientSortAlgo("CLIENT MERGE SORT");
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
+        .indexRejectedCount(1)
+        .indexRejected(0, indexName2, OptimizerReasons.REASON_COST_BASED_LOSS);
     } finally {
       conn.close();
     }
@@ -337,10 +347,14 @@ public class CostBasedDecisionIT extends BaseTest {
       assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES").subPlanCount(2)
         .subPlan(0).iteratorType("PARALLEL").scanType("RANGE SCAN").table(tableName)
         .keyRanges(" [*] - ['z']").serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
-        .clientSortAlgo("CLIENT MERGE SORT").end().subPlan(1).iteratorType("PARALLEL")
-        .scanType("RANGE SCAN").table(tableName).keyRanges(" ['a'] - [*]")
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+        .indexRejectedCount(1)
+        .indexRejected(0, indexName, OptimizerReasons.REASON_NO_PK_PREFIX_BOUND).end().subPlan(1)
+        .iteratorType("PARALLEL").scanType("RANGE SCAN").table(tableName).keyRanges(" ['a'] - [*]")
         .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
-        .clientSortAlgo("CLIENT MERGE SORT").end();
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+        .indexRejectedCount(1)
+        .indexRejected(0, indexName, OptimizerReasons.REASON_NO_PK_PREFIX_BOUND).end();
 
       PreparedStatement stmt =
         conn.prepareStatement("UPSERT INTO " + tableName + " (rowkey, c1, c2) VALUES (?, ?, ?)");
@@ -360,12 +374,13 @@ public class CostBasedDecisionIT extends BaseTest {
         .table(indexName + "(" + tableName + ")").keyRanges(" [1]").serverMergeColumns("[0.C2]")
         .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" <= 'z'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
-        .clientSortAlgo("CLIENT MERGE SORT").end().subPlan(1).iteratorType("PARALLEL")
-        .scanType("RANGE SCAN").table(indexName + "(" + tableName + ")").keyRanges(" [1]")
-        .serverMergeColumns("[0.C2]").serverFirstKeyOnlyProjection(true)
-        .serverWhereFilter("SERVER FILTER BY \"ROWKEY\" >= 'a'")
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
+        .indexRejectedNone().end().subPlan(1).iteratorType("PARALLEL").scanType("RANGE SCAN")
+        .table(indexName + "(" + tableName + ")").keyRanges(" [1]").serverMergeColumns("[0.C2]")
+        .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" >= 'a'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
-        .clientSortAlgo("CLIENT MERGE SORT").end();
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
+        .indexRejectedNone().end();
     } finally {
       conn.close();
     }
@@ -391,11 +406,14 @@ public class CostBasedDecisionIT extends BaseTest {
       // Use the default plan when stats are not available.
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(tableName)
         .serverWhereFilter("SERVER FILTER BY C1 LIKE 'X0%'")
-        .dynamicServerFilter("DYNAMIC SERVER FILTER BY T1.ROWKEY IN (T2.MRK)").subPlanCount(1)
-        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .dynamicServerFilter("DYNAMIC SERVER FILTER BY T1.ROWKEY IN (T2.MRK)").indexRule(null)
+        .indexRejectedNone().subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(tableName)
         .keyRanges(" [*] - ['z']").serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
-        .clientSortAlgo("CLIENT MERGE SORT");
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+        .indexRejectedCount(1)
+        .indexRejected(0, indexName, OptimizerReasons.REASON_NO_PK_PREFIX_BOUND);
 
       PreparedStatement stmt =
         conn.prepareStatement("UPSERT INTO " + tableName + " (rowkey, c1, c2) VALUES (?, ?, ?)");
@@ -414,13 +432,15 @@ public class CostBasedDecisionIT extends BaseTest {
         .table(indexName + "(" + tableName + ")").keyRanges(" [1,'X0'] - [1,'X1']")
         .serverMergeColumns("[0.C2]").serverFirstKeyOnlyProjection(true)
         .serverSortedBy("[\"T1.:ROWKEY\"]").clientSortAlgo("CLIENT MERGE SORT")
-        .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"T1.:ROWKEY\" IN (T2.MRK)").subPlanCount(1)
-        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"T1.:ROWKEY\" IN (T2.MRK)").indexRule(null)
+        .indexRejectedNone().subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .table(indexName + "(" + tableName + ")").keyRanges(" [1]").serverMergeColumns("[0.C2]")
         .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" <= 'z'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
-        .clientSortAlgo("CLIENT MERGE SORT");
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
+        .indexRejectedNone();
     } finally {
       conn.close();
     }

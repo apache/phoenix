@@ -84,6 +84,7 @@ import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.parse.ParseNodeFactory;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
@@ -7150,7 +7151,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         + " where ts >= TIMESTAMP '2023-02-23 13:30:00'  and ts < TIMESTAMP '2023-02-23 13:40:00'";
       assertPlan(conn, query).scanType("RANGE SCAN").table(indexName)
         .keyRanges(" [~1,677,159,600,000] - [~1,677,159,000,000]")
-        .serverFirstKeyOnlyProjection(true);
+        .serverFirstKeyOnlyProjection(true).indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+        .indexRejectedNone();
     }
   }
 
@@ -7168,7 +7170,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       assertEquals("\\x9E\\x9E\\x9F\\x00", Bytes.toStringBinary(openScan.getStartRow()));
       assertEquals("\\x9E\\xFF", Bytes.toStringBinary(openScan.getStopRow()));
       assertPlan(conn, openQry).scanType("RANGE SCAN").table(tableName)
-        .keyRanges(" [~'aaa'] - [~'a']").serverFirstKeyOnlyProjection(true);
+        .keyRanges(" [~'aaa'] - [~'a']").serverFirstKeyOnlyProjection(true)
+        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       String closedQry = "select * from " + tableName + " where k >= 'a' and k <= 'aaa'";
       Scan closedScan =
@@ -7176,7 +7179,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       assertEquals("\\x9E\\x9E\\x9E\\xFF", Bytes.toStringBinary(closedScan.getStartRow()));
       assertEquals("\\x9F\\x00", Bytes.toStringBinary(closedScan.getStopRow()));
       assertPlan(conn, closedQry).scanType("RANGE SCAN").table(tableName)
-        .keyRanges(" [~'aaa'] - [~'a']").serverFirstKeyOnlyProjection(true);
+        .keyRanges(" [~'aaa'] - [~'a']").serverFirstKeyOnlyProjection(true)
+        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
     }
   }
 
@@ -7195,7 +7199,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       assertPlan(conn, query).scanType("RANGE SCAN").table("II").keyRanges(" [1]")
         .serverMergeColumns("[0.V1, 0.V2, 0.V3, 0.V4]").serverFirstKeyOnlyProjection(true)
         .serverWhereFilter("SERVER FILTER BY \"K2\" = 1").serverSortedBy("[\"K1\", \"V1\"]")
-        .serverRowLimit(1L).clientRowLimit(1).clientSortAlgo("CLIENT MERGE SORT");
+        .serverRowLimit(1L).clientRowLimit(1).clientSortAlgo("CLIENT MERGE SORT")
+        .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
     }
   }
 
@@ -7263,7 +7268,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       stmt.execute("create index i on d(v2) include (v3)");
       String query = "select /*+ index(d i) */ * from d where v2=1 and v3=1";
       assertPlan(conn, query).scanType("RANGE SCAN").table("I").keyRanges(" [1]")
-        .serverMergeColumns("[0.V1, 0.V4]").serverWhereFilter("SERVER FILTER BY \"V3\" = 1");
+        .serverMergeColumns("[0.V1, 0.V4]").serverWhereFilter("SERVER FILTER BY \"V3\" = 1")
+        .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
     }
   }
 

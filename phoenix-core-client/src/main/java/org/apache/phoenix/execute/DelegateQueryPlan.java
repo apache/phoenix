@@ -32,6 +32,7 @@ import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.optimize.Cost;
+import org.apache.phoenix.optimize.OptimizerDecision;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.TableRef;
@@ -170,5 +171,15 @@ public abstract class DelegateQueryPlan implements QueryPlan {
   @Override
   public boolean isApplicable() {
     return delegate.isApplicable();
+  }
+
+  @Override
+  public OptimizerDecision getOptimizerDecision() {
+    return delegate.getOptimizerDecision();
+  }
+
+  @Override
+  public void setOptimizerDecision(OptimizerDecision decision) {
+    delegate.setOptimizerDecision(decision);
   }
 }

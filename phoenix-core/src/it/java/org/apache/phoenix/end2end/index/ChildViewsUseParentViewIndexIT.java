@@ -32,6 +32,7 @@ import java.util.Properties;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.schema.PTable;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -167,7 +168,8 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
     assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").serverFirstKeyOnlyProjection(true)
       .scanType("SKIP SCAN ON 3 KEYS").table("_IDX_" + baseTableName)
       .keyRanges(" [" + Short.MIN_VALUE + ",'1'" + childViewScanKey + "] - [" + Short.MIN_VALUE
-        + ",'3'" + childViewScanKey + "]");
+        + ",'3'" + childViewScanKey + "]")
+      .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
 
     ResultSet rs = conn.createStatement().executeQuery(sql);
     assertTrue(rs.next());
@@ -189,7 +191,8 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
     assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY")
       .serverWhereFilter(
         "SERVER FILTER BY (A4 IN ('1','2','3') AND ((A1 = 'X' AND A2 = 'Y') AND A3 = 'Z'))")
-      .scanType("FULL SCAN").table(baseTableName);
+      .scanType("FULL SCAN").table(baseTableName).indexRule(OptimizerReasons.RULE_DATA_TABLE)
+      .indexRejectedNone();
 
     ResultSet rs = conn.createStatement().executeQuery(sql);
     assertTrue(rs.next());
@@ -264,7 +267,8 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
     assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").serverFirstKeyOnlyProjection(true)
       .scanType("SKIP SCAN ON 5 RANGES").table("_IDX_" + baseTableName)
       .keyRanges(" [" + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx1',*] - ["
-        + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~'2016-01-01 06:00:00.000']");
+        + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~'2016-01-01 06:00:00.000']")
+      .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
 
     ResultSet rs = conn.createStatement().executeQuery(sql);
     for (int i = 0; i < expectedRows; ++i) {
