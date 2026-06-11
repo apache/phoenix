@@ -185,9 +185,15 @@ public class PhoenixConnection
   private LogLevel auditLogLevel;
   private Double logSamplingRate;
   private String sourceOfOperation;
-  @Nullable // Only available for connection which is part of HA Connections
+  @Nullable
+  // HA group name (String) used to tag outgoing mutations and point-lookup scans
+  // with the _HAGroupName attribute. Set on every connection that resolved through
+  // an HA route, including cloned connections.
   private String haGroupName;
-  @Nullable // Only available for connection which is part of HA Connections
+  @Nullable
+  // Resolved HA group object used for failover orchestration and cluster-role
+  // lookups. Set on root HA connections; cloned connections inherit it via the
+  // copy constructors.
   private HighAvailabilityGroup haGroup;
   private volatile SQLException reasonForClose;
   private static final String[] CONNECTION_PROPERTIES;
@@ -219,7 +225,7 @@ public class PhoenixConnection
     boolean isRunningUpgrade) throws SQLException {
     this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(),
       connection.getMutationState(), isDescRowKeyOrderUpgrade, isRunningUpgrade,
-      connection.buildingIndex, true, null);
+      connection.buildingIndex, true, connection.haGroup);
     this.isAutoCommit = connection.isAutoCommit;
     this.isAutoFlush = connection.isAutoFlush;
     this.sampler = connection.sampler;
@@ -234,7 +240,7 @@ public class PhoenixConnection
     throws SQLException {
     this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(),
       mutationState, connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade(),
-      connection.buildingIndex, true, null);
+      connection.buildingIndex, true, connection.haGroup);
   }
 
   public PhoenixConnection(PhoenixConnection connection, long scn) throws SQLException {
@@ -244,7 +250,7 @@ public class PhoenixConnection
   public PhoenixConnection(PhoenixConnection connection, Properties props) throws SQLException {
     this(connection.getQueryServices(), connection.getURL(), props, connection.getMutationState(),
       connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade(),
-      connection.buildingIndex, true, null);
+      connection.buildingIndex, true, connection.haGroup);
     this.isAutoCommit = connection.isAutoCommit;
     this.isAutoFlush = connection.isAutoFlush;
     this.sampler = connection.sampler;
@@ -264,7 +270,7 @@ public class PhoenixConnection
   public PhoenixConnection(PhoenixConnection connection, ConnectionQueryServices services,
     Properties info) throws SQLException {
     this(services, connection.url, info, null, connection.isDescVarLengthRowKeyUpgrade(),
-      connection.isRunningUpgrade(), connection.buildingIndex, true, null);
+      connection.isRunningUpgrade(), connection.buildingIndex, true, connection.haGroup);
   }
 
   private PhoenixConnection(ConnectionQueryServices services, String url, Properties info,

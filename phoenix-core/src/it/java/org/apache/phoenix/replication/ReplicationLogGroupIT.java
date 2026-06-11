@@ -274,6 +274,47 @@ public class ReplicationLogGroupIT extends HABaseIT {
   }
 
   @Test
+  public void testUpsertSelectReplicatesViaCloneConnection() throws Exception {
+    final String sourceTable = "T_" + generateUniqueName();
+    final String targetTable = "T_" + generateUniqueName();
+    final String createSourceDdl = String.format(
+      "create table if not exists %s (id integer not null primary key, val varchar)", sourceTable);
+    final String createTargetDdl = String.format(
+      "create table if not exists %s (id integer not null primary key, val varchar)", targetTable);
+
+    // Must exceed the default MUTATE_BATCH_SIZE (100) so the in-loop flush at
+    // UpsertCompiler.upsertSelect line ~288 fires. That flush calls send() on the cloned
+    // connection's MutationState — the only path where the missing haGroup field is observable.
+    // For smaller row counts the chunk's mutations are joined back to the parent and the parent's
+    // commit does the annotation with its (non-null) haGroup, so the bug stays hidden.
+    final int rowCount = 250;
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(createSourceDdl);
+      conn.createStatement().execute(createTargetDdl);
+      PreparedStatement insert =
+        conn.prepareStatement("upsert into " + sourceTable + " values (?, ?)");
+      for (int i = 0; i < rowCount; i++) {
+        insert.setInt(1, i);
+        insert.setString(2, "v" + i);
+        insert.executeUpdate();
+      }
+      conn.commit();
+
+      conn.setAutoCommit(true);
+      conn.createStatement()
+        .execute("upsert into " + targetTable + " select id, val from " + sourceTable);
+    }
+
+    Map<String, Integer> expected = Maps.newHashMap();
+    expected.put(sourceTable, rowCount); // direct upserts on the parent connection
+    expected.put(targetTable, rowCount); // upsert-select rows — currently fails: gets 0
+    expected.put(SYSTEM_CATALOG_NAME, 0);
+    expected.put(SYSTEM_CHILD_LINK_NAME, 0);
+    verifyReplication(expected);
+  }
+
+  @Test
   public void testAppendAndSync() throws Exception {
     final String tableName = "T_" + generateUniqueName();
     final String indexName1 = "I_" + generateUniqueName();
