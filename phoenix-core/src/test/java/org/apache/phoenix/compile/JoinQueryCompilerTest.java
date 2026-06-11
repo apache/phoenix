@@ -81,15 +81,18 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
         + JOIN_SUPPLIER_TABLE_FULL_NAME
         + " s ON s.\"supplier_id\" = i.\"supplier_id\" WHERE i.name LIKE 'T%'";
     // RIGHT JOIN drives the scan over SUPPLIER, with the rest of the join tree nested as sub-plans.
+    // The outer join is swapped to build the left input (HASH BUILD LEFT). The nested left-join
+    // tree builds its right inputs (HASH BUILD RIGHT).
     assertPlan(conn, query).scanType("FULL SCAN").table(JOIN_SUPPLIER_TABLE_DISPLAY_NAME)
       .serverFirstKeyOnlyProjection(true)
       .afterJoinFilter("AFTER-JOIN SERVER FILTER BY I.NAME LIKE 'T%'").subPlanCount(1).subPlan(0)
-      .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0").scanType("FULL SCAN")
-      .table(JOIN_ORDER_TABLE_DISPLAY_NAME).subPlanCount(2).subPlan(0)
-      .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0").scanType("FULL SCAN")
-      .table(JOIN_CUSTOMER_TABLE_DISPLAY_NAME).serverWhereFilter("SERVER FILTER BY NAME LIKE 'C%'")
-      .end().subPlan(1).abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 1").scanType("FULL SCAN")
-      .table(JOIN_ITEM_TABLE_DISPLAY_NAME).end().end();
+      .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD LEFT */")
+      .scanType("FULL SCAN").table(JOIN_ORDER_TABLE_DISPLAY_NAME).subPlanCount(2).subPlan(0)
+      .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+      .scanType("FULL SCAN").table(JOIN_CUSTOMER_TABLE_DISPLAY_NAME)
+      .serverWhereFilter("SERVER FILTER BY NAME LIKE 'C%'").end().subPlan(1)
+      .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 1  /* HASH BUILD RIGHT */")
+      .scanType("FULL SCAN").table(JOIN_ITEM_TABLE_DISPLAY_NAME).end().end();
   }
 
   @Test
