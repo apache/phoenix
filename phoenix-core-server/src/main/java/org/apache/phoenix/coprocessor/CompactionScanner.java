@@ -1672,9 +1672,9 @@ public class CompactionScanner implements InternalScanner {
     private void setTTL(long ttlInSecs) {
       this.ttl = Math.max(ttlInSecs * 1000, maxLookbackInMillis + 1);
       this.ttlWindowStart = ttlInSecs == HConstants.FOREVER ? 1 : compactionTime - ttl;
-      this.maxLookbackWindowStartForRow = Math.max(ttlWindowStart, maxLookbackWindowStart);
       this.maxLookbackWindowStartForRow =
-        Math.min(this.maxLookbackWindowStartForRow, replicationConsistencyPoint);
+        ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
+          maxLookbackWindowStart, replicationConsistencyPoint);
       if (LOGGER.isTraceEnabled()) {
         LOGGER.trace(String.format("RowContext:- (ttlWindowStart=%d, maxLookbackWindowStart=%d)",
           ttlWindowStart, maxLookbackWindowStart));

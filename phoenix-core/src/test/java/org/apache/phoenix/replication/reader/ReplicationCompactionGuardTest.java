@@ -29,17 +29,6 @@ import org.junit.Test;
  */
 public class ReplicationCompactionGuardTest {
 
-  /**
-   * Simulates the RowContext computation in CompactionScanner.RowContext.setTTL():
-   * maxLookbackWindowStartForRow = min(max(ttlWindowStart, maxLookbackWindowStart),
-   * replicationConsistencyPoint)
-   */
-  private static long computeRowBoundary(long ttlWindowStart, long maxLookbackWindowStart,
-    long replicationConsistencyPoint) {
-    long rowBoundary = Math.max(ttlWindowStart, maxLookbackWindowStart);
-    return Math.min(rowBoundary, replicationConsistencyPoint);
-  }
-
   @Test
   public void testTtlHigherThanConsistencyPoint_capApplied() {
     long now = System.currentTimeMillis();
@@ -47,7 +36,8 @@ public class ReplicationCompactionGuardTest {
     long ttlWindowStart = now - 3600000L;
     long consistencyPoint = now - 7200000L;
 
-    long result = computeRowBoundary(ttlWindowStart, maxLookbackWindowStart, consistencyPoint);
+    long result = ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
 
     assertEquals(consistencyPoint, result);
   }
@@ -59,7 +49,8 @@ public class ReplicationCompactionGuardTest {
     long ttlWindowStart = now - 14400000L;
     long consistencyPoint = now - 3600000L;
 
-    long result = computeRowBoundary(ttlWindowStart, maxLookbackWindowStart, consistencyPoint);
+    long result = ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
 
     assertEquals(ttlWindowStart, result);
   }
@@ -71,7 +62,8 @@ public class ReplicationCompactionGuardTest {
     long ttlWindowStart = 1L;
     long consistencyPoint = now - 172800000L;
 
-    long result = computeRowBoundary(ttlWindowStart, maxLookbackWindowStart, consistencyPoint);
+    long result = ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
 
     assertEquals(consistencyPoint, result);
   }
@@ -83,7 +75,8 @@ public class ReplicationCompactionGuardTest {
     long ttlWindowStart = 1L;
     long consistencyPoint = now - 60000L;
 
-    long result = computeRowBoundary(ttlWindowStart, maxLookbackWindowStart, consistencyPoint);
+    long result = ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
 
     assertEquals(maxLookbackWindowStart, result);
   }
@@ -95,7 +88,8 @@ public class ReplicationCompactionGuardTest {
     long ttlWindowStart = now - 3600000L;
     long consistencyPoint = 0L;
 
-    long result = computeRowBoundary(ttlWindowStart, maxLookbackWindowStart, consistencyPoint);
+    long result = ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
 
     assertEquals(0L, result);
   }
@@ -107,7 +101,8 @@ public class ReplicationCompactionGuardTest {
     long ttlWindowStart = now - 3600000L;
     long consistencyPoint = Long.MAX_VALUE;
 
-    long result = computeRowBoundary(ttlWindowStart, maxLookbackWindowStart, consistencyPoint);
+    long result = ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
 
     assertEquals(ttlWindowStart, result);
   }
@@ -133,6 +128,34 @@ public class ReplicationCompactionGuardTest {
       assertEquals(500000L, result2);
       assertEquals(500000L, result3);
       assertEquals(1, fetchCount.get());
+    } finally {
+      ReplicationLogReplayService.resetInstanceForTesting();
+    }
+  }
+
+  @Test
+  public void testTransientFailureNotCached_retriesOnNextCall() {
+    AtomicInteger fetchCount = new AtomicInteger(0);
+    ReplicationLogReplayService.setConsistencyPointSupplierForTesting(() -> {
+      int attempt = fetchCount.incrementAndGet();
+      if (attempt == 1) {
+        throw new RuntimeException("Simulated transient failure");
+      }
+      return 700000L;
+    });
+
+    try {
+      Configuration conf = new Configuration(false);
+      String table = "TEST_TABLE";
+      String cf = "0";
+
+      long result1 = ReplicationLogReplayService.resolveConsistencyPoint(conf, table, cf);
+      assertEquals(0L, result1);
+
+      long result2 = ReplicationLogReplayService.resolveConsistencyPoint(conf, table, cf);
+      assertEquals(700000L, result2);
+
+      assertEquals(2, fetchCount.get());
     } finally {
       ReplicationLogReplayService.resetInstanceForTesting();
     }
