@@ -105,22 +105,19 @@ public class ReplicationLogReplayService {
     this.cachedConsistencyPoint = Suppliers.memoizeWithExpiration(() -> {
       try {
         return getConsistencyPoint();
-      } catch (Exception e) {
-        LOG.warn("Failed to refresh cached consistency point", e);
-        return 0L;
+      } catch (IOException | SQLException e) {
+        throw new RuntimeException("Failed to fetch consistency point", e);
       }
     }, CONSISTENCY_POINT_CACHE_TTL_SECONDS, TimeUnit.SECONDS);
   }
 
   private ReplicationLogReplayService(long fixedConsistencyPoint) {
-    this.conf = null;
     this.cachedConsistencyPoint = () -> fixedConsistencyPoint;
   }
 
   private ReplicationLogReplayService(Supplier<Long> supplier) {
-    this.conf = null;
-    this.cachedConsistencyPoint = Suppliers.memoizeWithExpiration(
-      supplier, CONSISTENCY_POINT_CACHE_TTL_SECONDS, TimeUnit.SECONDS);
+    this.cachedConsistencyPoint = Suppliers.memoizeWithExpiration(supplier,
+      CONSISTENCY_POINT_CACHE_TTL_SECONDS, TimeUnit.SECONDS);
   }
 
   /**
@@ -299,6 +296,15 @@ public class ReplicationLogReplayService {
         + " Retaining all delete markers.", tableName, columnFamilyName, e);
       return 0L;
     }
+  }
+
+  /**
+   * Computes the effective max-lookback boundary for a row, capped by the replication consistency
+   * point. This is the single source of truth for the formula used by CompactionScanner.RowContext.
+   */
+  public static long computeRowMaxLookbackWithGuard(long ttlWindowStart,
+    long maxLookbackWindowStart, long replicationConsistencyPoint) {
+    return Math.min(Math.max(ttlWindowStart, maxLookbackWindowStart), replicationConsistencyPoint);
   }
 
   /** Returns the list of HA groups on the cluster */
