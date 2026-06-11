@@ -69,15 +69,21 @@ public class SubqueryRewriter extends ParseNodeRewriter {
 
   private final ColumnResolver columnResolver;
   private final PhoenixConnection connection;
+  private final StatementContext context;
   private TableNode tableNode;
   private ParseNode topNode;
 
   public static SelectStatement transform(SelectStatement select, ColumnResolver resolver,
     PhoenixConnection connection) throws SQLException {
+    return transform(select, resolver, connection, null);
+  }
+
+  public static SelectStatement transform(SelectStatement select, ColumnResolver resolver,
+    PhoenixConnection connection, StatementContext context) throws SQLException {
     ParseNode where = select.getWhere();
     if (where == null) return select;
 
-    SubqueryRewriter rewriter = new SubqueryRewriter(select, resolver, connection);
+    SubqueryRewriter rewriter = new SubqueryRewriter(select, resolver, connection, context);
     ParseNode normWhere = rewrite(where, rewriter);
     if (normWhere == where) return select;
 
@@ -86,10 +92,44 @@ public class SubqueryRewriter extends ParseNodeRewriter {
 
   protected SubqueryRewriter(SelectStatement select, ColumnResolver resolver,
     PhoenixConnection connection) {
+    this(select, resolver, connection, null);
+  }
+
+  protected SubqueryRewriter(SelectStatement select, ColumnResolver resolver,
+    PhoenixConnection connection, StatementContext context) {
     this.columnResolver = resolver;
     this.connection = connection;
+    this.context = context;
     this.tableNode = select.getFrom();
     this.topNode = null;
+  }
+
+  /**
+   * Records a subquery to join rewrite breadcrumb on the active context. The wording is derived
+   * from the originating subquery kind and the chosen {@link JoinType}.
+   */
+  private void recordSubqueryRewrite(String subqueryKind, JoinType joinType) {
+    if (context == null) {
+      return;
+    }
+    final String joinName;
+    switch (joinType) {
+      case Semi:
+        joinName = "SEMI";
+        break;
+      case Anti:
+        joinName = "ANTI";
+        break;
+      case Inner:
+        joinName = "INNER";
+        break;
+      case Left:
+        joinName = "LEFT";
+        break;
+      default:
+        joinName = joinType.name().toUpperCase();
+    }
+    context.addAppliedRewrite(subqueryKind + " SUBQUERY AS " + joinName + " JOIN");
   }
 
   @Override
@@ -263,6 +303,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         newSubquerySelectAliasedNodes.get(0).getAlias(), null), !inParseNode.isNegate());
     tableNode = NODE_FACTORY.join(joinType, tableNode, subqueryDerivedTableNode,
       joinOnConditionParseNode, false);
+    recordSubqueryRewrite(inParseNode.isNegate() ? "NOT IN" : "IN", joinType);
 
     return resultWhereParseNode;
   }
@@ -392,6 +433,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
         newSubquerySelectAliasedNodes.get(0).getAlias(), null), !existsParseNode.isNegate());
     tableNode = NODE_FACTORY.join(joinType, tableNode, subqueryDerivedTableNode,
       joinOnConditionParseNode, false);
+    recordSubqueryRewrite(existsParseNode.isNegate() ? "NOT EXISTS" : "EXISTS", joinType);
     return resultWhereParseNode;
   }
 
@@ -459,6 +501,7 @@ public class SubqueryRewriter extends ParseNodeRewriter {
     ParseNode ret = NODE_FACTORY.comparison(node.getFilterOp(), l.get(0), NODE_FACTORY
       .column(NODE_FACTORY.table(null, rhsTableAlias), selectNodes.get(0).getAlias(), null));
     tableNode = NODE_FACTORY.join(joinType, tableNode, rhsTable, onNode, !isAggregate || isGroupby);
+    recordSubqueryRewrite("SCALAR", joinType);
 
     return ret;
   }

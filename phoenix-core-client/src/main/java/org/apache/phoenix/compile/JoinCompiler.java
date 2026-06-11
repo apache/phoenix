@@ -128,9 +128,10 @@ public class JoinCompiler {
   private final Map<ColumnRef, ColumnRefType> columnRefs;
   private final Map<ColumnRef, ColumnParseNode> columnNodes;
   private final boolean useSortMergeJoin;
+  private final StatementContext context;
 
-  private JoinCompiler(PhoenixStatement statement, SelectStatement select,
-    ColumnResolver resolver) {
+  private JoinCompiler(PhoenixStatement statement, SelectStatement select, ColumnResolver resolver,
+    StatementContext context) {
     this.phoenixStatement = statement;
     this.originalJoinSelectStatement = select;
     this.origResolver = resolver;
@@ -138,16 +139,25 @@ public class JoinCompiler {
     this.columnRefs = new HashMap<ColumnRef, ColumnRefType>();
     this.columnNodes = new HashMap<ColumnRef, ColumnParseNode>();
     this.useSortMergeJoin = select.getHint().hasHint(Hint.USE_SORT_MERGE_JOIN);
+    this.context = context;
+  }
+
+  public static JoinTable compile(PhoenixStatement statement, SelectStatement select,
+    ColumnResolver resolver) throws SQLException {
+    return compile(statement, select, resolver, null);
   }
 
   /**
    * After this method is called, the inner state of the parameter resolver may be changed by
    * {@link FromCompiler#refreshDerivedTableNode} because of some sql optimization, see also
    * {@link Table#pruneSubselectAliasedNodes()}.
+   * <p>
+   * The supplied {@link StatementContext} receives top of plan rewrite breadcrumbs recorded during
+   * join compilation. May be null.
    */
   public static JoinTable compile(PhoenixStatement statement, SelectStatement select,
-    ColumnResolver resolver) throws SQLException {
-    JoinCompiler compiler = new JoinCompiler(statement, select, resolver);
+    ColumnResolver resolver, StatementContext context) throws SQLException {
+    JoinCompiler compiler = new JoinCompiler(statement, select, resolver, context);
     JoinTableConstructor constructor = compiler.new JoinTableConstructor();
     Pair<Table, List<JoinSpec>> res = select.getFrom().accept(constructor);
     JoinTable joinTable = res.getSecond() == null
@@ -253,7 +263,7 @@ public class JoinCompiler {
     private JoinTable(Table table) {
       this.leftTable = table;
       this.joinSpecs = Collections.<JoinSpec> emptyList();
-      this.postFilters = Collections.EMPTY_LIST;
+      this.postFilters = Collections.emptyList();
       this.allTables = Collections.<Table> singletonList(table);
       this.allTableRefs = Collections.<TableRef> singletonList(table.getTableRef());
       this.allLeftJoin = false;
@@ -479,6 +489,10 @@ public class JoinCompiler {
         }
       }
 
+      if (context != null && vector.length >= 2) {
+        context.addAppliedRewrite("STAR JOIN ON " + vector.length + " RIGHT LEGS");
+      }
+
       return vector;
     }
 
@@ -633,6 +647,7 @@ public class JoinCompiler {
       return dependentTableRefs;
     }
 
+    @SuppressWarnings("rawtypes")
     public Pair<List<Expression>, List<Expression>> compileJoinConditions(StatementContext lhsCtx,
       StatementContext rhsCtx, Strategy strategy) throws SQLException {
       if (onConditions.isEmpty()) {
@@ -704,6 +719,7 @@ public class JoinCompiler {
       return new Pair<List<Expression>, List<Expression>>(lConditions, rConditions);
     }
 
+    @SuppressWarnings("rawtypes")
     private PDataType getCommonType(PDataType lType, PDataType rType) throws SQLException {
       if (lType == rType) return lType;
 
@@ -823,7 +839,7 @@ public class JoinCompiler {
       this.dynamicColumns = Collections.<ColumnDef> emptyList();
       this.tableSamplingRate = ConcreteTableNode.DEFAULT_TABLE_SAMPLING_RATE;
       this.subselectStatement =
-        SubselectRewriter.flatten(tableNode.getSelect(), phoenixStatement.getConnection());
+        SubselectRewriter.flatten(tableNode.getSelect(), phoenixStatement.getConnection(), context);
       this.tableRef = tableRef;
       this.preFilterParseNodes = new ArrayList<ParseNode>();
       this.postFilterParseNodes = new ArrayList<ParseNode>();
@@ -1056,8 +1072,10 @@ public class JoinCompiler {
       }
 
       SelectStatement selectStatementToUse = this.getAsSubquery(null);
+      // The rewrite result is only used to test a predicate, so any rewrite breadcrumbs are
+      // recorded on a throwaway context and discarded.
       RewriteResult rewriteResult =
-        ParseNodeUtil.rewrite(selectStatementToUse, phoenixStatement.getConnection());
+        ParseNodeUtil.rewrite(selectStatementToUse, new StatementContext(phoenixStatement));
       return JoinCompiler
         .isCouldPushToServerAsHashJoinProbeSide(rewriteResult.getRewrittenSelectStatement());
     }

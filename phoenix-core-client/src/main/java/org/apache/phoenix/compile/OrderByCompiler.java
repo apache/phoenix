@@ -224,6 +224,7 @@ public class OrderByCompiler {
           if (offset.getByteOffset().isPresent()) {
             throw new SQLException("Do not allow non-pk ORDER BY with RVC OFFSET");
           }
+          context.addAppliedRewrite("REVERSE SCAN SUBSTITUTION");
           return OrderBy.REV_ROW_KEY_ORDER_BY;
         }
       } else {
