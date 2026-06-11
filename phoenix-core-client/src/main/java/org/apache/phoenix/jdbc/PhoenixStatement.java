@@ -1023,7 +1023,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       boolean firstRow = true;
       for (String planStep : planSteps) {
         byte[] row = PVarchar.INSTANCE.toBytes(planStep);
-        List<Cell> cells = Lists.newArrayListWithCapacity(3);
+        // The top-of-plan row carries the plan step plus up to three estimate cells. Every other
+        // row carries only the plan step.
+        List<Cell> cells = Lists.newArrayListWithCapacity(firstRow ? 4 : 1);
         cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_COLUMN,
           MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
         if (firstRow) {
