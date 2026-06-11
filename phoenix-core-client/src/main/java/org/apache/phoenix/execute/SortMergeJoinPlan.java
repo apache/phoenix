@@ -57,6 +57,7 @@ import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.PhoenixQueues;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -217,6 +218,9 @@ public class SortMergeJoinPlan implements QueryPlan {
     rootBuilder.setSortMergeSkipMerge(rhsSchema.getFieldCount() == 0);
     rootBuilder.setLhsJoinQueryExplainPlan(lhsPlanAttributes);
     rootBuilder.setRhsJoinQueryExplainPlan(rhsPlanAttributes);
+    if (getContext().isRoot()) {
+      ExplainTable.populateTopOfPlanAttributes(rootBuilder, getContext(), getTableRef());
+    }
     return new ExplainPlan(steps, rootBuilder.build());
   }
 

@@ -245,6 +245,7 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
   // -----------------------------------------------------------------
   // Private Helper Methods
   // -----------------------------------------------------------------
+
   private Connection createTenantSpecificConnection() throws SQLException {
     Connection conn;
     Properties props = new Properties();

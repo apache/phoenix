@@ -243,18 +243,16 @@ public class PartialIndexIT extends BaseTest {
       assertEquals("b", rs.getString(1));
       assertFalse(rs.next());
       // explain plan verify to check if partial index is used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      assertTrue(rs.next());
-      assertTrue(rs.getString(1).contains(indexTableName));
+      assertTrue(
+        ExplainPlanTestUtil.getPlanSteps(conn, selectSql).toString().contains(indexTableName));
 
       selectSql = "SELECT  D from " + dataTableName + " WHERE A = 50";
       rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is not used
       assertCurrentTable((PhoenixResultSet) rs, "", dataTableName);
       // explain plan verify to check if partial index is not used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      assertTrue(rs.next());
-      assertFalse(rs.getString(1).contains(indexTableName));
+      assertFalse(
+        ExplainPlanTestUtil.getPlanSteps(conn, selectSql).get(0).contains(indexTableName));
 
       // Add more rows to test the index write path
       conn.createStatement()
@@ -292,9 +290,8 @@ public class PartialIndexIT extends BaseTest {
       assertTrue(rs.next());
       assertEquals("id2", rs.getString(1));
       // explain plan verify to check if partial index is not used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      assertTrue(rs.next());
-      assertFalse(rs.getString(1).contains(indexTableName));
+      assertFalse(
+        ExplainPlanTestUtil.getPlanSteps(conn, selectSql).get(0).contains(indexTableName));
 
       // Test index verification and repair by IndexTool
       verifyIndex(dataTableName, indexTableName);
@@ -340,18 +337,16 @@ public class PartialIndexIT extends BaseTest {
       assertEquals("a", rs.getString(1));
       assertFalse(rs.next());
       // explain plan verify to check if partial index is used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      assertTrue(rs.next());
-      assertTrue(rs.getString(1).contains(indexTableName));
+      assertTrue(
+        ExplainPlanTestUtil.getPlanSteps(conn, selectSql).toString().contains(indexTableName));
 
       selectSql = "SELECT  D from " + dataTableName + " WHERE A > 100";
       rs = conn.createStatement().executeQuery(selectSql);
       // Verify that the index table is not used
       assertCurrentTable((PhoenixResultSet) rs, "", dataTableName);
       // explain plan verify to check if partial index is not used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      assertTrue(rs.next());
-      assertFalse(rs.getString(1).contains(indexTableName));
+      assertFalse(
+        ExplainPlanTestUtil.getPlanSteps(conn, selectSql).get(0).contains(indexTableName));
 
       // Add more rows to test the index write path
       conn.createStatement()
@@ -429,9 +424,8 @@ public class PartialIndexIT extends BaseTest {
       assertEquals("a", rs.getString(2));
       assertFalse(rs.next());
       // explain plan verify to check if partial index is used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      assertTrue(rs.next());
-      assertTrue(rs.getString(1).contains(indexTableName));
+      assertTrue(
+        ExplainPlanTestUtil.getPlanSteps(conn, selectSql).toString().contains(indexTableName));
 
       // Add more rows to test the index write path
       conn.createStatement()
@@ -460,10 +454,8 @@ public class PartialIndexIT extends BaseTest {
       assertTrue(rs.next());
       assertEquals(5, rs.getInt(1));
       // explain plan verify to check if partial index is not used
-      rs =
-        conn.createStatement().executeQuery("EXPLAIN " + "SELECT Count(*) from " + dataTableName);
-      assertTrue(rs.next());
-      assertFalse(rs.getString(1).contains(indexTableName));
+      assertFalse(ExplainPlanTestUtil.getPlanSteps(conn, "SELECT Count(*) from " + dataTableName)
+        .get(0).contains(indexTableName));
 
       // Overwrite an existing row that satisfies the index WHERE clause such that
       // the new version of the row does not satisfy the index where clause anymore. This
@@ -519,9 +511,8 @@ public class PartialIndexIT extends BaseTest {
       assertEquals("abcdef", rs.getString(1));
       assertFalse(rs.next());
       // explain plan verify to check if partial index is used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      assertTrue(rs.next());
-      assertTrue(rs.getString(1).contains(indexTableName));
+      assertTrue(
+        ExplainPlanTestUtil.getPlanSteps(conn, selectSql).toString().contains(indexTableName));
 
       // Add more rows to test the index write path
       conn.createStatement()
@@ -548,9 +539,8 @@ public class PartialIndexIT extends BaseTest {
       assertTrue(rs.next());
       assertEquals(5, rs.getInt(1));
       // explain plan verify to check if partial index is not used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      assertTrue(rs.next());
-      assertFalse(rs.getString(1).contains(indexTableName));
+      assertFalse(
+        ExplainPlanTestUtil.getPlanSteps(conn, selectSql).get(0).contains(indexTableName));
 
       // Overwrite an existing row that satisfies the index WHERE clause such that
       // the new version of the row does not satisfy the index where clause anymore. This
@@ -611,9 +601,8 @@ public class PartialIndexIT extends BaseTest {
       assertEquals(70, rs.getInt(1));
       assertFalse(rs.next());
       // explain plan verify to check if partial index is used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      assertTrue(rs.next());
-      assertTrue(rs.getString(1).contains(indexTableName));
+      assertTrue(
+        ExplainPlanTestUtil.getPlanSteps(conn, selectSql).toString().contains(indexTableName));
 
       // Add more rows to test the index write path
       conn.createStatement().execute("upsert into " + dataTableName + " values ('id2', 20, 3)");
@@ -627,10 +616,8 @@ public class PartialIndexIT extends BaseTest {
       assertTrue(rs.next());
       assertEquals(4, rs.getInt(1));
       // explain plan verify to check if partial index is not used
-      rs =
-        conn.createStatement().executeQuery("EXPLAIN " + "SELECT Count(*) from " + dataTableName);
-      assertTrue(rs.next());
-      assertFalse(rs.getString(1).contains(indexTableName));
+      assertFalse(ExplainPlanTestUtil.getPlanSteps(conn, "SELECT Count(*) from " + dataTableName)
+        .get(0).contains(indexTableName));
 
       rs = conn.createStatement().executeQuery("SELECT Count(*) from " + indexTableName);
       assertTrue(rs.next());
@@ -649,9 +636,8 @@ public class PartialIndexIT extends BaseTest {
       assertEquals(0, rs.getInt(1));
       assertFalse(rs.next());
       // explain plan verify to check if partial index is used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      assertTrue(rs.next());
-      assertTrue(rs.getString(1).contains(indexTableName));
+      assertTrue(
+        ExplainPlanTestUtil.getPlanSteps(conn, selectSql).toString().contains(indexTableName));
 
       // Test index verification and repair by IndexTool
       verifyIndex(dataTableName, indexTableName);
@@ -805,9 +791,8 @@ public class PartialIndexIT extends BaseTest {
       assertEquals("b", rs.getString(1));
       assertFalse(rs.next());
       // explain plan verify to check if partial index is used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      assertTrue(rs.next());
-      assertTrue(rs.getString(1).contains(partialIndexTableName));
+      assertTrue(ExplainPlanTestUtil.getPlanSteps(conn, selectSql).toString()
+        .contains(partialIndexTableName));
 
       selectSql = "SELECT  D from " + dataTableName + " WHERE A < 50";
       // Verify that the full index table is used
@@ -817,9 +802,8 @@ public class PartialIndexIT extends BaseTest {
       assertEquals("a", rs.getString(1));
       assertFalse(rs.next());
       // explain plan verify to check if full index is used
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      assertTrue(rs.next());
-      assertTrue(rs.getString(1).contains(fullIndexTableName));
+      assertTrue(
+        ExplainPlanTestUtil.getPlanSteps(conn, selectSql).toString().contains(fullIndexTableName));
     }
   }
 

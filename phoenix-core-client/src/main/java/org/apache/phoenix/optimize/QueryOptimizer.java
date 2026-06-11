@@ -201,16 +201,18 @@ public class QueryOptimizer {
 
       if (replacement != null) {
         select = rewriteQueryWithIndexReplacement(statement.getConnection(), resolver, select,
-          replacement);
+          replacement, dataPlan.getContext());
       }
     }
 
     // Re-compile the plan with option "optimizeSubquery" turned on, so that enclosed
-    // sub-queries can be optimized recursively.
+    // sub-queries can be optimized recursively. Carry forward the top-of-plan rewrite breadcrumbs
+    // recorded on the data plan's context so they survive the recompile onto the optimized plan's
+    // context.
     QueryCompiler compiler = new QueryCompiler(statement, select,
       FromCompiler.getResolverForQuery(select, statement.getConnection()), targetColumns,
       parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), true, true, dataPlans,
-      dataPlan.getContext());
+      dataPlan.getContext()).withRewriteContext(dataPlan.getContext());
     return Collections.singletonList(compiler.compile());
   }
 
@@ -218,9 +220,20 @@ public class QueryOptimizer {
     PTable index) throws SQLException {
     StatementContext context = new StatementContext(dataPlan.getContext());
     context.setResolver(FromCompiler.getResolver(dataPlan.getTableRef()));
-    return WhereCompiler.contains(
-      index.getIndexWhereExpression(dataPlan.getContext().getConnection()),
-      WhereCompiler.transformDNF(select.getWhere(), context));
+    boolean usable =
+      WhereCompiler.contains(index.getIndexWhereExpression(dataPlan.getContext().getConnection()),
+        WhereCompiler.transformDNF(select.getWhere(), context));
+    StatementContext rootContext = dataPlan.getContext();
+    String tableName = dataPlan.getTableRef().getTable().getName().getString();
+    String indexName = index.getName().getString();
+    // Dedupe so the breadcrumb is recorded once per table and index pair even when the optimizer
+    // scores the same index across multiple candidate paths.
+    if (rootContext.markPartialIndexChecked(tableName, indexName)) {
+      rootContext.addAppliedRewrite(usable
+        ? "PARTIAL INDEX APPLICABLE"
+        : "PARTIAL INDEX NOT APPLICABLE -- index WHERE not implied by query WHERE");
+    }
+    return usable;
   }
 
   private List<QueryPlan> getApplicablePlansForSingleFlatQuery(QueryPlan dataPlan,
@@ -281,12 +294,9 @@ public class QueryOptimizer {
         QueryPlan> singletonList(recordDecision(dataPlan, OptimizerReasons.RULE_DATA_TABLE, state));
     }
     // The targetColumns is set for UPSERT SELECT to ensure that the proper type conversion takes
-    // place.
-    // For a SELECT, it is empty. In this case, we want to set the targetColumns to match the
-    // projection
-    // from the dataPlan to ensure that the metadata for when an index is used matches the metadata
-    // for
-    // when the data table is used.
+    // place. For a SELECT, it is empty. In this case, we want to set the targetColumns to match
+    // the projection from the dataPlan to ensure that the metadata for when an index is used
+    // matches the metadata for when the data table is used.
     if (targetColumns.isEmpty()) {
       List<? extends ColumnProjector> projectors = dataPlan.getProjector().getColumnProjectors();
       List<PDatum> targetDatums = Lists.newArrayListWithExpectedSize(projectors.size());
@@ -631,11 +641,12 @@ public class QueryOptimizer {
                 new Hint[] { Hint.INDEX, Hint.NO_CHILD_PARENT_JOIN_OPTIMIZATION }),
               FACTORY.hint("NO_INDEX"));
             SelectStatement query = FACTORY.select(dataSelect, hint, outerWhere);
-            RewriteResult rewriteResult = ParseNodeUtil.rewrite(query, statement.getConnection());
+            RewriteResult rewriteResult = ParseNodeUtil.rewrite(query, dataPlan.getContext());
             QueryPlan plan =
               new QueryCompiler(statement, rewriteResult.getRewrittenSelectStatement(),
                 rewriteResult.getColumnResolver(), targetColumns, parallelIteratorFactory,
-                dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans).compile();
+                dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans)
+                  .withRewriteContext(dataPlan.getContext()).compile();
             return AddPlanResult.success(plan);
           }
         }
@@ -908,9 +919,7 @@ public class QueryOptimizer {
     return null;
   }
 
-  /**
-   * The bound-PK-column count for {@code plan}.
-   */
+  /** The bound-PK-column count for {@code plan}. */
   private static int adjustedBoundCount(QueryPlan plan, int boundRanges) {
     PTable table = plan.getTableRef().getTable();
     int boundCount = plan.getContext().getScanRanges().getBoundPkColumnCount();
@@ -1002,7 +1011,8 @@ public class QueryOptimizer {
 
   private static SelectStatement rewriteQueryWithIndexReplacement(
     final PhoenixConnection connection, final ColumnResolver resolver, final SelectStatement select,
-    final Map<TableRef, TableRef> replacement) throws SQLException {
+    final Map<TableRef, TableRef> replacement, final StatementContext breadcrumbContext)
+    throws SQLException {
     TableNode from = select.getFrom();
     TableNode newFrom = from.accept(new QueryOptimizerTableNode(resolver, replacement));
     if (from == newFrom) {
@@ -1015,7 +1025,8 @@ public class QueryOptimizer {
       // replace expressions with corresponding matching columns for functional indexes
       indexSelect = ParseNodeRewriter.rewrite(indexSelect,
         new IndexExpressionParseNodeRewriter(indexTableRef.getTable(),
-          indexTableRef.getTableAlias(), connection, indexSelect.getUdfParseNodes()));
+          indexTableRef.getTableAlias(), connection, indexSelect.getUdfParseNodes(),
+          breadcrumbContext));
     }
 
     return indexSelect;
