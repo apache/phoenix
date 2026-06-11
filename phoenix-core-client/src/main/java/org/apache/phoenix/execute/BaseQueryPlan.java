@@ -52,6 +52,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.DelegateResultIterator;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -549,6 +550,9 @@ public abstract class BaseQueryPlan implements QueryPlan {
     if (decision != null) {
       builder.setIndexRule(decision.getRule());
       builder.setIndexRejected(decision.getRejectedIndexes());
+    }
+    if (context.isRoot()) {
+      ExplainTable.populateTopOfPlanAttributes(builder, context, getTableRef());
     }
     return Pair.of(planSteps, builder.build());
   }

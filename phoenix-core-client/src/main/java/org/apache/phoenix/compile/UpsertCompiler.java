@@ -62,6 +62,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.ResultIterator;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
@@ -352,6 +353,7 @@ public class UpsertCompiler {
     this.operation = operation;
   }
 
+  @SuppressWarnings("rawtypes")
   private static LiteralParseNode getNodeForRowTimestampColumn(PColumn col) {
     PDataType type = col.getDataType();
     long dummyValue = 0L;
@@ -579,14 +581,19 @@ public class UpsertCompiler {
     if (valueNodesList.isEmpty()) {
       SelectStatement select = upsert.getSelect();
       assert (select != null);
-      select = SubselectRewriter.flatten(select, connection);
+      // Pre-build a context so the early rewrite pass records top-of-plan breadcrumbs that are
+      // adopted by the UPSERT SELECT query plan's compilation context.
+      StatementContext rewriteContext =
+        new StatementContext(statement, FromCompiler.EMPTY_TABLE_RESOLVER,
+          new BindManager(statement.getParameters()), new Scan(), new SequenceManager(statement));
+      select = SubselectRewriter.flatten(select, connection, rewriteContext);
       ColumnResolver selectResolver =
         FromCompiler.getResolverForQuery(select, connection, false, upsert.getTable().getName());
       select = StatementNormalizer.normalize(select, selectResolver);
       select = prependTenantAndViewConstants(table, select, tenantIdStr, addViewColumnsToBe,
         useServerTimestampToBe);
       SelectStatement transformedSelect =
-        SubqueryRewriter.transform(select, selectResolver, connection);
+        SubqueryRewriter.transform(select, selectResolver, connection, rewriteContext);
       if (transformedSelect != select) {
         selectResolver = FromCompiler.getResolverForQuery(transformedSelect, connection, false,
           upsert.getTable().getName());
@@ -649,7 +656,8 @@ public class UpsertCompiler {
       // correctly
       // Use optimizer to choose the best plan
       QueryCompiler compiler = new QueryCompiler(statement, select, selectResolver, targetColumns,
-        parallelIteratorFactoryToBe, new SequenceManager(statement), true, false, null);
+        parallelIteratorFactoryToBe, new SequenceManager(statement), true, false, null)
+          .withRewriteContext(rewriteContext);
       queryPlanToBe = compiler.compile();
 
       if (sameTable) {
@@ -1246,6 +1254,9 @@ public class UpsertCompiler {
       newBuilder.setAbstractExplainPlan("UPSERT ROWS");
       planSteps.add("UPSERT ROWS");
       planSteps.addAll(queryPlanSteps);
+      if (getContext().isRoot()) {
+        ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());
+      }
       return new ExplainPlan(planSteps, newBuilder.build());
     }
 
@@ -1430,6 +1441,12 @@ public class UpsertCompiler {
           .add("CLIENT RESERVE " + context.getSequenceManager().getSequenceCount() + " SEQUENCES");
       }
       planSteps.add("PUT SINGLE ROW");
+      if (getContext().isRoot()) {
+        ExplainPlanAttributesBuilder builder =
+          new ExplainPlanAttributesBuilder(ExplainPlanAttributes.getDefaultExplainPlan());
+        ExplainTable.populateTopOfPlanAttributes(builder, getContext(), getTargetRef());
+        return new ExplainPlan(planSteps, builder.build());
+      }
       return new ExplainPlan(planSteps);
     }
 
@@ -1554,6 +1571,9 @@ public class UpsertCompiler {
       newBuilder.setAbstractExplainPlan("UPSERT SELECT");
       planSteps.add("UPSERT SELECT");
       planSteps.addAll(queryPlanSteps);
+      if (getContext().isRoot()) {
+        ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());
+      }
       return new ExplainPlan(planSteps, newBuilder.build());
     }
 

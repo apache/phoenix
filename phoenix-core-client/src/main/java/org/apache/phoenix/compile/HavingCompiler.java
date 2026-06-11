@@ -75,6 +75,9 @@ public class HavingCompiler {
     }
     HavingClauseVisitor visitor = new HavingClauseVisitor(context, groupBy);
     having.accept(visitor);
+    if (!visitor.getMoveToWhereClauseExpressions().isEmpty()) {
+      context.addAppliedRewrite("HAVING PREDICATE AS WHERE");
+    }
     statement = SelectStatementRewriter.moveFromHavingToWhereClause(statement,
       visitor.getMoveToWhereClauseExpressions());
     return statement;

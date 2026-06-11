@@ -47,6 +47,7 @@ import org.apache.hadoop.hbase.client.RegionInfoBuilder;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryServices;
@@ -183,7 +184,8 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       text("CLIENT PARALLEL <N>-WAY REVERSE RANGE SCAN OVER PTSDB2 ['na1']", "    INDEX PTSDB2",
         "    REGIONS PLANNED <N>", "    SERVER PROJECTION FILTER BY FIRST KEY ONLY"),
       scanAttrs("RANGE SCAN ", "PTSDB2", " ['na1']").put("serverFirstKeyOnlyProjection", true)
-        .put("clientSortedBy", "REVERSE"));
+        .put("clientSortedBy", "REVERSE")
+        .set("rewrites", rewriteList("REVERSE SCAN SUBSTITUTION")));
   }
 
   @Test
@@ -474,10 +476,9 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
 
   @Test
   public void testSortMergeJoin() throws Exception {
-    // After the SMJ reshape the root is a synthetic node carrying just the join header and the
-    // two operand plans as separate lhs / rhs children.
-    // Join operand leaves are compiled through the join path, not optimizer index selection, so
-    // they carry no decision rule.
+    // In a SMJ the root is a synthetic node carrying the join header and the two operand plans as
+    // lhs and rhs. Join operand leaves are compiled through the join path, not optimizer index
+    // selection, so they carry no decision rule.
     ObjectNode lhs =
       scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']").putNull("indexRule");
     ObjectNode rhs = scanAttrs("FULL SCAN ", "ATABLE", "").putNull("indexRule");
@@ -501,8 +502,8 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   public void testHashJoinInner() throws Exception {
     // HashJoinPlan root attributes come from the delegate scan. Each hash/skip-scan child
     // is recorded under subPlans with its join header on abstractExplainPlan.
-    // Hash join nodes (the delegate root and the build-side child) are compiled through the join
-    // path, not optimizer index selection, so they carry no decision rule.
+    // Hash joins are compiled through the join path, not optimizer index selection, so they carry
+    // no decision rule.
     ObjectNode child = scanAttrs("FULL SCAN ", "ATABLE", "")
       .put("abstractExplainPlan", "PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
       .putNull("indexRule");
@@ -525,35 +526,46 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
 
   @Test
   public void testHashJoinSemiInSubquery() throws Exception {
-    // Phoenix temp aliases are renamed by first appearance so this case asserts on the canonical
-    // "$1.$2" form.
-    ObjectNode child = scanAttrs("FULL SCAN ", "ATABLE", "")
-      .put("abstractExplainPlan", "SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .put("serverWhereFilter", "SERVER FILTER BY A_INTEGER = 1")
-      .put("serverAggregate", "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [ORGANIZATION_ID]");
-    // The outer hash-join scan is compiled through the subquery/join path and carries no decision
-    // rule; the aggregate subquery build side is optimized separately and keeps its data-table
-    // rule.
-    ObjectNode expected = scanAttrs("FULL SCAN ", "ATABLE", "").putNull("indexRule");
-    expected.set("subPlans", mapper.createArrayNode().add(child));
-    expected.put("dynamicServerFilter",
-      "DYNAMIC SERVER FILTER BY ATABLE.ORGANIZATION_ID IN ($1.$2)");
-    verifyQuery("hashJoinSemiInSubquery",
-      "SELECT a_string FROM atable"
-        + " WHERE organization_id IN (SELECT organization_id FROM atable WHERE a_integer = 1)",
-      text("CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "    INDEX ATABLE",
-        "    REGIONS PLANNED <N>", "    SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */",
-        "        CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "            INDEX ATABLE",
-        "            REGIONS PLANNED <N>", "            SERVER FILTER BY A_INTEGER = 1",
-        "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [ORGANIZATION_ID]",
-        "    DYNAMIC SERVER FILTER BY ATABLE.ORGANIZATION_ID IN ($1.$2)"),
-      expected);
+    // The behavior under test is the IN-subquery -> semi-join rewrite breadcrumb, asserted via
+    // attributes below. The optimizer's behavior is nondeterministic.
+    // WhereOptimizer.getKeyExpressionCombination probes the row key using
+    // PDataType.getSampleValue, which for CHAR/VARCHAR row keys returns a value from an
+    // unseeded ThreadLocal Random. The choice flips between SKIP-SCAN-JOIN and PARALLEL
+    // SEMI-JOIN ... SKIP MERGE from run to run. Every other rewrite breadcrumb is stable and
+    // asserted exactly. Phoenix temp aliases are renamed by first appearance so the dynamic
+    // server filter asserts on the canonical "$1.$2" form.
+    String query = "SELECT a_string FROM atable"
+      + " WHERE organization_id IN (SELECT organization_id FROM atable WHERE a_integer = 1)";
+    String skipScanJoin = "    SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */";
+    String parallelSemiJoin = "    PARALLEL SEMI-JOIN TABLE 0  /* HASH BUILD RIGHT, SKIP MERGE */";
+    // Index 3 is the unstable join-operator line. null marks it as "tolerated".
+    List<String> expectedStable = text("CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE",
+      "    INDEX ATABLE", "    REGIONS PLANNED <N>", null,
+      "        CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "            INDEX ATABLE",
+      "            REGIONS PLANNED <N>", "            SERVER FILTER BY A_INTEGER = 1",
+      "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [ORGANIZATION_ID]",
+      "    DYNAMIC SERVER FILTER BY ATABLE.ORGANIZATION_ID IN ($1.$2)");
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      ExplainPlan plan = ExplainPlanTestUtil.getExplainPlan(conn, query);
+      List<String> actual = oracle.normalizeText(plan.getPlanSteps());
+      assertEquals("plan line count, was " + actual, expectedStable.size(), actual.size());
+      for (int i = 0; i < expectedStable.size(); i++) {
+        if (expectedStable.get(i) == null) {
+          assertTrue("unexpected join-strategy line: " + actual.get(i),
+            actual.get(i).equals(skipScanJoin) || actual.get(i).equals(parallelSemiJoin));
+        } else {
+          assertEquals("@" + i, expectedStable.get(i), actual.get(i));
+        }
+      }
+      // The dynamic server filter line is normalized above.
+      ExplainPlanTestUtil.assertPlan(plan.getPlanStepsAsAttributes())
+        .rewriteContains("IN SUBQUERY AS SEMI JOIN");
+    }
   }
 
   @Test
   public void testUnionAll() throws Exception {
-    // The union composes each branch recursively from its own getExplainPlan() into the subPlans
-    // list.
+    // The union composes each branch recursively from its own explain plan into subPlans.
     ObjectNode lhs = scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']");
     ObjectNode rhs = scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000002']");
     ObjectNode expected = defaultAttrs();
@@ -573,9 +585,8 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   @Test
   public void testUnionAllOfHashJoins() throws Exception {
     // A UNION ALL whose branches are each hash joins. Exercises recursive explain composition end
-    // to end and
-    // confirms each branch carries its own subPlans and dynamicServerFilter.
-    // Every node in a union-of-hash-joins is compiled through the join path, so none carry a
+    // to end and confirms each branch carries its own subPlans and dynamicServerFilter.
+    // Every node in a union of hash joins is compiled through the join path, so none carry a
     // decision rule.
     ObjectNode joinChild1 = scanAttrs("FULL SCAN ", "ATABLE", "")
       .put("abstractExplainPlan", "PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
@@ -715,7 +726,8 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     verifyQuery("multiTenantView", "SELECT * FROM " + MT_VIEW + " LIMIT 1", tenantProps,
       text("CLIENT SERIAL <N>-WAY RANGE SCAN OVER EO_MT_BASE ['tenant42']", "    INDEX EO_MT_VIEW",
         "    REGIONS PLANNED <N>", "    SERVER 1 ROW LIMIT", "CLIENT 1 ROW LIMIT"),
-      attrs().put("iteratorTypeAndScanSize", "SERIAL <N>-WAY").put("consistency", "STRONG")
+      attrs().put("tenantId", TENANT_ID).put("viewName", MT_VIEW).put("viewBaseName", MT_BASE)
+        .put("iteratorTypeAndScanSize", "SERIAL <N>-WAY").put("consistency", "STRONG")
         .put("explainScanType", "RANGE SCAN ").put("tableName", "EO_MT_BASE")
         .put("indexName", "EO_MT_VIEW").put("indexRule", "data table")
         .put("keyRanges", " ['tenant42']").put("serverRowLimit", 1).put("clientRowLimit", 1)
@@ -832,6 +844,224 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       assertPlanContainsLine(conn, query, "    INDEX " + base + "  /* more bound PK columns */");
       assertPlanContainsLine(conn, query, "    /* !INDEX " + idx + " -- no PK prefix bound */");
     }
+  }
+
+  @Test
+  public void testRewriteReverseScanSubstitution() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      ExplainPlanTestUtil.assertPlan(conn, "SELECT inst,\"DATE\" FROM ptsdb2 WHERE inst = 'na1'"
+        + " ORDER BY inst DESC, \"DATE\" DESC").rewriteContains("REVERSE SCAN SUBSTITUTION");
+    }
+  }
+
+  @Test
+  public void testRewriteInSubqueryAsSemiJoin() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      ExplainPlanTestUtil
+        .assertPlan(conn,
+          "SELECT a_string FROM atable"
+            + " WHERE organization_id IN (SELECT organization_id FROM atable WHERE a_integer = 1)")
+        .rewriteContains("IN SUBQUERY AS SEMI JOIN");
+    }
+  }
+
+  @Test
+  public void testRewriteNotInSubqueryAsAntiJoin() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      ExplainPlanTestUtil.assertPlan(conn, "SELECT a_string FROM atable"
+        + " WHERE organization_id NOT IN (SELECT organization_id FROM atable WHERE a_integer = 1)")
+        .rewriteContains("NOT IN SUBQUERY AS ANTI JOIN");
+    }
+  }
+
+  @Test
+  public void testRewriteExistsSubqueryAsSemiJoin() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      ExplainPlanTestUtil.assertPlan(conn,
+        "SELECT a_string FROM atable a WHERE EXISTS"
+          + " (SELECT 1 FROM atable b WHERE b.organization_id = a.organization_id"
+          + " AND b.a_integer = 1)")
+        .rewriteContains("EXISTS SUBQUERY AS SEMI JOIN");
+    }
+  }
+
+  @Test
+  public void testRewriteNotExistsSubqueryAsAntiJoin() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      ExplainPlanTestUtil.assertPlan(conn,
+        "SELECT a_string FROM atable a WHERE NOT EXISTS"
+          + " (SELECT 1 FROM atable b WHERE b.organization_id = a.organization_id"
+          + " AND b.a_integer = 1)")
+        .rewriteContains("NOT EXISTS SUBQUERY AS ANTI JOIN");
+    }
+  }
+
+  @Test
+  public void testRewriteScalarSubqueryAsInnerJoin() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      ExplainPlanTestUtil
+        .assertPlan(conn,
+          "SELECT a_string FROM atable a WHERE a_integer ="
+            + " (SELECT max(a_integer) FROM atable b WHERE b.organization_id = a.organization_id)")
+        .rewriteContains("SCALAR SUBQUERY AS INNER JOIN");
+    }
+  }
+
+  @Test
+  public void testRewriteHavingPredicateAsWhere() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      ExplainPlanTestUtil
+        .assertPlan(conn, "SELECT count(1) FROM atable GROUP BY a_string HAVING a_string = 'a'")
+        .rewriteContains("HAVING PREDICATE AS WHERE");
+    }
+  }
+
+  @Test
+  public void testRewriteDerivedTableFlattened() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      ExplainPlanTestUtil
+        .assertPlan(conn, "SELECT a_string FROM (SELECT a_string FROM atable) WHERE a_string = 'a'")
+        .rewriteContains("DERIVED TABLE FLATTENED 1");
+    }
+  }
+
+  @Test
+  public void testRewriteUnionOrderByMerge() throws Exception {
+    // The UNION ORDER BY merge optimization only fires when a union is the inner select of an
+    // outer query whose GROUP BY / ORDER BY is order-preserving over the union output.
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    props.setProperty(DATE_FORMAT_ATTRIB, "yyyy-MM-dd");
+    props.setProperty(QueryServices.FORCE_ROW_KEY_ORDER_ATTRIB, Boolean.toString(false));
+    try (Connection conn = DriverManager.getConnection(getUrl(), props);
+      java.sql.Statement stmt = conn.createStatement()) {
+      String t1 = generateUniqueName();
+      String t2 = generateUniqueName();
+      stmt.execute("CREATE TABLE " + t1 + " (fuid UNSIGNED_LONG NOT NULL,"
+        + " fstatsdate UNSIGNED_LONG NOT NULL, faid_1 UNSIGNED_LONG NOT NULL,"
+        + " clk_pv_1 UNSIGNED_LONG CONSTRAINT pk PRIMARY KEY (fuid, fstatsdate, faid_1))");
+      stmt.execute("CREATE TABLE " + t2 + " (fuid UNSIGNED_LONG NOT NULL,"
+        + " fstatsdate UNSIGNED_LONG NOT NULL, faid_2 UNSIGNED_LONG NOT NULL,"
+        + " clk_pv_2 UNSIGNED_LONG CONSTRAINT pk PRIMARY KEY (fuid, fstatsdate, faid_2))");
+      String unionSql = "(SELECT fuid AS advertiser_id, faid_1 AS adgroup_id,"
+        + " fstatsdate AS date, SUM(clk_pv_1) AS clicks FROM " + t1
+        + " GROUP BY fuid, faid_1, fstatsdate UNION ALL"
+        + " SELECT fuid AS advertiser_id, faid_2 AS adgroup_id,"
+        + " fstatsdate AS date, SUM(clk_pv_2) AS clicks FROM " + t2
+        + " GROUP BY fuid, faid_2, fstatsdate)";
+      String sql = "SELECT advertiser_id, adgroup_id, date, SUM(clicks) AS clicks FROM " + unionSql
+        + " GROUP BY advertiser_id, adgroup_id, date ORDER BY advertiser_id, adgroup_id, date";
+      ExplainPlanTestUtil.assertPlan(conn, sql).rewriteContains("UNION ORDER BY MERGE");
+    }
+  }
+
+  @Test
+  public void testRewriteStarJoin() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      ExplainPlanTestUtil
+        .assertPlan(conn,
+          "SELECT a.a_string, b.a_string, c.a_string FROM atable a"
+            + " JOIN atable b ON a.organization_id = b.organization_id"
+            + " JOIN atable c ON a.organization_id = c.organization_id"
+            + " WHERE a.organization_id = '00D000000000001'")
+        .rewriteContains("STAR JOIN ON 2 RIGHT LEGS");
+    }
+  }
+
+  @Test
+  public void testRewriteRightJoinAsLeftJoin() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      ExplainPlanTestUtil
+        .assertPlan(conn,
+          "SELECT a.a_string, b.a_string FROM atable a"
+            + " RIGHT JOIN atable b ON a.organization_id = b.organization_id"
+            + " WHERE b.organization_id = '00D000000000001'")
+        .rewriteContains("RIGHT JOIN AS LEFT JOIN");
+    }
+  }
+
+  @Test
+  public void testDisclosureTenantAndView() throws Exception {
+    Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    tenantProps.setProperty(DATE_FORMAT_ATTRIB, "yyyy-MM-dd");
+    tenantProps.setProperty(TENANT_ID_ATTRIB, TENANT_ID);
+    try (Connection conn = DriverManager.getConnection(getUrl(), tenantProps)) {
+      ExplainPlanTestUtil.assertPlan(conn, "SELECT * FROM " + MT_VIEW + " LIMIT 1")
+        .tenant(TENANT_ID).view(MT_VIEW, MT_BASE);
+    }
+  }
+
+  @Test
+  public void testDisclosureNoneOnPlainScan() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      ExplainPlanTestUtil.assertPlan(conn, "SELECT * FROM atable").tenantNone().viewNone()
+        .cdcScopesNone().txnProviderNone().rewritesNone();
+    }
+  }
+
+  /**
+   * End-to-end check that the disclosure block is prepended to the real JDBC {@code EXPLAIN} result
+   * set (the {@link org.apache.phoenix.jdbc.PhoenixStatement} path that invokes
+   * {@link ExplainTable#renderTopOfPlanText}), with {@code TENANT} then {@code VIEW} ahead of the
+   * first operator line.
+   */
+  @Test
+  public void testTopOfPlanTextTenantAndView() throws Exception {
+    Properties tenantProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    tenantProps.setProperty(DATE_FORMAT_ATTRIB, "yyyy-MM-dd");
+    tenantProps.setProperty(TENANT_ID_ATTRIB, TENANT_ID);
+    try (Connection conn = DriverManager.getConnection(getUrl(), tenantProps)) {
+      List<String> rows = explainViaJdbc(conn, "SELECT * FROM " + MT_VIEW + " LIMIT 1");
+      assertEquals("TENANT '" + TENANT_ID + "'", rows.get(0));
+      assertEquals("VIEW " + MT_VIEW + " OVER " + MT_BASE, rows.get(1));
+      assertTrue("operator should follow the disclosure block: " + rows.get(2),
+        rows.get(2).startsWith("CLIENT"));
+    }
+  }
+
+  /**
+   * End-to-end check that a {@code REWRITE} breadcrumb is prepended ahead of the first operator.
+   */
+  @Test
+  public void testTopOfPlanTextRewriteAtTop() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      List<String> rows =
+        explainViaJdbc(conn, "SELECT a.a_string, b.a_string FROM atable a RIGHT JOIN atable b"
+          + " ON a.organization_id = b.organization_id WHERE b.organization_id = '00D000000000001'");
+      assertEquals("REWRITE RIGHT JOIN AS LEFT JOIN", rows.get(0));
+      assertTrue("operator should follow the REWRITE line: " + rows.get(1),
+        rows.get(1).startsWith("CLIENT"));
+    }
+  }
+
+  /** A view with no resolvable base table renders {@code VIEW <name>} without {@code OVER}. */
+  @Test
+  public void testRenderTopOfPlanTextViewWithoutBase() {
+    ExplainPlanAttributes attrs = new ExplainPlanAttributesBuilder().setViewName("V").build();
+    List<String> steps = new java.util.ArrayList<>(Arrays.asList("CLIENT FOO"));
+    ExplainTable.renderTopOfPlanText(steps, attrs);
+    assertEquals(Arrays.asList("VIEW V", "CLIENT FOO"), steps);
+  }
+
+  /** {@link ExplainTable#renderTopOfPlanText} leaves the steps untouched. */
+  @Test
+  public void testRenderTopOfPlanTextNoopWhenNoDisclosure() {
+    ExplainPlanAttributes attrs = new ExplainPlanAttributesBuilder().build();
+    List<String> steps = new java.util.ArrayList<>(
+      Arrays.asList("CLIENT PARALLEL 1-WAY FULL SCAN OVER T", "    SERVER FILTER BY X"));
+    ExplainTable.renderTopOfPlanText(steps, attrs);
+    assertEquals(Arrays.asList("CLIENT PARALLEL 1-WAY FULL SCAN OVER T", "    SERVER FILTER BY X"),
+      steps);
+  }
+
+  private static List<String> explainViaJdbc(Connection conn, String query) throws SQLException {
+    List<String> rows = new java.util.ArrayList<>();
+    try (java.sql.Statement stmt = conn.createStatement();
+      java.sql.ResultSet rs = stmt.executeQuery("EXPLAIN " + query)) {
+      while (rs.next()) {
+        rows.add(rs.getString(1));
+      }
+    }
+    return rows;
   }
 
   @Test
@@ -1135,6 +1365,12 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
    */
   private static ObjectNode defaultAttrs() {
     ObjectNode n = mapper.createObjectNode();
+    n.putNull("tenantId");
+    n.putNull("viewName");
+    n.putNull("viewBaseName");
+    n.putNull("cdcScopes");
+    n.putNull("txnProvider");
+    n.putNull("rewrites");
     n.putNull("abstractExplainPlan");
     n.putNull("splitsChunk");
     n.putNull("estimatedRows");
@@ -1192,9 +1428,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   }
 
   /**
-   * Convenience wrapper that builds {@link #defaultAttrs()} and sets the five fields every
-   * connection backed scan emits via {@code ExplainTable.explain}: {@code iteratorTypeAndScanSize},
-   * {@code consistency}, {@code explainScanType}, {@code tableName}, and {@code keyRanges}.
+   * Convenience wrapper that builds {@link #defaultAttrs()} for scans.
    * @param scanType the {@code explainScanType} string (with its trailing space, e.g.
    *                 {@code "FULL SCAN "})
    * @param table    the {@code tableName} value
@@ -1209,9 +1443,8 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     // For a data table scan the per scan INDEX line names the same entity as tableName. View and
     // index scans that diverge override indexName on the returned node.
     n.put("indexName", table);
-    // A data-table scan that participated in optimizer index selection records its decision rule.
-    // A point lookup short-circuits to the point-lookup rule; any other data-table target lands on
-    // the data-table default. Index targets set their own rule on the returned node.
+    // A data table scan that participated in optimizer index selection records its decision rule.
+    // A point lookup short-circuits to the point lookup rule. Index targets set their own rule.
     n.put("indexRule", scanType.trim().startsWith("POINT LOOKUP") ? "point lookup" : "data table");
     if (keys != null) {
       n.put("keyRanges", keys);
@@ -1228,6 +1461,15 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   private static ArrayNode clientSteps(String... steps) {
     ArrayNode arr = mapper.createArrayNode();
     for (String s : steps) {
+      arr.add(s);
+    }
+    return arr;
+  }
+
+  /** Build a {@code rewrites} JSON array for embedding into an expected attributes object. */
+  private static ArrayNode rewriteList(String... rewrites) {
+    ArrayNode arr = mapper.createArrayNode();
+    for (String s : rewrites) {
       arr.add(s);
     }
     return arr;

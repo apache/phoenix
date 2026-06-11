@@ -48,6 +48,7 @@ import org.apache.phoenix.iterate.AggregatingResultIterator;
 import org.apache.phoenix.iterate.BaseGroupedAggregatingResultIterator;
 import org.apache.phoenix.iterate.ClientHashAggregatingResultIterator;
 import org.apache.phoenix.iterate.DistinctAggregatingResultIterator;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.FilterAggregatingResultIterator;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.GroupedAggregatingResultIterator;
@@ -308,6 +309,9 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
       newBuilder.addClientStep(step);
     }
 
+    if (context.isRoot()) {
+      ExplainTable.populateTopOfPlanAttributes(newBuilder, context, getTableRef());
+    }
     return new ExplainPlan(planSteps, newBuilder.build());
   }
 
