@@ -542,7 +542,8 @@ public abstract class BaseQueryPlan implements QueryPlan {
     return planSteps;
   }
 
-  private Pair<List<String>, ExplainPlanAttributes> getPlanStepsV2(ResultIterator iterator) {
+  private Pair<List<String>, ExplainPlanAttributes> getPlanStepsV2(ResultIterator iterator)
+    throws SQLException {
     List<String> planSteps = Lists.newArrayListWithExpectedSize(5);
     ExplainPlanAttributesBuilder builder = new ExplainPlanAttributesBuilder();
     iterator.explain(planSteps, builder);
@@ -553,6 +554,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     }
     if (context.isRoot()) {
       ExplainTable.populateTopOfPlanAttributes(builder, context, getTableRef());
+      ExplainTable.populateTopOfPlanEstimates(builder, this);
     }
     return Pair.of(planSteps, builder.build());
   }
