@@ -829,9 +829,7 @@ public class QueryOptimizer {
   /**
    * Outcome of attempting to build an index candidate plan in {@link #addPlan}. Carries either the
    * successfully built {@code plan} or a {@code rejection} explaining why the candidate index was
-   * not usable. Exactly one of the two is non-null. This discriminated-union return keeps rejection
-   * bookkeeping out of {@code addPlan} itself (no shared mutable state); the caller records the
-   * rejection onto its {@link DecisionState}.
+   * not usable.
    */
   private static final class AddPlanResult {
     final QueryPlan plan;
@@ -853,10 +851,8 @@ public class QueryOptimizer {
   }
 
   /**
-   * Accumulates the rejected-index entries gathered while selecting an index for a single flat
-   * query. Rejections are de-duplicated by index name with first-reason-wins semantics, so a reason
-   * recorded earlier in the pipeline (e.g. while building the candidate) is not overwritten by a
-   * later comparator-stage reason for the same index.
+   * Accumulates the rejected index entries gathered while selecting an index for a single flat
+   * query. Rejections are deduplicated by index name.
    */
   private static final class DecisionState {
     private final List<RejectedIndexEntry> rejections = new ArrayList<>();
@@ -892,9 +888,8 @@ public class QueryOptimizer {
   }
 
   /**
-   * Records the optimizer's index-selection rationale on the chosen plan and returns it so callers
-   * can use this inline at a {@code return} site. The chosen-index name is the plan's table name
-   * (the data table for a data-table target, otherwise the index table name).
+   * Records the optimizer's index selection rationale on the chosen plan and returns it so callers
+   * can use this inline at a {@code return} site.
    */
   private static QueryPlan recordDecision(QueryPlan winner, String rule, DecisionState state) {
     winner.setOptimizerDecision(
@@ -914,9 +909,7 @@ public class QueryOptimizer {
   }
 
   /**
-   * The bound-PK-column count for {@code plan}, adjusted exactly as the comparator in
-   * {@link #orderPlansBestToWorst} adjusts it: view-index id columns are added back and the salt
-   * column is removed.
+   * The bound-PK-column count for {@code plan}.
    */
   private static int adjustedBoundCount(QueryPlan plan, int boundRanges) {
     PTable table = plan.getTableRef().getTable();
@@ -928,10 +921,7 @@ public class QueryOptimizer {
 
   /**
    * Returns the {@code RULE_*} label for the chosen plan by replaying the comparator ladder in
-   * {@link #orderPlansBestToWorst} against the runner-up and returning the first decisive branch.
-   * Read-only: it does not reorder or mutate any plan. When there is no runner-up the chosen plan
-   * was the only candidate. When every comparator step ties, the final local-vs-global tie-break is
-   * what selected the winner, so {@code RULE_NON_LOCAL_PREFERRED} is the fall-through label.
+   * {@link #orderPlansBestToWorst} against the runner up and returning the first decisive branch.
    */
   private static String labelComparatorRule(QueryPlan winner, QueryPlan runnerUp, int boundRanges) {
     if (runnerUp == null) {
@@ -953,12 +943,7 @@ public class QueryOptimizer {
     return OptimizerReasons.RULE_NON_LOCAL_PREFERRED;
   }
 
-  /**
-   * Tags every index candidate that lost to {@code winner} with a rejection reason that mirrors the
-   * comparator's decisive step. Only INDEX-type candidates are tagged (the data table is not an
-   * "index"). De-duplication in {@link DecisionState} ensures an earlier, more specific reason
-   * recorded while building the candidate is preserved.
-   */
+  /** Tags every index candidate that lost to {@code winner} with a rejection reason. */
   private static void tagComparatorRejections(QueryPlan winner, List<QueryPlan> plans,
     int boundRanges, DecisionState state) {
     int winnerBound = adjustedBoundCount(winner, boundRanges);
