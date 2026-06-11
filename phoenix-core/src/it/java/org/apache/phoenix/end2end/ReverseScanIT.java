@@ -38,6 +38,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -81,7 +82,8 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
 
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").clientSortedBy("REVERSE")
         .scanType("FULL SCAN").table(tableName).serverFirstKeyOnlyProjection(true)
-        .serverWhereFilter("SERVER FILTER BY ENTITY_ID >= '00A323122312312'");
+        .serverWhereFilter("SERVER FILTER BY ENTITY_ID >= '00A323122312312'")
+        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       PreparedStatement statement = conn.prepareStatement("SELECT entity_id FROM " + tableName
         + " WHERE organization_id = ? AND entity_id >= ? ORDER BY organization_id DESC, entity_id DESC");
@@ -179,7 +181,8 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
 
       assertPlan(conn, query).iteratorType("SERIAL 1-WAY").clientSortedBy("REVERSE")
         .scanType("RANGE SCAN").table(indexName).keyRanges(" [not null]")
-        .serverFirstKeyOnlyProjection(true).serverRowLimit(1L).clientRowLimit(1);
+        .serverFirstKeyOnlyProjection(true).serverRowLimit(1L).clientRowLimit(1)
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
     }
 
   }

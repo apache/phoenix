@@ -86,6 +86,7 @@ import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.join.HashCacheClient;
 import org.apache.phoenix.monitoring.OverAllQueryMetrics;
+import org.apache.phoenix.optimize.OptimizerDecision;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
@@ -643,6 +644,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
   @Override
   protected int getSplitCount() {
     return splits == null ? 0 : splits.size();
+  }
+
+  @Override
+  protected OptimizerDecision getOptimizerDecision() {
+    return plan.getOptimizerDecision();
   }
 
   @Override

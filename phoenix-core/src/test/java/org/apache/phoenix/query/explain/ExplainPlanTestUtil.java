@@ -30,6 +30,7 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.optimize.RejectedIndexEntry;
 
 /**
  * Test helpers for retrieving the {@link ExplainPlan} and its structured
@@ -188,6 +189,72 @@ public final class ExplainPlanTestUtil {
     public ExplainPlanAssert indexKind(String expected) {
       assertEquals(at("indexKind"), expected, attributes.getIndexKind());
       return this;
+    }
+
+    /**
+     * Assert the optimizer's index-selection rule label, e.g. one of the
+     * {@code OptimizerReasons.RULE_*} constants (null when the plan did not participate in
+     * optimizer index selection).
+     */
+    public ExplainPlanAssert indexRule(String expected) {
+      assertEquals(at("indexRule"), expected, attributes.getIndexRule());
+      return this;
+    }
+
+    /**
+     * Assert the index-selection rule label starts with {@code prefix}. Useful for the functional
+     * index {@code "matches <expr>"} rule whose suffix is expression-dependent.
+     */
+    public ExplainPlanAssert indexRuleStartsWith(String prefix) {
+      String actual = attributes.getIndexRule();
+      assertNotNull(at("indexRule") + " must not be null", actual);
+      assertTrue(
+        at("indexRule") + " expected to start with '" + prefix + "' but was '" + actual + "'",
+        actual.startsWith(prefix));
+      return this;
+    }
+
+    /** Assert the number of rejected index candidates recorded for this plan. */
+    public ExplainPlanAssert indexRejectedCount(int expected) {
+      List<RejectedIndexEntry> rejected = attributes.getIndexRejected();
+      int actual = rejected == null ? 0 : rejected.size();
+      assertEquals(at("indexRejected.size"), expected, actual);
+      return this;
+    }
+
+    /** Assert the i-th rejected index candidate's name and reason. */
+    public ExplainPlanAssert indexRejected(int i, String name, String reason) {
+      List<RejectedIndexEntry> rejected = attributes.getIndexRejected();
+      assertNotNull(at("indexRejected") + " must not be null", rejected);
+      assertTrue(at("indexRejected") + " has no index " + i + " (size=" + rejected.size() + ")",
+        i >= 0 && i < rejected.size());
+      RejectedIndexEntry entry = rejected.get(i);
+      assertEquals(at("indexRejected[" + i + "].name"), name, entry.getName());
+      assertEquals(at("indexRejected[" + i + "].reason"), reason, entry.getReason());
+      return this;
+    }
+
+    /** Assert that no index candidates were rejected (null or empty list). */
+    public ExplainPlanAssert indexRejectedNone() {
+      List<RejectedIndexEntry> rejected = attributes.getIndexRejected();
+      assertTrue(at("indexRejected") + " expected none but was " + rejected,
+        rejected == null || rejected.isEmpty());
+      return this;
+    }
+
+    /**
+     * Assert that the rejected index list contains an entry with {@code name} and {@code reason}.
+     */
+    public ExplainPlanAssert indexRejectedContains(String name, String reason) {
+      List<RejectedIndexEntry> rejected = attributes.getIndexRejected();
+      assertNotNull(at("indexRejected") + " must not be null", rejected);
+      for (RejectedIndexEntry entry : rejected) {
+        if (entry.getName().equals(name) && entry.getReason().equals(reason)) {
+          return this;
+        }
+      }
+      throw new AssertionError(at("indexRejected") + " expected to contain {" + name + ", " + reason
+        + "} but was " + rejected);
     }
 
     /** Assert the salt bucket count of the scanned table (null when not salted). */

@@ -32,6 +32,7 @@ import java.util.Properties;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.types.PVarbinary;
@@ -160,14 +161,16 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
 
     if (indexSaltBuckets == null) {
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-        .table(indexTableFullName).keyRanges(" [~'y']").serverFirstKeyOnlyProjection(true);
+        .table(indexTableFullName).keyRanges(" [~'y']").serverFirstKeyOnlyProjection(true)
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
     } else {
       assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("RANGE SCAN")
         .table(indexTableFullName)
         .keyRanges(" [X'00',~'y'] - ["
           + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (indexSaltBuckets - 1) })
           + ",~'y']")
-        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
+        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
     }
 
     // Will use index, so rows returned in DESC order.
@@ -184,14 +187,16 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     assertFalse(rs.next());
     if (indexSaltBuckets == null) {
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-        .table(indexTableFullName).keyRanges(" [*] - [~'x']").serverFirstKeyOnlyProjection(true);
+        .table(indexTableFullName).keyRanges(" [*] - [~'x']").serverFirstKeyOnlyProjection(true)
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
     } else {
       assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("RANGE SCAN")
         .table(indexTableFullName)
         .keyRanges(" [X'00',*] - ["
           + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (indexSaltBuckets - 1) })
           + ",~'x']")
-        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
+        .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
     }
 
     // Use data table, since point lookup trumps order by
@@ -202,7 +207,8 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     assertEquals("x", rs.getString(2));
     assertFalse(rs.next());
     assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("POINT LOOKUP ON 1 KEY")
-      .table(dataTableFullName).serverSortedBy("[V]").clientSortAlgo("CLIENT MERGE SORT");
+      .table(dataTableFullName).serverSortedBy("[V]").clientSortAlgo("CLIENT MERGE SORT")
+      .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
 
     // Will use data table now, since there's a LIMIT clause and
     // we're able to optimize out the ORDER BY, unless the data
@@ -219,11 +225,13 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     if (tableSaltBuckets == null) {
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
         .table(dataTableFullName).serverWhereFilter("SERVER FILTER BY V >= 'x'").serverRowLimit(2L)
-        .clientRowLimit(2);
+        .clientRowLimit(2).indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+        .indexRejectedNone();
     } else {
       assertPlan(conn, query).iteratorType("PARALLEL 3-WAY").scanType("FULL SCAN")
         .table(dataTableFullName).serverWhereFilter("SERVER FILTER BY V >= 'x'").serverRowLimit(2L)
-        .clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(2);
+        .clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(2)
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
     }
 
     // PHOENIX-6604
@@ -231,11 +239,12 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     if (indexSaltBuckets == null) {
       assertPlan(conn, query).iteratorType("SERIAL 1-WAY").scanType("FULL SCAN")
         .table(indexTableFullName).serverFirstKeyOnlyProjection(true).serverRowLimit(1L)
-        .clientRowLimit(1);
+        .clientRowLimit(1).indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
     } else {
       assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("FULL SCAN")
         .table(indexTableFullName).serverFirstKeyOnlyProjection(true).serverRowLimit(1L)
-        .clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(1);
+        .clientSortAlgo("CLIENT MERGE SORT").clientRowLimit(1)
+        .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
     }
   }
 }

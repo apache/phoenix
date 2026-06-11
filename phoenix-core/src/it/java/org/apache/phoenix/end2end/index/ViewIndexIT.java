@@ -64,6 +64,7 @@ import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
@@ -260,7 +261,8 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
         .table(fullIndexName + "("
           + SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName), isNamespaceMapped) + ")")
         .keyRanges(" [1,'10',100]").serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
-        .clientSortAlgo("CLIENT MERGE SORT");
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+        .indexRejectedNone();
       ResultSet rs = conn1.prepareStatement(sql).executeQuery();
       assertTrue(rs.next());
       assertFalse(rs.next());
@@ -585,7 +587,8 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
       // Uses index and finds correct number of rows
       assertPlan(conn, "SELECT COUNT(*) FROM " + fullTableName).iteratorType("PARALLEL 1-WAY")
         .scanType("RANGE SCAN")
-        .table(Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(fullBaseName))));
+        .table(Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(fullBaseName))))
+        .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
     }
 
     // Force it not to use index and still finds correct number of rows

@@ -55,6 +55,7 @@ import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.explain.ExplainPlanTestUtil;
@@ -1013,7 +1014,7 @@ public class PartialIndexIT extends BaseTest {
       String selectSql = "SELECT  /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ "
         + "A from " + dataTableName + " WHERE id2 = 100 AND id1 = 'id12'";
       ExplainPlanTestUtil.assertPlan(conn, selectSql).scanType("POINT LOOKUP ON 1 KEY")
-        .table(indexTableName);
+        .table(indexTableName).indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
       ResultSet rs = stmt.executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(2, rs.getInt(1));
@@ -1022,13 +1023,13 @@ public class PartialIndexIT extends BaseTest {
       selectSql = "SELECT  /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ " + "A from "
         + dataTableName + " WHERE id2 = 10 AND id1 = 'id11'";
       ExplainPlanTestUtil.assertPlan(conn, selectSql).scanType("POINT LOOKUP ON 1 KEY")
-        .table(indexTableName);
+        .table(indexTableName).indexRule(null).indexRejectedNone();
       rs = stmt.executeQuery(selectSql);
       assertFalse(rs.next());
       // No index hint so, use data table only as its point lookup
       selectSql = "SELECT A from " + dataTableName + " WHERE id2 = 10 AND id1 = 'id11'";
       ExplainPlanTestUtil.assertPlan(conn, selectSql).scanType("POINT LOOKUP ON 1 KEY")
-        .table(dataTableName);
+        .table(dataTableName).indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
       rs = stmt.executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(1, rs.getInt(1));

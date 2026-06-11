@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Set;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Consistency;
+import org.apache.phoenix.optimize.RejectedIndexEntry;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.schema.PColumn;
@@ -35,16 +36,16 @@ import org.apache.phoenix.schema.PColumn;
  * Strings containing entire plan.
  */
 @JsonPropertyOrder({ "abstractExplainPlan", "hint", "explainScanType", "consistency", "tableName",
-  "keyRanges", "indexName", "indexKind", "saltBuckets", "regionsPlanned", "scanTimeRangeMin",
-  "scanTimeRangeMax", "splitsChunk", "useRoundRobinIterator", "samplingRate", "hexStringRVCOffset",
-  "iteratorTypeAndScanSize", "estimatedRows", "estimatedSizeInBytes", "serverWhereFilter",
-  "serverDistinctFilter", "serverMergeColumns", "serverArrayElementProjection",
-  "serverFirstKeyOnlyProjection", "serverEmptyColumnOnlyProjection", "serverAggregate",
-  "serverGroupByLimit", "serverSortedBy", "serverOffset", "serverRowLimit", "clientFilterBy",
-  "clientAggregate", "clientDistinctFilter", "clientAfterAggregate", "clientSortAlgo",
-  "clientSortedBy", "clientOffset", "clientRowLimit", "clientSequenceCount", "clientCursorName",
-  "clientSteps", "lhsJoinQueryExplainPlan", "rhsJoinQueryExplainPlan", "subPlans",
-  "dynamicServerFilter", "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge",
+  "keyRanges", "indexName", "indexKind", "indexRule", "indexRejected", "saltBuckets",
+  "regionsPlanned", "scanTimeRangeMin", "scanTimeRangeMax", "splitsChunk", "useRoundRobinIterator",
+  "samplingRate", "hexStringRVCOffset", "iteratorTypeAndScanSize", "estimatedRows",
+  "estimatedSizeInBytes", "serverWhereFilter", "serverDistinctFilter", "serverMergeColumns",
+  "serverArrayElementProjection", "serverFirstKeyOnlyProjection", "serverEmptyColumnOnlyProjection",
+  "serverAggregate", "serverGroupByLimit", "serverSortedBy", "serverOffset", "serverRowLimit",
+  "clientFilterBy", "clientAggregate", "clientDistinctFilter", "clientAfterAggregate",
+  "clientSortAlgo", "clientSortedBy", "clientOffset", "clientRowLimit", "clientSequenceCount",
+  "clientCursorName", "clientSteps", "lhsJoinQueryExplainPlan", "rhsJoinQueryExplainPlan",
+  "subPlans", "dynamicServerFilter", "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge",
   "regionLocations", "regionLocationsTotalSize", "numRegionLocationLookups" })
 public class ExplainPlanAttributes {
 
@@ -57,6 +58,8 @@ public class ExplainPlanAttributes {
   private final String keyRanges;
   private final String indexName;
   private final String indexKind;
+  private final String indexRule;
+  private final List<RejectedIndexEntry> indexRejected;
   private final Integer saltBuckets;
   private final Integer regionsPlanned;
   private final Long scanTimeRangeMin;
@@ -122,6 +125,8 @@ public class ExplainPlanAttributes {
     this.keyRanges = null;
     this.indexName = null;
     this.indexKind = null;
+    this.indexRule = null;
+    this.indexRejected = null;
     this.saltBuckets = null;
     this.regionsPlanned = null;
     this.scanTimeRangeMin = null;
@@ -169,20 +174,20 @@ public class ExplainPlanAttributes {
 
   public ExplainPlanAttributes(String abstractExplainPlan, Hint hint, String explainScanType,
     Consistency consistency, String tableName, String keyRanges, String indexName, String indexKind,
-    Integer saltBuckets, Integer regionsPlanned, Long scanTimeRangeMin, Long scanTimeRangeMax,
-    Integer splitsChunk, boolean useRoundRobinIterator, Double samplingRate,
-    String hexStringRVCOffset, String iteratorTypeAndScanSize, Long estimatedRows,
-    Long estimatedSizeInBytes, String serverWhereFilter, String serverDistinctFilter,
-    Set<PColumn> serverMergeColumns, boolean serverArrayElementProjection,
-    boolean serverFirstKeyOnlyProjection, boolean serverEmptyColumnOnlyProjection,
-    String serverAggregate, Integer serverGroupByLimit, String serverSortedBy, Integer serverOffset,
-    Long serverRowLimit, String clientFilterBy, String clientAggregate, String clientDistinctFilter,
-    String clientAfterAggregate, String clientSortAlgo, String clientSortedBy, Integer clientOffset,
-    Integer clientRowLimit, Integer clientSequenceCount, String clientCursorName,
-    List<String> clientSteps, ExplainPlanAttributes lhsJoinQueryExplainPlan,
-    ExplainPlanAttributes rhsJoinQueryExplainPlan, List<ExplainPlanAttributes> subPlans,
-    String dynamicServerFilter, String afterJoinFilter, Long joinScannerLimit,
-    boolean sortMergeSkipMerge, List<HRegionLocation> regionLocations,
+    String indexRule, List<RejectedIndexEntry> indexRejected, Integer saltBuckets,
+    Integer regionsPlanned, Long scanTimeRangeMin, Long scanTimeRangeMax, Integer splitsChunk,
+    boolean useRoundRobinIterator, Double samplingRate, String hexStringRVCOffset,
+    String iteratorTypeAndScanSize, Long estimatedRows, Long estimatedSizeInBytes,
+    String serverWhereFilter, String serverDistinctFilter, Set<PColumn> serverMergeColumns,
+    boolean serverArrayElementProjection, boolean serverFirstKeyOnlyProjection,
+    boolean serverEmptyColumnOnlyProjection, String serverAggregate, Integer serverGroupByLimit,
+    String serverSortedBy, Integer serverOffset, Long serverRowLimit, String clientFilterBy,
+    String clientAggregate, String clientDistinctFilter, String clientAfterAggregate,
+    String clientSortAlgo, String clientSortedBy, Integer clientOffset, Integer clientRowLimit,
+    Integer clientSequenceCount, String clientCursorName, List<String> clientSteps,
+    ExplainPlanAttributes lhsJoinQueryExplainPlan, ExplainPlanAttributes rhsJoinQueryExplainPlan,
+    List<ExplainPlanAttributes> subPlans, String dynamicServerFilter, String afterJoinFilter,
+    Long joinScannerLimit, boolean sortMergeSkipMerge, List<HRegionLocation> regionLocations,
     Integer regionLocationsTotalSize, int numRegionLocationLookups) {
     this.abstractExplainPlan = abstractExplainPlan;
     this.hint = hint;
@@ -192,6 +197,10 @@ public class ExplainPlanAttributes {
     this.keyRanges = keyRanges;
     this.indexName = indexName;
     this.indexKind = indexKind;
+    this.indexRule = indexRule;
+    this.indexRejected = (indexRejected == null || indexRejected.isEmpty())
+      ? null
+      : Collections.unmodifiableList(new ArrayList<>(indexRejected));
     this.saltBuckets = saltBuckets;
     this.regionsPlanned = regionsPlanned;
     this.scanTimeRangeMin = scanTimeRangeMin;
@@ -269,6 +278,14 @@ public class ExplainPlanAttributes {
 
   public String getIndexKind() {
     return indexKind;
+  }
+
+  public String getIndexRule() {
+    return indexRule;
+  }
+
+  public List<RejectedIndexEntry> getIndexRejected() {
+    return indexRejected;
   }
 
   public Integer getSaltBuckets() {
@@ -458,6 +475,8 @@ public class ExplainPlanAttributes {
     private String keyRanges;
     private String indexName;
     private String indexKind;
+    private String indexRule;
+    private List<RejectedIndexEntry> indexRejected;
     private Integer saltBuckets;
     private Integer regionsPlanned;
     private Long scanTimeRangeMin;
@@ -515,6 +534,9 @@ public class ExplainPlanAttributes {
       this.keyRanges = explainPlanAttributes.getKeyRanges();
       this.indexName = explainPlanAttributes.getIndexName();
       this.indexKind = explainPlanAttributes.getIndexKind();
+      this.indexRule = explainPlanAttributes.getIndexRule();
+      List<RejectedIndexEntry> srcIndexRejected = explainPlanAttributes.getIndexRejected();
+      this.indexRejected = srcIndexRejected == null ? null : new ArrayList<>(srcIndexRejected);
       this.saltBuckets = explainPlanAttributes.getSaltBuckets();
       this.regionsPlanned = explainPlanAttributes.getRegionsPlanned();
       this.scanTimeRangeMin = explainPlanAttributes.getScanTimeRangeMin();
@@ -599,6 +621,16 @@ public class ExplainPlanAttributes {
 
     public ExplainPlanAttributesBuilder setIndexKind(String indexKind) {
       this.indexKind = indexKind;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setIndexRule(String indexRule) {
+      this.indexRule = indexRule;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setIndexRejected(List<RejectedIndexEntry> indexRejected) {
+      this.indexRejected = indexRejected == null ? null : new ArrayList<>(indexRejected);
       return this;
     }
 
@@ -833,16 +865,16 @@ public class ExplainPlanAttributes {
 
     public ExplainPlanAttributes build() {
       return new ExplainPlanAttributes(abstractExplainPlan, hint, explainScanType, consistency,
-        tableName, keyRanges, indexName, indexKind, saltBuckets, regionsPlanned, scanTimeRangeMin,
-        scanTimeRangeMax, splitsChunk, useRoundRobinIterator, samplingRate, hexStringRVCOffset,
-        iteratorTypeAndScanSize, estimatedRows, estimatedSizeInBytes, serverWhereFilter,
-        serverDistinctFilter, serverMergeColumns, serverArrayElementProjection,
-        serverFirstKeyOnlyProjection, serverEmptyColumnOnlyProjection, serverAggregate,
-        serverGroupByLimit, serverSortedBy, serverOffset, serverRowLimit, clientFilterBy,
-        clientAggregate, clientDistinctFilter, clientAfterAggregate, clientSortAlgo, clientSortedBy,
-        clientOffset, clientRowLimit, clientSequenceCount, clientCursorName, clientSteps,
-        lhsJoinQueryExplainPlan, rhsJoinQueryExplainPlan, subPlans, dynamicServerFilter,
-        afterJoinFilter, joinScannerLimit, sortMergeSkipMerge, regionLocations,
+        tableName, keyRanges, indexName, indexKind, indexRule, indexRejected, saltBuckets,
+        regionsPlanned, scanTimeRangeMin, scanTimeRangeMax, splitsChunk, useRoundRobinIterator,
+        samplingRate, hexStringRVCOffset, iteratorTypeAndScanSize, estimatedRows,
+        estimatedSizeInBytes, serverWhereFilter, serverDistinctFilter, serverMergeColumns,
+        serverArrayElementProjection, serverFirstKeyOnlyProjection, serverEmptyColumnOnlyProjection,
+        serverAggregate, serverGroupByLimit, serverSortedBy, serverOffset, serverRowLimit,
+        clientFilterBy, clientAggregate, clientDistinctFilter, clientAfterAggregate, clientSortAlgo,
+        clientSortedBy, clientOffset, clientRowLimit, clientSequenceCount, clientCursorName,
+        clientSteps, lhsJoinQueryExplainPlan, rhsJoinQueryExplainPlan, subPlans,
+        dynamicServerFilter, afterJoinFilter, joinScannerLimit, sortMergeSkipMerge, regionLocations,
         regionLocationsTotalSize, numRegionLocationLookups);
     }
   }

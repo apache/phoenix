@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryServices.DATE_FORMAT_ATTRIB;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -46,6 +47,7 @@ import org.apache.hadoop.hbase.client.RegionInfoBuilder;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
@@ -109,8 +111,9 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       "SELECT a_string, b_string FROM atable"
         + " WHERE organization_id = '00D000000000001' AND entity_id = '00E00000000001'"
         + " AND x_integer = 2 AND a_integer < 5",
-      text("CLIENT PARALLEL <N>-WAY POINT LOOKUP ON 1 KEY OVER ATABLE", "    INDEX ATABLE",
-        "    REGIONS PLANNED <N>", "    SERVER FILTER BY (X_INTEGER = 2 AND A_INTEGER < 5)"),
+      text("CLIENT PARALLEL <N>-WAY POINT LOOKUP ON 1 KEY OVER ATABLE",
+        "    INDEX ATABLE  /* point lookup */", "    REGIONS PLANNED <N>",
+        "    SERVER FILTER BY (X_INTEGER = 2 AND A_INTEGER < 5)"),
       scanAttrs("POINT LOOKUP ON 1 KEY ", "ATABLE", null).put("serverWhereFilter",
         "SERVER FILTER BY (X_INTEGER = 2 AND A_INTEGER < 5)"));
   }
@@ -121,8 +124,8 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       "SELECT a_string, b_string FROM atable"
         + " WHERE organization_id IN ('00D000000000001', '00D000000000005')"
         + " AND entity_id IN ('00E00000000000X','00E00000000000Z')",
-      text("CLIENT PARALLEL <N>-WAY POINT LOOKUP ON 4 KEYS OVER ATABLE", "    INDEX ATABLE",
-        "    REGIONS PLANNED <N>"),
+      text("CLIENT PARALLEL <N>-WAY POINT LOOKUP ON 4 KEYS OVER ATABLE",
+        "    INDEX ATABLE  /* point lookup */", "    REGIONS PLANNED <N>"),
       scanAttrs("POINT LOOKUP ON 4 KEYS ", "ATABLE", null));
   }
 
@@ -473,8 +476,11 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   public void testSortMergeJoin() throws Exception {
     // After the SMJ reshape the root is a synthetic node carrying just the join header and the
     // two operand plans as separate lhs / rhs children.
-    ObjectNode lhs = scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']");
-    ObjectNode rhs = scanAttrs("FULL SCAN ", "ATABLE", "");
+    // Join operand leaves are compiled through the join path, not optimizer index selection, so
+    // they carry no decision rule.
+    ObjectNode lhs =
+      scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']").putNull("indexRule");
+    ObjectNode rhs = scanAttrs("FULL SCAN ", "ATABLE", "").putNull("indexRule");
     ObjectNode expected = defaultAttrs();
     expected.put("abstractExplainPlan", "SORT-MERGE-JOIN (INNER)");
     expected.set("lhsJoinQueryExplainPlan", lhs);
@@ -495,9 +501,13 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   public void testHashJoinInner() throws Exception {
     // HashJoinPlan root attributes come from the delegate scan. Each hash/skip-scan child
     // is recorded under subPlans with its join header on abstractExplainPlan.
-    ObjectNode child = scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan",
-      "PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */");
-    ObjectNode expected = scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']");
+    // Hash join nodes (the delegate root and the build-side child) are compiled through the join
+    // path, not optimizer index selection, so they carry no decision rule.
+    ObjectNode child = scanAttrs("FULL SCAN ", "ATABLE", "")
+      .put("abstractExplainPlan", "PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+      .putNull("indexRule");
+    ObjectNode expected =
+      scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']").putNull("indexRule");
     expected.set("subPlans", mapper.createArrayNode().add(child));
     expected.put("dynamicServerFilter",
       "DYNAMIC SERVER FILTER BY A.ORGANIZATION_ID IN (B.ORGANIZATION_ID)");
@@ -521,7 +531,10 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       .put("abstractExplainPlan", "SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */")
       .put("serverWhereFilter", "SERVER FILTER BY A_INTEGER = 1")
       .put("serverAggregate", "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [ORGANIZATION_ID]");
-    ObjectNode expected = scanAttrs("FULL SCAN ", "ATABLE", "");
+    // The outer hash-join scan is compiled through the subquery/join path and carries no decision
+    // rule; the aggregate subquery build side is optimized separately and keeps its data-table
+    // rule.
+    ObjectNode expected = scanAttrs("FULL SCAN ", "ATABLE", "").putNull("indexRule");
     expected.set("subPlans", mapper.createArrayNode().add(child));
     expected.put("dynamicServerFilter",
       "DYNAMIC SERVER FILTER BY ATABLE.ORGANIZATION_ID IN ($1.$2)");
@@ -562,15 +575,21 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     // A UNION ALL whose branches are each hash joins. Exercises recursive explain composition end
     // to end and
     // confirms each branch carries its own subPlans and dynamicServerFilter.
-    ObjectNode joinChild1 = scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan",
-      "PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */");
-    ObjectNode branch1 = scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']");
+    // Every node in a union-of-hash-joins is compiled through the join path, so none carry a
+    // decision rule.
+    ObjectNode joinChild1 = scanAttrs("FULL SCAN ", "ATABLE", "")
+      .put("abstractExplainPlan", "PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+      .putNull("indexRule");
+    ObjectNode branch1 =
+      scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']").putNull("indexRule");
     branch1.set("subPlans", mapper.createArrayNode().add(joinChild1));
     branch1.put("dynamicServerFilter",
       "DYNAMIC SERVER FILTER BY A.ORGANIZATION_ID IN (B.ORGANIZATION_ID)");
-    ObjectNode joinChild2 = scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan",
-      "PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */");
-    ObjectNode branch2 = scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000002']");
+    ObjectNode joinChild2 = scanAttrs("FULL SCAN ", "ATABLE", "")
+      .put("abstractExplainPlan", "PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+      .putNull("indexRule");
+    ObjectNode branch2 =
+      scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000002']").putNull("indexRule");
     branch2.set("subPlans", mapper.createArrayNode().add(joinChild2));
     branch2.put("dynamicServerFilter",
       "DYNAMIC SERVER FILTER BY A.ORGANIZATION_ID IN (B.ORGANIZATION_ID)");
@@ -630,8 +649,8 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       true,
       text("UPSERT ROWS", "CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE ['00D000000000001']",
         "    INDEX ATABLE", "    REGIONS PLANNED <N>"),
-      scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']").put("abstractExplainPlan",
-        "UPSERT ROWS"));
+      scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']")
+        .put("abstractExplainPlan", "UPSERT ROWS").putNull("indexRule"));
   }
 
   @Test
@@ -651,7 +670,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
         "    SERVER PROJECTION FILTER BY FIRST KEY ONLY", "    SERVER FILTER BY ENTITY_ID = 'abc'"),
       scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan", "DELETE ROWS SERVER SELECT")
         .put("serverFirstKeyOnlyProjection", true)
-        .put("serverWhereFilter", "SERVER FILTER BY ENTITY_ID = 'abc'"));
+        .put("serverWhereFilter", "SERVER FILTER BY ENTITY_ID = 'abc'").putNull("indexRule"));
   }
 
   @Test
@@ -698,8 +717,9 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
         "    REGIONS PLANNED <N>", "    SERVER 1 ROW LIMIT", "CLIENT 1 ROW LIMIT"),
       attrs().put("iteratorTypeAndScanSize", "SERIAL <N>-WAY").put("consistency", "STRONG")
         .put("explainScanType", "RANGE SCAN ").put("tableName", "EO_MT_BASE")
-        .put("indexName", "EO_MT_VIEW").put("keyRanges", " ['tenant42']").put("serverRowLimit", 1)
-        .put("clientRowLimit", 1).set("clientSteps", clientSteps("CLIENT 1 ROW LIMIT")));
+        .put("indexName", "EO_MT_VIEW").put("indexRule", "data table")
+        .put("keyRanges", " ['tenant42']").put("serverRowLimit", 1).put("clientRowLimit", 1)
+        .set("clientSteps", clientSteps("CLIENT 1 ROW LIMIT")));
   }
 
   @Test
@@ -710,8 +730,11 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       String idx = generateUniqueName();
       stmt.execute("CREATE TABLE " + base + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
       stmt.execute("CREATE INDEX " + idx + " ON " + base + " (v1) INCLUDE (v2)");
-      ExplainPlanTestUtil.assertPlan(conn, "SELECT v1, v2 FROM " + base + " WHERE v1 = 'x'")
-        .table(idx).indexName(idx).indexKind("GLOBAL");
+      String query = "SELECT v1, v2 FROM " + base + " WHERE v1 = 'x'";
+      ExplainPlanTestUtil.assertPlan(conn, query).table(idx).indexName(idx).indexKind("GLOBAL")
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
+      assertPlanContainsLine(conn, query,
+        "    INDEX " + idx + " GLOBAL  /* more bound PK columns */");
     }
   }
 
@@ -724,10 +747,11 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       stmt.execute("CREATE TABLE " + base + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
       stmt.execute("CREATE LOCAL INDEX " + idx + " ON " + base + " (v1)");
       // The OVER line decorates a local index as <idx>(<phys>); the INDEX line prints just <idx>.
-      ExplainPlanTestUtil
-        .assertPlan(conn,
-          "SELECT /*+ INDEX(" + base + " " + idx + ") */ k, v1 FROM " + base + " WHERE v1 = 'x'")
-        .indexName(idx).indexKind("LOCAL");
+      String query =
+        "SELECT /*+ INDEX(" + base + " " + idx + ") */ k, v1 FROM " + base + " WHERE v1 = 'x'";
+      ExplainPlanTestUtil.assertPlan(conn, query).indexName(idx).indexKind("LOCAL")
+        .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
+      assertPlanContainsLine(conn, query, "    INDEX " + idx + " LOCAL  /* hint */");
     }
   }
 
@@ -739,10 +763,74 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       String idx = generateUniqueName();
       stmt.execute("CREATE TABLE " + base + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
       stmt.execute("CREATE UNCOVERED INDEX " + idx + " ON " + base + " (v1)");
-      ExplainPlanTestUtil
-        .assertPlan(conn,
-          "SELECT /*+ INDEX(" + base + " " + idx + ") */ k, v2 FROM " + base + " WHERE v1 = 'x'")
-        .indexName(idx).indexKind("UNCOVERED GLOBAL");
+      String query =
+        "SELECT /*+ INDEX(" + base + " " + idx + ") */ k, v2 FROM " + base + " WHERE v1 = 'x'";
+      ExplainPlanTestUtil.assertPlan(conn, query).indexName(idx).indexKind("UNCOVERED GLOBAL")
+        .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
+      assertPlanContainsLine(conn, query, "    INDEX " + idx + " UNCOVERED GLOBAL  /* hint */");
+    }
+  }
+
+  /**
+   * A full scan over a table with no indexes records the {@code "data table"} default rule, which
+   * is suppressed. The INDEX line must be bare and carry no {@code !INDEX} rejection notes.
+   */
+  @Test
+  public void testNoCandidateDataTableBareIndexLine() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String base = generateUniqueName();
+      stmt.execute("CREATE TABLE " + base + " (k VARCHAR PRIMARY KEY, v1 VARCHAR)");
+      String query = "SELECT v1 FROM " + base;
+      ExplainPlanTestUtil.assertPlan(conn, query).indexName(base).indexKind(null)
+        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
+      assertPlanContainsLine(conn, query, "    INDEX " + base);
+      assertNoPlanLineContains(conn, query, "/*");
+      assertNoPlanLineContains(conn, query, "!INDEX");
+    }
+  }
+
+  /**
+   * A query whose {@code ORDER BY} can be served by a covered global index picks that index by the
+   * {@code "non-local preferred"} rule, which is non default and renders a rule comment on the
+   * INDEX line.
+   */
+  @Test
+  public void testIndexRuleNonLocalPreferred() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String base = generateUniqueName();
+      String idx = generateUniqueName();
+      stmt.execute("CREATE TABLE " + base + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+      stmt.execute("CREATE INDEX " + idx + " ON " + base + " (v1) INCLUDE (v2)");
+      String query = "SELECT v1, v2 FROM " + base + " ORDER BY v1";
+      ExplainPlanTestUtil.assertPlan(conn, query).indexName(idx).indexKind("GLOBAL")
+        .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED);
+      assertPlanContainsLine(conn, query,
+        "    INDEX " + idx + " GLOBAL  /* non-local preferred */");
+    }
+  }
+
+  /**
+   * A {@code GROUP BY} on a column with a LOCAL index chooses the data table by the
+   * {@code "more bound PK columns"} rule, which is non default and renders a rule comment.
+   */
+  @Test
+  public void testIndexRejectedRendered() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String base = generateUniqueName();
+      String idx = base + "_IDX";
+      stmt
+        .execute("CREATE TABLE " + base + " (rowkey VARCHAR PRIMARY KEY, c1 VARCHAR, c2 VARCHAR)");
+      stmt.execute("CREATE LOCAL INDEX " + idx + " ON " + base + " (c1)");
+      String query =
+        "SELECT c1, max(rowkey), max(c2) FROM " + base + " WHERE rowkey <= 'z' GROUP BY c1";
+      ExplainPlanTestUtil.assertPlan(conn, query).indexName(base)
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedCount(1)
+        .indexRejected(0, idx, OptimizerReasons.REASON_NO_PK_PREFIX_BOUND);
+      assertPlanContainsLine(conn, query, "    INDEX " + base + "  /* more bound PK columns */");
+      assertPlanContainsLine(conn, query, "    /* !INDEX " + idx + " -- no PK prefix bound */");
     }
   }
 
@@ -1012,6 +1100,25 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     return ExplainPlanTestUtil.getMutationExplainPlan(conn, query);
   }
 
+  /** Assert that the optimized plan-steps text for {@code query} contains {@code expectedLine}. */
+  private static void assertPlanContainsLine(Connection conn, String query, String expectedLine)
+    throws SQLException {
+    List<String> steps = ExplainPlanTestUtil.getPlanSteps(conn, query);
+    assertTrue("expected plan to contain line '" + expectedLine + "' but was " + steps,
+      steps.contains(expectedLine));
+  }
+
+  /** Assert that no plan-steps text line for {@code query} contains {@code needle}. */
+  private static void assertNoPlanLineContains(Connection conn, String query, String needle)
+    throws SQLException {
+    List<String> steps = ExplainPlanTestUtil.getPlanSteps(conn, query);
+    for (String s : steps) {
+      assertFalse(
+        "expected no plan line containing '" + needle + "' but found '" + s + "' in " + steps,
+        s.contains(needle));
+    }
+  }
+
   private static Properties defaultProps() {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     props.setProperty(DATE_FORMAT_ATTRIB, "yyyy-MM-dd");
@@ -1044,6 +1151,8 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     n.putNull("keyRanges");
     n.putNull("indexName");
     n.putNull("indexKind");
+    n.putNull("indexRule");
+    n.putNull("indexRejected");
     n.putNull("saltBuckets");
     n.putNull("regionsPlanned");
     n.putNull("scanTimeRangeMin");
@@ -1100,6 +1209,10 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     // For a data table scan the per scan INDEX line names the same entity as tableName. View and
     // index scans that diverge override indexName on the returned node.
     n.put("indexName", table);
+    // A data-table scan that participated in optimizer index selection records its decision rule.
+    // A point lookup short-circuits to the point-lookup rule; any other data-table target lands on
+    // the data-table default. Index targets set their own rule on the returned node.
+    n.put("indexRule", scanType.trim().startsWith("POINT LOOKUP") ? "point lookup" : "data table");
     if (keys != null) {
       n.put("keyRanges", keys);
     }
