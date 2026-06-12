@@ -41,7 +41,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
 import java.util.TreeMap;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
@@ -1516,12 +1515,9 @@ public class ScanUtil {
    */
   public static void setScanAttributeForHAForPointLookups(Scan scan, PhoenixConnection conn,
     StatementContext context) {
-    if (
-      context.getScanRanges().isPointLookup() && conn.getHAGroup() != null
-        && StringUtils.isNotBlank(conn.getHAGroupName())
-    ) {
+    if (context.getScanRanges().isPointLookup() && conn.getHAGroup() != null) {
       scan.setAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB,
-        Bytes.toBytes(conn.getHAGroupName()));
+        Bytes.toBytes(conn.getHAGroup().getName()));
     }
   }
 

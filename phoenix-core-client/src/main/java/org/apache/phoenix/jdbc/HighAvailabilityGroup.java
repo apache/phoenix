@@ -745,6 +745,15 @@ public class HighAvailabilityGroup {
     return info;
   }
 
+  /**
+   * Returns the HA group name. Convenience accessor — equivalent to
+   * {@code getGroupInfo().getName()} but accessible to callers outside this package
+   * ({@link HAGroupInfo} is package-private).
+   */
+  public String getName() {
+    return info.getName();
+  }
+
   @VisibleForTesting
   public Properties getProperties() {
     return properties;

@@ -148,8 +148,10 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
 
   public PhoenixConnection connect(String url, Properties info) throws SQLException;
 
-  public PhoenixConnection connect(String url, Properties info, HighAvailabilityGroup haGroup)
-    throws SQLException;
+  default PhoenixConnection connect(String url, Properties info, HighAvailabilityGroup haGroup)
+    throws SQLException {
+    return connect(url, info);
+  }
 
   /**
    * @param tableTimestamp timestamp of table if its present in the client side cache

@@ -185,9 +185,10 @@ public class PhoenixConnection
   private LogLevel auditLogLevel;
   private Double logSamplingRate;
   private String sourceOfOperation;
-  @Nullable // Only available for connection which is part of HA Connections
-  private String haGroupName;
-  @Nullable // Only available for connection which is part of HA Connections
+  @Nullable
+  // Resolved HA group object used for failover orchestration and cluster-role
+  // lookups. Set on root HA connections; cloned connections inherit it via the
+  // copy constructors.
   private HighAvailabilityGroup haGroup;
   private volatile SQLException reasonForClose;
   private static final String[] CONNECTION_PROPERTIES;
@@ -219,7 +220,7 @@ public class PhoenixConnection
     boolean isRunningUpgrade) throws SQLException {
     this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(),
       connection.getMutationState(), isDescRowKeyOrderUpgrade, isRunningUpgrade,
-      connection.buildingIndex, true, null);
+      connection.buildingIndex, true, connection.getHAGroup());
     this.isAutoCommit = connection.isAutoCommit;
     this.isAutoFlush = connection.isAutoFlush;
     this.sampler = connection.sampler;
@@ -234,7 +235,7 @@ public class PhoenixConnection
     throws SQLException {
     this(connection.getQueryServices(), connection.getURL(), connection.getClientInfo(),
       mutationState, connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade(),
-      connection.buildingIndex, true, null);
+      connection.buildingIndex, true, connection.getHAGroup());
   }
 
   public PhoenixConnection(PhoenixConnection connection, long scn) throws SQLException {
@@ -244,7 +245,7 @@ public class PhoenixConnection
   public PhoenixConnection(PhoenixConnection connection, Properties props) throws SQLException {
     this(connection.getQueryServices(), connection.getURL(), props, connection.getMutationState(),
       connection.isDescVarLengthRowKeyUpgrade(), connection.isRunningUpgrade(),
-      connection.buildingIndex, true, null);
+      connection.buildingIndex, true, connection.getHAGroup());
     this.isAutoCommit = connection.isAutoCommit;
     this.isAutoFlush = connection.isAutoFlush;
     this.sampler = connection.sampler;
@@ -264,7 +265,7 @@ public class PhoenixConnection
   public PhoenixConnection(PhoenixConnection connection, ConnectionQueryServices services,
     Properties info) throws SQLException {
     this(services, connection.url, info, null, connection.isDescVarLengthRowKeyUpgrade(),
-      connection.isRunningUpgrade(), connection.buildingIndex, true, null);
+      connection.isRunningUpgrade(), connection.buildingIndex, true, connection.getHAGroup());
   }
 
   private PhoenixConnection(ConnectionQueryServices services, String url, Properties info,
@@ -286,8 +287,6 @@ public class PhoenixConnection
 
     // Copy so client cannot change
     this.info = PropertiesUtil.deepCopy(info);
-    // get HAGroupName from the connection info
-    this.haGroupName = info.getProperty(HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR);
     this.haGroup = haGroup;
     final PName tenantId = JDBCUtil.getTenantId(url, info);
     if (this.info.isEmpty() && tenantId == null) {
@@ -1186,18 +1185,6 @@ public class PhoenixConnection
 
   public void setConsistency(Consistency val) {
     this.consistency = val;
-  }
-
-  /**
-   * This is temporary method to set HAGroupName for the connection. This will be removed once we
-   * have a proper way to set HAGroupName in the connection.
-   */
-  public void setHAGroupName(String haGroupName) {
-    this.haGroupName = haGroupName;
-  }
-
-  public String getHAGroupName() {
-    return this.haGroupName;
   }
 
   /**
