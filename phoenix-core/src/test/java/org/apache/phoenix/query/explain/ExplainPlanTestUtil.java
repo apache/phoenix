@@ -27,6 +27,7 @@ import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
@@ -404,9 +405,40 @@ public final class ExplainPlanTestUtil {
       return this;
     }
 
-    public ExplainPlanAssert serverArrayElementProjection(boolean expected) {
-      assertEquals(at("serverArrayElementProjection"), expected,
-        attributes.isServerArrayElementProjection());
+    /** Assert the entire server-parsed-projection map matches {@code expected}. */
+    public ExplainPlanAssert serverParsedProjections(Map<String, List<String>> expected) {
+      assertEquals(at("serverParsedProjections"), expected,
+        attributes.getServerParsedProjections());
+      return this;
+    }
+
+    /**
+     * Assert that the named bucket ({@code ARRAY}, {@code JSON}, {@code BSON}) holds exactly the
+     * listed per-expression renderings, in order.
+     */
+    public ExplainPlanAssert serverParsedProjections(String label, String... expected) {
+      Map<String, List<String>> actual = attributes.getServerParsedProjections();
+      assertNotNull(at("serverParsedProjections") + " must not be null", actual);
+      List<String> bucket = actual.get(label);
+      assertNotNull(at("serverParsedProjections[" + label + "]") + " must not be null", bucket);
+      assertEquals(at("serverParsedProjections[" + label + "]"), Arrays.asList(expected), bucket);
+      return this;
+    }
+
+    /** Assert that no server-parsed projections were disclosed (null or empty). */
+    public ExplainPlanAssert serverParsedProjectionsNone() {
+      Map<String, List<String>> actual = attributes.getServerParsedProjections();
+      assertTrue(at("serverParsedProjections") + " expected none but was " + actual,
+        actual == null || actual.isEmpty());
+      return this;
+    }
+
+    /** Assert the number of expressions in the named bucket. */
+    public ExplainPlanAssert serverParsedProjectionCount(String label, int expected) {
+      Map<String, List<String>> actual = attributes.getServerParsedProjections();
+      List<String> bucket = actual == null ? null : actual.get(label);
+      int actualCount = bucket == null ? 0 : bucket.size();
+      assertEquals(at("serverParsedProjections[" + label + "].size"), expected, actualCount);
       return this;
     }
 
