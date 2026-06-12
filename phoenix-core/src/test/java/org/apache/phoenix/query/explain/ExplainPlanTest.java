@@ -729,6 +729,108 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   }
 
   @Test
+  public void testPutSingleRowOnDuplicateKeyUpdate() throws Exception {
+    verifyMutation("putSingleRowOnDuplicateKeyUpdate",
+      "UPSERT INTO atable (organization_id, entity_id, a_integer)"
+        + " VALUES ('00D000000000001','00E00000000001',1)"
+        + " ON DUPLICATE KEY UPDATE a_integer = a_integer + 1",
+      false,
+      text("PUT SINGLE ROW ON DUPLICATE KEY UPDATE",
+        "    SERVER UPDATE SET A_INTEGER = (A_INTEGER + 1)"),
+      onDupKeyAttrs("UPDATE", "A_INTEGER = (A_INTEGER + 1)"));
+  }
+
+  @Test
+  public void testPutSingleRowOnDuplicateKeyUpdateOnly() throws Exception {
+    verifyMutation("putSingleRowOnDuplicateKeyUpdateOnly",
+      "UPSERT INTO atable (organization_id, entity_id, a_integer)"
+        + " VALUES ('00D000000000001','00E00000000001',1)"
+        + " ON DUPLICATE KEY UPDATE_ONLY a_integer = a_integer + 1",
+      false, text("PUT SINGLE ROW ON DUPLICATE KEY UPDATE_ONLY"),
+      defaultAttrs().put("onDuplicateKeyAction", "UPDATE_ONLY"));
+  }
+
+  @Test
+  public void testPutSingleRowOnDuplicateKeyIgnore() throws Exception {
+    verifyMutation("putSingleRowOnDuplicateKeyIgnore",
+      "UPSERT INTO atable (organization_id, entity_id, a_integer)"
+        + " VALUES ('00D000000000001','00E00000000001',1) ON DUPLICATE KEY IGNORE",
+      false, text("PUT SINGLE ROW ON DUPLICATE KEY IGNORE"),
+      defaultAttrs().put("onDuplicateKeyAction", "IGNORE"));
+  }
+
+  @Test
+  public void testPutSingleRowReturning() throws Exception {
+    verifyMutation("putSingleRowReturning",
+      "UPSERT INTO atable (organization_id, entity_id, a_string)"
+        + " VALUES ('00D000000000001','00E00000000001','x') RETURNING *",
+      false, text("PUT SINGLE ROW", "    RETURNING *"), defaultAttrs().put("returningRow", true));
+  }
+
+  @Test
+  public void testPutSingleRowOnDuplicateKeyUpdateReturning() throws Exception {
+    verifyMutation("putSingleRowOnDuplicateKeyUpdateReturning",
+      "UPSERT INTO atable (organization_id, entity_id, a_integer)"
+        + " VALUES ('00D000000000001','00E00000000001',1)"
+        + " ON DUPLICATE KEY UPDATE a_integer = a_integer + 1 RETURNING *",
+      false,
+      text("PUT SINGLE ROW ON DUPLICATE KEY UPDATE",
+        "    SERVER UPDATE SET A_INTEGER = (A_INTEGER + 1)", "    RETURNING *"),
+      onDupKeyAttrs("UPDATE", "A_INTEGER = (A_INTEGER + 1)").put("returningRow", true));
+  }
+
+  @Test
+  public void testUpsertSelectClientReturning() throws Exception {
+    verifyMutation("upsertSelectClientReturning",
+      "UPSERT INTO atable (organization_id, entity_id, a_string)"
+        + " SELECT organization_id, entity_id, a_string FROM atable"
+        + " WHERE organization_id = '00D000000000001' RETURNING *",
+      false,
+      text("UPSERT SELECT", "    RETURNING *",
+        "CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE ['00D000000000001']", "    INDEX ATABLE",
+        "    REGIONS PLANNED <N>"),
+      scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']")
+        .put("abstractExplainPlan", "UPSERT SELECT").put("returningRow", true));
+  }
+
+  @Test
+  public void testUpsertSelectServerReturning() throws Exception {
+    verifyMutation("upsertSelectServerReturning",
+      "UPSERT INTO atable (organization_id, entity_id, a_string)"
+        + " SELECT organization_id, entity_id, a_string FROM atable"
+        + " WHERE organization_id = '00D000000000001' RETURNING *",
+      true,
+      text("UPSERT ROWS", "    RETURNING *",
+        "CLIENT PARALLEL <N>-WAY RANGE SCAN OVER ATABLE ['00D000000000001']", "    INDEX ATABLE",
+        "    REGIONS PLANNED <N>"),
+      scanAttrs("RANGE SCAN ", "ATABLE", " ['00D000000000001']")
+        .put("abstractExplainPlan", "UPSERT ROWS").putNull("indexRule").put("returningRow", true));
+  }
+
+  @Test
+  public void testDeleteSingleRowReturning() throws Exception {
+    verifyMutation("deleteSingleRowReturning",
+      "DELETE FROM atable WHERE organization_id = '00D000000000001'"
+        + " AND entity_id = '00E00000000001' RETURNING *",
+      true, text("DELETE SINGLE ROW", "    RETURNING *"),
+      defaultAttrs().put("abstractExplainPlan", "DELETE SINGLE ROW").put("returningRow", true));
+  }
+
+  @Test
+  public void testDeleteServerReturning() throws Exception {
+    verifyMutation("deleteServerReturning",
+      "DELETE FROM atable WHERE entity_id = 'abc' RETURNING *", true,
+      text("DELETE ROWS SERVER SELECT", "    RETURNING *",
+        "CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "    INDEX ATABLE",
+        "    REGIONS PLANNED <N>", "    SERVER PROJECTION FILTER BY FIRST KEY ONLY",
+        "    SERVER FILTER BY ENTITY_ID = 'abc'"),
+      scanAttrs("FULL SCAN ", "ATABLE", "").put("abstractExplainPlan", "DELETE ROWS SERVER SELECT")
+        .put("serverFirstKeyOnlyProjection", true)
+        .put("serverWhereFilter", "SERVER FILTER BY ENTITY_ID = 'abc'").putNull("indexRule")
+        .put("returningRow", true));
+  }
+
+  @Test
   public void testSequenceNextValue() throws Exception {
     verifyQuery("sequenceNextValue", "SELECT NEXT VALUE FOR " + SEQ + " FROM atable",
       text("CLIENT PARALLEL <N>-WAY FULL SCAN OVER ATABLE", "    INDEX ATABLE",
@@ -1414,6 +1516,9 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     n.putNull("estimatedSizeInBytes");
     n.putNull("estimateInfoTs");
     n.putNull("abstractExplainPlan");
+    n.putNull("onDuplicateKeyAction");
+    n.putNull("serverUpdateSet");
+    n.put("returningRow", false);
     n.putNull("splitsChunk");
     n.putNull("scanEstimatedRows");
     n.putNull("scanEstimatedSizeInBytes");
@@ -1497,6 +1602,22 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   /** A plain {@link ObjectNode} alias for clarity in tests that don't use {@link #scanAttrs}. */
   private static ObjectNode attrs() {
     return defaultAttrs();
+  }
+
+  /**
+   * Convenience wrapper that builds {@link #defaultAttrs()} for an atomic UPSERT operator,
+   * populating {@code onDuplicateKeyAction} and the {@code serverUpdateSet} assignment array.
+   * @param action      the {@code OnDuplicateKeyType} name (e.g. {@code "UPDATE"})
+   * @param assignments the ordered {@code <col> = <expr>} renderings
+   */
+  private static ObjectNode onDupKeyAttrs(String action, String... assignments) {
+    ObjectNode n = defaultAttrs();
+    n.put("onDuplicateKeyAction", action);
+    ArrayNode arr = n.putArray("serverUpdateSet");
+    for (String a : assignments) {
+      arr.add(a);
+    }
+    return n;
   }
 
   /** Build a {@code clientSteps} JSON array for embedding into an expected attributes object. */
