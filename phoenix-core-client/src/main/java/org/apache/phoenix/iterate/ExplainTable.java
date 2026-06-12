@@ -26,6 +26,7 @@ import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Consistency;
@@ -44,6 +45,7 @@ import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
@@ -513,17 +515,50 @@ public abstract class ExplainTable {
     }
     getRegionLocations(planSteps, explainPlanAttributesBuilder, regionLocations);
     groupBy.explain(planSteps, groupByLimit, explainPlanAttributesBuilder);
-    if (scan.getAttribute(BaseScannerRegionObserverConstants.SPECIFIC_ARRAY_INDEX) != null) {
-      planSteps.add("    SERVER ARRAY ELEMENT PROJECTION");
-      if (explainPlanAttributesBuilder != null) {
-        explainPlanAttributesBuilder.setServerArrayElementProjection(true);
+    emitServerProjection(planSteps, explainPlanAttributesBuilder, "ARRAY",
+      Collections.singletonList(BaseScannerRegionObserverConstants.SPECIFIC_ARRAY_INDEX));
+    emitServerProjection(planSteps, explainPlanAttributesBuilder, "JSON",
+      Arrays.asList(BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION,
+        BaseScannerRegionObserverConstants.JSON_QUERY_FUNCTION));
+    emitServerProjection(planSteps, explainPlanAttributesBuilder, "BSON",
+      Collections.singletonList(BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION));
+  }
+
+  /**
+   * Emit a {@code SERVER <label> PROJECTION <count>} clause plus one indented detail line per
+   * server evaluated path expression of the given type. The expressions are read from
+   * {@link StatementContext#getServerParsedProjections()}, gathering the buckets named by
+   * {@code attributeKeys} in order.
+   * @param planSteps                    plan step lines to append to
+   * @param explainPlanAttributesBuilder attributes builder to populate, or {@code null}
+   * @param label                        the type label ({@code ARRAY}, {@code JSON}, {@code BSON})
+   * @param attributeKeys                the scan attribute bucket keys contributing to this type
+   */
+  private void emitServerProjection(List<String> planSteps,
+    ExplainPlanAttributesBuilder explainPlanAttributesBuilder, String label,
+    List<String> attributeKeys) {
+    Map<String, List<Expression>> serverParsedProjections = context.getServerParsedProjections();
+    if (serverParsedProjections == null) {
+      return;
+    }
+    List<String> details = new ArrayList<>();
+    for (String attributeKey : attributeKeys) {
+      List<Expression> expressions = serverParsedProjections.get(attributeKey);
+      if (expressions != null) {
+        for (Expression expression : expressions) {
+          details.add(expression.toString());
+        }
       }
     }
-    if (
-      scan.getAttribute(BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION) != null
-        || scan.getAttribute(BaseScannerRegionObserverConstants.JSON_QUERY_FUNCTION) != null
-    ) {
-      planSteps.add("    SERVER JSON FUNCTION PROJECTION");
+    if (details.isEmpty()) {
+      return;
+    }
+    planSteps.add("    SERVER " + label + " PROJECTION " + details.size());
+    for (String detail : details) {
+      planSteps.add("        " + detail);
+    }
+    if (explainPlanAttributesBuilder != null) {
+      explainPlanAttributesBuilder.addServerParsedProjection(label, details);
     }
   }
 

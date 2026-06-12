@@ -2202,7 +2202,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     Connection conn = DriverManager.getConnection(getUrl());
     try {
       conn.createStatement().execute("CREATE TABLE t(a INTEGER PRIMARY KEY, arr INTEGER ARRAY)");
-      assertPlan(conn, "SELECT arr[1] from t").serverArrayElementProjection(true);
+      assertPlan(conn, "SELECT arr[1] from t").serverParsedProjections("ARRAY",
+        "ARRAY_ELEM(ARR, 1)");
     } finally {
       conn.createStatement().execute("DROP TABLE IF EXISTS t");
       conn.close();
@@ -2214,7 +2215,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     Connection conn = DriverManager.getConnection(getUrl());
     try {
       conn.createStatement().execute("CREATE TABLE t(a INTEGER PRIMARY KEY, arr INTEGER ARRAY)");
-      assertPlan(conn, "SELECT arr, arr[1] from t").serverArrayElementProjection(false);
+      assertPlan(conn, "SELECT arr, arr[1] from t").serverParsedProjectionsNone();
     } finally {
       conn.createStatement().execute("DROP TABLE IF EXISTS t");
       conn.close();
@@ -2227,7 +2228,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     try {
       conn.createStatement()
         .execute("CREATE TABLE t(a INTEGER PRIMARY KEY, arr INTEGER ARRAY, arr2 VARCHAR ARRAY)");
-      assertPlan(conn, "SELECT arr, arr[1], arr2[1] from t").serverArrayElementProjection(true);
+      assertPlan(conn, "SELECT arr, arr[1], arr2[1] from t").serverParsedProjections("ARRAY",
+        "ARRAY_ELEM(ARR2, 1)");
     } finally {
       conn.createStatement().execute("DROP TABLE IF EXISTS t");
       conn.close();
@@ -2242,7 +2244,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         .execute("CREATE TABLE t (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)");
       assertPlan(conn,
         "SELECT arr1, arr1[1], ARRAY_APPEND(ARRAY_APPEND(arr1, arr2[2]), arr2[1]), p from t")
-          .serverArrayElementProjection(true);
+          .serverParsedProjectionCount("ARRAY", 2);
     } finally {
       conn.createStatement().execute("DROP TABLE IF EXISTS t");
       conn.close();
@@ -2302,7 +2304,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         .execute("CREATE TABLE t (p INTEGER PRIMARY KEY, arr1 INTEGER ARRAY, arr2 INTEGER ARRAY)");
       assertPlan(conn,
         "SELECT arr1, arr1[1], ARRAY_ELEM(ARRAY_APPEND(arr1, arr2[1]), 1), p, arr2[2] from t")
-          .serverArrayElementProjection(true);
+          .serverParsedProjectionCount("ARRAY", 2);
     } finally {
       conn.createStatement().execute("DROP TABLE IF EXISTS t");
       conn.close();
@@ -2314,7 +2316,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     Connection conn = DriverManager.getConnection(getUrl());
     try {
       conn.createStatement().execute("CREATE TABLE t(arr INTEGER ARRAY PRIMARY KEY)");
-      assertPlan(conn, "SELECT arr[1] from t").serverArrayElementProjection(false);
+      assertPlan(conn, "SELECT arr[1] from t").serverParsedProjectionsNone();
     } finally {
       conn.createStatement().execute("DROP TABLE IF EXISTS t");
       conn.close();
