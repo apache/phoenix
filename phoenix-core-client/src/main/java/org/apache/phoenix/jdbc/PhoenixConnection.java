@@ -186,11 +186,6 @@ public class PhoenixConnection
   private Double logSamplingRate;
   private String sourceOfOperation;
   @Nullable
-  // HA group name (String) used to tag outgoing mutations and point-lookup scans
-  // with the _HAGroupName attribute. Set on every connection that resolved through
-  // an HA route, including cloned connections.
-  private String haGroupName;
-  @Nullable
   // Resolved HA group object used for failover orchestration and cluster-role
   // lookups. Set on root HA connections; cloned connections inherit it via the
   // copy constructors.
@@ -292,8 +287,6 @@ public class PhoenixConnection
 
     // Copy so client cannot change
     this.info = PropertiesUtil.deepCopy(info);
-    // get HAGroupName from the connection info
-    this.haGroupName = info.getProperty(HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR);
     this.haGroup = haGroup;
     final PName tenantId = JDBCUtil.getTenantId(url, info);
     if (this.info.isEmpty() && tenantId == null) {
@@ -1192,18 +1185,6 @@ public class PhoenixConnection
 
   public void setConsistency(Consistency val) {
     this.consistency = val;
-  }
-
-  /**
-   * This is temporary method to set HAGroupName for the connection. This will be removed once we
-   * have a proper way to set HAGroupName in the connection.
-   */
-  public void setHAGroupName(String haGroupName) {
-    this.haGroupName = haGroupName;
-  }
-
-  public String getHAGroupName() {
-    return this.haGroupName;
   }
 
   /**

@@ -57,7 +57,6 @@ import java.util.Map.Entry;
 import java.util.Set;
 import javax.annotation.Nonnull;
 import javax.annotation.concurrent.Immutable;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -947,8 +946,8 @@ public class MutationState implements SQLCloseable {
       table.getLastDDLTimestamp() != null ? Bytes.toBytes(table.getLastDDLTimestamp()) : null;
     byte[] haGroupName = null;
     // Only set haGroupName if connection is part of HA Connection
-    if (connection.getHAGroup() != null && StringUtils.isNotBlank(connection.getHAGroupName())) {
-      haGroupName = Bytes.toBytes(connection.getHAGroupName());
+    if (connection.getHAGroup() != null) {
+      haGroupName = Bytes.toBytes(connection.getHAGroup().getName());
     }
     WALAnnotationUtil.annotateMutation(mutation, tenantId, schemaName, tableName, tableType,
       lastDDLTimestamp, haGroupName);
