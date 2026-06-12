@@ -874,15 +874,16 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       try {
         printClusterRoleRecordAsText(manager.getClusterRoleRecord(haGroupName));
       } catch (RuntimeException e) {
-        // A malformed stored cluster URL makes ClusterRoleRecord normalization throw; don't crash -
-        // show the raw URLs (offending one marked <invalid>) and how to repair.
+        // ClusterRoleRecord normalization throws on a malformed stored cluster URL; don't crash -
+        // show the raw URLs (offending one marked <invalid>) and how to repair. Surface the cause
+        // so an unrelated failure is not silently mislabeled as a bad URL.
         HAGroupStoreRecord raw = manager.getHAGroupStoreRecord(haGroupName).orElse(null);
-        System.out
-          .println("\nCluster Role Record for '" + haGroupName + "' (a stored URL is invalid):");
+        System.out.println("\nCluster Role Record for '" + haGroupName
+          + "' could not be built (likely a malformed stored URL): " + e.getMessage());
         if (raw != null) {
-          System.out.println("  Cluster 1 URL:     "
+          System.out.println("  Cluster URL:       "
             + describeUrl(raw.getClusterUrl(), ClusterRoleRecord.RegistryType.RPC));
-          System.out.println("  Cluster 2 URL:     "
+          System.out.println("  Peer Cluster URL:  "
             + describeUrl(raw.getPeerClusterUrl(), ClusterRoleRecord.RegistryType.RPC));
         }
         System.out.println(
@@ -1020,11 +1021,13 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
   }
 
   /**
-   * Whether cluster A takes slot 1 in SYSTEM.HA_GROUP's slot-indexed columns. The key is the
-   * formatted ZK URL compared lexicographically - the same rule ClusterRoleRecord uses for
-   * url1/url2 and the periodic ZK-&gt;SYSTEM.HA_GROUP sync - so both clusters of a pair persist
-   * identical rows and every slot keeps its ZK/CLUSTER/ROLE/HDFS columns pointing at one cluster
-   * (the read path resolves a cluster's HDFS URL by matching its ZK URL slot).
+   * Whether cluster A takes slot 1 in SYSTEM.HA_GROUP's slot-indexed columns, keyed on the
+   * formatted ZK URL compared lexicographically. The ordering is deterministic and independent of
+   * which cluster is local (the same canonicalization {@link ClusterRoleRecord} applies to its
+   * url1/url2, though that sorts on the cluster URL) and matches the periodic
+   * ZK-&gt;SYSTEM.HA_GROUP sync - so both clusters of a pair persist identical rows and every slot
+   * keeps its ZK/CLUSTER/ROLE/HDFS columns pointing at one cluster (the read path resolves a
+   * cluster's HDFS URL by matching its ZK URL slot).
    */
   private static boolean firstClusterTakesSlot1(String zkUrlA, String zkUrlB) {
     String formattedZkUrlA = StringUtils.isBlank(zkUrlA)
@@ -1791,7 +1794,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     System.out.println("  -lst, --last-sync-time <ms>       Last sync time (requires --force)");
     System.out.println();
     System.out.println("FLAGS:");
-    System.out.println("  -F, --force                       Allow state and restricted changes");
+    System.out.println(
+      "  -F, --force                       Allow restricted changes; store malformed URLs as-is");
     System.out.println("  -d, --dry-run                     Show changes without applying");
     System.out.println("  -h, --help                        Show this help");
     System.out.println();
