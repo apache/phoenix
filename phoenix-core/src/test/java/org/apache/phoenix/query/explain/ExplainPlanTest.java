@@ -76,6 +76,8 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   private static final String MT_BASE = "EO_MT_BASE";
   private static final String MT_VIEW = "EO_MT_VIEW";
   private static final String TENANT_ID = "tenant42";
+  private static final String JSON_TBL = "EO_JSON";
+  private static final String BSON_TBL = "EO_BSON";
 
   private static ExplainOracle oracle;
   private static ObjectMapper mapper;
@@ -89,6 +91,10 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + SALTED
         + " (k VARCHAR NOT NULL PRIMARY KEY, v INTEGER) SALT_BUCKETS=4");
       conn.createStatement().execute("CREATE SEQUENCE IF NOT EXISTS " + SEQ);
+      conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + JSON_TBL
+        + " (pk VARCHAR NOT NULL PRIMARY KEY, jsoncol JSON)");
+      conn.createStatement().execute("CREATE TABLE IF NOT EXISTS " + BSON_TBL
+        + " (pk VARCHAR NOT NULL PRIMARY KEY, payload BSON)");
       conn.createStatement()
         .execute("CREATE TABLE IF NOT EXISTS " + MT_BASE + " (" + "  tenant_id VARCHAR(8) NOT NULL,"
           + "  userid INTEGER NOT NULL," + "  username VARCHAR NOT NULL," + "  col VARCHAR"
@@ -283,10 +289,37 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
 
   @Test
   public void testArrayElementProjection() throws Exception {
+    ObjectNode arrayBucket = mapper.createObjectNode();
+    arrayBucket.set("ARRAY", mapper.createArrayNode().add("ARRAY_ELEM(A_STRING_ARRAY, 1)"));
     verifyQuery("arrayElementProjection", "SELECT a_string_array[1] FROM table_with_array",
       text("CLIENT PARALLEL <N>-WAY FULL SCAN OVER TABLE_WITH_ARRAY", "    INDEX TABLE_WITH_ARRAY",
-        "    REGIONS PLANNED <N>", "    SERVER ARRAY ELEMENT PROJECTION"),
-      scanAttrs("FULL SCAN ", "TABLE_WITH_ARRAY", "").put("serverArrayElementProjection", true));
+        "    REGIONS PLANNED <N>", "    SERVER ARRAY PROJECTION 1",
+        "        ARRAY_ELEM(A_STRING_ARRAY, 1)"),
+      scanAttrs("FULL SCAN ", "TABLE_WITH_ARRAY", "").set("serverParsedProjections", arrayBucket));
+  }
+
+  @Test
+  public void testJsonFunctionProjection() throws Exception {
+    ObjectNode jsonBucket = mapper.createObjectNode();
+    jsonBucket.set("JSON", mapper.createArrayNode().add("JSON_VALUE(JSONCOL, '$.type')"));
+    verifyQuery("jsonFunctionProjection", "SELECT JSON_VALUE(jsoncol, '$.type') FROM " + JSON_TBL,
+      text("CLIENT PARALLEL <N>-WAY FULL SCAN OVER " + JSON_TBL, "    INDEX " + JSON_TBL,
+        "    REGIONS PLANNED <N>", "    SERVER JSON PROJECTION 1",
+        "        JSON_VALUE(JSONCOL, '$.type')"),
+      scanAttrs("FULL SCAN ", JSON_TBL, "").set("serverParsedProjections", jsonBucket));
+  }
+
+  @Test
+  public void testBsonValueProjection() throws Exception {
+    ObjectNode bsonBucket = mapper.createObjectNode();
+    bsonBucket.set("BSON",
+      mapper.createArrayNode().add("BSON_VALUE(PAYLOAD, 'user.id', 'VARCHAR', )"));
+    verifyQuery("bsonValueProjection",
+      "SELECT BSON_VALUE(payload, 'user.id', 'VARCHAR') FROM " + BSON_TBL,
+      text("CLIENT PARALLEL <N>-WAY FULL SCAN OVER " + BSON_TBL, "    INDEX " + BSON_TBL,
+        "    REGIONS PLANNED <N>", "    SERVER BSON PROJECTION 1",
+        "        BSON_VALUE(PAYLOAD, 'user.id', 'VARCHAR', )"),
+      scanAttrs("FULL SCAN ", BSON_TBL, "").set("serverParsedProjections", bsonBucket));
   }
 
   @Test
@@ -1406,7 +1439,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     n.putNull("serverDistinctFilter");
     n.putNull("serverOffset");
     n.putNull("serverRowLimit");
-    n.put("serverArrayElementProjection", false);
+    n.putNull("serverParsedProjections");
     n.put("serverFirstKeyOnlyProjection", false);
     n.put("serverEmptyColumnOnlyProjection", false);
     n.putNull("serverAggregate");

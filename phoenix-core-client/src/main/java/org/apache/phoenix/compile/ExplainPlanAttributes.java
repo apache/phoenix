@@ -21,7 +21,9 @@ import com.fasterxml.jackson.annotation.JsonPropertyOrder;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.client.Consistency;
@@ -41,7 +43,7 @@ import org.apache.phoenix.schema.PColumn;
   "indexRejected", "saltBuckets", "regionsPlanned", "scanTimeRangeMin", "scanTimeRangeMax",
   "splitsChunk", "useRoundRobinIterator", "samplingRate", "hexStringRVCOffset",
   "iteratorTypeAndScanSize", "scanEstimatedRows", "scanEstimatedSizeInBytes", "serverWhereFilter",
-  "serverDistinctFilter", "serverMergeColumns", "serverArrayElementProjection",
+  "serverDistinctFilter", "serverMergeColumns", "serverParsedProjections",
   "serverFirstKeyOnlyProjection", "serverEmptyColumnOnlyProjection", "serverAggregate",
   "serverGroupByLimit", "serverSortedBy", "serverOffset", "serverRowLimit", "clientFilterBy",
   "clientAggregate", "clientDistinctFilter", "clientAfterAggregate", "clientSortAlgo",
@@ -91,7 +93,7 @@ public class ExplainPlanAttributes {
   private final String serverWhereFilter;
   private final String serverDistinctFilter;
   private final Set<PColumn> serverMergeColumns;
-  private final boolean serverArrayElementProjection;
+  private final Map<String, List<String>> serverParsedProjections;
   private final boolean serverFirstKeyOnlyProjection;
   private final boolean serverEmptyColumnOnlyProjection;
   private final String serverAggregate;
@@ -165,7 +167,7 @@ public class ExplainPlanAttributes {
     this.serverWhereFilter = null;
     this.serverDistinctFilter = null;
     this.serverMergeColumns = null;
-    this.serverArrayElementProjection = false;
+    this.serverParsedProjections = null;
     this.serverFirstKeyOnlyProjection = false;
     this.serverEmptyColumnOnlyProjection = false;
     this.serverAggregate = null;
@@ -205,7 +207,7 @@ public class ExplainPlanAttributes {
     Integer splitsChunk, boolean useRoundRobinIterator, Double samplingRate,
     String hexStringRVCOffset, String iteratorTypeAndScanSize, Long scanEstimatedRows,
     Long scanEstimatedSizeInBytes, String serverWhereFilter, String serverDistinctFilter,
-    Set<PColumn> serverMergeColumns, boolean serverArrayElementProjection,
+    Set<PColumn> serverMergeColumns, Map<String, List<String>> serverParsedProjections,
     boolean serverFirstKeyOnlyProjection, boolean serverEmptyColumnOnlyProjection,
     String serverAggregate, Integer serverGroupByLimit, String serverSortedBy, Integer serverOffset,
     Long serverRowLimit, String clientFilterBy, String clientAggregate, String clientDistinctFilter,
@@ -253,7 +255,7 @@ public class ExplainPlanAttributes {
     this.serverWhereFilter = serverWhereFilter;
     this.serverDistinctFilter = serverDistinctFilter;
     this.serverMergeColumns = serverMergeColumns;
-    this.serverArrayElementProjection = serverArrayElementProjection;
+    this.serverParsedProjections = copyServerParsedProjections(serverParsedProjections);
     this.serverFirstKeyOnlyProjection = serverFirstKeyOnlyProjection;
     this.serverEmptyColumnOnlyProjection = serverEmptyColumnOnlyProjection;
     this.serverAggregate = serverAggregate;
@@ -419,8 +421,20 @@ public class ExplainPlanAttributes {
     return serverMergeColumns;
   }
 
-  public boolean isServerArrayElementProjection() {
-    return serverArrayElementProjection;
+  public Map<String, List<String>> getServerParsedProjections() {
+    return serverParsedProjections;
+  }
+
+  private static Map<String, List<String>>
+    copyServerParsedProjections(Map<String, List<String>> source) {
+    if (source == null || source.isEmpty()) {
+      return null;
+    }
+    Map<String, List<String>> copy = new LinkedHashMap<>();
+    for (Map.Entry<String, List<String>> entry : source.entrySet()) {
+      copy.put(entry.getKey(), Collections.unmodifiableList(new ArrayList<>(entry.getValue())));
+    }
+    return Collections.unmodifiableMap(copy);
   }
 
   public boolean isServerFirstKeyOnlyProjection() {
@@ -574,7 +588,7 @@ public class ExplainPlanAttributes {
     private String serverWhereFilter;
     private String serverDistinctFilter;
     private Set<PColumn> serverMergeColumns;
-    private boolean serverArrayElementProjection;
+    private Map<String, List<String>> serverParsedProjections;
     private boolean serverFirstKeyOnlyProjection;
     private boolean serverEmptyColumnOnlyProjection;
     private String serverAggregate;
@@ -644,7 +658,10 @@ public class ExplainPlanAttributes {
       this.serverWhereFilter = explainPlanAttributes.getServerWhereFilter();
       this.serverDistinctFilter = explainPlanAttributes.getServerDistinctFilter();
       this.serverMergeColumns = explainPlanAttributes.getServerMergeColumns();
-      this.serverArrayElementProjection = explainPlanAttributes.isServerArrayElementProjection();
+      Map<String, List<String>> srcServerParsedProjections =
+        explainPlanAttributes.getServerParsedProjections();
+      this.serverParsedProjections =
+        srcServerParsedProjections == null ? null : new LinkedHashMap<>(srcServerParsedProjections);
       this.serverFirstKeyOnlyProjection = explainPlanAttributes.isServerFirstKeyOnlyProjection();
       this.serverEmptyColumnOnlyProjection =
         explainPlanAttributes.isServerEmptyColumnOnlyProjection();
@@ -851,8 +868,19 @@ public class ExplainPlanAttributes {
     }
 
     public ExplainPlanAttributesBuilder
-      setServerArrayElementProjection(boolean serverArrayElementProjection) {
-      this.serverArrayElementProjection = serverArrayElementProjection;
+      setServerParsedProjections(Map<String, List<String>> serverParsedProjections) {
+      this.serverParsedProjections =
+        serverParsedProjections == null ? null : new LinkedHashMap<>(serverParsedProjections);
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder addServerParsedProjection(String label,
+      List<String> details) {
+      if (this.serverParsedProjections == null) {
+        this.serverParsedProjections = new LinkedHashMap<>();
+      }
+      this.serverParsedProjections.put(label,
+        Collections.unmodifiableList(new ArrayList<>(details)));
       return this;
     }
 
@@ -1016,7 +1044,7 @@ public class ExplainPlanAttributes {
         indexRejected, saltBuckets, regionsPlanned, scanTimeRangeMin, scanTimeRangeMax, splitsChunk,
         useRoundRobinIterator, samplingRate, hexStringRVCOffset, iteratorTypeAndScanSize,
         scanEstimatedRows, scanEstimatedSizeInBytes, serverWhereFilter, serverDistinctFilter,
-        serverMergeColumns, serverArrayElementProjection, serverFirstKeyOnlyProjection,
+        serverMergeColumns, serverParsedProjections, serverFirstKeyOnlyProjection,
         serverEmptyColumnOnlyProjection, serverAggregate, serverGroupByLimit, serverSortedBy,
         serverOffset, serverRowLimit, clientFilterBy, clientAggregate, clientDistinctFilter,
         clientAfterAggregate, clientSortAlgo, clientSortedBy, clientOffset, clientRowLimit,
