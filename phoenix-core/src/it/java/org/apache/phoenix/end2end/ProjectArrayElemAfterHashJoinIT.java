@@ -110,11 +110,10 @@ public class ProjectArrayElemAfterHashJoinIT extends ParallelStatsDisabledIT {
 
   private void verifyExplain(Connection conn, String table, boolean fullArray, boolean hashJoin)
     throws Exception {
-
     String query = getQuery(table, fullArray, hashJoin);
     ExplainPlanAttributes attributes = getExplainAttributes(conn, query);
     if (!fullArray) {
-      assertPlan(attributes).serverArrayElementProjection(true);
+      assertPlan(attributes).serverParsedProjectionCount("ARRAY", 4);
     }
     assertPlan(attributes).subPlanCount(hashJoin ? 1 : 0);
   }
