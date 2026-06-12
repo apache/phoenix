@@ -673,7 +673,8 @@ public class DeleteCompiler {
       // from the data table, while the others will be for deleting rows from immutable indexes.
       List<MutationPlan> mutationPlans = Lists.newArrayListWithExpectedSize(queryPlans.size());
       for (final QueryPlan plan : queryPlans) {
-        mutationPlans.add(new SingleRowDeleteMutationPlan(plan, connection, maxSize, maxSizeBytes));
+        mutationPlans.add(new SingleRowDeleteMutationPlan(plan, connection, maxSize, maxSizeBytes,
+          delete.isReturningRow()));
       }
       return new MultiRowDeleteMutationPlan(dataPlan, mutationPlans);
     } else if (runOnServer) {
@@ -706,7 +707,7 @@ public class DeleteCompiler {
         new AggregatePlan(context, select, dataPlan.getTableRef(), projector, null, null,
           OrderBy.EMPTY_ORDER_BY, null, GroupBy.EMPTY_GROUP_BY, null, dataPlan);
       return new ServerSelectDeleteMutationPlan(dataPlan, connection, aggPlan, projector, maxSize,
-        maxSizeBytes);
+        maxSizeBytes, delete.isReturningRow());
     } else {
       final DeletingParallelIteratorFactory parallelIteratorFactory = parallelIteratorFactoryToBe;
       List<PColumn> adjustedProjectedColumns =
@@ -751,7 +752,7 @@ public class DeleteCompiler {
       }
       return new ClientSelectDeleteMutationPlan(targetTableRef, dataPlan, bestPlan,
         hasPreOrPostProcessing, parallelIteratorFactory, otherTableRefs, projectedTableRef, maxSize,
-        maxSizeBytes, connection);
+        maxSizeBytes, connection, delete.isReturningRow());
     }
   }
 
@@ -765,14 +766,16 @@ public class DeleteCompiler {
     private final int maxSize;
     private final StatementContext context;
     private final long maxSizeBytes;
+    private final boolean returningRow;
 
     public SingleRowDeleteMutationPlan(QueryPlan dataPlan, PhoenixConnection connection,
-      int maxSize, long maxSizeBytes) {
+      int maxSize, long maxSizeBytes, boolean returningRow) {
       this.dataPlan = dataPlan;
       this.connection = connection;
       this.maxSize = maxSize;
       this.context = dataPlan.getContext();
       this.maxSizeBytes = maxSizeBytes;
+      this.returningRow = returningRow;
     }
 
     @Override
@@ -801,11 +804,17 @@ public class DeleteCompiler {
     public ExplainPlan getExplainPlan() throws SQLException {
       ExplainPlanAttributesBuilder builder =
         new ExplainPlanAttributesBuilder().setAbstractExplainPlan("DELETE SINGLE ROW");
+      builder.setReturningRow(returningRow);
       if (getContext().isRoot()) {
         ExplainTable.populateTopOfPlanAttributes(builder, getContext(), getTargetRef());
         ExplainTable.populateTopOfPlanEstimates(builder, this);
       }
-      return new ExplainPlan(Collections.singletonList("DELETE SINGLE ROW"), builder.build());
+      List<String> planSteps = Lists.newArrayListWithExpectedSize(2);
+      planSteps.add("DELETE SINGLE ROW");
+      if (returningRow) {
+        planSteps.add("    RETURNING *");
+      }
+      return new ExplainPlan(planSteps, builder.build());
     }
 
     @Override
@@ -864,9 +873,11 @@ public class DeleteCompiler {
     private final RowProjector projector;
     private final int maxSize;
     private final long maxSizeBytes;
+    private final boolean returningRow;
 
     public ServerSelectDeleteMutationPlan(QueryPlan dataPlan, PhoenixConnection connection,
-      QueryPlan aggPlan, RowProjector projector, int maxSize, long maxSizeBytes) {
+      QueryPlan aggPlan, RowProjector projector, int maxSize, long maxSizeBytes,
+      boolean returningRow) {
       this.context = dataPlan.getContext();
       this.dataPlan = dataPlan;
       this.connection = connection;
@@ -874,6 +885,7 @@ public class DeleteCompiler {
       this.projector = projector;
       this.maxSize = maxSize;
       this.maxSizeBytes = maxSizeBytes;
+      this.returningRow = returningRow;
     }
 
     @Override
@@ -982,11 +994,15 @@ public class DeleteCompiler {
       ExplainPlan explainPlan = aggPlan.getExplainPlan();
       List<String> queryPlanSteps = explainPlan.getPlanSteps();
       ExplainPlanAttributes explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
-      List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size() + 1);
+      List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size() + 2);
       ExplainPlanAttributesBuilder newBuilder =
         new ExplainPlanAttributesBuilder(explainPlanAttributes);
       newBuilder.setAbstractExplainPlan("DELETE ROWS SERVER SELECT");
+      newBuilder.setReturningRow(returningRow);
       planSteps.add("DELETE ROWS SERVER SELECT");
+      if (returningRow) {
+        planSteps.add("    RETURNING *");
+      }
       planSteps.addAll(queryPlanSteps);
       if (getContext().isRoot()) {
         ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());
@@ -1032,11 +1048,13 @@ public class DeleteCompiler {
     private final int maxSize;
     private final long maxSizeBytes;
     private final PhoenixConnection connection;
+    private final boolean returningRow;
 
     public ClientSelectDeleteMutationPlan(TableRef targetTableRef, QueryPlan dataPlan,
       QueryPlan bestPlan, boolean hasPreOrPostProcessing,
       DeletingParallelIteratorFactory parallelIteratorFactory, List<TableRef> otherTableRefs,
-      TableRef projectedTableRef, int maxSize, long maxSizeBytes, PhoenixConnection connection) {
+      TableRef projectedTableRef, int maxSize, long maxSizeBytes, PhoenixConnection connection,
+      boolean returningRow) {
       this.context = bestPlan.getContext();
       this.targetTableRef = targetTableRef;
       this.dataPlan = dataPlan;
@@ -1048,6 +1066,7 @@ public class DeleteCompiler {
       this.maxSize = maxSize;
       this.maxSizeBytes = maxSizeBytes;
       this.connection = connection;
+      this.returningRow = returningRow;
     }
 
     @Override
@@ -1121,11 +1140,15 @@ public class DeleteCompiler {
       ExplainPlan explainPlan = bestPlan.getExplainPlan();
       List<String> queryPlanSteps = explainPlan.getPlanSteps();
       ExplainPlanAttributes explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
-      List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size() + 1);
+      List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size() + 2);
       ExplainPlanAttributesBuilder newBuilder =
         new ExplainPlanAttributesBuilder(explainPlanAttributes);
       newBuilder.setAbstractExplainPlan("DELETE ROWS CLIENT SELECT");
+      newBuilder.setReturningRow(returningRow);
       planSteps.add("DELETE ROWS CLIENT SELECT");
+      if (returningRow) {
+        planSteps.add("    RETURNING *");
+      }
       planSteps.addAll(queryPlanSteps);
       if (getContext().isRoot()) {
         ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());

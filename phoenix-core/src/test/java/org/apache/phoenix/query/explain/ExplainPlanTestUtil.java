@@ -33,6 +33,7 @@ import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.optimize.RejectedIndexEntry;
+import org.apache.phoenix.parse.UpsertStatement.OnDuplicateKeyType;
 
 /**
  * Test helpers for retrieving the {@link ExplainPlan} and its structured
@@ -284,6 +285,43 @@ public final class ExplainPlanTestUtil {
 
     public ExplainPlanAssert abstractExplainPlan(String expected) {
       assertEquals(at("abstractExplainPlan"), expected, attributes.getAbstractExplainPlan());
+      return this;
+    }
+
+    /**
+     * Assert the {@code ON DUPLICATE KEY} flavor disclosed on an atomic UPSERT mutation operator.
+     */
+    public ExplainPlanAssert onDuplicateKeyAction(OnDuplicateKeyType expected) {
+      assertEquals(at("onDuplicateKeyAction"), expected, attributes.getOnDuplicateKeyAction());
+      return this;
+    }
+
+    /**
+     * Assert the ordered {@code <col> = <expr>} assignments disclosed under
+     * {@code ON DUPLICATE KEY UPDATE}.
+     */
+    public ExplainPlanAssert serverUpdateSet(String... expected) {
+      assertEquals(at("serverUpdateSet"), Arrays.asList(expected), attributes.getServerUpdateSet());
+      return this;
+    }
+
+    /** Assert the number of {@code SERVER UPDATE SET} assignments. */
+    public ExplainPlanAssert serverUpdateSetCount(int expected) {
+      List<String> actual = attributes.getServerUpdateSet();
+      int actualCount = actual == null ? 0 : actual.size();
+      assertEquals(at("serverUpdateSet.size"), expected, actualCount);
+      return this;
+    }
+
+    /** Assert the mutation operator discloses {@code RETURNING *}. */
+    public ExplainPlanAssert returningRow() {
+      assertTrue(at("returningRow") + " expected true", attributes.isReturningRow());
+      return this;
+    }
+
+    /** Assert the mutation operator does not disclose {@code RETURNING *}. */
+    public ExplainPlanAssert noReturningRow() {
+      assertTrue(at("returningRow") + " expected false", !attributes.isReturningRow());
       return this;
     }
 
