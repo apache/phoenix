@@ -88,8 +88,19 @@ public class GetClusterRoleRecordUtil {
     Connection conn = getConnection(url, properties);
     PhoenixConnection connection = conn.unwrap(PhoenixConnection.class);
     try (Admin admin = connection.getQueryServices().getAdmin()) {
-      // get all live region servers
+      // Get all live region servers. The list is only auto-populated at CQSI init when
+      // LAST_DDL_TIMESTAMP_VALIDATION_ENABLED is true (default false), so on the first call
+      // for the default config path the list is null. Refresh inline rather than letting the
+      // catch block recover via NPE: keeps the retry path reserved for genuine failures
+      // (auth, transport, RPC) and avoids logging an ERROR per first invocation.
       List<ServerName> regionServers = connection.getQueryServices().getLiveRegionServers();
+      if (regionServers == null || regionServers.isEmpty()) {
+        connection.getQueryServices().refreshLiveRegionServers();
+        regionServers = connection.getQueryServices().getLiveRegionServers();
+        if (regionServers == null || regionServers.isEmpty()) {
+          throw new SQLException("No live region servers available for HA group " + haGroupName);
+        }
+      }
       // pick one at random
       ServerName regionServer =
         regionServers.get(ThreadLocalRandom.current().nextInt(regionServers.size()));
