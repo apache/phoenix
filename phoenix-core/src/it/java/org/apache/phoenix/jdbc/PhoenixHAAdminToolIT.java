@@ -760,9 +760,9 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     assertTrue("Output should indicate transition incomplete",
       output.contains("Failover transition incomplete") || output.contains("Timeout"));
 
-    // On timeout, operators should be pointed at manual recovery and the runbook.
-    assertTrue("Timeout output should reference the failover runbook",
-      output.contains("FAILOVER_RUNBOOK.md"));
+    // On timeout, operators should be pointed at the manual recovery steps.
+    assertTrue("Timeout output should include recovery guidance",
+      output.contains("Recovery") && output.contains("get-cluster-role-record"));
     assertTrue("Timeout output should suggest abort-failover on the standby",
       output.contains("abort-failover"));
 

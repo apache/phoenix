@@ -565,34 +565,6 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
   }
 
   /**
-   * Render a degraded cluster-role-record view from the raw HAGroupStoreRecord when normalization
-   * of a stored cluster URL fails, marking the offending URL {@code <invalid>} so the operator can
-   * repair it (e.g. {@code update -g <group> -c <good-url> -av}, adding {@code --force} if needed).
-   */
-  private void printClusterRoleRecordWithInvalidUrls(HAGroupStoreManager manager,
-    String haGroupName) {
-    System.out.println("\nCluster Role Record:");
-    System.out.println("  HA Group Name:     " + haGroupName);
-    try {
-      HAGroupStoreRecord record = manager.getHAGroupStoreRecord(haGroupName).orElse(null);
-      if (record != null) {
-        System.out.println("  Policy:            " + record.getPolicy());
-        System.out.println("  Cluster 1 URL:     "
-          + describeUrl(record.getClusterUrl(), ClusterRoleRecord.RegistryType.RPC));
-        System.out.println("  Cluster 1 Role:    " + record.getClusterRole());
-        System.out.println("  Cluster 2 URL:     "
-          + describeUrl(record.getPeerClusterUrl(), ClusterRoleRecord.RegistryType.RPC));
-      }
-    } catch (Exception e) {
-      LOG.warn("Could not read raw HA group record for " + haGroupName, e);
-    }
-    System.out.println("  \u26a0 A stored cluster URL is invalid and could not be normalized.");
-    System.out.println(
-      "    Repair with: update -g " + haGroupName + " -c <good-url> (or -pc) -av  [--force]");
-    System.out.println();
-  }
-
-  /**
    * Initiates failover on active cluster, transitioning it to standby while peer becomes active.
    * <p>
    * <b>Architecture:</b> Failover is a coordinated state transition where the currently ACTIVE
@@ -902,9 +874,19 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       try {
         printClusterRoleRecordAsText(manager.getClusterRoleRecord(haGroupName));
       } catch (RuntimeException e) {
-        // A malformed stored cluster URL makes ClusterRoleRecord normalization throw. Render a
-        // degraded view that marks the offending URL <invalid> instead of crashing.
-        printClusterRoleRecordWithInvalidUrls(manager, haGroupName);
+        // A malformed stored cluster URL makes ClusterRoleRecord normalization throw; don't crash -
+        // show the raw URLs (offending one marked <invalid>) and how to repair.
+        HAGroupStoreRecord raw = manager.getHAGroupStoreRecord(haGroupName).orElse(null);
+        System.out
+          .println("\nCluster Role Record for '" + haGroupName + "' (a stored URL is invalid):");
+        if (raw != null) {
+          System.out.println("  Cluster 1 URL:     "
+            + describeUrl(raw.getClusterUrl(), ClusterRoleRecord.RegistryType.RPC));
+          System.out.println("  Cluster 2 URL:     "
+            + describeUrl(raw.getPeerClusterUrl(), ClusterRoleRecord.RegistryType.RPC));
+        }
+        System.out.println(
+          "  Repair with: update -g " + haGroupName + " -c <good-url> (or -pc) -av  [--force]");
       }
 
       return RET_SUCCESS;
@@ -1038,9 +1020,6 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
   }
 
   /**
-   * Insert a new HA group row into SYSTEM.HA_GROUP using symmetric slot-based columns.
-   */
-  /**
    * Whether cluster A takes slot 1 in SYSTEM.HA_GROUP's slot-indexed columns. The key is the
    * formatted ZK URL compared lexicographically - the same rule ClusterRoleRecord uses for
    * url1/url2 and the periodic ZK-&gt;SYSTEM.HA_GROUP sync - so both clusters of a pair persist
@@ -1048,15 +1027,19 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
    * (the read path resolves a cluster's HDFS URL by matching its ZK URL slot).
    */
   private static boolean firstClusterTakesSlot1(String zkUrlA, String zkUrlB) {
-    String fa = StringUtils.isBlank(zkUrlA)
+    String formattedZkUrlA = StringUtils.isBlank(zkUrlA)
       ? null
       : JDBCUtil.formatUrl(zkUrlA, ClusterRoleRecord.RegistryType.ZK);
-    String fb = StringUtils.isBlank(zkUrlB)
+    String formattedZkUrlB = StringUtils.isBlank(zkUrlB)
       ? null
       : JDBCUtil.formatUrl(zkUrlB, ClusterRoleRecord.RegistryType.ZK);
-    return StringUtils.isBlank(fb) || (StringUtils.isNotBlank(fa) && fa.compareTo(fb) <= 0);
+    return StringUtils.isBlank(formattedZkUrlB) || (StringUtils.isNotBlank(formattedZkUrlA)
+      && formattedZkUrlA.compareTo(formattedZkUrlB) <= 0);
   }
 
+  /**
+   * Insert a new HA group row into SYSTEM.HA_GROUP using symmetric slot-based columns.
+   */
   private void insertIntoSystemTable(String haGroupName, String policy, String zkUrl1,
     String clusterUrl1, ClusterRole clusterRole1, String hdfsUrl1, String zkUrl2,
     String clusterUrl2, ClusterRole clusterRole2, String hdfsUrl2, long adminVersion,
@@ -1237,12 +1220,11 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     System.err.println("         get-cluster-role-record -g " + haGroupName);
     System.err.println("    2. If the clusters were partitioned, restore connectivity and re-check."
       + " Transient states are not auto-converged once a notification is lost.");
-    System.err.println("    3. If the standby is still STANDBY_TO_ACTIVE, abort on the standby:");
+    System.err.println("    3. If a cluster is stuck in a transitional *_TO_* state, abort the"
+      + " failover on the standby; if it still will not converge, force a steady state (last"
+      + " resort):");
     System.err.println("         abort-failover -g " + haGroupName);
-    System.err.println("    4. If a cluster is stuck in a *_TO_* state with no progress, force it"
-      + " to a steady state on that cluster:");
     System.err.println("         update -g " + haGroupName + " -s <ACTIVE_IN_SYNC|STANDBY> -av -F");
-    System.err.println("    See FAILOVER_RUNBOOK.md (sections 5-7) for the full procedure.");
   }
 
   /**
