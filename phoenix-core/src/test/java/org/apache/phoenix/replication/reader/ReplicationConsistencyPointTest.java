@@ -24,88 +24,9 @@ import org.apache.hadoop.conf.Configuration;
 import org.junit.Test;
 
 /**
- * Tests for the replication compaction guard row-level cap logic. Verifies the contract:
- * maxLookbackWindowStartForRow = min(max(ttlWindowStart, maxLookbackWindowStart), consistencyPoint)
+ * Tests for ReplicationLogReplayService.resolveConsistencyPoint caching behavior.
  */
-public class ReplicationCompactionGuardTest {
-
-  @Test
-  public void testTtlHigherThanConsistencyPoint_capApplied() {
-    long now = System.currentTimeMillis();
-    long maxLookbackWindowStart = now - 86400000L;
-    long ttlWindowStart = now - 3600000L;
-    long consistencyPoint = now - 7200000L;
-
-    long result = ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
-      maxLookbackWindowStart, consistencyPoint);
-
-    assertEquals(consistencyPoint, result);
-  }
-
-  @Test
-  public void testTtlLowerThanConsistencyPoint_noCapNeeded() {
-    long now = System.currentTimeMillis();
-    long maxLookbackWindowStart = now - 86400000L;
-    long ttlWindowStart = now - 14400000L;
-    long consistencyPoint = now - 3600000L;
-
-    long result = ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
-      maxLookbackWindowStart, consistencyPoint);
-
-    assertEquals(ttlWindowStart, result);
-  }
-
-  @Test
-  public void testNoTtl_capAppliedOnMaxLookback() {
-    long now = System.currentTimeMillis();
-    long maxLookbackWindowStart = now - 86400000L;
-    long ttlWindowStart = 1L;
-    long consistencyPoint = now - 172800000L;
-
-    long result = ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
-      maxLookbackWindowStart, consistencyPoint);
-
-    assertEquals(consistencyPoint, result);
-  }
-
-  @Test
-  public void testNoTtl_consistencyPointAheadOfMaxLookback() {
-    long now = System.currentTimeMillis();
-    long maxLookbackWindowStart = now - 86400000L;
-    long ttlWindowStart = 1L;
-    long consistencyPoint = now - 60000L;
-
-    long result = ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
-      maxLookbackWindowStart, consistencyPoint);
-
-    assertEquals(maxLookbackWindowStart, result);
-  }
-
-  @Test
-  public void testConsistencyPointZero_retainsAll() {
-    long now = System.currentTimeMillis();
-    long maxLookbackWindowStart = now - 86400000L;
-    long ttlWindowStart = now - 3600000L;
-    long consistencyPoint = 0L;
-
-    long result = ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
-      maxLookbackWindowStart, consistencyPoint);
-
-    assertEquals(0L, result);
-  }
-
-  @Test
-  public void testGuardDisabled_longMaxValueNoOp() {
-    long now = System.currentTimeMillis();
-    long maxLookbackWindowStart = now - 86400000L;
-    long ttlWindowStart = now - 3600000L;
-    long consistencyPoint = Long.MAX_VALUE;
-
-    long result = ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
-      maxLookbackWindowStart, consistencyPoint);
-
-    assertEquals(ttlWindowStart, result);
-  }
+public class ReplicationConsistencyPointTest {
 
   @Test
   public void testCachedConsistencyPointAvoidsRepeatedFetches() {

@@ -298,15 +298,6 @@ public class ReplicationLogReplayService {
     }
   }
 
-  /**
-   * Computes the effective max-lookback boundary for a row, capped by the replication consistency
-   * point. This is the single source of truth for the formula used by CompactionScanner.RowContext.
-   */
-  public static long computeRowMaxLookbackWithGuard(long ttlWindowStart,
-    long maxLookbackWindowStart, long replicationConsistencyPoint) {
-    return Math.min(Math.max(ttlWindowStart, maxLookbackWindowStart), replicationConsistencyPoint);
-  }
-
   /** Returns the list of HA groups on the cluster */
   protected List<String> getReplicationGroups() throws SQLException {
     return HAGroupStoreManager.getInstance(conf).getHAGroupNames();
