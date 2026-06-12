@@ -1647,6 +1647,15 @@ public class CompactionScanner implements InternalScanner {
   }
 
   /**
+   * Computes the effective max-lookback boundary for a row, capped by the replication consistency
+   * point. Formula: min(max(ttlWindowStart, maxLookbackWindowStart), consistencyPoint).
+   */
+  public static long computeRowMaxLookbackWithGuard(long ttlWindowStart,
+    long maxLookbackWindowStart, long replicationConsistencyPoint) {
+    return Math.min(Math.max(ttlWindowStart, maxLookbackWindowStart), replicationConsistencyPoint);
+  }
+
+  /**
    * The context for a given row during compaction. A row may have multiple compaction row versions.
    * CompactionScanner uses the same row context for these versions.
    */
@@ -1672,9 +1681,8 @@ public class CompactionScanner implements InternalScanner {
     private void setTTL(long ttlInSecs) {
       this.ttl = Math.max(ttlInSecs * 1000, maxLookbackInMillis + 1);
       this.ttlWindowStart = ttlInSecs == HConstants.FOREVER ? 1 : compactionTime - ttl;
-      this.maxLookbackWindowStartForRow =
-        ReplicationLogReplayService.computeRowMaxLookbackWithGuard(ttlWindowStart,
-          maxLookbackWindowStart, replicationConsistencyPoint);
+      this.maxLookbackWindowStartForRow = computeRowMaxLookbackWithGuard(ttlWindowStart,
+        maxLookbackWindowStart, replicationConsistencyPoint);
       if (LOGGER.isTraceEnabled()) {
         LOGGER.trace(String.format("RowContext:- (ttlWindowStart=%d, maxLookbackWindowStart=%d)",
           ttlWindowStart, maxLookbackWindowStart));
