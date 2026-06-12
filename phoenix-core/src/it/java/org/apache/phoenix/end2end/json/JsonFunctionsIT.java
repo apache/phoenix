@@ -113,7 +113,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
 
       // Check here for the JSON server side projection
       rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      assertTrue(QueryUtil.getExplainPlan(rs).contains("    SERVER JSON FUNCTION PROJECTION"));
+      assertTrue(QueryUtil.getExplainPlan(rs).contains("    SERVER JSON PROJECTION "));
     }
   }
 
@@ -542,7 +542,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       String query = String.format(queryTemplate, "AndersenFamily");
       // check if the explain plan indicates server side execution
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      assertFalse(QueryUtil.getExplainPlan(rs).contains("    SERVER JSON FUNCTION PROJECTION"));
+      assertFalse(QueryUtil.getExplainPlan(rs).contains("    SERVER JSON PROJECTION "));
     }
   }
 
@@ -568,8 +568,8 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
       // Since we are using complete array and json col, no server side execution
       ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertFalse(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
-      assertPlan(conn, query).serverArrayElementProjection(false)
+      assertFalse(explainPlan.contains("    SERVER JSON PROJECTION "));
+      assertPlan(conn, query).serverParsedProjectionsNone()
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -583,8 +583,8 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
         + " WHERE JSON_VALUE(jsoncol, '$.name') = 'AndersenFamily'";
       rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       explainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
-      assertPlan(conn, query).serverArrayElementProjection(true)
+      assertTrue(explainPlan.contains("    SERVER JSON PROJECTION "));
+      assertPlan(conn, query).serverParsedProjectionCount("ARRAY", 1)
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       // only Array optimization and not Json
@@ -592,8 +592,8 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
         + " WHERE JSON_VALUE(jsoncol, '$.name') = 'AndersenFamily'";
       rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       explainPlan = QueryUtil.getExplainPlan(rs);
-      assertFalse(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
-      assertPlan(conn, query).serverArrayElementProjection(true)
+      assertFalse(explainPlan.contains("    SERVER JSON PROJECTION "));
+      assertPlan(conn, query).serverParsedProjectionCount("ARRAY", 1)
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       // only Json optimization and not Array Index
@@ -601,8 +601,8 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
         + " WHERE JSON_VALUE(jsoncol, '$.name') = 'AndersenFamily'";
       rs = conn.createStatement().executeQuery("EXPLAIN " + query);
       explainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(explainPlan.contains("    SERVER JSON FUNCTION PROJECTION"));
-      assertPlan(conn, query).serverArrayElementProjection(false)
+      assertTrue(explainPlan.contains("    SERVER JSON PROJECTION "));
+      assertPlan(conn, query).serverParsedProjectionCount("ARRAY", 0)
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
     }
   }

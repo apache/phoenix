@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.log.QueryLogger;
@@ -106,6 +107,7 @@ public class StatementContext {
   private int derivedTableFlattenCount;
   private List<Pair<ParseNode, String>> indexExpressionSubstitutions;
   private Set<Pair<String, String>> partialIndexCheckedSet;
+  private Map<String, List<Expression>> serverParsedProjections;
   private StatementContext parentContext;
 
   public StatementContext(PhoenixStatement statement) {
@@ -147,6 +149,7 @@ public class StatementContext {
     this.derivedTableFlattenCount = context.derivedTableFlattenCount;
     this.indexExpressionSubstitutions = context.indexExpressionSubstitutions;
     this.partialIndexCheckedSet = context.partialIndexCheckedSet;
+    this.serverParsedProjections = context.serverParsedProjections;
     this.parentContext = context.parentContext;
   }
 
@@ -214,6 +217,7 @@ public class StatementContext {
     this.derivedTableFlattenCount = 0;
     this.indexExpressionSubstitutions = new ArrayList<>();
     this.partialIndexCheckedSet = Sets.newHashSet();
+    this.serverParsedProjections = null;
     this.parentContext = null;
   }
 
@@ -506,6 +510,7 @@ public class StatementContext {
     this.derivedTableFlattenCount = source.derivedTableFlattenCount;
     this.indexExpressionSubstitutions = source.indexExpressionSubstitutions;
     this.partialIndexCheckedSet = source.partialIndexCheckedSet;
+    this.serverParsedProjections = source.serverParsedProjections;
   }
 
   public void incrementDerivedTableFlattenCount() {
@@ -532,6 +537,22 @@ public class StatementContext {
    */
   public boolean markPartialIndexChecked(String tableName, String indexName) {
     return partialIndexCheckedSet.add(new Pair<>(tableName, indexName));
+  }
+
+  /**
+   * Server-evaluated parsed projection expressions, keyed by the scan attribute they were
+   * serialized into ({@code _SpecificArrayIndex}, {@code _JsonValueFunction},
+   * {@code _JsonQueryFunction}, {@code _BsonValueFunction}). Populated by
+   * {@link ProjectionCompiler} when at least one JSON/BSON/array path expression is pushed to the
+   * server, and consumed by {@code ExplainTable} to render the per-type {@code SERVER * PROJECTION}
+   * clauses. {@code null} when no server-side parsed projection compile occurred.
+   */
+  public Map<String, List<Expression>> getServerParsedProjections() {
+    return serverParsedProjections;
+  }
+
+  public void setServerParsedProjections(Map<String, List<Expression>> serverParsedProjections) {
+    this.serverParsedProjections = serverParsedProjections;
   }
 
   public StatementContext getParentContext() {
