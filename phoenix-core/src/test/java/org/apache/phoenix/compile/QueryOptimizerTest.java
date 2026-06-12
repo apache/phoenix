@@ -512,6 +512,48 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
   }
 
   @Test
+  public void testFunctionalIndexChosenRuleMatchesExpression() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    conn.createStatement().execute(
+      "create table fe_match (id varchar not null primary key, name varchar, val varchar)");
+    conn.createStatement().execute("create index fe_match_upper_idx on fe_match (UPPER(name))");
+    // The functional index's indexed expression matches the query's UPPER(NAME) path expression,
+    // so the chosen index's rule is overridden to the "matches <expr>" form. Assert on the rule
+    // prefix.
+    assertPlan(conn, "select id from fe_match where UPPER(name) = 'ABC'")
+      .table("FE_MATCH_UPPER_IDX").indexRule(OptimizerReasons.matches("UPPER(NAME)"));
+  }
+
+  @Test
+  public void testFunctionalIndexRejectedPathExpressionDoesNotMatch() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    conn.createStatement().execute(
+      "create table fe_nomatch (id varchar not null primary key, name varchar, val varchar, other varchar)");
+    conn.createStatement().execute("create index fe_nomatch_upper_idx on fe_nomatch (UPPER(name))");
+    conn.createStatement()
+      .execute("create index fe_nomatch_val_idx on fe_nomatch (val) include (other)");
+    // The query never references UPPER(NAME), so the functional index matched no path expression
+    // and its generic "does not cover projection" rejection is swapped for the more specific
+    // "path expression does not match".
+    assertPlan(conn, "select val, other from fe_nomatch where val = 'x'")
+      .table("FE_NOMATCH_VAL_IDX").indexRejectedContains("FE_NOMATCH_UPPER_IDX",
+        OptimizerReasons.REASON_PATH_EXPRESSION_DOES_NOT_MATCH);
+  }
+
+  @Test
+  public void testFunctionalIndexRejectedDoesNotCoverProjection() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    conn.createStatement().execute(
+      "create table fe_cover (id varchar not null primary key, name varchar, val varchar)");
+    conn.createStatement().execute("create index fe_cover_upper_idx on fe_cover (UPPER(name))");
+    // The functional index's expression DOES match UPPER(NAME) in the query, but VAL is not in the
+    // index, so the rejection stays "does not cover projection" rather than being swapped.
+    assertPlan(conn, "select UPPER(name), val from fe_cover where UPPER(name) = 'ABC'")
+      .table("FE_COVER").indexRejectedContains("FE_COVER_UPPER_IDX",
+        OptimizerReasons.REASON_DOES_NOT_COVER_PROJECTION);
+  }
+
+  @Test
   public void testCharArrayLength() throws Exception {
     Connection conn = DriverManager.getConnection(getUrl());
     conn.createStatement().execute(
