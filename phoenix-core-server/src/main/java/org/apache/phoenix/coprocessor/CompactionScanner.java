@@ -1650,7 +1650,7 @@ public class CompactionScanner implements InternalScanner {
    * Computes the effective max-lookback boundary for a row, capped by the replication consistency
    * point. Formula: min(max(ttlWindowStart, maxLookbackWindowStart), consistencyPoint).
    */
-  public static long computeRowMaxLookbackWithGuard(long ttlWindowStart,
+  private static long computeRowMaxLookbackWithGuard(long ttlWindowStart,
     long maxLookbackWindowStart, long replicationConsistencyPoint) {
     return Math.min(Math.max(ttlWindowStart, maxLookbackWindowStart), replicationConsistencyPoint);
   }
