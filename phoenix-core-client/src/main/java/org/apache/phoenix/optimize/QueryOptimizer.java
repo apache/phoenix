@@ -495,6 +495,7 @@ public class QueryOptimizer {
       isHinted, indexSelect, resolver);
   }
 
+  @SuppressWarnings("rawtypes")
   private AddPlanResult addPlan(PhoenixStatement statement, SelectStatement select, PTable index,
     List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory,
     QueryPlan dataPlan, boolean isHinted, SelectStatement indexSelect, ColumnResolver resolver)
@@ -531,12 +532,22 @@ public class QueryOptimizer {
         }
         // translate nodes that match expressions that are indexed to the
         // associated column parse node
+        IndexExpressionParseNodeRewriter indexExpressionRewriter =
+          new IndexExpressionParseNodeRewriter(index, null, statement.getConnection(),
+            indexSelect.getUdfParseNodes());
         SelectStatement rewrittenIndexSelect =
-          ParseNodeRewriter.rewrite(indexSelect, new IndexExpressionParseNodeRewriter(index, null,
-            statement.getConnection(), indexSelect.getUdfParseNodes()));
+          ParseNodeRewriter.rewrite(indexSelect, indexExpressionRewriter);
+        // Record which functional index expressions actually matched this query, so the
+        // optimizer can label the chosen index's rule and distinguish functional index rejections
+        // that matched nothing.
+        if (indexExpressionRewriter.hasFunctionalColumns()) {
+          dataPlan.getContext().recordFunctionalIndex(index.getTableName().getString());
+        }
+        dataPlan.getContext().recordAppliedIndexExpressionMatches(index.getTableName().getString(),
+          indexExpressionRewriter.getAppliedFunctionalSubstitutions().values());
         QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver,
           targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(),
-          isProjected, true, dataPlans);
+          isProjected, true, dataPlans).withRewriteContext(dataPlan.getContext());
 
         QueryPlan plan = compiler.compile();
         if (indexTable.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
@@ -579,10 +590,8 @@ public class QueryOptimizer {
             maintainer.getIndexedColumnInfo();
           for (org.apache.hadoop.hbase.util.Pair<String, String> pair : indexedColumns) {
             // The first member of the pair is the column family. For the data table PK columns, the
-            // column
-            // family is set to null. The data PK columns should not be added to the set of data
-            // columns
-            // to join back to index rows
+            // column family is set to null. The data PK columns should not be added to the set of
+            // data columns to join back to index rows
             if (pair.getFirst() != null) {
               PColumn pColumn = dataTable.getColumnForColumnName(pair.getSecond());
               // The following adds the column to the set
@@ -598,8 +607,7 @@ public class QueryOptimizer {
         indexTable = indexTableRef.getTable();
         indexState = indexTable.getIndexState();
         // Checking number of columns handles the wildcard cases correctly, as in that case the
-        // index
-        // must contain all columns from the data table to be able to be used.
+        // index must contain all columns from the data table to be able to be used.
         if (
           indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE
             || (indexState == PIndexState.PENDING_DISABLE && isUnderPendingDisableThreshold(
@@ -687,7 +695,8 @@ public class QueryOptimizer {
         return AddPlanResult.rejected(index, OptimizerReasons.REASON_DEGENERATE_RANGE);
       }
     }
-    return AddPlanResult.rejected(index, OptimizerReasons.REASON_DOES_NOT_COVER_PROJECTION);
+    return AddPlanResult.rejected(index, adjustReasonForFunctionalIndex(index,
+      OptimizerReasons.REASON_DOES_NOT_COVER_PROJECTION, dataPlan.getContext()));
   }
 
   // returns true if we can still use the index
@@ -935,10 +944,57 @@ public class QueryOptimizer {
    * can use this inline at a {@code return} site.
    */
   private static QueryPlan recordDecision(QueryPlan winner, String rule, DecisionState state) {
+    String functionalRule = functionalIndexRule(winner);
+    if (functionalRule != null) {
+      rule = functionalRule;
+    }
     winner.setOptimizerDecision(
       new OptimizerDecision(winner.getTableRef().getTable().getTableName().getString(), rule,
         state == null ? null : state.getRejections()));
     return winner;
+  }
+
+  /**
+   * Returns {@link OptimizerReasons#matches(String)} for {@code winner} when it is a functional
+   * index whose indexed expression actually substituted a path expression in the user's query, or
+   * {@code null} when the functional index rule override does not apply. The applied matches are
+   * only ever recorded for genuine expression substitutions, so a non-empty match list implies the
+   * chosen plan is a functional index that matched.
+   */
+  private static String functionalIndexRule(QueryPlan winner) {
+    PTable table = winner.getTableRef().getTable();
+    List<String> matches =
+      winner.getContext().getAppliedIndexExpressionMatches(table.getTableName().getString());
+    if (matches.isEmpty()) {
+      return null;
+    }
+    return OptimizerReasons.matches(matches.get(0));
+  }
+
+  /**
+   * Swaps a generic coverage driven rejection reason for
+   * {@link OptimizerReasons#REASON_PATH_EXPRESSION_DOES_NOT_MATCH} when {@code index} is a
+   * functional index for which no query expression matched its indexed expression. Other reasons,
+   * and functional indexes that did match an expression, keep their original reason.
+   */
+  private static String adjustReasonForFunctionalIndex(PTable index, String reason,
+    StatementContext rewriteContext) {
+    if (!rewriteContext.isFunctionalIndex(index.getTableName().getString())) {
+      return reason;
+    }
+    if (
+      !OptimizerReasons.REASON_DOES_NOT_COVER_PROJECTION.equals(reason)
+        && !OptimizerReasons.REASON_NO_PK_PREFIX_BOUND.equals(reason)
+        && !OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE.equals(reason)
+    ) {
+      return reason;
+    }
+    if (
+      !rewriteContext.getAppliedIndexExpressionMatches(index.getTableName().getString()).isEmpty()
+    ) {
+      return reason;
+    }
+    return OptimizerReasons.REASON_PATH_EXPRESSION_DOES_NOT_MATCH;
   }
 
   /** First plan in {@code plans} that is not {@code exclude}, or {@code null} if there is none. */
@@ -998,9 +1054,11 @@ public class QueryOptimizer {
         continue;
       }
       if (adjustedBoundCount(plan, boundRanges) < winnerBound) {
-        state.reject(table, OptimizerReasons.REASON_NO_PK_PREFIX_BOUND);
+        state.reject(table, adjustReasonForFunctionalIndex(table,
+          OptimizerReasons.REASON_NO_PK_PREFIX_BOUND, winner.getContext()));
       } else if (table.getIndexType() == IndexType.LOCAL && winnerNonLocal) {
-        state.reject(table, OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE);
+        state.reject(table, adjustReasonForFunctionalIndex(table,
+          OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE, winner.getContext()));
       }
     }
   }
@@ -1055,10 +1113,20 @@ public class QueryOptimizer {
       IndexStatementRewriter.translate(FACTORY.select(select, newFrom), resolver, replacement);
     for (TableRef indexTableRef : replacement.values()) {
       // replace expressions with corresponding matching columns for functional indexes
-      indexSelect = ParseNodeRewriter.rewrite(indexSelect,
+      IndexExpressionParseNodeRewriter indexExpressionRewriter =
         new IndexExpressionParseNodeRewriter(indexTableRef.getTable(),
           indexTableRef.getTableAlias(), connection, indexSelect.getUdfParseNodes(),
-          breadcrumbContext));
+          breadcrumbContext);
+      indexSelect = ParseNodeRewriter.rewrite(indexSelect, indexExpressionRewriter);
+      // Surface which functional index expressions actually matched so the optimizer can label
+      // the chosen index's rule and distinguish functional index rejections that matched nothing.
+      if (indexExpressionRewriter.hasFunctionalColumns()) {
+        breadcrumbContext
+          .recordFunctionalIndex(indexTableRef.getTable().getTableName().getString());
+      }
+      breadcrumbContext.recordAppliedIndexExpressionMatches(
+        indexTableRef.getTable().getTableName().getString(),
+        indexExpressionRewriter.getAppliedFunctionalSubstitutions().values());
     }
 
     return indexSelect;

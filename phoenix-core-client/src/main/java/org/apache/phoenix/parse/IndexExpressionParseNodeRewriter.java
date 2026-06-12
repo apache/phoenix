@@ -19,6 +19,7 @@ package org.apache.phoenix.parse;
 
 import java.sql.SQLException;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.phoenix.compile.ColumnResolver;
@@ -44,6 +45,19 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
 
   private final Map<ParseNode, ParseNode> indexedParseNodeToColumnParseNodeMap;
 
+  /**
+   * Maps the rewritten parse node of a functional index column to a [colName, expressionStr] pair.
+   * Plain PK columns are excluded.
+   */
+  private final Map<ParseNode, String[]> indexedParseNodeToFunctionalColumn;
+
+  /**
+   * Records the functional index substitutions that actually fired against the query, mapping the
+   * index column name to the expression string. Insertion order is preserved so callers can report
+   * matches in first-seen order.
+   */
+  private final Map<String, String> appliedFunctionalSubstitutions = new LinkedHashMap<>();
+
   public IndexExpressionParseNodeRewriter(PTable index, String alias, PhoenixConnection connection,
     Map<String, UDFParseNode> udfParseNodes) throws SQLException {
     this(index, alias, connection, udfParseNodes, null);
@@ -54,6 +68,7 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
     throws SQLException {
     indexedParseNodeToColumnParseNodeMap =
       Maps.newHashMapWithExpectedSize(index.getColumns().size());
+    indexedParseNodeToFunctionalColumn = Maps.newHashMapWithExpectedSize(index.getColumns().size());
     NamedTableNode tableNode =
       NamedTableNode.create(alias, TableName.create(index.getParentSchemaName().getString(),
         index.getParentTableName().getString()), Collections.<ColumnDef> emptyList());
@@ -80,6 +95,14 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
         columnParseNode = NODE_FACTORY.cast(columnParseNode, expressionDataType, null, null);
       }
       indexedParseNodeToColumnParseNodeMap.put(indexedParseNode, columnParseNode);
+      // Only true functional columns defined over an expression get an applied match entry. A
+      // plain indexed or PK column's expression string parses to a bare column reference. An
+      // expression column (e.g. UPPER(NAME)) parses to a compound node.
+      if (!(expressionParseNode instanceof ColumnParseNode)) {
+        // Trim leading/trailing whitespace
+        indexedParseNodeToFunctionalColumn.put(indexedParseNode,
+          new String[] { colName, expressionStr.trim() });
+      }
       if (breadcrumbContext != null) {
         breadcrumbContext.addAppliedRewrite("INDEX EXPRESSION " + expressionStr + " AS " + colName);
         breadcrumbContext.addIndexExpressionSubstitution(indexedParseNode, colName);
@@ -90,9 +113,32 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
   @Override
   protected ParseNode leaveCompoundNode(CompoundParseNode node, List<ParseNode> children,
     CompoundNodeFactory factory) {
-    return indexedParseNodeToColumnParseNodeMap.containsKey(node)
-      ? indexedParseNodeToColumnParseNodeMap.get(node)
-      : super.leaveCompoundNode(node, children, factory);
+    ParseNode replacement = indexedParseNodeToColumnParseNodeMap.get(node);
+    if (replacement == null) {
+      return super.leaveCompoundNode(node, children, factory);
+    }
+    // A functional index substitution actually fired for this query node.
+    String[] functionalColumn = indexedParseNodeToFunctionalColumn.get(node);
+    if (functionalColumn != null) {
+      appliedFunctionalSubstitutions.put(functionalColumn[0], functionalColumn[1]);
+    }
+    return replacement;
+  }
+
+  /**
+   * Returns the functional index substitutions that actually fired against the query, keyed by
+   * index column name with the expression string as the value, in first-seen order.
+   */
+  public Map<String, String> getAppliedFunctionalSubstitutions() {
+    return Collections.unmodifiableMap(appliedFunctionalSubstitutions);
+  }
+
+  /**
+   * Returns {@code true} if the index this rewriter was built for has at least one functional
+   * column, regardless of whether any such column matched the query.
+   */
+  public boolean hasFunctionalColumns() {
+    return !indexedParseNodeToFunctionalColumn.isEmpty();
   }
 
 }
