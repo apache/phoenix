@@ -21,6 +21,7 @@ import java.sql.SQLException;
 import java.text.Format;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.Iterator;
@@ -106,6 +107,8 @@ public class StatementContext {
   private List<String> appliedRewrites;
   private int derivedTableFlattenCount;
   private List<Pair<ParseNode, String>> indexExpressionSubstitutions;
+  private Map<String, List<String>> appliedIndexExpressionMatches;
+  private Set<String> functionalIndexNames;
   private Set<Pair<String, String>> partialIndexCheckedSet;
   private Map<String, List<Expression>> serverParsedProjections;
   private StatementContext parentContext;
@@ -148,6 +151,8 @@ public class StatementContext {
     this.appliedRewrites = context.appliedRewrites;
     this.derivedTableFlattenCount = context.derivedTableFlattenCount;
     this.indexExpressionSubstitutions = context.indexExpressionSubstitutions;
+    this.appliedIndexExpressionMatches = context.appliedIndexExpressionMatches;
+    this.functionalIndexNames = context.functionalIndexNames;
     this.partialIndexCheckedSet = context.partialIndexCheckedSet;
     this.serverParsedProjections = context.serverParsedProjections;
     this.parentContext = context.parentContext;
@@ -216,6 +221,8 @@ public class StatementContext {
     this.appliedRewrites = new ArrayList<>();
     this.derivedTableFlattenCount = 0;
     this.indexExpressionSubstitutions = new ArrayList<>();
+    this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
+    this.functionalIndexNames = Sets.newHashSet();
     this.partialIndexCheckedSet = Sets.newHashSet();
     this.serverParsedProjections = null;
     this.parentContext = null;
@@ -509,6 +516,8 @@ public class StatementContext {
     this.appliedRewrites = source.appliedRewrites;
     this.derivedTableFlattenCount = source.derivedTableFlattenCount;
     this.indexExpressionSubstitutions = source.indexExpressionSubstitutions;
+    this.appliedIndexExpressionMatches = source.appliedIndexExpressionMatches;
+    this.functionalIndexNames = source.functionalIndexNames;
     this.partialIndexCheckedSet = source.partialIndexCheckedSet;
     this.serverParsedProjections = source.serverParsedProjections;
   }
@@ -528,6 +537,45 @@ public class StatementContext {
 
   public void addIndexExpressionSubstitution(ParseNode source, String indexColumnName) {
     indexExpressionSubstitutions.add(new Pair<>(source, indexColumnName));
+  }
+
+  /**
+   * Records the path expressions that actually substituted against this query for the given
+   * functional index. Used by the optimizer to label the chosen index's rule as
+   * {@code matches <expr>} and to distinguish functional index rejections that matched no query
+   * expression. Deduplicated per index, preserving first seen order.
+   */
+  public void recordAppliedIndexExpressionMatches(String indexName,
+    Collection<String> expressions) {
+    if (expressions == null || expressions.isEmpty()) {
+      return;
+    }
+    List<String> matches =
+      appliedIndexExpressionMatches.computeIfAbsent(indexName, k -> new ArrayList<>());
+    for (String expression : expressions) {
+      if (!matches.contains(expression)) {
+        matches.add(expression);
+      }
+    }
+  }
+
+  /**
+   * Returns the path expressions that actually substituted against this query for the given
+   * functional index, or an empty list if none were recorded.
+   */
+  public List<String> getAppliedIndexExpressionMatches(String indexName) {
+    List<String> matches = appliedIndexExpressionMatches.get(indexName);
+    return matches == null ? Collections.emptyList() : matches;
+  }
+
+  /** Marks the given index as a functional index. */
+  public void recordFunctionalIndex(String indexName) {
+    functionalIndexNames.add(indexName);
+  }
+
+  /** Returns whether the given index was recorded as a functional index during rewriting. */
+  public boolean isFunctionalIndex(String indexName) {
+    return functionalIndexNames.contains(indexName);
   }
 
   /**
