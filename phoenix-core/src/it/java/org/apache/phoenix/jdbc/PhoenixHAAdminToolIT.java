@@ -1120,10 +1120,11 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
   }
 
   /**
-   * update rejects a malformed URL field, but --force stores it as-is (recovery path).
+   * update rejects malformed ZK URL fields even with --force: ZK URLs are identity keys used by
+   * HAGroupStoreClient and must remain parseable.
    */
   @Test(timeout = 180000)
-  public void testUpdateRejectsMalformedPeerZkUrlUnlessForced() throws Exception {
+  public void testUpdateRejectsMalformedPeerZkUrlEvenWhenForced() throws Exception {
     // Initialize the ZK znode from the @Before system-table row so -av can read the version.
     new HAGroupStoreManager(CLUSTERS.getHBaseCluster1().getConfiguration())
       .getHAGroupStoreRecord(haGroupName);
@@ -1136,7 +1137,8 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     STDOUT_CAPTURE.reset();
     int forcedRet = ToolRunner.run(adminTool,
       new String[] { "update", "-g", haGroupName, "-pz", MALFORMED_URL, "-av", "-F" });
-    assertEquals("Malformed peer ZK URL should be accepted with --force", RET_SUCCESS, forcedRet);
+    assertEquals("Malformed peer ZK URL should be rejected even with --force", RET_ARGUMENT_ERROR,
+      forcedRet);
   }
 
   /**
@@ -1153,6 +1155,26 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
         CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1", CLUSTERS.getHdfsUrl1(), "-hdfs2",
         CLUSTERS.getHdfsUrl2() });
     assertEquals("Malformed cluster-url-1 should be rejected on create", RET_ARGUMENT_ERROR, ret);
+
+    assertTrue("No row should be created for a rejected create",
+      querySystemTable(createGroup, CLUSTERS.getZkUrl1()) == null);
+  }
+
+  /**
+   * create rejects malformed ZK URL fields even with --force.
+   */
+  @Test(timeout = 180000)
+  public void testCreateRejectsMalformedZkUrlEvenWhenForced() throws Exception {
+    String createGroup = "testCreateBadZkUrl_" + System.currentTimeMillis();
+    System.setOut(new PrintStream(STDOUT_CAPTURE));
+
+    int ret = ToolRunner.run(adminTool,
+      new String[] { "create", "-g", createGroup, "-p", "FAILOVER", "-zk1", MALFORMED_URL, "-c1",
+        CLUSTERS.getMasterAddress1(), "-cr1", "ACTIVE", "-zk2", CLUSTERS.getZkUrl2(), "-c2",
+        CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1", CLUSTERS.getHdfsUrl1(), "-hdfs2",
+        CLUSTERS.getHdfsUrl2(), "-F" });
+    assertEquals("Malformed zk-url-1 should be rejected even with --force", RET_ARGUMENT_ERROR,
+      ret);
 
     assertTrue("No row should be created for a rejected create",
       querySystemTable(createGroup, CLUSTERS.getZkUrl1()) == null);

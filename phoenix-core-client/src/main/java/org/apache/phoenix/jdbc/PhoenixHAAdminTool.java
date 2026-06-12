@@ -330,8 +330,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       }
 
       // Validate URLs against the registry type the read path normalizes them with (ZK quorum vs
-      // RPC/master); --force stores malformed values as-is.
-      validateUrlsOrThrow(force, ClusterRoleRecord.RegistryType.ZK, "peer-zk-url", peerZkUrl);
+      // RPC/master). ZK URLs identify the HA pair and must remain parseable even with --force.
+      validateUrlsOrThrow(false, ClusterRoleRecord.RegistryType.ZK, "peer-zk-url", peerZkUrl);
       validateUrlsOrThrow(force, ClusterRoleRecord.RegistryType.RPC, "cluster-url", clusterUrl,
         "peer-cluster-url", peerClusterUrl);
 
@@ -512,10 +512,11 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
    * Validate that each provided URL parses under {@link JDBCUtil#formatUrl(String, RegistryType)}
    * for the given registry type - the same normalization the HA read path applies (ZK URLs go
    * through {@code RegistryType.ZK}, cluster URLs through {@code RegistryType.RPC}). A value that
-   * throws here would later break HA group enumeration and cluster-role-record construction, so it
-   * is rejected at write time. Passing --force stores the value as-is (logged), mirroring the
-   * state/lastSyncTime force-guard.
-   * @param force        when true, malformed URLs are logged and allowed through, not rejected
+   * throws here would later break HA group enumeration and cluster-role-record construction. Passing
+   * --force stores non-ZK URL values as-is (logged), mirroring the state/lastSyncTime force-guard.
+   * ZK URLs must be validated with {@code force=false} because HAGroupStoreClient uses them as
+   * identity keys and cannot safely operate on malformed values.
+   * @param force        when true, malformed non-ZK URLs are logged and allowed through
    * @param registryType registry type whose normalization the URLs must satisfy
    * @param labeledUrls  flat [label0, url0, label1, url1, ...] pairs; blank URLs are skipped
    * @throws IllegalArgumentException if any URL is malformed and force is false
@@ -931,8 +932,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       final boolean force = cmdLine.hasOption(FORCE_OPT.getOpt());
 
       // Validate URLs against the registry type the read path normalizes them with (ZK quorum vs
-      // RPC/master); --force stores malformed values as-is.
-      validateUrlsOrThrow(force, ClusterRoleRecord.RegistryType.ZK, "zk-url-1", zkUrl1, "zk-url-2",
+      // RPC/master). ZK URLs identify the HA pair and must remain parseable even with --force.
+      validateUrlsOrThrow(false, ClusterRoleRecord.RegistryType.ZK, "zk-url-1", zkUrl1, "zk-url-2",
         zkUrl2);
       validateUrlsOrThrow(force, ClusterRoleRecord.RegistryType.RPC, "cluster-url-1", clusterUrl1,
         "cluster-url-2", clusterUrl2);
@@ -1748,8 +1749,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     System.out.println();
     System.out.println("OPTIONAL:");
     System.out.println("  -v,     --admin-version <ver>   Initial admin version (default: 1)");
-    System.out
-      .println("  -F,     --force                 Store malformed URLs as-is (skip checks)");
+    System.out.println(
+      "  -F,     --force                 Store malformed cluster URLs as-is; ZK URLs still checked");
     System.out.println("  -d,     --dry-run               Show what would be created");
     System.out.println("  -h,     --help                  Show this help");
     System.out.println();
@@ -1795,7 +1796,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     System.out.println();
     System.out.println("FLAGS:");
     System.out.println(
-      "  -F, --force                       Allow restricted changes; store malformed URLs as-is");
+      "  -F, --force                       Allow restricted changes; store malformed cluster URLs as-is");
+    System.out.println("                                    ZK URLs are always validated");
     System.out.println("  -d, --dry-run                     Show changes without applying");
     System.out.println("  -h, --help                        Show this help");
     System.out.println();
