@@ -850,7 +850,8 @@ public class UpsertCompiler {
             statementContext.getCurrentTable(), aggProjector, null, null, OrderBy.EMPTY_ORDER_BY,
             null, GroupBy.EMPTY_GROUP_BY, null, originalQueryPlan);
           return new ServerUpsertSelectMutationPlan(queryPlan, tableRef, originalQueryPlan, context,
-            connection, scan, aggPlan, aggProjector, maxSize, maxSizeBytes);
+            connection, scan, aggPlan, aggProjector, upsert.isReturningRow(), maxSize,
+            maxSizeBytes);
         }
       }
       ////////////////////////////////////////////////////////////////////
@@ -858,7 +859,7 @@ public class UpsertCompiler {
       /////////////////////////////////////////////////////////////////////
       return new ClientUpsertSelectMutationPlan(queryPlan, tableRef, originalQueryPlan,
         parallelIteratorFactory, projector, columnIndexes, pkSlotIndexes, useServerTimestamp,
-        maxSize, maxSizeBytes);
+        upsert.isReturningRow(), maxSize, maxSizeBytes);
     }
 
     ////////////////////////////////////////////////////////////////////
@@ -971,7 +972,8 @@ public class UpsertCompiler {
 
     return new UpsertValuesMutationPlan(context, tableRef, nodeIndexOffset, constantExpressionsList,
       allColumns, columnIndexes, overlapViewColumns, valuesList, addViewColumns, connection,
-      pkSlotIndexes, useServerTimestamp, onDupKeyBytes, onDupKeyType, maxSize, maxSizeBytes);
+      pkSlotIndexes, useServerTimestamp, onDupKeyBytes, onDupKeyType, upsert.getOnDupKeyPairs(),
+      upsert.isReturningRow(), maxSize, maxSizeBytes);
   }
 
   private static byte[] getOnDuplicateKeyBytes(PTable table, StatementContext context,
@@ -1156,12 +1158,14 @@ public class UpsertCompiler {
     private final Scan scan;
     private final QueryPlan aggPlan;
     private final RowProjector aggProjector;
+    private final boolean returningRow;
     private final int maxSize;
     private final long maxSizeBytes;
 
     public ServerUpsertSelectMutationPlan(QueryPlan queryPlan, TableRef tableRef,
       QueryPlan originalQueryPlan, StatementContext context, PhoenixConnection connection,
-      Scan scan, QueryPlan aggPlan, RowProjector aggProjector, int maxSize, long maxSizeBytes) {
+      Scan scan, QueryPlan aggPlan, RowProjector aggProjector, boolean returningRow, int maxSize,
+      long maxSizeBytes) {
       this.queryPlan = queryPlan;
       this.tableRef = tableRef;
       this.originalQueryPlan = originalQueryPlan;
@@ -1170,6 +1174,7 @@ public class UpsertCompiler {
       this.scan = scan;
       this.aggPlan = aggPlan;
       this.aggProjector = aggProjector;
+      this.returningRow = returningRow;
       this.maxSize = maxSize;
       this.maxSizeBytes = maxSizeBytes;
     }
@@ -1248,11 +1253,15 @@ public class UpsertCompiler {
       ExplainPlan explainPlan = aggPlan.getExplainPlan();
       List<String> queryPlanSteps = explainPlan.getPlanSteps();
       ExplainPlanAttributes explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
-      List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size() + 1);
+      List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size() + 2);
       ExplainPlanAttributesBuilder newBuilder =
         new ExplainPlanAttributesBuilder(explainPlanAttributes);
       newBuilder.setAbstractExplainPlan("UPSERT ROWS");
+      newBuilder.setReturningRow(returningRow);
       planSteps.add("UPSERT ROWS");
+      if (returningRow) {
+        planSteps.add("    RETURNING *");
+      }
       planSteps.addAll(queryPlanSteps);
       if (getContext().isRoot()) {
         ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());
@@ -1292,6 +1301,8 @@ public class UpsertCompiler {
     private final boolean useServerTimestamp;
     private final byte[] onDupKeyBytes;
     private final OnDuplicateKeyType onDupKeyType;
+    private final List<Pair<ColumnName, ParseNode>> onDupKeyPairs;
+    private final boolean returningRow;
     private final int maxSize;
     private final long maxSizeBytes;
 
@@ -1300,7 +1311,8 @@ public class UpsertCompiler {
       int[] columnIndexes, Set<PColumn> overlapViewColumns, List<byte[][]> valuesList,
       Set<PColumn> addViewColumns, PhoenixConnection connection, int[] pkSlotIndexes,
       boolean useServerTimestamp, byte[] onDupKeyBytes, OnDuplicateKeyType onDupKeyType,
-      int maxSize, long maxSizeBytes) {
+      List<Pair<ColumnName, ParseNode>> onDupKeyPairs, boolean returningRow, int maxSize,
+      long maxSizeBytes) {
       this.context = context;
       this.tableRef = tableRef;
       this.nodeIndexOffset = nodeIndexOffset;
@@ -1315,6 +1327,8 @@ public class UpsertCompiler {
       this.useServerTimestamp = useServerTimestamp;
       this.onDupKeyBytes = onDupKeyBytes;
       this.onDupKeyType = onDupKeyType;
+      this.onDupKeyPairs = onDupKeyPairs;
+      this.returningRow = returningRow;
       this.maxSize = maxSize;
       this.maxSizeBytes = maxSizeBytes;
     }
@@ -1436,20 +1450,54 @@ public class UpsertCompiler {
 
     @Override
     public ExplainPlan getExplainPlan() throws SQLException {
-      List<String> planSteps = Lists.newArrayListWithExpectedSize(2);
+      List<String> planSteps = Lists.newArrayListWithExpectedSize(4);
       if (context.getSequenceManager().getSequenceCount() > 0) {
         planSteps
           .add("CLIENT RESERVE " + context.getSequenceManager().getSequenceCount() + " SEQUENCES");
       }
-      planSteps.add("PUT SINGLE ROW");
+      String header;
+      switch (onDupKeyType) {
+        case NONE:
+          header = "PUT SINGLE ROW";
+          break;
+        case UPDATE:
+          header = "PUT SINGLE ROW ON DUPLICATE KEY UPDATE";
+          break;
+        case UPDATE_ONLY:
+          header = "PUT SINGLE ROW ON DUPLICATE KEY UPDATE_ONLY";
+          break;
+        case IGNORE:
+          header = "PUT SINGLE ROW ON DUPLICATE KEY IGNORE";
+          break;
+        default:
+          throw new IllegalStateException("Unhandled OnDuplicateKeyType: " + onDupKeyType);
+      }
+      planSteps.add(header);
+      List<String> serverUpdateSet = null;
+      if (
+        onDupKeyType == OnDuplicateKeyType.UPDATE && onDupKeyPairs != null
+          && !onDupKeyPairs.isEmpty()
+      ) {
+        serverUpdateSet = Lists.newArrayListWithExpectedSize(onDupKeyPairs.size());
+        for (Pair<ColumnName, ParseNode> pair : onDupKeyPairs) {
+          serverUpdateSet.add(pair.getFirst().toString() + " = " + pair.getSecond().toString());
+        }
+        planSteps.add("    SERVER UPDATE SET " + String.join(", ", serverUpdateSet));
+      }
+      if (returningRow) {
+        planSteps.add("    RETURNING *");
+      }
+      ExplainPlanAttributesBuilder builder =
+        new ExplainPlanAttributesBuilder(ExplainPlanAttributes.getDefaultExplainPlan());
+      builder
+        .setOnDuplicateKeyAction(onDupKeyType == OnDuplicateKeyType.NONE ? null : onDupKeyType);
+      builder.setServerUpdateSet(serverUpdateSet);
+      builder.setReturningRow(returningRow);
       if (getContext().isRoot()) {
-        ExplainPlanAttributesBuilder builder =
-          new ExplainPlanAttributesBuilder(ExplainPlanAttributes.getDefaultExplainPlan());
         ExplainTable.populateTopOfPlanAttributes(builder, getContext(), getTargetRef());
         ExplainTable.populateTopOfPlanEstimates(builder, this);
-        return new ExplainPlan(planSteps, builder.build());
       }
-      return new ExplainPlan(planSteps);
+      return new ExplainPlan(planSteps, builder.build());
     }
 
     @Override
@@ -1477,13 +1525,14 @@ public class UpsertCompiler {
     private final int[] columnIndexes;
     private final int[] pkSlotIndexes;
     private final boolean useServerTimestamp;
+    private final boolean returningRow;
     private final int maxSize;
     private final long maxSizeBytes;
 
     public ClientUpsertSelectMutationPlan(QueryPlan queryPlan, TableRef tableRef,
       QueryPlan originalQueryPlan, UpsertingParallelIteratorFactory parallelIteratorFactory,
       RowProjector projector, int[] columnIndexes, int[] pkSlotIndexes, boolean useServerTimestamp,
-      int maxSize, long maxSizeBytes) {
+      boolean returningRow, int maxSize, long maxSizeBytes) {
       this.queryPlan = queryPlan;
       this.tableRef = tableRef;
       this.originalQueryPlan = originalQueryPlan;
@@ -1492,6 +1541,7 @@ public class UpsertCompiler {
       this.columnIndexes = columnIndexes;
       this.pkSlotIndexes = pkSlotIndexes;
       this.useServerTimestamp = useServerTimestamp;
+      this.returningRow = returningRow;
       this.maxSize = maxSize;
       this.maxSizeBytes = maxSizeBytes;
       queryPlan.getContext().setClientSideUpsertSelect(true);
@@ -1567,11 +1617,15 @@ public class UpsertCompiler {
       ExplainPlan explainPlan = queryPlan.getExplainPlan();
       List<String> queryPlanSteps = explainPlan.getPlanSteps();
       ExplainPlanAttributes explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
-      List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size() + 1);
+      List<String> planSteps = Lists.newArrayListWithExpectedSize(queryPlanSteps.size() + 2);
       ExplainPlanAttributesBuilder newBuilder =
         new ExplainPlanAttributesBuilder(explainPlanAttributes);
       newBuilder.setAbstractExplainPlan("UPSERT SELECT");
+      newBuilder.setReturningRow(returningRow);
       planSteps.add("UPSERT SELECT");
+      if (returningRow) {
+        planSteps.add("    RETURNING *");
+      }
       planSteps.addAll(queryPlanSteps);
       if (getContext().isRoot()) {
         ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());

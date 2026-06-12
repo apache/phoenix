@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.client.Consistency;
 import org.apache.phoenix.optimize.RejectedIndexEntry;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.parse.UpsertStatement.OnDuplicateKeyType;
 import org.apache.phoenix.schema.PColumn;
 
 /**
@@ -38,19 +39,20 @@ import org.apache.phoenix.schema.PColumn;
  * Strings containing entire plan.
  */
 @JsonPropertyOrder({ "tenantId", "viewName", "viewBaseName", "cdcScopes", "txnProvider", "rewrites",
-  "estimatedRows", "estimatedSizeInBytes", "estimateInfoTs", "abstractExplainPlan", "hint",
-  "explainScanType", "consistency", "tableName", "keyRanges", "indexName", "indexKind", "indexRule",
-  "indexRejected", "saltBuckets", "regionsPlanned", "scanTimeRangeMin", "scanTimeRangeMax",
-  "splitsChunk", "useRoundRobinIterator", "samplingRate", "hexStringRVCOffset",
-  "iteratorTypeAndScanSize", "scanEstimatedRows", "scanEstimatedSizeInBytes", "serverWhereFilter",
-  "serverDistinctFilter", "serverMergeColumns", "serverParsedProjections",
-  "serverFirstKeyOnlyProjection", "serverEmptyColumnOnlyProjection", "serverAggregate",
-  "serverGroupByLimit", "serverSortedBy", "serverOffset", "serverRowLimit", "clientFilterBy",
-  "clientAggregate", "clientDistinctFilter", "clientAfterAggregate", "clientSortAlgo",
-  "clientSortedBy", "clientOffset", "clientRowLimit", "clientSequenceCount", "clientCursorName",
-  "clientSteps", "lhsJoinQueryExplainPlan", "rhsJoinQueryExplainPlan", "subPlans",
-  "dynamicServerFilter", "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge",
-  "regionLocations", "regionLocationsTotalSize", "numRegionLocationLookups" })
+  "estimatedRows", "estimatedSizeInBytes", "estimateInfoTs", "abstractExplainPlan",
+  "onDuplicateKeyAction", "serverUpdateSet", "returningRow", "hint", "explainScanType",
+  "consistency", "tableName", "keyRanges", "indexName", "indexKind", "indexRule", "indexRejected",
+  "saltBuckets", "regionsPlanned", "scanTimeRangeMin", "scanTimeRangeMax", "splitsChunk",
+  "useRoundRobinIterator", "samplingRate", "hexStringRVCOffset", "iteratorTypeAndScanSize",
+  "scanEstimatedRows", "scanEstimatedSizeInBytes", "serverWhereFilter", "serverDistinctFilter",
+  "serverMergeColumns", "serverParsedProjections", "serverFirstKeyOnlyProjection",
+  "serverEmptyColumnOnlyProjection", "serverAggregate", "serverGroupByLimit", "serverSortedBy",
+  "serverOffset", "serverRowLimit", "clientFilterBy", "clientAggregate", "clientDistinctFilter",
+  "clientAfterAggregate", "clientSortAlgo", "clientSortedBy", "clientOffset", "clientRowLimit",
+  "clientSequenceCount", "clientCursorName", "clientSteps", "lhsJoinQueryExplainPlan",
+  "rhsJoinQueryExplainPlan", "subPlans", "dynamicServerFilter", "afterJoinFilter",
+  "joinScannerLimit", "sortMergeSkipMerge", "regionLocations", "regionLocationsTotalSize",
+  "numRegionLocationLookups" })
 public class ExplainPlanAttributes {
 
   // Top-of-plan disclosures (populated only on the root plan)
@@ -67,6 +69,10 @@ public class ExplainPlanAttributes {
 
   // Plan identity and scan-level metadata
   private final String abstractExplainPlan;
+  // Mutation-operator detail (populated only on mutation plans).
+  private final OnDuplicateKeyType onDuplicateKeyAction;
+  private final List<String> serverUpdateSet;
+  private final boolean returningRow;
   private final Hint hint;
   private final String explainScanType;
   private final Consistency consistency;
@@ -144,6 +150,9 @@ public class ExplainPlanAttributes {
     this.estimatedSizeInBytes = null;
     this.estimateInfoTs = null;
     this.abstractExplainPlan = null;
+    this.onDuplicateKeyAction = null;
+    this.serverUpdateSet = null;
+    this.returningRow = false;
     this.hint = null;
     this.explainScanType = null;
     this.consistency = null;
@@ -200,8 +209,9 @@ public class ExplainPlanAttributes {
 
   public ExplainPlanAttributes(String tenantId, String viewName, String viewBaseName,
     String cdcScopes, String txnProvider, List<String> rewrites, Long estimatedRows,
-    Long estimatedSizeInBytes, Long estimateInfoTs, String abstractExplainPlan, Hint hint,
-    String explainScanType, Consistency consistency, String tableName, String keyRanges,
+    Long estimatedSizeInBytes, Long estimateInfoTs, String abstractExplainPlan,
+    OnDuplicateKeyType onDuplicateKeyAction, List<String> serverUpdateSet, boolean returningRow,
+    Hint hint, String explainScanType, Consistency consistency, String tableName, String keyRanges,
     String indexName, String indexKind, String indexRule, List<RejectedIndexEntry> indexRejected,
     Integer saltBuckets, Integer regionsPlanned, Long scanTimeRangeMin, Long scanTimeRangeMax,
     Integer splitsChunk, boolean useRoundRobinIterator, Double samplingRate,
@@ -230,6 +240,11 @@ public class ExplainPlanAttributes {
     this.estimatedSizeInBytes = estimatedSizeInBytes;
     this.estimateInfoTs = estimateInfoTs;
     this.abstractExplainPlan = abstractExplainPlan;
+    this.onDuplicateKeyAction = onDuplicateKeyAction;
+    this.serverUpdateSet = (serverUpdateSet == null || serverUpdateSet.isEmpty())
+      ? null
+      : Collections.unmodifiableList(new ArrayList<>(serverUpdateSet));
+    this.returningRow = returningRow;
     this.hint = hint;
     this.explainScanType = explainScanType;
     this.consistency = consistency;
@@ -314,6 +329,18 @@ public class ExplainPlanAttributes {
 
   public String getAbstractExplainPlan() {
     return abstractExplainPlan;
+  }
+
+  public OnDuplicateKeyType getOnDuplicateKeyAction() {
+    return onDuplicateKeyAction;
+  }
+
+  public List<String> getServerUpdateSet() {
+    return serverUpdateSet;
+  }
+
+  public boolean isReturningRow() {
+    return returningRow;
   }
 
   public Hint getHint() {
@@ -565,6 +592,9 @@ public class ExplainPlanAttributes {
     private Long estimatedSizeInBytes;
     private Long estimateInfoTs;
     private String abstractExplainPlan;
+    private OnDuplicateKeyType onDuplicateKeyAction;
+    private List<String> serverUpdateSet;
+    private boolean returningRow;
     private HintNode.Hint hint;
     private String explainScanType;
     private Consistency consistency;
@@ -634,6 +664,11 @@ public class ExplainPlanAttributes {
       this.estimatedSizeInBytes = explainPlanAttributes.getEstimatedSizeInBytes();
       this.estimateInfoTs = explainPlanAttributes.getEstimateInfoTs();
       this.abstractExplainPlan = explainPlanAttributes.getAbstractExplainPlan();
+      this.onDuplicateKeyAction = explainPlanAttributes.getOnDuplicateKeyAction();
+      List<String> srcServerUpdateSet = explainPlanAttributes.getServerUpdateSet();
+      this.serverUpdateSet =
+        srcServerUpdateSet == null ? null : new ArrayList<>(srcServerUpdateSet);
+      this.returningRow = explainPlanAttributes.isReturningRow();
       this.hint = explainPlanAttributes.getHint();
       this.explainScanType = explainPlanAttributes.getExplainScanType();
       this.consistency = explainPlanAttributes.getConsistency();
@@ -749,6 +784,22 @@ public class ExplainPlanAttributes {
 
     public ExplainPlanAttributesBuilder setAbstractExplainPlan(String abstractExplainPlan) {
       this.abstractExplainPlan = abstractExplainPlan;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder
+      setOnDuplicateKeyAction(OnDuplicateKeyType onDuplicateKeyAction) {
+      this.onDuplicateKeyAction = onDuplicateKeyAction;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setServerUpdateSet(List<String> serverUpdateSet) {
+      this.serverUpdateSet = serverUpdateSet == null ? null : new ArrayList<>(serverUpdateSet);
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setReturningRow(boolean returningRow) {
+      this.returningRow = returningRow;
       return this;
     }
 
@@ -1039,18 +1090,19 @@ public class ExplainPlanAttributes {
 
     public ExplainPlanAttributes build() {
       return new ExplainPlanAttributes(tenantId, viewName, viewBaseName, cdcScopes, txnProvider,
-        rewrites, estimatedRows, estimatedSizeInBytes, estimateInfoTs, abstractExplainPlan, hint,
-        explainScanType, consistency, tableName, keyRanges, indexName, indexKind, indexRule,
-        indexRejected, saltBuckets, regionsPlanned, scanTimeRangeMin, scanTimeRangeMax, splitsChunk,
-        useRoundRobinIterator, samplingRate, hexStringRVCOffset, iteratorTypeAndScanSize,
-        scanEstimatedRows, scanEstimatedSizeInBytes, serverWhereFilter, serverDistinctFilter,
-        serverMergeColumns, serverParsedProjections, serverFirstKeyOnlyProjection,
-        serverEmptyColumnOnlyProjection, serverAggregate, serverGroupByLimit, serverSortedBy,
-        serverOffset, serverRowLimit, clientFilterBy, clientAggregate, clientDistinctFilter,
-        clientAfterAggregate, clientSortAlgo, clientSortedBy, clientOffset, clientRowLimit,
-        clientSequenceCount, clientCursorName, clientSteps, lhsJoinQueryExplainPlan,
-        rhsJoinQueryExplainPlan, subPlans, dynamicServerFilter, afterJoinFilter, joinScannerLimit,
-        sortMergeSkipMerge, regionLocations, regionLocationsTotalSize, numRegionLocationLookups);
+        rewrites, estimatedRows, estimatedSizeInBytes, estimateInfoTs, abstractExplainPlan,
+        onDuplicateKeyAction, serverUpdateSet, returningRow, hint, explainScanType, consistency,
+        tableName, keyRanges, indexName, indexKind, indexRule, indexRejected, saltBuckets,
+        regionsPlanned, scanTimeRangeMin, scanTimeRangeMax, splitsChunk, useRoundRobinIterator,
+        samplingRate, hexStringRVCOffset, iteratorTypeAndScanSize, scanEstimatedRows,
+        scanEstimatedSizeInBytes, serverWhereFilter, serverDistinctFilter, serverMergeColumns,
+        serverParsedProjections, serverFirstKeyOnlyProjection, serverEmptyColumnOnlyProjection,
+        serverAggregate, serverGroupByLimit, serverSortedBy, serverOffset, serverRowLimit,
+        clientFilterBy, clientAggregate, clientDistinctFilter, clientAfterAggregate, clientSortAlgo,
+        clientSortedBy, clientOffset, clientRowLimit, clientSequenceCount, clientCursorName,
+        clientSteps, lhsJoinQueryExplainPlan, rhsJoinQueryExplainPlan, subPlans,
+        dynamicServerFilter, afterJoinFilter, joinScannerLimit, sortMergeSkipMerge, regionLocations,
+        regionLocationsTotalSize, numRegionLocationLookups);
     }
   }
 }
