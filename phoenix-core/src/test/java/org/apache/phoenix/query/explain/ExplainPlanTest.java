@@ -34,6 +34,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -46,9 +47,17 @@ import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.RegionInfoBuilder;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainFilter;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.expression.AndExpression;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.iterate.ExplainTable;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.optimize.OptimizerReasons;
+import org.apache.phoenix.parse.ExplainOptions;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
@@ -973,11 +982,205 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       stmt.execute("CREATE LOCAL INDEX " + idx + " ON " + base + " (c1)");
       String query =
         "SELECT c1, max(rowkey), max(c2) FROM " + base + " WHERE rowkey <= 'z' GROUP BY c1";
+      // The structured indexRejected attribute is populated regardless of EXPLAIN mode.
       ExplainPlanTestUtil.assertPlan(conn, query).indexName(base)
         .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedCount(1)
         .indexRejected(0, idx, OptimizerReasons.REASON_NO_PK_PREFIX_BOUND);
       assertPlanContainsLine(conn, query, "    INDEX " + base + "  /* more bound PK columns */");
-      assertPlanContainsLine(conn, query, "    /* !INDEX " + idx + " -- no PK prefix bound */");
+      // The !INDEX rejection comment text is VERBOSE-only.
+      assertNoPlanLineContains(conn, query, "!INDEX");
+      List<String> verboseSteps =
+        ExplainPlanTestUtil.getPlanSteps(conn, query, ExplainOptions.VERBOSE);
+      assertTrue(
+        "expected VERBOSE plan to contain the !INDEX rejection comment but was " + verboseSteps,
+        verboseSteps.contains("    /* !INDEX " + idx + " -- no PK prefix bound */"));
+    }
+  }
+
+  @Test
+  public void testVerboseProjectLine() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String t = generateUniqueName();
+      stmt
+        .execute("CREATE TABLE " + t + " (k VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR, c VARCHAR)");
+      String query = "SELECT a, b FROM " + t;
+      ExplainPlanTestUtil.assertPlanWithVerbose(conn, query).serverProject("A", "B");
+      List<String> verboseSteps =
+        ExplainPlanTestUtil.getPlanSteps(conn, query, ExplainOptions.VERBOSE);
+      assertTrue("expected VERBOSE plan to contain the PROJECT line but was " + verboseSteps,
+        verboseSteps.contains("    PROJECT A, B"));
+      // Plain EXPLAIN carries no PROJECT line and no serverProject attribute.
+      ExplainPlanTestUtil.assertPlan(conn, query).serverProjectNone();
+      assertNoPlanLineContains(conn, query, "PROJECT ");
+    }
+  }
+
+  @Test
+  public void testVerboseServerFilterWhereFanout() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String t = generateUniqueName();
+      stmt
+        .execute("CREATE TABLE " + t + " (k VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR, c VARCHAR)");
+      String query = "SELECT a FROM " + t + " WHERE b = 'x' AND c = 'y'";
+      ExplainPlanTestUtil.assertPlanWithVerbose(conn, query).serverFilterCount(2)
+        .serverFilterOrigin(0, "WHERE").serverFilterPathTest(0, null).serverFilterOrigin(1, "WHERE")
+        .serverFilterPathTest(1, null);
+      // Plain EXPLAIN keeps the combined single serverWhereFilter line, no per-predicate breakdown.
+      ExplainPlanTestUtil.assertPlan(conn, query).serverFiltersNone();
+    }
+  }
+
+  @Test
+  public void testVerboseServerFilterSinglePredicate() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String t = generateUniqueName();
+      stmt.execute("CREATE TABLE " + t + " (k VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)");
+      String query = "SELECT a FROM " + t + " WHERE b = 'x'";
+      ExplainPlanTestUtil.assertPlanWithVerbose(conn, query).serverFilterCount(1)
+        .serverFilterOrigin(0, "WHERE").serverFilterPathTest(0, null);
+    }
+  }
+
+  @Test
+  public void testVerboseServerFilterJsonExistsSubtag() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String t = generateUniqueName();
+      stmt.execute("CREATE TABLE " + t + " (pk VARCHAR PRIMARY KEY, jsoncol JSON)");
+      String query = "SELECT pk FROM " + t + " WHERE JSON_EXISTS(jsoncol, '$.info.address.town')";
+      ExplainPlanTestUtil.assertPlanWithVerbose(conn, query).serverFilterCount(1)
+        .serverFilterOrigin(0, "WHERE").serverFilterPathTest(0, "JSON EXISTS");
+    }
+  }
+
+  @Test
+  public void testVerboseServerFilterBsonConditionSubtag() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String t = generateUniqueName();
+      stmt.execute("CREATE TABLE " + t + " (pk VARCHAR PRIMARY KEY, payload BSON)");
+      String query = "SELECT pk FROM " + t
+        + " WHERE BSON_CONDITION_EXPRESSION(payload, '{\"$EXPR\": \"field_exists(Id)\"}')";
+      ExplainPlanTestUtil.assertPlanWithVerbose(conn, query).serverFilterCount(1)
+        .serverFilterOrigin(0, "WHERE").serverFilterPathTest(0, "BSON CONDITION");
+    }
+  }
+
+  @Test
+  public void testVerboseClientFilterFanout() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      String query = "SELECT a_string FROM (SELECT a_string, a_integer FROM atable LIMIT 5)"
+        + " WHERE a_integer > 2";
+      ExplainPlanTestUtil.assertPlanWithVerbose(conn, query).clientFilterCount(1)
+        .clientFilter(0, "A_INTEGER > 2").clientFilterOrigin(0, "WHERE")
+        .clientFilterPathTest(0, null);
+      List<String> verboseSteps =
+        ExplainPlanTestUtil.getPlanSteps(conn, query, ExplainOptions.VERBOSE);
+      assertTrue("expected VERBOSE plan to contain a CLIENT FILTER BY line but was " + verboseSteps,
+        verboseSteps.stream().anyMatch(s -> s.startsWith("CLIENT FILTER BY A_INTEGER > 2")));
+      // Plain EXPLAIN keeps the combined clientFilterBy string and no structured breakdown.
+      ExplainPlanTestUtil.assertPlan(conn, query).clientFiltersNone()
+        .clientFilterBy("A_INTEGER > 2");
+    }
+  }
+
+  @Test
+  public void testVerboseClientFilterHavingFanout() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      String query =
+        "SELECT count(1) FROM atable GROUP BY a_string, b_string HAVING max(a_string) = 'a'";
+      ExplainPlanTestUtil.assertPlanWithVerbose(conn, query).clientFilterCount(1)
+        .clientFilter(0, "MAX(A_STRING) = 'a'").clientFilterOrigin(0, "HAVING")
+        .clientFilterPathTest(0, null);
+      // Plain EXPLAIN keeps the combined string and no structured breakdown.
+      ExplainPlanTestUtil.assertPlan(conn, query).clientFiltersNone()
+        .clientFilterBy("MAX(A_STRING) = 'a'");
+    }
+  }
+
+  /**
+   * When a top-level AND is only partially tagged, renderVerboseFilters collapses to a single
+   * combined line. That line must still union the origins recorded on the tagged conjunct(s) rather
+   * than reading only the parent expression. Normal WHERE/HAVING compilation always tags every
+   * conjunct, so this partial-tag state is reachable only when identity is lost during expression
+   * rewriting.
+   */
+  @Test
+  public void testVerboseCombinedFilterUnionsConjunctOrigins() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
+      QueryPlan plan = conn.prepareStatement("SELECT * FROM atable")
+        .unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+      StatementContext context = plan.getContext();
+      Expression tagged = LiteralExpression.newConstant(true);
+      Expression untagged = LiteralExpression.newConstant(false);
+      Expression and = new AndExpression(Arrays.asList(tagged, untagged));
+      context.tagPredicate(tagged, "WHERE");
+      List<String> planSteps = new ArrayList<>();
+      List<ExplainFilter> filters = ExplainTable.renderVerboseFilters(context, and, and.toString(),
+        "    SERVER FILTER BY", planSteps);
+      assertEquals("partial tagging must collapse to one combined line", 1, filters.size());
+      assertEquals("combined line must union origins from tagged conjuncts",
+        Collections.singletonList("WHERE"), filters.get(0).getOrigin());
+      assertEquals(1, planSteps.size());
+      assertTrue("combined line should carry the unioned origin comment but was " + planSteps,
+        planSteps.get(0).endsWith("-- WHERE"));
+    }
+  }
+
+  @Test
+  public void testVerboseIgnoredHintNoIndexNoIndexes() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String t = generateUniqueName();
+      stmt.execute("CREATE TABLE " + t + " (k VARCHAR PRIMARY KEY, a VARCHAR, b VARCHAR)");
+      String query = "SELECT /*+ NO_INDEX */ a FROM " + t + " WHERE b = 'x'";
+      ExplainPlanTestUtil.assertPlanWithVerbose(conn, query).ignoredHint("NO_INDEX",
+        "no indexes on table");
+      List<String> verboseSteps =
+        ExplainPlanTestUtil.getPlanSteps(conn, query, ExplainOptions.VERBOSE);
+      assertTrue(
+        "expected VERBOSE plan to disclose the ignored NO_INDEX hint but was " + verboseSteps,
+        verboseSteps.contains("    /*- NO_INDEX -- no indexes on table */"));
+      // Plain EXPLAIN does not disclose ignored hints.
+      ExplainPlanTestUtil.assertPlan(conn, query).ignoredHintsNone();
+      assertNoPlanLineContains(conn, query, "/*- NO_INDEX");
+    }
+  }
+
+  @Test
+  public void testVerboseIgnoredHintIndexNoMatch() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String t = generateUniqueName();
+      String idx = generateUniqueName();
+      stmt.execute("CREATE TABLE " + t + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+      stmt.execute("CREATE INDEX " + idx + " ON " + t + " (v1) INCLUDE (v2)");
+      // Hint references an index name that does not exist on the table.
+      String query =
+        "SELECT /*+ INDEX(" + t + " NONEXISTENT_IDX) */ k, v2 FROM " + t + " WHERE v1 = 'x'";
+      ExplainPlanTestUtil.assertPlanWithVerbose(conn, query).ignoredHint("INDEX",
+        "no matching index applicable");
+    }
+  }
+
+  @Test
+  public void testVerboseIgnoredHintSortMergeNoJoin() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String t = generateUniqueName();
+      stmt.execute("CREATE TABLE " + t + " (k VARCHAR PRIMARY KEY, a VARCHAR)");
+      String query = "SELECT /*+ USE_SORT_MERGE_JOIN */ a FROM " + t;
+      ExplainPlanTestUtil.assertPlanWithVerbose(conn, query).ignoredHint("USE_SORT_MERGE_JOIN",
+        "no join in query");
+      List<String> verboseSteps =
+        ExplainPlanTestUtil.getPlanSteps(conn, query, ExplainOptions.VERBOSE);
+      assertTrue(
+        "expected VERBOSE plan to disclose the ignored USE_SORT_MERGE_JOIN hint but was "
+          + verboseSteps,
+        verboseSteps.contains("    /*- USE_SORT_MERGE_JOIN -- no join in query */"));
     }
   }
 
@@ -1545,10 +1748,14 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     n.putNull("serverOffset");
     n.putNull("serverRowLimit");
     n.putNull("serverParsedProjections");
+    n.putNull("serverProject");
+    n.putNull("serverFilters");
+    n.putNull("ignoredHints");
     n.put("serverFirstKeyOnlyProjection", false);
     n.put("serverEmptyColumnOnlyProjection", false);
     n.putNull("serverAggregate");
     n.putNull("clientFilterBy");
+    n.putNull("clientFilters");
     n.putNull("clientAggregate");
     n.putNull("clientSortedBy");
     n.putNull("clientAfterAggregate");

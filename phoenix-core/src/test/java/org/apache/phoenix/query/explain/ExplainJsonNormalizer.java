@@ -125,6 +125,34 @@ public final class ExplainJsonNormalizer {
       }
     }
 
+    // The VERBOSE serverFilters and clientFilters breakdowns carry a rendered predicate string per
+    // element. Rewrite any temp aliases inside each element's "expr" so the comparison is
+    // invariant under environment differences.
+    rewriteFilterExprs(obj.get("serverFilters"), aliases);
+    rewriteFilterExprs(obj.get("clientFilters"), aliases);
+
     return obj;
+  }
+
+  /**
+   * Rewrite temp aliases inside the {@code expr} string of each element of a filter-breakdown array
+   * (e.g. {@code serverFilters} or {@code clientFilters}).
+   */
+  private static void rewriteFilterExprs(JsonNode node, TempAliasRenumberer aliases) {
+    if (node == null || !node.isArray()) {
+      return;
+    }
+    for (JsonNode element : (ArrayNode) node) {
+      if (element != null && element.isObject()) {
+        JsonNode expr = element.get("expr");
+        if (expr != null && expr.isTextual()) {
+          String original = expr.asText();
+          String rewritten = aliases.rewrite(original);
+          if (!rewritten.equals(original)) {
+            ((ObjectNode) element).put("expr", rewritten);
+          }
+        }
+      }
+    }
   }
 }

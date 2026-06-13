@@ -320,6 +320,10 @@ public class QueryCompiler {
       JoinTable joinTable = JoinCompiler.compile(statement, select, context.getResolver(), context);
       return compileJoinQuery(context, joinTable, false, false, null);
     } else {
+      // A USE_SORT_MERGE_JOIN hint on a query without any join is ignored.
+      if (select.getHint().hasHint(Hint.USE_SORT_MERGE_JOIN)) {
+        context.recordIgnoredHint(Hint.USE_SORT_MERGE_JOIN, "no join in query");
+      }
       return compileSingleQuery(context, select, false, true);
     }
   }

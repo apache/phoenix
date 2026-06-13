@@ -37,15 +37,21 @@ import org.apache.hadoop.hbase.filter.PageFilter;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.io.TimeRange;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainFilter;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.StatementPlan;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.expression.AndExpression;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.function.BsonConditionExpressionFunction;
+import org.apache.phoenix.expression.function.JsonExistsFunction;
 import org.apache.phoenix.filter.BooleanExpressionFilter;
 import org.apache.phoenix.filter.DistinctPrefixFilter;
 import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
@@ -150,6 +156,14 @@ public abstract class ExplainTable {
    * @return the decision, or {@code null} when unavailable
    */
   protected OptimizerDecision getOptimizerDecision() {
+    return null;
+  }
+
+  /**
+   * The post-compile row projector for the plan this scan belongs to. Returns {@code null} when the
+   * plan has no projector.
+   */
+  protected RowProjector getProjector() {
     return null;
   }
 
@@ -297,6 +311,7 @@ public abstract class ExplainTable {
     StringBuilder buf = new StringBuilder(prefix);
     ScanRanges scanRanges = context.getScanRanges();
     Scan scan = context.getScan();
+    boolean verbose = context.isVerbose();
 
     if (scan.getConsistency() != Consistency.STRONG) {
       buf.append("TIMELINE-CONSISTENCY ");
@@ -340,6 +355,8 @@ public abstract class ExplainTable {
       }
     }
 
+    emitProject(planSteps, explainPlanAttributesBuilder, verbose);
+
     PTable.IndexType indexType = tableRef.getTable().getIndexType();
     String explainIndexName = getExplainIndexName(tableRef.getTable());
     String indexKind = null;
@@ -367,7 +384,7 @@ public abstract class ExplainTable {
       indexLine.append("  /* ").append(decision.getRule()).append(" */");
     }
     planSteps.add(indexLine.toString());
-    if (decision != null) {
+    if (verbose && decision != null) {
       for (RejectedIndexEntry rejected : decision.getRejectedIndexes()) {
         planSteps
           .add("    /* !INDEX " + rejected.getName() + " -- " + rejected.getReason() + " */");
@@ -455,11 +472,17 @@ public abstract class ExplainTable {
         explainPlanAttributesBuilder.setServerEmptyColumnOnlyProjection(true);
       }
     }
+    emitIgnoredHints(planSteps, explainPlanAttributesBuilder, verbose);
     if (whereFilterStr != null) {
-      String serverWhereFilter = "SERVER FILTER BY " + whereFilterStr;
-      planSteps.add("    " + serverWhereFilter);
-      if (explainPlanAttributesBuilder != null) {
-        explainPlanAttributesBuilder.setServerWhereFilter(serverWhereFilter);
+      if (verbose) {
+        emitServerFilters(planSteps, explainPlanAttributesBuilder,
+          whereFilter == null ? null : whereFilter.getExpression(), whereFilterStr);
+      } else {
+        String serverWhereFilter = "SERVER FILTER BY " + whereFilterStr;
+        planSteps.add("    " + serverWhereFilter);
+        if (explainPlanAttributesBuilder != null) {
+          explainPlanAttributesBuilder.setServerWhereFilter(serverWhereFilter);
+        }
       }
     }
     if (distinctFilter != null) {
@@ -560,6 +583,188 @@ public abstract class ExplainTable {
     if (explainPlanAttributesBuilder != null) {
       explainPlanAttributesBuilder.addServerParsedProjection(label, details);
     }
+  }
+
+  /** Emit the VERBOSE-only {@code PROJECT <cols>} line and populate {@code serverProject}. */
+  private void emitProject(List<String> planSteps,
+    ExplainPlanAttributesBuilder explainPlanAttributesBuilder, boolean verbose) {
+    if (!verbose) {
+      return;
+    }
+    RowProjector projector = getProjector();
+    if (projector == null) {
+      return;
+    }
+    List<? extends ColumnProjector> columnProjectors = projector.getColumnProjectors();
+    if (columnProjectors == null || columnProjectors.isEmpty()) {
+      return;
+    }
+    List<String> columns = new ArrayList<>(columnProjectors.size());
+    for (ColumnProjector columnProjector : columnProjectors) {
+      String name = columnProjector.getName();
+      if (name == null || name.isEmpty()) {
+        name = String.valueOf(columnProjector.getExpression());
+      }
+      columns.add(name);
+    }
+    planSteps.add("    PROJECT " + String.join(", ", columns));
+    if (explainPlanAttributesBuilder != null) {
+      explainPlanAttributesBuilder.setServerProject(columns);
+    }
+  }
+
+  /**
+   * Emit the VERBOSE-only ignored-hint comments, one {@code /*- HINT(args) -- reason *}{@code /}
+   * line per hint the planner intentionally ignored.
+   */
+  private void emitIgnoredHints(List<String> planSteps,
+    ExplainPlanAttributesBuilder explainPlanAttributesBuilder, boolean verbose) {
+    if (!verbose) {
+      return;
+    }
+    Map<Hint, String> ignoredHints = context.getIgnoredHints();
+    if (ignoredHints == null || ignoredHints.isEmpty()) {
+      return;
+    }
+    for (Map.Entry<Hint, String> entry : ignoredHints.entrySet()) {
+      Hint ignoredHint = entry.getKey();
+      String args = hint == null ? null : hint.getHint(ignoredHint);
+      String rendered = ignoredHint.name() + (args == null ? "" : args);
+      planSteps.add("    /*- " + rendered + " -- " + entry.getValue() + " */");
+      if (explainPlanAttributesBuilder != null) {
+        explainPlanAttributesBuilder.addIgnoredHint(ignoredHint.name(), entry.getValue());
+      }
+    }
+  }
+
+  /**
+   * Emit the VERBOSE-only per-predicate {@code SERVER FILTER BY <expr>  -- <origin>} lines and
+   * populate {@code serverFilters}. When the top-level filter is an {@link AndExpression} whose
+   * children all carry origin tags, one line is emitted per child. Otherwise a single line carries
+   * the comma-separated union of origins.
+   */
+  private void emitServerFilters(List<String> planSteps,
+    ExplainPlanAttributesBuilder explainPlanAttributesBuilder, Expression whereExpression,
+    String whereFilterStr) {
+    List<ExplainFilter> filters = renderVerboseFilters(context, whereExpression, whereFilterStr,
+      "    SERVER FILTER BY", planSteps);
+    if (explainPlanAttributesBuilder != null) {
+      explainPlanAttributesBuilder.setServerFilters(filters);
+    }
+  }
+
+  /**
+   * Render the VERBOSE per-predicate filter breakdown. Each emitted line is appended to
+   * {@code planSteps}.
+   * @param context           the statement context carrying the predicate-origin tags.
+   * @param filterExpression  the residual filter expression (may be {@code null} when only the
+   *                          rendered string is available, e.g. an index-serialized filter).
+   * @param combinedFilterStr the combined filter string used for the single-line fallback.
+   * @param linePrefix        the full leading token including any indentation, e.g.
+   *                          {@code "    SERVER FILTER BY"} or {@code "CLIENT FILTER BY"}.
+   * @param planSteps         the plan-steps list to append rendered lines to.
+   * @return the structured filters in render order (never {@code null}; never empty).
+   */
+  public static List<ExplainFilter> renderVerboseFilters(StatementContext context,
+    Expression filterExpression, String combinedFilterStr, String linePrefix,
+    List<String> planSteps) {
+    List<ExplainFilter> filters = new ArrayList<>();
+    if (filterExpression instanceof AndExpression) {
+      List<Expression> children = filterExpression.getChildren();
+      boolean allTagged = !children.isEmpty();
+      for (Expression child : children) {
+        if (context.getPredicateOrigins(child).isEmpty()) {
+          allTagged = false;
+          break;
+        }
+      }
+      if (allTagged) {
+        for (Expression child : children) {
+          filters.add(buildFilter(context, "(" + child + ")", child));
+        }
+      }
+    }
+    if (filters.isEmpty()) {
+      filters.add(buildCombinedFilter(context, combinedFilterStr, filterExpression));
+    }
+    for (ExplainFilter filter : filters) {
+      StringBuilder line = new StringBuilder(linePrefix).append(" ").append(filter.getExpr());
+      String comment = renderOriginComment(filter);
+      if (comment != null) {
+        line.append("  -- ").append(comment);
+      }
+      planSteps.add(line.toString());
+    }
+    return filters;
+  }
+
+  private static ExplainFilter buildFilter(StatementContext context, String exprStr,
+    Expression expression) {
+    List<String> origins =
+      expression == null ? null : new ArrayList<>(context.getPredicateOrigins(expression));
+    String pathTestSubtag = detectPathTestSubtag(expression);
+    return new ExplainFilter(exprStr, origins, pathTestSubtag);
+  }
+
+  /**
+   * Build the {@link ExplainFilter} for a single combined line. Origin tags can live on the parent
+   * expression or its conjunct children, so when we collapse to one line union both sets to avoid
+   * dropping the attribution.
+   */
+  private static ExplainFilter buildCombinedFilter(StatementContext context, String exprStr,
+    Expression expression) {
+    List<String> origins = expression == null ? null : combinedOrigins(context, expression);
+    String pathTestSubtag = detectPathTestSubtag(expression);
+    return new ExplainFilter(exprStr, origins, pathTestSubtag);
+  }
+
+  /** Union of origin tags on {@code expression} and, when it is an AND, its conjunct children. */
+  private static List<String> combinedOrigins(StatementContext context, Expression expression) {
+    Set<String> origins = new LinkedHashSet<>(context.getPredicateOrigins(expression));
+    if (expression instanceof AndExpression) {
+      for (Expression child : expression.getChildren()) {
+        origins.addAll(context.getPredicateOrigins(child));
+      }
+    }
+    return new ArrayList<>(origins);
+  }
+
+  /** Render the trailing origin comment for a server filter. */
+  private static String renderOriginComment(ExplainFilter filter) {
+    StringBuilder comment = new StringBuilder();
+    List<String> origins = filter.getOrigin();
+    if (origins != null && !origins.isEmpty()) {
+      comment.append(String.join(", ", origins));
+    }
+    if (filter.getPathTestSubtag() != null) {
+      if (comment.length() > 0) {
+        comment.append(" ");
+      }
+      comment.append("(").append(filter.getPathTestSubtag()).append(")");
+    }
+    return comment.length() == 0 ? null : comment.toString();
+  }
+
+  /** Detect a path test function anywhere in the expression tree and return its sub tag. */
+  private static String detectPathTestSubtag(Expression expression) {
+    if (expression == null) {
+      return null;
+    }
+    if (expression instanceof JsonExistsFunction) {
+      return "JSON EXISTS";
+    }
+    if (expression instanceof BsonConditionExpressionFunction) {
+      return "BSON CONDITION";
+    }
+    if (expression.getChildren() != null) {
+      for (Expression child : expression.getChildren()) {
+        String subtag = detectPathTestSubtag(child);
+        if (subtag != null) {
+          return subtag;
+        }
+      }
+    }
+    return null;
   }
 
   /**
