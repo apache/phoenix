@@ -109,6 +109,9 @@ public final class ExplainOptions {
     }
 
     public Builder setFormat(Format format) {
+      if (format == null) {
+        throw new RuntimeException("EXPLAIN option FORMAT requires a value: TEXT or JSON");
+      }
       if (this.format != null) {
         throw new RuntimeException("Duplicate EXPLAIN option: FORMAT");
       }
