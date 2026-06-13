@@ -571,6 +571,11 @@ public abstract class ExplainTable {
   private void getRegionLocations(List<String> planSteps,
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
     List<HRegionLocation> regionLocations) {
+    // Region locations are emitted as text and in the structured attributes only when the
+    // EXPLAIN statement requested them via the REGIONS option (or the legacy WITH REGIONS alias).
+    if (!context.getExplainOptions().isRegions()) {
+      return;
+    }
     String regionLocationPlan =
       getRegionLocationsForExplainPlan(explainPlanAttributesBuilder, regionLocations);
     if (regionLocationPlan.length() > 0) {
