@@ -91,6 +91,7 @@ import org.apache.phoenix.compile.CreateTableCompiler;
 import org.apache.phoenix.compile.DeclareCursorCompiler;
 import org.apache.phoenix.compile.DeleteCompiler;
 import org.apache.phoenix.compile.DropSequenceCompiler;
+import org.apache.phoenix.compile.ExplainJsonRenderer;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExpressionProjector;
@@ -1005,11 +1006,20 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         plan.getContext().setExplainOptions(getOptions());
       }
       ExplainPlan explainPlan = plan.getExplainPlan();
-      // Prepend the top-of-plan disclosure blocks. This is the only place the disclosure text is
-      // emitted.
-      List<String> planSteps = new ArrayList<>(explainPlan.getPlanSteps());
-      ExplainTable.renderTopOfPlanText(planSteps, explainPlan.getPlanStepsAsAttributes());
-      planSteps = Collections.unmodifiableList(planSteps);
+      List<String> planSteps;
+      if (getOptions().getFormat() == ExplainOptions.Format.JSON) {
+        // FORMAT JSON returns a single row whose cell carries the serialized attributes tree. The
+        // top-of-plan disclosure block is already inside the attributes, so renderTopOfPlanText is
+        // not invoked here.
+        planSteps = Collections
+          .singletonList(ExplainJsonRenderer.render(explainPlan.getPlanStepsAsAttributes()));
+      } else {
+        // Prepend the top-of-plan disclosure blocks. This is the only place the disclosure text is
+        // emitted.
+        planSteps = new ArrayList<>(explainPlan.getPlanSteps());
+        ExplainTable.renderTopOfPlanText(planSteps, explainPlan.getPlanStepsAsAttributes());
+        planSteps = Collections.unmodifiableList(planSteps);
+      }
       List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
       Long estimatedBytesToScan = plan.getEstimatedBytesToScan();
       Long estimatedRowsToScan = plan.getEstimatedRowsToScan();
