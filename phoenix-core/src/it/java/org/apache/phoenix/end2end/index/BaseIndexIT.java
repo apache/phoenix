@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
 import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlanWithRegions;
 import static org.apache.phoenix.util.TestUtil.ROW5;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -152,7 +153,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
       String query = "SELECT d.char_col1, int_col1 from " + fullTableName + " as d";
 
       ExplainPlanTestUtil.ExplainPlanAssert basePlan =
-        assertPlan(conn, query).iteratorType("PARALLEL 1-WAY");
+        assertPlanWithRegions(conn, query).iteratorType("PARALLEL 1-WAY");
       if (!uncovered) {
         // Optimizer would not select the uncovered index for this query
         basePlan.serverProjectionFilter(columnEncoded);
@@ -578,7 +579,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
       String query =
         "SELECT" + (uncovered ? " /*+ INDEX(" + fullTableName + " " + indexName + ")*/ " : " ")
           + "int_pk from " + fullTableName;
-      ExplainPlanTestUtil.ExplainPlanAssert basePlan = assertPlan(conn, query)
+      ExplainPlanTestUtil.ExplainPlanAssert basePlan = assertPlanWithRegions(conn, query)
         .iteratorType("PARALLEL 1-WAY").serverProjectionFilter(columnEncoded);
       if (localIndex) {
         basePlan.scanType("RANGE SCAN").table(fullIndexName + "(" + fullTableName + ")")
@@ -660,7 +661,7 @@ public abstract class BaseIndexIT extends ParallelStatsDisabledIT {
       query = "SELECT" + (uncovered ? " /*+ INDEX(" + fullTableName + " " + indexName + ")*/" : "")
         + " * FROM " + fullTableName;
       ExplainPlanTestUtil.ExplainPlanAssert basePlan =
-        assertPlan(conn, query).iteratorType("PARALLEL 1-WAY");
+        assertPlanWithRegions(conn, query).iteratorType("PARALLEL 1-WAY");
       if (localIndex) {
         basePlan.scanType("RANGE SCAN").table(fullIndexName + "(" + fullTableName + ")")
           .clientSortAlgo("CLIENT MERGE SORT").keyRanges(" [1]");

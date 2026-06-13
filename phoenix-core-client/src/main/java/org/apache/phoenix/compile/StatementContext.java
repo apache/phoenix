@@ -41,6 +41,7 @@ import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.SlowestScanMetricsQueue;
 import org.apache.phoenix.monitoring.TopNTreeMultiMap;
+import org.apache.phoenix.parse.ExplainOptions;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
@@ -112,6 +113,7 @@ public class StatementContext {
   private Set<Pair<String, String>> partialIndexCheckedSet;
   private Map<String, List<Expression>> serverParsedProjections;
   private StatementContext parentContext;
+  private ExplainOptions explainOptions = ExplainOptions.DEFAULT;
 
   public StatementContext(PhoenixStatement statement) {
     this(statement, new Scan());
@@ -156,6 +158,7 @@ public class StatementContext {
     this.partialIndexCheckedSet = context.partialIndexCheckedSet;
     this.serverParsedProjections = context.serverParsedProjections;
     this.parentContext = context.parentContext;
+    this.explainOptions = context.explainOptions;
   }
 
   /**
@@ -605,6 +608,18 @@ public class StatementContext {
 
   public StatementContext getParentContext() {
     return parentContext;
+  }
+
+  /**
+   * The options parsed from the {@code EXPLAIN} statement's option list. Defaults to
+   * {@link ExplainOptions#DEFAULT}.
+   */
+  public ExplainOptions getExplainOptions() {
+    return explainOptions;
+  }
+
+  public void setExplainOptions(ExplainOptions explainOptions) {
+    this.explainOptions = explainOptions == null ? ExplainOptions.DEFAULT : explainOptions;
   }
 
   /** Returns true if this is the top-level (root) statement context, i.e. it has no parent. */

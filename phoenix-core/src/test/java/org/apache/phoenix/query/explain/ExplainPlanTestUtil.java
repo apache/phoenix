@@ -33,6 +33,7 @@ import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.optimize.RejectedIndexEntry;
+import org.apache.phoenix.parse.ExplainOptions;
 import org.apache.phoenix.parse.UpsertStatement.OnDuplicateKeyType;
 
 /**
@@ -58,6 +59,21 @@ public final class ExplainPlanTestUtil {
   public static ExplainPlanAttributes getExplainAttributes(Connection conn, String query)
     throws SQLException {
     return getExplainPlan(conn, query).getPlanStepsAsAttributes();
+  }
+
+  /**
+   * Optimize {@code query} and return its structured {@link ExplainPlanAttributes} with the given
+   * {@link ExplainOptions} applied to the plan's {@code StatementContext}. Used to exercise region
+   * location information, which is only populated when the {@code REGIONS} option is requested.
+   */
+  public static ExplainPlanAttributes getExplainAttributes(Connection conn, String query,
+    ExplainOptions options) throws SQLException {
+    try (PhoenixPreparedStatement statement =
+      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)) {
+      QueryPlan plan = statement.optimizeQuery();
+      plan.getContext().setExplainOptions(options);
+      return plan.getExplainPlan().getPlanStepsAsAttributes();
+    }
   }
 
   /** Optimize {@code query} and return its plan-steps text. */
@@ -89,6 +105,17 @@ public final class ExplainPlanTestUtil {
   /** Optimize {@code query} on {@code conn} and begin assertions on its plan attributes. */
   public static ExplainPlanAssert assertPlan(Connection conn, String query) throws SQLException {
     return assertPlan(getExplainAttributes(conn, query));
+  }
+
+  /**
+   * Optimize {@code query} on {@code conn} with the {@code REGIONS} option enabled and begin
+   * assertions on its plan attributes. Use this instead of {@link #assertPlan(Connection, String)}
+   * when asserting on region-location attributes, which are only populated when {@code REGIONS} is
+   * requested.
+   */
+  public static ExplainPlanAssert assertPlanWithRegions(Connection conn, String query)
+    throws SQLException {
+    return assertPlan(getExplainAttributes(conn, query, ExplainOptions.WITH_REGIONS));
   }
 
   /**
