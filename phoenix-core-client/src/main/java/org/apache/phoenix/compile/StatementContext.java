@@ -24,7 +24,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.EnumMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,6 +45,7 @@ import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.SlowestScanMetricsQueue;
 import org.apache.phoenix.monitoring.TopNTreeMultiMap;
 import org.apache.phoenix.parse.ExplainOptions;
+import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
@@ -114,6 +118,10 @@ public class StatementContext {
   private Map<String, List<Expression>> serverParsedProjections;
   private StatementContext parentContext;
   private ExplainOptions explainOptions = ExplainOptions.DEFAULT;
+  private Map<Expression, Set<String>> predicateOrigins;
+  private Set<ParseNode> liftedHavingNodes;
+  private Map<ParseNode, String> decorrelatedSubqueryAlias;
+  private Map<Hint, String> ignoredHints;
 
   public StatementContext(PhoenixStatement statement) {
     this(statement, new Scan());
@@ -159,6 +167,10 @@ public class StatementContext {
     this.serverParsedProjections = context.serverParsedProjections;
     this.parentContext = context.parentContext;
     this.explainOptions = context.explainOptions;
+    this.predicateOrigins = context.predicateOrigins;
+    this.liftedHavingNodes = context.liftedHavingNodes;
+    this.decorrelatedSubqueryAlias = context.decorrelatedSubqueryAlias;
+    this.ignoredHints = context.ignoredHints;
   }
 
   /**
@@ -229,6 +241,10 @@ public class StatementContext {
     this.partialIndexCheckedSet = Sets.newHashSet();
     this.serverParsedProjections = null;
     this.parentContext = null;
+    this.predicateOrigins = new IdentityHashMap<>();
+    this.liftedHavingNodes = Collections.newSetFromMap(new IdentityHashMap<>());
+    this.decorrelatedSubqueryAlias = new IdentityHashMap<>();
+    this.ignoredHints = new EnumMap<>(Hint.class);
   }
 
   /**
@@ -523,6 +539,10 @@ public class StatementContext {
     this.functionalIndexNames = source.functionalIndexNames;
     this.partialIndexCheckedSet = source.partialIndexCheckedSet;
     this.serverParsedProjections = source.serverParsedProjections;
+    this.predicateOrigins = source.predicateOrigins;
+    this.liftedHavingNodes = source.liftedHavingNodes;
+    this.decorrelatedSubqueryAlias = source.decorrelatedSubqueryAlias;
+    this.ignoredHints = source.ignoredHints;
   }
 
   public void incrementDerivedTableFlattenCount() {
@@ -620,6 +640,99 @@ public class StatementContext {
 
   public void setExplainOptions(ExplainOptions explainOptions) {
     this.explainOptions = explainOptions == null ? ExplainOptions.DEFAULT : explainOptions;
+  }
+
+  /** Returns true if the {@code EXPLAIN} statement requested {@code VERBOSE} output. */
+  public boolean isVerbose() {
+    return explainOptions != null && explainOptions.isVerbose();
+  }
+
+  /**
+   * Tag a predicate {@link Expression} with the given origin (e.g. {@code "WHERE"},
+   * {@code "JOIN ON"}). Tags accumulate as a set so a predicate fused from multiple sources carries
+   * every contributing origin. Keyed by object identity, since Phoenix rewrites and re-instantiates
+   * expressions during compilation. Diagnostic only; never affects the compiled plan.
+   */
+  public void tagPredicate(Expression expression, String origin) {
+    if (expression == null || origin == null) {
+      return;
+    }
+    predicateOrigins.computeIfAbsent(expression, k -> new LinkedHashSet<>()).add(origin);
+  }
+
+  /**
+   * Propagate the accumulated origin tags of each source expression onto a freshly minted
+   * destination expression. Used by expression rewriters/clone visitors so identity-keyed tags
+   * survive node replacement.
+   */
+  public void unionTags(Expression dst, Iterable<? extends Expression> srcs) {
+    if (dst == null || srcs == null) {
+      return;
+    }
+    for (Expression src : srcs) {
+      Set<String> tags = predicateOrigins.get(src);
+      if (tags != null && !tags.isEmpty()) {
+        predicateOrigins.computeIfAbsent(dst, k -> new LinkedHashSet<>()).addAll(tags);
+      }
+    }
+  }
+
+  /** Returns the predicate origin tags accumulated during compilation. Identity keyed. */
+  public Map<Expression, Set<String>> getPredicateOrigins() {
+    return predicateOrigins;
+  }
+
+  /** Returns the origin tags recorded for {@code expression}, or an empty set if none. */
+  public Set<String> getPredicateOrigins(Expression expression) {
+    Set<String> tags = predicateOrigins.get(expression);
+    return tags == null ? Collections.emptySet() : tags;
+  }
+
+  /** Records a parse node lifted from HAVING into the WHERE clause (identity keyed). */
+  public void addLiftedHavingNode(ParseNode node) {
+    if (node != null) {
+      liftedHavingNodes.add(node);
+    }
+  }
+
+  /** Returns true if {@code node} was lifted from HAVING into the WHERE clause. */
+  public boolean isLiftedHavingNode(ParseNode node) {
+    return liftedHavingNodes.contains(node);
+  }
+
+  /**
+   * Records that the given decorrelated join-condition parse node originated from the subquery with
+   * the given temp alias.
+   */
+  public void putDecorrelatedSubqueryAlias(ParseNode joinConditionNode, String subqueryAlias) {
+    if (joinConditionNode != null && subqueryAlias != null) {
+      decorrelatedSubqueryAlias.put(joinConditionNode, subqueryAlias);
+    }
+  }
+
+  /**
+   * Returns the subquery temp alias the given join-condition parse node was decorrelated from, or
+   * {@code null} if the node is not a decorrelated predicate.
+   */
+  public String getDecorrelatedSubqueryAlias(ParseNode joinConditionNode) {
+    return decorrelatedSubqueryAlias.get(joinConditionNode);
+  }
+
+  /**
+   * Records that the planner intentionally ignored {@code hint} for the given {@code reason}.
+   * Surfaced under {@code EXPLAIN (VERBOSE)} as a {@code /*- HINT(args) -- reason *}{@code /}
+   * comment. The first reason recorded for a hint wins. Diagnostic only.
+   */
+  public void recordIgnoredHint(Hint hint, String reason) {
+    if (hint == null || reason == null) {
+      return;
+    }
+    ignoredHints.putIfAbsent(hint, reason);
+  }
+
+  /** Returns the hints the planner intentionally ignored, mapped to the reason. */
+  public Map<Hint, String> getIgnoredHints() {
+    return ignoredHints;
   }
 
   /** Returns true if this is the top-level (root) statement context, i.e. it has no parent. */

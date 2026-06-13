@@ -250,6 +250,9 @@ public class QueryOptimizer {
       indexHint == null && dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan
         && dataPlan.isApplicable()
     ) {
+      if (select.getHint().hasHint(Hint.NO_INDEX)) {
+        dataPlan.getContext().recordIgnoredHint(Hint.NO_INDEX, "point lookup short-circuit");
+      }
       return Collections.<QueryPlan> singletonList(
         recordDecision(dataPlan, OptimizerReasons.RULE_POINT_LOOKUP, state));
     }
@@ -283,6 +286,9 @@ public class QueryOptimizer {
       table = cdcBuilder.build();
       dataPlan.getTableRef().setTable(table);
       forCDC = true;
+      if (select.getHint().hasHint(Hint.NO_INDEX)) {
+        dataPlan.getContext().recordIgnoredHint(Hint.NO_INDEX, "CDC table");
+      }
     }
 
     List<PTable> indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
@@ -292,6 +298,10 @@ public class QueryOptimizer {
     ) {
       if (select.getHint().hasHint(Hint.NO_INDEX)) {
         state.rejectAll(indexes, OptimizerReasons.REASON_EXCLUDED_BY_NO_INDEX_HINT);
+        if (indexes.isEmpty()) {
+          // NO_INDEX had no effect: the table has no indexes to exclude.
+          dataPlan.getContext().recordIgnoredHint(Hint.NO_INDEX, "no indexes on table");
+        }
       }
       return Collections.<
         QueryPlan> singletonList(recordDecision(dataPlan, OptimizerReasons.RULE_DATA_TABLE, state));
@@ -334,6 +344,9 @@ public class QueryOptimizer {
           }
           plans.add(0, hintedPlan);
         }
+      } else if (indexHint != null) {
+        // An INDEX(...) hint was supplied but no hinted index could be built into a usable plan.
+        dataPlan.getContext().recordIgnoredHint(Hint.INDEX, "no matching index applicable");
       }
     }
 
@@ -395,7 +408,8 @@ public class QueryOptimizer {
    */
   private static void carryForwardRewrites(StatementContext from, List<QueryPlan> plans) {
     List<String> rewrites = from.getAppliedRewrites();
-    if (rewrites.isEmpty()) {
+    Map<Hint, String> ignoredHints = from.getIgnoredHints();
+    if (rewrites.isEmpty() && (ignoredHints == null || ignoredHints.isEmpty())) {
       return;
     }
     for (QueryPlan plan : plans) {
@@ -406,6 +420,11 @@ public class QueryOptimizer {
       for (String rewrite : rewrites) {
         if (!to.getAppliedRewrites().contains(rewrite)) {
           to.addAppliedRewrite(rewrite);
+        }
+      }
+      if (ignoredHints != null) {
+        for (Map.Entry<Hint, String> entry : ignoredHints.entrySet()) {
+          to.recordIgnoredHint(entry.getKey(), entry.getValue());
         }
       }
     }

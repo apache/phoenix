@@ -273,7 +273,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
       ? delegate.iterator(scanGrouper, scan)
       : ((BaseQueryPlan) delegate).iterator(dependencies, scanGrouper, scan);
     if (statement.getInnerSelectStatement() != null && postFilter != null) {
-      iterator = new FilterResultIterator(iterator, postFilter);
+      iterator = new FilterResultIterator(iterator, postFilter, delegate.getContext());
     }
 
     if (hasSubPlansWithPersistentCache) {

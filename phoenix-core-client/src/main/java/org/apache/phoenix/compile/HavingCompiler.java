@@ -64,6 +64,14 @@ public class HavingCompiler {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.ONLY_AGGREGATE_IN_HAVING_CLAUSE).build()
         .buildException();
     }
+    // Tag the residual HAVING predicate(s) with their origin for VERBOSE attribution.
+    if (expression instanceof org.apache.phoenix.expression.AndExpression) {
+      for (Expression child : expression.getChildren()) {
+        context.tagPredicate(child, "HAVING");
+      }
+    } else {
+      context.tagPredicate(expression, "HAVING");
+    }
     return expression;
   }
 
@@ -77,6 +85,11 @@ public class HavingCompiler {
     having.accept(visitor);
     if (!visitor.getMoveToWhereClauseExpressions().isEmpty()) {
       context.addAppliedRewrite("HAVING PREDICATE AS WHERE");
+      // Record the parse nodes lifted from HAVING into WHERE so VERBOSE predicate attribution can
+      // distinguish them.
+      for (ParseNode lifted : visitor.getMoveToWhereClauseExpressions()) {
+        context.addLiftedHavingNode(lifted);
+      }
     }
     statement = SelectStatementRewriter.moveFromHavingToWhereClause(statement,
       visitor.getMoveToWhereClauseExpressions());

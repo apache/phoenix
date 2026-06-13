@@ -45,14 +45,14 @@ import org.apache.phoenix.schema.PColumn;
   "saltBuckets", "regionsPlanned", "scanTimeRangeMin", "scanTimeRangeMax", "splitsChunk",
   "useRoundRobinIterator", "samplingRate", "hexStringRVCOffset", "iteratorTypeAndScanSize",
   "scanEstimatedRows", "scanEstimatedSizeInBytes", "serverWhereFilter", "serverDistinctFilter",
-  "serverMergeColumns", "serverParsedProjections", "serverFirstKeyOnlyProjection",
-  "serverEmptyColumnOnlyProjection", "serverAggregate", "serverGroupByLimit", "serverSortedBy",
-  "serverOffset", "serverRowLimit", "clientFilterBy", "clientAggregate", "clientDistinctFilter",
-  "clientAfterAggregate", "clientSortAlgo", "clientSortedBy", "clientOffset", "clientRowLimit",
-  "clientSequenceCount", "clientCursorName", "clientSteps", "lhsJoinQueryExplainPlan",
-  "rhsJoinQueryExplainPlan", "subPlans", "dynamicServerFilter", "afterJoinFilter",
-  "joinScannerLimit", "sortMergeSkipMerge", "regionLocations", "regionLocationsTotalSize",
-  "numRegionLocationLookups" })
+  "serverMergeColumns", "serverParsedProjections", "serverProject", "serverFilters", "ignoredHints",
+  "serverFirstKeyOnlyProjection", "serverEmptyColumnOnlyProjection", "serverAggregate",
+  "serverGroupByLimit", "serverSortedBy", "serverOffset", "serverRowLimit", "clientFilterBy",
+  "clientFilters", "clientAggregate", "clientDistinctFilter", "clientAfterAggregate",
+  "clientSortAlgo", "clientSortedBy", "clientOffset", "clientRowLimit", "clientSequenceCount",
+  "clientCursorName", "clientSteps", "lhsJoinQueryExplainPlan", "rhsJoinQueryExplainPlan",
+  "subPlans", "dynamicServerFilter", "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge",
+  "regionLocations", "regionLocationsTotalSize", "numRegionLocationLookups" })
 public class ExplainPlanAttributes {
 
   // Top-of-plan disclosures (populated only on the root plan)
@@ -100,6 +100,9 @@ public class ExplainPlanAttributes {
   private final String serverDistinctFilter;
   private final Set<PColumn> serverMergeColumns;
   private final Map<String, List<String>> serverParsedProjections;
+  private final List<String> serverProject;
+  private final List<ExplainFilter> serverFilters;
+  private final Map<String, String> ignoredHints;
   private final boolean serverFirstKeyOnlyProjection;
   private final boolean serverEmptyColumnOnlyProjection;
   private final String serverAggregate;
@@ -110,6 +113,7 @@ public class ExplainPlanAttributes {
 
   // Client-side operations
   private final String clientFilterBy;
+  private final List<ExplainFilter> clientFilters;
   private final String clientAggregate;
   private final String clientDistinctFilter;
   private final String clientAfterAggregate;
@@ -177,6 +181,9 @@ public class ExplainPlanAttributes {
     this.serverDistinctFilter = null;
     this.serverMergeColumns = null;
     this.serverParsedProjections = null;
+    this.serverProject = null;
+    this.serverFilters = null;
+    this.ignoredHints = null;
     this.serverFirstKeyOnlyProjection = false;
     this.serverEmptyColumnOnlyProjection = false;
     this.serverAggregate = null;
@@ -185,6 +192,7 @@ public class ExplainPlanAttributes {
     this.serverOffset = null;
     this.serverRowLimit = null;
     this.clientFilterBy = null;
+    this.clientFilters = null;
     this.clientAggregate = null;
     this.clientDistinctFilter = null;
     this.clientAfterAggregate = null;
@@ -227,7 +235,9 @@ public class ExplainPlanAttributes {
     ExplainPlanAttributes rhsJoinQueryExplainPlan, List<ExplainPlanAttributes> subPlans,
     String dynamicServerFilter, String afterJoinFilter, Long joinScannerLimit,
     boolean sortMergeSkipMerge, List<HRegionLocation> regionLocations,
-    Integer regionLocationsTotalSize, int numRegionLocationLookups) {
+    Integer regionLocationsTotalSize, int numRegionLocationLookups, List<String> serverProject,
+    List<ExplainFilter> serverFilters, Map<String, String> ignoredHints,
+    List<ExplainFilter> clientFilters) {
     this.tenantId = tenantId;
     this.viewName = viewName;
     this.viewBaseName = viewBaseName;
@@ -279,6 +289,9 @@ public class ExplainPlanAttributes {
     this.serverOffset = serverOffset;
     this.serverRowLimit = serverRowLimit;
     this.clientFilterBy = clientFilterBy;
+    this.clientFilters = (clientFilters == null || clientFilters.isEmpty())
+      ? null
+      : Collections.unmodifiableList(new ArrayList<>(clientFilters));
     this.clientAggregate = clientAggregate;
     this.clientDistinctFilter = clientDistinctFilter;
     this.clientAfterAggregate = clientAfterAggregate;
@@ -301,6 +314,15 @@ public class ExplainPlanAttributes {
     this.regionLocations = regionLocations;
     this.regionLocationsTotalSize = regionLocationsTotalSize;
     this.numRegionLocationLookups = numRegionLocationLookups;
+    this.serverProject = (serverProject == null || serverProject.isEmpty())
+      ? null
+      : Collections.unmodifiableList(new ArrayList<>(serverProject));
+    this.serverFilters = (serverFilters == null || serverFilters.isEmpty())
+      ? null
+      : Collections.unmodifiableList(new ArrayList<>(serverFilters));
+    this.ignoredHints = (ignoredHints == null || ignoredHints.isEmpty())
+      ? null
+      : Collections.unmodifiableMap(new LinkedHashMap<>(ignoredHints));
   }
 
   public String getTenantId() {
@@ -464,6 +486,18 @@ public class ExplainPlanAttributes {
     return Collections.unmodifiableMap(copy);
   }
 
+  public List<String> getServerProject() {
+    return serverProject;
+  }
+
+  public List<ExplainFilter> getServerFilters() {
+    return serverFilters;
+  }
+
+  public Map<String, String> getIgnoredHints() {
+    return ignoredHints;
+  }
+
   public boolean isServerFirstKeyOnlyProjection() {
     return serverFirstKeyOnlyProjection;
   }
@@ -494,6 +528,10 @@ public class ExplainPlanAttributes {
 
   public String getClientFilterBy() {
     return clientFilterBy;
+  }
+
+  public List<ExplainFilter> getClientFilters() {
+    return clientFilters;
   }
 
   public String getClientAggregate() {
@@ -581,6 +619,59 @@ public class ExplainPlanAttributes {
     return EXPLAIN_PLAN_INSTANCE;
   }
 
+  /** A single VERBOSE-mode filter predicate. */
+  @JsonPropertyOrder({ "expr", "origin", "pathTestSubtag" })
+  public static class ExplainFilter {
+    private final String expr;
+    private final List<String> origin;
+    private final String pathTestSubtag;
+
+    public ExplainFilter(String expr, List<String> origin, String pathTestSubtag) {
+      this.expr = expr;
+      this.origin = (origin == null || origin.isEmpty())
+        ? null
+        : Collections.unmodifiableList(new ArrayList<>(origin));
+      this.pathTestSubtag = pathTestSubtag;
+    }
+
+    public String getExpr() {
+      return expr;
+    }
+
+    public List<String> getOrigin() {
+      return origin;
+    }
+
+    public String getPathTestSubtag() {
+      return pathTestSubtag;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (!(o instanceof ExplainFilter)) {
+        return false;
+      }
+      ExplainFilter that = (ExplainFilter) o;
+      return java.util.Objects.equals(expr, that.expr)
+        && java.util.Objects.equals(origin, that.origin)
+        && java.util.Objects.equals(pathTestSubtag, that.pathTestSubtag);
+    }
+
+    @Override
+    public int hashCode() {
+      return java.util.Objects.hash(expr, origin, pathTestSubtag);
+    }
+
+    @Override
+    public String toString() {
+      return "ExplainFilter{expr=" + expr + ", origin=" + origin + ", pathTestSubtag="
+        + pathTestSubtag + "}";
+    }
+  }
+
   public static class ExplainPlanAttributesBuilder {
     private String tenantId;
     private String viewName;
@@ -619,6 +710,9 @@ public class ExplainPlanAttributes {
     private String serverDistinctFilter;
     private Set<PColumn> serverMergeColumns;
     private Map<String, List<String>> serverParsedProjections;
+    private List<String> serverProject;
+    private List<ExplainFilter> serverFilters;
+    private Map<String, String> ignoredHints;
     private boolean serverFirstKeyOnlyProjection;
     private boolean serverEmptyColumnOnlyProjection;
     private String serverAggregate;
@@ -627,6 +721,7 @@ public class ExplainPlanAttributes {
     private Integer serverOffset;
     private Long serverRowLimit;
     private String clientFilterBy;
+    private List<ExplainFilter> clientFilters;
     private String clientAggregate;
     private String clientDistinctFilter;
     private String clientAfterAggregate;
@@ -697,6 +792,12 @@ public class ExplainPlanAttributes {
         explainPlanAttributes.getServerParsedProjections();
       this.serverParsedProjections =
         srcServerParsedProjections == null ? null : new LinkedHashMap<>(srcServerParsedProjections);
+      List<String> srcServerProject = explainPlanAttributes.getServerProject();
+      this.serverProject = srcServerProject == null ? null : new ArrayList<>(srcServerProject);
+      List<ExplainFilter> srcServerFilters = explainPlanAttributes.getServerFilters();
+      this.serverFilters = srcServerFilters == null ? null : new ArrayList<>(srcServerFilters);
+      Map<String, String> srcIgnoredHints = explainPlanAttributes.getIgnoredHints();
+      this.ignoredHints = srcIgnoredHints == null ? null : new LinkedHashMap<>(srcIgnoredHints);
       this.serverFirstKeyOnlyProjection = explainPlanAttributes.isServerFirstKeyOnlyProjection();
       this.serverEmptyColumnOnlyProjection =
         explainPlanAttributes.isServerEmptyColumnOnlyProjection();
@@ -706,6 +807,8 @@ public class ExplainPlanAttributes {
       this.serverOffset = explainPlanAttributes.getServerOffset();
       this.serverRowLimit = explainPlanAttributes.getServerRowLimit();
       this.clientFilterBy = explainPlanAttributes.getClientFilterBy();
+      List<ExplainFilter> srcClientFilters = explainPlanAttributes.getClientFilters();
+      this.clientFilters = srcClientFilters == null ? null : new ArrayList<>(srcClientFilters);
       this.clientAggregate = explainPlanAttributes.getClientAggregate();
       this.clientDistinctFilter = explainPlanAttributes.getClientDistinctFilter();
       this.clientAfterAggregate = explainPlanAttributes.getClientAfterAggregate();
@@ -935,6 +1038,37 @@ public class ExplainPlanAttributes {
       return this;
     }
 
+    public ExplainPlanAttributesBuilder setServerProject(List<String> serverProject) {
+      this.serverProject = serverProject == null ? null : new ArrayList<>(serverProject);
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setServerFilters(List<ExplainFilter> serverFilters) {
+      this.serverFilters = serverFilters == null ? null : new ArrayList<>(serverFilters);
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder addServerFilter(ExplainFilter serverFilter) {
+      if (this.serverFilters == null) {
+        this.serverFilters = new ArrayList<>();
+      }
+      this.serverFilters.add(serverFilter);
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setIgnoredHints(Map<String, String> ignoredHints) {
+      this.ignoredHints = ignoredHints == null ? null : new LinkedHashMap<>(ignoredHints);
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder addIgnoredHint(String hint, String reason) {
+      if (this.ignoredHints == null) {
+        this.ignoredHints = new LinkedHashMap<>();
+      }
+      this.ignoredHints.put(hint, reason);
+      return this;
+    }
+
     public ExplainPlanAttributesBuilder
       setServerFirstKeyOnlyProjection(boolean serverFirstKeyOnlyProjection) {
       this.serverFirstKeyOnlyProjection = serverFirstKeyOnlyProjection;
@@ -974,6 +1108,19 @@ public class ExplainPlanAttributes {
 
     public ExplainPlanAttributesBuilder setClientFilterBy(String clientFilterBy) {
       this.clientFilterBy = clientFilterBy;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setClientFilters(List<ExplainFilter> clientFilters) {
+      this.clientFilters = clientFilters == null ? null : new ArrayList<>(clientFilters);
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder addClientFilter(ExplainFilter clientFilter) {
+      if (this.clientFilters == null) {
+        this.clientFilters = new ArrayList<>();
+      }
+      this.clientFilters.add(clientFilter);
       return this;
     }
 
@@ -1102,7 +1249,8 @@ public class ExplainPlanAttributes {
         clientSortedBy, clientOffset, clientRowLimit, clientSequenceCount, clientCursorName,
         clientSteps, lhsJoinQueryExplainPlan, rhsJoinQueryExplainPlan, subPlans,
         dynamicServerFilter, afterJoinFilter, joinScannerLimit, sortMergeSkipMerge, regionLocations,
-        regionLocationsTotalSize, numRegionLocationLookups);
+        regionLocationsTotalSize, numRegionLocationLookups, serverProject, serverFilters,
+        ignoredHints, clientFilters);
     }
   }
 }

@@ -81,6 +81,20 @@ public final class ExplainPlanTestUtil {
     return getExplainPlan(conn, query).getPlanSteps();
   }
 
+  /**
+   * Optimize {@code query} with the given {@link ExplainOptions} applied to the plan's
+   * {@code StatementContext} and return its plan-steps text.
+   */
+  public static List<String> getPlanSteps(Connection conn, String query, ExplainOptions options)
+    throws SQLException {
+    try (PhoenixPreparedStatement statement =
+      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)) {
+      QueryPlan plan = statement.optimizeQuery();
+      plan.getContext().setExplainOptions(options);
+      return plan.getExplainPlan().getPlanSteps();
+    }
+  }
+
   /** Compile a mutation (UPSERT/DELETE) and return its {@link ExplainPlan}. */
   public static ExplainPlan getMutationExplainPlan(Connection conn, String query)
     throws SQLException {
@@ -116,6 +130,16 @@ public final class ExplainPlanTestUtil {
   public static ExplainPlanAssert assertPlanWithRegions(Connection conn, String query)
     throws SQLException {
     return assertPlan(getExplainAttributes(conn, query, ExplainOptions.WITH_REGIONS));
+  }
+
+  /**
+   * Optimize {@code query} on {@code conn} with the {@code VERBOSE} option enabled and begin
+   * assertions on its plan attributes. Use this when asserting on VERBOSE-only attributes such as
+   * {@code serverProject}, {@code serverFilters}, and {@code ignoredHints}.
+   */
+  public static ExplainPlanAssert assertPlanWithVerbose(Connection conn, String query)
+    throws SQLException {
+    return assertPlan(getExplainAttributes(conn, query, ExplainOptions.VERBOSE));
   }
 
   /**
@@ -504,6 +528,156 @@ public final class ExplainPlanTestUtil {
       List<String> bucket = actual == null ? null : actual.get(label);
       int actualCount = bucket == null ? 0 : bucket.size();
       assertEquals(at("serverParsedProjections[" + label + "].size"), expected, actualCount);
+      return this;
+    }
+
+    /** Assert the entire VERBOSE {@code PROJECT} column list matches {@code expected}, in order. */
+    public ExplainPlanAssert serverProject(String... expected) {
+      List<String> actual = attributes.getServerProject();
+      List<String> actualOrEmpty = actual == null ? Collections.<String> emptyList() : actual;
+      assertEquals(at("serverProject"), Arrays.asList(expected), actualOrEmpty);
+      return this;
+    }
+
+    /** Assert the number of VERBOSE {@code PROJECT} columns. */
+    public ExplainPlanAssert serverProjectCount(int expected) {
+      List<String> actual = attributes.getServerProject();
+      int actualCount = actual == null ? 0 : actual.size();
+      assertEquals(at("serverProject.size"), expected, actualCount);
+      return this;
+    }
+
+    /** Assert that no VERBOSE {@code PROJECT} disclosure was emitted (null or empty). */
+    public ExplainPlanAssert serverProjectNone() {
+      List<String> actual = attributes.getServerProject();
+      assertTrue(at("serverProject") + " expected none but was " + actual,
+        actual == null || actual.isEmpty());
+      return this;
+    }
+
+    /** Assert the number of VERBOSE server filter predicates. */
+    public ExplainPlanAssert serverFilterCount(int expected) {
+      List<ExplainPlanAttributes.ExplainFilter> actual = attributes.getServerFilters();
+      int actualCount = actual == null ? 0 : actual.size();
+      assertEquals(at("serverFilters.size"), expected, actualCount);
+      return this;
+    }
+
+    /** Assert that no VERBOSE server filter breakdown was emitted (null or empty). */
+    public ExplainPlanAssert serverFiltersNone() {
+      List<ExplainPlanAttributes.ExplainFilter> actual = attributes.getServerFilters();
+      assertTrue(at("serverFilters") + " expected none but was " + actual,
+        actual == null || actual.isEmpty());
+      return this;
+    }
+
+    /** Assert the i-th VERBOSE server filter's rendered expression. */
+    public ExplainPlanAssert serverFilter(int i, String expectedExpr) {
+      ExplainPlanAttributes.ExplainFilter filter = serverFilterAt(i);
+      assertEquals(at("serverFilters[" + i + "].expr"), expectedExpr, filter.getExpr());
+      return this;
+    }
+
+    /** Assert the i-th VERBOSE server filter's origin attribution, in order. */
+    public ExplainPlanAssert serverFilterOrigin(int i, String... expectedOrigin) {
+      ExplainPlanAttributes.ExplainFilter filter = serverFilterAt(i);
+      List<String> actual =
+        filter.getOrigin() == null ? Collections.<String> emptyList() : filter.getOrigin();
+      assertEquals(at("serverFilters[" + i + "].origin"), Arrays.asList(expectedOrigin), actual);
+      return this;
+    }
+
+    /** Assert the i-th VERBOSE server filter's path-test sub-tag (or {@code null}). */
+    public ExplainPlanAssert serverFilterPathTest(int i, String expectedSubtag) {
+      ExplainPlanAttributes.ExplainFilter filter = serverFilterAt(i);
+      assertEquals(at("serverFilters[" + i + "].pathTestSubtag"), expectedSubtag,
+        filter.getPathTestSubtag());
+      return this;
+    }
+
+    private ExplainPlanAttributes.ExplainFilter serverFilterAt(int i) {
+      List<ExplainPlanAttributes.ExplainFilter> filters = attributes.getServerFilters();
+      assertNotNull(at("serverFilters") + " must not be null", filters);
+      assertTrue(at("serverFilters") + " has no index " + i + " (size=" + filters.size() + ")",
+        i >= 0 && i < filters.size());
+      return filters.get(i);
+    }
+
+    /** Assert the number of VERBOSE client filter predicates. */
+    public ExplainPlanAssert clientFilterCount(int expected) {
+      List<ExplainPlanAttributes.ExplainFilter> actual = attributes.getClientFilters();
+      int actualCount = actual == null ? 0 : actual.size();
+      assertEquals(at("clientFilters.size"), expected, actualCount);
+      return this;
+    }
+
+    /** Assert that no VERBOSE client filter breakdown was emitted (null or empty). */
+    public ExplainPlanAssert clientFiltersNone() {
+      List<ExplainPlanAttributes.ExplainFilter> actual = attributes.getClientFilters();
+      assertTrue(at("clientFilters") + " expected none but was " + actual,
+        actual == null || actual.isEmpty());
+      return this;
+    }
+
+    /** Assert the i-th VERBOSE client filter's rendered expression. */
+    public ExplainPlanAssert clientFilter(int i, String expectedExpr) {
+      ExplainPlanAttributes.ExplainFilter filter = clientFilterAt(i);
+      assertEquals(at("clientFilters[" + i + "].expr"), expectedExpr, filter.getExpr());
+      return this;
+    }
+
+    /** Assert the i-th VERBOSE client filter's origin attribution, in order. */
+    public ExplainPlanAssert clientFilterOrigin(int i, String... expectedOrigin) {
+      ExplainPlanAttributes.ExplainFilter filter = clientFilterAt(i);
+      List<String> actual =
+        filter.getOrigin() == null ? Collections.<String> emptyList() : filter.getOrigin();
+      assertEquals(at("clientFilters[" + i + "].origin"), Arrays.asList(expectedOrigin), actual);
+      return this;
+    }
+
+    /** Assert the i-th VERBOSE client filter's path-test sub-tag (or {@code null}). */
+    public ExplainPlanAssert clientFilterPathTest(int i, String expectedSubtag) {
+      ExplainPlanAttributes.ExplainFilter filter = clientFilterAt(i);
+      assertEquals(at("clientFilters[" + i + "].pathTestSubtag"), expectedSubtag,
+        filter.getPathTestSubtag());
+      return this;
+    }
+
+    private ExplainPlanAttributes.ExplainFilter clientFilterAt(int i) {
+      List<ExplainPlanAttributes.ExplainFilter> filters = attributes.getClientFilters();
+      assertNotNull(at("clientFilters") + " must not be null", filters);
+      assertTrue(at("clientFilters") + " has no index " + i + " (size=" + filters.size() + ")",
+        i >= 0 && i < filters.size());
+      return filters.get(i);
+    }
+
+    /** Assert the entire VERBOSE ignored-hint map matches {@code expected}. */
+    public ExplainPlanAssert ignoredHints(Map<String, String> expected) {
+      assertEquals(at("ignoredHints"), expected, attributes.getIgnoredHints());
+      return this;
+    }
+
+    /** Assert the ignored-hint map carries {@code hint} mapped to {@code reason}. */
+    public ExplainPlanAssert ignoredHint(String hint, String reason) {
+      Map<String, String> actual = attributes.getIgnoredHints();
+      assertNotNull(at("ignoredHints") + " must not be null", actual);
+      assertEquals(at("ignoredHints[" + hint + "]"), reason, actual.get(hint));
+      return this;
+    }
+
+    /** Assert that the ignored-hint map contains an entry for {@code hint}. */
+    public ExplainPlanAssert hasIgnoredHint(String hint) {
+      Map<String, String> actual = attributes.getIgnoredHints();
+      assertTrue(at("ignoredHints") + " expected to contain '" + hint + "' but was " + actual,
+        actual != null && actual.containsKey(hint));
+      return this;
+    }
+
+    /** Assert that no ignored-hint disclosure was emitted (null or empty). */
+    public ExplainPlanAssert ignoredHintsNone() {
+      Map<String, String> actual = attributes.getIgnoredHints();
+      assertTrue(at("ignoredHints") + " expected none but was " + actual,
+        actual == null || actual.isEmpty());
       return this;
     }
 

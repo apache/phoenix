@@ -675,6 +675,12 @@ public class JoinCompiler {
         if (right.getDataType() != toType || right.getSortOrder() != toSortOrder) {
           right = CoerceExpression.create(right, toType, toSortOrder, right.getMaxLength());
         }
+        // Tag the compiled ON predicates with their origin for VERBOSE attribution.
+        String decorrelatedAlias = lhsCtx.getDecorrelatedSubqueryAlias(condition);
+        String onOrigin =
+          decorrelatedAlias == null ? "JOIN ON" : "decorrelated from " + decorrelatedAlias;
+        lhsCtx.tagPredicate(left, onOrigin);
+        rhsCtx.tagPredicate(right, onOrigin);
         compiled.add(new Pair<Expression, Expression>(left, right));
       }
       // TODO PHOENIX-4618:

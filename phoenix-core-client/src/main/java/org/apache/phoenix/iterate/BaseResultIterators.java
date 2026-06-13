@@ -652,6 +652,11 @@ public abstract class BaseResultIterators extends ExplainTable implements Result
   }
 
   @Override
+  protected org.apache.phoenix.compile.RowProjector getProjector() {
+    return plan.getProjector();
+  }
+
+  @Override
   public List<List<Scan>> getScans() {
     if (scans == null) return Collections.emptyList();
     else return scans;
