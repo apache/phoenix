@@ -117,7 +117,7 @@ public class QueryLoggerIT extends BaseTest {
 
     // sleep for sometime to let query log committed
     Thread.sleep(delay);
-    try (ResultSet explainRS = conn.createStatement().executeQuery("Explain with regions " + query);
+    try (ResultSet explainRS = conn.createStatement().executeQuery("Explain " + query);
       ResultSet rs = conn.createStatement().executeQuery(logQuery)) {
       boolean foundQueryLog = false;
 
@@ -301,8 +301,8 @@ public class QueryLoggerIT extends BaseTest {
 
       // sleep for sometime to let query log committed
       Thread.sleep(delay);
-      String explainQuery =
-        "EXPLAIN WITH REGIONS " + "SELECT * FROM " + tableName + " where V = 'value5'";
+      // Compare against a plain EXPLAIN (no REGIONS) to match the logged plan.
+      String explainQuery = "EXPLAIN " + "SELECT * FROM " + tableName + " where V = 'value5'";
       try (ResultSet explainRS = conn.createStatement().executeQuery(explainQuery);
         ResultSet rs = conn.createStatement().executeQuery(logQuery)) {
         boolean foundQueryLog = false;
