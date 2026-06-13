@@ -18,11 +18,13 @@
 package org.apache.phoenix.execute;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainFilter;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
@@ -87,7 +89,7 @@ public class ClientScanPlan extends ClientProcessingPlan {
   public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
     ResultIterator iterator = delegate.iterator(scanGrouper, scan);
     if (where != null) {
-      iterator = new FilterResultIterator(iterator, where);
+      iterator = new FilterResultIterator(iterator, where, context);
     }
 
     if (!orderBy.getOrderByExpressions().isEmpty()) { // TopN
@@ -124,10 +126,21 @@ public class ClientScanPlan extends ClientProcessingPlan {
     ExplainPlanAttributesBuilder newBuilder =
       new ExplainPlanAttributesBuilder(explainPlanAttributes);
     if (where != null) {
-      String step = "CLIENT FILTER BY " + where.toString();
-      planSteps.add(step);
-      newBuilder.setClientFilterBy(where.toString());
-      newBuilder.addClientStep(step);
+      if (context.isVerbose()) {
+        List<String> filterLines = new ArrayList<>();
+        List<ExplainFilter> clientFilters = ExplainTable.renderVerboseFilters(context, where,
+          where.toString(), "CLIENT FILTER BY", filterLines);
+        for (String filterLine : filterLines) {
+          planSteps.add(filterLine);
+          newBuilder.addClientStep(filterLine);
+        }
+        newBuilder.setClientFilters(clientFilters);
+      } else {
+        String step = "CLIENT FILTER BY " + where.toString();
+        planSteps.add(step);
+        newBuilder.setClientFilterBy(where.toString());
+        newBuilder.addClientStep(step);
+      }
     }
     if (!orderBy.getOrderByExpressions().isEmpty()) {
       if (offset != null) {

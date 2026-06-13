@@ -180,6 +180,9 @@ public class RVCOffsetCompiler {
       throw new RowValueConstructorOffsetInternalErrorException("RVC Offset unexpected failure.");
     }
 
+    // Tag the RVC offset predicate with its origin for VERBOSE attribution.
+    context.tagPredicate(whereExpression, "RVC OFFSET");
+
     Expression expression;
     try {
       expression = WhereOptimizer.pushKeyExpressionsToScan(context, originalHints, whereExpression,
