@@ -33,6 +33,7 @@ public final class ExplainOptions {
 
   public static final ExplainOptions DEFAULT = new ExplainOptions(false, false, Format.TEXT);
   public static final ExplainOptions WITH_REGIONS = new ExplainOptions(true, false, Format.TEXT);
+  public static final ExplainOptions VERBOSE = new ExplainOptions(false, true, Format.TEXT);
 
   private final boolean regions;
   private final boolean verbose;

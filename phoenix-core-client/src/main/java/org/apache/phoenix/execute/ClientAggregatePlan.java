@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import org.apache.hadoop.hbase.Cell;
@@ -29,6 +30,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainFilter;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -136,7 +138,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
   public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
     ResultIterator iterator = delegate.iterator(scanGrouper, scan);
     if (where != null) {
-      iterator = new FilterResultIterator(iterator, where);
+      iterator = new FilterResultIterator(iterator, where, context);
     }
 
     AggregatingResultIterator aggResultIterator;
@@ -186,7 +188,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     }
 
     if (having != null) {
-      aggResultIterator = new FilterAggregatingResultIterator(aggResultIterator, having);
+      aggResultIterator = new FilterAggregatingResultIterator(aggResultIterator, having, context);
     }
 
     if (statement.isDistinct() && statement.isAggregate()) { // Dedup on client if select distinct
@@ -227,10 +229,21 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     ExplainPlanAttributesBuilder newBuilder =
       new ExplainPlanAttributesBuilder(explainPlanAttributes);
     if (where != null) {
-      String step = "CLIENT FILTER BY " + where.toString();
-      planSteps.add(step);
-      newBuilder.setClientFilterBy(where.toString());
-      newBuilder.addClientStep(step);
+      if (context.isVerbose()) {
+        List<String> filterLines = new ArrayList<>();
+        List<ExplainFilter> clientFilters = ExplainTable.renderVerboseFilters(context, where,
+          where.toString(), "CLIENT FILTER BY", filterLines);
+        for (String filterLine : filterLines) {
+          planSteps.add(filterLine);
+          newBuilder.addClientStep(filterLine);
+        }
+        newBuilder.setClientFilters(clientFilters);
+      } else {
+        String step = "CLIENT FILTER BY " + where.toString();
+        planSteps.add(step);
+        newBuilder.setClientFilterBy(where.toString());
+        newBuilder.addClientStep(step);
+      }
     }
     if (groupBy.isEmpty()) {
       String step = "CLIENT AGGREGATE INTO SINGLE ROW";
