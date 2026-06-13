@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlanWithRegions;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -49,7 +50,9 @@ import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class FlappingLocalIndexIT extends BaseLocalIndexIT {
 
   public FlappingLocalIndexIT(boolean isNamespaceMapped) {
@@ -167,7 +170,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
 
       // MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN is set as 2 so getRegionLocations() is trimmed. The
       // full number of regions is reported via regionLocationsTotalSize.
-      assertPlan(conn1, query).iteratorType("PARALLEL " + numRegions + "-WAY")
+      assertPlanWithRegions(conn1, query).iteratorType("PARALLEL " + numRegions + "-WAY")
         .scanType("RANGE SCAN").table(indexTableName + "(" + indexPhysicalTableName + ")")
         .keyRanges(" [1,'a'] - [1,'b']").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT").regionLocationCount(trimmedRegionLocations)

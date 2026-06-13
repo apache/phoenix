@@ -233,7 +233,7 @@ import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.parse.LikeParseNode.LikeType;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.parse.AddJarsStatement;
-import org.apache.phoenix.parse.ExplainType;
+import org.apache.phoenix.parse.ExplainOptions;
 }
 
 @lexer::header {
@@ -316,6 +316,38 @@ package org.apache.phoenix.parse;
          if (nBind > anonBindNum) {
              anonBindNum = nBind;
          }
+    }
+
+    /**
+     * Parse a single EXPLAIN option into the given builder. The option name is matched
+     * case-insensitively against the closed set {REGIONS, VERBOSE, FORMAT}. REGIONS and VERBOSE are
+     * flags and must not carry a value; FORMAT requires a value of TEXT or JSON.
+     */
+    private void parseExplainOption(ExplainOptions.Builder opts, String name, String value) {
+        if ("REGIONS".equalsIgnoreCase(name)) {
+            if (value != null) {
+                throw new RuntimeException("EXPLAIN option REGIONS does not take a value");
+            }
+            opts.setRegions(true);
+        } else if ("VERBOSE".equalsIgnoreCase(name)) {
+            if (value != null) {
+                throw new RuntimeException("EXPLAIN option VERBOSE does not take a value");
+            }
+            opts.setVerbose(true);
+        } else if ("FORMAT".equalsIgnoreCase(name)) {
+            if (value == null) {
+                throw new RuntimeException("EXPLAIN option FORMAT requires a value: TEXT or JSON");
+            }
+            if ("TEXT".equalsIgnoreCase(value)) {
+                opts.setFormat(ExplainOptions.Format.TEXT);
+            } else if ("JSON".equalsIgnoreCase(value)) {
+                opts.setFormat(ExplainOptions.Format.JSON);
+            } else {
+                throw new RuntimeException("Unknown EXPLAIN FORMAT: " + value);
+            }
+        } else {
+            throw new RuntimeException("Unknown EXPLAIN option: " + name);
+        }
     }
 
     protected Object recoverFromMismatchedToken(IntStream input, int ttype, BitSet follow)
@@ -477,14 +509,23 @@ oneStatement returns [BindableStatement ret]
 finally{ contextStack.pop(); }
     
 explain_node returns [BindableStatement ret]
-    :   EXPLAIN (w=WITH)? (r=REGIONS)? q=oneStatement
+@init { ExplainOptions.Builder opts = new ExplainOptions.Builder(); }
+    :   EXPLAIN
+        (
+            (LPAREN explain_option[opts] (COMMA explain_option[opts])* RPAREN)
+          | (WITH REGIONS                   { opts.setRegions(true); })
+        )?
+        q=oneStatement
      {
-        if ((w==null && r!=null) || (w!=null && r==null)) {
-            throw new RuntimeException("Valid usage: EXPLAIN {query} OR EXPLAIN WITH REGIONS {query}");
-        }
-        ret = (w==null && r==null) ? factory.explain(q, ExplainType.DEFAULT)
-         : factory.explain(q, ExplainType.WITH_REGIONS);
+        ret = factory.explain(q, opts.build());
      }
+    ;
+
+// A single EXPLAIN option. REGIONS is a global keyword token. The remaining option keywords
+// (VERBOSE, FORMAT, TEXT, JSON) are not reserved and arrive as NAME tokens, validated in the action.
+explain_option[ExplainOptions.Builder opts]
+    :   REGIONS                 { opts.setRegions(true); }
+    |   k=NAME (v=NAME)?        { parseExplainOption(opts, k.getText(), v == null ? null : v.getText()); }
     ;
 
 // Parse a create table statement.

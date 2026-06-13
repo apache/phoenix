@@ -162,8 +162,8 @@ import org.apache.phoenix.parse.DropSchemaStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.ExecuteUpgradeStatement;
+import org.apache.phoenix.parse.ExplainOptions;
 import org.apache.phoenix.parse.ExplainStatement;
-import org.apache.phoenix.parse.ExplainType;
 import org.apache.phoenix.parse.FetchStatement;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
@@ -393,8 +393,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             // Send mutations to hbase, so they are visible to subsequent reads.
             // Use original plan for data table so that data and immutable indexes will be sent
             // TODO: for joins, we need to iterate through all tables, but we need the original
-            // table,
-            // not the projected table, so plan.getContext().getResolver().getTables() won't work.
+            // table, not the projected table, so plan.getContext().getResolver().getTables()
+            // won't work.
             if (plan.getContext().getScanRanges().isPointLookup()) {
               pointLookup = true;
             }
@@ -445,12 +445,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             overallQuerymetrics.startQuery();
             overallQuerymetrics.setQueryParsingTimeMS(getSqlQueryParsingTime());
             rs = newResultSet(resultIterator, plan.getProjector(), plan.getContext());
-            // newResultset sets lastResultset
-            // ExecutableShowCreateTable/ExecutableShowTablesStatement/ExecutableShowSchemasStatement
-            // using a delegateStmt
+            // newResultset sets lastResultset ExecutableShowCreateTable /
+            // ExecutableShowTablesStatement / ExecutableShowSchemasStatement using a delegateStmt
             // to compile a queryPlan, the resultSet will set to the delegateStmt, so need set
-            // resultSet
-            // to the origin statement.
+            // resultSet to the origin statement.
             setLastResultSet(rs);
             setLastQueryPlan(plan);
             setLastUpdateCount(NO_UPDATE);
@@ -771,11 +769,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                   ) {
                     TableMetricsManager.updateLatencyHistogramForMutations(tableName,
                       executeMutationTimeSpent, false);
-                    // We won't have size histograms for delete mutations when auto commit is set to
-                    // true and
-                    // if plan is of ServerSelectDeleteMutationPlan or
-                    // ServerUpsertSelectMutationPlan
-                    // since the update happens on server.
+                    // We won't have size histograms for delete mutations when auto commit is set
+                    // to true and if plan is of ServerSelectDeleteMutationPlan or
+                    // ServerUpsertSelectMutationPlan since the update happens on server.
                   } else {
                     state.addExecuteMutationTime(executeMutationTimeSpent, tableName);
                   }
@@ -963,8 +959,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
   private static class ExecutableExplainStatement extends ExplainStatement
     implements CompilableStatement {
 
-    ExecutableExplainStatement(BindableStatement statement, ExplainType explainType) {
-      super(statement, explainType);
+    ExecutableExplainStatement(BindableStatement statement, ExplainOptions options) {
+      super(statement, options);
     }
 
     @Override
@@ -1003,16 +999,16 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
           stmt.getConnection().getQueryServices().getOptimizer().optimize(stmt, dataPlan);
       }
       final StatementPlan plan = compilePlan;
+      // Propagate the parsed EXPLAIN options onto the resolved plan's context so the renderer has
+      // access to the requested options.
+      if (plan.getContext() != null) {
+        plan.getContext().setExplainOptions(getOptions());
+      }
       ExplainPlan explainPlan = plan.getExplainPlan();
       // Prepend the top-of-plan disclosure blocks. This is the only place the disclosure text is
       // emitted.
       List<String> planSteps = new ArrayList<>(explainPlan.getPlanSteps());
       ExplainTable.renderTopOfPlanText(planSteps, explainPlan.getPlanStepsAsAttributes());
-      ExplainType explainType = getExplainType();
-      if (explainType == ExplainType.DEFAULT) {
-        planSteps.removeIf(
-          planStep -> planStep != null && planStep.contains(ExplainTable.REGION_LOCATIONS));
-      }
       planSteps = Collections.unmodifiableList(planSteps);
       List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
       Long estimatedBytesToScan = plan.getEstimatedBytesToScan();
@@ -2397,8 +2393,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
     @Override
-    public ExplainStatement explain(BindableStatement statement, ExplainType explainType) {
-      return new ExecutableExplainStatement(statement, explainType);
+    public ExplainStatement explain(BindableStatement statement, ExplainOptions options) {
+      return new ExecutableExplainStatement(statement, options);
     }
 
     @Override

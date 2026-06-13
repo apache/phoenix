@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlanWithRegions;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.assertResultSet;
 import static org.junit.Assert.assertEquals;
@@ -556,8 +557,9 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
     assertEquals("a", rs.getString(1));
     assertEquals(4, rs.getLong(2));
     assertFalse(rs.next());
-    assertPlan(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY").clientSortedBy("REVERSE")
-      .scanType("FULL SCAN").table(tableName).serverFirstKeyOnlyProjection(true)
+    assertPlanWithRegions(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY")
+      .clientSortedBy("REVERSE").scanType("FULL SCAN").table(tableName)
+      .serverFirstKeyOnlyProjection(true)
       .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]")
       .regionLocationsNotEmpty();
   }
@@ -605,8 +607,9 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
     assertEquals("a", rs.getString(1));
     assertEquals(10, rs.getLong(2));
     assertFalse(rs.next());
-    assertPlan(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY").clientSortedBy("REVERSE")
-      .scanType("FULL SCAN").table(tableName).serverFirstKeyOnlyProjection(true)
+    assertPlanWithRegions(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY")
+      .clientSortedBy("REVERSE").scanType("FULL SCAN").table(tableName)
+      .serverFirstKeyOnlyProjection(true)
       .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]")
       .regionLocationsNotEmpty();
   }
@@ -664,8 +667,8 @@ public abstract class BaseAggregateIT extends ParallelStatsDisabledIT {
     assertEquals("n", rs.getString(1));
     assertEquals(2, rs.getDouble(2), 1e-6);
     assertFalse(rs.next());
-    assertPlan(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
-      .table(tableName).serverFirstKeyOnlyProjection(true)
+    assertPlanWithRegions(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY")
+      .scanType("FULL SCAN").table(tableName).serverFirstKeyOnlyProjection(true)
       .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [K1]")
       .regionLocationsNotEmpty();
     TestUtil.analyzeTable(conn, tableName);
