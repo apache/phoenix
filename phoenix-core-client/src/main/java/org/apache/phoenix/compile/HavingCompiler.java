@@ -85,11 +85,6 @@ public class HavingCompiler {
     having.accept(visitor);
     if (!visitor.getMoveToWhereClauseExpressions().isEmpty()) {
       context.addAppliedRewrite("HAVING PREDICATE AS WHERE");
-      // Record the parse nodes lifted from HAVING into WHERE so VERBOSE predicate attribution can
-      // distinguish them.
-      for (ParseNode lifted : visitor.getMoveToWhereClauseExpressions()) {
-        context.addLiftedHavingNode(lifted);
-      }
     }
     statement = SelectStatementRewriter.moveFromHavingToWhereClause(statement,
       visitor.getMoveToWhereClauseExpressions());
