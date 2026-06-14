@@ -105,7 +105,6 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
       }
       if (breadcrumbContext != null) {
         breadcrumbContext.addAppliedRewrite("INDEX EXPRESSION " + expressionStr + " AS " + colName);
-        breadcrumbContext.addIndexExpressionSubstitution(indexedParseNode, colName);
       }
     }
   }
