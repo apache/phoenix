@@ -298,11 +298,6 @@ public class SubselectRewriter extends ParseNodeRewriter {
       newSelectAliasedNodes);
   }
 
-  public static SelectStatement flatten(SelectStatement select, PhoenixConnection connection)
-    throws SQLException {
-    return flatten(select, connection, null);
-  }
-
   public static SelectStatement flatten(SelectStatement select, PhoenixConnection connection,
     StatementContext context) throws SQLException {
     TableNode from = select.getFrom();

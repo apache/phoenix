@@ -74,11 +74,6 @@ public class SubqueryRewriter extends ParseNodeRewriter {
   private ParseNode topNode;
 
   public static SelectStatement transform(SelectStatement select, ColumnResolver resolver,
-    PhoenixConnection connection) throws SQLException {
-    return transform(select, resolver, connection, null);
-  }
-
-  public static SelectStatement transform(SelectStatement select, ColumnResolver resolver,
     PhoenixConnection connection, StatementContext context) throws SQLException {
     ParseNode where = select.getWhere();
     if (where == null) return select;
@@ -88,11 +83,6 @@ public class SubqueryRewriter extends ParseNodeRewriter {
     if (normWhere == where) return select;
 
     return NODE_FACTORY.select(select, rewriter.tableNode, normWhere);
-  }
-
-  protected SubqueryRewriter(SelectStatement select, ColumnResolver resolver,
-    PhoenixConnection connection) {
-    this(select, resolver, connection, null);
   }
 
   protected SubqueryRewriter(SelectStatement select, ColumnResolver resolver,
