@@ -598,9 +598,7 @@ public class DeleteCompiler {
     select = StatementNormalizer.normalize(select, resolverToBe);
     // Pre-build a context so the early rewrite pass records top of plan breadcrumbs that are
     // adopted by the DELETE data query plan's compilation context.
-    StatementContext rewriteContext =
-      new StatementContext(statement, FromCompiler.EMPTY_TABLE_RESOLVER,
-        new BindManager(statement.getParameters()), new Scan(), new SequenceManager(statement));
+    StatementContext rewriteContext = StatementContext.forRewrite(statement);
     SelectStatement transformedSelect =
       SubqueryRewriter.transform(select, resolverToBe, connection, rewriteContext);
     boolean hasPreProcessing = transformedSelect != select;
