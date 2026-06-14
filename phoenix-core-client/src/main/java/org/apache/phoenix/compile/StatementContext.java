@@ -111,7 +111,6 @@ public class StatementContext {
   private final int slowestScanMetricsCount;
   private List<String> appliedRewrites;
   private int derivedTableFlattenCount;
-  private List<Pair<ParseNode, String>> indexExpressionSubstitutions;
   private Map<String, List<String>> appliedIndexExpressionMatches;
   private Set<String> functionalIndexNames;
   private Set<Pair<String, String>> partialIndexCheckedSet;
@@ -119,7 +118,6 @@ public class StatementContext {
   private StatementContext parentContext;
   private ExplainOptions explainOptions = ExplainOptions.DEFAULT;
   private Map<Expression, Set<String>> predicateOrigins;
-  private Set<ParseNode> liftedHavingNodes;
   private Map<ParseNode, String> decorrelatedSubqueryAlias;
   private Map<Hint, String> ignoredHints;
 
@@ -160,7 +158,6 @@ public class StatementContext {
     this.hasRawRowSizeFunction = context.hasRawRowSizeFunction;
     this.appliedRewrites = context.appliedRewrites;
     this.derivedTableFlattenCount = context.derivedTableFlattenCount;
-    this.indexExpressionSubstitutions = context.indexExpressionSubstitutions;
     this.appliedIndexExpressionMatches = context.appliedIndexExpressionMatches;
     this.functionalIndexNames = context.functionalIndexNames;
     this.partialIndexCheckedSet = context.partialIndexCheckedSet;
@@ -168,7 +165,6 @@ public class StatementContext {
     this.parentContext = context.parentContext;
     this.explainOptions = context.explainOptions;
     this.predicateOrigins = context.predicateOrigins;
-    this.liftedHavingNodes = context.liftedHavingNodes;
     this.decorrelatedSubqueryAlias = context.decorrelatedSubqueryAlias;
     this.ignoredHints = context.ignoredHints;
   }
@@ -235,14 +231,12 @@ public class StatementContext {
     this.subStatementContexts = Sets.newLinkedHashSet();
     this.appliedRewrites = new ArrayList<>();
     this.derivedTableFlattenCount = 0;
-    this.indexExpressionSubstitutions = new ArrayList<>();
     this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
     this.functionalIndexNames = Sets.newHashSet();
     this.partialIndexCheckedSet = Sets.newHashSet();
     this.serverParsedProjections = null;
     this.parentContext = null;
     this.predicateOrigins = new IdentityHashMap<>();
-    this.liftedHavingNodes = Collections.newSetFromMap(new IdentityHashMap<>());
     this.decorrelatedSubqueryAlias = new IdentityHashMap<>();
     this.ignoredHints = new EnumMap<>(Hint.class);
   }
@@ -534,13 +528,11 @@ public class StatementContext {
   public void adoptRewriteState(StatementContext source) {
     this.appliedRewrites = source.appliedRewrites;
     this.derivedTableFlattenCount = source.derivedTableFlattenCount;
-    this.indexExpressionSubstitutions = source.indexExpressionSubstitutions;
     this.appliedIndexExpressionMatches = source.appliedIndexExpressionMatches;
     this.functionalIndexNames = source.functionalIndexNames;
     this.partialIndexCheckedSet = source.partialIndexCheckedSet;
     this.serverParsedProjections = source.serverParsedProjections;
     this.predicateOrigins = source.predicateOrigins;
-    this.liftedHavingNodes = source.liftedHavingNodes;
     this.decorrelatedSubqueryAlias = source.decorrelatedSubqueryAlias;
     this.ignoredHints = source.ignoredHints;
   }
@@ -551,15 +543,6 @@ public class StatementContext {
 
   public int getDerivedTableFlattenCount() {
     return derivedTableFlattenCount;
-  }
-
-  /** Structured pairs recorded when a functional index expression is substituted. */
-  public List<Pair<ParseNode, String>> getIndexExpressionSubstitutions() {
-    return indexExpressionSubstitutions;
-  }
-
-  public void addIndexExpressionSubstitution(ParseNode source, String indexColumnName) {
-    indexExpressionSubstitutions.add(new Pair<>(source, indexColumnName));
   }
 
   /**
@@ -660,23 +643,6 @@ public class StatementContext {
     predicateOrigins.computeIfAbsent(expression, k -> new LinkedHashSet<>()).add(origin);
   }
 
-  /**
-   * Propagate the accumulated origin tags of each source expression onto a freshly minted
-   * destination expression. Used by expression rewriters/clone visitors so identity-keyed tags
-   * survive node replacement.
-   */
-  public void unionTags(Expression dst, Iterable<? extends Expression> srcs) {
-    if (dst == null || srcs == null) {
-      return;
-    }
-    for (Expression src : srcs) {
-      Set<String> tags = predicateOrigins.get(src);
-      if (tags != null && !tags.isEmpty()) {
-        predicateOrigins.computeIfAbsent(dst, k -> new LinkedHashSet<>()).addAll(tags);
-      }
-    }
-  }
-
   /** Returns the predicate origin tags accumulated during compilation. Identity keyed. */
   public Map<Expression, Set<String>> getPredicateOrigins() {
     return predicateOrigins;
@@ -686,18 +652,6 @@ public class StatementContext {
   public Set<String> getPredicateOrigins(Expression expression) {
     Set<String> tags = predicateOrigins.get(expression);
     return tags == null ? Collections.emptySet() : tags;
-  }
-
-  /** Records a parse node lifted from HAVING into the WHERE clause (identity keyed). */
-  public void addLiftedHavingNode(ParseNode node) {
-    if (node != null) {
-      liftedHavingNodes.add(node);
-    }
-  }
-
-  /** Returns true if {@code node} was lifted from HAVING into the WHERE clause. */
-  public boolean isLiftedHavingNode(ParseNode node) {
-    return liftedHavingNodes.contains(node);
   }
 
   /**
