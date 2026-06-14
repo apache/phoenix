@@ -22,7 +22,6 @@ import java.text.Format;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -804,14 +803,13 @@ public abstract class ExplainTable {
     }
     try {
       StringBuilder buf = new StringBuilder().append(REGION_LOCATIONS);
-      Set<RegionBoundary> regionBoundaries = new HashSet<>();
+      Set<String> regionBoundaries = new LinkedHashSet<>();
       List<HRegionLocation> regionLocations = new ArrayList<>();
       for (HRegionLocation regionLocation : regionLocationsFromResultIterator) {
-        RegionBoundary regionBoundary = new RegionBoundary(regionLocation.getRegion().getStartKey(),
-          regionLocation.getRegion().getEndKey());
-        if (!regionBoundaries.contains(regionBoundary)) {
+        String regionBoundary = Bytes.toStringBinary(regionLocation.getRegion().getStartKey()) + ":"
+          + Bytes.toStringBinary(regionLocation.getRegion().getEndKey());
+        if (regionBoundaries.add(regionBoundary)) {
           regionLocations.add(regionLocation);
-          regionBoundaries.add(regionBoundary);
         }
       }
       int maxLimitRegionLoc = context.getConnection().getQueryServices().getConfiguration().getInt(
@@ -842,39 +840,6 @@ public abstract class ExplainTable {
     } catch (Exception e) {
       LOGGER.error("Explain table unable to add region locations.", e);
       return "";
-    }
-  }
-
-  /**
-   * Region boundary class with start and end key of the region.
-   */
-  private static class RegionBoundary {
-    private final byte[] startKey;
-    private final byte[] endKey;
-
-    RegionBoundary(byte[] startKey, byte[] endKey) {
-      this.startKey = startKey;
-      this.endKey = endKey;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-      if (this == o) {
-        return true;
-      }
-      if (o == null || getClass() != o.getClass()) {
-        return false;
-      }
-      RegionBoundary that = (RegionBoundary) o;
-      return Bytes.compareTo(startKey, that.startKey) == 0
-        && Bytes.compareTo(endKey, that.endKey) == 0;
-    }
-
-    @Override
-    public int hashCode() {
-      int result = Arrays.hashCode(startKey);
-      result = 31 * result + Arrays.hashCode(endKey);
-      return result;
     }
   }
 
