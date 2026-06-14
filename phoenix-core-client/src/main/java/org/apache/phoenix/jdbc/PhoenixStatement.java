@@ -80,7 +80,6 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.call.CallRunner;
 import org.apache.phoenix.compile.BaseMutationPlan;
-import org.apache.phoenix.compile.BindManager;
 import org.apache.phoenix.compile.CloseStatementCompiler;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.CreateFunctionCompiler;
@@ -95,7 +94,6 @@ import org.apache.phoenix.compile.ExplainJsonRenderer;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExpressionProjector;
-import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.ListJarsQueryPlan;
 import org.apache.phoenix.compile.MutationPlan;
@@ -867,9 +865,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       // Pre-build the top-level StatementContext so the early SubselectRewriter/SubqueryRewriter
       // pass can record top of plan rewrite breadcrumbs onto it. The same accumulator is then
       // adopted by the compilation context via QueryCompiler.withRewriteContext.
-      StatementContext rewriteContext = new StatementContext(phoenixStatement,
-        FromCompiler.EMPTY_TABLE_RESOLVER, new BindManager(phoenixStatement.getParameters()),
-        new Scan(), new SequenceManager(phoenixStatement));
+      StatementContext rewriteContext = StatementContext.forRewrite(phoenixStatement);
       RewriteResult rewriteResult = ParseNodeUtil.rewrite(this, rewriteContext);
       QueryPlan queryPlan = new QueryCompiler(phoenixStatement,
         rewriteResult.getRewrittenSelectStatement(), rewriteResult.getColumnResolver(),

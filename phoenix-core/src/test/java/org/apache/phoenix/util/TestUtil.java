@@ -1445,15 +1445,18 @@ public class TestUtil {
   public static JoinTable getJoinTable(String query, PhoenixConnection connection)
     throws SQLException {
     SQLParser parser = new SQLParser(query);
-    SelectStatement select = SubselectRewriter.flatten(parser.parseQuery(), connection);
+    PhoenixStatement stmt = connection.createStatement().unwrap(PhoenixStatement.class);
+    StatementContext rewriteContext = StatementContext.forRewrite(stmt);
+    SelectStatement select =
+      SubselectRewriter.flatten(parser.parseQuery(), connection, rewriteContext);
     ColumnResolver resolver = FromCompiler.getResolverForQuery(select, connection);
     select = StatementNormalizer.normalize(select, resolver);
-    SelectStatement transformedSelect = SubqueryRewriter.transform(select, resolver, connection);
+    SelectStatement transformedSelect =
+      SubqueryRewriter.transform(select, resolver, connection, rewriteContext);
     if (transformedSelect != select) {
       resolver = FromCompiler.getResolverForQuery(transformedSelect, connection);
       select = StatementNormalizer.normalize(transformedSelect, resolver);
     }
-    PhoenixStatement stmt = connection.createStatement().unwrap(PhoenixStatement.class);
     return JoinCompiler.compile(stmt, select, resolver);
   }
 

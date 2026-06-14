@@ -125,6 +125,23 @@ public class StatementContext {
     this(statement, new Scan());
   }
 
+  /**
+   * Build a top-level {@link StatementContext} suitable for the early
+   * {@link SubselectRewriter}/{@link SubqueryRewriter} rewrite pass, accumulating rewrite
+   * breadcrumbs.
+   */
+  public static StatementContext forRewrite(PhoenixStatement statement) {
+    return forRewrite(statement, new BindManager(statement.getParameters()));
+  }
+
+  /**
+   * Variant of {@link #forRewrite(PhoenixStatement)} that reuses an existing {@link BindManager}.
+   */
+  public static StatementContext forRewrite(PhoenixStatement statement, BindManager bindManager) {
+    return new StatementContext(statement, FromCompiler.EMPTY_TABLE_RESOLVER, bindManager,
+      new Scan(), new SequenceManager(statement));
+  }
+
   public StatementContext(StatementContext context) {
     this.resolver = context.resolver;
     this.connection = context.connection;

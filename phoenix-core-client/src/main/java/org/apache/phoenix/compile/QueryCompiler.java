@@ -724,11 +724,7 @@ public class QueryCompiler {
 
   protected QueryPlan compileSubquery(SelectStatement subquerySelectStatement,
     boolean pushDownMaxRows, StatementContext parentContext) throws SQLException {
-    // Pre-build a context so the subquery's early rewrite pass records breadcrumbs that are then
-    // adopted by the subquery's compilation context.
-    StatementContext rewriteContext =
-      new StatementContext(this.statement, FromCompiler.EMPTY_TABLE_RESOLVER, bindManager,
-        new Scan(), new SequenceManager(this.statement));
+    StatementContext rewriteContext = StatementContext.forRewrite(this.statement, bindManager);
     RewriteResult rewriteResult = ParseNodeUtil.rewrite(subquerySelectStatement, rewriteContext);
     int maxRows = this.statement.getMaxRows();
     // overwrite maxRows to avoid its impact on inner queries.
