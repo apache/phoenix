@@ -141,188 +141,95 @@ public class ExplainPlanAttributes {
   private final Integer regionLocationsTotalSize;
   private final int numRegionLocationLookups;
 
-  private static final ExplainPlanAttributes EXPLAIN_PLAN_INSTANCE = new ExplainPlanAttributes();
+  private static final ExplainPlanAttributes EXPLAIN_PLAN_INSTANCE =
+    new ExplainPlanAttributesBuilder().build();
 
-  private ExplainPlanAttributes() {
-    this.tenantId = null;
-    this.viewName = null;
-    this.viewBaseName = null;
-    this.cdcScopes = null;
-    this.txnProvider = null;
-    this.rewrites = null;
-    this.estimatedRows = null;
-    this.estimatedSizeInBytes = null;
-    this.estimateInfoTs = null;
-    this.abstractExplainPlan = null;
-    this.onDuplicateKeyAction = null;
-    this.serverUpdateSet = null;
-    this.returningRow = false;
-    this.hint = null;
-    this.explainScanType = null;
-    this.consistency = null;
-    this.tableName = null;
-    this.keyRanges = null;
-    this.indexName = null;
-    this.indexKind = null;
-    this.indexRule = null;
-    this.indexRejected = null;
-    this.saltBuckets = null;
-    this.regionsPlanned = null;
-    this.scanTimeRangeMin = null;
-    this.scanTimeRangeMax = null;
-    this.splitsChunk = null;
-    this.useRoundRobinIterator = false;
-    this.samplingRate = null;
-    this.hexStringRVCOffset = null;
-    this.iteratorTypeAndScanSize = null;
-    this.scanEstimatedRows = null;
-    this.scanEstimatedSizeInBytes = null;
-    this.serverWhereFilter = null;
-    this.serverDistinctFilter = null;
-    this.serverMergeColumns = null;
-    this.serverParsedProjections = null;
-    this.serverProject = null;
-    this.serverFilters = null;
-    this.ignoredHints = null;
-    this.serverFirstKeyOnlyProjection = false;
-    this.serverEmptyColumnOnlyProjection = false;
-    this.serverAggregate = null;
-    this.serverGroupByLimit = null;
-    this.serverSortedBy = null;
-    this.serverOffset = null;
-    this.serverRowLimit = null;
-    this.clientFilterBy = null;
-    this.clientFilters = null;
-    this.clientAggregate = null;
-    this.clientDistinctFilter = null;
-    this.clientAfterAggregate = null;
-    this.clientSortAlgo = null;
-    this.clientSortedBy = null;
-    this.clientOffset = null;
-    this.clientRowLimit = null;
-    this.clientSequenceCount = null;
-    this.clientCursorName = null;
-    this.clientSteps = null;
-    this.lhsJoinQueryExplainPlan = null;
-    this.rhsJoinQueryExplainPlan = null;
-    this.subPlans = null;
-    this.dynamicServerFilter = null;
-    this.afterJoinFilter = null;
-    this.joinScannerLimit = null;
-    this.sortMergeSkipMerge = false;
-    this.regionLocations = null;
-    this.regionLocationsTotalSize = null;
-    this.numRegionLocationLookups = 0;
-  }
-
-  public ExplainPlanAttributes(String tenantId, String viewName, String viewBaseName,
-    String cdcScopes, String txnProvider, List<String> rewrites, Long estimatedRows,
-    Long estimatedSizeInBytes, Long estimateInfoTs, String abstractExplainPlan,
-    OnDuplicateKeyType onDuplicateKeyAction, List<String> serverUpdateSet, boolean returningRow,
-    Hint hint, String explainScanType, Consistency consistency, String tableName, String keyRanges,
-    String indexName, String indexKind, String indexRule, List<RejectedIndexEntry> indexRejected,
-    Integer saltBuckets, Integer regionsPlanned, Long scanTimeRangeMin, Long scanTimeRangeMax,
-    Integer splitsChunk, boolean useRoundRobinIterator, Double samplingRate,
-    String hexStringRVCOffset, String iteratorTypeAndScanSize, Long scanEstimatedRows,
-    Long scanEstimatedSizeInBytes, String serverWhereFilter, String serverDistinctFilter,
-    Set<PColumn> serverMergeColumns, Map<String, List<String>> serverParsedProjections,
-    boolean serverFirstKeyOnlyProjection, boolean serverEmptyColumnOnlyProjection,
-    String serverAggregate, Integer serverGroupByLimit, String serverSortedBy, Integer serverOffset,
-    Long serverRowLimit, String clientFilterBy, String clientAggregate, String clientDistinctFilter,
-    String clientAfterAggregate, String clientSortAlgo, String clientSortedBy, Integer clientOffset,
-    Integer clientRowLimit, Integer clientSequenceCount, String clientCursorName,
-    List<String> clientSteps, ExplainPlanAttributes lhsJoinQueryExplainPlan,
-    ExplainPlanAttributes rhsJoinQueryExplainPlan, List<ExplainPlanAttributes> subPlans,
-    String dynamicServerFilter, String afterJoinFilter, Long joinScannerLimit,
-    boolean sortMergeSkipMerge, List<HRegionLocation> regionLocations,
-    Integer regionLocationsTotalSize, int numRegionLocationLookups, List<String> serverProject,
-    List<ExplainFilter> serverFilters, Map<String, String> ignoredHints,
-    List<ExplainFilter> clientFilters) {
-    this.tenantId = tenantId;
-    this.viewName = viewName;
-    this.viewBaseName = viewBaseName;
-    this.cdcScopes = cdcScopes;
-    this.txnProvider = txnProvider;
-    this.rewrites = (rewrites == null || rewrites.isEmpty())
+  private ExplainPlanAttributes(ExplainPlanAttributesBuilder b) {
+    this.tenantId = b.tenantId;
+    this.viewName = b.viewName;
+    this.viewBaseName = b.viewBaseName;
+    this.cdcScopes = b.cdcScopes;
+    this.txnProvider = b.txnProvider;
+    this.rewrites = (b.rewrites == null || b.rewrites.isEmpty())
       ? null
-      : Collections.unmodifiableList(new ArrayList<>(rewrites));
-    this.estimatedRows = estimatedRows;
-    this.estimatedSizeInBytes = estimatedSizeInBytes;
-    this.estimateInfoTs = estimateInfoTs;
-    this.abstractExplainPlan = abstractExplainPlan;
-    this.onDuplicateKeyAction = onDuplicateKeyAction;
-    this.serverUpdateSet = (serverUpdateSet == null || serverUpdateSet.isEmpty())
+      : Collections.unmodifiableList(new ArrayList<>(b.rewrites));
+    this.estimatedRows = b.estimatedRows;
+    this.estimatedSizeInBytes = b.estimatedSizeInBytes;
+    this.estimateInfoTs = b.estimateInfoTs;
+    this.abstractExplainPlan = b.abstractExplainPlan;
+    this.onDuplicateKeyAction = b.onDuplicateKeyAction;
+    this.serverUpdateSet = (b.serverUpdateSet == null || b.serverUpdateSet.isEmpty())
       ? null
-      : Collections.unmodifiableList(new ArrayList<>(serverUpdateSet));
-    this.returningRow = returningRow;
-    this.hint = hint;
-    this.explainScanType = explainScanType;
-    this.consistency = consistency;
-    this.tableName = tableName;
-    this.keyRanges = keyRanges;
-    this.indexName = indexName;
-    this.indexKind = indexKind;
-    this.indexRule = indexRule;
-    this.indexRejected = (indexRejected == null || indexRejected.isEmpty())
+      : Collections.unmodifiableList(new ArrayList<>(b.serverUpdateSet));
+    this.returningRow = b.returningRow;
+    this.hint = b.hint;
+    this.explainScanType = b.explainScanType;
+    this.consistency = b.consistency;
+    this.tableName = b.tableName;
+    this.keyRanges = b.keyRanges;
+    this.indexName = b.indexName;
+    this.indexKind = b.indexKind;
+    this.indexRule = b.indexRule;
+    this.indexRejected = (b.indexRejected == null || b.indexRejected.isEmpty())
       ? null
-      : Collections.unmodifiableList(new ArrayList<>(indexRejected));
-    this.saltBuckets = saltBuckets;
-    this.regionsPlanned = regionsPlanned;
-    this.scanTimeRangeMin = scanTimeRangeMin;
-    this.scanTimeRangeMax = scanTimeRangeMax;
-    this.splitsChunk = splitsChunk;
-    this.useRoundRobinIterator = useRoundRobinIterator;
-    this.samplingRate = samplingRate;
-    this.hexStringRVCOffset = hexStringRVCOffset;
-    this.iteratorTypeAndScanSize = iteratorTypeAndScanSize;
-    this.scanEstimatedRows = scanEstimatedRows;
-    this.scanEstimatedSizeInBytes = scanEstimatedSizeInBytes;
-    this.serverWhereFilter = serverWhereFilter;
-    this.serverDistinctFilter = serverDistinctFilter;
-    this.serverMergeColumns = serverMergeColumns;
-    this.serverParsedProjections = copyServerParsedProjections(serverParsedProjections);
-    this.serverFirstKeyOnlyProjection = serverFirstKeyOnlyProjection;
-    this.serverEmptyColumnOnlyProjection = serverEmptyColumnOnlyProjection;
-    this.serverAggregate = serverAggregate;
-    this.serverGroupByLimit = serverGroupByLimit;
-    this.serverSortedBy = serverSortedBy;
-    this.serverOffset = serverOffset;
-    this.serverRowLimit = serverRowLimit;
-    this.clientFilterBy = clientFilterBy;
-    this.clientFilters = (clientFilters == null || clientFilters.isEmpty())
+      : Collections.unmodifiableList(new ArrayList<>(b.indexRejected));
+    this.saltBuckets = b.saltBuckets;
+    this.regionsPlanned = b.regionsPlanned;
+    this.scanTimeRangeMin = b.scanTimeRangeMin;
+    this.scanTimeRangeMax = b.scanTimeRangeMax;
+    this.splitsChunk = b.splitsChunk;
+    this.useRoundRobinIterator = b.useRoundRobinIterator;
+    this.samplingRate = b.samplingRate;
+    this.hexStringRVCOffset = b.hexStringRVCOffset;
+    this.iteratorTypeAndScanSize = b.iteratorTypeAndScanSize;
+    this.scanEstimatedRows = b.scanEstimatedRows;
+    this.scanEstimatedSizeInBytes = b.scanEstimatedSizeInBytes;
+    this.serverWhereFilter = b.serverWhereFilter;
+    this.serverDistinctFilter = b.serverDistinctFilter;
+    this.serverMergeColumns = b.serverMergeColumns;
+    this.serverParsedProjections = copyServerParsedProjections(b.serverParsedProjections);
+    this.serverProject = (b.serverProject == null || b.serverProject.isEmpty())
       ? null
-      : Collections.unmodifiableList(new ArrayList<>(clientFilters));
-    this.clientAggregate = clientAggregate;
-    this.clientDistinctFilter = clientDistinctFilter;
-    this.clientAfterAggregate = clientAfterAggregate;
-    this.clientSortAlgo = clientSortAlgo;
-    this.clientSortedBy = clientSortedBy;
-    this.clientOffset = clientOffset;
-    this.clientRowLimit = clientRowLimit;
-    this.clientSequenceCount = clientSequenceCount;
-    this.clientCursorName = clientCursorName;
-    this.clientSteps = (clientSteps == null || clientSteps.isEmpty())
+      : Collections.unmodifiableList(new ArrayList<>(b.serverProject));
+    this.serverFilters = (b.serverFilters == null || b.serverFilters.isEmpty())
       ? null
-      : Collections.unmodifiableList(new ArrayList<>(clientSteps));
-    this.lhsJoinQueryExplainPlan = lhsJoinQueryExplainPlan;
-    this.rhsJoinQueryExplainPlan = rhsJoinQueryExplainPlan;
-    this.subPlans = subPlans;
-    this.dynamicServerFilter = dynamicServerFilter;
-    this.afterJoinFilter = afterJoinFilter;
-    this.joinScannerLimit = joinScannerLimit;
-    this.sortMergeSkipMerge = sortMergeSkipMerge;
-    this.regionLocations = regionLocations;
-    this.regionLocationsTotalSize = regionLocationsTotalSize;
-    this.numRegionLocationLookups = numRegionLocationLookups;
-    this.serverProject = (serverProject == null || serverProject.isEmpty())
+      : Collections.unmodifiableList(new ArrayList<>(b.serverFilters));
+    this.ignoredHints = (b.ignoredHints == null || b.ignoredHints.isEmpty())
       ? null
-      : Collections.unmodifiableList(new ArrayList<>(serverProject));
-    this.serverFilters = (serverFilters == null || serverFilters.isEmpty())
+      : Collections.unmodifiableMap(new LinkedHashMap<>(b.ignoredHints));
+    this.serverFirstKeyOnlyProjection = b.serverFirstKeyOnlyProjection;
+    this.serverEmptyColumnOnlyProjection = b.serverEmptyColumnOnlyProjection;
+    this.serverAggregate = b.serverAggregate;
+    this.serverGroupByLimit = b.serverGroupByLimit;
+    this.serverSortedBy = b.serverSortedBy;
+    this.serverOffset = b.serverOffset;
+    this.serverRowLimit = b.serverRowLimit;
+    this.clientFilterBy = b.clientFilterBy;
+    this.clientFilters = (b.clientFilters == null || b.clientFilters.isEmpty())
       ? null
-      : Collections.unmodifiableList(new ArrayList<>(serverFilters));
-    this.ignoredHints = (ignoredHints == null || ignoredHints.isEmpty())
+      : Collections.unmodifiableList(new ArrayList<>(b.clientFilters));
+    this.clientAggregate = b.clientAggregate;
+    this.clientDistinctFilter = b.clientDistinctFilter;
+    this.clientAfterAggregate = b.clientAfterAggregate;
+    this.clientSortAlgo = b.clientSortAlgo;
+    this.clientSortedBy = b.clientSortedBy;
+    this.clientOffset = b.clientOffset;
+    this.clientRowLimit = b.clientRowLimit;
+    this.clientSequenceCount = b.clientSequenceCount;
+    this.clientCursorName = b.clientCursorName;
+    this.clientSteps = (b.clientSteps == null || b.clientSteps.isEmpty())
       ? null
-      : Collections.unmodifiableMap(new LinkedHashMap<>(ignoredHints));
+      : Collections.unmodifiableList(new ArrayList<>(b.clientSteps));
+    this.lhsJoinQueryExplainPlan = b.lhsJoinQueryExplainPlan;
+    this.rhsJoinQueryExplainPlan = b.rhsJoinQueryExplainPlan;
+    this.subPlans = b.subPlans;
+    this.dynamicServerFilter = b.dynamicServerFilter;
+    this.afterJoinFilter = b.afterJoinFilter;
+    this.joinScannerLimit = b.joinScannerLimit;
+    this.sortMergeSkipMerge = b.sortMergeSkipMerge;
+    this.regionLocations = b.regionLocations;
+    this.regionLocationsTotalSize = b.regionLocationsTotalSize;
+    this.numRegionLocationLookups = b.numRegionLocationLookups;
   }
 
   public String getTenantId() {
@@ -1236,21 +1143,7 @@ public class ExplainPlanAttributes {
     }
 
     public ExplainPlanAttributes build() {
-      return new ExplainPlanAttributes(tenantId, viewName, viewBaseName, cdcScopes, txnProvider,
-        rewrites, estimatedRows, estimatedSizeInBytes, estimateInfoTs, abstractExplainPlan,
-        onDuplicateKeyAction, serverUpdateSet, returningRow, hint, explainScanType, consistency,
-        tableName, keyRanges, indexName, indexKind, indexRule, indexRejected, saltBuckets,
-        regionsPlanned, scanTimeRangeMin, scanTimeRangeMax, splitsChunk, useRoundRobinIterator,
-        samplingRate, hexStringRVCOffset, iteratorTypeAndScanSize, scanEstimatedRows,
-        scanEstimatedSizeInBytes, serverWhereFilter, serverDistinctFilter, serverMergeColumns,
-        serverParsedProjections, serverFirstKeyOnlyProjection, serverEmptyColumnOnlyProjection,
-        serverAggregate, serverGroupByLimit, serverSortedBy, serverOffset, serverRowLimit,
-        clientFilterBy, clientAggregate, clientDistinctFilter, clientAfterAggregate, clientSortAlgo,
-        clientSortedBy, clientOffset, clientRowLimit, clientSequenceCount, clientCursorName,
-        clientSteps, lhsJoinQueryExplainPlan, rhsJoinQueryExplainPlan, subPlans,
-        dynamicServerFilter, afterJoinFilter, joinScannerLimit, sortMergeSkipMerge, regionLocations,
-        regionLocationsTotalSize, numRegionLocationLookups, serverProject, serverFilters,
-        ignoredHints, clientFilters);
+      return new ExplainPlanAttributes(this);
     }
   }
 }
