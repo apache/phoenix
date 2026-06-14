@@ -79,49 +79,4 @@ public final class ExplainOptions {
     return "ExplainOptions{regions=" + regions + ", verbose=" + verbose + ", format=" + format
       + "}";
   }
-
-  /**
-   * Mutable builder used by the parser to accumulate options as they are encountered in the option
-   * list. Rejects duplicate options.
-   */
-  public static final class Builder {
-    private boolean regions;
-    private boolean regionsSet;
-    private boolean verbose;
-    private boolean verboseSet;
-    private Format format;
-
-    public Builder setRegions(boolean regions) {
-      if (regionsSet) {
-        throw new RuntimeException("Duplicate EXPLAIN option: REGIONS");
-      }
-      this.regions = regions;
-      this.regionsSet = true;
-      return this;
-    }
-
-    public Builder setVerbose(boolean verbose) {
-      if (verboseSet) {
-        throw new RuntimeException("Duplicate EXPLAIN option: VERBOSE");
-      }
-      this.verbose = verbose;
-      this.verboseSet = true;
-      return this;
-    }
-
-    public Builder setFormat(Format format) {
-      if (format == null) {
-        throw new RuntimeException("EXPLAIN option FORMAT requires a value: TEXT or JSON");
-      }
-      if (this.format != null) {
-        throw new RuntimeException("Duplicate EXPLAIN option: FORMAT");
-      }
-      this.format = format;
-      return this;
-    }
-
-    public ExplainOptions build() {
-      return new ExplainOptions(regions, verbose, format == null ? Format.TEXT : format);
-    }
-  }
 }
