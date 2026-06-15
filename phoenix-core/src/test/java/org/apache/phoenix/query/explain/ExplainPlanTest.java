@@ -321,13 +321,15 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
   @Test
   public void testBsonValueProjection() throws Exception {
     ObjectNode bsonBucket = mapper.createObjectNode();
+    // The fourth argument to BSON_VALUE is a typed-null default. It is now rendered as "null"
+    // rather than the empty string LiteralExpression.toString previously produced.
     bsonBucket.set("BSON",
-      mapper.createArrayNode().add("BSON_VALUE(PAYLOAD, 'user.id', 'VARCHAR', )"));
+      mapper.createArrayNode().add("BSON_VALUE(PAYLOAD, 'user.id', 'VARCHAR', null)"));
     verifyQuery("bsonValueProjection",
       "SELECT BSON_VALUE(payload, 'user.id', 'VARCHAR') FROM " + BSON_TBL,
       text("CLIENT PARALLEL <N>-WAY FULL SCAN OVER " + BSON_TBL, "    INDEX " + BSON_TBL,
         "    REGIONS PLANNED <N>", "    SERVER BSON PROJECTION 1",
-        "        BSON_VALUE(PAYLOAD, 'user.id', 'VARCHAR', )"),
+        "        BSON_VALUE(PAYLOAD, 'user.id', 'VARCHAR', null)"),
       scanAttrs("FULL SCAN ", BSON_TBL, "").set("serverParsedProjections", bsonBucket));
   }
 
