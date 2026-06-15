@@ -175,7 +175,7 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
     String createIndexStatement =
       "CREATE LOCAL INDEX " + indexName + " ON " + pTableFullName + "(v1 DESC, k) INCLUDE (v2)";
     String createIndexStatement2 = "CREATE LOCAL INDEX " + indexName2 + " ON " + pTableFullName
-      + "( LPAD(v1,10) DESC, k) INCLUDE (v2)";
+      + "(LPAD(v1,10) DESC, k) INCLUDE (v2)";
 
     List<String> queries = new ArrayList<String>() {
     };
@@ -203,7 +203,7 @@ public class SchemaToolExtractionIT extends ParallelStatsEnabledIT {
     String createTableStatement = "CREATE TABLE " + pTableFullName
       + "(K VARCHAR NOT NULL PRIMARY KEY, \"v1\" VARCHAR, V2 VARCHAR)" + properties;
     String createIndexStatement = "CREATE LOCAL INDEX " + indexName + " ON " + pTableFullName
-      + "( LPAD(\"v1\",10) DESC, K) INCLUDE (V2)";
+      + "(LPAD(\"v1\",10) DESC, K) INCLUDE (V2)";
 
     List<String> queries = new ArrayList<String>() {
     };
