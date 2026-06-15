@@ -999,6 +999,103 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     }
   }
 
+  /**
+   * A query whose path expression matches a covered functional index's indexed expression must
+   * choose that index, label the disclosed rule {@code "matches <expr>"}, and emit exactly one
+   * {@code INDEX EXPRESSION <expr> AS <col>} rewrite breadcrumb on the chosen plan's context. The
+   * breadcrumb is rendered as a {@code REWRITE INDEX EXPRESSION ...} top-of-plan line in plain
+   * EXPLAIN text and as a single entry in the structured {@code rewrites} attribute.
+   */
+  @Test
+  public void testIndexExpressionRewriteEmittedForChosenFunctionalIndex() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String base = generateUniqueName();
+      String idx = generateUniqueName();
+      stmt.execute("CREATE TABLE " + base + " (pk VARCHAR PRIMARY KEY, payload BSON)");
+      stmt.execute("CREATE INDEX " + idx + " ON " + base
+        + " (BSON_VALUE(payload, 'k', 'VARCHAR')) INCLUDE (payload)");
+      String query = "SELECT BSON_VALUE(payload, 'k', 'VARCHAR') FROM " + base
+        + " WHERE BSON_VALUE(payload, 'k', 'VARCHAR') = 'x'";
+
+      // The functional index is chosen and the rule comment names the matched expression.
+      ExplainPlanTestUtil.assertPlan(conn, query).indexName(idx)
+        .indexRuleStartsWith("matches BSON_VALUE(PAYLOAD,'k','VARCHAR')")
+        // Exactly one breadcrumb (one applied substitution; no eager per-PK-column emissions).
+        .rewriteCount(1).rewrite(0,
+          "INDEX EXPRESSION BSON_VALUE(PAYLOAD,'k','VARCHAR') AS \":BSON_VALUE(PAYLOAD,'k','VARCHAR')\"");
+
+      // Plain EXPLAIN renders the breadcrumb as a REWRITE top-of-plan line.
+      List<String> rows = explainViaJdbc(conn, query);
+      assertEquals("REWRITE INDEX EXPRESSION BSON_VALUE(PAYLOAD,'k','VARCHAR') AS"
+        + " \":BSON_VALUE(PAYLOAD,'k','VARCHAR')\"", rows.get(0));
+      assertTrue("operator should follow the REWRITE line: " + rows.get(1),
+        rows.get(1).startsWith("CLIENT"));
+    }
+  }
+
+  /**
+   * A query that references the indexed path expression more than once must still emit the
+   * {@code INDEX EXPRESSION <expr> AS <col>} breadcrumb exactly once. Guards against duplicates.
+   */
+  @Test
+  public void testIndexExpressionRewriteEmittedOnceForRepeatedQueryReference() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String base = generateUniqueName();
+      String idx = generateUniqueName();
+      stmt.execute("CREATE TABLE " + base + " (pk VARCHAR PRIMARY KEY, payload BSON)");
+      stmt.execute("CREATE INDEX " + idx + " ON " + base
+        + " (BSON_VALUE(payload, 'k', 'VARCHAR')) INCLUDE (payload)");
+      // The same path expression appears in the WHERE, the projection, and the ORDER BY.
+      String query = "SELECT BSON_VALUE(payload, 'k', 'VARCHAR') FROM " + base
+        + " WHERE BSON_VALUE(payload, 'k', 'VARCHAR') >= 'a'"
+        + " ORDER BY BSON_VALUE(payload, 'k', 'VARCHAR')";
+      ExplainPlanTestUtil.assertPlan(conn, query).indexName(idx).rewriteCount(1).rewrite(0,
+        "INDEX EXPRESSION BSON_VALUE(PAYLOAD,'k','VARCHAR') AS \":BSON_VALUE(PAYLOAD,'k','VARCHAR')\"");
+    }
+  }
+
+  /**
+   * A plain global index chosen for a query must not emit an
+   * {@code INDEX EXPRESSION <expr> AS <col>} breadcrumb for ordinary indexed columns.
+   */
+  @Test
+  public void testIndexExpressionRewriteOmittedForNonFunctionalIndex() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String base = generateUniqueName();
+      String idx = generateUniqueName();
+      stmt.execute("CREATE TABLE " + base + " (k VARCHAR PRIMARY KEY, v1 VARCHAR, v2 VARCHAR)");
+      stmt.execute("CREATE INDEX " + idx + " ON " + base + " (v1) INCLUDE (v2)");
+      String query = "SELECT v1, v2 FROM " + base + " WHERE v1 = 'x'";
+      ExplainPlanTestUtil.assertPlan(conn, query).indexName(idx).rewritesNone();
+      assertNoPlanLineContains(conn, query, "INDEX EXPRESSION");
+    }
+  }
+
+  /**
+   * A functional index that is considered but rejected must not emit an
+   * {@code INDEX EXPRESSION <expr> AS <col>} breadcrumb.
+   */
+  @Test
+  public void testIndexExpressionRewriteOmittedWhenFunctionalIndexNotChosen() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String base = generateUniqueName();
+      String idx = generateUniqueName();
+      stmt.execute("CREATE TABLE " + base + " (pk VARCHAR PRIMARY KEY, payload BSON)");
+      stmt.execute("CREATE INDEX " + idx + " ON " + base
+        + " (BSON_VALUE(payload, 'k', 'VARCHAR')) INCLUDE (payload)");
+      // The functional index is over the 'k' path. The query reads the 'other' path and is on
+      // the data-table primary key, so the optimizer never substitutes the indexed expression.
+      String query =
+        "SELECT BSON_VALUE(payload, 'other', 'VARCHAR') FROM " + base + " WHERE pk = 'p1'";
+      ExplainPlanTestUtil.assertPlan(conn, query).indexName(base).rewritesNone();
+      assertNoPlanLineContains(conn, query, "INDEX EXPRESSION");
+    }
+  }
+
   @Test
   public void testVerboseProjectLine() throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
