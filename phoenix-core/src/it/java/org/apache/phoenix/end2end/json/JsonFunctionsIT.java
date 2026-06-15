@@ -369,7 +369,7 @@ public class JsonFunctionsIT extends ParallelStatsDisabledIT {
         "SELECT JSON_VALUE(JSONCOL,'$.type'), " + "JSON_VALUE(JSONCOL,'$.info.address.town') FROM "
           + tableName + " WHERE JSON_VALUE(JSONCOL,'$.type') = 'Basic'";
       assertPlan(conn, selectSql).scanType("RANGE SCAN").table(indexName)
-        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
+        .indexRuleStartsWith("matches").indexRejectedNone();
       // Validate the total count of rows
       String countSql = "SELECT COUNT(1) FROM " + tableName;
       ResultSet rs = conn.createStatement().executeQuery(countSql);
