@@ -333,6 +333,13 @@ public class HAGroupStoreRecordTest {
       .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.STANDBY));
     assertFalse(HAGroupStoreRecord.HAGroupState.UNKNOWN
       .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.OFFLINE));
+
+    // A degraded standby's allowed set is exactly {STANDBY, STANDBY_TO_ACTIVE}; it must promote
+    // via STANDBY_TO_ACTIVE and cannot jump directly to an active or offline state.
+    assertFalse(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY
+      .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC));
+    assertFalse(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY
+      .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.OFFLINE));
   }
 
   @Test
