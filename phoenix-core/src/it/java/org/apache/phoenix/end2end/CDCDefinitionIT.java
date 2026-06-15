@@ -244,8 +244,8 @@ public class CDCDefinitionIT extends CDCBaseIT {
     assertEquals(true, indexTable.isMultiTenant());
     List<PColumn> idxPkColumns = indexTable.getPKColumns();
     assertEquals(":TENANTID", idxPkColumns.get(0).getName().getString());
-    assertEquals(": PARTITION_ID()", idxPkColumns.get(1).getName().getString());
-    assertEquals(": PHOENIX_ROW_TIMESTAMP()", idxPkColumns.get(2).getName().getString());
+    assertEquals(":PARTITION_ID()", idxPkColumns.get(1).getName().getString());
+    assertEquals(":PHOENIX_ROW_TIMESTAMP()", idxPkColumns.get(2).getName().getString());
     assertEquals(":K", idxPkColumns.get(3).getName().getString());
 
     PTable cdcTable = PhoenixRuntime.getTable(conn, cdcName);
