@@ -564,6 +564,8 @@ public class QueryOptimizer {
         }
         dataPlan.getContext().recordAppliedIndexExpressionMatches(index.getTableName().getString(),
           indexExpressionRewriter.getAppliedFunctionalSubstitutions().values());
+        dataPlan.getContext().recordAppliedIndexExpressionPairs(index.getTableName().getString(),
+          indexExpressionRewriter.getAppliedFunctionalSubstitutions());
         QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver,
           targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(),
           isProjected, true, dataPlans).withRewriteContext(dataPlan.getContext());
@@ -970,7 +972,30 @@ public class QueryOptimizer {
     winner.setOptimizerDecision(
       new OptimizerDecision(winner.getTableRef().getTable().getTableName().getString(), rule,
         state == null ? null : state.getRejections()));
+    recordFunctionalIndexExpressionBreadcrumbs(winner);
     return winner;
+  }
+
+  /**
+   * Emit one {@code INDEX EXPRESSION <expr> AS <col>} rewrite breadcrumb on the chosen plan's
+   * context for every functional-index substitution that actually matched a query expression. The
+   * pairs were captured at index-candidate-build time (see {@code addPlan} and
+   * {@code rewriteQueryWithIndexReplacement}) and are looked up here only for the winner, so
+   * unmatched expressions and unchosen indexes never produce breadcrumbs.
+   */
+  private static void recordFunctionalIndexExpressionBreadcrumbs(QueryPlan winner) {
+    String tableName = winner.getTableRef().getTable().getTableName().getString();
+    Map<String, String> pairs = winner.getContext().getAppliedIndexExpressionPairs(tableName);
+    if (pairs.isEmpty()) {
+      return;
+    }
+    for (Map.Entry<String, String> entry : pairs.entrySet()) {
+      // Skip if any caller already recorded an equivalent breadcrumb for this winner.
+      String breadcrumb = "INDEX EXPRESSION " + entry.getValue() + " AS " + entry.getKey();
+      if (!winner.getContext().getAppliedRewrites().contains(breadcrumb)) {
+        winner.getContext().addAppliedRewrite(breadcrumb);
+      }
+    }
   }
 
   /**
@@ -1146,6 +1171,9 @@ public class QueryOptimizer {
       breadcrumbContext.recordAppliedIndexExpressionMatches(
         indexTableRef.getTable().getTableName().getString(),
         indexExpressionRewriter.getAppliedFunctionalSubstitutions().values());
+      breadcrumbContext.recordAppliedIndexExpressionPairs(
+        indexTableRef.getTable().getTableName().getString(),
+        indexExpressionRewriter.getAppliedFunctionalSubstitutions());
     }
 
     return indexSelect;
