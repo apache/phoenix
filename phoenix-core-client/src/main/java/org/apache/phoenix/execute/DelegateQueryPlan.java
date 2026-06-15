@@ -39,6 +39,10 @@ import org.apache.phoenix.schema.TableRef;
 
 public abstract class DelegateQueryPlan implements QueryPlan {
   protected final QueryPlan delegate;
+  // Fallback storage for the optimizer decision used only when this plan has no delegate to
+  // forward to. Some DelegateQueryPlan subclasses intentionally pass a null delegate and override
+  // getContext()/getTableRef()/getProjector() to serve from local state.
+  private OptimizerDecision optimizerDecision;
 
   public DelegateQueryPlan(QueryPlan delegate) {
     this.delegate = delegate;
@@ -175,11 +179,15 @@ public abstract class DelegateQueryPlan implements QueryPlan {
 
   @Override
   public OptimizerDecision getOptimizerDecision() {
-    return delegate.getOptimizerDecision();
+    return delegate != null ? delegate.getOptimizerDecision() : optimizerDecision;
   }
 
   @Override
   public void setOptimizerDecision(OptimizerDecision decision) {
-    delegate.setOptimizerDecision(decision);
+    if (delegate != null) {
+      delegate.setOptimizerDecision(decision);
+    } else {
+      this.optimizerDecision = decision;
+    }
   }
 }
