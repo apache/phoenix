@@ -27,6 +27,7 @@ import java.util.Deque;
 import java.util.EnumMap;
 import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -112,6 +113,7 @@ public class StatementContext {
   private List<String> appliedRewrites;
   private int derivedTableFlattenCount;
   private Map<String, List<String>> appliedIndexExpressionMatches;
+  private Map<String, Map<String, String>> appliedIndexExpressionPairs;
   private Set<String> functionalIndexNames;
   private Set<Pair<String, String>> partialIndexCheckedSet;
   private Map<String, List<Expression>> serverParsedProjections;
@@ -176,6 +178,7 @@ public class StatementContext {
     this.appliedRewrites = context.appliedRewrites;
     this.derivedTableFlattenCount = context.derivedTableFlattenCount;
     this.appliedIndexExpressionMatches = context.appliedIndexExpressionMatches;
+    this.appliedIndexExpressionPairs = context.appliedIndexExpressionPairs;
     this.functionalIndexNames = context.functionalIndexNames;
     this.partialIndexCheckedSet = context.partialIndexCheckedSet;
     this.serverParsedProjections = context.serverParsedProjections;
@@ -249,6 +252,7 @@ public class StatementContext {
     this.appliedRewrites = new ArrayList<>();
     this.derivedTableFlattenCount = 0;
     this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
+    this.appliedIndexExpressionPairs = Maps.newLinkedHashMap();
     this.functionalIndexNames = Sets.newHashSet();
     this.partialIndexCheckedSet = Sets.newHashSet();
     this.serverParsedProjections = null;
@@ -546,6 +550,7 @@ public class StatementContext {
     this.appliedRewrites = source.appliedRewrites;
     this.derivedTableFlattenCount = source.derivedTableFlattenCount;
     this.appliedIndexExpressionMatches = source.appliedIndexExpressionMatches;
+    this.appliedIndexExpressionPairs = source.appliedIndexExpressionPairs;
     this.functionalIndexNames = source.functionalIndexNames;
     this.partialIndexCheckedSet = source.partialIndexCheckedSet;
     this.serverParsedProjections = source.serverParsedProjections;
@@ -589,6 +594,33 @@ public class StatementContext {
   public List<String> getAppliedIndexExpressionMatches(String indexName) {
     List<String> matches = appliedIndexExpressionMatches.get(indexName);
     return matches == null ? Collections.emptyList() : matches;
+  }
+
+  /**
+   * Records the {@code <index column name, indexed expression string>} pairs for substitutions that
+   * actually fired against this query for the given functional index. Carries enough information
+   * for the optimizer to emit one {@code REWRITE INDEX EXPRESSION <expr> AS <col>} breadcrumb per
+   * applied substitution after the chosen plan is selected. Deduplicated per index, preserving
+   * first-seen insertion order.
+   */
+  public void recordAppliedIndexExpressionPairs(String indexName, Map<String, String> pairs) {
+    if (pairs == null || pairs.isEmpty()) {
+      return;
+    }
+    Map<String, String> existing =
+      appliedIndexExpressionPairs.computeIfAbsent(indexName, k -> new LinkedHashMap<>());
+    for (Map.Entry<String, String> entry : pairs.entrySet()) {
+      existing.putIfAbsent(entry.getKey(), entry.getValue());
+    }
+  }
+
+  /**
+   * Returns the {@code <index column name, indexed expression string>} pairs that actually
+   * substituted against this query for the given functional index, or an empty map if none.
+   */
+  public Map<String, String> getAppliedIndexExpressionPairs(String indexName) {
+    Map<String, String> pairs = appliedIndexExpressionPairs.get(indexName);
+    return pairs == null ? Collections.emptyMap() : pairs;
   }
 
   /** Marks the given index as a functional index. */

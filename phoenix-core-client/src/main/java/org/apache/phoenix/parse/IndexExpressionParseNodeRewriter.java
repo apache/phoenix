@@ -63,6 +63,13 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
     this(index, alias, connection, udfParseNodes, null);
   }
 
+  /**
+   * Retained for API compatibility. The {@code breadcrumbContext} parameter is no longer used:
+   * {@code REWRITE INDEX EXPRESSION ... AS ...} breadcrumbs are now emitted by the optimizer after
+   * a winner is selected, against {@link #getAppliedFunctionalSubstitutions()}, so the breadcrumb
+   * fires once per substitution that actually matched a query expression and only for the chosen
+   * index plan rather than for every PK column of every candidate index.
+   */
   public IndexExpressionParseNodeRewriter(PTable index, String alias, PhoenixConnection connection,
     Map<String, UDFParseNode> udfParseNodes, StatementContext breadcrumbContext)
     throws SQLException {
@@ -102,9 +109,6 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
         // Trim leading/trailing whitespace
         indexedParseNodeToFunctionalColumn.put(indexedParseNode,
           new String[] { colName, expressionStr.trim() });
-      }
-      if (breadcrumbContext != null) {
-        breadcrumbContext.addAppliedRewrite("INDEX EXPRESSION " + expressionStr + " AS " + colName);
       }
     }
   }
