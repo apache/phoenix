@@ -36,12 +36,15 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -955,5 +958,45 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
       rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan().getContext().getScan();
     assertNull(scan.getAttribute(MIN_QUALIFIER));
     assertNull(scan.getAttribute(MAX_QUALIFIER));
+  }
+
+  /**
+   * Test the deep copy contract of the {@link StatementContext} copy constructor and
+   * {@link StatementContext#adoptRewriteState}.
+   */
+  @Test
+  public void testAdoptRewriteStateDoesNotBleedSourceMutations() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+
+    StatementContext source = new StatementContext(stmt);
+    source.addAppliedRewrite("X");
+    source.recordAppliedIndexExpressionMatches("IDX", Collections.singletonList("A + B"));
+    Expression predicate = LiteralExpression.newConstant(1);
+    source.tagPredicate(predicate, "WHERE");
+
+    // Copy via the copy constructor, which shares copyRewriteStateFrom() with adoptRewriteState().
+    StatementContext copy = new StatementContext(source);
+
+    // The copy observed the breadcrumbs recorded before the copy.
+    assertTrue(copy.getAppliedRewrites().contains("X"));
+    assertEquals(Collections.singletonList("A + B"), copy.getAppliedIndexExpressionMatches("IDX"));
+    assertTrue(copy.getPredicateOrigins(predicate).contains("WHERE"));
+
+    // Mutating the source after the copy must not leak into the destination.
+    source.addAppliedRewrite("foo");
+    source.recordAppliedIndexExpressionMatches("IDX", Collections.singletonList("C + D"));
+    source.tagPredicate(predicate, "JOIN ON");
+
+    assertFalse(copy.getAppliedRewrites().contains("foo"));
+    assertFalse(copy.getAppliedIndexExpressionMatches("IDX").contains("C + D"));
+    assertFalse(copy.getPredicateOrigins(predicate).contains("JOIN ON"));
+
+    // adoptRewriteState() onto a fresh destination has the same isolation guarantee.
+    StatementContext adopted = new StatementContext(stmt);
+    adopted.adoptRewriteState(source);
+    assertTrue(adopted.getAppliedRewrites().contains("foo"));
+    source.addAppliedRewrite("bar");
+    assertFalse(adopted.getAppliedRewrites().contains("bar"));
   }
 }

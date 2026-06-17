@@ -32,6 +32,7 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.optimize.RejectedIndexEntry;
 import org.apache.phoenix.parse.ExplainOptions;
 import org.apache.phoenix.parse.UpsertStatement.OnDuplicateKeyType;
@@ -255,16 +256,11 @@ public final class ExplainPlanTestUtil {
     }
 
     /**
-     * Assert the index-selection rule label starts with {@code prefix}. Useful for the functional
-     * index {@code "matches <expr>"} rule whose suffix is expression dependent.
+     * Assert the optimizer chose a functional index whose rule label is exactly
+     * {@code "matches <expression>"} (see {@link OptimizerReasons#matches(String)}).
      */
-    public ExplainPlanAssert indexRuleStartsWith(String prefix) {
-      String actual = attributes.getIndexRule();
-      assertNotNull(at("indexRule") + " must not be null", actual);
-      assertTrue(
-        at("indexRule") + " expected to start with '" + prefix + "' but was '" + actual + "'",
-        actual.startsWith(prefix));
-      return this;
+    public ExplainPlanAssert indexRuleMatches(String expression) {
+      return indexRule(OptimizerReasons.matches(expression));
     }
 
     /** Assert the number of rejected index candidates recorded for this plan. */
