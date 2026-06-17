@@ -931,7 +931,7 @@ public class ExplainPlanAttributes {
     }
 
     public ExplainPlanAttributesBuilder setServerMergeColumns(Set<PColumn> columns) {
-      this.serverMergeColumns = columns;
+      this.serverMergeColumns = columns == null ? null : new LinkedHashSet<>(columns);
       return this;
     }
 

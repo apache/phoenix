@@ -537,10 +537,7 @@ public class StatementContext {
    * {@link SubselectRewriter}/{@link SubqueryRewriter} pass on a pre-built context across the
    * rewrite boundary onto the actual compilation context. Fresh collections are allocated (see
    * {@link #copyRewriteStateFrom}) so this context and {@code source} continue to mutate
-   * independently: after adoption the source is still read and written (e.g. the optimizer keeps
-   * recording per-index applicability breadcrumbs on the data plan's context and reconciles them
-   * onto the candidate plans), so sharing the backing collections by reference would let two
-   * contexts read and write the same lists/maps/sets.
+   * independently.
    */
   public void adoptRewriteState(StatementContext source) {
     copyRewriteStateFrom(source);
@@ -548,13 +545,13 @@ public class StatementContext {
 
   /**
    * Copy the rewrite breadcrumb accumulators and related diagnostic state from {@code source} into
-   * this context, allocating fresh collections (deep enough to cover the nested lists/maps/sets
-   * that accumulate during compilation) so the two contexts never share mutable backing
+   * this context, allocating fresh collections so the two contexts never share mutable backing
    * collections. Shared by the copy constructor and {@link #adoptRewriteState}, both of which hand
    * the resulting context to a compile pass that continues to mutate this state.
    */
   private void copyRewriteStateFrom(StatementContext source) {
-    this.appliedRewrites = new ArrayList<>(source.appliedRewrites);
+    this.appliedRewrites =
+      source.appliedRewrites == null ? new ArrayList<>() : new ArrayList<>(source.appliedRewrites);
     this.derivedTableFlattenCount = source.derivedTableFlattenCount;
     this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
     for (Map.Entry<String, List<String>> entry : source.appliedIndexExpressionMatches.entrySet()) {
