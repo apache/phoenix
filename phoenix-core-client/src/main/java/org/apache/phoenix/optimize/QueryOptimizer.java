@@ -177,7 +177,6 @@ public class QueryOptimizer {
         if (stmt.getWhere() != null && stmt.getWhere().hasSubquery()) {
           StatementContext context =
             new StatementContext(statement, resolver, new Scan(), new SequenceManager(statement));
-          ;
           ParseNode dummyWhere =
             GenSubqueryParamValuesRewriter.replaceWithDummyValues(stmt.getWhere(), context);
           stmt = FACTORY.select(stmt, dummyWhere);
