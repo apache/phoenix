@@ -358,17 +358,9 @@ public class PhoenixSyncTableToolIT {
     validateSyncCounters(counters2, 7, 7, 7, 0);
     validateMapperCounters(counters2, 4, 0);
 
-    // Source and target each show 7 live rows under the conditional TTL filter the sync tool
-    // applies on both sides, so the repair pass is a no-op and no MISMATCHED rows are written.
-    // Note: the standard Phoenix query (without the TTL filter the tool applies) sees 10 rows
-    // on source vs 7 on target because IS_STRICT_TTL=false returns expired rows on source
-    // (uncompacted) but compaction on target physically removed them — that asymmetry is by
-    // design, not drift the tool can converge.
-    //
-    // Note: the two runSyncTool calls above each write CHUNK/VERIFIED rows under their own
-    // (from-time, to-time) PK, so the checkpoint table accumulates entries from prior validate
-    // passes — strict validateCheckpointEntries can't be applied here against a single counter
-    // snapshot. Use the bounded variant with the repair pass's counters as the lower bound.
+    // The tool's TTL filter shows 7 live rows on both sides, so repair is a no-op. Use the
+    // bounded checkpoint validator because the prior runSyncTool calls left CHUNK/VERIFIED
+    // entries under different (from-time, to-time) PKs.
     RepairRunResult result = runSyncToolWithRepair(uniqueTableName);
     SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
     assertRowDriftCounters(repairCounters, 0, 0, 0, 0);
@@ -718,11 +710,8 @@ public class PhoenixSyncTableToolIT {
         + ") should be greater than first run (" + chunkCountAfterFirstRun + ")",
       separatedAfterRerun.chunks.size() > chunkCountAfterFirstRun);
 
-    // The partial-rerun pattern (delete chunks, rerun with smaller chunks) exercises the
-    // checkpoint resume path. Once that has been validated, run a clean dry-run + repair
-    // pass on the same window so the repair flow has a stable boundary set to converge.
-    // Use the dry-run+repair pattern so any chunk that landed in a non-resumable state
-    // (REPAIRED with stale boundaries) is re-validated rather than skipped.
+    // Final dry-run + repair pass to re-validate any chunk left REPAIRED with stale boundaries
+    // by the partial-rerun, which the resume filter would otherwise skip.
     convergeAndAssertIdentical(uniqueTableName, fromTime, toTime);
   }
 

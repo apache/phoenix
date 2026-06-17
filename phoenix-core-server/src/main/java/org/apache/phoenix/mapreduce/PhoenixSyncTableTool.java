@@ -437,6 +437,8 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_MISSING_ON_TARGET).getValue();
       long rowsExtraOnTarget =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_EXTRA_ON_TARGET).getValue();
+      long rowsDifferentOnTarget = counters
+        .findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_DIFFERENT_ON_TARGET).getValue();
       long rowsCannotRepair =
         counters.findCounter(PhoenixSyncTableMapper.SyncCounters.ROWS_CANNOT_REPAIR).getValue();
       long cellsMissingOnTarget = counters
@@ -455,14 +457,14 @@ public class PhoenixSyncTableTool extends Configured implements Tool {
           + "Chunks Unrepairable: {}, \n Chunks Repair Failed: {}, \n"
           + "Source Rows Processed: {}, \n Target Rows Processed: {}, \n"
           + "Rows Missing On Target: {}, \n Rows Extra On Target: {}, \n"
-          + "Rows Cannot Repair: {}, \n"
+          + "Rows Different On Target: {}, \n Rows Cannot Repair: {}, \n"
           + "Cells Missing On Target: {}, \n Cells Extra On Target: {}, \n"
           + "Cells Different On Target: {}, \n" + "Checkpoint Write Failed: {}",
         taskCreated, verifiedMappers, mismatchedMappers, repairedMappers, unrepairableMappers,
         repairFailedMappers, chunksVerified, chunksMismatched, chunksRepaired, chunksUnrepairable,
         chunksRepairFailed, sourceRowsProcessed, targetRowsProcessed, rowsMissingOnTarget,
-        rowsExtraOnTarget, rowsCannotRepair, cellsMissingOnTarget, cellsExtraOnTarget,
-        cellsDifferentOnTarget, checkpointWriteFailed);
+        rowsExtraOnTarget, rowsDifferentOnTarget, rowsCannotRepair, cellsMissingOnTarget,
+        cellsExtraOnTarget, cellsDifferentOnTarget, checkpointWriteFailed);
       if (checkpointWriteFailed > 0) {
         LOGGER
           .error("{} chunk(s) had a successful repair attempt but FAILED to write a checkpoint row "

@@ -141,11 +141,8 @@ public class PhoenixSyncTableInputFormat extends PhoenixInputFormat<DBWritable> 
   }
 
   /**
-   * Queries Sync checkpoint table for completed mapper regions.
-   * @param isDryRun When false (repair mode), only VERIFIED and REPAIRED regions are filtered out
-   *                 as completed; MISMATCHED regions are re-entered as splits so their chunks can
-   *                 be repaired. When true (dry-run), all REGION rows regardless of status are
-   *                 treated as completed.
+   * Returns regions to skip on resume. Repair mode skips only VERIFIED/REPAIRED so MISMATCHED
+   * regions get re-split for chunk repair; dry-run skips every REGION row regardless of status.
    */
   private List<KeyRange> queryCompletedMapperRegions(Configuration conf, String tableName,
     String targetZkQuorum, Long fromTime, Long toTime, boolean isDryRun) throws SQLException {
