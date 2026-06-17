@@ -80,6 +80,7 @@
                   <exclude>META-INF/*.RSA</exclude>
                   <exclude>META-INF/license/*</exclude>
                   <exclude>META-INF/NOTICE</exclude>
+                  <exclude>META-INF/services/java.net.spi.InetAddressResolverProvider</exclude>
                   <exclude>LICENSE.*</exclude>
                   <exclude>NOTICE.*</exclude>
                   <exclude>NOTICE</exclude>
