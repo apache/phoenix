@@ -244,8 +244,8 @@ public class StatementContext {
     this.derivedTableFlattenCount = 0;
     this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
     this.appliedIndexExpressionPairs = Maps.newLinkedHashMap();
-    this.functionalIndexNames = Sets.newHashSet();
-    this.partialIndexCheckedSet = Sets.newHashSet();
+    this.functionalIndexNames = Sets.newLinkedHashSet();
+    this.partialIndexCheckedSet = Sets.newLinkedHashSet();
     this.serverParsedProjections = null;
     this.parentContext = null;
     this.predicateOrigins = new IdentityHashMap<>();
@@ -565,8 +565,8 @@ public class StatementContext {
       .entrySet()) {
       this.appliedIndexExpressionPairs.put(entry.getKey(), new LinkedHashMap<>(entry.getValue()));
     }
-    this.functionalIndexNames = Sets.newHashSet(source.functionalIndexNames);
-    this.partialIndexCheckedSet = Sets.newHashSet(source.partialIndexCheckedSet);
+    this.functionalIndexNames = Sets.newLinkedHashSet(source.functionalIndexNames);
+    this.partialIndexCheckedSet = Sets.newLinkedHashSet(source.partialIndexCheckedSet);
     // serverParsedProjections is nullable and only ever replaced wholesale via its setter (never
     // mutated in place), so the reference can be carried over directly.
     this.serverParsedProjections = source.serverParsedProjections;
@@ -575,7 +575,7 @@ public class StatementContext {
       this.predicateOrigins.put(entry.getKey(), new LinkedHashSet<>(entry.getValue()));
     }
     this.decorrelatedSubqueryAlias = new IdentityHashMap<>(source.decorrelatedSubqueryAlias);
-    this.ignoredHints = new EnumMap<Hint, String>(source.ignoredHints);
+    this.ignoredHints = new EnumMap<>(source.ignoredHints);
   }
 
   public void incrementDerivedTableFlattenCount() {
