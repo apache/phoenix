@@ -26,55 +26,56 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
-import org.apache.hadoop.hbase.client.Delete;
-import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ByteBuffInputStream;
 import org.apache.hadoop.hbase.nio.ByteBuff;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.io.WritableUtils;
 
 /**
- * Default Codec for encoding and decoding ReplicationLog Records within a block buffer. This
- * implementation uses standard Java DataInput/DataOutput for serialization. Record Format within a
- * block:
+ * Default Codec for encoding and decoding ReplicationLog Records within a block buffer. The on-disk
+ * record is cell-oriented (mirroring HBase's WALEdit): a record carries a flat ordered list of
+ * cells across one or more rows. Mutation reconstruction (grouping by row+type) is the consumer's
+ * responsibility and lives in {@link org.apache.phoenix.replication.MutationCellGrouper}.
  *
  * <pre>
  *   +--------------------------------------------+
  *   | RECORD LENGTH (vint)                       |
  *   +--------------------------------------------+
  *   | RECORD HEADER                              |
- *   |  - Mutation type (byte)                    |
  *   |  - HBase table name length (vint)          |
  *   |  - HBase table name (byte[])               |
- *   |  - Transaction/SCN or commit ID (vint)     |
+ *   |  - Commit ID (vlong)                       |
  *   +--------------------------------------------+
- *   | ROW KEY LENGTH (vint)                      |
- *   | ROW KEY (byte[])                           |
+ *   | NUMBER OF ATTRIBUTES (vint)                |
  *   +--------------------------------------------+
- *   | MUTATION TIMESTAMP (vint)                  |
- *   +--------------------------------------------+
- *   | NUMBER OF COLUMN FAMILIES CHANGED (vint)   |
- *   +--------------------------------------------+
- *   | PER-FAMILY DATA (repeated)                 |
+ *   | PER-ATTRIBUTE (repeated)                   |
  *   |   +--------------------------------------+ |
- *   |   | COLUMN FAMILY NAME LENGTH (vint)     | |
- *   |   | COLUMN FAMILY NAME (byte[])          | |
- *   |   | NUMBER OF CELLS IN FAMILY (vint)     | |
+ *   |   | ATTRIBUTE KEY LENGTH (vint)          | |
+ *   |   | ATTRIBUTE KEY (byte[])               | |
+ *   |   | ATTRIBUTE VALUE LENGTH (vint)        | |
+ *   |   | ATTRIBUTE VALUE (byte[])             | |
  *   |   +--------------------------------------+ |
- *   |   | PER-CELL DATA (repeated)             | |
- *   |   |   +––––––––––––----------------–--–+ | |
- *   |   |   | CELL TIMESTAMP (long)          | | |
- *   |   |   | CELL TYPE (byte)               | | |
- *   |   |   | COLUMN QUALIFIER LENGTH (vint) | | |
- *   |   |   | COLUMN QUALIFIER (byte[])      | | |
- *   |   |   | VALUE LENGTH (vint)            | | |
- *   |   |   | VALUE (byte[])                 | | |
- *   |   |   +–––––––––––––--------------––--–+ | |
+ *   +--------------------------------------------+
+ *   | NUMBER OF CELLS (vint)                     |
+ *   +--------------------------------------------+
+ *   | PER-CELL DATA (repeated)                   |
+ *   |   +--------------------------------------+ |
+ *   |   | ROW LENGTH (vint)                    | |
+ *   |   | ROW (byte[])                         | |
+ *   |   | FAMILY LENGTH (vint)                 | |
+ *   |   | FAMILY (byte[])                      | |
+ *   |   | QUALIFIER LENGTH (vint)              | |
+ *   |   | QUALIFIER (byte[])                   | |
+ *   |   | TIMESTAMP (long)                     | |
+ *   |   | TYPE (byte)                          | |
+ *   |   | VALUE LENGTH (vint)                  | |
+ *   |   | VALUE (byte[])                       | |
  *   |   +--------------------------------------+ |
  *   +--------------------------------------------+
  * </pre>
@@ -114,64 +115,65 @@ public class LogFileCodec implements LogFile.Codec {
 
     @Override
     public void write(LogFile.Record record) throws IOException {
-
+      if (record.getCells().isEmpty()) {
+        throw new IllegalArgumentException("Cannot encode a record with no cells");
+      }
       DataOutput recordOut = new DataOutputStream(currentRecord);
 
-      // Write record fields
-
-      Mutation mutation = record.getMutation();
-      LogFileRecord.MutationType mutationType = LogFileRecord.MutationType.get(mutation);
-      recordOut.writeByte(mutationType.getCode());
+      // Header: table name + commit id
       byte[] nameBytes = record.getHBaseTableName().getBytes(StandardCharsets.UTF_8);
       WritableUtils.writeVInt(recordOut, nameBytes.length);
       recordOut.write(nameBytes);
       WritableUtils.writeVLong(recordOut, record.getCommitId());
-      byte[] rowKey = mutation.getRow();
-      WritableUtils.writeVInt(recordOut, rowKey.length);
-      recordOut.write(rowKey);
-      recordOut.writeLong(mutation.getTimestamp());
 
-      Map<byte[], List<Cell>> familyMap = mutation.getFamilyCellMap();
-      int cfCount = familyMap.size();
-      WritableUtils.writeVInt(recordOut, cfCount);
+      // Attributes
+      Map<String, byte[]> attrs = record.getAttributes();
+      WritableUtils.writeVInt(recordOut, attrs.size());
+      for (Map.Entry<String, byte[]> e : attrs.entrySet()) {
+        byte[] keyBytes = e.getKey().getBytes(StandardCharsets.UTF_8);
+        WritableUtils.writeVInt(recordOut, keyBytes.length);
+        recordOut.write(keyBytes);
+        byte[] val = e.getValue();
+        WritableUtils.writeVInt(recordOut, val.length);
+        if (val.length > 0) {
+          recordOut.write(val);
+        }
+      }
 
-      for (Map.Entry<byte[], List<Cell>> entry : familyMap.entrySet()) {
-        byte[] cf = entry.getKey();
-        WritableUtils.writeVInt(recordOut, cf.length);
-        recordOut.write(cf);
-        List<Cell> cells = entry.getValue();
-        WritableUtils.writeVInt(recordOut, cells.size());
-        for (Cell cell : cells) {
-          recordOut.writeLong(cell.getTimestamp());
-          recordOut.writeByte(cell.getTypeByte());
-          WritableUtils.writeVInt(recordOut, cell.getQualifierLength());
+      // Cells
+      List<Cell> cells = record.getCells();
+      WritableUtils.writeVInt(recordOut, cells.size());
+      for (Cell cell : cells) {
+        WritableUtils.writeVInt(recordOut, cell.getRowLength());
+        recordOut.write(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
+        WritableUtils.writeVInt(recordOut, cell.getFamilyLength());
+        recordOut.write(cell.getFamilyArray(), cell.getFamilyOffset(), cell.getFamilyLength());
+        WritableUtils.writeVInt(recordOut, cell.getQualifierLength());
+        if (cell.getQualifierLength() > 0) {
           recordOut.write(cell.getQualifierArray(), cell.getQualifierOffset(),
             cell.getQualifierLength());
-          WritableUtils.writeVInt(recordOut, cell.getValueLength());
-          if (cell.getValueLength() > 0) {
-            recordOut.write(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
-          }
+        }
+        recordOut.writeLong(cell.getTimestamp());
+        recordOut.writeByte(cell.getTypeByte());
+        WritableUtils.writeVInt(recordOut, cell.getValueLength());
+        if (cell.getValueLength() > 0) {
+          recordOut.write(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength());
         }
       }
 
       byte[] currentRecordBytes = currentRecord.toByteArray();
-      // Write total record length
       WritableUtils.writeVInt(out, currentRecordBytes.length);
-      // Write the record
       out.write(currentRecordBytes);
 
-      // Set the size (including the vint prefix) on the record object
       ((LogFileRecord) record).setSerializedLength(
         currentRecordBytes.length + WritableUtils.getVIntSize(currentRecordBytes.length));
 
-      // Reset the ByteArrayOutputStream to release resources
       currentRecord.reset();
     }
   }
 
   private static class RecordDecoder implements LogFile.Codec.Decoder {
     private final DataInput in;
-    // A reference to the object populated by the last successful advance()
     private LogFileRecord current = null;
 
     RecordDecoder(DataInput in) {
@@ -185,78 +187,64 @@ public class LogFileCodec implements LogFile.Codec {
         recordDataLength += WritableUtils.getVIntSize(recordDataLength);
 
         current = new LogFileRecord();
-        // Set the total serialized length on the record
         current.setSerializedLength(recordDataLength);
 
-        LogFileRecord.MutationType type = LogFileRecord.MutationType.codeToType(in.readByte());
-
+        // Header
         int nameBytesLen = WritableUtils.readVInt(in);
         byte[] nameBytes = new byte[nameBytesLen];
         in.readFully(nameBytes);
-
         current.setHBaseTableName(Bytes.toString(nameBytes));
-
         current.setCommitId(WritableUtils.readVLong(in));
 
-        int rowKeyLen = WritableUtils.readVInt(in);
-        byte[] rowKey = new byte[rowKeyLen];
-        in.readFully(rowKey);
-
-        Mutation mutation;
-        switch (type) {
-          case PUT:
-            mutation = new Put(rowKey);
-            break;
-          case DELETE:
-            mutation = new Delete(rowKey);
-            break;
-          default:
-            throw new UnsupportedOperationException("Unhandled mutation type " + type);
-        }
-        current.setMutation(mutation);
-
-        long ts = in.readLong();
-        mutation.setTimestamp(ts);
-
-        int cfCount = WritableUtils.readVInt(in);
-        for (int i = 0; i < cfCount; i++) {
-          // Col name
-          int cfLen = WritableUtils.readVInt(in);
-          byte[] cf = new byte[cfLen];
-          in.readFully(cf);
-          // Qualifiers+Values Count
-          int columnValuePairsCount = WritableUtils.readVInt(in);
-          for (int j = 0; j < columnValuePairsCount; j++) {
-            // Cell timestamp
-            long cellTs = in.readLong();
-            // Cell type byte
-            byte cellTypeByte = in.readByte();
-            // Qualifier name
-            int qualLen = WritableUtils.readVInt(in);
-            byte[] qual = new byte[qualLen];
-            if (qualLen > 0) {
-              in.readFully(qual);
-            }
-            // Value
-            int valueLen = WritableUtils.readVInt(in);
-            byte[] value = new byte[valueLen];
-            if (valueLen > 0) {
-              in.readFully(value);
-            }
-            Cell cell = new KeyValue(rowKey, 0, rowKey.length, cf, 0, cf.length, qual, 0,
-              qual.length, cellTs, KeyValue.Type.codeToType(cellTypeByte), value, 0, value.length);
-            if (mutation instanceof Put) {
-              ((Put) mutation).add(cell);
-            } else {
-              ((Delete) mutation).add(cell);
-            }
+        // Attributes
+        int attrCount = WritableUtils.readVInt(in);
+        Map<String, byte[]> attrs = attrCount == 0 ? new HashMap<>() : new HashMap<>(attrCount);
+        for (int i = 0; i < attrCount; i++) {
+          int keyLen = WritableUtils.readVInt(in);
+          byte[] keyBytes = new byte[keyLen];
+          in.readFully(keyBytes);
+          int valLen = WritableUtils.readVInt(in);
+          byte[] valBytes = new byte[valLen];
+          if (valLen > 0) {
+            in.readFully(valBytes);
           }
+          attrs.put(new String(keyBytes, StandardCharsets.UTF_8), valBytes);
         }
+        current.setAttributes(attrs);
 
-        // Successfully read a record
+        // Cells
+        int cellCount = WritableUtils.readVInt(in);
+        List<Cell> cells = new ArrayList<>(cellCount);
+        for (int i = 0; i < cellCount; i++) {
+          int rowLen = WritableUtils.readVInt(in);
+          byte[] row = new byte[rowLen];
+          if (rowLen > 0) {
+            in.readFully(row);
+          }
+          int famLen = WritableUtils.readVInt(in);
+          byte[] family = new byte[famLen];
+          if (famLen > 0) {
+            in.readFully(family);
+          }
+          int qualLen = WritableUtils.readVInt(in);
+          byte[] qual = new byte[qualLen];
+          if (qualLen > 0) {
+            in.readFully(qual);
+          }
+          long ts = in.readLong();
+          byte typeByte = in.readByte();
+          int valueLen = WritableUtils.readVInt(in);
+          byte[] value = new byte[valueLen];
+          if (valueLen > 0) {
+            in.readFully(value);
+          }
+          cells.add(new KeyValue(row, 0, row.length, family, 0, family.length, qual, 0, qual.length,
+            ts, KeyValue.Type.codeToType(typeByte), value, 0, value.length));
+        }
+        current.setCells(cells);
+
         return true;
       } catch (EOFException e) {
-        // End of stream
         current = null;
         return false;
       }

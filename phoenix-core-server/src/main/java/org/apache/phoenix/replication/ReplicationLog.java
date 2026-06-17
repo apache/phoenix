@@ -33,7 +33,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
-import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.phoenix.replication.ReplicationLogGroup.Record;
 import org.apache.phoenix.replication.log.LogFileWriter;
@@ -312,7 +311,7 @@ public class ReplicationLog {
     LOG.info("Replaying {} unsynced records into new writer {}", currentBatch.size(),
       currentWriter);
     for (Record r : currentBatch) {
-      currentWriter.append(r.tableName, r.commitId, r.mutation);
+      currentWriter.append(r.tableName, r.commitId, r.cells);
     }
   }
 
@@ -352,7 +351,7 @@ public class ReplicationLog {
   protected void append(Record r) throws IOException {
     final boolean[] blockSynced = { false };
     apply(writer -> {
-      blockSynced[0] = writer.append(r.tableName, r.commitId, r.mutation);
+      blockSynced[0] = writer.append(r.tableName, r.commitId, r.cells);
     });
     // Add to current batch only after we succeed at appending
     currentBatch.add(r);
@@ -365,10 +364,6 @@ public class ReplicationLog {
       // ensures size-based rotations don't cascade.
       requestRotationIfOversized();
     }
-  }
-
-  protected void append(String tableName, long commitId, Mutation mutation) throws IOException {
-    apply(writer -> writer.append(tableName, commitId, mutation));
   }
 
   protected void sync() throws IOException {

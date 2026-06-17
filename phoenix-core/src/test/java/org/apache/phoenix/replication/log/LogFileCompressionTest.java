@@ -131,7 +131,7 @@ public class LogFileCompressionTest {
     for (int i = 0; i < 100; i++) {
       LogFile.Record record = LogFileTestUtil.newPutRecord("TBLSBWC", i, "row" + i, 100L + i, 2);
       originals.add(record);
-      writer.append(record.getHBaseTableName(), record.getCommitId(), record.getMutation());
+      writer.append(record.getHBaseTableName(), record.getCommitId(), record.getCells());
     }
     writer.close();
     initLogFileReader();
@@ -148,7 +148,7 @@ public class LogFileCompressionTest {
     for (int i = 0; i < 100_000; i++) {
       LogFile.Record record = LogFileTestUtil.newPutRecord("TBLMBWC", i, "row" + i, 100L + i, 5);
       originals.add(record);
-      writer.append(record.getHBaseTableName(), record.getCommitId(), record.getMutation());
+      writer.append(record.getHBaseTableName(), record.getCommitId(), record.getCells());
     }
     writer.close();
     initLogFileReader();

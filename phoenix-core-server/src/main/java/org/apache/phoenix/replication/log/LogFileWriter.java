@@ -19,10 +19,11 @@ package org.apache.phoenix.replication.log;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
-import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.hadoop.hbase.Cell;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -79,12 +80,12 @@ public class LogFileWriter implements LogFile.Writer {
   }
 
   @Override
-  public boolean append(String tableName, long commitId, Mutation mutation) throws IOException {
+  public boolean append(String tableName, long commitId, List<Cell> cells) throws IOException {
     if (isClosed()) {
       throw new IOException("Writer has been closed");
     }
     return writer.append(
-      new LogFileRecord().setHBaseTableName(tableName).setCommitId(commitId).setMutation(mutation));
+      new LogFileRecord().setHBaseTableName(tableName).setCommitId(commitId).setCells(cells));
   }
 
   @Override

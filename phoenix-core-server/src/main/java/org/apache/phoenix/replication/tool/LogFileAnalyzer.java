@@ -126,6 +126,43 @@ public class LogFileAnalyzer extends Configured implements Tool {
     return allFiles;
   }
 
+  /**
+   * Count the number of log <em>records</em> (not flattened mutations) per table across all log
+   * files under {@code source}. Unlike {@link #groupLogsByTable(String)}, which expands each record
+   * into its constituent mutations, this preserves the record boundary so callers can assert the
+   * coalescing contract (one record per table per batch).
+   */
+  public Map<String, Integer> countRecordsByTable(String source) throws IOException {
+    Map<String, Integer> allFiles = Maps.newHashMap();
+    init();
+    Path path = new Path(source);
+    List<Path> filesToAnalyze = getFilesToAnalyze(path);
+    for (Path file : filesToAnalyze) {
+      Map<String, Integer> perFile = countRecordsByTable(file);
+      for (Map.Entry<String, Integer> entry : perFile.entrySet()) {
+        allFiles.merge(entry.getKey(), entry.getValue(), Integer::sum);
+      }
+    }
+    return allFiles;
+  }
+
+  private Map<String, Integer> countRecordsByTable(Path file) throws IOException {
+    Map<String, Integer> recordsByTable = Maps.newHashMap();
+    LogFileReaderContext context = new LogFileReaderContext(getConf()).setFileSystem(fs)
+      .setFilePath(file).setSkipCorruptBlocks(check);
+    LogFileReader reader = new LogFileReader();
+    try {
+      reader.init(context);
+      Record record;
+      while ((record = reader.next()) != null) {
+        recordsByTable.merge(record.getHBaseTableName(), 1, Integer::sum);
+      }
+    } finally {
+      reader.close();
+    }
+    return recordsByTable;
+  }
+
   private Map<String, List<Mutation>> groupLogsByTable(Path file) throws IOException {
     Map<String, List<Mutation>> mutationsByTable = Maps.newHashMap();
     System.out.println("\nAnalyzing file: " + file);
@@ -139,7 +176,7 @@ public class LogFileAnalyzer extends Configured implements Tool {
       while ((record = reader.next()) != null) {
         String tableName = record.getHBaseTableName();
         List<Mutation> mutations = mutationsByTable.getOrDefault(tableName, Lists.newArrayList());
-        mutations.add(record.getMutation());
+        mutations.addAll(record.getMutations());
         mutationsByTable.put(tableName, mutations);
       }
     } finally {
@@ -198,7 +235,9 @@ public class LogFileAnalyzer extends Configured implements Tool {
           System.out.println("\nRecord #" + recordCount + ":");
           System.out.println("  Table: " + record.getHBaseTableName());
           System.out.println("  Commit ID: " + record.getCommitId());
-          System.out.println("  Mutation: " + record.getMutation());
+          for (Mutation m : record.getMutations()) {
+            System.out.println("  Mutation: " + m);
+          }
           if (verbose) {
             System.out.println("  Serialized Length: " + record.getSerializedLength());
           }

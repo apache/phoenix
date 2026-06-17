@@ -22,10 +22,13 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.List;
+import java.util.Map;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.io.compress.Compression;
 
@@ -258,16 +261,57 @@ public interface LogFile {
     void write(DataOutput out) throws IOException;
   }
 
-  /** Represents a single logical change */
+  /** Represents a single logical change (a batch of cells across one or more rows) */
   interface Record {
     /**
-     * Gets the mutation this record represents.
-     * @return The Mutation.
+     * Gets the cells in this record's body.
+     * @return The cell list.
      */
-    Mutation getMutation();
+    List<Cell> getCells();
 
     /**
-     * Sets the mutation this record represents.
+     * Sets the cells in this record's body.
+     * @param cells The cell list to set.
+     * @return This Record instance for chaining.
+     */
+    Record setCells(List<Cell> cells);
+
+    /**
+     * Gets the attributes for this record. These apply uniformly to every mutation reconstructed
+     * from {@link #getCells()}.
+     * @return The attribute map (keys are attribute names, values are attribute byte arrays).
+     */
+    Map<String, byte[]> getAttributes();
+
+    /**
+     * Sets the attributes for this record.
+     * @param attributes The attribute map to set.
+     * @return This Record instance for chaining.
+     */
+    Record setAttributes(Map<String, byte[]> attributes);
+
+    /**
+     * Reconstructs the mutations in this record by grouping {@link #getCells()} on the row+type
+     * boundary (one mutation per contiguous run of cells with the same row and same put-vs-delete
+     * disposition). Attributes from {@link #getAttributes()} are applied to each result mutation.
+     * @return The list of reconstructed Put/Delete mutations.
+     * @throws IOException if mutation assembly fails.
+     */
+    List<Mutation> getMutations() throws IOException;
+
+    /**
+     * Convenience accessor that returns the single mutation in this record. Throws if
+     * {@link #getMutations()} produces anything other than exactly one entry.
+     * @return The single reconstructed Put or Delete mutation.
+     * @throws IllegalStateException if the body does not contain exactly one mutation.
+     * @throws IOException           if mutation assembly fails.
+     */
+    Mutation getMutation() throws IOException;
+
+    /**
+     * Convenience setter that populates this record's cell body from a single mutation. Cells are
+     * taken from the mutation's family cell map. Attributes are cleared; callers that need
+     * attributes on the record must set them explicitly via {@link #setAttributes(Map)}.
      * @param mutation The Mutation to set.
      * @return This Record instance for chaining.
      */
@@ -324,14 +368,15 @@ public interface LogFile {
     void init(LogFileWriterContext context) throws IOException;
 
     /**
-     * Appends an HBase mutation to the log file. The log record may be buffered internally.
-     * @param tableName The HBase table name
-     * @param commitId  The commit identifier
-     * @param mutation  The mutation to append.
+     * Appends a coalesced batch of cells as a single record. The cells must already be grouped by
+     * row+type so consumers can reconstruct Put/Delete mutations on the row+type boundary.
+     * @param tableName The HBase table name shared by every cell.
+     * @param commitId  The commit identifier.
+     * @param cells     The flat ordered cell stream for one batch on one table.
      * @return true if an implicit sync happened (block full), false if buffered only
      * @throws IOException if an I/O error occurs during append.
      */
-    boolean append(String tableName, long commitId, Mutation mutation) throws IOException;
+    boolean append(String tableName, long commitId, List<Cell> cells) throws IOException;
 
     /**
      * Flushes any buffered data to the underlying storage and ensures it is durable (e.g., by

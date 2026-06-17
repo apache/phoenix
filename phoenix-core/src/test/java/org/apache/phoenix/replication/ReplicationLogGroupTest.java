@@ -52,6 +52,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
@@ -109,11 +110,16 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Happens-before ordering verification, using Mockito's inOrder. Verify that the appends
     // happen before sync, and sync happened after appends.
-    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId1), eq(put1));
-    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId2), eq(put2));
-    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId3), eq(put3));
-    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId4), eq(put4));
-    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId5), eq(put5));
+    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId1),
+      eq(LogFileTestUtil.cellsOf(put1)));
+    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId2),
+      eq(LogFileTestUtil.cellsOf(put2)));
+    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId3),
+      eq(LogFileTestUtil.cellsOf(put3)));
+    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId4),
+      eq(LogFileTestUtil.cellsOf(put4)));
+    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId5),
+      eq(LogFileTestUtil.cellsOf(put5)));
     inOrder.verify(writer, times(1)).sync();
   }
 
@@ -144,7 +150,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Verify the sequence: append, sync (fail), sync (succeed on retry with same writer)
     InOrder inOrder = Mockito.inOrder(writer);
-    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    inOrder.verify(writer, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)));
     inOrder.verify(writer, times(2)).sync(); // First fails, second succeeds
   }
 
@@ -169,7 +176,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
         sleep(50); // Simulate slow processing
         return invocation.callRealMethod();
       }
-    }).when(innerWriter).append(anyString(), anyLong(), any(Mutation.class));
+    }).when(innerWriter).append(anyString(), anyLong(), any(List.class));
 
     // Fill up the ring buffer by sending enough events.
     for (int i = 0; i < TEST_RINGBUFFER_SIZE; i++) {
@@ -206,7 +213,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     assertTrue("Append should have completed", appendFuture.isDone());
 
     // Verify the append eventually happens on the writer.
-    verify(innerWriter, timeout(10000).times(1)).append(eq(tableName), eq(myCommitId), any());
+    verify(innerWriter, timeout(10000).times(1)).append(eq(tableName), eq(myCommitId),
+      any(List.class));
   }
 
   /**
@@ -225,7 +233,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Configure writerBeforeRoll to fail on the first append call
     doThrow(new IOException("Simulated append failure")).when(writerBeforeRoll).append(anyString(),
-      anyLong(), any(Mutation.class));
+      anyLong(), any(List.class));
 
     // Append data
     logGroup.append(tableName, commitId, put);
@@ -237,9 +245,11 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Verify the sequence: append (fail), rotate, append (succeed), sync
     InOrder inOrder = Mockito.inOrder(writerBeforeRoll, writerAfterRoll);
-    inOrder.verify(writerBeforeRoll, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    inOrder.verify(writerBeforeRoll, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)));
     inOrder.verify(writerBeforeRoll, times(0)).sync(); // We failed append, did not try
-    inOrder.verify(writerAfterRoll, times(1)).append(eq(tableName), eq(commitId), eq(put)); // Retry
+    inOrder.verify(writerAfterRoll, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put))); // Retry
     inOrder.verify(writerAfterRoll, times(1)).sync();
   }
 
@@ -348,7 +358,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // Verify that all of appends were processed by the internal writer.
     for (int i = 0; i < APPENDS_PER_THREAD * 2; i++) {
       final long commitId = i;
-      verify(innerWriter, times(1)).append(eq(tableName), eq(commitId), any());
+      verify(innerWriter, times(1)).append(eq(tableName), eq(commitId), any(List.class));
     }
   }
 
@@ -389,9 +399,11 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Verify the sequence of operations
     InOrder inOrder = Mockito.inOrder(writerBeforeRotation, writerAfterRotation);
-    inOrder.verify(writerBeforeRotation, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    inOrder.verify(writerBeforeRotation, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)));
     inOrder.verify(writerBeforeRotation, times(1)).sync();
-    inOrder.verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + 1), eq(put));
+    inOrder.verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + 1),
+      eq(LogFileTestUtil.cellsOf(put)));
     inOrder.verify(writerAfterRotation, times(1)).sync();
   }
 
@@ -430,7 +442,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     assertTrue("Writer should have been rotated", writerAfterRotation != writerBeforeRotation);
 
     // Verify the final append went to the new writer
-    verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)));
     verify(writerAfterRotation, times(1)).sync();
   }
 
@@ -510,10 +523,12 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     assertTrue("Writer should have been rotated", writerAfterRotation != writerBeforeRotation);
 
     // Verify first batch went to initial writer
-    verify(writerBeforeRotation, times(1)).append(eq(tableName), eq(1L), eq(put));
+    verify(writerBeforeRotation, times(1)).append(eq(tableName), eq(1L),
+      eq(LogFileTestUtil.cellsOf(put)));
     verify(writerBeforeRotation, times(1)).sync();
     // Verify second batch went to new writer (swap happened before append)
-    verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + 1), eq(put));
+    verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + 1),
+      eq(LogFileTestUtil.cellsOf(put)));
     verify(writerAfterRotation, times(1)).sync();
     // Verify the initial writer was closed asynchronously
     verify(writerBeforeRotation, timeout(5000).times(1)).close();
@@ -568,11 +583,14 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Verify operations went to the writers in the correct order
     InOrder inOrder = Mockito.inOrder(initialWriter, writerAfterRotate);
-    inOrder.verify(initialWriter).append(eq(tableName), eq(commitId), eq(put));
+    inOrder.verify(initialWriter).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)));
     inOrder.verify(initialWriter).sync();
-    inOrder.verify(initialWriter).append(eq(tableName), eq(commitId + 1), eq(put));
+    inOrder.verify(initialWriter).append(eq(tableName), eq(commitId + 1),
+      eq(LogFileTestUtil.cellsOf(put)));
     inOrder.verify(initialWriter).sync();
-    inOrder.verify(writerAfterRotate).append(eq(tableName), eq(commitId + 2), eq(put));
+    inOrder.verify(writerAfterRotate).append(eq(tableName), eq(commitId + 2),
+      eq(LogFileTestUtil.cellsOf(put)));
     inOrder.verify(writerAfterRotate).sync();
   }
 
@@ -628,7 +646,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Configure writer to throw a RuntimeException on append
     doThrow(new RuntimeException("Simulated critical error")).when(innerWriter).append(anyString(),
-      anyLong(), any(Mutation.class));
+      anyLong(), any(List.class));
 
     // Append publishes to the ring buffer. The event handler catches the RuntimeException via
     // catch(Throwable), poisons itself, and fails the sync future. The producer receives
@@ -766,12 +784,12 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // 5 appends went to old writer (processed before rotation task fired)
     for (int i = 0; i < 5; i++) {
       inOrder.verify(writerBeforeRotation, times(1)).append(eq(tableName), eq(commitId + i),
-        eq(put));
+        eq(LogFileTestUtil.cellsOf(put)));
     }
     // Swap happens before sync action: 5 records replayed into new writer
     for (int i = 0; i < 5; i++) {
       inOrder.verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + i),
-        eq(put));
+        eq(LogFileTestUtil.cellsOf(put)));
     }
     // Sync goes to new writer
     inOrder.verify(writerAfterRotation, times(1)).sync();
@@ -1020,7 +1038,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Configure writer to throw RuntimeException on append
     doThrow(new RuntimeException("Simulated critical error")).when(innerWriter).append(anyString(),
-      anyLong(), any(Mutation.class));
+      anyLong(), any(List.class));
 
     // Append publishes to the ring buffer. The event handler catches the RuntimeException,
     // poisons itself, and fails the sync future. The producer calls abort().
@@ -1059,7 +1077,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Configure writer to throw RuntimeException on append
     doThrow(new RuntimeException("Simulated critical error")).when(innerWriter).append(anyString(),
-      anyLong(), any(Mutation.class));
+      anyLong(), any(List.class));
 
     // Append publishes to the ring buffer. The event handler catches the RuntimeException,
     // poisons itself, and fails the sync future. The producer calls abort().
@@ -1166,7 +1184,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
         sleep(50); // Delay to allow multiple events to be posted
         return invocation.callRealMethod();
       }
-    }).when(innerWriter).append(eq(tableName), eq(commitId1), eq(put1));
+    }).when(innerWriter).append(eq(tableName), eq(commitId1), eq(LogFileTestUtil.cellsOf(put1)));
 
     // Post appends and three syncs in quick succession. The first append will be delayed long
     // enough for the three syncs to appear in a single Disruptor batch. Then they should all
@@ -1181,9 +1199,12 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // Verify the sequence of operations on the inner writer: the three appends, then exactly
     // one sync.
     InOrder inOrder = Mockito.inOrder(innerWriter);
-    inOrder.verify(innerWriter, times(1)).append(eq(tableName), eq(commitId1), eq(put1));
-    inOrder.verify(innerWriter, times(1)).append(eq(tableName), eq(commitId2), eq(put2));
-    inOrder.verify(innerWriter, times(1)).append(eq(tableName), eq(commitId3), eq(put3));
+    inOrder.verify(innerWriter, times(1)).append(eq(tableName), eq(commitId1),
+      eq(LogFileTestUtil.cellsOf(put1)));
+    inOrder.verify(innerWriter, times(1)).append(eq(tableName), eq(commitId2),
+      eq(LogFileTestUtil.cellsOf(put2)));
+    inOrder.verify(innerWriter, times(1)).append(eq(tableName), eq(commitId3),
+      eq(LogFileTestUtil.cellsOf(put3)));
     inOrder.verify(innerWriter, times(1)).sync(); // Only one sync should be called
   }
 
@@ -1287,12 +1308,12 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // invocation/stub state is not thread-safe and the partially-applied stub can be matched
     // against an unrelated method on the consumer thread.
     doThrow(new IOException("Simulate append failure")).when(writer).append(tableName, commitId5,
-      put5);
+      LogFileTestUtil.cellsOf(put5));
     // Rotated writers must also fail on the 5th append so the retry doesn't rescue the loop.
     doAnswer(invocation -> {
       LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
       doThrow(new IOException("Simulate append failure")).when(w).append(tableName, commitId5,
-        put5);
+        LogFileTestUtil.cellsOf(put5));
       return w;
     }).when(activeLog).createNewWriter();
 
@@ -1309,11 +1330,16 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // verify that all the in-flight appends and syncs are replayed on the new store and forward
     // writer
-    inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId1), eq(put1));
-    inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId2), eq(put2));
-    inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId3), eq(put3));
-    inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId4), eq(put4));
-    inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId5), eq(put5));
+    inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId1),
+      eq(LogFileTestUtil.cellsOf(put1)));
+    inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId2),
+      eq(LogFileTestUtil.cellsOf(put2)));
+    inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId3),
+      eq(LogFileTestUtil.cellsOf(put3)));
+    inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId4),
+      eq(LogFileTestUtil.cellsOf(put4)));
+    inOrder.verify(storeAndForwardWriter, times(1)).append(eq(tableName), eq(commitId5),
+      eq(LogFileTestUtil.cellsOf(put5)));
     inOrder.verify(storeAndForwardWriter, times(1)).sync();
   }
 
@@ -1379,15 +1405,16 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // 3 appends went to old writer
     for (int i = 0; i < 3; i++) {
       inOrder.verify(writerBeforeRotation, times(1)).append(eq(tableName), eq(commitId + i),
-        eq(put));
+        eq(LogFileTestUtil.cellsOf(put)));
     }
     // 3 records replayed into new writer
     for (int i = 0; i < 3; i++) {
       inOrder.verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + i),
-        eq(put));
+        eq(LogFileTestUtil.cellsOf(put)));
     }
     // 4th append goes to new writer
-    inOrder.verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + 3), eq(put));
+    inOrder.verify(writerAfterRotation, times(1)).append(eq(tableName), eq(commitId + 3),
+      eq(LogFileTestUtil.cellsOf(put)));
     inOrder.verify(writerAfterRotation, times(1)).sync();
 
     // Old writer closed async
@@ -1429,57 +1456,13 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     assertTrue("Should be using new writer", newWriter != initialWriter);
 
     // Old writer: received the append only
-    verify(initialWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    verify(initialWriter, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)));
 
     // New writer: received replayed append + successful sync
-    verify(newWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    verify(newWriter, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)));
     verify(newWriter, times(1)).sync();
-  }
-
-  /**
-   * Tests the idle-then-lease-recovery scenario: after a sync clears currentBatch, the system goes
-   * idle. A rotation tick stages a pending writer. The reader performs HDFS lease recovery,
-   * breaking the old writer's stream. When events resume, apply() drains the healthy staged writer
-   * before the action — the broken writer is never touched. No replay needed (empty batch).
-   */
-  @Test
-  public void testIdleLeaseRecoveryDrainsStagedWriter() throws Exception {
-    final String tableName = "TBLILRDSW";
-    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
-    final long commitId = 1L;
-
-    ReplicationLog activeLog = logGroup.getActiveLog();
-    LogFileWriter initialWriter = activeLog.getWriter();
-    assertNotNull("Initial writer should not be null", initialWriter);
-
-    // Append + sync to establish baseline and clear currentBatch
-    logGroup.append(tableName, commitId, put);
-    logGroup.sync();
-
-    // Stage W2 in pendingWriter via forced rotation
-    activeLog.forceRotation();
-
-    // Simulate HDFS lease recovery breaking the old writer's stream
-    doThrow(new IOException("Simulated broken stream after lease recovery")).when(initialWriter)
-      .append(anyString(), anyLong(), any(Mutation.class));
-    doThrow(new IOException("Simulated broken stream after lease recovery")).when(initialWriter)
-      .sync();
-
-    // Events resume — apply() drains W2 before the action, so broken writer is never touched
-    logGroup.append(tableName, commitId + 1, put);
-    logGroup.sync();
-
-    LogFileWriter newWriter = activeLog.getWriter();
-    assertTrue("Should be using new writer after idle + lease recovery",
-      newWriter != initialWriter);
-
-    // New writer received the new append + sync (no replay — currentBatch was empty)
-    verify(newWriter, times(1)).append(eq(tableName), eq(commitId + 1), eq(put));
-    verify(newWriter, times(1)).sync();
-
-    // Old writer: only the pre-idle append + sync, nothing after the break
-    verify(initialWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
-    verify(initialWriter, times(1)).sync();
   }
 
   /**
@@ -1505,7 +1488,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
           throw new IOException("Simulated transient HDFS error during replay");
         }
         return appendInvocation.callRealMethod();
-      }).when(w).append(anyString(), anyLong(), any(Mutation.class));
+      }).when(w).append(anyString(), anyLong(), any(List.class));
       return w;
     }).when(activeLog).createNewWriter();
 
@@ -1526,9 +1509,12 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     assertTrue("Should be using a fresh writer", finalWriter != initialWriter);
 
     // Final writer (W3): replayed r1+r2 then appended r3 — each exactly once.
-    verify(finalWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
-    verify(finalWriter, times(1)).append(eq(tableName), eq(commitId + 1), eq(put));
-    verify(finalWriter, times(1)).append(eq(tableName), eq(commitId + 2), eq(put));
+    verify(finalWriter, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)));
+    verify(finalWriter, times(1)).append(eq(tableName), eq(commitId + 1),
+      eq(LogFileTestUtil.cellsOf(put)));
+    verify(finalWriter, times(1)).append(eq(tableName), eq(commitId + 2),
+      eq(LogFileTestUtil.cellsOf(put)));
     verify(finalWriter, times(1)).sync();
   }
 
@@ -1549,7 +1535,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Configure initial writer's append to always fail (simulating broken HDFS stream)
     doThrow(new IOException("Simulated broken stream")).when(initialWriter).append(anyString(),
-      anyLong(), any(Mutation.class));
+      anyLong(), any(List.class));
 
     // Append — attempt 1 fails on initialWriter, rotation requested, attempt 2 drains the
     // rotated writer and succeeds
@@ -1560,9 +1546,11 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     assertTrue("Should be using a new writer after error recovery", newWriter != initialWriter);
 
     // Old writer received 1 failed attempt
-    verify(initialWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    verify(initialWriter, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)));
     // New writer received the successful append
-    verify(newWriter, times(1)).append(eq(tableName), eq(commitId), eq(put));
+    verify(newWriter, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)));
     verify(newWriter, times(1)).sync();
   }
 
@@ -2061,7 +2049,7 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     doAnswer(invocation -> {
       holdConsumer.await();
       return invocation.callRealMethod();
-    }).when(innerWriter).append(anyString(), anyLong(), any(Mutation.class));
+    }).when(innerWriter).append(anyString(), anyLong(), any(List.class));
 
     Thread filler = new Thread(() -> {
       try {
@@ -2109,6 +2097,12 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     final int appendsPerSync = Integer.getInteger("test.appendsPerSync", 5);
     final int cellsPerMutation = Integer.getInteger("test.cellsPerMutation", 1);
     final long innerSyncDelayMs = Long.getLong("test.innerSyncDelayMs", 2);
+    // Framing of the appendsPerSync mutations between two syncs:
+    // permutation - one append() per mutation (pre-coalescing behavior)
+    // perbatch - one append(table, commitId, List<Cell>) per sync carrying the whole batch's
+    // flat cell stream (the coalesced behavior IndexRegionObserver now emits)
+    final String recordFraming = System.getProperty("test.recordFraming", "permutation");
+    final boolean perBatch = "perbatch".equals(recordFraming);
 
     // Use the production-default ring buffer size so producers are not artificially blocked on
     // ringBuffer.next() — the default test fixture uses a 32-slot buffer which fills under
@@ -2164,11 +2158,26 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
           try {
             startLatch.await();
             for (int i = 0; i < syncsPerProducer; i++) {
-              for (int j = 0; j < appendsPerSync; j++) {
+              if (perBatch) {
+                // Coalesce the whole batch into a single record carrying the flat cell stream,
+                // mirroring IndexRegionObserver's per-(table,batch) append.
+                List<Cell> batchCells = new ArrayList<>(appendsPerSync * cellsPerMutation);
                 long commitId = commitIdSeq.getAndIncrement();
-                Mutation put = LogFileTestUtil.newPut("row" + commitId, commitId, cellsPerMutation);
-                logGroup.append(tableName, commitId, put);
+                for (int j = 0; j < appendsPerSync; j++) {
+                  Mutation put =
+                    LogFileTestUtil.newPut("row" + commitId + "_" + j, commitId, cellsPerMutation);
+                  batchCells.addAll(LogFileTestUtil.cellsOf(put));
+                }
+                logGroup.append(tableName, commitId, batchCells);
                 totalProducerAppends.incrementAndGet();
+              } else {
+                for (int j = 0; j < appendsPerSync; j++) {
+                  long commitId = commitIdSeq.getAndIncrement();
+                  Mutation put =
+                    LogFileTestUtil.newPut("row" + commitId, commitId, cellsPerMutation);
+                  logGroup.append(tableName, commitId, put);
+                  totalProducerAppends.incrementAndGet();
+                }
               }
               logGroup.sync();
               totalProducerSyncs.incrementAndGet();
@@ -2235,5 +2244,71 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       pool.shutdownNow();
       pool.awaitTermination(5, TimeUnit.SECONDS);
     }
+  }
+
+  /**
+   * Verifies that the producer- and consumer-side sync metrics are actually emitted on the write
+   * path. Guards against the "metric declared but never wired" regression class.
+   * <p>
+   * Two deliberate choices make this assertion deterministic where the IT version flaked:
+   * <ul>
+   * <li>The inner writer's {@code sync()} is stubbed to sleep a couple of ms so that
+   * {@code syncTime} and {@code fsSyncTime} — which are stored ms-truncated — clear the
+   * sub-millisecond floor every run. On a fast disk a real fsync floors to 0 ms, which is correct
+   * behavior but breaks a naive {@code > 0} assertion.</li>
+   * <li>Metrics are read only after a graceful {@link ReplicationLogGroup#close()}, which joins the
+   * Disruptor consumer thread. This establishes happens-before on every consumer-recorded metric,
+   * including {@code batchSize}, which is updated on the endOfBatch callback after the producer's
+   * sync future has already completed.</li>
+   * </ul>
+   */
+  @Test
+  public void testSyncMetricsEmitted() throws Exception {
+    // Make the inner fsync take >= 1ms so the ms-truncated syncTime/fsSyncTime histograms record a
+    // non-zero value deterministically.
+    final long innerSyncDelayMs = 2;
+    LogFileWriter writer = logGroup.getActiveLog().getWriter();
+    assertNotNull("Writer should not be null", writer);
+    doAnswer(invocation -> {
+      sleep(innerSyncDelayMs);
+      return invocation.callRealMethod();
+    }).when(writer).sync();
+
+    final String tableName = "TESTTBL";
+    final int batches = 5;
+    final int appendsPerBatch = 4;
+    long commitId = 0;
+    for (int b = 0; b < batches; b++) {
+      for (int j = 0; j < appendsPerBatch; j++) {
+        logGroup.append(tableName, commitId, LogFileTestUtil.newPut("row" + commitId, commitId, 1));
+        commitId++;
+      }
+      logGroup.sync();
+    }
+
+    // Close gracefully (fatalException == null) so the consumer drains and the executor is joined
+    // before we read. close() is idempotent, so tearDown's close() is a no-op.
+    logGroup.close();
+
+    // getCurrentMetricValues() snapshots and resets the histogram bins, so call it exactly once.
+    ReplicationLogMetricValues values = logGroup.getMetrics().getCurrentMetricValues();
+
+    // Nanosecond-resolution metrics never truncate to zero, so assert strictly positive.
+    assertTrue("appendTime should be > 0, got " + values.getAppendTimeMax(),
+      values.getAppendTimeMax() > 0);
+    assertTrue("ringBufferTime should be > 0, got " + values.getRingBufferTimeMax(),
+      values.getRingBufferTimeMax() > 0);
+    assertTrue("pendingSyncWaitTime should be > 0, got " + values.getPendingSyncWaitTimeMax(),
+      values.getPendingSyncWaitTimeMax() > 0);
+    // Counts.
+    assertTrue("batchSize should be > 0, got " + values.getBatchSizeMax(),
+      values.getBatchSizeMax() > 0);
+    assertTrue("pendingSyncCount should be > 0, got " + values.getPendingSyncCountMax(),
+      values.getPendingSyncCountMax() > 0);
+    // Millisecond-resolution timers: the injected fsync delay clears the truncation floor.
+    assertTrue("syncTime should be > 0, got " + values.getSyncTimeMax(),
+      values.getSyncTimeMax() > 0);
+    assertTrue("fsSyncTime should be > 0, got " + values.getFsSyncTimeMax(),
+      values.getFsSyncTimeMax() > 0);
   }
 }

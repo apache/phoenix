@@ -30,6 +30,8 @@ import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FSDataOutputStreamBuilder;
 import org.apache.hadoop.fs.FileSystem;
@@ -37,12 +39,24 @@ import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
 
 public interface LogFileTestUtil {
+
+  /**
+   * Flatten a mutation's family cell map into the cell list that the writer ultimately receives.
+   */
+  static List<Cell> cellsOf(Mutation mutation) {
+    List<Cell> cells = new ArrayList<>();
+    for (List<Cell> familyCells : mutation.getFamilyCellMap().values()) {
+      cells.addAll(familyCells);
+    }
+    return cells;
+  }
 
   static LogFile.Record newPutRecord(String table, long commitId, String rowKey, long ts,
     int numCols) {
@@ -120,16 +134,33 @@ public interface LogFileTestUtil {
 
   static void assertRecordEquals(String message, LogFile.Record r1, LogFile.Record r2)
     throws AssertionError {
-    try {
-      if (
-        !r1.getMutation().toJSON().equals(r2.getMutation().toJSON())
-          || !r1.getHBaseTableName().equals(r2.getHBaseTableName())
-          || r1.getCommitId() != r2.getCommitId()
-      ) {
-        throw new AssertionError(message + ": left=" + r1 + ", right=" + r2);
+    if (
+      !r1.getHBaseTableName().equals(r2.getHBaseTableName()) || r1.getCommitId() != r2.getCommitId()
+    ) {
+      throw new AssertionError(message + ": left=" + r1 + ", right=" + r2);
+    }
+    if (r1.getCells().size() != r2.getCells().size()) {
+      throw new AssertionError(message + ": cell count mismatch: left=" + r1 + ", right=" + r2);
+    }
+    for (int i = 0; i < r1.getCells().size(); i++) {
+      Cell c1 = r1.getCells().get(i);
+      Cell c2 = r2.getCells().get(i);
+      // CellUtil.equals compares row/family/qualifier/timestamp/type but not value.
+      if (!CellUtil.equals(c1, c2) || !CellUtil.matchingValue(c1, c2)) {
+        throw new AssertionError(
+          message + ": cell #" + i + " mismatch: left=" + r1 + ", right=" + r2);
       }
-    } catch (IOException e) {
-      throw new AssertionError(e.getMessage());
+    }
+    if (r1.getAttributes().size() != r2.getAttributes().size()) {
+      throw new AssertionError(
+        message + ": attribute count mismatch: left=" + r1 + ", right=" + r2);
+    }
+    for (java.util.Map.Entry<String, byte[]> e : r1.getAttributes().entrySet()) {
+      byte[] other = r2.getAttributes().get(e.getKey());
+      if (other == null || !java.util.Arrays.equals(e.getValue(), other)) {
+        throw new AssertionError(
+          message + ": attribute '" + e.getKey() + "' mismatch: left=" + r1 + ", right=" + r2);
+      }
     }
   }
 
@@ -158,12 +189,22 @@ public interface LogFileTestUtil {
   }
 
   static void assertMutationEquals(String message, Mutation m1, Mutation m2) {
-    try {
-      if (!m1.toJSON().equals(m2.toJSON())) {
-        throw new AssertionError(message + ": left=" + m1 + ", right=" + m2);
+    if (!Bytes.equals(m1.getRow(), m2.getRow())) {
+      throw new AssertionError(message + ": row mismatch: left=" + m1 + ", right=" + m2);
+    }
+    if (m1.getClass() != m2.getClass()) {
+      throw new AssertionError(message + ": type mismatch: left=" + m1 + ", right=" + m2);
+    }
+    List<Cell> c1 = cellsOf(m1);
+    List<Cell> c2 = cellsOf(m2);
+    if (c1.size() != c2.size()) {
+      throw new AssertionError(message + ": cell count mismatch: left=" + m1 + ", right=" + m2);
+    }
+    for (int i = 0; i < c1.size(); i++) {
+      if (!CellUtil.equals(c1.get(i), c2.get(i)) || !CellUtil.matchingValue(c1.get(i), c2.get(i))) {
+        throw new AssertionError(
+          message + ": cell #" + i + " mismatch: left=" + m1 + ", right=" + m2);
       }
-    } catch (IOException e) {
-      throw new AssertionError(e.getMessage());
     }
   }
 

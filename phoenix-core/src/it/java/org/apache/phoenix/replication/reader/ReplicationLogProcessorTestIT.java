@@ -132,7 +132,7 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
 
     // Add a mutation to make it a proper log file with data
     Mutation put = LogFileTestUtil.newPut("testRow", 1, 1);
-    writer.append(tableName, 1, put);
+    writer.append(tableName, 1, LogFileTestUtil.cellsOf(put));
     writer.sync();
     writer.close();
 
@@ -213,7 +213,7 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
 
     LogFileWriter writer = initLogFileWriter(filePath);
     Mutation put = LogFileTestUtil.newPut("testRow", 1, 1);
-    writer.append(tableName, 1, put);
+    writer.append(tableName, 1, LogFileTestUtil.cellsOf(put));
     writer.sync();
     // Do NOT call writer.close() -- skips trailer, simulates a writer crash after sync
 
@@ -261,7 +261,7 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
 
     LogFileWriter writer = initLogFileWriter(filePath);
     Mutation put = LogFileTestUtil.newPut("testRow", 1, 1);
-    writer.append(tableName, 1, put);
+    writer.append(tableName, 1, LogFileTestUtil.cellsOf(put));
     writer.sync();
     // Do NOT call writer.close() -- skips trailer
 
@@ -311,7 +311,7 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
 
     // Add a mutation to make it a proper log file with data
     Mutation put = LogFileTestUtil.newPut("testRow", 1, 1);
-    writer.append(tableName, 1, put);
+    writer.append(tableName, 1, LogFileTestUtil.cellsOf(put));
     writer.sync();
     writer.close();
 
@@ -528,14 +528,14 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
         generateHBaseMutations(phoenixConnection, 5, table2Name, 101L, "b");
       table1Mutations.forEach(mutation -> {
         try {
-          writer.append(table1Name, mutation.hashCode(), mutation);
+          writer.append(table1Name, mutation.hashCode(), LogFileTestUtil.cellsOf(mutation));
         } catch (IOException e) {
           throw new RuntimeException(e);
         }
       });
       table2Mutations.forEach(mutation -> {
         try {
-          writer.append(table2Name, mutation.hashCode(), mutation);
+          writer.append(table2Name, mutation.hashCode(), LogFileTestUtil.cellsOf(mutation));
         } catch (IOException e) {
           throw new RuntimeException(e);
         }
@@ -646,7 +646,7 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
 
     // Add one mutation
     Mutation put = LogFileTestUtil.newPut("row1", 3L, 4);
-    writer.append(tableNameString, 1, put);
+    writer.append(tableNameString, 1, LogFileTestUtil.cellsOf(put));
     writer.sync();
 
     // For processing of an unclosed file to work, we need to disable trailer validation
@@ -733,7 +733,7 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
       Put put = new Put(Bytes.toBytes("row" + i));
       put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("qual"), Bytes.toBytes("abcd"));
       mutations.add(put);
-      writer.append(tableName, i, put);
+      writer.append(tableName, i, LogFileTestUtil.cellsOf(put));
     }
 
     // Add 1 big mutation that will cross the byte size threshold before count threshold
@@ -749,14 +749,14 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
         + "it crosses the byte size threshold and forces a batch to be processed."));
 
     mutations.add(bigPut);
-    writer.append(tableName, 100, bigPut);
+    writer.append(tableName, 100, LogFileTestUtil.cellsOf(bigPut));
 
     // Add more small mutations that will be batched due to count limit
     for (int i = 3; i < 10; i++) {
       Put put = new Put(Bytes.toBytes("row" + i));
       put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("qual"), Bytes.toBytes("abcd"));
       mutations.add(put);
-      writer.append(tableName, i, put);
+      writer.append(tableName, i, LogFileTestUtil.cellsOf(put));
     }
 
     writer.close();
@@ -924,13 +924,13 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
       // Add mutation for table1
       Mutation put1 = LogFileTestUtil.newPut("row1_" + i, (i * 2) + 1, (i * 2) + 1);
       table1Mutations.add(put1);
-      writer.append(table1Name, (i * 2) + 1, put1);
+      writer.append(table1Name, (i * 2) + 1, LogFileTestUtil.cellsOf(put1));
       writer.sync();
 
       // Add mutation for table2
       Mutation put2 = LogFileTestUtil.newPut("row2_" + i, (i * 2) + 2, (i * 2) + 2);
       table2Mutations.add(put2);
-      writer.append(table2Name, (i * 2) + 2, put2);
+      writer.append(table2Name, (i * 2) + 2, LogFileTestUtil.cellsOf(put2));
       writer.sync();
     }
     writer.close();
@@ -1663,7 +1663,7 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
     for (int i = 0; i < totalRecords; i++) {
       Mutation put = LogFileTestUtil.newPut("row" + i, i + 1, i + 1);
       originalMutations.add(put);
-      writer.append(tableName, i + 1, put);
+      writer.append(tableName, i + 1, LogFileTestUtil.cellsOf(put));
       writer.sync();
     }
     writer.close();
