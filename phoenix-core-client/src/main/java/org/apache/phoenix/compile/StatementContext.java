@@ -175,18 +175,9 @@ public class StatementContext {
     this.totalSegmentsValue = context.totalSegmentsValue;
     this.hasRowSizeFunction = context.hasRowSizeFunction;
     this.hasRawRowSizeFunction = context.hasRawRowSizeFunction;
-    this.appliedRewrites = context.appliedRewrites;
-    this.derivedTableFlattenCount = context.derivedTableFlattenCount;
-    this.appliedIndexExpressionMatches = context.appliedIndexExpressionMatches;
-    this.appliedIndexExpressionPairs = context.appliedIndexExpressionPairs;
-    this.functionalIndexNames = context.functionalIndexNames;
-    this.partialIndexCheckedSet = context.partialIndexCheckedSet;
-    this.serverParsedProjections = context.serverParsedProjections;
     this.parentContext = context.parentContext;
     this.explainOptions = context.explainOptions;
-    this.predicateOrigins = context.predicateOrigins;
-    this.decorrelatedSubqueryAlias = context.decorrelatedSubqueryAlias;
-    this.ignoredHints = context.ignoredHints;
+    copyRewriteStateFrom(context);
   }
 
   /**
@@ -253,8 +244,8 @@ public class StatementContext {
     this.derivedTableFlattenCount = 0;
     this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
     this.appliedIndexExpressionPairs = Maps.newLinkedHashMap();
-    this.functionalIndexNames = Sets.newHashSet();
-    this.partialIndexCheckedSet = Sets.newHashSet();
+    this.functionalIndexNames = Sets.newLinkedHashSet();
+    this.partialIndexCheckedSet = Sets.newLinkedHashSet();
     this.serverParsedProjections = null;
     this.parentContext = null;
     this.predicateOrigins = new IdentityHashMap<>();
@@ -541,22 +532,47 @@ public class StatementContext {
   }
 
   /**
-   * Adopt the rewrite breadcrumb accumulator (and related diagnostic state) of another context by
-   * sharing its references. Used to carry breadcrumbs recorded by the early
+   * Adopt the rewrite breadcrumb accumulator (and related diagnostic state) of another context.
+   * Used to carry breadcrumbs recorded by the early
    * {@link SubselectRewriter}/{@link SubqueryRewriter} pass on a pre-built context across the
-   * rewrite boundary onto the actual compilation context.
+   * rewrite boundary onto the actual compilation context. Fresh collections are allocated (see
+   * {@link #copyRewriteStateFrom}) so this context and {@code source} continue to mutate
+   * independently.
    */
   public void adoptRewriteState(StatementContext source) {
-    this.appliedRewrites = source.appliedRewrites;
+    copyRewriteStateFrom(source);
+  }
+
+  /**
+   * Copy the rewrite breadcrumb accumulators and related diagnostic state from {@code source} into
+   * this context, allocating fresh collections so the two contexts never share mutable backing
+   * collections. Shared by the copy constructor and {@link #adoptRewriteState}, both of which hand
+   * the resulting context to a compile pass that continues to mutate this state.
+   */
+  private void copyRewriteStateFrom(StatementContext source) {
+    this.appliedRewrites =
+      source.appliedRewrites == null ? new ArrayList<>() : new ArrayList<>(source.appliedRewrites);
     this.derivedTableFlattenCount = source.derivedTableFlattenCount;
-    this.appliedIndexExpressionMatches = source.appliedIndexExpressionMatches;
-    this.appliedIndexExpressionPairs = source.appliedIndexExpressionPairs;
-    this.functionalIndexNames = source.functionalIndexNames;
-    this.partialIndexCheckedSet = source.partialIndexCheckedSet;
+    this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
+    for (Map.Entry<String, List<String>> entry : source.appliedIndexExpressionMatches.entrySet()) {
+      this.appliedIndexExpressionMatches.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+    }
+    this.appliedIndexExpressionPairs = Maps.newLinkedHashMap();
+    for (Map.Entry<String, Map<String, String>> entry : source.appliedIndexExpressionPairs
+      .entrySet()) {
+      this.appliedIndexExpressionPairs.put(entry.getKey(), new LinkedHashMap<>(entry.getValue()));
+    }
+    this.functionalIndexNames = Sets.newLinkedHashSet(source.functionalIndexNames);
+    this.partialIndexCheckedSet = Sets.newLinkedHashSet(source.partialIndexCheckedSet);
+    // serverParsedProjections is nullable and only ever replaced wholesale via its setter (never
+    // mutated in place), so the reference can be carried over directly.
     this.serverParsedProjections = source.serverParsedProjections;
-    this.predicateOrigins = source.predicateOrigins;
-    this.decorrelatedSubqueryAlias = source.decorrelatedSubqueryAlias;
-    this.ignoredHints = source.ignoredHints;
+    this.predicateOrigins = new IdentityHashMap<>();
+    for (Map.Entry<Expression, Set<String>> entry : source.predicateOrigins.entrySet()) {
+      this.predicateOrigins.put(entry.getKey(), new LinkedHashSet<>(entry.getValue()));
+    }
+    this.decorrelatedSubqueryAlias = new IdentityHashMap<>(source.decorrelatedSubqueryAlias);
+    this.ignoredHints = new EnumMap<>(source.ignoredHints);
   }
 
   public void incrementDerivedTableFlattenCount() {

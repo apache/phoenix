@@ -22,6 +22,7 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -186,7 +187,9 @@ public class ExplainPlanAttributes {
     this.scanEstimatedSizeInBytes = b.scanEstimatedSizeInBytes;
     this.serverWhereFilter = b.serverWhereFilter;
     this.serverDistinctFilter = b.serverDistinctFilter;
-    this.serverMergeColumns = b.serverMergeColumns;
+    this.serverMergeColumns = (b.serverMergeColumns == null || b.serverMergeColumns.isEmpty())
+      ? null
+      : Collections.unmodifiableSet(new LinkedHashSet<>(b.serverMergeColumns));
     this.serverParsedProjections = copyServerParsedProjections(b.serverParsedProjections);
     this.serverProject = (b.serverProject == null || b.serverProject.isEmpty())
       ? null
@@ -222,12 +225,16 @@ public class ExplainPlanAttributes {
       : Collections.unmodifiableList(new ArrayList<>(b.clientSteps));
     this.lhsJoinQueryExplainPlan = b.lhsJoinQueryExplainPlan;
     this.rhsJoinQueryExplainPlan = b.rhsJoinQueryExplainPlan;
-    this.subPlans = b.subPlans;
+    this.subPlans = (b.subPlans == null || b.subPlans.isEmpty())
+      ? null
+      : Collections.unmodifiableList(new ArrayList<>(b.subPlans));
     this.dynamicServerFilter = b.dynamicServerFilter;
     this.afterJoinFilter = b.afterJoinFilter;
     this.joinScannerLimit = b.joinScannerLimit;
     this.sortMergeSkipMerge = b.sortMergeSkipMerge;
-    this.regionLocations = b.regionLocations;
+    this.regionLocations = (b.regionLocations == null || b.regionLocations.isEmpty())
+      ? null
+      : Collections.unmodifiableList(new ArrayList<>(b.regionLocations));
     this.regionLocationsTotalSize = b.regionLocationsTotalSize;
     this.numRegionLocationLookups = b.numRegionLocationLookups;
   }
@@ -924,7 +931,7 @@ public class ExplainPlanAttributes {
     }
 
     public ExplainPlanAttributesBuilder setServerMergeColumns(Set<PColumn> columns) {
-      this.serverMergeColumns = columns;
+      this.serverMergeColumns = columns == null ? null : new LinkedHashSet<>(columns);
       return this;
     }
 

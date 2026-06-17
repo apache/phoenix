@@ -75,12 +75,9 @@ import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.StringUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 public abstract class ExplainTable {
 
-  private static final Logger LOGGER = LoggerFactory.getLogger(ExplainTable.class);
   private static final List<KeyRange> EVERYTHING =
     Collections.singletonList(KeyRange.EVERYTHING_RANGE);
   public static final String POINT_LOOKUP_ON_STRING = "POINT LOOKUP ON ";
@@ -801,46 +798,40 @@ public abstract class ExplainTable {
     if (regionLocationsFromResultIterator == null) {
       return "";
     }
-    try {
-      StringBuilder buf = new StringBuilder().append(REGION_LOCATIONS);
-      Set<String> regionBoundaries = new LinkedHashSet<>();
-      List<HRegionLocation> regionLocations = new ArrayList<>();
-      for (HRegionLocation regionLocation : regionLocationsFromResultIterator) {
-        String regionBoundary = Bytes.toStringBinary(regionLocation.getRegion().getStartKey()) + ":"
-          + Bytes.toStringBinary(regionLocation.getRegion().getEndKey());
-        if (regionBoundaries.add(regionBoundary)) {
-          regionLocations.add(regionLocation);
-        }
+    StringBuilder buf = new StringBuilder().append(REGION_LOCATIONS);
+    Set<String> regionBoundaries = new LinkedHashSet<>();
+    List<HRegionLocation> regionLocations = new ArrayList<>();
+    for (HRegionLocation regionLocation : regionLocationsFromResultIterator) {
+      String regionBoundary = Bytes.toStringBinary(regionLocation.getRegion().getStartKey()) + ":"
+        + Bytes.toStringBinary(regionLocation.getRegion().getEndKey());
+      if (regionBoundaries.add(regionBoundary)) {
+        regionLocations.add(regionLocation);
       }
-      int maxLimitRegionLoc = context.getConnection().getQueryServices().getConfiguration().getInt(
-        QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
-        QueryServicesOptions.DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN);
-      if (regionLocations.size() > maxLimitRegionLoc) {
-        int originalSize = regionLocations.size();
-        List<HRegionLocation> trimmedRegionLocations =
-          regionLocations.subList(0, maxLimitRegionLoc);
-        if (explainPlanAttributesBuilder != null) {
-          explainPlanAttributesBuilder
-            .setRegionLocations(Collections.unmodifiableList(trimmedRegionLocations))
-            .setRegionLocationsTotalSize(originalSize);
-        }
-        buf.append(trimmedRegionLocations);
-        buf.append("...total size = ");
-        buf.append(originalSize);
-      } else {
-        buf.append(regionLocations);
-        if (explainPlanAttributesBuilder != null) {
-          explainPlanAttributesBuilder
-            .setRegionLocations(Collections.unmodifiableList(regionLocations))
-            .setRegionLocationsTotalSize(regionLocations.size());
-        }
-      }
-      buf.append(") ");
-      return buf.toString();
-    } catch (Exception e) {
-      LOGGER.error("Explain table unable to add region locations.", e);
-      return "";
     }
+    int maxLimitRegionLoc = context.getConnection().getQueryServices().getConfiguration().getInt(
+      QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
+      QueryServicesOptions.DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN);
+    if (regionLocations.size() > maxLimitRegionLoc) {
+      int originalSize = regionLocations.size();
+      List<HRegionLocation> trimmedRegionLocations = regionLocations.subList(0, maxLimitRegionLoc);
+      if (explainPlanAttributesBuilder != null) {
+        explainPlanAttributesBuilder
+          .setRegionLocations(Collections.unmodifiableList(trimmedRegionLocations))
+          .setRegionLocationsTotalSize(originalSize);
+      }
+      buf.append(trimmedRegionLocations);
+      buf.append("...total size = ");
+      buf.append(originalSize);
+    } else {
+      buf.append(regionLocations);
+      if (explainPlanAttributesBuilder != null) {
+        explainPlanAttributesBuilder
+          .setRegionLocations(Collections.unmodifiableList(regionLocations))
+          .setRegionLocationsTotalSize(regionLocations.size());
+      }
+    }
+    buf.append(") ");
+    return buf.toString();
   }
 
   @SuppressWarnings("rawtypes")

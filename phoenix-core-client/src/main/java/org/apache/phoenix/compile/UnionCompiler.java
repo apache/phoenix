@@ -235,8 +235,8 @@ public class UnionCompiler {
    * perform any special processing on the output of the subqueries.
    */
   static void optimizeUnionOrderByIfPossible(UnionPlan innerUnionPlan,
-    SelectStatement outerSelectStatement, Supplier<StatementContext> statementContextCreator)
-    throws SQLException {
+    SelectStatement outerSelectStatement, Supplier<StatementContext> statementContextCreator,
+    StatementContext breadcrumbContext) throws SQLException {
     innerUnionPlan.enableCheckSupportOrderByOptimize();
     if (!innerUnionPlan.isSupportOrderByOptimize()) {
       return;
@@ -250,8 +250,10 @@ public class UnionCompiler {
       // not perform any special processing on the output of the subqueries.
       innerUnionPlan.disableSupportOrderByOptimize();
     } else {
-      // The order-by merge optimization is preserved. Record a top-of-plan breadcrumb.
-      statementContextCreator.get().addAppliedRewrite("UNION ORDER BY MERGE");
+      // The order-by merge optimization is preserved. Record a top-of-plan breadcrumb on the outer
+      // query's compilation context (the throwaway contexts produced by statementContextCreator are
+      // only used for trial group-by/order-by compilation and are discarded).
+      breadcrumbContext.addAppliedRewrite("UNION ORDER BY MERGE");
     }
   }
 
