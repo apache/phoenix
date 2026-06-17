@@ -1020,7 +1020,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
 
       // The functional index is chosen and the rule comment names the matched expression.
       ExplainPlanTestUtil.assertPlan(conn, query).indexName(idx)
-        .indexRuleStartsWith("matches BSON_VALUE(PAYLOAD,'k','VARCHAR')")
+        .indexRuleMatches("BSON_VALUE(PAYLOAD,'k','VARCHAR')")
         // Exactly one breadcrumb (one applied substitution; no eager per-PK-column emissions).
         .rewriteCount(1).rewrite(0,
           "INDEX EXPRESSION BSON_VALUE(PAYLOAD,'k','VARCHAR') AS \":BSON_VALUE(PAYLOAD,'k','VARCHAR')\"");

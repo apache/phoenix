@@ -762,7 +762,7 @@ public class QueryCompiler {
     QueryPlan innerPlan = compileSubquery(innerSelect, false, context);
     if (innerPlan instanceof UnionPlan) {
       UnionCompiler.optimizeUnionOrderByIfPossible((UnionPlan) innerPlan, select,
-        this::createStatementContext);
+        this::createStatementContext, context);
     }
     RowProjector innerQueryPlanRowProjector = innerPlan.getProjector();
     TupleProjector tupleProjector = new TupleProjector(innerQueryPlanRowProjector);
