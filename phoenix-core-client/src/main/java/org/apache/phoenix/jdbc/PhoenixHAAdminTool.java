@@ -512,10 +512,10 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
    * Validate that each provided URL parses under {@link JDBCUtil#formatUrl(String, RegistryType)}
    * for the given registry type - the same normalization the HA read path applies (ZK URLs go
    * through {@code RegistryType.ZK}, cluster URLs through {@code RegistryType.RPC}). A value that
-   * throws here would later break HA group enumeration and cluster-role-record construction. Passing
-   * --force stores non-ZK URL values as-is (logged), mirroring the state/lastSyncTime force-guard.
-   * ZK URLs must be validated with {@code force=false} because HAGroupStoreClient uses them as
-   * identity keys and cannot safely operate on malformed values.
+   * throws here would later break HA group enumeration and cluster-role-record construction.
+   * Passing --force stores non-ZK URL values as-is (logged), mirroring the state/lastSyncTime
+   * force-guard. ZK URLs must be validated with {@code force=false} because HAGroupStoreClient uses
+   * them as identity keys and cannot safely operate on malformed values.
    * @param force        when true, malformed non-ZK URLs are logged and allowed through
    * @param registryType registry type whose normalization the URLs must satisfy
    * @param labeledUrls  flat [label0, url0, label1, url1, ...] pairs; blank URLs are skipped
@@ -875,20 +875,20 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       try {
         printClusterRoleRecordAsText(manager.getClusterRoleRecord(haGroupName));
       } catch (RuntimeException e) {
-        // ClusterRoleRecord normalization throws on a malformed stored cluster URL; don't crash -
-        // show the raw URLs (offending one marked <invalid>) and how to repair. Surface the cause
-        // so an unrelated failure is not silently mislabeled as a bad URL.
+        // A malformed stored cluster URL makes ClusterRoleRecord normalization throw; report it on
+        // stderr (bad URL marked <invalid>, with a repair hint) and an error code, don't crash.
         HAGroupStoreRecord raw = manager.getHAGroupStoreRecord(haGroupName).orElse(null);
-        System.out.println("\nCluster Role Record for '" + haGroupName
+        System.err.println("\nCluster Role Record for '" + haGroupName
           + "' could not be built (likely a malformed stored URL): " + e.getMessage());
         if (raw != null) {
-          System.out.println("  Cluster URL:       "
+          System.err.println("  Cluster URL:       "
             + describeUrl(raw.getClusterUrl(), ClusterRoleRecord.RegistryType.RPC));
-          System.out.println("  Peer Cluster URL:  "
+          System.err.println("  Peer Cluster URL:  "
             + describeUrl(raw.getPeerClusterUrl(), ClusterRoleRecord.RegistryType.RPC));
         }
-        System.out.println(
+        System.err.println(
           "  Repair with: update -g " + haGroupName + " -c <good-url> (or -pc) -av  [--force]");
+        return RET_UPDATE_ERROR;
       }
 
       return RET_SUCCESS;

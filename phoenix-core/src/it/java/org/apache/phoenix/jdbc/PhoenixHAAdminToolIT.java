@@ -1202,8 +1202,8 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
   }
 
   /**
-   * get-cluster-role-record renders a malformed stored cluster URL as &lt;invalid&gt; rather than
-   * crashing.
+   * get-cluster-role-record reports a malformed stored cluster URL (marked &lt;invalid&gt;) on
+   * stderr and returns an error code rather than crashing.
    */
   @Test(timeout = 180000)
   public void testGetClusterRoleRecordMarksInvalidUrl() throws Exception {
@@ -1214,14 +1214,17 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
       ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
       CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
 
-    System.setOut(new PrintStream(STDOUT_CAPTURE));
+    // Diagnostic goes to stderr; capture both streams.
+    PrintStream capture = new PrintStream(STDOUT_CAPTURE);
+    System.setOut(capture);
+    System.setErr(capture);
     int ret =
       ToolRunner.run(adminTool, new String[] { "get-cluster-role-record", "-g", badUrlGroup });
 
-    assertEquals("get-cluster-role-record must not crash on a malformed stored URL", RET_SUCCESS,
-      ret);
+    assertEquals("get-cluster-role-record should report a malformed stored URL as an error",
+      PhoenixHAAdminTool.RET_UPDATE_ERROR, ret);
     String output = STDOUT_CAPTURE.toString();
-    LOG.info("Got stdout from get-cluster-role-record (bad url): \n++++++++\n{}++++++++\n", output);
+    LOG.info("Got output from get-cluster-role-record (bad url): \n++++++++\n{}++++++++\n", output);
     assertTrue("Output should mark the malformed URL <invalid>", output.contains("<invalid>"));
   }
 }
