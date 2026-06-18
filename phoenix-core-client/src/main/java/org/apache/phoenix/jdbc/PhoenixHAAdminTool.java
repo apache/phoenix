@@ -57,6 +57,7 @@ import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.jdbc.PhoenixHAAdmin.HighAvailibilityCuratorProvider;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
+import org.apache.phoenix.util.JDBCUtil;
 import org.apache.zookeeper.data.Stat;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -323,9 +324,16 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       if (
         policy == null && state == null && clusterUrl == null && peerClusterUrl == null
           && peerZkUrl == null && protocolVersion == null && lastSyncTimeStr == null
+          && hdfsUrl == null && peerHdfsUrl == null
       ) {
         throw new IllegalArgumentException("Must specify at least one field to update");
       }
+
+      // Validate URLs against the registry type the read path normalizes them with (ZK quorum vs
+      // RPC/master). ZK URLs identify the HA pair and must remain parseable even with --force.
+      validateUrlsOrThrow(false, ClusterRoleRecord.RegistryType.ZK, "peer-zk-url", peerZkUrl);
+      validateUrlsOrThrow(force, ClusterRoleRecord.RegistryType.RPC, "cluster-url", clusterUrl,
+        "peer-cluster-url", peerClusterUrl);
 
       // Determine version
       long adminVersion;
@@ -501,6 +509,63 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
   }
 
   /**
+   * Validate that each provided URL parses under {@link JDBCUtil#formatUrl(String, RegistryType)}
+   * for the given registry type - the same normalization the HA read path applies (ZK URLs go
+   * through {@code RegistryType.ZK}, cluster URLs through {@code RegistryType.RPC}). A value that
+   * throws here would later break HA group enumeration and cluster-role-record construction.
+   * Passing --force stores non-ZK URL values as-is (logged), mirroring the state/lastSyncTime
+   * force-guard. ZK URLs must be validated with {@code force=false} because HAGroupStoreClient uses
+   * them as identity keys and cannot safely operate on malformed values.
+   * @param force        when true, malformed non-ZK URLs are logged and allowed through
+   * @param registryType registry type whose normalization the URLs must satisfy
+   * @param labeledUrls  flat [label0, url0, label1, url1, ...] pairs; blank URLs are skipped
+   * @throws IllegalArgumentException if any URL is malformed and force is false
+   */
+  private static void validateUrlsOrThrow(boolean force,
+    ClusterRoleRecord.RegistryType registryType, String... labeledUrls) {
+    StringBuilder invalid = new StringBuilder();
+    for (int i = 0; i + 1 < labeledUrls.length; i += 2) {
+      String url = labeledUrls[i + 1];
+      if (StringUtils.isBlank(url)) {
+        continue;
+      }
+      try {
+        JDBCUtil.formatUrl(url, registryType);
+      } catch (RuntimeException e) {
+        if (invalid.length() > 0) {
+          invalid.append("; ");
+        }
+        invalid.append(labeledUrls[i]).append("='").append(url).append("'");
+      }
+    }
+    if (invalid.length() == 0) {
+      return;
+    }
+    if (force) {
+      LOG.warn("Storing malformed URL(s) due to --force: {}", invalid);
+    } else {
+      throw new IllegalArgumentException(
+        "Malformed URL(s): " + invalid + ". Fix the value(s), or pass --force to store as-is.");
+    }
+  }
+
+  /**
+   * Render a stored URL for display: the raw value, annotated with {@code <invalid>} when it cannot
+   * be normalized by {@link JDBCUtil#formatUrl(String, RegistryType)} for the given registry type.
+   */
+  private static String describeUrl(String url, ClusterRoleRecord.RegistryType registryType) {
+    if (StringUtils.isBlank(url)) {
+      return "null";
+    }
+    try {
+      JDBCUtil.formatUrl(url, registryType);
+      return url;
+    } catch (RuntimeException e) {
+      return url + " <invalid>";
+    }
+  }
+
+  /**
    * Initiates failover on active cluster, transitioning it to standby while peer becomes active.
    * <p>
    * <b>Architecture:</b> Failover is a coordinated state transition where the currently ACTIVE
@@ -626,7 +691,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
           System.err.println("\n⚠ Failover transition incomplete");
           System.err.println("  The failover was initiated but did not complete within "
             + timeoutSeconds + " seconds.");
-          System.err.println("  Check cluster states manually to verify completion.");
+          printFailoverRecoveryGuidance(haGroupName);
           return RET_UPDATE_ERROR;
         }
       }
@@ -759,7 +824,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
           System.err.println("\n⚠ Abort transition incomplete");
           System.err.println("  The abort was initiated but did not complete within "
             + timeoutSeconds + " seconds.");
-          System.err.println("  Check cluster states manually to verify completion.");
+          printFailoverRecoveryGuidance(haGroupName);
           return RET_UPDATE_ERROR;
         }
       }
@@ -807,9 +872,24 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       String haGroupName = getRequiredOption(cmdLine, HA_GROUP_OPT, "HA group name");
 
       HAGroupStoreManager manager = HAGroupStoreManager.getInstance(getConf());
-      ClusterRoleRecord clusterRoleRecord = manager.getClusterRoleRecord(haGroupName);
-
-      printClusterRoleRecordAsText(clusterRoleRecord);
+      try {
+        printClusterRoleRecordAsText(manager.getClusterRoleRecord(haGroupName));
+      } catch (RuntimeException e) {
+        // A malformed stored cluster URL makes ClusterRoleRecord normalization throw; report it on
+        // stderr (bad URL marked <invalid>, with a repair hint) and an error code, don't crash.
+        HAGroupStoreRecord raw = manager.getHAGroupStoreRecord(haGroupName).orElse(null);
+        System.err.println("\nCluster Role Record for '" + haGroupName
+          + "' could not be built (likely a malformed stored URL): " + e.getMessage());
+        if (raw != null) {
+          System.err.println("  Cluster URL:       "
+            + describeUrl(raw.getClusterUrl(), ClusterRoleRecord.RegistryType.RPC));
+          System.err.println("  Peer Cluster URL:  "
+            + describeUrl(raw.getPeerClusterUrl(), ClusterRoleRecord.RegistryType.RPC));
+        }
+        System.err.println(
+          "  Repair with: update -g " + haGroupName + " -c <good-url> (or -pc) -av  [--force]");
+        return RET_UPDATE_ERROR;
+      }
 
       return RET_SUCCESS;
 
@@ -849,6 +929,14 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       String hdfsUrl1 = getRequiredOption(cmdLine, HDFS_URL_1_OPT, "HDFS URL for cluster 1");
       String hdfsUrl2 = getRequiredOption(cmdLine, HDFS_URL_2_OPT, "HDFS URL for cluster 2");
       final boolean dryRun = cmdLine.hasOption(DRY_RUN_OPT.getOpt());
+      final boolean force = cmdLine.hasOption(FORCE_OPT.getOpt());
+
+      // Validate URLs against the registry type the read path normalizes them with (ZK quorum vs
+      // RPC/master). ZK URLs identify the HA pair and must remain parseable even with --force.
+      validateUrlsOrThrow(false, ClusterRoleRecord.RegistryType.ZK, "zk-url-1", zkUrl1, "zk-url-2",
+        zkUrl2);
+      validateUrlsOrThrow(force, ClusterRoleRecord.RegistryType.RPC, "cluster-url-1", clusterUrl1,
+        "cluster-url-2", clusterUrl2);
 
       long adminVersion = 1L;
       String adminVersionStr = cmdLine.getOptionValue(ADMIN_VERSION_OPT.getOpt());
@@ -934,12 +1022,43 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
   }
 
   /**
+   * Whether cluster A takes slot 1 in SYSTEM.HA_GROUP's slot-indexed columns, keyed on the
+   * formatted ZK URL compared lexicographically. The ordering is deterministic and independent of
+   * which cluster is local (the same canonicalization {@link ClusterRoleRecord} applies to its
+   * url1/url2, though that sorts on the cluster URL) and matches the periodic
+   * ZK-&gt;SYSTEM.HA_GROUP sync - so both clusters of a pair persist identical rows and every slot
+   * keeps its ZK/CLUSTER/ROLE/HDFS columns pointing at one cluster (the read path resolves a
+   * cluster's HDFS URL by matching its ZK URL slot).
+   */
+  private static boolean firstClusterTakesSlot1(String zkUrlA, String zkUrlB) {
+    String formattedZkUrlA = StringUtils.isBlank(zkUrlA)
+      ? null
+      : JDBCUtil.formatUrl(zkUrlA, ClusterRoleRecord.RegistryType.ZK);
+    String formattedZkUrlB = StringUtils.isBlank(zkUrlB)
+      ? null
+      : JDBCUtil.formatUrl(zkUrlB, ClusterRoleRecord.RegistryType.ZK);
+    return StringUtils.isBlank(formattedZkUrlB) || (StringUtils.isNotBlank(formattedZkUrlA)
+      && formattedZkUrlA.compareTo(formattedZkUrlB) <= 0);
+  }
+
+  /**
    * Insert a new HA group row into SYSTEM.HA_GROUP using symmetric slot-based columns.
    */
   private void insertIntoSystemTable(String haGroupName, String policy, String zkUrl1,
     String clusterUrl1, ClusterRole clusterRole1, String hdfsUrl1, String zkUrl2,
     String clusterUrl2, ClusterRole clusterRole2, String hdfsUrl2, long adminVersion,
     String localZkUrl) throws SQLException {
+
+    // Write the slot columns in canonical order so ZK/CLUSTER/ROLE/HDFS stay paired per slot.
+    boolean firstInSlot1 = firstClusterTakesSlot1(zkUrl1, zkUrl2);
+    String slot1ZkUrl = firstInSlot1 ? zkUrl1 : zkUrl2;
+    String slot1ClusterUrl = firstInSlot1 ? clusterUrl1 : clusterUrl2;
+    ClusterRole slot1ClusterRole = firstInSlot1 ? clusterRole1 : clusterRole2;
+    String slot1HdfsUrl = firstInSlot1 ? hdfsUrl1 : hdfsUrl2;
+    String slot2ZkUrl = firstInSlot1 ? zkUrl2 : zkUrl1;
+    String slot2ClusterUrl = firstInSlot1 ? clusterUrl2 : clusterUrl1;
+    ClusterRole slot2ClusterRole = firstInSlot1 ? clusterRole2 : clusterRole1;
+    String slot2HdfsUrl = firstInSlot1 ? hdfsUrl2 : hdfsUrl1;
 
     String insertQuery = "UPSERT INTO " + SYSTEM_HA_GROUP_NAME + " (" + HA_GROUP_NAME + ", "
       + POLICY + ", " + ZK_URL_1 + ", " + CLUSTER_URL_1 + ", " + CLUSTER_ROLE_1 + ", " + HDFS_URL_1
@@ -950,14 +1069,14 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       PreparedStatement pstmt = conn.prepareStatement(insertQuery)) {
       pstmt.setString(1, haGroupName);
       pstmt.setString(2, policy);
-      pstmt.setString(3, zkUrl1);
-      pstmt.setString(4, clusterUrl1);
-      pstmt.setString(5, clusterRole1.name());
-      pstmt.setString(6, hdfsUrl1);
-      pstmt.setString(7, zkUrl2);
-      pstmt.setString(8, clusterUrl2);
-      pstmt.setString(9, clusterRole2.name());
-      pstmt.setString(10, hdfsUrl2);
+      pstmt.setString(3, slot1ZkUrl);
+      pstmt.setString(4, slot1ClusterUrl);
+      pstmt.setString(5, slot1ClusterRole.name());
+      pstmt.setString(6, slot1HdfsUrl);
+      pstmt.setString(7, slot2ZkUrl);
+      pstmt.setString(8, slot2ClusterUrl);
+      pstmt.setString(9, slot2ClusterRole.name());
+      pstmt.setString(10, slot2HdfsUrl);
       pstmt.setLong(11, adminVersion);
       pstmt.executeUpdate();
       conn.commit();
@@ -1092,6 +1211,24 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       System.err.println("  ✗ Error during polling: " + e.getMessage());
       return false;
     }
+  }
+
+  /**
+   * Print operator guidance shown when a failover / abort does not converge within the timeout.
+   * Post-partition states (e.g. active ACTIVE_IN_SYNC_TO_STANDBY with peer STANDBY) are ambiguous
+   * and are intentionally not auto-converged, so recovery is manual.
+   */
+  private void printFailoverRecoveryGuidance(String haGroupName) {
+    System.err.println("\n  Recovery (state did not converge - can happen on a partition):");
+    System.err.println("    1. Inspect both clusters (run on each):");
+    System.err.println("         get-cluster-role-record -g " + haGroupName);
+    System.err.println("    2. If the clusters were partitioned, restore connectivity and re-check."
+      + " Transient states are not auto-converged once a notification is lost.");
+    System.err.println("    3. If a cluster is stuck in a transitional *_TO_* state, abort the"
+      + " failover on the standby; if it still will not converge, force a steady state (last"
+      + " resort):");
+    System.err.println("         abort-failover -g " + haGroupName);
+    System.err.println("         update -g " + haGroupName + " -s <ACTIVE_IN_SYNC|STANDBY> -av -F");
   }
 
   /**
@@ -1285,10 +1422,22 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       LOG.warn("Could not read peer record, using UNKNOWN for peer role", e);
     }
 
+    // Write all slot columns (incl HDFS) in canonical order so ZK/CLUSTER/ROLE/HDFS stay paired per
+    // slot. Previously this wrote local-first and never wrote HDFS, which mispaired the row.
+    boolean localInSlot1 = firstClusterTakesSlot1(localZkUrl, record.getPeerZKUrl());
+    ClusterRole slot1ClusterRole = localInSlot1 ? record.getClusterRole() : peerRole;
+    ClusterRole slot2ClusterRole = localInSlot1 ? peerRole : record.getClusterRole();
+    String slot1ClusterUrl = localInSlot1 ? record.getClusterUrl() : record.getPeerClusterUrl();
+    String slot2ClusterUrl = localInSlot1 ? record.getPeerClusterUrl() : record.getClusterUrl();
+    String slot1ZkUrl = localInSlot1 ? localZkUrl : record.getPeerZKUrl();
+    String slot2ZkUrl = localInSlot1 ? record.getPeerZKUrl() : localZkUrl;
+    String slot1HdfsUrl = localInSlot1 ? record.getHdfsUrl() : record.getPeerHdfsUrl();
+    String slot2HdfsUrl = localInSlot1 ? record.getPeerHdfsUrl() : record.getHdfsUrl();
+
     String updateQuery = "UPSERT INTO " + SYSTEM_HA_GROUP_NAME + " " + "(" + HA_GROUP_NAME + ", "
       + POLICY + ", " + CLUSTER_ROLE_1 + ", " + CLUSTER_ROLE_2 + ", " + CLUSTER_URL_1 + ", "
-      + CLUSTER_URL_2 + ", " + ZK_URL_1 + ", " + ZK_URL_2 + ", " + VERSION + ") "
-      + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+      + CLUSTER_URL_2 + ", " + ZK_URL_1 + ", " + ZK_URL_2 + ", " + HDFS_URL_1 + ", " + HDFS_URL_2
+      + ", " + VERSION + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
     try (
       PhoenixConnection conn = (PhoenixConnection) DriverManager
@@ -1297,13 +1446,15 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
 
       pstmt.setString(1, haGroupName);
       pstmt.setString(2, record.getPolicy());
-      pstmt.setString(3, record.getClusterRole().name());
-      pstmt.setString(4, peerRole.name());
-      pstmt.setString(5, record.getClusterUrl());
-      pstmt.setString(6, record.getPeerClusterUrl());
-      pstmt.setString(7, localZkUrl);
-      pstmt.setString(8, record.getPeerZKUrl());
-      pstmt.setLong(9, record.getAdminCRRVersion());
+      pstmt.setString(3, slot1ClusterRole.name());
+      pstmt.setString(4, slot2ClusterRole.name());
+      pstmt.setString(5, slot1ClusterUrl);
+      pstmt.setString(6, slot2ClusterUrl);
+      pstmt.setString(7, slot1ZkUrl);
+      pstmt.setString(8, slot2ZkUrl);
+      pstmt.setString(9, slot1HdfsUrl);
+      pstmt.setString(10, slot2HdfsUrl);
+      pstmt.setLong(11, record.getAdminCRRVersion());
 
       pstmt.executeUpdate();
       conn.commit();
@@ -1342,6 +1493,16 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
 
     if (!Objects.equals(current.getPeerZKUrl(), proposed.getPeerZKUrl())) {
       printFieldChange("Peer ZK URL", current.getPeerZKUrl(), proposed.getPeerZKUrl());
+      hasChanges = true;
+    }
+
+    if (!Objects.equals(current.getHdfsUrl(), proposed.getHdfsUrl())) {
+      printFieldChange("HDFS URL", current.getHdfsUrl(), proposed.getHdfsUrl());
+      hasChanges = true;
+    }
+
+    if (!Objects.equals(current.getPeerHdfsUrl(), proposed.getPeerHdfsUrl())) {
+      printFieldChange("Peer HDFS URL", current.getPeerHdfsUrl(), proposed.getPeerHdfsUrl());
       hasChanges = true;
     }
 
@@ -1415,6 +1576,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       System.out.println("  Cluster URL:       " + record.getClusterUrl());
       System.out.println("  Peer Cluster URL:  " + record.getPeerClusterUrl());
       System.out.println("  Peer ZK URL:       " + record.getPeerZKUrl());
+      System.out.println("  HDFS URL:          " + record.getHdfsUrl());
+      System.out.println("  Peer HDFS URL:     " + record.getPeerHdfsUrl());
       System.out.println("  Admin Version:     " + record.getAdminCRRVersion());
       System.out
         .println("  Last Sync Time:    " + formatTimestamp(record.getLastSyncStateTimeInMs()));
@@ -1430,7 +1593,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       .addOption(ZK_URL_1_OPT).addOption(CLUSTER_URL_1_OPT).addOption(CLUSTER_ROLE_1_OPT)
       .addOption(ZK_URL_2_OPT).addOption(CLUSTER_URL_2_OPT).addOption(CLUSTER_ROLE_2_OPT)
       .addOption(HDFS_URL_1_OPT).addOption(HDFS_URL_2_OPT).addOption(ADMIN_VERSION_OPT)
-      .addOption(DRY_RUN_OPT);
+      .addOption(FORCE_OPT).addOption(DRY_RUN_OPT);
   }
 
   /**
@@ -1440,8 +1603,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     return new Options().addOption(HELP_OPT).addOption(HA_GROUP_OPT).addOption(ADMIN_VERSION_OPT)
       .addOption(AUTO_INCREMENT_VERSION_OPT).addOption(POLICY_OPT).addOption(STATE_OPT)
       .addOption(CLUSTER_URL_OPT).addOption(PEER_CLUSTER_URL_OPT).addOption(PEER_ZK_URL_OPT)
-      .addOption(PROTOCOL_VERSION_OPT).addOption(LAST_SYNC_TIME_OPT).addOption(FORCE_OPT)
-      .addOption(DRY_RUN_OPT);
+      .addOption(PROTOCOL_VERSION_OPT).addOption(LAST_SYNC_TIME_OPT).addOption(HDFS_URL_OPT)
+      .addOption(PEER_HDFS_URL_OPT).addOption(FORCE_OPT).addOption(DRY_RUN_OPT);
   }
 
   /**
@@ -1586,6 +1749,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     System.out.println();
     System.out.println("OPTIONAL:");
     System.out.println("  -v,     --admin-version <ver>   Initial admin version (default: 1)");
+    System.out.println(
+      "  -F,     --force                 Store malformed cluster URLs as-is; ZK URLs still checked");
     System.out.println("  -d,     --dry-run               Show what would be created");
     System.out.println("  -h,     --help                  Show this help");
     System.out.println();
@@ -1624,11 +1789,15 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     System.out.println("  -c, --cluster-url <url>           Local cluster URL");
     System.out.println("  -pc, --peer-cluster-url <url>     Peer cluster URL");
     System.out.println("  -pz, --peer-zk-url <url>          Peer ZK URL");
+    System.out.println("  -hdfsurl, --hdfs-url <url>        HDFS URL");
+    System.out.println("  -phdfsurl, --peer-hdfs-url <url>  Peer HDFS URL");
     System.out.println("  -pv, --protocol-version <ver>     Protocol version");
     System.out.println("  -lst, --last-sync-time <ms>       Last sync time (requires --force)");
     System.out.println();
     System.out.println("FLAGS:");
-    System.out.println("  -F, --force                       Allow state and restricted changes");
+    System.out.println(
+      "  -F, --force                       Allow restricted changes; store malformed cluster URLs as-is");
+    System.out.println("                                    ZK URLs are always validated");
     System.out.println("  -d, --dry-run                     Show changes without applying");
     System.out.println("  -h, --help                        Show this help");
     System.out.println();

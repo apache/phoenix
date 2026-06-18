@@ -216,23 +216,28 @@ public class HAGroupStoreClient implements Closeable {
       PhoenixConnection conn = (PhoenixConnection) DriverManager
         .getConnection(JDBC_PROTOCOL_ZK + JDBC_PROTOCOL_SEPARATOR + zkUrl);
       Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(queryString)) {
+      // Format the local zkUrl once and strictly: a malformed own URL is a hard error.
+      String formattedZkUrl = JDBCUtil.formatUrl(zkUrl, RegistryType.ZK);
       while (rs.next()) {
+        String haGroupName = rs.getString(HA_GROUP_NAME);
         String zkUrl1 = rs.getString(ZK_URL_1);
         String zkUrl2 = rs.getString(ZK_URL_2);
-        String formattedZkUrl1 = null;
-        String formattedZkUrl2 = null;
-        if (StringUtils.isNotBlank(zkUrl1)) {
-          formattedZkUrl1 = JDBCUtil.formatUrl(zkUrl1, RegistryType.ZK);
-        }
-        if (StringUtils.isNotBlank(zkUrl2)) {
-          formattedZkUrl2 = JDBCUtil.formatUrl(zkUrl2, RegistryType.ZK);
-        }
-        String formattedZkUrl = JDBCUtil.formatUrl(zkUrl, RegistryType.ZK);
-        if (
-          StringUtils.equals(formattedZkUrl1, formattedZkUrl)
-            || StringUtils.equals(formattedZkUrl2, formattedZkUrl)
-        ) {
-          result.add(rs.getString(HA_GROUP_NAME));
+        try {
+          String formattedZkUrl1 =
+            StringUtils.isNotBlank(zkUrl1) ? JDBCUtil.formatUrl(zkUrl1, RegistryType.ZK) : null;
+          String formattedZkUrl2 =
+            StringUtils.isNotBlank(zkUrl2) ? JDBCUtil.formatUrl(zkUrl2, RegistryType.ZK) : null;
+          if (
+            StringUtils.equals(formattedZkUrl1, formattedZkUrl)
+              || StringUtils.equals(formattedZkUrl2, formattedZkUrl)
+          ) {
+            result.add(haGroupName);
+          }
+        } catch (RuntimeException e) {
+          // One row with an unparseable ZK URL must not break enumeration for any caller (admin
+          // `list`, PhoenixRegionServerEndpoint, ReplicationLogReplayService). Skip just that row.
+          LOGGER.warn("Skipping HA group row '{}' with unparseable ZK URL (zkUrl1={}, zkUrl2={})",
+            haGroupName, zkUrl1, zkUrl2, e);
         }
       }
     }
