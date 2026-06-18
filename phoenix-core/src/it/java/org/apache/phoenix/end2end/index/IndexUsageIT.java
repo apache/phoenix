@@ -135,7 +135,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         .iteratorType("PARALLEL 1-WAY").serverFirstKeyOnlyProjection(true)
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY "
           + "[TO_BIGINT(\"(A.INT_COL1 + B.INT_COL2)\")]")
-        .indexRuleMatches("(A.INT_COL1 + B.INT_COL2)").indexRejectedNone();
+        .functionalMatch("(A.INT_COL1 + B.INT_COL2)").indexRejectedNone();
       if (localIndex) {
         basePlan.scanType("RANGE SCAN")
           .table("INDEX_TEST." + indexName + "(" + fullDataTableName + ")")
@@ -192,7 +192,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
           "SERVER DISTINCT PREFIX FILTER OVER " + "[TO_BIGINT(\"(A.INT_COL1 + 1)\")]")
         .serverAggregate(
           "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY " + "[TO_BIGINT(\"(A.INT_COL1 + 1)\")]")
-        .indexRuleMatches("(A.INT_COL1 + 1)").indexRejectedNone();
+        .functionalMatch("(A.INT_COL1 + 1)").indexRejectedNone();
       if (localIndex) {
         basePlan.table("INDEX_TEST." + indexName + "(" + fullDataTableName + ")")
           .keyRanges(" [1,0] - [1,*]").clientSortAlgo("CLIENT MERGE SORT");
@@ -247,7 +247,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
 
       ExplainPlanTestUtil.ExplainPlanAssert basePlan = assertPlan(conn, sql)
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").serverFirstKeyOnlyProjection(true)
-        .indexRuleMatches("(A.INT_COL1 + 1)").indexRejectedNone();
+        .functionalMatch("(A.INT_COL1 + 1)").indexRejectedNone();
       if (localIndex) {
         basePlan.table("INDEX_TEST." + indexName + "(" + fullDataTableName + ")")
           .keyRanges(" [1,2]").clientSortAlgo("CLIENT MERGE SORT");
@@ -301,7 +301,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
 
       ExplainPlanTestUtil.ExplainPlanAssert basePlan =
         assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").serverFirstKeyOnlyProjection(true)
-          .indexRuleMatches("(A.INT_COL1 + 1)").indexRejectedNone();
+          .functionalMatch("(A.INT_COL1 + 1)").indexRejectedNone();
       if (localIndex) {
         basePlan.scanType("RANGE SCAN")
           .table("INDEX_TEST." + indexName + "(" + fullDataTableName + ")").keyRanges(" [1]")
@@ -376,7 +376,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         + " WHERE (\"V1\" || '_' || \"v2\") = 'x_1'";
       ExplainPlanTestUtil.ExplainPlanAssert basePlan =
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-          .indexRuleMatches("(\"cf1\".\"V1\" || '_' || \"CF2\".\"v2\")").indexRejectedNone();
+          .functionalMatch("(\"cf1\".\"V1\" || '_' || \"CF2\".\"v2\")").indexRejectedNone();
       if (localIndex) {
         basePlan.table(indexName + "(" + dataTableName + ")").keyRanges(" [1,'x_1']")
           .clientSortAlgo("CLIENT MERGE SORT");
@@ -401,7 +401,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         "SELECT \"V1\", \"V1\" as foo1, (\"V1\" || '_' || \"v2\") as foo, (\"V1\" || '_' || \"v2\") as \"Foo1\", (\"V1\" || '_' || \"v2\") FROM "
           + dataTableName + " ORDER BY foo";
       basePlan = assertPlan(conn, query).iteratorType("PARALLEL 1-WAY")
-        .indexRuleMatches("(\"cf1\".\"V1\" || '_' || \"CF2\".\"v2\")").indexRejectedNone();
+        .functionalMatch("(\"cf1\".\"V1\" || '_' || \"CF2\".\"v2\")").indexRejectedNone();
       if (localIndex) {
         basePlan.scanType("RANGE SCAN").table(indexName + "(" + dataTableName + ")")
           .keyRanges(" [1]").clientSortAlgo("CLIENT MERGE SORT");
@@ -482,7 +482,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         basePlan.scanType("RANGE SCAN")
           .table("INDEX_TEST." + indexName + "(" + fullDataTableName + ")").keyRanges(" [1,2]")
           .clientSortAlgo("CLIENT MERGE SORT").serverFirstKeyOnlyProjection(true)
-          .indexRuleMatches("(A.INT_COL1 + 1)").indexRejectedNone();
+          .functionalMatch("(A.INT_COL1 + 1)").indexRejectedNone();
       } else {
         basePlan.scanType("FULL SCAN").table(fullDataTableName).clientSortAlgo(null)
           .serverWhereFilter("SERVER FILTER BY (A.INT_COL1 + 1) = 2")
@@ -537,7 +537,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
       String query = "SELECT k1, k2, k3, s1, s2 FROM " + viewName + " WHERE k1+k2+k3 = 173.0";
       ExplainPlanTestUtil.ExplainPlanAssert basePlan =
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-          .indexRuleMatches("(K1 + K2 + K3)").indexRejectedNone();
+          .functionalMatch("(K1 + K2 + K3)").indexRejectedNone();
       if (local) {
         basePlan.table(indexName1 + "(" + dataTableName + ")").keyRanges(" [1,173]")
           .clientSortAlgo("CLIENT MERGE SORT");
@@ -560,7 +560,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
 
       query = "SELECT k1, k2, s1||'_'||s2 FROM " + viewName + " WHERE (s1||'_'||s2)='foo2_bar2'";
       basePlan = assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-        .serverFirstKeyOnlyProjection(true).indexRuleMatches("(S1 || '_' || S2)")
+        .serverFirstKeyOnlyProjection(true).functionalMatch("(S1 || '_' || S2)")
         .indexRejectedCount(1);
       if (local) {
         basePlan.table(indexName2 + "(" + dataTableName + ")")
@@ -625,7 +625,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
 
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .table(indexName2).keyRanges(" [1,'abc_cab','foo']").serverFirstKeyOnlyProjection(true)
-        .indexRuleMatches("(S2 || '_' || S3)").indexRejectedCount(1);
+        .functionalMatch("(S2 || '_' || S3)").indexRejectedCount(1);
 
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -724,7 +724,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
 
       ExplainPlanTestUtil.ExplainPlanAssert basePlan = assertPlan(conn, query)
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").serverFirstKeyOnlyProjection(true)
-        .indexRuleMatches("REGEXP_SUBSTR(V,'id:\\\\w+')").indexRejectedNone();
+        .functionalMatch("REGEXP_SUBSTR(V,'id:\\\\w+')").indexRejectedNone();
       if (localIndex) {
         basePlan.table(indexName + "(" + dataTableName + ")").keyRanges(" [1,'id:id1']")
           .clientSortAlgo("CLIENT MERGE SORT");

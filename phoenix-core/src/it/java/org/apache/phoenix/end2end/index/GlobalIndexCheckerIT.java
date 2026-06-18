@@ -153,6 +153,24 @@ public class GlobalIndexCheckerIT extends BaseTest {
     // Verify the query is served by a RANGE SCAN over the index table not the data table.
     ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
     assertPlan(attributes).scanType("RANGE SCAN").indexRule(expectedRule);
+    assertScannedTableIsIndex(attributes, indexTableFullName);
+  }
+
+  /**
+   * Asserts the selection {@code expectedRule} and the separate
+   * {@code "matches <expectedFunctionalMatchExpr>"} functional index match.
+   */
+  public static void assertExplainPlan(Connection conn, String selectSql, String dataTableFullName,
+    String indexTableFullName, String expectedRule, String expectedFunctionalMatchExpr)
+    throws SQLException {
+    ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
+    assertPlan(attributes).scanType("RANGE SCAN").indexRule(expectedRule)
+      .functionalMatch(expectedFunctionalMatchExpr);
+    assertScannedTableIsIndex(attributes, indexTableFullName);
+  }
+
+  private static void assertScannedTableIsIndex(ExplainPlanAttributes attributes,
+    String indexTableFullName) {
     String actualTable =
       attributes.getTableName() == null ? null : attributes.getTableName().replaceAll(":", ".");
     String expectedTable = SchemaUtil.normalizeIdentifier(indexTableFullName);
@@ -249,7 +267,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
         + "PHOENIX_ROW_TIMESTAMP() < TO_DATE('" + after.toString()
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertExplainPlan(conn, query, dataTableName, indexTableName,
+        OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS, "PHOENIX_ROW_TIMESTAMP()");
       ResultSet rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -268,7 +287,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('c', 'bc', 'ccc', 'cccc')");
       conn.commit();
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertExplainPlan(conn, query, dataTableName, indexTableName,
+        OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -281,7 +301,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
         + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after.toString()
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertExplainPlan(conn, query, dataTableName, indexTableName,
+        OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS, "PHOENIX_ROW_TIMESTAMP()");
       waitForEventualConsistency();
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -293,10 +314,15 @@ public class GlobalIndexCheckerIT extends BaseTest {
       String noIndexQuery = "SELECT /*+ NO_INDEX */ val1, val2, PHOENIX_ROW_TIMESTAMP() from "
         + dataTableName + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('"
         + after.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
-      // Verify that we will read from the data table
+      // Verify that we will read from the data table. The NO_INDEX hint rejects every secondary
+      // index candidate. Under STRONG consistency only the user index exists. Under EVENTUAL
+      // consistency the user index is paired with an auto-created CDC index, so two candidates are
+      // rejected. Match the user index by name rather than position since the rejection order is
+      // not guaranteed.
+      int expectedRejected = isEventualConsistency() ? 2 : 1;
       assertPlan(conn, noIndexQuery).scanType("FULL SCAN").table(dataTableName)
-        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedCount(1)
-        .indexRejected(0, indexTableName, OptimizerReasons.REASON_EXCLUDED_BY_NO_INDEX_HINT);
+        .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedCount(expectedRejected)
+        .indexRejectedContains(indexTableName, OptimizerReasons.REASON_EXCLUDED_BY_NO_INDEX_HINT);
       rs = conn.createStatement().executeQuery(noIndexQuery);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -316,7 +342,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
       query =
         "SELECT  val1, val2, PHOENIX_ROW_TIMESTAMP()  from " + dataTableName + " WHERE val1 = 'de'";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertExplainPlan(conn, query, dataTableName, indexTableName,
+        OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS, "PHOENIX_ROW_TIMESTAMP()");
       waitForEventualConsistency();
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -346,7 +373,8 @@ public class GlobalIndexCheckerIT extends BaseTest {
         + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + initial.toString()
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertExplainPlan(conn, query, dataTableName, indexTableName,
+        OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("ab", rs.getString(1));
@@ -383,7 +411,10 @@ public class GlobalIndexCheckerIT extends BaseTest {
         + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + initial.toString()
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
 
-      assertExplainPlan(conn, query, dataTableName, indexTableName, OptimizerReasons.RULE_HINT);
+      // This query carries an explicit INDEX hint, so the selection rule is "hint". The functional
+      // index match over PHOENIX_ROW_TIMESTAMP() is disclosed separately.
+      assertExplainPlan(conn, query, dataTableName, indexTableName, OptimizerReasons.RULE_HINT,
+        "PHOENIX_ROW_TIMESTAMP()");
       waitForEventualConsistency();
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
@@ -1538,7 +1569,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       assertPlan(attributes).table(indexName);
       assertNotNull("expected a server distinct prefix filter, plan=" + attributes,
         attributes.getServerDistinctFilter());
-      List actualValues = Lists.newArrayList();
+      List<String> actualValues = Lists.newArrayList();
       while (rs.next()) {
         actualValues.add(rs.getString(1));
       }
@@ -1877,7 +1908,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
         assertPlan(attributes).table(indexTableName);
         assertNotNull("expected a server distinct prefix filter, plan=" + attributes,
           attributes.getServerDistinctFilter());
-        List actualValues = Lists.newArrayList();
+        List<String> actualValues = Lists.newArrayList();
         while (rs.next()) {
           actualValues.add(rs.getString(1));
         }
@@ -1899,6 +1930,10 @@ public class GlobalIndexCheckerIT extends BaseTest {
   }
 
   protected void waitForEventualConsistency() throws Exception {
+  }
+
+  protected boolean isEventualConsistency() {
+    return false;
   }
 
   protected void verifyTableHealth(Connection conn, String dataTableName, String indexTableName)

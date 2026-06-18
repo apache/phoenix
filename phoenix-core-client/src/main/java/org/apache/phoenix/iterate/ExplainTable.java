@@ -376,8 +376,25 @@ public abstract class ExplainTable {
     if (indexKind != null) {
       indexLine.append(" ").append(indexKind);
     }
-    if (decision != null && !isDefaultRule(decision.getRule())) {
-      indexLine.append("  /* ").append(decision.getRule()).append(" */");
+    if (decision != null) {
+      // Disclose the selection rule (unless it is a suppressed default) and, when the chosen plan
+      // is a functional index that matched a query expression, the separate "matches <expr>"
+      // disclosure. Both may appear together as "/* <rule>, matches <expr> */".
+      boolean showRule = !isDefaultRule(decision.getRule());
+      String functionalMatch = decision.getFunctionalMatch();
+      if (showRule || functionalMatch != null) {
+        indexLine.append("  /* ");
+        if (showRule) {
+          indexLine.append(decision.getRule());
+        }
+        if (functionalMatch != null) {
+          if (showRule) {
+            indexLine.append(", ");
+          }
+          indexLine.append(functionalMatch);
+        }
+        indexLine.append(" */");
+      }
     }
     planSteps.add(indexLine.toString());
     if (verbose && decision != null) {
@@ -772,14 +789,14 @@ public abstract class ExplainTable {
   private void getRegionLocations(List<String> planSteps,
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
     List<HRegionLocation> regionLocations) {
-    // Region locations are emitted as text and in the structured attributes only when the
-    // EXPLAIN statement requested them via the REGIONS option (or the legacy WITH REGIONS alias).
-    if (!context.getExplainOptions().isRegions()) {
-      return;
-    }
+    // Region locations are computed during scan planning, so always record them in the structured
+    // attributes. Consumers that read the attributes directly (e.g. the connection activity logger,
+    // and JSON output) rely on them being present. Only append them to the text plan steps when
+    // the EXPLAIN statement requested them via the REGIONS option (or the legacy WITH REGIONS
+    // alias).
     String regionLocationPlan =
       getRegionLocationsForExplainPlan(explainPlanAttributesBuilder, regionLocations);
-    if (regionLocationPlan.length() > 0) {
+    if (context.getExplainOptions().isRegions() && regionLocationPlan.length() > 0) {
       planSteps.add(regionLocationPlan);
     }
   }

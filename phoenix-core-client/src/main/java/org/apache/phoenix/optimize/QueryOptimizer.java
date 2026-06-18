@@ -964,13 +964,13 @@ public class QueryOptimizer {
    * can use this inline at a {@code return} site.
    */
   private static QueryPlan recordDecision(QueryPlan winner, String rule, DecisionState state) {
-    String functionalRule = functionalIndexRule(winner);
-    if (functionalRule != null) {
-      rule = functionalRule;
-    }
+    // The rule names the selection reason (e.g. hint, more bound PK columns). When the winner is a
+    // functional index that matched a query expression, the "matches <expr>" disclosure is
+    // recorded separately so both the selection reason and the functional match are surfaced.
+    String functionalMatch = functionalIndexRule(winner);
     winner.setOptimizerDecision(
       new OptimizerDecision(winner.getTableRef().getTable().getTableName().getString(), rule,
-        state == null ? null : state.getRejections()));
+        functionalMatch, state == null ? null : state.getRejections()));
     recordFunctionalIndexExpressionBreadcrumbs(winner);
     return winner;
   }

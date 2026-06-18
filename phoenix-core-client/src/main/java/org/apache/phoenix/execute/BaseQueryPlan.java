@@ -550,6 +550,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     OptimizerDecision decision = getOptimizerDecision();
     if (decision != null) {
       builder.setIndexRule(decision.getRule());
+      builder.setFunctionalMatch(decision.getFunctionalMatch());
       builder.setIndexRejected(decision.getRejectedIndexes());
     }
     if (context.isRoot()) {
