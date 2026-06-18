@@ -239,7 +239,7 @@ public class HAGroupStoreRecordTest {
       HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC.getClusterRole());
     assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE,
       HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC.getClusterRole());
-    assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+    assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE,
       HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY.getClusterRole());
     assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE,
       HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER.getClusterRole());
@@ -257,6 +257,12 @@ public class HAGroupStoreRecordTest {
       HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.getClusterRole());
     assertEquals(ClusterRoleRecord.ClusterRole.UNKNOWN,
       HAGroupStoreRecord.HAGroupState.UNKNOWN.getClusterRole());
+
+    // ANISTS is non-blocking (maps to ACTIVE); only AISTS blocks mutations.
+    assertFalse(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY.getClusterRole()
+      .isMutationBlocked());
+    assertTrue(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY.getClusterRole()
+      .isMutationBlocked());
   }
 
   @Test
@@ -294,6 +300,12 @@ public class HAGroupStoreRecordTest {
       .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY));
     assertTrue(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE
       .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC));
+
+    // A degraded standby can recover to STANDBY or promote directly on failover.
+    assertTrue(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY
+      .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.STANDBY));
+    assertTrue(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY
+      .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE));
   }
 
   @Test
@@ -320,6 +332,13 @@ public class HAGroupStoreRecordTest {
     assertFalse(HAGroupStoreRecord.HAGroupState.UNKNOWN
       .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.STANDBY));
     assertFalse(HAGroupStoreRecord.HAGroupState.UNKNOWN
+      .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.OFFLINE));
+
+    // A degraded standby's allowed set is exactly {STANDBY, STANDBY_TO_ACTIVE}; it must promote
+    // via STANDBY_TO_ACTIVE and cannot jump directly to an active or offline state.
+    assertFalse(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY
+      .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC));
+    assertFalse(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY
       .isTransitionAllowed(HAGroupStoreRecord.HAGroupState.OFFLINE));
   }
 
