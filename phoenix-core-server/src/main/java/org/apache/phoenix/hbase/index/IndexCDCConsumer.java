@@ -112,7 +112,7 @@ public class IndexCDCConsumer implements Runnable {
    */
   public static final String INDEX_CDC_CONSUMER_POLL_INTERVAL_MS =
     "phoenix.index.cdc.consumer.poll.interval.ms";
-  private static final long DEFAULT_POLL_INTERVAL_MS = 1000;
+  private static final long DEFAULT_POLL_INTERVAL_MS = 500;
 
   /**
    * The time buffer in milliseconds subtracted from current time when querying CDC mutations to
@@ -130,11 +130,11 @@ public class IndexCDCConsumer implements Runnable {
    */
   public static final String INDEX_CDC_CONSUMER_MAX_DATA_VISIBILITY_RETRIES =
     "phoenix.index.cdc.consumer.max.data.visibility.retries";
-  private static final int DEFAULT_MAX_DATA_VISIBILITY_RETRIES = 10;
+  private static final int DEFAULT_MAX_DATA_VISIBILITY_RETRIES = 15;
 
   public static final String INDEX_CDC_CONSUMER_RETRY_PAUSE_MS =
     "phoenix.index.cdc.consumer.retry.pause.ms";
-  private static final long DEFAULT_RETRY_PAUSE_MS = 2000;
+  private static final long DEFAULT_RETRY_PAUSE_MS = 200;
 
   public static final String INDEX_CDC_CONSUMER_PARENT_PROGRESS_PAUSE_MS =
     "phoenix.index.cdc.consumer.parent.progress.pause.ms";
