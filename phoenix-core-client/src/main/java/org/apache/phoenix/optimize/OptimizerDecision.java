@@ -22,21 +22,18 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 
-/**
- * Records the optimizer's index selection rationale: the chosen index (or data table), the rule
- * that selected it, and the indexes that were considered but rejected. The {@code rule} is one of
- * the closed-set {@code RULE_*} labels in {@link OptimizerReasons}. The entry for each rejected
- * index carries a {@code REASON_*} label.
- */
+/** Records the optimizer's index selection rationale. */
 public final class OptimizerDecision {
   private final String chosenIndex;
   private final String rule;
+  private final String functionalMatch;
   private final List<RejectedIndexEntry> rejectedIndexes;
 
-  public OptimizerDecision(String chosenIndex, String rule,
+  public OptimizerDecision(String chosenIndex, String rule, String functionalMatch,
     List<RejectedIndexEntry> rejectedIndexes) {
     this.chosenIndex = chosenIndex;
     this.rule = rule;
+    this.functionalMatch = functionalMatch;
     this.rejectedIndexes = rejectedIndexes == null
       ? Collections.emptyList()
       : Collections.unmodifiableList(new ArrayList<>(rejectedIndexes));
@@ -48,6 +45,13 @@ public final class OptimizerDecision {
 
   public String getRule() {
     return rule;
+  }
+
+  /**
+   * The functional-index match disclosure of the form {@code "matches <expr>"}, or {@code null}.
+   */
+  public String getFunctionalMatch() {
+    return functionalMatch;
   }
 
   /** Never null; unmodifiable; possibly empty. */
@@ -65,17 +69,18 @@ public final class OptimizerDecision {
     }
     OptimizerDecision that = (OptimizerDecision) o;
     return Objects.equals(chosenIndex, that.chosenIndex) && Objects.equals(rule, that.rule)
+      && Objects.equals(functionalMatch, that.functionalMatch)
       && rejectedIndexes.equals(that.rejectedIndexes);
   }
 
   @Override
   public int hashCode() {
-    return Objects.hash(chosenIndex, rule, rejectedIndexes);
+    return Objects.hash(chosenIndex, rule, functionalMatch, rejectedIndexes);
   }
 
   @Override
   public String toString() {
-    return "OptimizerDecision{chosenIndex=" + chosenIndex + ", rule=" + rule + ", rejectedIndexes="
-      + rejectedIndexes + "}";
+    return "OptimizerDecision{chosenIndex=" + chosenIndex + ", rule=" + rule + ", functionalMatch="
+      + functionalMatch + ", rejectedIndexes=" + rejectedIndexes + "}";
   }
 }
