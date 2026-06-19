@@ -521,10 +521,11 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
       "create table fe_match (id varchar not null primary key, name varchar, val varchar)");
     conn.createStatement().execute("create index fe_match_upper_idx on fe_match (UPPER(name))");
     // The functional index's indexed expression matches the query's UPPER(NAME) path expression,
-    // so the chosen index's rule is overridden to the "matches <expr>" form. Assert on the rule
-    // prefix.
+    // so the chosen index carries a separate "matches <expr>" functional match disclosure with
+    // its selection rule.
     assertPlan(conn, "select id from fe_match where UPPER(name) = 'ABC'")
-      .table("FE_MATCH_UPPER_IDX").indexRule(OptimizerReasons.matches("UPPER(NAME)"));
+      .table("FE_MATCH_UPPER_IDX").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+      .functionalMatch("UPPER(NAME)");
   }
 
   @Test

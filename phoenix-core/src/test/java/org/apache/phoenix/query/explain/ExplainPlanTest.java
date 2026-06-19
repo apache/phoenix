@@ -1001,10 +1001,11 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
 
   /**
    * A query whose path expression matches a covered functional index's indexed expression must
-   * choose that index, label the disclosed rule {@code "matches <expr>"}, and emit exactly one
-   * {@code INDEX EXPRESSION <expr> AS <col>} rewrite breadcrumb on the chosen plan's context. The
-   * breadcrumb is rendered as a {@code REWRITE INDEX EXPRESSION ...} top-of-plan line in plain
-   * EXPLAIN text and as a single entry in the structured {@code rewrites} attribute.
+   * choose that index, disclose the separate {@code "matches <expr>"} functional match label, and
+   * emit exactly one {@code INDEX EXPRESSION <expr> AS <col>} rewrite breadcrumb on the chosen
+   * plan's context. The breadcrumb is rendered as a {@code REWRITE INDEX EXPRESSION ...}
+   * top-of-plan line in plain EXPLAIN text and as a single entry in the structured {@code rewrites}
+   * attribute.
    */
   @Test
   public void testIndexExpressionRewriteEmittedForChosenFunctionalIndex() throws Exception {
@@ -1018,9 +1019,10 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
       String query = "SELECT BSON_VALUE(payload, 'k', 'VARCHAR') FROM " + base
         + " WHERE BSON_VALUE(payload, 'k', 'VARCHAR') = 'x'";
 
-      // The functional index is chosen and the rule comment names the matched expression.
+      // The functional index is chosen and the separate functional match disclosure names the
+      // matched expression.
       ExplainPlanTestUtil.assertPlan(conn, query).indexName(idx)
-        .indexRuleMatches("BSON_VALUE(PAYLOAD,'k','VARCHAR')")
+        .functionalMatch("BSON_VALUE(PAYLOAD,'k','VARCHAR')")
         // Exactly one breadcrumb (one applied substitution; no eager per-PK-column emissions).
         .rewriteCount(1).rewrite(0,
           "INDEX EXPRESSION BSON_VALUE(PAYLOAD,'k','VARCHAR') AS \":BSON_VALUE(PAYLOAD,'k','VARCHAR')\"");
@@ -1837,6 +1839,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     n.putNull("indexName");
     n.putNull("indexKind");
     n.putNull("indexRule");
+    n.putNull("functionalMatch");
     n.putNull("indexRejected");
     n.putNull("saltBuckets");
     n.putNull("regionsPlanned");

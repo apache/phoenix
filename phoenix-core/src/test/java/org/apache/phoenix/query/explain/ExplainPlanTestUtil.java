@@ -256,11 +256,20 @@ public final class ExplainPlanTestUtil {
     }
 
     /**
-     * Assert the optimizer chose a functional index whose rule label is exactly
-     * {@code "matches <expression>"} (see {@link OptimizerReasons#matches(String)}).
+     * Assert the optimizer's separate functional-index match disclosure equals
+     * {@code "matches <expression>"} (see {@link OptimizerReasons#matches(String)}). The selection
+     * {@code indexRule} is disclosed independently and is asserted with {@link #indexRule(String)}.
      */
-    public ExplainPlanAssert indexRuleMatches(String expression) {
-      return indexRule(OptimizerReasons.matches(expression));
+    public ExplainPlanAssert functionalMatch(String expression) {
+      assertEquals(at("functionalMatch"), OptimizerReasons.matches(expression),
+        attributes.getFunctionalMatch());
+      return this;
+    }
+
+    /** Assert no functional-index match disclosure was recorded for this plan. */
+    public ExplainPlanAssert functionalMatchNone() {
+      assertEquals(at("functionalMatch"), null, attributes.getFunctionalMatch());
+      return this;
     }
 
     /** Assert the number of rejected index candidates recorded for this plan. */
