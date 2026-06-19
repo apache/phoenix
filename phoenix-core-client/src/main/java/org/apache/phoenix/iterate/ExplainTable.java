@@ -376,8 +376,25 @@ public abstract class ExplainTable {
     if (indexKind != null) {
       indexLine.append(" ").append(indexKind);
     }
-    if (decision != null && !isDefaultRule(decision.getRule())) {
-      indexLine.append("  /* ").append(decision.getRule()).append(" */");
+    if (decision != null) {
+      // Disclose the selection rule (unless it is a suppressed default) and, when the chosen plan
+      // is a functional index that matched a query expression, the separate "matches <expr>"
+      // disclosure. Both may appear together as "/* <rule>, matches <expr> */".
+      boolean showRule = !isDefaultRule(decision.getRule());
+      String functionalMatch = decision.getFunctionalMatch();
+      if (showRule || functionalMatch != null) {
+        indexLine.append("  /* ");
+        if (showRule) {
+          indexLine.append(decision.getRule());
+        }
+        if (functionalMatch != null) {
+          if (showRule) {
+            indexLine.append(", ");
+          }
+          indexLine.append(functionalMatch);
+        }
+        indexLine.append(" */");
+      }
     }
     planSteps.add(indexLine.toString());
     if (verbose && decision != null) {
@@ -772,33 +789,38 @@ public abstract class ExplainTable {
   private void getRegionLocations(List<String> planSteps,
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
     List<HRegionLocation> regionLocations) {
-    // Region locations are emitted as text and in the structured attributes only when the
-    // EXPLAIN statement requested them via the REGIONS option (or the legacy WITH REGIONS alias).
-    if (!context.getExplainOptions().isRegions()) {
+    // Region locations are computed during scan planning, so always record them in the structured
+    // attributes. Consumers that read the attributes directly (e.g. the connection activity logger,
+    // and JSON output) rely on them being present. Only build and append the (potentially large)
+    // text representation to the plan steps when the EXPLAIN statement requested them via the
+    // REGIONS option (or the legacy WITH REGIONS alias).
+    RegionLocationsExplainInfo regionLocationsInfo =
+      populateRegionLocationAttributes(explainPlanAttributesBuilder, regionLocations);
+    if (regionLocationsInfo == null || !context.getExplainOptions().isRegions()) {
       return;
     }
-    String regionLocationPlan =
-      getRegionLocationsForExplainPlan(explainPlanAttributesBuilder, regionLocations);
+    String regionLocationPlan = renderRegionLocationsForExplainPlan(regionLocationsInfo);
     if (regionLocationPlan.length() > 0) {
       planSteps.add(regionLocationPlan);
     }
   }
 
   /**
-   * Retrieve region locations from hbase client and set the values for the explain plan output. If
-   * the list of region locations exceed max limit, print only list with the max limit and print num
-   * of total list size.
+   * Deduplicate the region locations by region boundary, trim to the configured max size, and
+   * record the result (and the total size) in the structured explain plan attributes. This is
+   * always done so that consumers reading the attributes directly have the values available,
+   * regardless of whether the text representation is requested.
    * @param explainPlanAttributesBuilder      explain plan v2 attributes builder instance.
    * @param regionLocationsFromResultIterator region locations.
-   * @return region locations to be added to the explain plan output.
+   * @return the deduplicated (and possibly trimmed) region locations along with the total
+   *         deduplicated size, or {@code null} when no region locations were available.
    */
-  private String getRegionLocationsForExplainPlan(
+  private RegionLocationsExplainInfo populateRegionLocationAttributes(
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder,
     List<HRegionLocation> regionLocationsFromResultIterator) {
     if (regionLocationsFromResultIterator == null) {
-      return "";
+      return null;
     }
-    StringBuilder buf = new StringBuilder().append(REGION_LOCATIONS);
     Set<String> regionBoundaries = new LinkedHashSet<>();
     List<HRegionLocation> regionLocations = new ArrayList<>();
     for (HRegionLocation regionLocation : regionLocationsFromResultIterator) {
@@ -811,27 +833,60 @@ public abstract class ExplainTable {
     int maxLimitRegionLoc = context.getConnection().getQueryServices().getConfiguration().getInt(
       QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN,
       QueryServicesOptions.DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN);
-    if (regionLocations.size() > maxLimitRegionLoc) {
-      int originalSize = regionLocations.size();
-      List<HRegionLocation> trimmedRegionLocations = regionLocations.subList(0, maxLimitRegionLoc);
-      if (explainPlanAttributesBuilder != null) {
-        explainPlanAttributesBuilder
-          .setRegionLocations(Collections.unmodifiableList(trimmedRegionLocations))
-          .setRegionLocationsTotalSize(originalSize);
-      }
-      buf.append(trimmedRegionLocations);
+    int totalSize = regionLocations.size();
+    List<HRegionLocation> trimmedRegionLocations = totalSize > maxLimitRegionLoc
+      ? regionLocations.subList(0, maxLimitRegionLoc)
+      : regionLocations;
+    if (explainPlanAttributesBuilder != null) {
+      explainPlanAttributesBuilder
+        .setRegionLocations(Collections.unmodifiableList(trimmedRegionLocations))
+        .setRegionLocationsTotalSize(totalSize);
+    }
+    return new RegionLocationsExplainInfo(trimmedRegionLocations, totalSize);
+  }
+
+  /**
+   * Render the region locations text for the explain plan output. If the region locations were
+   * trimmed (i.e. the deduplicated total exceeded the configured max limit), the trimmed list is
+   * printed followed by the total deduplicated size.
+   * @param regionLocationsInfo the deduplicated (and possibly trimmed) region locations along with
+   *                            the total deduplicated size.
+   * @return region locations to be added to the explain plan output.
+   */
+  private String
+    renderRegionLocationsForExplainPlan(RegionLocationsExplainInfo regionLocationsInfo) {
+    List<HRegionLocation> trimmedRegionLocations = regionLocationsInfo.getTrimmedRegionLocations();
+    StringBuilder buf = new StringBuilder().append(REGION_LOCATIONS);
+    buf.append(trimmedRegionLocations);
+    if (trimmedRegionLocations.size() < regionLocationsInfo.getTotalSize()) {
       buf.append("...total size = ");
-      buf.append(originalSize);
-    } else {
-      buf.append(regionLocations);
-      if (explainPlanAttributesBuilder != null) {
-        explainPlanAttributesBuilder
-          .setRegionLocations(Collections.unmodifiableList(regionLocations))
-          .setRegionLocationsTotalSize(regionLocations.size());
-      }
+      buf.append(regionLocationsInfo.getTotalSize());
     }
     buf.append(") ");
     return buf.toString();
+  }
+
+  /**
+   * Holder for the deduplicated (and possibly trimmed) region locations plus the total deduplicated
+   * size, used to keep attribute population separate from text rendering.
+   */
+  private static final class RegionLocationsExplainInfo {
+    private final List<HRegionLocation> trimmedRegionLocations;
+    private final int totalSize;
+
+    private RegionLocationsExplainInfo(List<HRegionLocation> trimmedRegionLocations,
+      int totalSize) {
+      this.trimmedRegionLocations = trimmedRegionLocations;
+      this.totalSize = totalSize;
+    }
+
+    private List<HRegionLocation> getTrimmedRegionLocations() {
+      return trimmedRegionLocations;
+    }
+
+    private int getTotalSize() {
+      return totalSize;
+    }
   }
 
   @SuppressWarnings("rawtypes")
