@@ -314,11 +314,11 @@ public class GlobalIndexCheckerIT extends BaseTest {
       String noIndexQuery = "SELECT /*+ NO_INDEX */ val1, val2, PHOENIX_ROW_TIMESTAMP() from "
         + dataTableName + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('"
         + after.toString() + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
-      // Verify that we will read from the data table. The NO_INDEX hint rejects every secondary
-      // index candidate. Under STRONG consistency only the user index exists. Under EVENTUAL
-      // consistency the user index is paired with an auto-created CDC index, so two candidates are
-      // rejected. Match the user index by name rather than position since the rejection order is
-      // not guaranteed.
+      // Verify that we will read from the data table. The NO_INDEX hint rejects every
+      // secondary index candidate. Under STRONG consistency only the user index exists.
+      // Under EVENTUAL consistency the user index is paired with an auto-created CDC index,
+      // so two candidates are rejected. Match the user index by name rather than position
+      // since the rejection order is not guaranteed.
       int expectedRejected = isEventualConsistency() ? 2 : 1;
       assertPlan(conn, noIndexQuery).scanType("FULL SCAN").table(dataTableName)
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedCount(expectedRejected)
