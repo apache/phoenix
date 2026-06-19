@@ -74,6 +74,11 @@ public class GlobalIndexCheckerEventualGenerateIT extends GlobalIndexCheckerIT {
     Thread.sleep(18000);
   }
 
+  @Override
+  protected boolean isEventualConsistency() {
+    return true;
+  }
+
   @Parameterized.Parameters(name = "async={0},encoded={1}")
   public static synchronized Collection<Object[]> data() {
     List<Object[]> list = Lists.newArrayListWithExpectedSize(4);
