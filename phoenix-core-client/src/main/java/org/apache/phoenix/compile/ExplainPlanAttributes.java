@@ -42,18 +42,19 @@ import org.apache.phoenix.schema.PColumn;
 @JsonPropertyOrder({ "tenantId", "viewName", "viewBaseName", "cdcScopes", "txnProvider", "rewrites",
   "estimatedRows", "estimatedSizeInBytes", "estimateInfoTs", "abstractExplainPlan",
   "onDuplicateKeyAction", "serverUpdateSet", "returningRow", "hint", "explainScanType",
-  "consistency", "tableName", "keyRanges", "indexName", "indexKind", "indexRule", "indexRejected",
-  "saltBuckets", "regionsPlanned", "scanTimeRangeMin", "scanTimeRangeMax", "splitsChunk",
-  "useRoundRobinIterator", "samplingRate", "hexStringRVCOffset", "iteratorTypeAndScanSize",
-  "scanEstimatedRows", "scanEstimatedSizeInBytes", "serverWhereFilter", "serverDistinctFilter",
-  "serverMergeColumns", "serverParsedProjections", "serverProject", "serverFilters", "ignoredHints",
-  "serverFirstKeyOnlyProjection", "serverEmptyColumnOnlyProjection", "serverAggregate",
-  "serverGroupByLimit", "serverSortedBy", "serverOffset", "serverRowLimit", "clientFilterBy",
-  "clientFilters", "clientAggregate", "clientDistinctFilter", "clientAfterAggregate",
-  "clientSortAlgo", "clientSortedBy", "clientOffset", "clientRowLimit", "clientSequenceCount",
-  "clientCursorName", "clientSteps", "lhsJoinQueryExplainPlan", "rhsJoinQueryExplainPlan",
-  "subPlans", "dynamicServerFilter", "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge",
-  "regionLocations", "regionLocationsTotalSize", "numRegionLocationLookups" })
+  "consistency", "tableName", "keyRanges", "indexName", "indexKind", "indexRule", "functionalMatch",
+  "indexRejected", "saltBuckets", "regionsPlanned", "scanTimeRangeMin", "scanTimeRangeMax",
+  "splitsChunk", "useRoundRobinIterator", "samplingRate", "hexStringRVCOffset",
+  "iteratorTypeAndScanSize", "scanEstimatedRows", "scanEstimatedSizeInBytes", "serverWhereFilter",
+  "serverDistinctFilter", "serverMergeColumns", "serverParsedProjections", "serverProject",
+  "serverFilters", "ignoredHints", "serverFirstKeyOnlyProjection",
+  "serverEmptyColumnOnlyProjection", "serverAggregate", "serverGroupByLimit", "serverSortedBy",
+  "serverOffset", "serverRowLimit", "clientFilterBy", "clientFilters", "clientAggregate",
+  "clientDistinctFilter", "clientAfterAggregate", "clientSortAlgo", "clientSortedBy",
+  "clientOffset", "clientRowLimit", "clientSequenceCount", "clientCursorName", "clientSteps",
+  "lhsJoinQueryExplainPlan", "rhsJoinQueryExplainPlan", "subPlans", "dynamicServerFilter",
+  "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge", "regionLocations",
+  "regionLocationsTotalSize", "numRegionLocationLookups" })
 public class ExplainPlanAttributes {
 
   // Top-of-plan disclosures (populated only on the root plan)
@@ -82,6 +83,7 @@ public class ExplainPlanAttributes {
   private final String indexName;
   private final String indexKind;
   private final String indexRule;
+  private final String functionalMatch;
   private final List<RejectedIndexEntry> indexRejected;
   private final Integer saltBuckets;
   private final Integer regionsPlanned;
@@ -171,6 +173,7 @@ public class ExplainPlanAttributes {
     this.indexName = b.indexName;
     this.indexKind = b.indexKind;
     this.indexRule = b.indexRule;
+    this.functionalMatch = b.functionalMatch;
     this.indexRejected = (b.indexRejected == null || b.indexRejected.isEmpty())
       ? null
       : Collections.unmodifiableList(new ArrayList<>(b.indexRejected));
@@ -309,6 +312,10 @@ public class ExplainPlanAttributes {
 
   public String getIndexRule() {
     return indexRule;
+  }
+
+  public String getFunctionalMatch() {
+    return functionalMatch;
   }
 
   public List<RejectedIndexEntry> getIndexRejected() {
@@ -608,6 +615,7 @@ public class ExplainPlanAttributes {
     private String indexName;
     private String indexKind;
     private String indexRule;
+    private String functionalMatch;
     private List<RejectedIndexEntry> indexRejected;
     private Integer saltBuckets;
     private Integer regionsPlanned;
@@ -686,6 +694,7 @@ public class ExplainPlanAttributes {
       this.indexName = explainPlanAttributes.getIndexName();
       this.indexKind = explainPlanAttributes.getIndexKind();
       this.indexRule = explainPlanAttributes.getIndexRule();
+      this.functionalMatch = explainPlanAttributes.getFunctionalMatch();
       List<RejectedIndexEntry> srcIndexRejected = explainPlanAttributes.getIndexRejected();
       this.indexRejected = srcIndexRejected == null ? null : new ArrayList<>(srcIndexRejected);
       this.saltBuckets = explainPlanAttributes.getSaltBuckets();
@@ -852,6 +861,11 @@ public class ExplainPlanAttributes {
 
     public ExplainPlanAttributesBuilder setIndexKind(String indexKind) {
       this.indexKind = indexKind;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setFunctionalMatch(String functionalMatch) {
+      this.functionalMatch = functionalMatch;
       return this;
     }
 
