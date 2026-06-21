@@ -30,10 +30,6 @@
       <groupId>org.apache.phoenix</groupId>
       <artifactId>phoenix-core-client</artifactId>
     </dependency>
-    <dependency>
-      <groupId>commons-io</groupId>
-      <artifactId>commons-io</artifactId>
-    </dependency>
 
     <!-- shaded thirdparty dependencies -->
     <dependency>
