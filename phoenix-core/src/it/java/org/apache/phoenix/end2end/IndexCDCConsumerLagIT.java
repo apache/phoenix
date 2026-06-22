@@ -46,7 +46,10 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
-/** Verifies the {@code cdcIndexUpdateLag} histogram keeps receiving samples while the consumer is idle. */
+/**
+ * Verifies the {@code cdcIndexUpdateLag} histogram keeps receiving samples while the consumer is
+ * idle.
+ */
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexCDCConsumerLagIT extends ParallelStatsDisabledIT {
 
