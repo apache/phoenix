@@ -206,10 +206,7 @@ public class CompactionScanner implements InternalScanner {
     boolean replayEnabled =
       conf.getBoolean(ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED,
         ReplicationLogReplayService.DEFAULT_REPLICATION_REPLAY_ENABLED);
-    boolean guardEnabled =
-      conf.getBoolean(ReplicationLogReplayService.REPLICATION_COMPACTION_GUARD_ENABLED,
-        ReplicationLogReplayService.DEFAULT_REPLICATION_COMPACTION_GUARD_ENABLED);
-    if (this.major && replayEnabled && guardEnabled) {
+    if (this.major && replayEnabled) {
       this.replicationConsistencyPoint =
         ReplicationLogReplayService.resolveConsistencyPoint(conf, tableName, columnFamilyName);
     } else {
@@ -1650,7 +1647,7 @@ public class CompactionScanner implements InternalScanner {
    * Computes the effective max-lookback boundary for a row, capped by the replication consistency
    * point. Formula: min(max(ttlWindowStart, maxLookbackWindowStart), consistencyPoint).
    */
-  private static long computeRowMaxLookbackWithGuard(long ttlWindowStart,
+  public static long computeRowMaxLookbackWithGuard(long ttlWindowStart,
     long maxLookbackWindowStart, long replicationConsistencyPoint) {
     return Math.min(Math.max(ttlWindowStart, maxLookbackWindowStart), replicationConsistencyPoint);
   }

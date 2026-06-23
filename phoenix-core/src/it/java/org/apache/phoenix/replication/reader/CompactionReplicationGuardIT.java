@@ -61,8 +61,6 @@ public class CompactionReplicationGuardIT extends BaseTest {
     props.put(QueryServices.PHOENIX_COMPACTION_ENABLED, Boolean.toString(true));
     props.put(ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED,
       Boolean.toString(true));
-    props.put(ReplicationLogReplayService.REPLICATION_COMPACTION_GUARD_ENABLED,
-      Boolean.toString(true));
     props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
@@ -222,6 +220,43 @@ public class CompactionReplicationGuardIT extends BaseTest {
     }
   }
 
+  /**
+   * Test 5: Guard retains delete markers on a table with explicit TTL. The consistency point is
+   * set BEFORE the delete, time advances past both TTL and maxLookback, and the guard still
+   * retains the delete marker because its timestamp is newer than the consistency point.
+   */
+  @Test(timeout = 120000L)
+  public void testGuardRetainsDeleteMarkersWithExplicitTTL() throws Exception {
+    int ttlSeconds = 30;
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      createTableWithTTL(dataTableName, ttlSeconds);
+      TableName dataTable = TableName.valueOf(dataTableName);
+      populateTable(dataTableName);
+
+      injectEdge.incrementValue(1);
+      long beforeDeleteTime = EnvironmentEdgeManager.currentTimeMillis();
+
+      // Delete a row
+      conn.createStatement().execute("DELETE FROM " + dataTableName + " WHERE id = 'a'");
+      conn.commit();
+      injectEdge.incrementValue(1);
+
+      // Set consistency point BEFORE the delete — replay hasn't caught up
+      long consistencyPoint = beforeDeleteTime - 1;
+      injectMockConsistencyPoint(consistencyPoint);
+
+      // Advance past both TTL and maxLookback — without guard, marker would be purged
+      injectEdge.incrementValue(ttlSeconds * 1000 + 1000);
+
+      flush(dataTable);
+      majorCompact(dataTable);
+
+      // Delete marker retained — guard caps purge at consistencyPoint
+      assertRawRowCount(conn, dataTable, ROWS_POPULATED);
+    }
+  }
+
   private void injectMockConsistencyPoint(long consistencyPoint) {
     ReplicationLogReplayService.setConsistencyPointForTesting(consistencyPoint);
   }
@@ -239,6 +274,15 @@ public class CompactionReplicationGuardIT extends BaseTest {
       conn.createStatement().execute(
         "CREATE TABLE " + tableName + " (id VARCHAR(10) NOT NULL PRIMARY KEY, val1 VARCHAR(10),"
           + " val2 VARCHAR(10), val3 VARCHAR(10))");
+      conn.commit();
+    }
+  }
+
+  private void createTableWithTTL(String tableName, int ttlSeconds) throws SQLException {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(
+        "CREATE TABLE " + tableName + " (id VARCHAR(10) NOT NULL PRIMARY KEY, val1 VARCHAR(10),"
+          + " val2 VARCHAR(10), val3 VARCHAR(10)) TTL=" + ttlSeconds);
       conn.commit();
     }
   }
