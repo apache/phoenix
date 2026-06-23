@@ -53,16 +53,6 @@ public class ReplicationLogReplayService {
    */
   public static final boolean DEFAULT_REPLICATION_REPLAY_ENABLED = false;
 
-  /**
-   * Configuration key for enabling/disabling the replication compaction guard
-   */
-  public static final String REPLICATION_COMPACTION_GUARD_ENABLED =
-    "phoenix.replication.compaction.guard.enabled";
-
-  /**
-   * Default value for replication compaction guard enabled flag
-   */
-  public static final boolean DEFAULT_REPLICATION_COMPACTION_GUARD_ENABLED = true;
 
   /**
    * Number of threads in the executor pool for the replication replay service
