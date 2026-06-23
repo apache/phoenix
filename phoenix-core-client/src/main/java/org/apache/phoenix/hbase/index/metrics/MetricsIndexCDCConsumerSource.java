@@ -52,7 +52,11 @@ public interface MetricsIndexCDCConsumerSource extends BaseSource {
 
   String CDC_INDEX_UPDATE_LAG = "cdcIndexUpdateLag";
   String CDC_INDEX_UPDATE_LAG_DESC =
-    "Histogram for the lag in milliseconds between current time and the last processed CDC event";
+    "Histogram of current time minus the consumer's effective freshness watermark, in "
+      + "milliseconds. The watermark advances on successful own-partition batches AND on empty "
+      + "polls (which prove caught-up to queryStart - timestampBufferMs). Idle steady state is "
+      + "≈ timestampBufferMs; grows during sustained failure, parent-region replay, or cold "
+      + "start (where it is floored at now - consumerStartTime).";
 
   /**
    * Updates the CDC batch processing time histogram.
