@@ -146,7 +146,7 @@ public class IndexCDCConsumer implements Runnable {
    */
   public static final String INDEX_CDC_CONSUMER_LAG_SAMPLE_INTERVAL_MS =
     "phoenix.index.cdc.consumer.lag.sample.interval.ms";
-  private static final long DEFAULT_LAG_SAMPLE_INTERVAL_MS = 1000L;
+  private static final long DEFAULT_LAG_SAMPLE_INTERVAL_MS = 5000L;
   private static final long MIN_LAG_SAMPLE_INTERVAL_MS = 50L;
 
   private final RegionCoprocessorEnvironment env;
@@ -1012,6 +1012,9 @@ public class IndexCDCConsumer implements Runnable {
           if (hasMoreRows) {
             newLastTimestamp = result.getFirst();
             if (batchMutations.isEmpty()) {
+              if (!isParentReplay) {
+                progress.recordProcessed(newLastTimestamp);
+              }
               sleepWithLagSampling(ConnectionUtils.getPauseTime(pause, ++retryCount));
             }
           }
@@ -1137,10 +1140,6 @@ public class IndexCDCConsumer implements Runnable {
                 dataTableName, partitionId, newLastTimestamp, lastScannedTimestamp[0], retryCount);
               metricSource.incrementCdcEventSkippedCount(dataTableName);
               newLastTimestamp = lastScannedTimestamp[0];
-              // NOTE: durable tracker advances below (newLastTimestamp > lastProcessedTimestamp)
-              // but progress.recordProcessed is skipped (batchStates.isEmpty()). The in-memory
-              // watermark lags durable state until the next empty poll heals it — over-reports
-              // lag temporarily (safe direction, self-healing).
               break;
             } else {
               // CDC index entries are written but the data is not yet visible.
@@ -1184,11 +1183,11 @@ public class IndexCDCConsumer implements Runnable {
         metricSource.updateCdcBatchProcessTime(dataTableName,
           EnvironmentEdgeManager.currentTimeMillis() - batchStartTime);
         metricSource.incrementCdcBatchCount(dataTableName);
+      }
+      if (newLastTimestamp > lastProcessedTimestamp) {
         if (!isParentReplay) {
           progress.recordProcessed(newLastTimestamp);
         }
-      }
-      if (newLastTimestamp > lastProcessedTimestamp) {
         updateTrackerProgress(conn, partitionId, ownerPartitionId, newLastTimestamp,
           PhoenixDatabaseMetaData.TRACKER_STATUS_IN_PROGRESS);
       }
