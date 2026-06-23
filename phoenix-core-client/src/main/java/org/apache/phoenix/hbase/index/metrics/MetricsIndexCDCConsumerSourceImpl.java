@@ -20,6 +20,7 @@ package org.apache.phoenix.hbase.index.metrics;
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
 import org.apache.hadoop.metrics2.MetricHistogram;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
+import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 
 /**
  * Implementation for tracking IndexCDCConsumer metrics.
@@ -33,6 +34,10 @@ public class MetricsIndexCDCConsumerSourceImpl extends BaseSourceImpl
   private final MutableFastCounter cdcBatchCounter;
   private final MutableFastCounter cdcMutationCounter;
   private final MutableFastCounter cdcBatchFailureCounter;
+  private final MutableFastCounter cdcEventSkippedCounter;
+  private final MutableGaugeLong cdcParentReplayActiveRegionsGauge;
+  private final MetricHistogram cdcParentReplayDurationHisto;
+  private final MutableGaugeLong cdcConsumerActiveRegionsGauge;
   private final MetricHistogram cdcIndexUpdateLagHisto;
 
   public MetricsIndexCDCConsumerSourceImpl() {
@@ -54,6 +59,14 @@ public class MetricsIndexCDCConsumerSourceImpl extends BaseSourceImpl
       getMetricsRegistry().newCounter(CDC_MUTATION_COUNT, CDC_MUTATION_COUNT_DESC, 0L);
     cdcBatchFailureCounter =
       getMetricsRegistry().newCounter(CDC_BATCH_FAILURE_COUNT, CDC_BATCH_FAILURE_COUNT_DESC, 0L);
+    cdcEventSkippedCounter =
+      getMetricsRegistry().newCounter(CDC_EVENT_SKIPPED_COUNT, CDC_EVENT_SKIPPED_COUNT_DESC, 0L);
+    cdcParentReplayActiveRegionsGauge = getMetricsRegistry()
+      .newGauge(CDC_PARENT_REPLAY_ACTIVE_REGIONS, CDC_PARENT_REPLAY_ACTIVE_REGIONS_DESC, 0L);
+    cdcParentReplayDurationHisto = getMetricsRegistry().newHistogram(CDC_PARENT_REPLAY_DURATION,
+      CDC_PARENT_REPLAY_DURATION_DESC);
+    cdcConsumerActiveRegionsGauge = getMetricsRegistry().newGauge(CDC_CONSUMER_ACTIVE_REGIONS,
+      CDC_CONSUMER_ACTIVE_REGIONS_DESC, 0L);
     cdcIndexUpdateLagHisto =
       getMetricsRegistry().newHistogram(CDC_INDEX_UPDATE_LAG, CDC_INDEX_UPDATE_LAG_DESC);
   }
@@ -97,6 +110,42 @@ public class MetricsIndexCDCConsumerSourceImpl extends BaseSourceImpl
   }
 
   @Override
+  public void incrementCdcEventSkippedCount(String dataTableName) {
+    incrementTableSpecificCounter(CDC_EVENT_SKIPPED_COUNT, dataTableName);
+    cdcEventSkippedCounter.incr();
+  }
+
+  @Override
+  public void incrementCdcParentReplayActiveRegions(String dataTableName) {
+    incrementTableSpecificGauge(CDC_PARENT_REPLAY_ACTIVE_REGIONS, dataTableName);
+    cdcParentReplayActiveRegionsGauge.incr();
+  }
+
+  @Override
+  public void decrementCdcParentReplayActiveRegions(String dataTableName) {
+    decrementTableSpecificGauge(CDC_PARENT_REPLAY_ACTIVE_REGIONS, dataTableName);
+    cdcParentReplayActiveRegionsGauge.decr();
+  }
+
+  @Override
+  public void updateCdcParentReplayDuration(String dataTableName, long durationMs) {
+    incrementTableSpecificHistogram(CDC_PARENT_REPLAY_DURATION, dataTableName, durationMs);
+    cdcParentReplayDurationHisto.add(durationMs);
+  }
+
+  @Override
+  public void incrementCdcConsumerActiveRegions(String dataTableName) {
+    incrementTableSpecificGauge(CDC_CONSUMER_ACTIVE_REGIONS, dataTableName);
+    cdcConsumerActiveRegionsGauge.incr();
+  }
+
+  @Override
+  public void decrementCdcConsumerActiveRegions(String dataTableName) {
+    decrementTableSpecificGauge(CDC_CONSUMER_ACTIVE_REGIONS, dataTableName);
+    cdcConsumerActiveRegionsGauge.decr();
+  }
+
+  @Override
   public void updateCdcLag(String dataTableName, long lag) {
     incrementTableSpecificHistogram(CDC_INDEX_UPDATE_LAG, dataTableName, lag);
     cdcIndexUpdateLagHisto.add(lag);
@@ -112,6 +161,18 @@ public class MetricsIndexCDCConsumerSourceImpl extends BaseSourceImpl
     MetricHistogram tableHistogram =
       getMetricsRegistry().getHistogram(getMetricName(baseName, tableName));
     tableHistogram.add(t);
+  }
+
+  private void incrementTableSpecificGauge(String baseName, String tableName) {
+    MutableGaugeLong tableGauge =
+      getMetricsRegistry().getGauge(getMetricName(baseName, tableName), 0);
+    tableGauge.incr();
+  }
+
+  private void decrementTableSpecificGauge(String baseName, String tableName) {
+    MutableGaugeLong tableGauge =
+      getMetricsRegistry().getGauge(getMetricName(baseName, tableName), 0);
+    tableGauge.decr();
   }
 
   private String getMetricName(String baseName, String tableName) {

@@ -50,6 +50,42 @@ public interface MetricsIndexCDCConsumerSource extends BaseSource {
   String CDC_BATCH_FAILURE_COUNT = "cdcBatchFailureCount";
   String CDC_BATCH_FAILURE_COUNT_DESC = "The number of CDC batch processing failures";
 
+  String CDC_EVENT_SKIPPED_COUNT = "cdcEventSkippedCount";
+  String CDC_EVENT_SKIPPED_COUNT_DESC =
+    "The number of times the consumer permanently advanced past CDC events whose data table "
+      + "row state could not be read within phoenix.index.cdc.consumer.max.data.visibility.retries"
+      + " attempts. Each increment represents one or more CDC events that will never be applied "
+      + "to the eventually consistent index \u2014 typically caused by failed or aborted data "
+      + "table mutations upstream. Non-zero values indicate silent data divergence between the "
+      + "data table and its EC indexes.";
+
+  String CDC_PARENT_REPLAY_ACTIVE_REGIONS = "cdcParentReplayActiveRegions";
+  String CDC_PARENT_REPLAY_ACTIVE_REGIONS_DESC =
+    "Gauge of regions currently in the parent-region replay phase (post-split / post-merge "
+      + "catch-up before steady-state own-partition processing begins). Per-table value = number "
+      + "of regions of this table on this RegionServer currently replaying ancestor partitions. "
+      + "The lag histogram inflates during this phase by design (parent-replay timestamps do not "
+      + "advance the child's own-partition freshness watermark) \u2014 this gauge lets operators "
+      + "distinguish 'normal post-split catch-up' from 'consumer is broken'.";
+
+  String CDC_PARENT_REPLAY_DURATION = "cdcParentReplayDuration";
+  String CDC_PARENT_REPLAY_DURATION_DESC =
+    "Histogram (milliseconds) of how long it took to fully replay one ancestor partition during "
+      + "post-split / post-merge catch-up. One sample is emitted per parent partition when this "
+      + "consumer either marks it COMPLETE or observes another consumer marking it COMPLETE. "
+      + "Ancestors that were already COMPLETE when discovered emit no sample.";
+
+  String CDC_CONSUMER_ACTIVE_REGIONS = "cdcConsumerActiveRegions";
+  String CDC_CONSUMER_ACTIVE_REGIONS_DESC =
+    "Gauge of regions whose IndexCDCConsumer is currently in steady-state own-partition "
+      + "processing for this table on this RegionServer. Incremented immediately before entering "
+      + "the main poll loop (after startup wait, EC-index discovery, CDC_STREAM wait, tracker "
+      + "lookup, and any parent-region replay have all completed) and decremented when the loop "
+      + "exits. A gauge of 0 where >0 is expected indicates the consumer either never reached "
+      + "steady state (cold start, missing EC index, missing CDC_STREAM entry) or exited "
+      + "(stopped, crashed, or region moved away). Combine with cdcParentReplayActiveRegions to "
+      + "tell 'in catch-up' apart from 'in steady state' apart from 'not running at all'.";
+
   String CDC_INDEX_UPDATE_LAG = "cdcIndexUpdateLag";
   String CDC_INDEX_UPDATE_LAG_DESC =
     "Histogram of current time minus the consumer's effective freshness watermark, in "
@@ -97,6 +133,49 @@ public interface MetricsIndexCDCConsumerSource extends BaseSource {
    * @param dataTableName physical data table name
    */
   void incrementCdcBatchFailureCount(String dataTableName);
+
+  /**
+   * Increments the count of CDC events permanently skipped after exhausting data-visibility
+   * retries. See {@link #CDC_EVENT_SKIPPED_COUNT_DESC}.
+   * @param dataTableName physical data table name
+   */
+  void incrementCdcEventSkippedCount(String dataTableName);
+
+  /**
+   * Increments the parent-region replay active gauge by 1. Must be paired with a corresponding
+   * {@link #decrementCdcParentReplayActiveRegions(String)} in a {@code finally} block.
+   * @param dataTableName physical data table name
+   */
+  void incrementCdcParentReplayActiveRegions(String dataTableName);
+
+  /**
+   * Decrements the parent-region replay active gauge by 1. Must be invoked in a {@code finally}
+   * block paired with {@link #incrementCdcParentReplayActiveRegions(String)}.
+   * @param dataTableName physical data table name
+   */
+  void decrementCdcParentReplayActiveRegions(String dataTableName);
+
+  /**
+   * Adds a sample to the parent-region replay duration histogram. Called once per ancestor
+   * partition after its replay reaches a terminal state.
+   * @param dataTableName physical data table name
+   * @param durationMs    wall-clock time spent replaying this ancestor partition
+   */
+  void updateCdcParentReplayDuration(String dataTableName, long durationMs);
+
+  /**
+   * Increments the steady-state active-regions gauge by 1. Must be paired with a corresponding
+   * {@link #decrementCdcConsumerActiveRegions(String)} in a {@code finally} block.
+   * @param dataTableName physical data table name
+   */
+  void incrementCdcConsumerActiveRegions(String dataTableName);
+
+  /**
+   * Decrements the steady-state active-regions gauge by 1. Must be invoked in a {@code finally}
+   * block paired with {@link #incrementCdcConsumerActiveRegions(String)}.
+   * @param dataTableName physical data table name
+   */
+  void decrementCdcConsumerActiveRegions(String dataTableName);
 
   /**
    * Updates the CDC lag histogram.
