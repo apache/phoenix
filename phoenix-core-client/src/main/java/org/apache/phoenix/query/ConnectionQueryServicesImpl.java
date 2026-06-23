@@ -422,6 +422,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   private final int maxInternalConnectionsAllowed;
   private final boolean shouldThrottleNumConnections;
   public static final byte[] MUTEX_LOCKED = "MUTEX_LOCKED".getBytes(StandardCharsets.UTF_8);
+  // Disambiguate the transform-lock row in SYSTEM.MUTEX from other lock purposes. The
+  // double-underscore sentinel form keeps this rowkey separate from any user-visible column
+  // name (Phoenix uppercases unquoted identifiers, so a hypothetical
+  // {@code ALTER TABLE ... ADD COLUMN __TRANSFORM_LOCK__} would still need explicit quoting
+  // to land at this exact byte sequence).
+  @VisibleForTesting
+  public static final String TRANSFORM_LOCK_MARKER = "__TRANSFORM_LOCK__";
   private ServerSideRPCControllerFactory serverSideRPCControllerFactory;
   private boolean localIndexUpgradeRequired;
 
@@ -5652,6 +5659,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     } catch (IOException e) {
       throw ClientUtil.parseServerException(e);
     }
+  }
+
+  @Override
+  public boolean acquireTransformLock(String tenantId, String schemaName, String tableName)
+    throws SQLException {
+    // Lock is keyed on (schemaName, tableName) only — tenantId is intentionally not part of the
+    // SYSTEM.MUTEX rowkey so that a transform on a (schema, table) blocks any concurrent
+    // transform on the same table regardless of tenant scope.
+    return writeMutexCell(null, schemaName, tableName, TRANSFORM_LOCK_MARKER, null);
+  }
+
+  @Override
+  public void releaseTransformLock(String tenantId, String schemaName, String tableName)
+    throws SQLException {
+    deleteMutexCell(null, schemaName, tableName, TRANSFORM_LOCK_MARKER, null);
   }
 
   @VisibleForTesting

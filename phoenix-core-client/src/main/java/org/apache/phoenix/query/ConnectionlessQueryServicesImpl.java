@@ -894,6 +894,17 @@ public class ConnectionlessQueryServicesImpl extends DelegateQueryServices
   }
 
   @Override
+  public boolean acquireTransformLock(String tenantId, String schemaName, String tableName)
+    throws SQLException {
+    return true;
+  }
+
+  @Override
+  public void releaseTransformLock(String tenantId, String schemaName, String tableName)
+    throws SQLException {
+  }
+
+  @Override
   public void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped,
     boolean preserveSplits) throws SQLException {
   }

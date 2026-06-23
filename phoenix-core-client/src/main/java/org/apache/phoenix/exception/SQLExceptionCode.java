@@ -543,6 +543,12 @@ public enum SQLExceptionCode {
     "The CURRENT_SCN may not be set for statement using ON DUPLICATE KEY."),
   CANNOT_USE_ON_DUP_KEY_WITH_GLOBAL_IDX(1224, "42Z24",
     "The ON DUPLICATE KEY clause may not be used when a table has a global index."),
+  CANNOT_MODIFY_TABLE_WITH_TRANSFORM_IN_PROGRESS(1225, "42Z25",
+    "Cannot modify table while a concurrent schema-modification is in progress on it. "
+      + "Retry after a short backoff (e.g., 30s); the lock also auto-expires after the "
+      + "SYSTEM.MUTEX TTL of 15 minutes if the holder dies. Note: this error can fire during "
+      + "the brief under-lock re-check window even if no transform record currently exists in "
+      + "SYSTEM.TRANSFORM."),
 
   /** Parser error. (errorcode 06, sqlState 42P) */
   PARSER_ERROR(601, "42P00", "Syntax error.", Factory.SYNTAX_ERROR),

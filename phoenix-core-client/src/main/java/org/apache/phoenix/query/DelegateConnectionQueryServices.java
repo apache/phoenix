@@ -458,6 +458,18 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices
   }
 
   @Override
+  public boolean acquireTransformLock(String tenantId, String schemaName, String tableName)
+    throws SQLException {
+    return getDelegate().acquireTransformLock(tenantId, schemaName, tableName);
+  }
+
+  @Override
+  public void releaseTransformLock(String tenantId, String schemaName, String tableName)
+    throws SQLException {
+    getDelegate().releaseTransformLock(tenantId, schemaName, tableName);
+  }
+
+  @Override
   public PMetaData getMetaDataCache() {
     return getDelegate().getMetaDataCache();
   }

@@ -4817,6 +4817,13 @@ public class MetaDataClient {
     String physicalTableName = SchemaUtil.getTableNameFromFullName(physicalName.getString());
     Set<String> acquiredColumnMutexSet = Sets.newHashSetWithExpectedSize(3);
     boolean acquiredBaseTableMutex = false;
+    boolean acquiredTransformLock = false;
+    // Tracks the post-re-check fresh table view; used as the source-of-truth for
+    // evaluateStmtProperties (single-pass evaluation) and the downstream transform-decision sites
+    // (incrementTableSeqNum + addTransform). Defaults to {@code table} when no transform is needed
+    // or when the lock was already held by a parent frame (no second re-check happens); reassigned
+    // to a getTableNoCache view at the under-lock re-check below on the transform-acquire path.
+    PTable freshTable = table;
     try {
       connection.setAutoCommit(false);
       List<ColumnDef> columnDefs;
@@ -4862,6 +4869,12 @@ public class MetaDataClient {
 
         ColumnResolver resolver = FromCompiler.getResolver(namedTableNode, connection);
         table = resolver.getTables().get(0).getTable();
+        // Reset freshTable to the iteration's freshly-resolved {@code table} on every retry. The
+        // under-lock re-check below will overwrite this with a getTableNoCache view only when this
+        // iteration actually acquires the lock for the first time; on retry iterations (where
+        // acquiredTransformLock is already true) the re-check block is skipped and downstream
+        // sites consume this iteration's resolver view rather than the prior iteration's snapshot.
+        freshTable = table;
         int nIndexes = table.getIndexes().size();
         int numCols = columnDefs.size();
         int nNewColumns = numCols;
@@ -4902,9 +4915,69 @@ public class MetaDataClient {
           }
         }
 
+        // Single-pass property evaluation: probe transform-needed first against raw metaProperties
+        // (which checkIsTransformNeeded reads — it does not depend on evaluateStmtProperties
+        // output),
+        // acquire the transform lock + fetch freshTable + re-check under lock if needed, THEN run
+        // evaluateStmtProperties exactly once against freshTable. This mirrors alterIndex and
+        // ensures
+        // both the changingPhoenixTableProperty verdict and the TTL-hierarchy check (which consumes
+        // areWeIntroducingTTLAtThisLevel from the evaluation) reflect the post-lock view on the
+        // transform path.
+        boolean isTransformNeeded = TransformClient.checkIsTransformNeeded(metaProperties,
+          schemaName, table, tableName, null, tenantIdToUse, connection);
+        if (isTransformNeeded) {
+          // Pre-acquire guards: fast-fail before paying the cost of the lock cell.
+          if (MetaDataUtil.hasLocalIndexTable(connection, physicalTableName.getBytes())) {
+            throw new SQLExceptionInfo.Builder(
+              SQLExceptionCode.CANNOT_TRANSFORM_TABLE_WITH_LOCAL_INDEX).setSchemaName(schemaName)
+                .setTableName(tableName).build().buildException();
+          }
+          if (table.isAppendOnlySchema()) {
+            throw new SQLExceptionInfo.Builder(
+              SQLExceptionCode.CANNOT_TRANSFORM_TABLE_WITH_APPEND_ONLY_SCHEMA)
+                .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+          }
+          if (table.isTransactional()) {
+            throw new SQLExceptionInfo.Builder(CANNOT_TRANSFORM_TRANSACTIONAL_TABLE)
+              .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+          }
+          if (!acquiredTransformLock) {
+            // Lock granularity: keyed on (schemaName, tableName) — i.e. per-logical-table, matching
+            // the SYSTEM.TRANSFORM primary key (TENANT_ID, TABLE_SCHEM, LOGICAL_TABLE_NAME). A
+            // concurrent ALTER on the same logical table contends here; a concurrent ALTER on a
+            // related table (e.g. an index of this data table) writes a different SYSTEM.TRANSFORM
+            // PK row and is intentionally NOT blocked. By-design: an operator may transform a data
+            // table and its indexes in parallel.
+            acquiredTransformLock = connection.getQueryServices()
+              .acquireTransformLock(tenantIdToUse, schemaName, tableName);
+            if (!acquiredTransformLock) {
+              throw new SQLExceptionInfo.Builder(
+                SQLExceptionCode.CANNOT_MODIFY_TABLE_WITH_TRANSFORM_IN_PROGRESS)
+                  .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+            }
+            // Re-check under lock with fresh metadata: a concurrent transform-triggering ALTER
+            // may have committed between our first checkIsTransformNeeded and the lock acquire.
+            // If so, the transform we observed is stale — drop through and treat as no-op.
+            // Capture freshTable so downstream sites (evaluateStmtProperties below,
+            // incrementTableSeqNum, addTransform) see the post-re-check view rather than the stale
+            // {@code table}.
+            // Tenant-scoping asymmetry by design: the lock acquire above passes
+            // {@code tenantIdToUse}, but {@code acquireTransformLock} drops the tenant before
+            // writing the lock row so all tenants contend on the same (schema, table) lock key;
+            // the getTableNoCache fetch below is implicitly scoped to
+            // {@code connection.getTenantId()} and returns the caller's tenant-specific view of
+            // the table.
+            freshTable = connection.getTableNoCache(SchemaUtil.getTableName(schemaName, tableName));
+            isTransformNeeded = TransformClient.checkIsTransformNeeded(metaProperties, schemaName,
+              freshTable, tableName, null, tenantIdToUse, connection);
+          }
+        }
+
         MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
-        changingPhoenixTableProperty = evaluateStmtProperties(metaProperties,
-          metaPropertiesEvaluated, table, schemaName, tableName, areWeIntroducingTTLAtThisLevel);
+        changingPhoenixTableProperty =
+          evaluateStmtProperties(metaProperties, metaPropertiesEvaluated, freshTable, schemaName,
+            tableName, areWeIntroducingTTLAtThisLevel);
         if (areWeIntroducingTTLAtThisLevel.booleanValue()) {
           // As we are introducing TTL for the first time at this level, we need to check
           // if TTL is already defined up or down in the hierarchy.
@@ -4927,26 +5000,6 @@ public class MetaDataClient {
            * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl# validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[], byte[], List, int)}
            * we are already traversing through allDescendantViews.
            */
-        }
-
-        boolean isTransformNeeded = TransformClient.checkIsTransformNeeded(metaProperties,
-          schemaName, table, tableName, null, tenantIdToUse, connection);
-        if (isTransformNeeded) {
-          // We can add a support for these later. For now, not supported.
-          if (MetaDataUtil.hasLocalIndexTable(connection, physicalTableName.getBytes())) {
-            throw new SQLExceptionInfo.Builder(
-              SQLExceptionCode.CANNOT_TRANSFORM_TABLE_WITH_LOCAL_INDEX).setSchemaName(schemaName)
-                .setTableName(tableName).build().buildException();
-          }
-          if (table.isAppendOnlySchema()) {
-            throw new SQLExceptionInfo.Builder(
-              SQLExceptionCode.CANNOT_TRANSFORM_TABLE_WITH_APPEND_ONLY_SCHEMA)
-                .setSchemaName(schemaName).setTableName(tableName).build().buildException();
-          }
-          if (table.isTransactional()) {
-            throw new SQLExceptionInfo.Builder(CANNOT_TRANSFORM_TRANSACTIONAL_TABLE)
-              .setSchemaName(schemaName).setTableName(tableName).build().buildException();
-          }
         }
 
         // If changing isImmutableRows to true or it's not being changed and is already true
@@ -5184,7 +5237,7 @@ public class MetaDataClient {
         long seqNum = 0;
         if (changingPhoenixTableProperty || columnDefs.size() > 0) {
           seqNum =
-            incrementTableSeqNum(table, tableType, columnDefs.size(), metaPropertiesEvaluated);
+            incrementTableSeqNum(freshTable, tableType, columnDefs.size(), metaPropertiesEvaluated);
 
           tableMetaData
             .addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
@@ -5194,8 +5247,8 @@ public class MetaDataClient {
         PTable transformingNewTable = null;
         if (isTransformNeeded) {
           try {
-            transformingNewTable = TransformClient.addTransform(connection, tenantIdToUse, table,
-              metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
+            transformingNewTable = TransformClient.addTransform(connection, tenantIdToUse,
+              freshTable, metaProperties, seqNum, PTable.TransformType.METADATA_TRANSFORM);
           } catch (SQLException ex) {
             connection.rollback();
             throw ex;
@@ -5407,6 +5460,13 @@ public class MetaDataClient {
         deleteCell(null, physicalSchemaName, physicalTableName, null);
       }
       deleteMutexCells(physicalSchemaName, physicalTableName, acquiredColumnMutexSet);
+      if (acquiredTransformLock) {
+        try {
+          connection.getQueryServices().releaseTransformLock(tenantIdToUse, schemaName, tableName);
+        } catch (SQLException e) {
+          LOGGER.warn("Failed to release transform lock for {}.{}", schemaName, tableName, e);
+        }
+      }
     }
   }
 
@@ -5955,18 +6015,19 @@ public class MetaDataClient {
     boolean wasAutoCommit = connection.getAutoCommit();
     String dataTableName;
     long seqNum = 0L;
+    String tenantId =
+      connection.getTenantId() == null ? null : connection.getTenantId().getString();
+    String schemaName = statement.getTable().getName().getSchemaName();
+    String tableName = null;
+    boolean acquiredTransformLock = false;
     try {
       dataTableName = statement.getTableName();
       final String indexName = statement.getTable().getName().getTableName();
       boolean isAsync = statement.isAsync();
       boolean isRebuildAll = statement.isRebuildAll();
-      String tenantId =
-        connection.getTenantId() == null ? null : connection.getTenantId().getString();
       PTable table =
         FromCompiler.getIndexResolver(statement, connection).getTables().get(0).getTable();
-
-      String schemaName = statement.getTable().getName().getSchemaName();
-      String tableName = table.getTableName().getString();
+      tableName = table.getTableName().getString();
 
       Map<String, List<Pair<String, Object>>> properties =
         new HashMap<>(statement.getProps().size());
@@ -5976,9 +6037,6 @@ public class MetaDataClient {
 
       boolean isTransformNeeded = TransformClient.checkIsTransformNeeded(metaProperties, schemaName,
         table, indexName, dataTableName, tenantId, connection);
-      MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
-      boolean changingPhoenixTableProperty = evaluateStmtProperties(metaProperties,
-        metaPropertiesEvaluated, table, schemaName, tableName, new MutableBoolean(false));
 
       PIndexState newIndexState = statement.getIndexState();
       IndexConsistency newIndexConsistency = statement.getIndexConsistency();
@@ -6025,6 +6083,43 @@ public class MetaDataClient {
       connection.setAutoCommit(false);
       // Confirm index table is valid and up-to-date
       TableRef indexRef = FromCompiler.getResolver(statement, connection).getTables().get(0);
+
+      // If the statement is a transform-triggering ALTER INDEX, acquire the transform lock and
+      // re-check freshness under the lock BEFORE we commit any index-state UPSERT. Otherwise a
+      // contending caller would see (or leave behind) a half-committed BUILDING state if the
+      // lock acquire failed below.
+      PTable freshTable = table;
+      if (isTransformNeeded) {
+        if (indexRef.getTable().getViewIndexId() != null) {
+          throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_TRANSFORM_LOCAL_OR_VIEW_INDEX)
+            .setSchemaName(schemaName).setTableName(indexName).build().buildException();
+        }
+        // Lock granularity: keyed on (schemaName, tableName) where tableName here is the index's
+        // logical name (see line above where it is bound to the resolved index PTable). This
+        // matches the SYSTEM.TRANSFORM primary key (TENANT_ID, TABLE_SCHEM, LOGICAL_TABLE_NAME).
+        // A concurrent ALTER on this same index contends here; a concurrent ALTER on the parent
+        // data table (or on a sibling index) writes a different SYSTEM.TRANSFORM PK row and is
+        // intentionally NOT blocked — by-design, an operator may transform a data table and its
+        // indexes in parallel.
+        acquiredTransformLock =
+          connection.getQueryServices().acquireTransformLock(tenantId, schemaName, tableName);
+        if (!acquiredTransformLock) {
+          throw new SQLExceptionInfo.Builder(
+            SQLExceptionCode.CANNOT_MODIFY_TABLE_WITH_TRANSFORM_IN_PROGRESS)
+              .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+        }
+        // Re-check under lock with fresh metadata: a concurrent transform-triggering ALTER may
+        // have committed between our first checkIsTransformNeeded and the lock acquire. If the
+        // observed transform is no longer needed, drop through and treat as no-op.
+        freshTable = connection.getTableNoCache(SchemaUtil.getTableName(schemaName, tableName));
+        isTransformNeeded = TransformClient.checkIsTransformNeeded(metaProperties, schemaName,
+          freshTable, indexName, dataTableName, tenantId, connection);
+      }
+
+      MetaPropertiesEvaluated metaPropertiesEvaluated = new MetaPropertiesEvaluated();
+      boolean changingPhoenixTableProperty = evaluateStmtProperties(metaProperties,
+        metaPropertiesEvaluated, freshTable, schemaName, tableName, new MutableBoolean(false));
+
       try (PreparedStatement tableUpsert = connection.prepareStatement(
         newIndexState == PIndexState.ACTIVE ? UPDATE_INDEX_STATE_TO_ACTIVE : UPDATE_INDEX_STATE)) {
         tableUpsert.setString(1,
@@ -6044,14 +6139,15 @@ public class MetaDataClient {
       connection.rollback();
 
       if (changingPhoenixTableProperty) {
-        seqNum = incrementTableSeqNum(table, statement.getTableType(), 0, metaPropertiesEvaluated);
+        seqNum =
+          incrementTableSeqNum(freshTable, statement.getTableType(), 0, metaPropertiesEvaluated);
         tableMetadata
           .addAll(connection.getMutationState().toMutations(timeStamp).next().getSecond());
         connection.rollback();
       }
 
       MetaDataMutationResult result = connection.getQueryServices().updateIndexState(tableMetadata,
-        dataTableName, properties, table);
+        dataTableName, properties, freshTable);
 
       try {
         MutationCode code = result.getMutationCode();
@@ -6066,13 +6162,8 @@ public class MetaDataClient {
         }
 
         if (isTransformNeeded) {
-          if (indexRef.getTable().getViewIndexId() != null) {
-            throw new SQLExceptionInfo.Builder(
-              SQLExceptionCode.CANNOT_TRANSFORM_LOCAL_OR_VIEW_INDEX).setSchemaName(schemaName)
-                .setTableName(indexName).build().buildException();
-          }
           try {
-            TransformClient.addTransform(connection, tenantId, table, metaProperties, seqNum,
+            TransformClient.addTransform(connection, tenantId, freshTable, metaProperties, seqNum,
               PTable.TransformType.METADATA_TRANSFORM);
           } catch (SQLException ex) {
             connection.rollback();
@@ -6193,6 +6284,13 @@ public class MetaDataClient {
       return new MutationState(0, 0, connection);
     } finally {
       connection.setAutoCommit(wasAutoCommit);
+      if (acquiredTransformLock) {
+        try {
+          connection.getQueryServices().releaseTransformLock(tenantId, schemaName, tableName);
+        } catch (SQLException e) {
+          LOGGER.warn("Failed to release transform lock for {}.{}", schemaName, tableName, e);
+        }
+      }
     }
   }
 

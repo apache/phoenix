@@ -298,6 +298,42 @@ public interface ConnectionQueryServices extends QueryServices, MetaDataMutated 
     String columnName, String familyName) throws SQLException;
 
   /**
+   * Acquire the transform lock on the given logical table. Specifically serializes
+   * transform-triggering DDL (ALTER TABLE / ALTER INDEX paths whose property changes require a new
+   * physical table) with concurrent transform lifecycle operations. Non-transform-triggering ALTERs
+   * (e.g., SET TTL, ADD COLUMN, SET IMMUTABLE_ROWS) do not contend on this lock.
+   * <p>
+   * Lock scope: keyed on {@code (schemaName, tableName)} only — the {@code tenantId} arg is
+   * accepted for API symmetry but does NOT participate in the lock rowkey. A transform-triggering
+   * change on a (schema, table) blocks any new transform attempt on the same table regardless of
+   * tenant, and vice versa.
+   * <p>
+   * Implemented on top of SYSTEM.MUTEX, so the lock auto-expires after the column-family TTL
+   * ({@link org.apache.phoenix.jdbc.PhoenixDatabaseMetaData#TTL_FOR_MUTEX} = 15 min) if the holder
+   * dies without releasing.
+   * <p>
+   * Callers MUST invoke {@link #releaseTransformLock} from a {@code finally} block on every path
+   * where this method returned {@code true}.
+   * <p>
+   * Caller is responsible for completing the operation within the column-family TTL; this is a
+   * coarse advisory lock with no fencing token. Holders that pause past the TTL may both observe
+   * lock-acquired simultaneously.
+   * @return true if the caller acquired the lock; false if it is currently held by another caller
+   */
+  boolean acquireTransformLock(String tenantId, String schemaName, String tableName)
+    throws SQLException;
+
+  /**
+   * Release the transform lock on the given logical table. Caller MUST call this from a
+   * {@code finally} block whenever {@link #acquireTransformLock} returned {@code true}. The release
+   * deletes the lock cell unconditionally; callers MUST NOT call release after the column-family
+   * TTL expiry, otherwise a different caller's lock cell may be deleted.
+   * @see org.apache.phoenix.end2end.transform.TransformLockIT#testStrayReleaseDoesNotDeleteAnotherCallersLock
+   */
+  void releaseTransformLock(String tenantId, String schemaName, String tableName)
+    throws SQLException;
+
+  /**
    * Truncate a phoenix table
    */
   void truncateTable(String schemaName, String tableName, boolean isNamespaceMapped,
