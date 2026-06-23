@@ -112,10 +112,12 @@ public class ReplicationLogReplayService {
   }
 
   private ReplicationLogReplayService(long fixedConsistencyPoint) {
+    this.conf = null;
     this.cachedConsistencyPoint = () -> fixedConsistencyPoint;
   }
 
   private ReplicationLogReplayService(Supplier<Long> supplier) {
+    this.conf = null;
     this.cachedConsistencyPoint = Suppliers.memoizeWithExpiration(supplier,
       CONSISTENCY_POINT_CACHE_TTL_SECONDS, TimeUnit.SECONDS);
   }
