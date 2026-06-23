@@ -52,12 +52,11 @@ public interface MetricsIndexCDCConsumerSource extends BaseSource {
 
   String CDC_EVENT_SKIPPED_COUNT = "cdcEventSkippedCount";
   String CDC_EVENT_SKIPPED_COUNT_DESC =
-    "The number of times the consumer permanently advanced past CDC events whose data table "
+    "The number of CDC events the consumer permanently advanced past because their data table "
       + "row state could not be read within phoenix.index.cdc.consumer.max.data.visibility.retries"
-      + " attempts. Each increment represents one or more CDC events that will never be applied "
-      + "to the eventually consistent index \u2014 typically caused by failed or aborted data "
-      + "table mutations upstream. Non-zero values indicate silent data divergence between the "
-      + "data table and its EC indexes.";
+      + " attempts. Each event counted will never be applied to the eventually consistent index "
+      + "\u2014 typically caused by failed or aborted data table mutations upstream. Non-zero "
+      + "values indicate silent data divergence between the data table and its EC indexes.";
 
   String CDC_PARENT_REPLAY_ACTIVE_REGIONS = "cdcParentReplayActiveRegions";
   String CDC_PARENT_REPLAY_ACTIVE_REGIONS_DESC =
@@ -70,10 +69,12 @@ public interface MetricsIndexCDCConsumerSource extends BaseSource {
 
   String CDC_PARENT_REPLAY_DURATION = "cdcParentReplayDuration";
   String CDC_PARENT_REPLAY_DURATION_DESC =
-    "Histogram (milliseconds) of how long it took to fully replay one ancestor partition during "
-      + "post-split / post-merge catch-up. One sample is emitted per parent partition when this "
-      + "consumer either marks it COMPLETE or observes another consumer marking it COMPLETE. "
-      + "Ancestors that were already COMPLETE when discovered emit no sample.";
+    "Histogram (milliseconds) of how long this consumer spent replaying one ancestor partition "
+      + "during post-split / post-merge catch-up, measured from when this consumer joined the "
+      + "replay until it reached a terminal state. One sample is emitted per parent partition "
+      + "when this consumer either marks it COMPLETE or observes another consumer marking it "
+      + "COMPLETE \u2014 in the latter case the sample is shorter than the end-to-end partition "
+      + "replay time. Ancestors that were already COMPLETE when discovered emit no sample.";
 
   String CDC_CONSUMER_ACTIVE_REGIONS = "cdcConsumerActiveRegions";
   String CDC_CONSUMER_ACTIVE_REGIONS_DESC =
@@ -138,8 +139,9 @@ public interface MetricsIndexCDCConsumerSource extends BaseSource {
    * Increments the count of CDC events permanently skipped after exhausting data-visibility
    * retries. See {@link #CDC_EVENT_SKIPPED_COUNT_DESC}.
    * @param dataTableName physical data table name
+   * @param count         number of CDC events skipped in this give-up event
    */
-  void incrementCdcEventSkippedCount(String dataTableName);
+  void incrementCdcEventSkippedCount(String dataTableName, long count);
 
   /**
    * Increments the parent-region replay active gauge by 1. Must be paired with a corresponding

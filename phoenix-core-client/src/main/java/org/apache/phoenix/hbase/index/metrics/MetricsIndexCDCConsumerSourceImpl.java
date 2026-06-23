@@ -110,9 +110,11 @@ public class MetricsIndexCDCConsumerSourceImpl extends BaseSourceImpl
   }
 
   @Override
-  public void incrementCdcEventSkippedCount(String dataTableName) {
-    incrementTableSpecificCounter(CDC_EVENT_SKIPPED_COUNT, dataTableName);
-    cdcEventSkippedCounter.incr();
+  public void incrementCdcEventSkippedCount(String dataTableName, long count) {
+    MutableFastCounter tableCounter =
+      getMetricsRegistry().getCounter(getMetricName(CDC_EVENT_SKIPPED_COUNT, dataTableName), 0);
+    tableCounter.incr(count);
+    cdcEventSkippedCounter.incr(count);
   }
 
   @Override

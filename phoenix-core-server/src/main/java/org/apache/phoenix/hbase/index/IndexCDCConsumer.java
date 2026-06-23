@@ -1118,6 +1118,7 @@ public class IndexCDCConsumer implements Runnable {
       List<Pair<Long, IndexMutationsProtos.DataRowStates>> batchStates = new ArrayList<>();
       long newLastTimestamp = lastProcessedTimestamp;
       long[] lastScannedTimestamp = { lastProcessedTimestamp };
+      long[] scannedRowCount = { 0L };
       boolean hasMoreRows = true;
       int retryCount = 0;
       // Captured immediately before each query so the empty-poll watermark cannot over-advance
@@ -1127,18 +1128,19 @@ public class IndexCDCConsumer implements Runnable {
         lastQueryStartTime = EnvironmentEdgeManager.currentTimeMillis();
         try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
           setStatementParams(scanInfo, partitionId, isParentReplay, newLastTimestamp, ps);
-          Pair<Long, Boolean> result =
-            getDataRowStatesAndTimestamp(ps, newLastTimestamp, batchStates, lastScannedTimestamp);
+          Pair<Long, Boolean> result = getDataRowStatesAndTimestamp(ps, newLastTimestamp,
+            batchStates, lastScannedTimestamp, scannedRowCount);
           hasMoreRows = result.getSecond();
           if (hasMoreRows) {
             if (!batchStates.isEmpty()) {
               newLastTimestamp = result.getFirst();
             } else if (retryCount >= maxDataVisibilityRetries) {
               LOG.warn(
-                "Skipping CDC events for table {} partition {} from timestamp {}"
+                "Skipping {} CDC events for table {} partition {} from timestamp {}"
                   + " to {} after {} retries — data table mutations may have failed",
-                dataTableName, partitionId, newLastTimestamp, lastScannedTimestamp[0], retryCount);
-              metricSource.incrementCdcEventSkippedCount(dataTableName);
+                scannedRowCount[0], dataTableName, partitionId, newLastTimestamp,
+                lastScannedTimestamp[0], retryCount);
+              metricSource.incrementCdcEventSkippedCount(dataTableName, scannedRowCount[0]);
               newLastTimestamp = lastScannedTimestamp[0];
               break;
             } else {
@@ -1166,8 +1168,8 @@ public class IndexCDCConsumer implements Runnable {
           int idx = scanInfo.bindParams(ps, 1);
           ps.setString(idx++, partitionId);
           ps.setDate(idx, new Date(newLastTimestamp));
-          Pair<Long, Boolean> result =
-            getDataRowStatesAndTimestamp(ps, newLastTimestamp, batchStates, lastScannedTimestamp);
+          Pair<Long, Boolean> result = getDataRowStatesAndTimestamp(ps, newLastTimestamp,
+            batchStates, lastScannedTimestamp, scannedRowCount);
           newLastTimestamp = result.getFirst();
           if (batchStates.isEmpty()) {
             newLastTimestamp = timestampToRefetch;
@@ -1211,13 +1213,15 @@ public class IndexCDCConsumer implements Runnable {
 
   private static Pair<Long, Boolean> getDataRowStatesAndTimestamp(PreparedStatement ps,
     long initialLastTimestamp, List<Pair<Long, IndexMutationsProtos.DataRowStates>> batchStates,
-    long[] lastScannedTimestamp) throws SQLException, IOException {
+    long[] lastScannedTimestamp, long[] scannedRowCount) throws SQLException, IOException {
     boolean hasRows = false;
     long lastTimestamp = initialLastTimestamp;
     lastScannedTimestamp[0] = initialLastTimestamp;
+    scannedRowCount[0] = 0L;
     try (ResultSet rs = ps.executeQuery()) {
       while (rs.next()) {
         hasRows = true;
+        scannedRowCount[0]++;
         long rowTimestamp = rs.getDate(1).getTime();
         lastScannedTimestamp[0] = rowTimestamp;
         String cdcValue = rs.getString(2);
