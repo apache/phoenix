@@ -18,6 +18,7 @@
 package org.apache.phoenix.replication.reader;
 
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY;
+import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.CONSISTENCY_POINT_UNAVAILABLE;
 import static org.apache.phoenix.util.TestUtil.assertRawRowCount;
 import static org.junit.Assert.assertFalse;
 
@@ -206,9 +207,9 @@ public class CompactionReplicationGuardIT extends BaseTest {
       conn.commit();
       injectEdge.incrementValue(1);
 
-      // Inject consistency point of 0 — simulating fallback when replay service is unavailable
-      ReplicationLogReplayService.setConsistencyPointForTesting(
-        getUtility().getConfiguration(), 0L);
+      // Inject consistency point as UNAVAILABLE — simulating fallback when replay service fails
+      ReplicationLogReplayService.setConsistencyPointForTesting(getUtility().getConfiguration(),
+        CONSISTENCY_POINT_UNAVAILABLE);
 
       // Advance past maxLookback
       injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000 + 1000);
@@ -222,9 +223,9 @@ public class CompactionReplicationGuardIT extends BaseTest {
   }
 
   /**
-   * Test 5: Guard retains delete markers on a table with explicit TTL. The consistency point is
-   * set BEFORE the delete, time advances past both TTL and maxLookback, and the guard still
-   * retains the delete marker because its timestamp is newer than the consistency point.
+   * Test 5: Guard retains delete markers on a table with explicit TTL. The consistency point is set
+   * BEFORE the delete, time advances past both TTL and maxLookback, and the guard still retains the
+   * delete marker because its timestamp is newer than the consistency point.
    */
   @Test(timeout = 120000L)
   public void testGuardRetainsDeleteMarkersWithExplicitTTL() throws Exception {
@@ -259,8 +260,8 @@ public class CompactionReplicationGuardIT extends BaseTest {
   }
 
   private void injectMockConsistencyPoint(long consistencyPoint) {
-    ReplicationLogReplayService.setConsistencyPointForTesting(
-      getUtility().getConfiguration(), consistencyPoint);
+    ReplicationLogReplayService.setConsistencyPointForTesting(getUtility().getConfiguration(),
+      consistencyPoint);
   }
 
   private void flush(TableName table) throws IOException {

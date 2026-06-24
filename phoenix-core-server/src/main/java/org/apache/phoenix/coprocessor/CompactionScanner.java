@@ -210,7 +210,8 @@ public class CompactionScanner implements InternalScanner {
       this.replicationConsistencyPoint =
         ReplicationLogReplayService.resolveConsistencyPoint(conf, tableName, columnFamilyName);
     } else {
-      this.replicationConsistencyPoint = Long.MAX_VALUE;
+      this.replicationConsistencyPoint =
+        ReplicationLogReplayService.CONSISTENCY_POINT_GUARD_DISABLED;
     }
     ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
     this.minVersion = cfd.getMinVersions();
@@ -1645,11 +1646,29 @@ public class CompactionScanner implements InternalScanner {
 
   /**
    * Computes the effective max-lookback boundary for a row, capped by the replication consistency
-   * point. Formula: min(max(ttlWindowStart, maxLookbackWindowStart), consistencyPoint).
+   * point. The consistency point represents an exclusive upper bound: everything with ts <
+   * consistencyPoint has been replayed. We subtract 1 so that cells at exactly ts ==
+   * consistencyPoint satisfy the strict-greater retention check and are retained.
+   * @param ttlWindowStart              row TTL window start in millis since epoch
+   * @param maxLookbackWindowStart      store-level max-lookback window start in millis since epoch
+   * @param replicationConsistencyPoint exclusive upper bound of replayed timestamps;
+   *                                    CONSISTENCY_POINT_UNAVAILABLE (0) retains all,
+   *                                    CONSISTENCY_POINT_GUARD_DISABLED (Long.MAX_VALUE) means
+   *                                    guard is a no-op
+   * @return effective boundary for the strict-greater retention compare (millis since epoch)
    */
   public static long computeRowMaxLookbackWithGuard(long ttlWindowStart,
     long maxLookbackWindowStart, long replicationConsistencyPoint) {
-    return Math.min(Math.max(ttlWindowStart, maxLookbackWindowStart), replicationConsistencyPoint);
+    if (
+      replicationConsistencyPoint == ReplicationLogReplayService.CONSISTENCY_POINT_UNAVAILABLE
+        || replicationConsistencyPoint
+            == ReplicationLogReplayService.CONSISTENCY_POINT_GUARD_DISABLED
+    ) {
+      return Math.min(Math.max(ttlWindowStart, maxLookbackWindowStart),
+        replicationConsistencyPoint);
+    }
+    return Math.min(Math.max(ttlWindowStart, maxLookbackWindowStart),
+      replicationConsistencyPoint - 1);
   }
 
   /**
@@ -1681,8 +1700,11 @@ public class CompactionScanner implements InternalScanner {
       this.maxLookbackWindowStartForRow = computeRowMaxLookbackWithGuard(ttlWindowStart,
         maxLookbackWindowStart, replicationConsistencyPoint);
       if (LOGGER.isTraceEnabled()) {
-        LOGGER.trace(String.format("RowContext:- (ttlWindowStart=%d, maxLookbackWindowStart=%d)",
-          ttlWindowStart, maxLookbackWindowStart));
+        LOGGER.trace(String.format(
+          "RowContext:- (ttlWindowStart=%d, maxLookbackWindowStart=%d, "
+            + "replicationConsistencyPoint=%d, maxLookbackWindowStartForRow=%d)",
+          ttlWindowStart, maxLookbackWindowStart, replicationConsistencyPoint,
+          maxLookbackWindowStartForRow));
       }
     }
 

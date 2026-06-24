@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.replication.reader;
 
+import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.CONSISTENCY_POINT_UNAVAILABLE;
 import static org.junit.Assert.assertEquals;
 
 import java.util.concurrent.atomic.AtomicInteger;
@@ -71,7 +72,7 @@ public class ReplicationConsistencyPointTest {
       String cf = "0";
 
       long result1 = ReplicationLogReplayService.resolveConsistencyPoint(conf, table, cf);
-      assertEquals(0L, result1);
+      assertEquals(CONSISTENCY_POINT_UNAVAILABLE, result1);
 
       long result2 = ReplicationLogReplayService.resolveConsistencyPoint(conf, table, cf);
       assertEquals(700000L, result2);

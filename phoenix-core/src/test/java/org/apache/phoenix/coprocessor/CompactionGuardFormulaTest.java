@@ -17,14 +17,16 @@
  */
 package org.apache.phoenix.coprocessor;
 
+import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.CONSISTENCY_POINT_GUARD_DISABLED;
+import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.CONSISTENCY_POINT_UNAVAILABLE;
 import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
 /**
- * Unit tests for CompactionScanner.computeRowMaxLookbackWithGuard formula.
- * Covers scenarios including those unreachable via standard TTL floor enforcement
- * to guard against future changes to the TTL computation.
+ * Unit tests for CompactionScanner.computeRowMaxLookbackWithGuard formula. Covers scenarios
+ * including those unreachable via standard TTL floor enforcement to guard against future changes to
+ * the TTL computation.
  */
 public class CompactionGuardFormulaTest {
 
@@ -36,11 +38,11 @@ public class CompactionGuardFormulaTest {
     long maxLookbackWindowStart = 2000L;
     long ttlWindowStart = 3000L;
 
-    long result = CompactionScanner.computeRowMaxLookbackWithGuard(
-      ttlWindowStart, maxLookbackWindowStart, consistencyPoint);
+    long result = CompactionScanner.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
 
-    // max(3000, 2000) = 3000, min(3000, 1000) = 1000 → guard caps at consistencyPoint
-    assertEquals(consistencyPoint, result);
+    // max(3000, 2000) = 3000, min(3000, 999) = 999 → guard caps at consistencyPoint - 1
+    assertEquals(consistencyPoint - 1, result);
   }
 
   @Test
@@ -50,11 +52,11 @@ public class CompactionGuardFormulaTest {
     long ttlWindowStart = 2000L;
     long maxLookbackWindowStart = 3000L;
 
-    long result = CompactionScanner.computeRowMaxLookbackWithGuard(
-      ttlWindowStart, maxLookbackWindowStart, consistencyPoint);
+    long result = CompactionScanner.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
 
-    // max(2000, 3000) = 3000, min(3000, 1000) = 1000 → guard caps at consistencyPoint
-    assertEquals(consistencyPoint, result);
+    // max(2000, 3000) = 3000, min(3000, 999) = 999 → guard caps at consistencyPoint - 1
+    assertEquals(consistencyPoint - 1, result);
   }
 
   @Test
@@ -64,37 +66,67 @@ public class CompactionGuardFormulaTest {
     long ttlWindowStart = 1000L;
     long consistencyPoint = 5000L;
 
-    long result = CompactionScanner.computeRowMaxLookbackWithGuard(
-      ttlWindowStart, maxLookbackWindowStart, consistencyPoint);
+    long result = CompactionScanner.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
 
-    // max(1000, 2000) = 2000, min(2000, 5000) = 2000 → guard doesn't restrict
+    // max(1000, 2000) = 2000, min(2000, 4999) = 2000 → guard doesn't restrict
     assertEquals(maxLookbackWindowStart, result);
   }
 
   @Test
   public void testConsistencyPointZero_retainsAll() {
-    // consistencyPoint = 0 signals fallback — retain all delete markers
+    // consistencyPoint = UNAVAILABLE signals fallback — retain all delete markers
     long maxLookbackWindowStart = 2000L;
     long ttlWindowStart = 3000L;
-    long consistencyPoint = 0L;
+    long consistencyPoint = CONSISTENCY_POINT_UNAVAILABLE;
 
-    long result = CompactionScanner.computeRowMaxLookbackWithGuard(
-      ttlWindowStart, maxLookbackWindowStart, consistencyPoint);
+    long result = CompactionScanner.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
 
-    assertEquals(0L, result);
+    assertEquals(CONSISTENCY_POINT_UNAVAILABLE, result);
   }
 
   @Test
   public void testConsistencyPointMaxValue_guardDisabled() {
-    // Long.MAX_VALUE used when replay is off — guard is effectively a no-op
+    // GUARD_DISABLED used when replay is off — guard is effectively a no-op
     long maxLookbackWindowStart = 2000L;
     long ttlWindowStart = 3000L;
-    long consistencyPoint = Long.MAX_VALUE;
+    long consistencyPoint = CONSISTENCY_POINT_GUARD_DISABLED;
 
-    long result = CompactionScanner.computeRowMaxLookbackWithGuard(
-      ttlWindowStart, maxLookbackWindowStart, consistencyPoint);
+    long result = CompactionScanner.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
 
     // max(3000, 2000) = 3000, min(3000, MAX_VALUE) = 3000 → normal behavior
     assertEquals(ttlWindowStart, result);
+  }
+
+  @Test
+  public void testBoundaryDeleteAtExactlyConsistencyPoint_isRetained() {
+    // A delete marker at ts == consistencyPoint has NOT been replayed (exclusive upper bound).
+    // The formula must produce a boundary below consistencyPoint so that the strict-greater
+    // retention check (ts > boundary) retains it.
+    long consistencyPoint = 5000L;
+    long maxLookbackWindowStart = 6000L;
+    long ttlWindowStart = 4000L;
+
+    long result = CompactionScanner.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
+
+    // Boundary = consistencyPoint - 1 = 4999; a cell at ts=5000 satisfies ts > 4999
+    assertEquals(consistencyPoint - 1, result);
+  }
+
+  @Test
+  public void testConsistencyPointBetweenInputs() {
+    // ttlWindowStart < consistencyPoint < maxLookbackWindowStart
+    long ttlWindowStart = 1000L;
+    long consistencyPoint = 2500L;
+    long maxLookbackWindowStart = 3000L;
+
+    long result = CompactionScanner.computeRowMaxLookbackWithGuard(ttlWindowStart,
+      maxLookbackWindowStart, consistencyPoint);
+
+    // max(1000, 3000) = 3000, min(3000, 2499) = 2499 → guard caps
+    assertEquals(consistencyPoint - 1, result);
   }
 }
