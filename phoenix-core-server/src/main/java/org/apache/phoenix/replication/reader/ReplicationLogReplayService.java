@@ -101,13 +101,13 @@ public class ReplicationLogReplayService {
     }, CONSISTENCY_POINT_CACHE_TTL_SECONDS, TimeUnit.SECONDS);
   }
 
-  private ReplicationLogReplayService(long fixedConsistencyPoint) {
-    this.conf = null;
+  private ReplicationLogReplayService(Configuration conf, long fixedConsistencyPoint) {
+    this.conf = conf;
     this.cachedConsistencyPoint = () -> fixedConsistencyPoint;
   }
 
-  private ReplicationLogReplayService(Supplier<Long> supplier) {
-    this.conf = null;
+  private ReplicationLogReplayService(Configuration conf, Supplier<Long> supplier) {
+    this.conf = conf;
     this.cachedConsistencyPoint = Suppliers.memoizeWithExpiration(supplier,
       CONSISTENCY_POINT_CACHE_TTL_SECONDS, TimeUnit.SECONDS);
   }
@@ -131,13 +131,15 @@ public class ReplicationLogReplayService {
   }
 
   @VisibleForTesting
-  public static void setConsistencyPointForTesting(long fixedConsistencyPoint) {
-    instance = new ReplicationLogReplayService(fixedConsistencyPoint);
+  public static void setConsistencyPointForTesting(Configuration conf,
+    long fixedConsistencyPoint) {
+    instance = new ReplicationLogReplayService(conf, fixedConsistencyPoint);
   }
 
   @VisibleForTesting
-  public static void setConsistencyPointSupplierForTesting(Supplier<Long> supplier) {
-    instance = new ReplicationLogReplayService(supplier);
+  public static void setConsistencyPointSupplierForTesting(Configuration conf,
+    Supplier<Long> supplier) {
+    instance = new ReplicationLogReplayService(conf, supplier);
   }
 
   @VisibleForTesting

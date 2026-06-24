@@ -30,14 +30,14 @@ public class ReplicationConsistencyPointTest {
 
   @Test
   public void testCachedConsistencyPointAvoidsRepeatedFetches() {
+    Configuration conf = new Configuration(false);
     AtomicInteger fetchCount = new AtomicInteger(0);
-    ReplicationLogReplayService.setConsistencyPointSupplierForTesting(() -> {
+    ReplicationLogReplayService.setConsistencyPointSupplierForTesting(conf, () -> {
       fetchCount.incrementAndGet();
       return 500000L;
     });
 
     try {
-      Configuration conf = new Configuration(false);
       String table = "TEST_TABLE";
       String cf = "0";
 
@@ -56,8 +56,9 @@ public class ReplicationConsistencyPointTest {
 
   @Test
   public void testTransientFailureNotCached_retriesOnNextCall() {
+    Configuration conf = new Configuration(false);
     AtomicInteger fetchCount = new AtomicInteger(0);
-    ReplicationLogReplayService.setConsistencyPointSupplierForTesting(() -> {
+    ReplicationLogReplayService.setConsistencyPointSupplierForTesting(conf, () -> {
       int attempt = fetchCount.incrementAndGet();
       if (attempt == 1) {
         throw new RuntimeException("Simulated transient failure");
@@ -66,7 +67,6 @@ public class ReplicationConsistencyPointTest {
     });
 
     try {
-      Configuration conf = new Configuration(false);
       String table = "TEST_TABLE";
       String cf = "0";
 

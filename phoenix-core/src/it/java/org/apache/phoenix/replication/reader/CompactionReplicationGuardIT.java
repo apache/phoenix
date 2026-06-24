@@ -207,7 +207,8 @@ public class CompactionReplicationGuardIT extends BaseTest {
       injectEdge.incrementValue(1);
 
       // Inject consistency point of 0 — simulating fallback when replay service is unavailable
-      ReplicationLogReplayService.setConsistencyPointForTesting(0L);
+      ReplicationLogReplayService.setConsistencyPointForTesting(
+        getUtility().getConfiguration(), 0L);
 
       // Advance past maxLookback
       injectEdge.incrementValue(MAX_LOOKBACK_AGE * 1000 + 1000);
@@ -258,7 +259,8 @@ public class CompactionReplicationGuardIT extends BaseTest {
   }
 
   private void injectMockConsistencyPoint(long consistencyPoint) {
-    ReplicationLogReplayService.setConsistencyPointForTesting(consistencyPoint);
+    ReplicationLogReplayService.setConsistencyPointForTesting(
+      getUtility().getConfiguration(), consistencyPoint);
   }
 
   private void flush(TableName table) throws IOException {
