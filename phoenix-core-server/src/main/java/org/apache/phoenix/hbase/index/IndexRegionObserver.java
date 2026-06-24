@@ -747,12 +747,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // Extract HAGroupName from the mutations
       Optional<ReplicationLogGroup> logGroup = getHAGroupFromBatch(c.getEnvironment(), miniBatchOp);
 
-      // Mutation batches that arrive without a resolvable HA group cannot be evaluated against
-      // the cluster-role-based mutation-block gate. Track the bypass globally (not per-table)
-      // so operators can spot regressions where a write path forgets to attach the
-      // _HAGroupName attribute. Scope is intentionally !logGroup.isPresent() regardless of
-      // dataTableName — system-HA-group writes WITH a haGroup are an *intended* gate exemption
-      // (state writes must proceed during a block window) and are not counted as bypasses.
+      // Path-coverage counter: increments whenever a mutation batch reaches preBatchMutate
+      // without a resolvable HA group attribute, so the cluster-role-based mutation-block gate
+      // has no haGroupName to evaluate against and is skipped. This counts the code path being
+      // short-circuited — it does NOT imply any safety property was breached (when the block
+      // feature is disabled or no block window is active, there is no property to breach).
+      // Tracked globally rather than per-table so operators can compare baseline vs.
+      // post-deploy delta to spot new write paths that forgot to attach _HAGroupName.
+      // Intentionally scoped to !logGroup.isPresent() regardless of dataTableName —
+      // system-HA-group writes WITH a haGroup are an intended gate exemption (state writes
+      // must proceed during a block window) and are not counted here.
       if (!logGroup.isPresent()) {
         try {
           MetricsHaBypassSourceFactory.getInstance().incrementBypassedMutationBlockCount();

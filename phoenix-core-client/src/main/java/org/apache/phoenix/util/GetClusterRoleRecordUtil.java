@@ -218,6 +218,19 @@ public class GetClusterRoleRecordUtil {
         // Increment unconditionally so a failed tick still alternates next iteration.
         long tick = tickCount.getAndIncrement();
         GlobalClientMetrics.GLOBAL_HA_POLLER_TICK_COUNT.increment();
+        // Sample current CRR cache age into the gauge each tick. Without this, the
+        // HA_CRR_CACHE_AGE_MS counter-backed gauge is only updated on connect() and would
+        // not advance during idle periods between connects, making it look fresher than it
+        // actually is. Sampling here puts the gauge on a steady wall-clock cadence matching
+        // the poller's polling interval.
+        try {
+          GlobalClientMetrics.GLOBAL_HA_CRR_CACHE_AGE_MS.getMetric().set(haGroup.getCacheAgeMs());
+        } catch (Throwable t) {
+          // Metric sampling is best-effort; never let a metric write break the poller tick.
+          LOGGER.warn(
+            "Failed to sample HA_CRR_CACHE_AGE_MS on poller tick for HA group {}; " + "continuing",
+            haGroupName, t);
+        }
         String tickUrl = selectUrlForTick(url1, url2, tick);
         try {
           ClusterRoleRecord polledCrr =
