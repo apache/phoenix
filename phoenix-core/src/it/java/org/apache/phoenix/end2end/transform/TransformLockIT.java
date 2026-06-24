@@ -28,12 +28,14 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Properties;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.ConnectionQueryServicesImpl;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 /**
  * Integration tests for the transform-lock primitive on SYSTEM.MUTEX. The lock is the coordination
@@ -41,6 +43,7 @@ import org.junit.Test;
  * this IT exercises the primitive itself plus the wiring at the DDL callsites (concurrent ALTER
  * fast-fail and narrow-scope behavior for non-transform ALTERs).
  */
+@Category(ParallelStatsDisabledTest.class)
 public class TransformLockIT extends ParallelStatsDisabledIT {
 
   private static ConnectionQueryServices services(Connection conn) throws Exception {
