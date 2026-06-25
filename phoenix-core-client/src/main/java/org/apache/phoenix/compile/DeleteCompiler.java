@@ -1002,6 +1002,10 @@ public class DeleteCompiler {
         planSteps.add("    RETURNING *");
       }
       planSteps.addAll(queryPlanSteps);
+      // Surface the row-identity projection the scan actually reads so VERBOSE explain describes
+      // the delete rather than the count.
+      ExplainTable.overrideMutationProject(planSteps, explainPlanAttributes, newBuilder,
+        dataPlan.getProjector());
       if (getContext().isRoot()) {
         ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());
         ExplainTable.populateTopOfPlanEstimates(newBuilder, this);
