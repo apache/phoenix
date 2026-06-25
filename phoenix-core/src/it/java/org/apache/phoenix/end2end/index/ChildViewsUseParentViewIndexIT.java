@@ -167,7 +167,7 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
     String childViewScanKey = isChildView ? ",'Y'" : "";
     assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").serverFirstKeyOnlyProjection(true)
       .scanType("SKIP SCAN ON 3 KEYS").table("_IDX_" + baseTableName)
-      .keyRanges(" [" + Short.MIN_VALUE + ",'1'" + childViewScanKey + "] - [" + Short.MIN_VALUE
+      .keyRanges("[" + Short.MIN_VALUE + ",'1'" + childViewScanKey + "] - [" + Short.MIN_VALUE
         + ",'3'" + childViewScanKey + "]")
       .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
 
@@ -266,7 +266,7 @@ public class ChildViewsUseParentViewIndexIT extends ParallelStatsDisabledIT {
       + " AND (A_DATE > TO_DATE('2016-01-01 06:00:00.0')) " + " ORDER BY WO_ID, A_DATE DESC";
     assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").serverFirstKeyOnlyProjection(true)
       .scanType("SKIP SCAN ON 5 RANGES").table("_IDX_" + baseTableName)
-      .keyRanges(" [" + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx1',*] - ["
+      .keyRanges("[" + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx1',*] - ["
         + Short.MIN_VALUE + ",'00Dxxxxxxxxxxx1','003xxxxxxxxxxx5',~'2016-01-01 06:00:00.000']")
       .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
     ResultSet rs = conn.createStatement().executeQuery(sql);
