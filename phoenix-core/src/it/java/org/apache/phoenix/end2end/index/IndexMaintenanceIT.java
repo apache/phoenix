@@ -162,12 +162,12 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
         assertPlan(stmt.unwrap(PhoenixPreparedStatement.class)).scanType("RANGE SCAN")
           .tableContains("INDEX_TEST." + indexName + "(" + fullDataTableName + ")")
           .keyRanges(
-            " [1,'VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]")
+            "[1,'VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]")
           .clientSortAlgo("CLIENT MERGE SORT");
       } else {
         assertPlan(stmt.unwrap(PhoenixPreparedStatement.class)).scanType("RANGE SCAN")
           .tableContains("INDEX_TEST." + indexName).keyRanges(
-            " ['VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]");
+            "['VARCHAR1_CHAR1     _A.VARCHAR1_B.CHAR1   ',3,'2015-01-02 00:00:00.000',1,420,156,800,000,1,420,156,800,000]");
       }
 
       // verify that the correct results are returned
@@ -185,8 +185,8 @@ public class IndexMaintenanceIT extends ParallelStatsDisabledIT {
           + fullDataTableName;
       if (localIndex) {
         assertPlan(conn, indexSelectSql).scanType("RANGE SCAN")
-          .tableContains("INDEX_TEST." + indexName + "(" + fullDataTableName + ")")
-          .keyRanges(" [1]").clientSortAlgo("CLIENT MERGE SORT");
+          .tableContains("INDEX_TEST." + indexName + "(" + fullDataTableName + ")").keyRanges("[1]")
+          .clientSortAlgo("CLIENT MERGE SORT");
       } else {
         assertPlan(conn, indexSelectSql).scanType("FULL SCAN")
           .tableContains("INDEX_TEST." + indexName);

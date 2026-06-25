@@ -54,7 +54,7 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
     assertPlan(conn, "SELECT v1,v2 FROM v WHERE v2 > 'a' ORDER BY v2")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("_IDX_T")
-      .keyRanges(" [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]")
+      .keyRanges("[-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]")
       .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS);
   }
 
@@ -71,28 +71,28 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
     // Query without predicate ordered by full row key
     String sql = "SELECT * FROM v1 ORDER BY k1, k2, k3";
-    assertRangeScan(conn, sql, " ['tenant123456789']");
+    assertRangeScan(conn, sql, "['tenant123456789']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Predicate with valid partial PK
     sql = "SELECT * FROM v1 WHERE k1 = 'xyz' ORDER BY k1, k2, k3";
-    assertRangeScan(conn, sql, " ['tenant123456789','xyz']");
+    assertRangeScan(conn, sql, "['tenant123456789','xyz']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     sql = "SELECT * FROM v1 WHERE k1 > 'xyz' ORDER BY k1, k2, k3";
-    assertRangeScan(conn, sql, " ['tenant123456789','xy{'] - ['tenant123456789',*]");
+    assertRangeScan(conn, sql, "['tenant123456789','xy{'] - ['tenant123456789',*]");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     String datePredicate = createStaticDate();
     sql = "SELECT * FROM v1 WHERE k1 = 'xyz' AND k2 = '123456789012345' AND k3 < TO_DATE('"
       + datePredicate + "') ORDER BY k1, k2, k3";
-    assertRangeScan(conn, sql, " ['tenant123456789','xyz','123456789012345',*] - "
+    assertRangeScan(conn, sql, "['tenant123456789','xyz','123456789012345',*] - "
       + "['tenant123456789','xyz','123456789012345','2015-01-01 08:00:00.000']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Predicate without valid partial PK
     sql = "SELECT * FROM v1 WHERE k2 < 'abcde1234567890' ORDER BY k1, k2, k3";
-    assertRangeScanWithFilter(conn, sql, " ['tenant123456789']",
+    assertRangeScanWithFilter(conn, sql, "['tenant123456789']",
       "SERVER FILTER BY K2 < 'abcde1234567890'");
     assertOrderByHasBeenOptimizedOut(conn, sql);
   }
@@ -109,35 +109,35 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
     // Query without predicate ordered by full row key
     String sql = "SELECT * FROM v1 ORDER BY k2, k3";
-    assertRangeScan(conn, sql, " ['tenant123456789','xyz']");
+    assertRangeScan(conn, sql, "['tenant123456789','xyz']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Query without predicate ordered by full row key, but without column view predicate
     sql = "SELECT * FROM v1 ORDER BY k2, k3";
-    assertRangeScan(conn, sql, " ['tenant123456789','xyz']");
+    assertRangeScan(conn, sql, "['tenant123456789','xyz']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Predicate with valid partial PK
     sql = "SELECT * FROM v1 WHERE k1 = 'xyz' ORDER BY k2, k3";
-    assertRangeScan(conn, sql, " ['tenant123456789','xyz']");
+    assertRangeScan(conn, sql, "['tenant123456789','xyz']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     sql = "SELECT * FROM v1 WHERE k2 < 'abcde1234567890' ORDER BY k2, k3";
     assertRangeScan(conn, sql,
-      " ['tenant123456789','xyz',*] - ['tenant123456789','xyz','abcde1234567890']");
+      "['tenant123456789','xyz',*] - ['tenant123456789','xyz','abcde1234567890']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Predicate with full PK
     String datePredicate = createStaticDate();
     sql = "SELECT * FROM v1 WHERE k2 = '123456789012345' AND k3 < TO_DATE('" + datePredicate
       + "') ORDER BY k2, k3";
-    assertRangeScan(conn, sql, " ['tenant123456789','xyz','123456789012345',*] - "
+    assertRangeScan(conn, sql, "['tenant123456789','xyz','123456789012345',*] - "
       + "['tenant123456789','xyz','123456789012345','2015-01-01 08:00:00.000']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Predicate with valid partial PK
     sql = "SELECT * FROM v1 WHERE k3 < TO_DATE('" + datePredicate + "') ORDER BY k2, k3";
-    assertRangeScanWithFilter(conn, sql, " ['tenant123456789','xyz']",
+    assertRangeScanWithFilter(conn, sql, "['tenant123456789','xyz']",
       "SERVER FILTER BY K3 < DATE '" + datePredicate + "'");
     assertOrderByHasBeenOptimizedOut(conn, sql);
   }
@@ -155,17 +155,17 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
     // Query without predicate ordered by full row key
     String sql = "SELECT * FROM v1 ORDER BY k3 DESC";
-    assertRangeScan(conn, sql, " ['tenant123456789','xyz','abcde']");
+    assertRangeScan(conn, sql, "['tenant123456789','xyz','abcde']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Query without predicate ordered by full row key, but without column view predicate
     sql = "SELECT * FROM v1 ORDER BY k3 DESC";
-    assertRangeScan(conn, sql, " ['tenant123456789','xyz','abcde']");
+    assertRangeScan(conn, sql, "['tenant123456789','xyz','abcde']");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
     // Query with predicate ordered by full row key
     sql = "SELECT * FROM v1 WHERE k3 <= TO_DATE('" + createStaticDate() + "') ORDER BY k3 DESC";
-    assertRangeScan(conn, sql, " ['tenant123456789','xyz','abcde',~'2015-01-01 08:00:00.000'] - "
+    assertRangeScan(conn, sql, "['tenant123456789','xyz','abcde',~'2015-01-01 08:00:00.000'] - "
       + "['tenant123456789','xyz','abcde',*]");
     assertOrderByHasBeenOptimizedOut(conn, sql);
 
@@ -173,7 +173,7 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
     sql = "SELECT * FROM v1 WHERE k3 <= TO_DATE('" + createStaticDate() + "') ORDER BY k3";
     assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("T")
       .clientSortedBy("REVERSE")
-      .keyRanges(" ['tenant123456789','xyz','abcde',~'2015-01-01 08:00:00.000'] - "
+      .keyRanges("['tenant123456789','xyz','abcde',~'2015-01-01 08:00:00.000'] - "
         + "['tenant123456789','xyz','abcde',*]")
       .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
     assertOrderByHasBeenOptimizedOut(conn, sql);
@@ -196,7 +196,7 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
 
     assertPlan(conn, "SELECT v2 FROM v WHERE v2 > 'a' and k2 = 'a' ORDER BY v2,k2")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("_IDX_T")
-      .keyRanges(" [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]")
+      .keyRanges("[-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]")
       .serverFirstKeyOnlyProjection(true).indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS);
 
     // Won't use index b/c v1 is not in index, but should optimize out k2 still from the order by
@@ -205,7 +205,7 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
     // The index i1 is rejected because it does not cover v1, leaving the data table as the only
     // surviving candidate.
     assertPlan(conn, "SELECT v1 FROM v WHERE v2 > 'a' ORDER BY k2").iteratorType("PARALLEL 1-WAY")
-      .scanType("RANGE SCAN").table("T").keyRanges(" ['me']")
+      .scanType("RANGE SCAN").table("T").keyRanges("['me']")
       .serverWhereFilter("SERVER FILTER BY (V2 > 'a' AND K2 = 'a')")
       .indexRule(OptimizerReasons.RULE_ONLY_CANDIDATE).indexRejectedCount(1);
 
@@ -238,7 +238,7 @@ public class TenantSpecificViewIndexCompileTest extends BaseConnectionlessQueryT
     // the updatable view
     assertPlan(conn, "SELECT v2 FROM v2 WHERE v3 > 'a' and k2 = 'a' ORDER BY v3,k2")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("_IDX_T")
-      .keyRanges(" [-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]")
+      .keyRanges("[-9223372036854775808,'me','a'] - [-9223372036854775808,'me',*]")
       .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS);
   }
 

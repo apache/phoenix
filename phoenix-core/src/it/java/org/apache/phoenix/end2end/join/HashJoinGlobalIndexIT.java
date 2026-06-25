@@ -124,10 +124,10 @@ public class HashJoinGlobalIndexIT extends HashJoinIT {
   protected void assertJoinPlanWithIndexPlan1(Connection conn, String query) throws Exception {
     String idxItem = getSchemaName() + ".idx_item";
     String idxSupplier = getSchemaName() + ".idx_supplier";
-    assertPlan(conn, query).scanType("RANGE SCAN").table(idxItem).keyRanges(" ['T1'] - ['T5']")
+    assertPlan(conn, query).scanType("RANGE SCAN").table(idxItem).keyRanges("['T1'] - ['T5']")
       .serverFirstKeyOnlyProjection(true).subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(idxSupplier).keyRanges(" ['S1'] - ['S5']")
+      .scanType("RANGE SCAN").table(idxSupplier).keyRanges("['S1'] - ['S5']")
       .serverFirstKeyOnlyProjection(true).end();
   }
 
@@ -136,9 +136,9 @@ public class HashJoinGlobalIndexIT extends HashJoinIT {
     String idxItem = getSchemaName() + ".idx_item";
     String idxSupplier = getSchemaName() + ".idx_supplier";
     assertPlan(conn, query).scanType("SKIP SCAN ON 2 KEYS").table(idxItem)
-      .keyRanges(" ['T1'] - ['T5']").subPlanCount(1).subPlan(0)
+      .keyRanges("['T1'] - ['T5']").subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("SKIP SCAN ON 2 KEYS").table(idxSupplier).keyRanges(" ['S1'] - ['S5']")
+      .scanType("SKIP SCAN ON 2 KEYS").table(idxSupplier).keyRanges("['S1'] - ['S5']")
       .serverFirstKeyOnlyProjection(true).end();
   }
 
@@ -204,9 +204,8 @@ public class HashJoinGlobalIndexIT extends HashJoinIT {
     String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
     String idxItem = getSchemaName() + ".idx_item";
     String supplier = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
-    assertPlan(conn, query).scanType("RANGE SCAN").table(customer)
-      .keyRanges(" [*] - ['0000000005']").serverSortedBy("[\"C.customer_id\", \"I.0:NAME\"]")
-      .clientSortAlgo("CLIENT MERGE SORT")
+    assertPlan(conn, query).scanType("RANGE SCAN").table(customer).keyRanges("[*] - ['0000000005']")
+      .serverSortedBy("[\"C.customer_id\", \"I.0:NAME\"]").clientSortAlgo("CLIENT MERGE SORT")
       .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"C.customer_id\" IN (\"O.customer_id\")")
       .subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
@@ -277,10 +276,9 @@ public class HashJoinGlobalIndexIT extends HashJoinIT {
     String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
     String idxItem = getSchemaName() + ".idx_item";
     String supplier = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
-    assertPlan(conn, query).scanType("RANGE SCAN").table(customer)
-      .keyRanges(" [*] - ['0000000005']").serverSortedBy("[C.CID, QO.INAME]")
-      .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
-      .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+    assertPlan(conn, query).scanType("RANGE SCAN").table(customer).keyRanges("[*] - ['0000000005']")
+      .serverSortedBy("[C.CID, QO.INAME]").clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1)
+      .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
       .scanType("FULL SCAN").table(order)
       .serverWhereFilter("SERVER FILTER BY \"order_id\" != '000000000000003'").subPlanCount(1)
       .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")

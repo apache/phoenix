@@ -344,10 +344,10 @@ public abstract class ExplainTable {
       if (OrderBy.REV_ROW_KEY_ORDER_BY.equals(orderBy)) {
         explainPlanAttributesBuilder.setClientSortedBy("REVERSE");
       }
-      explainPlanAttributesBuilder.setExplainScanType(scanTypeDetails);
+      explainPlanAttributesBuilder.setExplainScanType(scanTypeDetails.trim());
       explainPlanAttributesBuilder.setTableName(tableName);
       if (!scanRanges.isPointLookup()) {
-        explainPlanAttributesBuilder.setKeyRanges(appendKeyRanges());
+        explainPlanAttributesBuilder.setKeyRanges(appendKeyRanges().trim());
       }
     }
 
@@ -662,7 +662,8 @@ public abstract class ExplainTable {
     if (countProject == null || countProject.isEmpty()) {
       return;
     }
-    // Only override the internal COUNT(*)/COUNT(1) aggregate projection used for mutation row counts.
+    // Only override the internal COUNT(*)/COUNT(1) aggregate projection used for mutation row
+    // counts.
     if (countProject.size() != 1 || !countProject.get(0).startsWith("COUNT(")) {
       return;
     }

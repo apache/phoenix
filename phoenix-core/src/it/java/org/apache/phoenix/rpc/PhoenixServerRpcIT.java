@@ -117,7 +117,7 @@ public class PhoenixServerRpcIT extends BaseTest {
 
       // verify that the query does a range scan on the index table
       assertPlan(stmt.unwrap(PhoenixPreparedStatement.class)).scanType("RANGE SCAN")
-        .tableContains(indexTableFullName).keyRanges(" ['v1']");
+        .tableContains(indexTableFullName).keyRanges("['v1']");
 
       // verify that the correct results are returned
       ResultSet rs = stmt.executeQuery();

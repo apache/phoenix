@@ -249,7 +249,7 @@ public class SubqueryIT extends BaseJoinIT {
       assertFalse(rs.next());
 
       assertPlan(conn, query).subPlan(1).scanType("RANGE SCAN").table(tableName4)
-        .keyRanges(" ['000000000000001'] - [*]")
+        .keyRanges("['000000000000001'] - [*]")
         .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]")
         .clientSortAlgo("CLIENT MERGE SORT");
 

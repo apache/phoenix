@@ -206,9 +206,8 @@ public class HashJoinNoIndexIT extends HashJoinIT {
     String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
     String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
     String supplier = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
-    assertPlan(conn, query).scanType("RANGE SCAN").table(customer)
-      .keyRanges(" [*] - ['0000000005']").serverSortedBy("[\"C.customer_id\", I.NAME]")
-      .clientSortAlgo("CLIENT MERGE SORT")
+    assertPlan(conn, query).scanType("RANGE SCAN").table(customer).keyRanges("[*] - ['0000000005']")
+      .serverSortedBy("[\"C.customer_id\", I.NAME]").clientSortAlgo("CLIENT MERGE SORT")
       .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"C.customer_id\" IN (\"O.customer_id\")")
       .subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
@@ -275,10 +274,9 @@ public class HashJoinNoIndexIT extends HashJoinIT {
     String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
     String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
     String supplier = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
-    assertPlan(conn, query).scanType("RANGE SCAN").table(customer)
-      .keyRanges(" [*] - ['0000000005']").serverSortedBy("[C.CID, QO.INAME]")
-      .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
-      .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+    assertPlan(conn, query).scanType("RANGE SCAN").table(customer).keyRanges("[*] - ['0000000005']")
+      .serverSortedBy("[C.CID, QO.INAME]").clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1)
+      .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
       .scanType("FULL SCAN").table(order)
       .serverWhereFilter("SERVER FILTER BY \"order_id\" != '000000000000003'").subPlanCount(1)
       .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")

@@ -124,9 +124,9 @@ public class CostBasedDecisionIT extends BaseTest {
         .optimizeQuery().getExplainPlan();
       ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
       assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+      assertEquals("RANGE SCAN", explainPlanAttributes.getExplainScanType());
       assertEquals(tableName, explainPlanAttributes.getTableName());
-      assertEquals(" [*] - ['z']", explainPlanAttributes.getKeyRanges());
+      assertEquals("[*] - ['z']", explainPlanAttributes.getKeyRanges());
       assertEquals("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]",
         explainPlanAttributes.getServerAggregate());
       assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
@@ -150,9 +150,9 @@ public class CostBasedDecisionIT extends BaseTest {
         .getExplainPlan();
       explainPlanAttributes = plan.getPlanStepsAsAttributes();
       assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+      assertEquals("RANGE SCAN", explainPlanAttributes.getExplainScanType());
       assertEquals(indexName + "(" + tableName + ")", explainPlanAttributes.getTableName());
-      assertEquals(" [1]", explainPlanAttributes.getKeyRanges());
+      assertEquals("[1]", explainPlanAttributes.getKeyRanges());
       assertTrue(explainPlanAttributes.isServerFirstKeyOnlyProjection());
       assertEquals("SERVER FILTER BY \"ROWKEY\" <= 'z'",
         explainPlanAttributes.getServerWhereFilter());
@@ -187,9 +187,9 @@ public class CostBasedDecisionIT extends BaseTest {
         .optimizeQuery().getExplainPlan();
       ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
       assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+      assertEquals("RANGE SCAN", explainPlanAttributes.getExplainScanType());
       assertEquals(indexName2 + "(" + tableName + ")", explainPlanAttributes.getTableName());
-      assertEquals(" [2,*] - [2,9,000]", explainPlanAttributes.getKeyRanges());
+      assertEquals("[2,*] - [2,9,000]", explainPlanAttributes.getKeyRanges());
       assertEquals(
         "SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)",
         explainPlanAttributes.getServerWhereFilter());
@@ -212,9 +212,9 @@ public class CostBasedDecisionIT extends BaseTest {
         .getExplainPlan();
       explainPlanAttributes = plan.getPlanStepsAsAttributes();
       assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+      assertEquals("RANGE SCAN", explainPlanAttributes.getExplainScanType());
       assertEquals(indexName1 + "(" + tableName + ")", explainPlanAttributes.getTableName());
-      assertEquals(" [1,10] - [1,20]", explainPlanAttributes.getKeyRanges());
+      assertEquals("[1,10] - [1,20]", explainPlanAttributes.getKeyRanges());
       assertEquals("SERVER FILTER BY (\"C2\" < 9000 AND \"C3\" < 5000)",
         explainPlanAttributes.getServerWhereFilter());
       assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
@@ -244,7 +244,7 @@ public class CostBasedDecisionIT extends BaseTest {
       // Use the idx2 plan with a wider PK slot span when stats are not available.
       assertMutationPlan(conn, query).abstractExplainPlan("UPSERT SELECT").iteratorType("PARALLEL")
         .scanType("RANGE SCAN").table(indexName2 + "(" + tableName + ")")
-        .keyRanges(" [2,*] - [2,9,000]")
+        .keyRanges("[2,*] - [2,9,000]")
         .serverWhereFilter(
           "SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
@@ -265,7 +265,7 @@ public class CostBasedDecisionIT extends BaseTest {
       // Use the idx2 plan that scans less data when stats become available.
       assertMutationPlan(conn, query).abstractExplainPlan("UPSERT SELECT").iteratorType("PARALLEL")
         .scanType("RANGE SCAN").table(indexName1 + "(" + tableName + ")")
-        .keyRanges(" [1,10] - [1,20]")
+        .keyRanges("[1,10] - [1,20]")
         .serverWhereFilter("SERVER FILTER BY (\"C2\" < 9000 AND \"C3\" < 5000)")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
         .indexRejectedCount(1)
@@ -296,7 +296,7 @@ public class CostBasedDecisionIT extends BaseTest {
       // Use the idx2 plan with a wider PK slot span when stats are not available.
       assertMutationPlan(conn, query).abstractExplainPlan("DELETE ROWS CLIENT SELECT")
         .iteratorType("PARALLEL").scanType("RANGE SCAN").table(indexName2 + "(" + tableName + ")")
-        .keyRanges(" [2,*] - [2,9,000]")
+        .keyRanges("[2,*] - [2,9,000]")
         .serverWhereFilter(
           "SERVER FILTER BY ((\"C1\" >= 10 AND \"C1\" <= 20) AND TO_INTEGER(\"C3\") < 5000)")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
@@ -317,7 +317,7 @@ public class CostBasedDecisionIT extends BaseTest {
       // Use the idx2 plan that scans less data when stats become available.
       assertMutationPlan(conn, query).abstractExplainPlan("DELETE ROWS CLIENT SELECT")
         .iteratorType("PARALLEL").scanType("RANGE SCAN").table(indexName1 + "(" + tableName + ")")
-        .keyRanges(" [1,10] - [1,20]")
+        .keyRanges("[1,10] - [1,20]")
         .serverWhereFilter("SERVER FILTER BY (\"C2\" < 9000 AND \"C3\" < 5000)")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
         .indexRejectedCount(1)
@@ -346,11 +346,11 @@ public class CostBasedDecisionIT extends BaseTest {
       // Use the default plan when stats are not available.
       assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES").subPlanCount(2)
         .subPlan(0).iteratorType("PARALLEL").scanType("RANGE SCAN").table(tableName)
-        .keyRanges(" [*] - ['z']").serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
+        .keyRanges("[*] - ['z']").serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
         .indexRejectedCount(1)
         .indexRejected(0, indexName, OptimizerReasons.REASON_NO_PK_PREFIX_BOUND).end().subPlan(1)
-        .iteratorType("PARALLEL").scanType("RANGE SCAN").table(tableName).keyRanges(" ['a'] - [*]")
+        .iteratorType("PARALLEL").scanType("RANGE SCAN").table(tableName).keyRanges("['a'] - [*]")
         .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
         .indexRejectedCount(1)
@@ -371,12 +371,12 @@ public class CostBasedDecisionIT extends BaseTest {
       // Use the optimal plan based on cost when stats become available.
       assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES").subPlanCount(2)
         .subPlan(0).iteratorType("PARALLEL").scanType("RANGE SCAN")
-        .table(indexName + "(" + tableName + ")").keyRanges(" [1]").serverMergeColumns("[0.C2]")
+        .table(indexName + "(" + tableName + ")").keyRanges("[1]").serverMergeColumns("[0.C2]")
         .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" <= 'z'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
         .indexRejectedNone().end().subPlan(1).iteratorType("PARALLEL").scanType("RANGE SCAN")
-        .table(indexName + "(" + tableName + ")").keyRanges(" [1]").serverMergeColumns("[0.C2]")
+        .table(indexName + "(" + tableName + ")").keyRanges("[1]").serverMergeColumns("[0.C2]")
         .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" >= 'a'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
@@ -410,7 +410,7 @@ public class CostBasedDecisionIT extends BaseTest {
         .indexRejectedNone().subPlanCount(1).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(tableName)
-        .keyRanges(" [*] - ['z']").serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
+        .keyRanges("[*] - ['z']").serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [C1]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
         .indexRejectedCount(1)
         .indexRejected(0, indexName, OptimizerReasons.REASON_NO_PK_PREFIX_BOUND);
@@ -429,14 +429,14 @@ public class CostBasedDecisionIT extends BaseTest {
 
       // Use the optimal plan based on cost when stats become available.
       assertPlan(conn, query).iteratorType("PARALLEL 626-WAY").scanType("RANGE SCAN")
-        .table(indexName + "(" + tableName + ")").keyRanges(" [1,'X0'] - [1,'X1']")
+        .table(indexName + "(" + tableName + ")").keyRanges("[1,'X0'] - [1,'X1']")
         .serverMergeColumns("[0.C2]").serverFirstKeyOnlyProjection(true)
         .serverSortedBy("[\"T1.:ROWKEY\"]").clientSortAlgo("CLIENT MERGE SORT")
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"T1.:ROWKEY\" IN (T2.MRK)").indexRule(null)
         .indexRejectedNone().subPlanCount(1).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-        .table(indexName + "(" + tableName + ")").keyRanges(" [1]").serverMergeColumns("[0.C2]")
+        .table(indexName + "(" + tableName + ")").keyRanges("[1]").serverMergeColumns("[0.C2]")
         .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY \"ROWKEY\" <= 'z'")
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"C1\"]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_COST_BASED)
@@ -540,7 +540,7 @@ public class CostBasedDecisionIT extends BaseTest {
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY T2.ID IN (T1.COL1)").subPlanCount(1)
         .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD LEFT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable500)
-        .keyRanges(" [201] - [*]");
+        .keyRanges("[201] - [*]");
     }
   }
 
@@ -572,7 +572,7 @@ public class CostBasedDecisionIT extends BaseTest {
         .subPlanCount(1).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD LEFT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable500)
-        .keyRanges(" [201] - [*]");
+        .keyRanges("[201] - [*]");
     }
   }
 
@@ -587,7 +587,7 @@ public class CostBasedDecisionIT extends BaseTest {
         .subPlanCount(1).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD LEFT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable500)
-        .keyRanges(" [201] - [*]");
+        .keyRanges("[201] - [*]");
     }
   }
 
@@ -641,9 +641,9 @@ public class CostBasedDecisionIT extends BaseTest {
       assertPlan(conn, q).abstractExplainPlan("SORT-MERGE-JOIN (LEFT)").lhs()
         .abstractExplainPlan("SORT-MERGE-JOIN (LEFT)").lhs().iteratorType("PARALLEL 1-WAY")
         .scanType("FULL SCAN").table(testTable1000).end().rhs().iteratorType("PARALLEL 1-WAY")
-        .scanType("RANGE SCAN").table(testTable500).keyRanges(" [201] - [*]").end().end().rhs()
+        .scanType("RANGE SCAN").table(testTable500).keyRanges("[201] - [*]").end().end().rhs()
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable990)
-        .keyRanges(" [*] - [100]");
+        .keyRanges("[*] - [100]");
     }
   }
 
@@ -662,8 +662,8 @@ public class CostBasedDecisionIT extends BaseTest {
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY T1.ID IN (T2.COL1)").subPlanCount(1)
         .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable500)
-        .keyRanges(" [201] - [*]").end().end().rhs().iteratorType("PARALLEL 1-WAY")
-        .scanType("RANGE SCAN").table(testTable990).keyRanges(" [*] - [100]");
+        .keyRanges("[201] - [*]").end().end().rhs().iteratorType("PARALLEL 1-WAY")
+        .scanType("RANGE SCAN").table(testTable990).keyRanges("[*] - [100]");
     }
   }
 
@@ -682,10 +682,10 @@ public class CostBasedDecisionIT extends BaseTest {
         .subPlanCount(2).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable500)
-        .keyRanges(" [201] - [*]").end().subPlan(1)
+        .keyRanges("[201] - [*]").end().subPlan(1)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 1  /* HASH BUILD RIGHT */")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(testTable990)
-        .keyRanges(" [*] - [100]");
+        .keyRanges("[*] - [100]");
     }
   }
 

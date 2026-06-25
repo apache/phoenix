@@ -49,24 +49,24 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
 
     // LIMIT 1 uses a SERIAL iterator and pushes the limit to both server and client.
     assertPlan(conn, "SELECT * FROM TENANT_VIEW LIMIT 1").iteratorType("SERIAL")
-      .scanType("RANGE SCAN").table("BASE_MULTI_TENANT_TABLE").keyRanges(" ['tenantId']")
+      .scanType("RANGE SCAN").table("BASE_MULTI_TENANT_TABLE").keyRanges("['tenantId']")
       .serverRowLimit(1L).clientRowLimit(1).indexRule(OptimizerReasons.RULE_DATA_TABLE)
       .indexRejectedNone();
 
     // A very large limit falls back to a PARALLEL iterator.
     assertPlan(conn, "SELECT * FROM TENANT_VIEW LIMIT " + Integer.MAX_VALUE)
       .iteratorType("PARALLEL").scanType("RANGE SCAN").table("BASE_MULTI_TENANT_TABLE")
-      .keyRanges(" ['tenantId']").serverRowLimit((long) Integer.MAX_VALUE)
+      .keyRanges("['tenantId']").serverRowLimit((long) Integer.MAX_VALUE)
       .clientRowLimit(Integer.MAX_VALUE).indexRule(OptimizerReasons.RULE_DATA_TABLE)
       .indexRejectedNone();
 
     assertPlan(conn, "SELECT * FROM TENANT_VIEW WHERE username = 'Joe' LIMIT 1")
-      .scanType("RANGE SCAN").table("BASE_MULTI_TENANT_TABLE").keyRanges(" ['tenantId']")
+      .scanType("RANGE SCAN").table("BASE_MULTI_TENANT_TABLE").keyRanges("['tenantId']")
       .serverWhereFilter("SERVER FILTER BY USERNAME = 'Joe'").serverRowLimit(1L).clientRowLimit(1)
       .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
     assertPlan(conn, "SELECT * FROM TENANT_VIEW WHERE col = 'Joe' LIMIT 1").scanType("RANGE SCAN")
-      .table("BASE_MULTI_TENANT_TABLE").keyRanges(" ['tenantId']")
+      .table("BASE_MULTI_TENANT_TABLE").keyRanges("['tenantId']")
       .serverWhereFilter("SERVER FILTER BY COL = 'Joe'").serverRowLimit(1L).clientRowLimit(1)
       .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
   }
@@ -86,7 +86,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
       // The salient detail is the DESC-timestamp key range.
       assertPlan(conn, query).scanType("RANGE SCAN").table("FOO")
         .keyRanges(
-          " [X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
+          "[X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
         .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
     } finally {
@@ -112,7 +112,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
       // The round-robin iterator is surfaced as a dedicated attribute.
       assertPlan(conn, query).useRoundRobinIterator(true).scanType("RANGE SCAN").table(tableName)
         .keyRanges(
-          " [X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
+          "[X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
         .serverFirstKeyOnlyProjection(true).indexRule(OptimizerReasons.RULE_DATA_TABLE)
         .indexRejectedNone();
     } finally {
@@ -133,7 +133,7 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
       // The SERIAL hint is ignored for a non-rowkey ORDER BY, so the iterator stays PARALLEL and a
       // server sort + client merge sort are planned.
       assertPlan(conn, query).iteratorType("PARALLEL").scanType("RANGE SCAN").table("FOO")
-        .keyRanges(" ['a']").serverFirstKeyOnlyProjection(true).serverSortedBy("[B, C]")
+        .keyRanges("['a']").serverFirstKeyOnlyProjection(true).serverSortedBy("[B, C]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_DATA_TABLE)
         .indexRejectedNone();
     } finally {

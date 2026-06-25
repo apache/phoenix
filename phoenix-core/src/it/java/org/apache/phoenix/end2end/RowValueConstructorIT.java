@@ -1349,7 +1349,7 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("SKIP SCAN ON 12 KEYS")
-        .table(tempTableWithCompositePK).keyRanges(" [X'00',2] - [X'03',4]")
+        .table(tempTableWithCompositePK).keyRanges("[X'00',2] - [X'03',4]")
         .clientSortAlgo("CLIENT MERGE SORT");
     } finally {
       conn.close();

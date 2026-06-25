@@ -438,21 +438,20 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     // 1. same prefix length, no other restrictions, but v3 is in the SELECT. Use the main table.
     assertPlan(conn, "SELECT * FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(physicalTableName.toString())
-      .keyRanges(" [3,4]").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
-      .indexRejectedCount(1)
+      .keyRanges("[3,4]").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedCount(1)
       .indexRejected(0, indexName, OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE);
 
     // 2. same prefix length, no other restrictions. Only index columns used. Use the index.
     assertPlan(conn, "SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,3,4]")
+      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1,3,4]")
       .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
       .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
 
     // 3. same prefix length, but there's a column not on the index
     assertPlan(conn, "SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v3 = 1")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table(physicalTableName.toString())
-      .keyRanges(" [3,4]").serverWhereFilter("SERVER FILTER BY V3 = 1")
+      .keyRanges("[3,4]").serverWhereFilter("SERVER FILTER BY V3 = 1")
       .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedCount(1)
       .indexRejected(0, indexName, OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE);
 
@@ -460,7 +459,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     assertPlan(conn,
       "SELECT v2 FROM " + tableName + " WHERE pk1 = 3 AND pk2 = 4 AND v1 = 3 AND v3 = 1")
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,3,4,3]")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1,3,4,3]")
         .serverMergeColumns("[0.V3]").serverFirstKeyOnlyProjection(true)
         .serverWhereFilter("SERVER FILTER BY \"V3\" = 1").clientSortAlgo("CLIENT MERGE SORT")
         .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
@@ -491,7 +490,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     // 1. Still use the index
     assertPlan(conn, "SELECT pk1, pk2, pk3, v1 FROM " + tableName + " WHERE pk1 = 2 AND pk3 = 3")
       .iteratorType("PARALLEL").scanType("RANGE SCAN")
-      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,2,3]")
+      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1,2,3]")
       .serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
       .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
       .indexRejectedNone();
@@ -520,7 +519,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     // 1. COUNT(*) should still use the index - fewer bytes to scan
     assertPlan(conn, "SELECT COUNT(*) FROM " + tableName).iteratorType("PARALLEL 1-WAY")
       .scanType("RANGE SCAN").table(fullIndexName + "(" + indexPhysicalTableName + ")")
-      .keyRanges(" [1]").serverFirstKeyOnlyProjection(true)
+      .keyRanges("[1]").serverFirstKeyOnlyProjection(true)
       .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
       .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
 
@@ -533,7 +532,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     // 3. if the index can avoid a sort operation, use it
     assertPlan(conn, "SELECT * FROM " + tableName + " ORDER BY v2").iteratorType("PARALLEL 1-WAY")
       .scanType("RANGE SCAN").table(fullIndexName + "(" + indexPhysicalTableName + ")")
-      .keyRanges(" [1]").serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
+      .keyRanges("[1]").serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
       .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
       .indexRejectedNone();
 
@@ -547,7 +546,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     // 5. If we pin the prefix of the index key we use the index avoiding sorting on the postfix
     assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v2 = 2 ORDER BY v3")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,2]")
+      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1,2]")
       .serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
       .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
       .indexRejectedNone();
@@ -569,14 +568,14 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     // 8. Filtering along a prefix of the index key can use the index
     assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v2 = 2").iteratorType("PARALLEL 1-WAY")
       .scanType("RANGE SCAN").table(fullIndexName + "(" + indexPhysicalTableName + ")")
-      .keyRanges(" [1,2]").serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
+      .keyRanges("[1,2]").serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
       .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
       .indexRejectedNone();
 
     // 9. Make sure a gap in the index columns still uses the index as long as a prefix is specified
     assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v2 = 2 AND v4 = 4")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,2]")
+      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1,2]")
       .serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
       .serverWhereFilter("SERVER FILTER BY TO_INTEGER(\"V4\") = 4")
       .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
@@ -585,7 +584,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     // 10. Use index even when also filtering on non-indexed column
     assertPlan(conn, "SELECT * FROM " + tableName + " WHERE v2 = 2 AND v1 = 3")
       .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,2]")
+      .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1,2]")
       .serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
       .serverWhereFilter("SERVER FILTER BY \"V1\" = 3.0").clientSortAlgo("CLIENT MERGE SORT")
       .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
@@ -801,7 +800,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
 
       String query = "SELECT * FROM " + tableName + " ORDER BY V1";
       assertPlan(conn1, query).scanType("RANGE SCAN")
-        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1]")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1]")
         .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
         .indexRejectedNone();
@@ -821,7 +820,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
 
       query = "SELECT * FROM " + tableName + " ORDER BY V1 DESC NULLS LAST";
       assertPlan(conn1, query).scanType("RANGE SCAN").clientSortedBy("REVERSE")
-        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1]")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1]")
         .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED)
         .indexRejectedNone();
@@ -863,7 +862,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
 
       String query = "SELECT V1 FROM " + tableName + " ORDER BY V1 DESC NULLS LAST";
       assertPlan(conn1, query).scanType("RANGE SCAN").clientSortedBy("REVERSE")
-        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1]")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1]")
         .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
         .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
 
@@ -909,7 +908,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
 
       String query = "SELECT t_id, k1, k2, k3, V1 FROM " + tableName + " where v1='a'";
       assertPlan(conn1, query).scanType("RANGE SCAN")
-        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,'a']")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1,'a']")
         .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
         .indexRejectedNone();
@@ -929,7 +928,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
 
       query = "SELECT t_id, k1, k2, k3, V1 from " + tableName + "  where v1<='z' order by V1,t_id";
       assertPlan(conn1, query).scanType("RANGE SCAN")
-        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,*] - [1,'z']")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1,*] - [1,'z']")
         .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
         .indexRejectedNone();
@@ -962,7 +961,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
 
       query = "SELECT t_id, V1, k3 from " + tableName + "  where v1 <='z' group by v1,t_id, k3";
       assertPlan(conn1, query).scanType("RANGE SCAN")
-        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,*] - [1,'z']")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1,*] - [1,'z']")
         .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
@@ -989,7 +988,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
       query = "SELECT v1,sum(k3) from " + tableName + " where v1 <='z'  group by v1 order by v1";
 
       assertPlan(conn1, query).scanType("RANGE SCAN")
-        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges(" [1,*] - [1,'z']")
+        .table(fullIndexName + "(" + indexPhysicalTableName + ")").keyRanges("[1,*] - [1,'z']")
         .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"V1\"]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
@@ -1038,7 +1037,7 @@ public class LocalIndexIT extends BaseLocalIndexIT {
     assertPlan(conn1, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
       .table(
         SchemaUtil.getPhysicalTableName(Bytes.toBytes(indexTableName), isNamespaceMapped) + "2")
-      .keyRanges(" ['a']").serverFirstKeyOnlyProjection(true)
+      .keyRanges("['a']").serverFirstKeyOnlyProjection(true)
       .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedCount(1)
       .indexRejected(0, indexName, OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE);
     conn1.close();
