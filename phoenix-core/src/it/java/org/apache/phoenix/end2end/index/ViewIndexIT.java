@@ -260,7 +260,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
       assertPlan(conn1, sql).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .table(fullIndexName + "("
           + SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName), isNamespaceMapped) + ")")
-        .keyRanges(" [1,'10',100]").serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
+        .keyRanges("[1,'10',100]").serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
         .indexRejectedNone();
       ResultSet rs = conn1.prepareStatement(sql).executeQuery();

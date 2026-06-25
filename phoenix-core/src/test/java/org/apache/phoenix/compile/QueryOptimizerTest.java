@@ -509,7 +509,7 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
     assertPlan(conn2,
       "select * from INDEX_TEST_TABLE where A in ('1','2','3','4','5') and F in ('1111','2222','3333')")
         .scanType("SKIP SCAN ON 15 KEYS").table("INDEX_TEST_TABLE_INDEX_F")
-        .keyRanges(" ['1','1111'] - ['5','3333']")
+        .keyRanges("['1','1111'] - ['5','3333']")
         .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedCount(1)
         .indexRejected(0, "INDEX_TEST_TABLE_INDEX_D", OptimizerReasons.REASON_NO_PK_PREFIX_BOUND);
   }

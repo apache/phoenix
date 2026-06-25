@@ -381,10 +381,10 @@ public class SubBinaryFunctionIT extends ParallelStatsDisabledIT {
     }
     Assert.assertEquals(2, count);
     assertPlan(conn, sql).scanType("RANGE SCAN").table(tableName)
-      .keyRanges(" [1,X'01'] - [1,X'02']");
+      .keyRanges("[1,X'01'] - [1,X'02']");
 
     sql = "SELECT * FROM " + tableName + " WHERE id = 1 AND SUBBINARY(VAR_BIN_COL, 2, 1) = X'01'";
-    assertPlan(conn, sql).scanType("RANGE SCAN").table(tableName).keyRanges(" [1]");
+    assertPlan(conn, sql).scanType("RANGE SCAN").table(tableName).keyRanges("[1]");
   }
 
   private void upsertRow(PreparedStatement stmt, int id, byte[] b1, byte[] b2) throws SQLException {

@@ -172,7 +172,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
       // full number of regions is reported via regionLocationsTotalSize.
       assertPlanWithRegions(conn1, query).iteratorType("PARALLEL " + numRegions + "-WAY")
         .scanType("RANGE SCAN").table(indexTableName + "(" + indexPhysicalTableName + ")")
-        .keyRanges(" [1,'a'] - [1,'b']").serverFirstKeyOnlyProjection(true)
+        .keyRanges("[1,'a'] - [1,'b']").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT").regionLocationCount(trimmedRegionLocations)
         .regionLocationsTotalSize(numRegions);
 
@@ -194,7 +194,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
 
       assertPlan(conn1, query).iteratorType("PARALLEL " + numRegions + "-WAY")
         .scanType("RANGE SCAN").table(indexTableName + "(" + indexPhysicalTableName + ")")
-        .keyRanges(" [1,'a']").serverFirstKeyOnlyProjection(true)
+        .keyRanges("[1,'a']").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT");
 
       rs = conn1.createStatement().executeQuery(query);
@@ -211,7 +211,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
 
       assertPlan(conn1, query).iteratorType("PARALLEL " + numRegions + "-WAY")
         .scanType("RANGE SCAN").table(indexTableName + "(" + indexPhysicalTableName + ")")
-        .keyRanges(" [1,*] - [1,'z']").serverFirstKeyOnlyProjection(true)
+        .keyRanges("[1,*] - [1,'z']").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT").serverSortedBy("[\"K3\"]");
 
       rs = conn1.createStatement().executeQuery(query);
@@ -233,7 +233,7 @@ public class FlappingLocalIndexIT extends BaseLocalIndexIT {
 
       assertPlan(conn1, query).iteratorType("PARALLEL " + numRegions + "-WAY")
         .scanType("RANGE SCAN").table(indexTableName + "(" + indexPhysicalTableName + ")")
-        .keyRanges(" [1]").serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
+        .keyRanges("[1]").serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
         .serverSortedBy(null);
 
       rs = conn1.createStatement().executeQuery(query);
