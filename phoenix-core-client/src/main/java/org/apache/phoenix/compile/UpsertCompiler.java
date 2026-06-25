@@ -1261,6 +1261,9 @@ public class UpsertCompiler {
         planSteps.add("    RETURNING *");
       }
       planSteps.addAll(queryPlanSteps);
+      // Surface the user's SELECT projection instead so VERBOSE explain describes the upsert.
+      ExplainTable.overrideMutationProject(planSteps, explainPlanAttributes, newBuilder,
+        queryPlan.getProjector());
       if (getContext().isRoot()) {
         ExplainTable.populateTopOfPlanAttributes(newBuilder, getContext(), getTargetRef());
         ExplainTable.populateTopOfPlanEstimates(newBuilder, this);
