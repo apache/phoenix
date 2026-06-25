@@ -223,6 +223,9 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
 
   @Override
   public ExplainPlan getExplainPlan() throws SQLException {
+    // Carry the requested EXPLAIN options down to the delegate so every participating scan renders
+    // the same disclosures (e.g. VERBOSE predicate-origin attribution) as the driver scan.
+    delegate.getContext().setExplainOptions(context.getExplainOptions());
     ExplainPlan explainPlan = delegate.getExplainPlan();
     List<String> planSteps = Lists.newArrayList(explainPlan.getPlanSteps());
     ExplainPlanAttributes explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
