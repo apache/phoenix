@@ -193,6 +193,10 @@ public class SortMergeJoinPlan implements QueryPlan {
     List<String> steps = Lists.newArrayList();
     steps
       .add("SORT-MERGE-JOIN (" + joinType.toString().toUpperCase() + ") TABLES  /* SORT_MERGE */");
+    // Carry the requested EXPLAIN options down to both join halves so every participating scan
+    // renders the same disclosures (e.g. VERBOSE predicate-origin attribution) as the driver scan.
+    lhsPlan.getContext().setExplainOptions(getContext().getExplainOptions());
+    rhsPlan.getContext().setExplainOptions(getContext().getExplainOptions());
     ExplainPlan lhsExplainPlan = lhsPlan.getExplainPlan();
     List<String> lhsPlanSteps = lhsExplainPlan.getPlanSteps();
     ExplainPlanAttributes lhsPlanAttributes = lhsExplainPlan.getPlanStepsAsAttributes();

@@ -330,6 +330,11 @@ public class HashJoinPlan extends DelegateQueryPlan {
     ExplainPlanAttributesBuilder builder = new ExplainPlanAttributesBuilder(delegateAttributes);
     List<ExplainPlanAttributes> subPlanAttributes = Lists.newArrayList();
     int count = subPlans.length;
+    // Carry the requested EXPLAIN options down to each sub-plan so every participating scan renders
+    // the same disclosures (e.g. VERBOSE predicate-origin attribution) as the driver scan.
+    for (int i = 0; i < count; i++) {
+      subPlans[i].getInnerPlan().getContext().setExplainOptions(getContext().getExplainOptions());
+    }
     for (int i = 0; i < count; i++) {
       planSteps.addAll(subPlans[i].getPreSteps(this));
       ExplainPlanAttributes subPlanAttribute = subPlans[i].getPreStepsAsAttributes(this);
