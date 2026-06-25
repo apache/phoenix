@@ -655,8 +655,15 @@ public abstract class ExplainTable {
   public static void overrideMutationProject(List<String> planSteps,
     ExplainPlanAttributes innerAttributes, ExplainPlanAttributesBuilder builder,
     RowProjector userProjector) {
+    if (planSteps == null || innerAttributes == null || builder == null) {
+      return;
+    }
     List<String> countProject = innerAttributes.getServerProject();
     if (countProject == null || countProject.isEmpty()) {
+      return;
+    }
+    // Only override the internal COUNT(*)/COUNT(1) aggregate projection used for mutation row counts.
+    if (countProject.size() != 1 || !countProject.get(0).startsWith("COUNT(")) {
       return;
     }
     List<String> userColumns = projectedColumnNames(userProjector);
