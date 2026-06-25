@@ -147,6 +147,13 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
 
   @Override
   public ExplainPlan getExplainPlan() throws SQLException {
+    // getContext() is the delegate's context (already carrying the requested EXPLAIN options).
+    // Carry those same options onto the separate post-filter context so this plan's CLIENT FILTER
+    // BY
+    // renders the same disclosures (e.g. VERBOSE predicate-origin attribution) as the driver scan.
+    if (statementContext != null) {
+      statementContext.setExplainOptions(getContext().getExplainOptions());
+    }
     ExplainPlan explainPlan = delegate.getExplainPlan();
     List<String> planSteps = Lists.newArrayList(explainPlan.getPlanSteps());
     ExplainPlanAttributes explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
