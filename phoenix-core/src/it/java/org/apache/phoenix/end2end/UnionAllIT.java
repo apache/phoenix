@@ -635,7 +635,7 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
       assertEquals(2, subPlans.size());
       ExplainPlanAttributes lhsPlanAttributes = subPlans.get(0);
       assertEquals("PARALLEL 1-WAY", lhsPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", lhsPlanAttributes.getExplainScanType());
+      assertEquals("FULL SCAN", lhsPlanAttributes.getExplainScanType());
       assertEquals(tableName1, lhsPlanAttributes.getTableName());
       assertEquals("[COL1]", lhsPlanAttributes.getServerSortedBy());
       assertEquals(1L, lhsPlanAttributes.getServerRowLimit().longValue());
@@ -643,7 +643,7 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
       assertEquals("CLIENT MERGE SORT", lhsPlanAttributes.getClientSortAlgo());
       ExplainPlanAttributes rhsPlanAttributes = subPlans.get(1);
       assertEquals("PARALLEL 1-WAY", rhsPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", rhsPlanAttributes.getExplainScanType());
+      assertEquals("FULL SCAN", rhsPlanAttributes.getExplainScanType());
       assertEquals(tableName2, rhsPlanAttributes.getTableName());
       assertEquals("[COL1]", rhsPlanAttributes.getServerSortedBy());
       assertEquals(1L, rhsPlanAttributes.getServerRowLimit().longValue());
@@ -671,11 +671,11 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
       assertEquals(2, subPlans.size());
       lhsPlanAttributes = subPlans.get(0);
       assertEquals("PARALLEL 1-WAY", lhsPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", lhsPlanAttributes.getExplainScanType());
+      assertEquals("FULL SCAN", lhsPlanAttributes.getExplainScanType());
       assertEquals(tableName1, lhsPlanAttributes.getTableName());
       rhsPlanAttributes = subPlans.get(1);
       assertEquals("PARALLEL 1-WAY", rhsPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", rhsPlanAttributes.getExplainScanType());
+      assertEquals("FULL SCAN", rhsPlanAttributes.getExplainScanType());
       assertEquals(tableName2, rhsPlanAttributes.getTableName());
     }
   }

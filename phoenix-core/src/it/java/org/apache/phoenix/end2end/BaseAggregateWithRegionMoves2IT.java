@@ -138,7 +138,7 @@ public class BaseAggregateWithRegionMoves2IT extends ParallelStatsDisabledWithRe
     assertPlan(conn, queryBuilder.build()).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
       .table(tableName)
       .keyRanges(
-        " ['000001111122222','333334444455555',0,*] - ['000001111122222','333334444455555',0,1]")
+        "['000001111122222','333334444455555',0,*] - ['000001111122222','333334444455555',0,1]")
       .serverFirstKeyOnlyProjection(true)
       .serverAggregate(
         "SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [MATCH_STATUS, EXTERNAL_DATASOURCE_KEY]")

@@ -215,9 +215,8 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
         saltBuckets == null ? "PARALLEL 1-WAY" : "PARALLEL " + saltBuckets + "-WAY";
       expectedTableName = viewIndexPhysicalName;
       keyRanges = saltBuckets == null
-        ? " [" + Short.MIN_VALUE + ",51]"
-        : " [0," + Short.MIN_VALUE + ",51] - [" + (saltBuckets - 1) + "," + Short.MIN_VALUE
-          + ",51]";
+        ? "[" + Short.MIN_VALUE + ",51]"
+        : "[0," + Short.MIN_VALUE + ",51] - [" + (saltBuckets - 1) + "," + Short.MIN_VALUE + ",51]";
       clientSortAlgo = saltBuckets == null ? null : "CLIENT MERGE SORT";
       firstKeyOnlyProjection = false;
     }
@@ -257,15 +256,15 @@ public abstract class BaseViewIT extends ParallelStatsEnabledIT {
     if (localIndex) {
       physicalTableName = fullTableName;
       iteratorTypeAndScanSize = "PARALLEL " + (saltBuckets == null ? 1 : saltBuckets) + "-WAY";
-      keyRanges = " [" + (2) + ",'foo']";
+      keyRanges = "[" + (2) + ",'foo']";
       clientSortAlgo = "CLIENT MERGE SORT";
     } else {
       physicalTableName = viewIndexPhysicalName;
       iteratorTypeAndScanSize =
         saltBuckets == null ? "PARALLEL 1-WAY" : "PARALLEL " + saltBuckets + "-WAY";
       keyRanges = saltBuckets == null
-        ? " [" + (Short.MIN_VALUE + 1) + ",'foo']"
-        : " [0," + (Short.MIN_VALUE + 1) + ",'foo'] - [" + (saltBuckets - 1) + ","
+        ? "[" + (Short.MIN_VALUE + 1) + ",'foo']"
+        : "[0," + (Short.MIN_VALUE + 1) + ",'foo'] - [" + (saltBuckets - 1) + ","
           + (Short.MIN_VALUE + 1) + ",'foo']";
       clientSortAlgo = saltBuckets == null ? null : "CLIENT MERGE SORT";
     }

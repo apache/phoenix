@@ -255,7 +255,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         "select * from foo where a = 'a' and b >= timestamp '2016-01-28 00:00:00' and b < timestamp '2016-01-29 00:00:00'";
       assertPlan(conn, query).scanType("RANGE SCAN").table("FOO")
         .keyRanges(
-          " [X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
+          "[X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
         .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT");
     }
   }
@@ -275,7 +275,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         + " where a = 'a' and b >= timestamp '2016-01-28 00:00:00' and b < timestamp '2016-01-29 00:00:00'";
       assertPlan(conn, query).useRoundRobinIterator(true).scanType("RANGE SCAN").table(tableName)
         .keyRanges(
-          " [X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
+          "[X'00','a',~'2016-01-28 23:59:59.999'] -" + " [X'13','a',~'2016-01-28 00:00:00.000']")
         .serverFirstKeyOnlyProjection(true);
     }
   }
@@ -340,7 +340,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
       ResultSet rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(53, rs.getInt(1));
-      assertPlan(conn, query).scanType("RANGE SCAN").table(tableName).keyRanges(" [*] - ['b']")
+      assertPlan(conn, query).scanType("RANGE SCAN").table(tableName).keyRanges("[*] - ['b']")
         .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
         .numRegionLocationLookups(2);
 
@@ -348,7 +348,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(128, rs.getInt(1));
-      assertPlan(conn, query).scanType("RANGE SCAN").table(tableName).keyRanges(" [*] - ['cd']")
+      assertPlan(conn, query).scanType("RANGE SCAN").table(tableName).keyRanges("[*] - ['cd']")
         .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
         .numRegionLocationLookups(3);
 
@@ -356,7 +356,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(25, rs.getInt(1));
-      assertPlan(conn, query).scanType("RANGE SCAN").table(tableName).keyRanges(" ['ef'] - ['eg']")
+      assertPlan(conn, query).scanType("RANGE SCAN").table(tableName).keyRanges("['ef'] - ['eg']")
         .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
         .numRegionLocationLookups(1);
 
@@ -364,7 +364,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals(75, rs.getInt(1));
-      assertPlan(conn, query).scanType("RANGE SCAN").table(tableName).keyRanges(" ['de'] - [*]")
+      assertPlan(conn, query).scanType("RANGE SCAN").table(tableName).keyRanges("['de'] - [*]")
         .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
         .numRegionLocationLookups(1);
     }
@@ -460,14 +460,14 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         assertTrue(rs.next());
         assertEquals(50, rs.getInt(1));
 
-        assertPlan(tenantConn, query).scanType("RANGE SCAN").table(tableName).keyRanges(" ['ab12']")
+        assertPlan(tenantConn, query).scanType("RANGE SCAN").table(tableName).keyRanges("['ab12']")
           .serverFirstKeyOnlyProjection(true).serverAggregate("SERVER AGGREGATE INTO SINGLE ROW")
           .numRegionLocationLookups(1);
       }
 
       try (Connection tenantConn = getTenantConnection("cd12")) {
         String query = "select * from " + view03 + " order by col2";
-        assertPlan(tenantConn, query).scanType("RANGE SCAN").table(tableName).keyRanges(" ['cd12']")
+        assertPlan(tenantConn, query).scanType("RANGE SCAN").table(tableName).keyRanges("['cd12']")
           .serverSortedBy("[COL2]").clientSortAlgo("CLIENT MERGE SORT").numRegionLocationLookups(1);
       }
 
@@ -480,7 +480,7 @@ public class ExplainPlanWithStatsDisabledIT extends ParallelStatsDisabledIT {
         }
         assertEquals(25, c);
 
-        assertPlan(tenantConn, query).scanType("RANGE SCAN").table(tableName).keyRanges(" ['de12']")
+        assertPlan(tenantConn, query).scanType("RANGE SCAN").table(tableName).keyRanges("['de12']")
           .serverWhereFilter("SERVER FILTER BY COL1 = 'col101'").numRegionLocationLookups(1);
       }
     }

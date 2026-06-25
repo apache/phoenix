@@ -173,7 +173,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
         basePlan.serverProjectionFilter(columnEncoded);
       }
       if (localIndex) {
-        basePlan.table(fullTableName).keyRanges(" [1]").clientSortAlgo("CLIENT MERGE SORT")
+        basePlan.table(fullTableName).keyRanges("[1]").clientSortAlgo("CLIENT MERGE SORT")
           .scanType("RANGE SCAN");
       } else if (!uncovered) {
         basePlan.table(fullIndexName).clientSortAlgo(null).scanType("FULL SCAN");
@@ -635,7 +635,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
         .iteratorType("PARALLEL 1-WAY").serverProjectionFilter(columnEncoded);
       if (localIndex) {
         basePlan.scanType("RANGE SCAN").table(fullTableName).clientSortAlgo("CLIENT MERGE SORT")
-          .keyRanges(" [1]");
+          .keyRanges("[1]");
       } else {
         basePlan.scanType("FULL SCAN").table(fullIndexName).clientSortAlgo(null);
       }
@@ -658,7 +658,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
         .serverProjectionFilter(columnEncoded);
       if (localIndex) {
         basePlan.scanType("RANGE SCAN").table(fullTableName).clientSortAlgo("CLIENT MERGE SORT")
-          .keyRanges(" [1]");
+          .keyRanges("[1]");
       } else {
         basePlan.scanType("FULL SCAN").table(fullIndexName).clientSortAlgo(null);
       }
@@ -725,7 +725,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY");
       if (localIndex) {
         basePlan.scanType("RANGE SCAN").table(fullTableName).clientSortAlgo("CLIENT MERGE SORT")
-          .keyRanges(" [1]");
+          .keyRanges("[1]");
       } else {
         basePlan.scanType("FULL SCAN").table(fullIndexName).clientSortAlgo(null);
       }
@@ -817,7 +817,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
       ExplainPlanTestUtil.ExplainPlanAssert basePlan =
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY");
       if (localIndex) {
-        basePlan.scanType("RANGE SCAN").table(fullTableName).keyRanges(" [1]")
+        basePlan.scanType("RANGE SCAN").table(fullTableName).keyRanges("[1]")
           .clientSortAlgo("CLIENT MERGE SORT");
       } else {
         basePlan.scanType("FULL SCAN").table(fullIndexName);
@@ -1006,7 +1006,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
         assertPlan(conn, query).serverProjectionFilter(columnEncoded);
       if (localIndex) {
         basePlan.iteratorType("PARALLEL 2-WAY").scanType("RANGE SCAN").table(testTable)
-          .keyRanges(" [1]").clientSortAlgo("CLIENT MERGE SORT");
+          .keyRanges("[1]").clientSortAlgo("CLIENT MERGE SORT");
       } else {
         basePlan.iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(fullIndexName)
           .clientSortAlgo(null);
@@ -1080,9 +1080,9 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
       ExplainPlanTestUtil.ExplainPlanAssert basePlan =
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN");
       if (localIndex) {
-        basePlan.table(fullTableName).keyRanges(" [1,'1']");
+        basePlan.table(fullTableName).keyRanges("[1,'1']");
       } else {
-        basePlan.table(fullIndexName).keyRanges(" ['1']");
+        basePlan.table(fullIndexName).keyRanges("['1']");
       }
 
       rs = conn.createStatement().executeQuery(query);
@@ -1113,7 +1113,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
         + fullTableName + " ORDER BY foo";
       basePlan = assertPlan(conn, query).iteratorType("PARALLEL 1-WAY");
       if (localIndex) {
-        basePlan.scanType("RANGE SCAN").table(fullTableName).keyRanges(" [1]")
+        basePlan.scanType("RANGE SCAN").table(fullTableName).keyRanges("[1]")
           .clientSortAlgo("CLIENT MERGE SORT");
       } else {
         basePlan.scanType("FULL SCAN").table(fullIndexName).clientSortAlgo(null);
@@ -1249,7 +1249,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
       ExplainPlanTestUtil.ExplainPlanAssert basePlan =
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY");
       if (localIndex) {
-        basePlan.scanType("RANGE SCAN").table(fullTableName).keyRanges(" [1]")
+        basePlan.scanType("RANGE SCAN").table(fullTableName).keyRanges("[1]")
           .clientSortAlgo("CLIENT MERGE SORT");
       } else {
         basePlan.scanType("FULL SCAN").table(fullIndexName).clientSortAlgo(null);
@@ -1593,8 +1593,7 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
 
         query = "SELECT /*+ INDEX(" + fullTableName + " " + indexName + ")*/ " + columns + " from "
           + fullTableName + " where int_col1=2 and long_col1=2";
-        assertPlan(conn, query).scanType("RANGE SCAN").tableContains(fullIndexName)
-          .keyRanges(" [2]")
+        assertPlan(conn, query).scanType("RANGE SCAN").tableContains(fullIndexName).keyRanges("[2]")
           .serverMergeColumns(
             "[A.VARCHAR_COL1, A.CHAR_COL1, A.DECIMAL_COL1, A.DATE1, B.VARCHAR_COL2, B.CHAR_COL2,"
               + " B.INT_COL2, B.DECIMAL_COL2, B.DATE2]")

@@ -852,7 +852,7 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
       "select k,k1,myreverse5(lastname_reverse) from t5 where myreverse5(lastname_reverse)='kcoj'";
 
     assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("IDX2(T5)")
-      .keyRanges(" [1,'kcoj']").serverFirstKeyOnlyProjection(true)
+      .keyRanges("[1,'kcoj']").serverFirstKeyOnlyProjection(true)
       .clientSortAlgo("CLIENT MERGE SORT");
 
     rs = stmt.executeQuery(query);

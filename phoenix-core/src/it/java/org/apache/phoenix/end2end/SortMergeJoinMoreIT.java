@@ -420,10 +420,10 @@ public class SortMergeJoinMoreIT extends ParallelStatsDisabledIT {
           + " ) C\n" + " GROUP BY C.BUCKET, C.TIMESTAMP ORDER BY C.BUCKET, C.TIMESTAMP";
 
         String lhsKeyRanges =
-          " [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']";
+          "[X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']";
         String rhsKeyRanges = i == 0
           ? lhsKeyRanges
-          : " [X'00','5SEC',1462993420000000001,'Tr/Bal'] - [X'01','5SEC',1462993520000000000,'Tr/Bal']";
+          : "[X'00','5SEC',1462993420000000001,'Tr/Bal'] - [X'01','5SEC',1462993520000000000,'Tr/Bal']";
         String rhsClientSortedBy = i == 0 ? "[BUCKET, \"TIMESTAMP\"]" : null;
 
         assertPlan(conn, q).abstractExplainPlan("SORT-MERGE-JOIN (INNER)").sortMergeSkipMerge(true)

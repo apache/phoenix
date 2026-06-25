@@ -522,7 +522,7 @@ public class ViewIT extends SplitSystemCatalogIT {
 
       String expectedTable =
         localIndex ? fullIndexName1 + "(" + fullTableName + ")" : fullIndexName1;
-      String expectedKeyRanges = localIndex ? " [1,1,100] - [1,2,109]" : " [1,100] - [2,109]";
+      String expectedKeyRanges = localIndex ? "[1,1,100] - [1,2,109]" : "[1,100] - [2,109]";
       String expectedClientSortAlgo = localIndex ? "CLIENT MERGE SORT" : null;
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("SKIP SCAN ON 4 KEYS")
         .serverWhereFilter("SERVER FILTER BY (\"S2\" = 'bas' AND \"S1\" = 'foo')")
@@ -966,16 +966,16 @@ public class ViewIT extends SplitSystemCatalogIT {
       if (localIndex) {
         assertPlan(conn, query).scanType("RANGE SCAN")
           .iteratorType("PARALLEL " + (saltBuckets == null ? 1 : saltBuckets) + "-WAY")
-          .table(viewIndexFullName1 + "(" + fullTableName + ")").keyRanges(" [1,51]")
+          .table(viewIndexFullName1 + "(" + fullTableName + ")").keyRanges("[1,51]")
           .serverProjectionFilterAnyOf().clientSortAlgo("CLIENT MERGE SORT");
       } else if (saltBuckets == null) {
         assertPlan(conn, query).scanType("RANGE SCAN").iteratorType("PARALLEL 1-WAY")
-          .table(viewIndexPhysicalName).keyRanges(" [" + Short.MIN_VALUE + ",51]")
+          .table(viewIndexPhysicalName).keyRanges("[" + Short.MIN_VALUE + ",51]")
           .clientSortAlgo(null);
       } else {
         assertPlan(conn, query).scanType("RANGE SCAN")
           .iteratorType("PARALLEL " + saltBuckets + "-WAY").table(viewIndexPhysicalName)
-          .keyRanges(" [X'00'," + Short.MIN_VALUE + ",51] - ["
+          .keyRanges("[X'00'," + Short.MIN_VALUE + ",51] - ["
             + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (saltBuckets - 1) }) + ","
             + Short.MIN_VALUE + ",51]")
           .clientSortAlgo("CLIENT MERGE SORT");
@@ -1012,17 +1012,17 @@ public class ViewIT extends SplitSystemCatalogIT {
         physicalTableName = fullTableName;
         assertPlan(conn, query).scanType("RANGE SCAN").serverProjectionFilterAnyOf()
           .iteratorType("PARALLEL " + (saltBuckets == null ? 1 : saltBuckets) + "-WAY")
-          .table(viewIndexFullName2 + "(" + fullTableName + ")").keyRanges(" [" + (2) + ",'foo']");
+          .table(viewIndexFullName2 + "(" + fullTableName + ")").keyRanges("[" + (2) + ",'foo']");
       } else if (saltBuckets == null) {
         physicalTableName = viewIndexPhysicalName;
         assertPlan(conn, query).scanType("RANGE SCAN").serverProjectionFilterAnyOf()
           .iteratorType("PARALLEL 1-WAY").table(viewIndexPhysicalName)
-          .keyRanges(" [" + (Short.MIN_VALUE + 1) + ",'foo']").clientSortAlgo(null);
+          .keyRanges("[" + (Short.MIN_VALUE + 1) + ",'foo']").clientSortAlgo(null);
       } else {
         physicalTableName = viewIndexPhysicalName;
         assertPlan(conn, query).scanType("RANGE SCAN").serverProjectionFilterAnyOf()
           .iteratorType("PARALLEL " + saltBuckets + "-WAY").table(viewIndexPhysicalName)
-          .keyRanges(" [X'00'," + (Short.MIN_VALUE + 1) + ",'foo'] - ["
+          .keyRanges("[X'00'," + (Short.MIN_VALUE + 1) + ",'foo'] - ["
             + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (saltBuckets - 1) }) + ","
             + (Short.MIN_VALUE + 1) + ",'foo']")
           .clientSortAlgo("CLIENT MERGE SORT");

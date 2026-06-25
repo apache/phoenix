@@ -210,7 +210,7 @@ public class DeleteIT extends ParallelStatsDisabledIT {
     if (local) {
       String keyRanges = attributes.getKeyRanges();
       boolean used = indexName.equals(attributes.getTableName()) && keyRanges != null
-        && (keyRanges.startsWith(" [1]") || keyRanges.startsWith(" [1,"));
+        && (keyRanges.startsWith("[1]") || keyRanges.startsWith("[1,"));
       assertEquals(expectedToBeUsed, used);
     } else if (expectedToBeUsed) {
       assertPlan(attributes).table(indexName);

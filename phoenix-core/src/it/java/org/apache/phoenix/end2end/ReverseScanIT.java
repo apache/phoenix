@@ -180,7 +180,7 @@ public class ReverseScanIT extends ParallelStatsDisabledIT {
       assertFalse(rs.next());
 
       assertPlan(conn, query).iteratorType("SERIAL 1-WAY").clientSortedBy("REVERSE")
-        .scanType("RANGE SCAN").table(indexName).keyRanges(" [not null]")
+        .scanType("RANGE SCAN").table(indexName).keyRanges("[not null]")
         .serverFirstKeyOnlyProjection(true).serverRowLimit(1L).clientRowLimit(1)
         .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
     }
