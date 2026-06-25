@@ -239,6 +239,11 @@ public class UnionPlan implements QueryPlan {
     String abstractExplainPlan = "UNION ALL OVER " + this.plans.size() + " QUERIES";
     builder.setAbstractExplainPlan(abstractExplainPlan);
     steps.add(abstractExplainPlan);
+    // Carry the requested EXPLAIN options down to each branch so every participating scan renders
+    // the same disclosures (e.g. VERBOSE predicate-origin attribution) as the driver scan.
+    for (QueryPlan plan : plans) {
+      plan.getContext().setExplainOptions(getContext().getExplainOptions());
+    }
     // Compose each branch from its own getExplainPlan() so the full sub-plan structure of every
     // branch is preserved and explaining the union does not trigger sub-plan execution.
     UnionResultIterators.explainBranches(plans, steps, builder);
