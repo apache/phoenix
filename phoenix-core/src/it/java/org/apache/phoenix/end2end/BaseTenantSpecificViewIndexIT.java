@@ -177,17 +177,17 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
         SchemaUtil.getTableName(SchemaUtil.getSchemaNameFromFullName(viewName), indexName) + "("
           + tableName + ")";
       keyRanges =
-        " [" + (1L + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']";
+        "[" + (1L + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix + "v2-1']";
     } else {
       if (saltBuckets == null) {
         iteratorTypeAndScanSize = "PARALLEL 1-WAY";
         clientSortAlgo = null;
-        keyRanges = " [" + (Short.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','"
+        keyRanges = "[" + (Short.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','"
           + valuePrefix + "v2-1']";
       } else {
         iteratorTypeAndScanSize = "PARALLEL " + saltBuckets + "-WAY";
         clientSortAlgo = "CLIENT MERGE SORT";
-        keyRanges = " [X'00'," + (Short.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','"
+        keyRanges = "[X'00'," + (Short.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','"
           + valuePrefix + "v2-1'] - ["
           + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (saltBuckets - 1) }) + ","
           + (Short.MIN_VALUE + expectedIndexIdOffset) + ",'" + tenantId + "','" + valuePrefix
@@ -214,7 +214,7 @@ public abstract class BaseTenantSpecificViewIndexIT extends SplitSystemCatalogIT
       .iteratorType("PARALLEL 1-WAY").serverFirstKeyOnlyProjection(true).scanType("RANGE SCAN")
       .table(SchemaUtil.getTableName(SchemaUtil.getSchemaNameFromFullName(viewName), indexName)
         + "(" + tableName + ")")
-      .keyRanges(" [1," + tenantId + ",'" + valuePrefix + "v2-1']")
+      .keyRanges("[1," + tenantId + ",'" + valuePrefix + "v2-1']")
       .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
       .indexRejectedNone();
   }

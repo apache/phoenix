@@ -207,11 +207,11 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
       .optimizeQuery().getExplainPlan();
     ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
     assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+    assertEquals("RANGE SCAN", explainPlanAttributes.getExplainScanType());
     assertEquals(
       SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped).toString(),
       explainPlanAttributes.getTableName());
-    assertEquals(" ['" + tenantId + "']", explainPlanAttributes.getKeyRanges());
+    assertEquals("['" + tenantId + "']", explainPlanAttributes.getKeyRanges());
 
     rs =
       conn.createStatement().executeQuery("select pk2,col1 from " + viewName + " where col1='f'");
@@ -224,14 +224,14 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
       .getExplainPlan();
     explainPlanAttributes = plan.getPlanStepsAsAttributes();
     assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+    assertEquals("RANGE SCAN", explainPlanAttributes.getExplainScanType());
     assertTrue(explainPlanAttributes.isServerFirstKeyOnlyProjection());
     if (localIndex) {
       assertEquals(fullIndexName + "("
         + SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped).toString()
         + ")", explainPlanAttributes.getTableName());
       assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
-      assertEquals(" [" + (1L + indexIdOffset) + ",'" + tenantId + "','f']",
+      assertEquals("[" + (1L + indexIdOffset) + ",'" + tenantId + "','f']",
         explainPlanAttributes.getKeyRanges());
     } else {
       assertEquals(
@@ -239,7 +239,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
           SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped).toBytes())),
         explainPlanAttributes.getTableName());
       assertNull(explainPlanAttributes.getClientSortAlgo());
-      assertEquals(" [" + (Short.MIN_VALUE + indexIdOffset) + ",'" + tenantId + "','f']",
+      assertEquals("[" + (Short.MIN_VALUE + indexIdOffset) + ",'" + tenantId + "','f']",
         explainPlanAttributes.getKeyRanges());
     }
 
@@ -365,7 +365,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         + "ORDER BY PARENT_TYPE,CREATED_DATE LIMIT 501";
       assertPlan(viewConn, query1).iteratorType("SERIAL").scanType("RANGE SCAN")
         .table(expectedIndexName)
-        .keyRanges(" ['tenant1        ','001','2011-01-01 00:00:00.001']"
+        .keyRanges("['tenant1        ','001','2011-01-01 00:00:00.001']"
           + " - ['tenant1        ','001','2016-10-31 00:00:00.000']")
         .serverFirstKeyOnlyProjection(true).serverRowLimit(501L).clientRowLimit(501)
         .clientSteps("CLIENT 501 ROW LIMIT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
@@ -377,7 +377,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
         + "ORDER BY PARENT_TYPE,CREATED_DATE LIMIT 501";
       assertPlan(viewConn, query2).iteratorType("SERIAL").scanType("RANGE SCAN")
         .table(expectedIndexName)
-        .keyRanges(" ['tenant1        ','001','2012-10-21 00:00:00.001']"
+        .keyRanges("['tenant1        ','001','2012-10-21 00:00:00.001']"
           + " - ['tenant1        ','001','2016-01-01 00:00:00.000']")
         .serverFirstKeyOnlyProjection(true).serverRowLimit(501L).clientRowLimit(501)
         .clientSteps("CLIENT 501 ROW LIMIT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)

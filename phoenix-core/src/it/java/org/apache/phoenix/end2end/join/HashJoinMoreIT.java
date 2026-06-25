@@ -781,11 +781,11 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
           + " GROUP BY C.BUCKET, C.\"TIMESTAMP\"";
 
         String innerKeyRanges = i == 0
-          ? " [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']"
-          : " [X'00','5SEC',1462993420000000001,'Tr/Bal'] - [X'01','5SEC',1462993520000000000,'Tr/Bal']";
+          ? "[X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']"
+          : "[X'00','5SEC',1462993420000000001,'Tr/Bal'] - [X'01','5SEC',1462993520000000000,'Tr/Bal']";
 
         assertPlan(conn, q).scanType("SKIP SCAN ON 2 RANGES").table("EVENT_COUNT").keyRanges(
-          " [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']")
+          "[X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']")
           .serverFirstKeyOnlyProjection(true)
           .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"E.TIMESTAMP\", E.BUCKET]")
           .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)

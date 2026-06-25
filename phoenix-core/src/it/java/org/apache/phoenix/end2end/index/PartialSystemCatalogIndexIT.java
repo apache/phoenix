@@ -165,7 +165,7 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
 
   // SQL on the index table - SYSTEM.SYS_VIEW_INDEX_HDR_TEST_INDEX,
   static final String SYS_CATALOG_IDX_VIEW_INDEX_HEADER_SQL =
-    "SELECT \": DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID,VIEW_INDEX_ID_DATA_TYPE)\" FROM %s "
+    "SELECT \":DECODE_VIEW_INDEX_ID(VIEW_INDEX_ID,VIEW_INDEX_ID_DATA_TYPE)\" FROM %s "
       + "WHERE %s AND \":TABLE_SCHEM\" = '%s' AND \":TABLE_NAME\" = '%s'";
 
   private static RegionCoprocessorEnvironment taskRegionEnvironment;
@@ -819,7 +819,7 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
       assertPlan(conn,
         "select ROW_KEY_MATCHER, TTL, TABLE_NAME FROM SYSTEM.CATALOG WHERE TABLE_TYPE = 'v' AND ROW_KEY_MATCHER IS NOT NULL")
           .scanType("RANGE SCAN").tableContains(FULL_SYS_ROW_KEY_MATCHER_TEST_INDEX_NAME)
-          .keyRanges(" [not null]");
+          .keyRanges("[not null]");
     }
 
     /**

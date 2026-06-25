@@ -2550,20 +2550,20 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         .execute("CREATE TABLE t3(j INTEGER PRIMARY KEY," + " col3 VARCHAR, col4 VARCHAR)");
       conn.createStatement().execute("CREATE INDEX idx ON t1 (col1 || col2)");
       assertPlan(conn, "SELECT a.k from t1 a where a.col1 || a.col2 = 'foobar'")
-        .scanType("RANGE SCAN").table("IDX").keyRanges(" ['foobar']")
+        .scanType("RANGE SCAN").table("IDX").keyRanges("['foobar']")
         .serverFirstKeyOnlyProjection(true);
       assertPlan(conn, "SELECT k,j from t3 b join t1 a ON k = j where a.col1 || a.col2 = 'foobar'")
         .scanType("FULL SCAN").table("T3").serverFirstKeyOnlyProjection(true)
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY B.J IN (\"A.:K\")").subPlanCount(1)
         .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-        .scanType("RANGE SCAN").table("IDX").keyRanges(" ['foobar']")
+        .scanType("RANGE SCAN").table("IDX").keyRanges("['foobar']")
         .serverFirstKeyOnlyProjection(true).end();
       assertPlan(conn,
         "SELECT a.k,b.k from t2 b join t1 a ON a.k = b.k where a.col1 || a.col2 = 'foobar'")
           .scanType("FULL SCAN").table("T2").serverFirstKeyOnlyProjection(true)
           .dynamicServerFilter("DYNAMIC SERVER FILTER BY B.K IN (\"A.:K\")").subPlanCount(1)
           .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-          .scanType("RANGE SCAN").table("IDX").keyRanges(" ['foobar']")
+          .scanType("RANGE SCAN").table("IDX").keyRanges("['foobar']")
           .serverFirstKeyOnlyProjection(true).end();
     } finally {
       conn.close();
@@ -7152,9 +7152,8 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       String query = "select id, ts from " + tableName
         + " where ts >= TIMESTAMP '2023-02-23 13:30:00'  and ts < TIMESTAMP '2023-02-23 13:40:00'";
       assertPlan(conn, query).scanType("RANGE SCAN").table(indexName)
-        .keyRanges(" [~1,677,159,600,000] - [~1,677,159,000,000]")
-        .serverFirstKeyOnlyProjection(true).indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
-        .indexRejectedNone();
+        .keyRanges("[~1,677,159,600,000] - [~1,677,159,000,000]").serverFirstKeyOnlyProjection(true)
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
     }
   }
 
@@ -7172,7 +7171,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       assertEquals("\\x9E\\x9E\\x9F\\x00", Bytes.toStringBinary(openScan.getStartRow()));
       assertEquals("\\x9E\\xFF", Bytes.toStringBinary(openScan.getStopRow()));
       assertPlan(conn, openQry).scanType("RANGE SCAN").table(tableName)
-        .keyRanges(" [~'aaa'] - [~'a']").serverFirstKeyOnlyProjection(true)
+        .keyRanges("[~'aaa'] - [~'a']").serverFirstKeyOnlyProjection(true)
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       String closedQry = "select * from " + tableName + " where k >= 'a' and k <= 'aaa'";
@@ -7181,7 +7180,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       assertEquals("\\x9E\\x9E\\x9E\\xFF", Bytes.toStringBinary(closedScan.getStartRow()));
       assertEquals("\\x9F\\x00", Bytes.toStringBinary(closedScan.getStopRow()));
       assertPlan(conn, closedQry).scanType("RANGE SCAN").table(tableName)
-        .keyRanges(" [~'aaa'] - [~'a']").serverFirstKeyOnlyProjection(true)
+        .keyRanges("[~'aaa'] - [~'a']").serverFirstKeyOnlyProjection(true)
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
     }
   }
@@ -7198,7 +7197,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
       stmt.execute("create index ii on dd (k4, k1, k2, k3)");
       String query = "select /*+ index(dd ii) */ k1, k2, k3, k4, v1, v2, v3, v4 from dd"
         + " where k4=1 and k2=1 order by k1 asc, v1 asc limit  1";
-      assertPlan(conn, query).scanType("RANGE SCAN").table("II").keyRanges(" [1]")
+      assertPlan(conn, query).scanType("RANGE SCAN").table("II").keyRanges("[1]")
         .serverMergeColumns("[0.V1, 0.V2, 0.V3, 0.V4]").serverFirstKeyOnlyProjection(true)
         .serverWhereFilter("SERVER FILTER BY \"K2\" = 1").serverSortedBy("[\"K1\", \"V1\"]")
         .serverRowLimit(1L).clientRowLimit(1).clientSortAlgo("CLIENT MERGE SORT")
@@ -7226,7 +7225,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
           + " IN (($2.$4, $2.$5, $2.$6, $2.$7))")
         .subPlanCount(1).subPlan(0)
         .abstractExplainPlan("SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-        .scanType("RANGE SCAN").table("I").keyRanges(" ['XXX']").serverFirstKeyOnlyProjection(true)
+        .scanType("RANGE SCAN").table("I").keyRanges("['XXX']").serverFirstKeyOnlyProjection(true)
         .end();
     }
   }
@@ -7256,7 +7255,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
           + " IN (($2.$4, $2.$5, $2.$6, $2.$7))")
         .subPlanCount(1).subPlan(0)
         .abstractExplainPlan("SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-        .scanType("RANGE SCAN").table("IDX_PHOENIX_6986").keyRanges(" ['XXX']")
+        .scanType("RANGE SCAN").table("IDX_PHOENIX_6986").keyRanges("['XXX']")
         .serverFirstKeyOnlyProjection(true).end();
     }
   }
@@ -7269,7 +7268,7 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         "create table d (k integer primary key, v1 integer, v2 integer, v3 integer, v4 integer)");
       stmt.execute("create index i on d(v2) include (v3)");
       String query = "select /*+ index(d i) */ * from d where v2=1 and v3=1";
-      assertPlan(conn, query).scanType("RANGE SCAN").table("I").keyRanges(" [1]")
+      assertPlan(conn, query).scanType("RANGE SCAN").table("I").keyRanges("[1]")
         .serverMergeColumns("[0.V1, 0.V4]").serverWhereFilter("SERVER FILTER BY \"V3\" = 1")
         .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
     }

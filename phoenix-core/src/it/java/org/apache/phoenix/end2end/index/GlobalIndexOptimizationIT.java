@@ -83,7 +83,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
       }
       assertMutationPlan(conn1, query).abstractExplainPlan("DELETE ROWS CLIENT SELECT")
         .scanType("RANGE SCAN").table(indexTableName + "L(" + dataTableName + ")")
-        .keyRanges(" [1,*] - [1,100]").serverFirstKeyOnlyProjection(true)
+        .keyRanges("[1,*] - [1,100]").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
         .indexRejectedCount(1)
         .indexRejected(0, indexTableName + "G", OptimizerReasons.REASON_NO_PK_PREFIX_BOUND);
@@ -156,7 +156,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
 
       String query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ * FROM "
         + dataTableName + " where v1='a'";
-      assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName).keyRanges(" ['a']")
+      assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName).keyRanges("['a']")
         .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
 
@@ -175,7 +175,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
 
       query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ * FROM "
         + dataTableName + " where v1='a'";
-      assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName).keyRanges(" ['a']")
+      assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName).keyRanges("['a']")
         .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
 
@@ -197,7 +197,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
       query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ * FROM "
         + dataTableName + " where v1='a' limit 1";
       assertPlan(conn1, query).iteratorType("SERIAL").scanType("RANGE SCAN").table(indexTableName)
-        .keyRanges(" ['a']").serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
+        .keyRanges("['a']").serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .serverRowLimit(1L).clientRowLimit(1).indexRule(OptimizerReasons.RULE_HINT)
         .indexRejectedNone();
 
@@ -213,8 +213,8 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
       query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName
         + ")*/ t_id, k1, k2, k3, V1 from " + dataTableFullName
         + "  where v1<='z' and k3 > 1 order by V1,t_id";
-      assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName)
-        .keyRanges(" [*] - ['z']").serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
+      assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName).keyRanges("[*] - ['z']")
+        .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .serverWhereFilter("SERVER FILTER BY \"K3\" > 1").indexRule(OptimizerReasons.RULE_HINT)
         .indexRejectedNone();
 
@@ -250,7 +250,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
         .indexRejectedNone();
       skipScanJoinPlan.subPlanCount(1).subPlan(0)
         .abstractExplainPlan("SKIP-SCAN-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-        .scanType("RANGE SCAN").table(indexTableName).keyRanges(" [*] - ['z']")
+        .scanType("RANGE SCAN").table(indexTableName).keyRanges("[*] - ['z']")
         .serverFirstKeyOnlyProjection(true).indexRule(OptimizerReasons.RULE_DATA_TABLE)
         .indexRejectedNone().end();
       // The dynamic server filter references compiler-generated positional aliases ($N.$N) whose
@@ -288,8 +288,8 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
 
       query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ t_id, V1, k3 from "
         + dataTableFullName + "  where v1 <='z' group by v1,t_id, k3";
-      assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName)
-        .keyRanges(" [*] - ['z']").serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
+      assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName).keyRanges("[*] - ['z']")
+        .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"V1\", \"T_ID\", \"K3\"]")
         .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_HINT)
         .indexRejectedNone();
@@ -317,8 +317,8 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
       query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ v1,sum(k3) from "
         + dataTableFullName + " where v1 <='z'  group by v1 order by v1";
 
-      assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName)
-        .keyRanges(" [*] - ['z']").serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
+      assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName).keyRanges("[*] - ['z']")
+        .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"V1\"]")
         .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
 
@@ -353,7 +353,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
       String query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName
         + ")*/ k1,k2,k3,v1 FROM " + dataTableName + " where v1='a'";
       assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName)
-        .keyRanges(" ['tid1','a']").serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
+        .keyRanges("['tid1','a']").serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
 
       ResultSet rs = conn1.createStatement().executeQuery(query);
@@ -406,7 +406,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
        */
 
       assertPlan(conn1, query).scanType("SKIP SCAN ON 2 KEYS").table("_IDX_" + dataTableName)
-        .keyRanges(" [" + Short.MIN_VALUE + ",1] - [" + Short.MIN_VALUE + ",2]")
+        .keyRanges("[" + Short.MIN_VALUE + ",1] - [" + Short.MIN_VALUE + ",2]")
         .serverMergeColumns("[0.K3]").serverFirstKeyOnlyProjection(true)
         .indexRule(OptimizerReasons.RULE_HINT).indexRejectedNone();
 
@@ -445,7 +445,7 @@ public class GlobalIndexOptimizationIT extends ParallelStatsDisabledIT {
       // All columns available in index
       String query = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName
         + ")*/ t_id, k1, k2, V1 FROM " + dataTableName + " where v1='a'";
-      assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName).keyRanges(" ['a']")
+      assertPlan(conn1, query).scanType("RANGE SCAN").table(indexTableName).keyRanges("['a']")
         .serverFirstKeyOnlyProjection(true).indexRule(OptimizerReasons.RULE_HINT)
         .indexRejectedNone();
 

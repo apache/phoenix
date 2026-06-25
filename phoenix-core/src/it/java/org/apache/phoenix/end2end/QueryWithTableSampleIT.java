@@ -226,7 +226,7 @@ public class QueryWithTableSampleIT extends ParallelStatsEnabledIT {
         "SELECT * FROM " + tableName + " tablesample (100) where i1<2 union all SELECT * FROM "
           + tableName + " tablesample (2) where i2<6000";
       assertPlan(conn, query).abstractExplainPlan("UNION ALL OVER 2 QUERIES").subPlanCount(2)
-        .subPlan(0).scanType("RANGE SCAN").table(tableName).keyRanges(" [*] - [2]")
+        .subPlan(0).scanType("RANGE SCAN").table(tableName).keyRanges("[*] - [2]")
         .samplingRate(1.0d).serverFirstKeyOnlyProjection(true).end().subPlan(1)
         .scanType("FULL SCAN").table(tableName).samplingRate(0.02d)
         .serverFirstKeyOnlyProjection(true).serverWhereFilter("SERVER FILTER BY I2 < 6000").end();

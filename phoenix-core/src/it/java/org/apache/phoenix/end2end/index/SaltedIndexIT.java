@@ -161,12 +161,12 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
 
     if (indexSaltBuckets == null) {
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-        .table(indexTableFullName).keyRanges(" [~'y']").serverFirstKeyOnlyProjection(true)
+        .table(indexTableFullName).keyRanges("[~'y']").serverFirstKeyOnlyProjection(true)
         .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
     } else {
       assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("RANGE SCAN")
         .table(indexTableFullName)
-        .keyRanges(" [X'00',~'y'] - ["
+        .keyRanges("[X'00',~'y'] - ["
           + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (indexSaltBuckets - 1) })
           + ",~'y']")
         .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
@@ -187,12 +187,12 @@ public class SaltedIndexIT extends ParallelStatsDisabledIT {
     assertFalse(rs.next());
     if (indexSaltBuckets == null) {
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-        .table(indexTableFullName).keyRanges(" [*] - [~'x']").serverFirstKeyOnlyProjection(true)
+        .table(indexTableFullName).keyRanges("[*] - [~'x']").serverFirstKeyOnlyProjection(true)
         .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedNone();
     } else {
       assertPlan(conn, query).iteratorType("PARALLEL 4-WAY").scanType("RANGE SCAN")
         .table(indexTableFullName)
-        .keyRanges(" [X'00',*] - ["
+        .keyRanges("[X'00',*] - ["
           + PVarbinary.INSTANCE.toStringLiteral(new byte[] { (byte) (indexSaltBuckets - 1) })
           + ",~'x']")
         .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")

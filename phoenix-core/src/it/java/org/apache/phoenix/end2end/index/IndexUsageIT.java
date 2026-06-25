@@ -195,9 +195,9 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         .functionalMatch("(A.INT_COL1 + 1)").indexRejectedNone();
       if (localIndex) {
         basePlan.table("INDEX_TEST." + indexName + "(" + fullDataTableName + ")")
-          .keyRanges(" [1,0] - [1,*]").clientSortAlgo("CLIENT MERGE SORT");
+          .keyRanges("[1,0] - [1,*]").clientSortAlgo("CLIENT MERGE SORT");
       } else {
-        basePlan.table("INDEX_TEST." + indexName).keyRanges(" [0] - [*]").clientSortAlgo(null);
+        basePlan.table("INDEX_TEST." + indexName).keyRanges("[0] - [*]").clientSortAlgo(null);
       }
 
       ResultSet rs = conn.createStatement().executeQuery(sql);
@@ -249,10 +249,10 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").serverFirstKeyOnlyProjection(true)
         .functionalMatch("(A.INT_COL1 + 1)").indexRejectedNone();
       if (localIndex) {
-        basePlan.table("INDEX_TEST." + indexName + "(" + fullDataTableName + ")")
-          .keyRanges(" [1,2]").clientSortAlgo("CLIENT MERGE SORT");
+        basePlan.table("INDEX_TEST." + indexName + "(" + fullDataTableName + ")").keyRanges("[1,2]")
+          .clientSortAlgo("CLIENT MERGE SORT");
       } else {
-        basePlan.table("INDEX_TEST." + indexName).keyRanges(" [2]").clientSortAlgo(null);
+        basePlan.table("INDEX_TEST." + indexName).keyRanges("[2]").clientSortAlgo(null);
       }
 
       ResultSet rs = conn.createStatement().executeQuery(sql);
@@ -304,7 +304,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
           .functionalMatch("(A.INT_COL1 + 1)").indexRejectedNone();
       if (localIndex) {
         basePlan.scanType("RANGE SCAN")
-          .table("INDEX_TEST." + indexName + "(" + fullDataTableName + ")").keyRanges(" [1]")
+          .table("INDEX_TEST." + indexName + "(" + fullDataTableName + ")").keyRanges("[1]")
           .clientSortAlgo("CLIENT MERGE SORT");
       } else {
         basePlan.scanType("FULL SCAN").table("INDEX_TEST." + indexName).clientSortAlgo(null);
@@ -378,10 +378,10 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
           .functionalMatch("(\"cf1\".\"V1\" || '_' || \"CF2\".\"v2\")").indexRejectedNone();
       if (localIndex) {
-        basePlan.table(indexName + "(" + dataTableName + ")").keyRanges(" [1,'x_1']")
+        basePlan.table(indexName + "(" + dataTableName + ")").keyRanges("[1,'x_1']")
           .clientSortAlgo("CLIENT MERGE SORT");
       } else {
-        basePlan.table(indexName).keyRanges(" ['x_1']").clientSortAlgo(null);
+        basePlan.table(indexName).keyRanges("['x_1']").clientSortAlgo(null);
       }
 
       rs = conn.createStatement().executeQuery(query);
@@ -404,7 +404,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         .functionalMatch("(\"cf1\".\"V1\" || '_' || \"CF2\".\"v2\")").indexRejectedNone();
       if (localIndex) {
         basePlan.scanType("RANGE SCAN").table(indexName + "(" + dataTableName + ")")
-          .keyRanges(" [1]").clientSortAlgo("CLIENT MERGE SORT");
+          .keyRanges("[1]").clientSortAlgo("CLIENT MERGE SORT");
       } else {
         basePlan.scanType("FULL SCAN").table(indexName).clientSortAlgo(null);
       }
@@ -480,7 +480,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         assertPlan(conn, sql).iteratorType("PARALLEL 1-WAY");
       if (localIndex) {
         basePlan.scanType("RANGE SCAN")
-          .table("INDEX_TEST." + indexName + "(" + fullDataTableName + ")").keyRanges(" [1,2]")
+          .table("INDEX_TEST." + indexName + "(" + fullDataTableName + ")").keyRanges("[1,2]")
           .clientSortAlgo("CLIENT MERGE SORT").serverFirstKeyOnlyProjection(true)
           .functionalMatch("(A.INT_COL1 + 1)").indexRejectedNone();
       } else {
@@ -539,10 +539,10 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
           .functionalMatch("(K1 + K2 + K3)").indexRejectedNone();
       if (local) {
-        basePlan.table(indexName1 + "(" + dataTableName + ")").keyRanges(" [1,173]")
+        basePlan.table(indexName1 + "(" + dataTableName + ")").keyRanges("[1,173]")
           .clientSortAlgo("CLIENT MERGE SORT");
       } else {
-        basePlan.table("_IDX_" + dataTableName).keyRanges(" [" + Short.MIN_VALUE + ",173]")
+        basePlan.table("_IDX_" + dataTableName).keyRanges("[" + Short.MIN_VALUE + ",173]")
           .clientSortAlgo(null);
       }
 
@@ -564,10 +564,10 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         .indexRejectedCount(1);
       if (local) {
         basePlan.table(indexName2 + "(" + dataTableName + ")")
-          .keyRanges(" [" + (2) + ",'foo2_bar2']").clientSortAlgo("CLIENT MERGE SORT");
+          .keyRanges("[" + (2) + ",'foo2_bar2']").clientSortAlgo("CLIENT MERGE SORT");
       } else {
         basePlan.table("_IDX_" + dataTableName)
-          .keyRanges(" [" + (Short.MIN_VALUE + 1) + ",'foo2_bar2']").clientSortAlgo(null);
+          .keyRanges("[" + (Short.MIN_VALUE + 1) + ",'foo2_bar2']").clientSortAlgo(null);
       }
 
       rs = conn.createStatement().executeQuery(query);
@@ -624,7 +624,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         "SELECT s2||'_'||s3 FROM " + viewName + " WHERE k2=1 AND (s2||'_'||s3)='abc_cab'";
 
       assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
-        .table(indexName2).keyRanges(" [1,'abc_cab','foo']").serverFirstKeyOnlyProjection(true)
+        .table(indexName2).keyRanges("[1,'abc_cab','foo']").serverFirstKeyOnlyProjection(true)
         .functionalMatch("(S2 || '_' || S3)").indexRejectedCount(1);
 
       rs = conn.createStatement().executeQuery(query);
@@ -634,7 +634,7 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
 
       conn.createStatement().execute("ALTER VIEW " + viewName + " DROP COLUMN s4");
       // i2 cannot be used since s4 has been dropped from the view, so i1 will be used
-      assertPlan(conn, query).scanType("RANGE SCAN").tableContains(indexName1).keyRanges(" [1]")
+      assertPlan(conn, query).scanType("RANGE SCAN").tableContains(indexName1).keyRanges("[1]")
         .serverFirstKeyOnlyProjection(true)
         .serverWhereFilter(
           "SERVER FILTER BY ((\"S2\" || '_' || \"S3\") = 'abc_cab' AND \"S1\" = 'foo')")
@@ -726,10 +726,10 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").serverFirstKeyOnlyProjection(true)
         .functionalMatch("REGEXP_SUBSTR(V,'id:\\\\w+')").indexRejectedNone();
       if (localIndex) {
-        basePlan.table(indexName + "(" + dataTableName + ")").keyRanges(" [1,'id:id1']")
+        basePlan.table(indexName + "(" + dataTableName + ")").keyRanges("[1,'id:id1']")
           .clientSortAlgo("CLIENT MERGE SORT");
       } else {
-        basePlan.table(indexName).keyRanges(" ['id:id1']").clientSortAlgo(null);
+        basePlan.table(indexName).keyRanges("['id:id1']").clientSortAlgo(null);
       }
 
       rs = conn.createStatement().executeQuery(query);
@@ -794,16 +794,16 @@ public class IndexUsageIT extends ParallelStatsDisabledIT {
         + "where c.c_customer_sk || c.c_first_name = '1David'";
       if (localIndex) {
         assertPlan(conn, query).scanType("RANGE SCAN")
-          .tableContains(indexName + "(" + tableName + ")").keyRanges(" [1,'1David']")
+          .tableContains(indexName + "(" + tableName + ")").keyRanges("[1,'1David']")
           .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT").indexRule(null)
           .indexRejectedNone().subPlanCount(1).subPlan(0).scanType("RANGE SCAN")
-          .tableContains(indexName + "(" + tableName + ")").keyRanges(" [1]")
+          .tableContains(indexName + "(" + tableName + ")").keyRanges("[1]")
           .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
           .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT, SKIP MERGE */")
           .indexRule(null).indexRejectedNone().end();
       } else {
         assertPlan(conn, query).scanType("RANGE SCAN").tableContains(indexName)
-          .keyRanges(" ['1David']").serverFirstKeyOnlyProjection(true).indexRule(null)
+          .keyRanges("['1David']").serverFirstKeyOnlyProjection(true).indexRule(null)
           .indexRejectedNone().subPlanCount(1).subPlan(0).scanType("FULL SCAN")
           .tableContains(indexName).serverFirstKeyOnlyProjection(true)
           .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT, SKIP MERGE */")

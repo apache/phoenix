@@ -79,7 +79,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
       .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"I.0:NAME\"]")
       .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
       .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT").end();
   }
 
@@ -92,7 +92,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
       .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"I.:item_id\"]")
       .clientSortAlgo("CLIENT MERGE SORT").clientSortedBy("[SUM(O.QUANTITY) DESC]").subPlanCount(1)
       .subPlan(0).abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
       .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT").end();
   }
 
@@ -113,7 +113,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     String itemIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_ITEM_INDEX);
     String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
     assertPlan(conn, query).scanType("RANGE SCAN").table(itemIndex + "(" + item + ")")
-      .keyRanges(" [1]").serverFirstKeyOnlyProjection(true)
+      .keyRanges("[1]").serverFirstKeyOnlyProjection(true)
       .serverAggregate("SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY [\"I.0:NAME\"]")
       .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD LEFT */")
@@ -147,11 +147,11 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     String supplier = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
     String supplierIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_SUPPLIER_INDEX);
     assertPlan(conn, query).scanType("RANGE SCAN").table(itemIndex + "(" + item + ")")
-      .keyRanges(" [1,'T1'] - [1,'T5']").serverFirstKeyOnlyProjection(true)
+      .keyRanges("[1,'T1'] - [1,'T5']").serverFirstKeyOnlyProjection(true)
       .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
       .scanType("RANGE SCAN").table(supplierIndex + "(" + supplier + ")")
-      .keyRanges(" [1,'S1'] - [1,'S5']").serverFirstKeyOnlyProjection(true)
+      .keyRanges("[1,'S1'] - [1,'S5']").serverFirstKeyOnlyProjection(true)
       .clientSortAlgo("CLIENT MERGE SORT").end();
   }
 
@@ -162,10 +162,10 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     String supplier = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
     String supplierIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_SUPPLIER_INDEX);
     assertPlan(conn, query).scanType("SKIP SCAN ON 2 KEYS").table(itemIndex + "(" + item + ")")
-      .keyRanges(" [1,'T1'] - [1,'T5']").clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1)
+      .keyRanges("[1,'T1'] - [1,'T5']").clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1)
       .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
       .scanType("SKIP SCAN ON 2 KEYS").table(supplierIndex + "(" + supplier + ")")
-      .keyRanges(" [1,'S1'] - [1,'S5']").serverFirstKeyOnlyProjection(true)
+      .keyRanges("[1,'S1'] - [1,'S5']").serverFirstKeyOnlyProjection(true)
       .clientSortAlgo("CLIENT MERGE SORT").end();
   }
 
@@ -177,13 +177,13 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     String supplier = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
     String supplierIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_SUPPLIER_INDEX);
     assertPlan(conn, query).scanType("RANGE SCAN").table(itemIndex + "(" + item + ")")
-      .keyRanges(" [1]").clientSortAlgo("CLIENT MERGE SORT")
+      .keyRanges("[1]").clientSortAlgo("CLIENT MERGE SORT")
       .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"I.:item_id\" IN (\"O.item_id\")")
       .subPlanCount(2).subPlan(0)
       .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT, SKIP MERGE */")
       .scanType("FULL SCAN").table(order).serverWhereFilter("SERVER FILTER BY QUANTITY < 5000")
       .end().subPlan(1).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 1  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(supplierIndex + "(" + supplier + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(supplierIndex + "(" + supplier + ")").keyRanges("[1]")
       .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT").end();
   }
 
@@ -195,7 +195,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
       .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"I1.item_id\" IN (\"I2.:item_id\")")
       .subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
       .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT").end();
   }
 
@@ -204,12 +204,12 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
     String itemIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_ITEM_INDEX);
     assertPlan(conn, query).scanType("RANGE SCAN").table(itemIndex + "(" + item + ")")
-      .keyRanges(" [1]").serverFirstKeyOnlyProjection(true)
+      .keyRanges("[1]").serverFirstKeyOnlyProjection(true)
       .serverSortedBy("[\"I1.0:NAME\", \"I2.0:NAME\"]").clientSortAlgo("CLIENT MERGE SORT")
       .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"I1.:item_id\" IN (\"I2.0:supplier_id\")")
       .subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
       .clientSortAlgo("CLIENT MERGE SORT").end();
   }
 
@@ -224,21 +224,21 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     if (!noStarJoin) {
       assertPlan(conn, query).scanType("FULL SCAN").table(order).subPlanCount(2).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-        .scanType("RANGE SCAN").table(customerIndex + "(" + customer + ")").keyRanges(" [1]")
+        .scanType("RANGE SCAN").table(customerIndex + "(" + customer + ")").keyRanges("[1]")
         .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT").end().subPlan(1)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 1  /* HASH BUILD RIGHT */")
-        .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+        .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
         .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT").end();
     } else {
       assertPlan(conn, query).scanType("RANGE SCAN").table(itemIndex + "(" + item + ")")
-        .keyRanges(" [1]").serverFirstKeyOnlyProjection(true).serverSortedBy("[\"O.order_id\"]")
+        .keyRanges("[1]").serverFirstKeyOnlyProjection(true).serverSortedBy("[\"O.order_id\"]")
         .clientSortAlgo("CLIENT MERGE SORT")
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"I.:item_id\" IN (\"O.item_id\")")
         .subPlanCount(1).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD LEFT */")
         .scanType("FULL SCAN").table(order).subPlanCount(1).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-        .scanType("RANGE SCAN").table(customerIndex + "(" + customer + ")").keyRanges(" [1]")
+        .scanType("RANGE SCAN").table(customerIndex + "(" + customer + ")").keyRanges("[1]")
         .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT").end().end();
     }
   }
@@ -250,16 +250,15 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
     String itemIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_ITEM_INDEX);
     String supplier = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
-    assertPlan(conn, query).scanType("RANGE SCAN").table(customer)
-      .keyRanges(" [*] - ['0000000005']").serverSortedBy("[\"C.customer_id\", \"I.0:NAME\"]")
-      .clientSortAlgo("CLIENT MERGE SORT")
+    assertPlan(conn, query).scanType("RANGE SCAN").table(customer).keyRanges("[*] - ['0000000005']")
+      .serverSortedBy("[\"C.customer_id\", \"I.0:NAME\"]").clientSortAlgo("CLIENT MERGE SORT")
       .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"C.customer_id\" IN (\"O.customer_id\")")
       .subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
       .scanType("FULL SCAN").table(order)
       .serverWhereFilter("SERVER FILTER BY \"order_id\" != '000000000000003'").subPlanCount(1)
       .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
       .serverWhereFilter("SERVER FILTER BY \"NAME\" != 'T3'").clientSortAlgo("CLIENT MERGE SORT")
       .subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD LEFT */")
@@ -275,7 +274,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
       .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [I.NAME]")
       .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
       .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
       .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone().end();
   }
@@ -290,7 +289,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
       .clientSortAlgo("CLIENT MERGE SORT").clientSortedBy("[SUM(O.QUANTITY) DESC]").subPlanCount(1)
       .subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT, SKIP MERGE */")
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
       .serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
       .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone().end();
   }
@@ -301,7 +300,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     String itemIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_ITEM_INDEX);
     String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
     assertPlan(conn, query).scanType("RANGE SCAN").table(itemIndex + "(" + item + ")")
-      .keyRanges(" [1]").serverFirstKeyOnlyProjection(true)
+      .keyRanges("[1]").serverFirstKeyOnlyProjection(true)
       .serverSortedBy("[O.Q DESC NULLS LAST, I.IID]").clientSortAlgo("CLIENT MERGE SORT")
       .subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
@@ -317,7 +316,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     String itemIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_ITEM_INDEX);
     String order = getTableName(conn, JOIN_ORDER_TABLE_FULL_NAME);
     assertPlan(conn, query).scanType("RANGE SCAN").table(itemIndex + "(" + item + ")")
-      .keyRanges(" [1]").serverFirstKeyOnlyProjection(true).serverSortedBy("[O.Q DESC, I.IID]")
+      .keyRanges("[1]").serverFirstKeyOnlyProjection(true).serverSortedBy("[O.Q DESC, I.IID]")
       .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD LEFT */")
       .scanType("FULL SCAN").table(order)
@@ -333,14 +332,13 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     String item = getTableName(conn, JOIN_ITEM_TABLE_FULL_NAME);
     String itemIndex = SchemaUtil.getTableName(getSchemaName(), JOIN_ITEM_INDEX);
     String supplier = getTableName(conn, JOIN_SUPPLIER_TABLE_FULL_NAME);
-    assertPlan(conn, query).scanType("RANGE SCAN").table(customer)
-      .keyRanges(" [*] - ['0000000005']").serverSortedBy("[C.CID, QO.INAME]")
-      .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
-      .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+    assertPlan(conn, query).scanType("RANGE SCAN").table(customer).keyRanges("[*] - ['0000000005']")
+      .serverSortedBy("[C.CID, QO.INAME]").clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1)
+      .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
       .scanType("FULL SCAN").table(order)
       .serverWhereFilter("SERVER FILTER BY \"order_id\" != '000000000000003'").subPlanCount(1)
       .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
       .serverWhereFilter("SERVER FILTER BY \"NAME\" != 'T3'").clientSortAlgo("CLIENT MERGE SORT")
       .subPlanCount(1).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD LEFT */")
@@ -359,7 +357,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     assertPlan(conn, query).iteratorType("SERIAL").scanType("FULL SCAN").table(supplier)
       .serverRowLimit(4L).clientRowLimit(4).joinScannerLimit(4L).subPlanCount(2).subPlan(0)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
       .clientSortAlgo("CLIENT MERGE SORT").end().subPlan(1)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 1  /* HASH BUILD RIGHT, DELAYED EVALUATION */")
       .scanType("FULL SCAN").table(order).end();
@@ -375,7 +373,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
       .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"S.supplier_id\" IN (\"I.0:supplier_id\")")
       .joinScannerLimit(4L).subPlanCount(2).subPlan(0)
       .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
       .clientSortAlgo("CLIENT MERGE SORT").end().subPlan(1)
       .abstractExplainPlan(
         "PARALLEL INNER-JOIN TABLE 1  /* HASH BUILD RIGHT, DELAYED EVALUATION */")
@@ -393,7 +391,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     ExplainPlanAttributes attributes =
       statement.optimizeQuery().getExplainPlan().getPlanStepsAsAttributes();
     assertPlan(attributes).scanType("RANGE SCAN").table(itemIndex + "(" + item + ")")
-      .keyRanges(" [1]").serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
+      .keyRanges("[1]").serverFirstKeyOnlyProjection(true).clientSortAlgo("CLIENT MERGE SORT")
       .clientRowLimit(4)
       .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"I.:item_id\" IN (\"O.item_id\")")
       .joinScannerLimit(4L).subPlanCount(1).subPlan(0)
@@ -410,7 +408,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
     assertPlan(conn, query).iteratorType("SERIAL").scanType("FULL SCAN").table(supplier)
       .serverOffset(2).serverRowLimit(3L).clientRowLimit(1).joinScannerLimit(3L).subPlanCount(2)
       .subPlan(0).abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
       .clientSortAlgo("CLIENT MERGE SORT").end().subPlan(1)
       .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 1  /* HASH BUILD RIGHT, DELAYED EVALUATION */")
       .scanType("FULL SCAN").table(order).end();
@@ -427,7 +425,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
       .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"S.supplier_id\" IN (\"I.0:supplier_id\")")
       .joinScannerLimit(3L).subPlanCount(2).subPlan(0)
       .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
-      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges(" [1]")
+      .scanType("RANGE SCAN").table(itemIndex + "(" + item + ")").keyRanges("[1]")
       .clientSortAlgo("CLIENT MERGE SORT").end().subPlan(1)
       .abstractExplainPlan(
         "PARALLEL INNER-JOIN TABLE 1  /* HASH BUILD RIGHT, DELAYED EVALUATION */")
@@ -469,14 +467,14 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
       assertEquals(rs.getString(1), "888-888-1111");
       assertFalse(rs.next());
       assertPlan(conn, query).scanType("RANGE SCAN")
-        .table(supplierIndex + "(" + supplierTable + ")").keyRanges(" [1,'S1']")
+        .table(supplierIndex + "(" + supplierTable + ")").keyRanges("[1,'S1']")
         .serverMergeColumns("[0.PHONE]").serverFirstKeyOnlyProjection(true)
         .clientSortAlgo("CLIENT MERGE SORT")
         .dynamicServerFilter("DYNAMIC SERVER FILTER BY \"S.:supplier_id\" IN (\"I.0:supplier_id\")")
         .subPlanCount(1).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .scanType("RANGE SCAN").table(itemIndex + "(" + itemTable + ")")
-        .keyRanges(" [1,*] - [1,'T6']").clientSortAlgo("CLIENT MERGE SORT").end();
+        .keyRanges("[1,*] - [1,'T6']").clientSortAlgo("CLIENT MERGE SORT").end();
 
       query = "select phone, max(i.name) from " + supplierTable + " s join " + itemTable
         + " i on s.\"supplier_id\" = i.\"supplier_id\" where s.name = 'S1' and i.name < 'T6' group by phone";
@@ -487,7 +485,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
       assertEquals(rs.getString(2), "T2");
       assertFalse(rs.next());
       assertPlan(conn, query).scanType("RANGE SCAN")
-        .table(supplierIndex + "(" + supplierTable + ")").keyRanges(" [1,'S1']")
+        .table(supplierIndex + "(" + supplierTable + ")").keyRanges("[1,'S1']")
         .serverMergeColumns("[0.PHONE]").serverFirstKeyOnlyProjection(true)
         .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"S.PHONE\"]")
         .clientSortAlgo("CLIENT MERGE SORT")
@@ -495,7 +493,7 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
         .subPlanCount(1).subPlan(0)
         .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .scanType("RANGE SCAN").table(itemIndex + "(" + itemTable + ")")
-        .keyRanges(" [1,*] - [1,'T6']").clientSortAlgo("CLIENT MERGE SORT").end();
+        .keyRanges("[1,*] - [1,'T6']").clientSortAlgo("CLIENT MERGE SORT").end();
 
       query = "select max(phone), max(i.name) from " + supplierTable + " s left join " + itemTable
         + " i on s.\"supplier_id\" = i.\"supplier_id\" and i.name < 'T6' where s.name <= 'S3'";
@@ -506,12 +504,12 @@ public class HashJoinLocalIndexIT extends HashJoinIT {
       assertEquals(rs.getString(2), "T4");
       assertFalse(rs.next());
       assertPlan(conn, query).scanType("RANGE SCAN")
-        .table(supplierIndex + "(" + supplierTable + ")").keyRanges(" [1,*] - [1,'S3']")
+        .table(supplierIndex + "(" + supplierTable + ")").keyRanges("[1,*] - [1,'S3']")
         .serverMergeColumns("[0.PHONE]").serverFirstKeyOnlyProjection(true)
         .serverAggregate("SERVER AGGREGATE INTO SINGLE ROW").subPlanCount(1).subPlan(0)
         .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
         .scanType("RANGE SCAN").table(itemIndex + "(" + itemTable + ")")
-        .keyRanges(" [1,*] - [1,'T6']").clientSortAlgo("CLIENT MERGE SORT").end();
+        .keyRanges("[1,*] - [1,'T6']").clientSortAlgo("CLIENT MERGE SORT").end();
     } finally {
       conn.close();
     }
