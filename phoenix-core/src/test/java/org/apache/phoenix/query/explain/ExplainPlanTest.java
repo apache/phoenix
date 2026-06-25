@@ -874,9 +874,9 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
         "    REGIONS PLANNED <N>", "    SERVER 1 ROW LIMIT", "CLIENT 1 ROW LIMIT"),
       attrs().put("tenantId", TENANT_ID).put("viewName", MT_VIEW).put("viewBaseName", MT_BASE)
         .put("iteratorTypeAndScanSize", "SERIAL <N>-WAY").put("consistency", "STRONG")
-        .put("explainScanType", "RANGE SCAN ").put("tableName", "EO_MT_BASE")
+        .put("explainScanType", "RANGE SCAN").put("tableName", "EO_MT_BASE")
         .put("indexName", "EO_MT_VIEW").put("indexRule", "data table")
-        .put("keyRanges", " ['tenant42']").put("serverRowLimit", 1).put("clientRowLimit", 1)
+        .put("keyRanges", "['tenant42']").put("serverRowLimit", 1).put("clientRowLimit", 1)
         .set("clientSteps", clientSteps("CLIENT 1 ROW LIMIT")));
   }
 
@@ -1894,7 +1894,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     ObjectNode n = defaultAttrs();
     n.put("iteratorTypeAndScanSize", "PARALLEL <N>-WAY");
     n.put("consistency", "STRONG");
-    n.put("explainScanType", scanType);
+    n.put("explainScanType", scanType.trim());
     n.put("tableName", table);
     // For a data table scan the per scan INDEX line names the same entity as tableName. View and
     // index scans that diverge override indexName on the returned node.
@@ -1903,7 +1903,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     // A point lookup short-circuits to the point lookup rule. Index targets set their own rule.
     n.put("indexRule", scanType.trim().startsWith("POINT LOOKUP") ? "point lookup" : "data table");
     if (keys != null) {
-      n.put("keyRanges", keys);
+      n.put("keyRanges", keys.trim());
     }
     return n;
   }
