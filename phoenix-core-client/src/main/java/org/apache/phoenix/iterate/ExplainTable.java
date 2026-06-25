@@ -604,13 +604,30 @@ public abstract class ExplainTable {
     if (!verbose) {
       return;
     }
-    RowProjector projector = getProjector();
-    if (projector == null) {
+    List<String> columns = projectedColumnNames(getProjector());
+    if (columns == null) {
       return;
+    }
+    planSteps.add("    PROJECT " + String.join(", ", columns));
+    if (explainPlanAttributesBuilder != null) {
+      explainPlanAttributesBuilder.setServerProject(columns);
+    }
+  }
+
+  /**
+   * Render a {@link RowProjector}'s column list as the display names used by the VERBOSE
+   * {@code PROJECT} line, falling back to the projector's expression string when a column projector
+   * has no name.
+   * @return the list of display names, or {@code null} when the projector is {@code null} or
+   *         projects nothing
+   */
+  public static List<String> projectedColumnNames(RowProjector projector) {
+    if (projector == null) {
+      return null;
     }
     List<? extends ColumnProjector> columnProjectors = projector.getColumnProjectors();
     if (columnProjectors == null || columnProjectors.isEmpty()) {
-      return;
+      return null;
     }
     List<String> columns = new ArrayList<>(columnProjectors.size());
     for (ColumnProjector columnProjector : columnProjectors) {
@@ -620,10 +637,45 @@ public abstract class ExplainTable {
       }
       columns.add(name);
     }
-    planSteps.add("    PROJECT " + String.join(", ", columns));
-    if (explainPlanAttributesBuilder != null) {
-      explainPlanAttributesBuilder.setServerProject(columns);
+    return columns;
+  }
+
+  /**
+   * Server-side {@code UPSERT SELECT} and {@code DELETE} inner plans are compiled as an aggregating
+   * {@code SELECT COUNT(1)} whose count is used solely to report how many rows were touched. That
+   * count is an internal compiler choice. Surfacing {@code PROJECT COUNT(1)} on the explain output
+   * is misleading because the user asked to upsert/delete a set of columns/rows, not to count them.
+   * @param planSteps       the composed mutation plan steps (mutated in place)
+   * @param innerAttributes the inner aggregate plan's rendered attributes (source of the count-form
+   *                        {@code serverProject})
+   * @param builder         the mutation plan's attribute builder (its {@code serverProject} is
+   *                        overwritten)
+   * @param userProjector   the user-facing projection to surface instead of the count form
+   */
+  public static void overrideMutationProject(List<String> planSteps,
+    ExplainPlanAttributes innerAttributes, ExplainPlanAttributesBuilder builder,
+    RowProjector userProjector) {
+    if (planSteps == null || innerAttributes == null || builder == null) {
+      return;
     }
+    List<String> countProject = innerAttributes.getServerProject();
+    if (countProject == null || countProject.isEmpty()) {
+      return;
+    }
+    // Only override the internal COUNT(*)/COUNT(1) aggregate projection used for mutation row counts.
+    if (countProject.size() != 1 || !countProject.get(0).startsWith("COUNT(")) {
+      return;
+    }
+    List<String> userColumns = projectedColumnNames(userProjector);
+    if (userColumns == null || userColumns.isEmpty()) {
+      return;
+    }
+    String oldLine = "    PROJECT " + String.join(", ", countProject);
+    int idx = planSteps.indexOf(oldLine);
+    if (idx >= 0) {
+      planSteps.set(idx, "    PROJECT " + String.join(", ", userColumns));
+    }
+    builder.setServerProject(userColumns);
   }
 
   /**
