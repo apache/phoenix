@@ -1885,8 +1885,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
 
   /**
    * Convenience wrapper that builds {@link #defaultAttrs()} for scans.
-   * @param scanType the {@code explainScanType} string (with its trailing space, e.g.
-   *                 {@code "FULL SCAN "})
+   * @param scanType the {@code explainScanType} string e.g. {@code "FULL SCAN"})
    * @param table    the {@code tableName} value
    * @param keys     the {@code keyRanges} string (may be {@code null} or empty)
    */
@@ -1896,11 +1895,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     n.put("consistency", "STRONG");
     n.put("explainScanType", scanType.trim());
     n.put("tableName", table);
-    // For a data table scan the per scan INDEX line names the same entity as tableName. View and
-    // index scans that diverge override indexName on the returned node.
     n.put("indexName", table);
-    // A data table scan that participated in optimizer index selection records its decision rule.
-    // A point lookup short-circuits to the point lookup rule. Index targets set their own rule.
     n.put("indexRule", scanType.trim().startsWith("POINT LOOKUP") ? "point lookup" : "data table");
     if (keys != null) {
       n.put("keyRanges", keys.trim());
