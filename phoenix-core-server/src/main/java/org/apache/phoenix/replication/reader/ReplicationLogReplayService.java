@@ -29,6 +29,9 @@ import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Supplier;
+import org.apache.phoenix.thirdparty.com.google.common.base.Suppliers;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 /**
@@ -77,14 +80,51 @@ public class ReplicationLogReplayService {
    */
   public static final int DEFAULT_REPLICATION_REPLAY_SERVICE_EXECUTOR_SHUTDOWN_TIMEOUT_SECONDS = 30;
 
+  public static final long CONSISTENCY_POINT_UNAVAILABLE = 0L;
+  public static final long CONSISTENCY_POINT_GUARD_DISABLED = Long.MAX_VALUE;
+
+  public static final String CONSISTENCY_POINT_CACHE_TTL_SECONDS_KEY =
+    "phoenix.replication.compaction.guard.cache.ttl.seconds";
+  public static final long DEFAULT_CONSISTENCY_POINT_CACHE_TTL_SECONDS = 30;
+
+  private static volatile long lastFallbackWarnTime = 0;
+  private static final long WARN_LOG_INTERVAL_MS = 60_000;
+
   private static volatile ReplicationLogReplayService instance;
 
   private final Configuration conf;
   private ScheduledExecutorService scheduler;
   private volatile boolean isRunning = false;
+  private final Supplier<Long> cachedConsistencyPoint;
 
   private ReplicationLogReplayService(final Configuration conf) {
     this.conf = conf;
+    long cacheTtl = conf.getLong(CONSISTENCY_POINT_CACHE_TTL_SECONDS_KEY,
+      DEFAULT_CONSISTENCY_POINT_CACHE_TTL_SECONDS);
+    // Guava's memoizeWithExpiration does NOT cache exceptions — a thrown RuntimeException
+    // causes the next get() to re-invoke the supplier. We rely on this: transient failures
+    // (NN flap, SYSTEM.HA_GROUP unavailable) retry on the next compaction rather than
+    // caching a stale fallback for the full TTL.
+    this.cachedConsistencyPoint = Suppliers.memoizeWithExpiration(() -> {
+      try {
+        return getConsistencyPoint();
+      } catch (IOException | SQLException e) {
+        throw new RuntimeException("Failed to fetch consistency point", e);
+      }
+    }, cacheTtl, TimeUnit.SECONDS);
+  }
+
+  private ReplicationLogReplayService(Configuration conf, long fixedConsistencyPoint) {
+    this.conf = conf;
+    this.cachedConsistencyPoint = () -> fixedConsistencyPoint;
+  }
+
+  private ReplicationLogReplayService(Configuration conf, Supplier<Long> supplier) {
+    this.conf = conf;
+    long cacheTtl = conf.getLong(CONSISTENCY_POINT_CACHE_TTL_SECONDS_KEY,
+      DEFAULT_CONSISTENCY_POINT_CACHE_TTL_SECONDS);
+    this.cachedConsistencyPoint =
+      Suppliers.memoizeWithExpiration(supplier, cacheTtl, TimeUnit.SECONDS);
   }
 
   /**
@@ -103,6 +143,28 @@ public class ReplicationLogReplayService {
       }
     }
     return instance;
+  }
+
+  @VisibleForTesting
+  public static void setConsistencyPointForTesting(Configuration conf, long fixedConsistencyPoint) {
+    synchronized (ReplicationLogReplayService.class) {
+      instance = new ReplicationLogReplayService(conf, fixedConsistencyPoint);
+    }
+  }
+
+  @VisibleForTesting
+  public static void setConsistencyPointSupplierForTesting(Configuration conf,
+    Supplier<Long> supplier) {
+    synchronized (ReplicationLogReplayService.class) {
+      instance = new ReplicationLogReplayService(conf, supplier);
+    }
+  }
+
+  @VisibleForTesting
+  public static void resetInstanceForTesting() {
+    synchronized (ReplicationLogReplayService.class) {
+      instance = null;
+    }
   }
 
   /**
@@ -227,6 +289,32 @@ public class ReplicationLogReplayService {
         .getReplicationReplayLogDiscovery().getConsistencyPoint(), consistencyPoint);
     }
     return consistencyPoint;
+  }
+
+  /**
+   * Resolves the minimum replication consistency point across all HA groups. Uses a cached value
+   * with a configurable TTL (see {@link #CONSISTENCY_POINT_CACHE_TTL_SECONDS_KEY}) to avoid
+   * repeated RPCs during compaction bursts. Returns {@link #CONSISTENCY_POINT_UNAVAILABLE} on any
+   * failure (caller treats this as "retain all delete markers").
+   */
+  public static long resolveConsistencyPoint(Configuration conf, String tableName,
+    String columnFamilyName) {
+    try {
+      long consistencyPoint = getInstance(conf).cachedConsistencyPoint.get();
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Replication guard: table={} store={} consistencyPoint={}", tableName,
+          columnFamilyName, consistencyPoint);
+      }
+      return consistencyPoint;
+    } catch (Exception e) {
+      long now = System.currentTimeMillis();
+      if (now - lastFallbackWarnTime > WARN_LOG_INTERVAL_MS) {
+        lastFallbackWarnTime = now;
+        LOG.warn("Replication guard: consistency point unavailable for table={} store={}."
+          + " Retaining all delete markers.", tableName, columnFamilyName, e);
+      }
+      return CONSISTENCY_POINT_UNAVAILABLE;
+    }
   }
 
   /** Returns the list of HA groups on the cluster */

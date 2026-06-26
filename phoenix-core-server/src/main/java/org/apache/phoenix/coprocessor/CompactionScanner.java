@@ -81,6 +81,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.replication.reader.ReplicationLogReplayService;
 import org.apache.phoenix.schema.CompiledConditionalTTLExpression;
 import org.apache.phoenix.schema.CompiledTTLExpression;
 import org.apache.phoenix.schema.ConditionalTTLExpression;
@@ -139,6 +140,7 @@ public class CompactionScanner implements InternalScanner {
   private final Store store;
   private final RegionCoprocessorEnvironment env;
   private long maxLookbackWindowStart;
+  private final long replicationConsistencyPoint;
   private final long maxLookbackInMillis;
   private int minVersion;
   private int maxVersion;
@@ -199,8 +201,19 @@ public class CompactionScanner implements InternalScanner {
     this.maxLookbackWindowStart = this.maxLookbackInMillis == 0
       ? compactionTime
       : compactionTime - (this.maxLookbackInMillis + 1);
-    ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
+    Configuration conf = env.getConfiguration();
     this.major = major && !forceMinorCompaction;
+    boolean replayEnabled =
+      conf.getBoolean(ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED,
+        ReplicationLogReplayService.DEFAULT_REPLICATION_REPLAY_ENABLED);
+    if (this.major && replayEnabled) {
+      this.replicationConsistencyPoint =
+        ReplicationLogReplayService.resolveConsistencyPoint(conf, tableName, columnFamilyName);
+    } else {
+      this.replicationConsistencyPoint =
+        ReplicationLogReplayService.CONSISTENCY_POINT_GUARD_DISABLED;
+    }
+    ColumnFamilyDescriptor cfd = store.getColumnFamilyDescriptor();
     this.minVersion = cfd.getMinVersions();
     this.maxVersion = cfd.getMaxVersions();
     this.keepDeletedCells = keepDeleted ? KeepDeletedCells.TTL : cfd.getKeepDeletedCells();
@@ -1632,6 +1645,33 @@ public class CompactionScanner implements InternalScanner {
   }
 
   /**
+   * Computes the effective max-lookback boundary for a row, capped by the replication consistency
+   * point. The consistency point represents an exclusive upper bound: everything with ts <
+   * consistencyPoint has been replayed. We subtract 1 so that cells at exactly ts ==
+   * consistencyPoint satisfy the strict-greater retention check and are retained.
+   * @param ttlWindowStart              row TTL window start in millis since epoch
+   * @param maxLookbackWindowStart      store-level max-lookback window start in millis since epoch
+   * @param replicationConsistencyPoint exclusive upper bound of replayed timestamps;
+   *                                    CONSISTENCY_POINT_UNAVAILABLE (0) retains all,
+   *                                    CONSISTENCY_POINT_GUARD_DISABLED (Long.MAX_VALUE) means
+   *                                    guard is a no-op
+   * @return effective boundary for the strict-greater retention compare (millis since epoch)
+   */
+  public static long computeRowMaxLookbackWithGuard(long ttlWindowStart,
+    long maxLookbackWindowStart, long replicationConsistencyPoint) {
+    if (
+      replicationConsistencyPoint == ReplicationLogReplayService.CONSISTENCY_POINT_UNAVAILABLE
+        || replicationConsistencyPoint
+            == ReplicationLogReplayService.CONSISTENCY_POINT_GUARD_DISABLED
+    ) {
+      return Math.min(Math.max(ttlWindowStart, maxLookbackWindowStart),
+        replicationConsistencyPoint);
+    }
+    return Math.min(Math.max(ttlWindowStart, maxLookbackWindowStart),
+      replicationConsistencyPoint - 1);
+  }
+
+  /**
    * The context for a given row during compaction. A row may have multiple compaction row versions.
    * CompactionScanner uses the same row context for these versions.
    */
@@ -1657,10 +1697,14 @@ public class CompactionScanner implements InternalScanner {
     private void setTTL(long ttlInSecs) {
       this.ttl = Math.max(ttlInSecs * 1000, maxLookbackInMillis + 1);
       this.ttlWindowStart = ttlInSecs == HConstants.FOREVER ? 1 : compactionTime - ttl;
-      this.maxLookbackWindowStartForRow = Math.max(ttlWindowStart, maxLookbackWindowStart);
+      this.maxLookbackWindowStartForRow = computeRowMaxLookbackWithGuard(ttlWindowStart,
+        maxLookbackWindowStart, replicationConsistencyPoint);
       if (LOGGER.isTraceEnabled()) {
-        LOGGER.trace(String.format("RowContext:- (ttlWindowStart=%d, maxLookbackWindowStart=%d)",
-          ttlWindowStart, maxLookbackWindowStart));
+        LOGGER.trace(String.format(
+          "RowContext:- (ttlWindowStart=%d, maxLookbackWindowStart=%d, "
+            + "replicationConsistencyPoint=%d, maxLookbackWindowStartForRow=%d)",
+          ttlWindowStart, maxLookbackWindowStart, replicationConsistencyPoint,
+          maxLookbackWindowStartForRow));
       }
     }
 

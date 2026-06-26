@@ -103,7 +103,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
    */
   public static final double DEFAULT_WAITING_BUFFER_PERCENTAGE = 15.0;
 
-  private ReplicationRound lastRoundInSync;
+  private volatile ReplicationRound lastRoundInSync;
 
   // AtomicReference ensures listener updates are visible to replay thread
   private final AtomicReference<ReplicationReplayState> replicationReplayState =
