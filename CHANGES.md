@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.2.2 - Unreleased (as of 2025-05-07)
+## Release 5.2.2 - Unreleased (as of 2026-06-27)
 
 
 
@@ -26,6 +26,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7759](https://issues.apache.org/jira/browse/PHOENIX-7759) | Preserve buffered mutations when batch size limit is exceeded |  Minor | . |
 | [PHOENIX-5117](https://issues.apache.org/jira/browse/PHOENIX-5117) | Return the count of rows scanned in HBase |  Major | . |
 
 
@@ -33,6 +34,32 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7933](https://issues.apache.org/jira/browse/PHOENIX-7933) | Avoid using reflection to initialize ServerCacheFactory |  Major | . |
+| [PHOENIX-7850](https://issues.apache.org/jira/browse/PHOENIX-7850) | Unblock Phoenix PR validation builds |  Blocker | . |
+| [PHOENIX-7844](https://issues.apache.org/jira/browse/PHOENIX-7844) | Add Pull Request template with guidelines for generative AI tools |  Minor | . |
+| [PHOENIX-7717](https://issues.apache.org/jira/browse/PHOENIX-7717) | Change version to 5.2.2-SNAPSHOT |  Major | . |
+| [PHOENIX-7741](https://issues.apache.org/jira/browse/PHOENIX-7741) | Remove usage of isRegionInTransition method from phoenix tests |  Major | . |
+| [PHOENIX-7737](https://issues.apache.org/jira/browse/PHOENIX-7737) | Fix flapper test testScanningResultIteratorQueryTimeoutForPagingWithVeryLowTimeout |  Major | . |
+| [PHOENIX-6644](https://issues.apache.org/jira/browse/PHOENIX-6644) | Fix column name based ResultSet getter for view indexes |  Major | . |
+| [PHOENIX-7707](https://issues.apache.org/jira/browse/PHOENIX-7707) | Phoenix server paging on valid rows |  Major | . |
+| [PHOENIX-7709](https://issues.apache.org/jira/browse/PHOENIX-7709) | Index committer post writer lazy mode - Async RPC call for verified index mutations |  Major | . |
+| [PHOENIX-7708](https://issues.apache.org/jira/browse/PHOENIX-7708) | Update Jackson to 2.18.4.1 |  Minor | core |
+| [PHOENIX-7701](https://issues.apache.org/jira/browse/PHOENIX-7701) | UngroupedAggregateRegionScanner doesn't release rpc handler on page timeouts |  Major | . |
+| [PHOENIX-7700](https://issues.apache.org/jira/browse/PHOENIX-7700) | Update default values for schema change retry policy |  Major | . |
+| [PHOENIX-7697](https://issues.apache.org/jira/browse/PHOENIX-7697) | Update Gson to 2.13.1 |  Major | . |
+| [PHOENIX-7698](https://issues.apache.org/jira/browse/PHOENIX-7698) | Update Netty to 4.1.126 |  Major | . |
+| [PHOENIX-7699](https://issues.apache.org/jira/browse/PHOENIX-7699) | Update Jetty to 9.4.58.v20250814 |  Major | . |
+| [PHOENIX-7696](https://issues.apache.org/jira/browse/PHOENIX-7696) | Update Hadoop 3.4 version to 3.4.2 |  Major | core |
+| [PHOENIX-7690](https://issues.apache.org/jira/browse/PHOENIX-7690) | Add a config to enable using bloom filters for multi-key point lookups |  Major | . |
+| [PHOENIX-7659](https://issues.apache.org/jira/browse/PHOENIX-7659) | Leverage = ANY() instead of big IN list to do huge number of point lookups in a single query |  Minor | . |
+| [PHOENIX-7625](https://issues.apache.org/jira/browse/PHOENIX-7625) | Adding query plan information to ConnectionActivityLogger |  Major | . |
+| [PHOENIX-7683](https://issues.apache.org/jira/browse/PHOENIX-7683) | Bump Apache Commons Lang 3 to 3.18.0 due to CVE-2025-48924 |  Major | . |
+| [PHOENIX-7681](https://issues.apache.org/jira/browse/PHOENIX-7681) | Update HBase 2.5 profile default version to 2.5.12 |  Major | core |
+| [PHOENIX-7668](https://issues.apache.org/jira/browse/PHOENIX-7668) | Update HBase 2.6 profile default version to 2.6.3 |  Blocker | core |
+| [PHOENIX-7626](https://issues.apache.org/jira/browse/PHOENIX-7626) | Add metrics to capture HTable thread pool utilization and contention |  Minor | . |
+| [PHOENIX-7591](https://issues.apache.org/jira/browse/PHOENIX-7591) | Concurrent updates to tables with indexes can cause data inconsistency |  Major | . |
+| [PHOENIX-7605](https://issues.apache.org/jira/browse/PHOENIX-7605) | Allow the threadpool used by HBase client to be managed at the CQSI level |  Major | . |
+| [PHOENIX-7604](https://issues.apache.org/jira/browse/PHOENIX-7604) | Log exceptions in GlobalClientMetrics static initializer |  Major | . |
 | [PHOENIX-7515](https://issues.apache.org/jira/browse/PHOENIX-7515) | Add metric for count of Phoenix client batches used by a commit call |  Minor | . |
 | [PHOENIX-7449](https://issues.apache.org/jira/browse/PHOENIX-7449) | Bypass disable table during drop if table is already disabled in HBase |  Minor | core |
 | [PHOENIX-7576](https://issues.apache.org/jira/browse/PHOENIX-7576) | Update Jetty to 9.4.57.v20241219 |  Minor | core, queryserver |
@@ -51,6 +78,19 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7744](https://issues.apache.org/jira/browse/PHOENIX-7744) | Update log4j2 to 2.25.3 |  Major | connectors, core, queryserver |
+| [PHOENIX-7740](https://issues.apache.org/jira/browse/PHOENIX-7740) | Update jaxb to 2.3.9 in Pherf and fix XML object collection initialization |  Major | . |
+| [PHOENIX-7666](https://issues.apache.org/jira/browse/PHOENIX-7666) | Index query failure with SkipScanFilter |  Major | . |
+| [PHOENIX-7687](https://issues.apache.org/jira/browse/PHOENIX-7687) | Wrong Hadoop version used for Hbase 2.5.0 profile |  Major | . |
+| [PHOENIX-7628](https://issues.apache.org/jira/browse/PHOENIX-7628) | Don't add Apache Snapshot Maven Repo by Default |  Major | . |
+| [PHOENIX-7645](https://issues.apache.org/jira/browse/PHOENIX-7645) | HighAvailabilityGroup can leak zookeeper connections |  Critical | . |
+| [PHOENIX-7619](https://issues.apache.org/jira/browse/PHOENIX-7619) | Excess HFiles are being read to look for more than required column versions |  Major | . |
+| [PHOENIX-7468](https://issues.apache.org/jira/browse/PHOENIX-7468) | NPE in SchemaExtractionTool on salted table |  Major | . |
+| [PHOENIX-7358](https://issues.apache.org/jira/browse/PHOENIX-7358) | Upsert select result wrong when use order by in query |  Major | core |
+| [PHOENIX-7618](https://issues.apache.org/jira/browse/PHOENIX-7618) | Missing jul-to-slf4j.jar in the lib folder of the assembled tar file |  Major | core |
+| [PHOENIX-7599](https://issues.apache.org/jira/browse/PHOENIX-7599) | Count of rows scanned metric does not work for Uncovered Indexes |  Major | . |
+| [PHOENIX-7610](https://issues.apache.org/jira/browse/PHOENIX-7610) | Using CAST() on pk columns always result in full table scan |  Critical | . |
+| [PHOENIX-7534](https://issues.apache.org/jira/browse/PHOENIX-7534) | ConnectionIT.testRPCConnections  is very flakey |  Major | core |
 | [PHOENIX-7574](https://issues.apache.org/jira/browse/PHOENIX-7574) | Phoenix Compaction doesn't correctly handle DeleteFamilyVersion markers |  Major | . |
 | [PHOENIX-7533](https://issues.apache.org/jira/browse/PHOENIX-7533) | Fix broken compatibility for Zookeeper based ConnectionInfo |  Major | . |
 | [PHOENIX-7580](https://issues.apache.org/jira/browse/PHOENIX-7580) | Data in last salt bucket is not being scanned for range scan |  Blocker | . |
@@ -71,10 +111,24 @@
 | [PHOENIX-7448](https://issues.apache.org/jira/browse/PHOENIX-7448) | Phoenix Compaction can miss retaining some cells when there is a gap more than TTL |  Major | . |
 
 
+### TESTS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7655](https://issues.apache.org/jira/browse/PHOENIX-7655) | Remove WALRecoveryRegionPostOpenIT |  Major | . |
+
+
 ### SUB-TASKS:
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7751](https://issues.apache.org/jira/browse/PHOENIX-7751) | Feature to validate table data using PhoenixSyncTable tool b/w source and target cluster |  Major | . |
+| [PHOENIX-7612](https://issues.apache.org/jira/browse/PHOENIX-7612) | Fix Cell references in IndexRegionObserver |  Major | . |
+| [PHOENIX-7443](https://issues.apache.org/jira/browse/PHOENIX-7443) | Add Spotless to the pre-commit checks |  Major | phoenix |
+| [PHOENIX-7442](https://issues.apache.org/jira/browse/PHOENIX-7442) | Apply Spotless to reformat the entire codebase |  Major | phoenix |
+| [PHOENIX-7675](https://issues.apache.org/jira/browse/PHOENIX-7675) | Update spotless plugin to also format IT classes |  Major | . |
+| [PHOENIX-7676](https://issues.apache.org/jira/browse/PHOENIX-7676) |  Update checkstyle checker.xml based on spotless rules |  Major | . |
+| [PHOENIX-7481](https://issues.apache.org/jira/browse/PHOENIX-7481) | HBase 3 compatibility changes: Cleanup deprecated APIs, HTable and HTableDescriptor |  Major | phoenix |
 | [PHOENIX-7441](https://issues.apache.org/jira/browse/PHOENIX-7441) | Integrate the Spotless plugin and update the code template |  Major | phoenix |
 
 
@@ -82,6 +136,7 @@
 
 | JIRA | Summary | Priority | Component |
 |:---- |:---- | :--- |:---- |
+| [PHOENIX-7739](https://issues.apache.org/jira/browse/PHOENIX-7739) | Update Default HBase 2.5 version to 2.5.13 |  Major | core |
 | [PHOENIX-7539](https://issues.apache.org/jira/browse/PHOENIX-7539) | Update default HBase 2.5 version to 2.5.11 |  Major | core |
 | [PHOENIX-7532](https://issues.apache.org/jira/browse/PHOENIX-7532) | Update default Hbase 2.6 version to 2.6.2 |  Major | core |
 | [PHOENIX-7475](https://issues.apache.org/jira/browse/PHOENIX-7475) |  Bump commons-io:commons-io from 2.14.0 to 2.18.0 |  Major | core, queryserver |

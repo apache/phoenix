@@ -23,6 +23,27 @@ These release notes cover new developer and user-facing incompatibilities, impor
 
 ---
 
+* [PHOENIX-7696](https://issues.apache.org/jira/browse/PHOENIX-7696) | *Major* | **Update Hadoop 3.4 version to 3.4.2**
+
+Phoenix is not built with Hadoop 3.4.2 by default.
+
+
+---
+
+* [PHOENIX-7681](https://issues.apache.org/jira/browse/PHOENIX-7681) | *Major* | **Update HBase 2.5 profile default version to 2.5.12**
+
+Phoenix now uses HBase 2.5.12 by default when built with the HBase 2.5 profile.
+
+
+---
+
+* [PHOENIX-7668](https://issues.apache.org/jira/browse/PHOENIX-7668) | *Blocker* | **Update HBase 2.6 profile default version to 2.6.3**
+
+Phoenix now uses Hbase 2.6.3 when built with the HBase 2.6 profile.
+
+
+---
+
 * [PHOENIX-7550](https://issues.apache.org/jira/browse/PHOENIX-7550) | *Major* | **Update OWASP plugin to 12.1.0**
 
 Phoenix now uses the 12.1.0 version of WASP plugin, which requires Java 11.
