@@ -18,6 +18,36 @@
 -->
 # PHOENIX Changelog
 
+## Release 5.3.2 - Unreleased (as of 2026-06-27)
+
+
+
+### IMPROVEMENTS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7933](https://issues.apache.org/jira/browse/PHOENIX-7933) | Avoid using reflection to initialize ServerCacheFactory |  Major | . |
+| [PHOENIX-7883](https://issues.apache.org/jira/browse/PHOENIX-7883) | Rework metrics for the Phoenix Eventually Consistent Index framework |  Major | . |
+| [PHOENIX-7878](https://issues.apache.org/jira/browse/PHOENIX-7878) | CDC perf improvement - skip redundant cell versions on data table scans |  Major | . |
+| [PHOENIX-7842](https://issues.apache.org/jira/browse/PHOENIX-7842) | Reduce the shading contribution to build time |  Minor | . |
+
+
+### BUG FIXES:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7267](https://issues.apache.org/jira/browse/PHOENIX-7267) | CsvBulkLoadTool fails job due to a bad record with "(startline 1) EOF reached before encapsulated token finished" |  Major | . |
+| [PHOENIX-7880](https://issues.apache.org/jira/browse/PHOENIX-7880) | BSON\_UPDATE\_EXPRESSION corrupts literal string SET values containing + or - |  Major | . |
+
+
+### SUB-TASKS:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7884](https://issues.apache.org/jira/browse/PHOENIX-7884) | cdcIndexUpdateLag is silent during idle / failure / parent-replay and misattributed during ancestor replay |  Major | . |
+
+
+
 ## Release 5.3.1 - Unreleased (as of 2026-05-13)
 
 
