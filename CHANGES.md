@@ -18,7 +18,7 @@
 -->
 # PHOENIX Changelog
 
-## Release 5.3.2 - Unreleased (as of 2026-06-27)
+## Release 5.3.2 - Unreleased (as of 2026-06-28)
 
 
 
