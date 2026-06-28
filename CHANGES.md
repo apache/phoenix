@@ -47,6 +47,13 @@
 | [PHOENIX-7884](https://issues.apache.org/jira/browse/PHOENIX-7884) | cdcIndexUpdateLag is silent during idle / failure / parent-replay and misattributed during ancestor replay |  Major | . |
 
 
+### OTHER:
+
+| JIRA | Summary | Priority | Component |
+|:---- |:---- | :--- |:---- |
+| [PHOENIX-7943](https://issues.apache.org/jira/browse/PHOENIX-7943) | Add 2.6.0 profile in profile list for new releases |  Major | . |
+
+
 
 ## Release 5.3.1 - Unreleased (as of 2026-05-13)
 
