@@ -80,6 +80,7 @@ public class StatementContext {
 
   private long currentTime = QueryConstants.UNSET_TIMESTAMP;
   private ScanRanges scanRanges = ScanRanges.EVERYTHING;
+  private org.apache.phoenix.compile.keyspace.scan.V2ScanArtifact v2ScanArtifact;
   private final SequenceManager sequences;
 
   private TableRef currentTable;
@@ -306,7 +307,29 @@ public class StatementContext {
 
   public void setScanRanges(ScanRanges scanRanges) {
     this.scanRanges = scanRanges;
+    // V2ScanArtifact is tied to the specific ScanRanges produced alongside it by
+    // WhereOptimizerV2 (the artifact's KeySpaceList is the pre-encoding view of
+    // those same scan ranges). Clear it on replacement so downstream consumers —
+    // notably ExplainTable.appendKeyRanges — never read stale V2 metadata against
+    // a freshly-installed scanRanges. Callers that attach an artifact must do so
+    // via setV2ScanArtifact(...) after setScanRanges(...); that ordering is what
+    // WhereOptimizerV2.run already uses.
+    this.v2ScanArtifact = null;
     scanRanges.initializeScan(scan);
+  }
+
+  /**
+   * V2-owned metadata attached by the V2 scan-construction path; null under the V1 path
+   * ({@code WHERE_OPTIMIZER_V2_ENABLED=false}). Consumers (currently the explain-plan
+   * formatter) prefer this when present; others are unaffected.
+   */
+  public org.apache.phoenix.compile.keyspace.scan.V2ScanArtifact getV2ScanArtifact() {
+    return this.v2ScanArtifact;
+  }
+
+  public void setV2ScanArtifact(
+    org.apache.phoenix.compile.keyspace.scan.V2ScanArtifact artifact) {
+    this.v2ScanArtifact = artifact;
   }
 
   public PhoenixConnection getConnection() {

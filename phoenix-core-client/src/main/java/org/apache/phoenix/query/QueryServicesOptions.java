@@ -76,6 +76,8 @@ import static org.apache.phoenix.query.QueryServices.LOG_SAMPLE_RATE;
 import static org.apache.phoenix.query.QueryServices.MASTER_INFO_PORT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_IN_LIST_SKIP_SCAN_SIZE;
+import static org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_CARTESIAN_BOUND;
+import static org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_ENABLED;
 import static org.apache.phoenix.query.QueryServices.MAX_MEMORY_PERC_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_MUTATION_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN;
@@ -214,6 +216,9 @@ public class QueryServicesOptions {
   public static final boolean DEFAULT_IS_NAMESPACE_MAPPING_ENABLED = false;
   public static final boolean DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE = true;
   public static final int DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE = 50000;
+  public static final boolean DEFAULT_WHERE_OPTIMIZER_V2_ENABLED = true;
+  public static final int DEFAULT_WHERE_OPTIMIZER_V2_CARTESIAN_BOUND =
+    DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE;
 
   //
   // Spillable GroupBy - SPGBY prefix
@@ -618,6 +623,8 @@ public class QueryServicesOptions {
         DEFAULT_MAX_REGION_LOCATIONS_SIZE_EXPLAIN_PLAN)
       .setIfUnset(SERVER_MERGE_FOR_UNCOVERED_INDEX, DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX)
       .setIfUnset(MAX_IN_LIST_SKIP_SCAN_SIZE, DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE)
+      .setIfUnset(WHERE_OPTIMIZER_V2_ENABLED, DEFAULT_WHERE_OPTIMIZER_V2_ENABLED)
+      .setIfUnset(WHERE_OPTIMIZER_V2_CARTESIAN_BOUND, DEFAULT_WHERE_OPTIMIZER_V2_CARTESIAN_BOUND)
       .setIfUnset(CONNECTION_ACTIVITY_LOGGING_ENABLED, DEFAULT_CONNECTION_ACTIVITY_LOGGING_ENABLED)
       .setIfUnset(CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED,
         DEFAULT_CONNECTION_EXPLAIN_PLAN_LOGGING_ENABLED)

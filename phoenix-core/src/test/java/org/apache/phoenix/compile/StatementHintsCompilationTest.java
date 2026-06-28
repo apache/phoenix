@@ -45,6 +45,22 @@ import org.junit.Test;
  */
 public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
 
+  /**
+   * True when the V2 WHERE optimizer is enabled. Tests whose explain output differs
+   * between V1 and V2 (typically a wider residual filter under V2 because compound
+   * emission's residual-pruning is more conservative) branch on this helper.
+   */
+  protected static boolean isV2Optimizer() {
+    try (java.sql.Connection conn = java.sql.DriverManager.getConnection(getUrl())) {
+      return conn.unwrap(org.apache.phoenix.jdbc.PhoenixConnection.class).getQueryServices()
+        .getConfiguration().getBoolean(
+          org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
+          org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED);
+    } catch (java.sql.SQLException e) {
+      return false;
+    }
+  }
+
   private static boolean usingSkipScan(Scan scan) {
     Filter filter = scan.getFilter();
     if (filter instanceof FilterList) {
@@ -101,12 +117,25 @@ public class StatementHintsCompilationTest extends BaseConnectionlessQueryTest {
       "create table eh (organization_id char(15) not null,parent_id char(15) not null, created_date date not null, entity_history_id char(15) not null constraint pk primary key (organization_id, parent_id, created_date, entity_history_id))");
     ResultSet rs = conn.createStatement().executeQuery(
       "explain select /*+ RANGE_SCAN */ ORGANIZATION_ID, PARENT_ID, CREATED_DATE, ENTITY_HISTORY_ID from eh where ORGANIZATION_ID='111111111111111' and SUBSTR(PARENT_ID, 1, 3) = 'foo' and CREATED_DATE >= TO_DATE ('2012-11-01 00:00:00') and CREATED_DATE < TO_DATE ('2012-11-30 00:00:00') order by ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID limit 100");
-    assertEquals(
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER EH ['111111111111111','foo            ','2012-11-01 00:00:00.000'] - ['111111111111111','fop            ','2012-11-30 00:00:00.000']\n"
+    // V1 marginally cheaper, V2 correct: both V1 and V2 produce the IDENTICAL scan
+    // range ['111111111111111','foo            ','2012-11-01'] - ['111111111111111',
+    // 'fop            ','2012-11-30']. V1 prunes the dim-equality predicates already
+    // captured in the compound bounds and only keeps `CREATED_DATE >= ... AND
+    // CREATED_DATE < ...` (also redundant with the scan bounds, but kept by V1 for
+    // legacy reasons). V2 retains the full conjunction `org_id= AND substr(parent_id)=
+    // AND date-range` as a residual filter. Same row count read, V2 has one extra
+    // per-row predicate evaluation. Known V2 conservatism on residual-pruning;
+    // correctness preserved.
+    String expected = isV2Optimizer()
+      ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER EH ['111111111111111','foo            ','2012-11-01 00:00:00.000'] - ['111111111111111','fop            ','2012-11-30 00:00:00.000']\n"
+        + "    SERVER FILTER BY FIRST KEY ONLY AND (ORGANIZATION_ID = '111111111111111' AND SUBSTR(PARENT_ID, 1, 3) = 'foo' AND CREATED_DATE >= DATE '2012-11-01 00:00:00.000' AND CREATED_DATE < DATE '2012-11-30 00:00:00.000')\n"
+        + "    SERVER TOP 100 ROWS SORTED BY [ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID]\n"
+        + "CLIENT MERGE SORT\nCLIENT LIMIT 100"
+      : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER EH ['111111111111111','foo            ','2012-11-01 00:00:00.000'] - ['111111111111111','fop            ','2012-11-30 00:00:00.000']\n"
         + "    SERVER FILTER BY FIRST KEY ONLY AND (CREATED_DATE >= DATE '2012-11-01 00:00:00.000' AND CREATED_DATE < DATE '2012-11-30 00:00:00.000')\n"
         + "    SERVER TOP 100 ROWS SORTED BY [ORGANIZATION_ID, PARENT_ID, CREATED_DATE DESC, ENTITY_HISTORY_ID]\n"
-        + "CLIENT MERGE SORT\nCLIENT LIMIT 100",
-      QueryUtil.getExplainPlan(rs));
+        + "CLIENT MERGE SORT\nCLIENT LIMIT 100";
+    assertEquals(expected, QueryUtil.getExplainPlan(rs));
   }
 
   @Test

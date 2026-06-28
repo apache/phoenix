@@ -383,14 +383,24 @@ public class KeyRange implements Writable {
     return lowerRange == UNBOUND;
   }
 
+  // Cached hash. 0 means uncomputed (the chance of a legitimate 0 hash is negligible and
+  // even if it hits we just recompute). KeyRange is effectively immutable once constructed
+  // (fields are final), so memoization is safe.
+  private int cachedHashCode;
+
   @Override
   public int hashCode() {
+    int h = cachedHashCode;
+    if (h != 0) {
+      return h;
+    }
     final int prime = 31;
     int result = 1;
     result = prime * result + Arrays.hashCode(lowerRange);
     if (lowerRange != null) result = prime * result + (lowerInclusive ? 1231 : 1237);
     result = prime * result + Arrays.hashCode(upperRange);
     if (upperRange != null) result = prime * result + (upperInclusive ? 1231 : 1237);
+    cachedHashCode = result;
     return result;
   }
 

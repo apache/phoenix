@@ -177,6 +177,12 @@
     <numForkedIT>7</numForkedIT>
     <it.failIfNoSpecifiedTests>false</it.failIfNoSpecifiedTests>
     <surefire.failIfNoSpecifiedTests>false</surefire.failIfNoSpecifiedTests>
+    <!-- WHERE optimizer V2 flag, forwarded into forked test JVMs by the surefire and
+         failsafe configurations below. Default empty so the connectionless test driver
+         picks the codebase default (V1). Override with
+         `mvn test -Dphoenix.where.optimizer.v2.enabled=true` to run the same suites
+         under V2. -->
+    <phoenix.where.optimizer.v2.enabled/>
     <!-- Empty argument when code coverage is deactivated -->
     <jacocoArgLine/>
 
@@ -1612,6 +1618,8 @@
             <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
             <systemPropertyVariables>
               <java.io.tmpdir>${test.tmp.dir}</java.io.tmpdir>
+              <!-- See surefire-plugin section above for rationale. -->
+              <phoenix.where.optimizer.v2.enabled>${phoenix.where.optimizer.v2.enabled}</phoenix.where.optimizer.v2.enabled>
             </systemPropertyVariables>
           </configuration>
           <executions>
@@ -1882,6 +1890,10 @@
           <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
           <systemPropertyVariables>
             <java.io.tmpdir>${test.tmp.dir}</java.io.tmpdir>
+            <!-- Forward V2 WHERE-optimizer flag from the maven JVM into the forked
+                 test JVM so `mvn test -Dphoenix.where.optimizer.v2.enabled=true`
+                 actually reaches BaseConnectionlessQueryTest's driver setup. -->
+            <phoenix.where.optimizer.v2.enabled>${phoenix.where.optimizer.v2.enabled}</phoenix.where.optimizer.v2.enabled>
           </systemPropertyVariables>
         </configuration>
       </plugin>
