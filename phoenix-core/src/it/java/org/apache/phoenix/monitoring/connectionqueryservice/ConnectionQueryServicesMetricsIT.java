@@ -118,8 +118,6 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
       }
     });
     Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-    conf.set(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-    conf.set(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     conf.set(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     hbaseTestUtil = new HBaseTestingUtility(conf);
     setUpConfigForMiniCluster(conf);

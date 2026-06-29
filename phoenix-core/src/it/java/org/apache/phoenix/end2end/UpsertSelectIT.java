@@ -85,10 +85,6 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
     // An hour - inherited from ParallelStatsDisabledIT
     props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
       Integer.toString(60 * 60));
-    // Postpone scans of SYSTEM.TASK indefinitely so as to prevent
-    // any addition to GLOBAL_OPEN_PHOENIX_CONNECTIONS
-    props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     props.put(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }

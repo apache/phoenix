@@ -115,8 +115,6 @@ public class BackwardCompatibilityIT {
   public synchronized void doSetup() throws Exception {
     tmpDir = System.getProperty("java.io.tmpdir");
     conf = HBaseConfiguration.create();
-    conf.set(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-    conf.set(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     hbaseTestUtil = new HBaseTestingUtility(conf);
     setUpConfigForMiniCluster(conf);
     conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,

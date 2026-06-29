@@ -579,6 +579,10 @@ public abstract class BaseTest {
     conf.set(IndexManagementUtil.WAL_EDIT_CODEC_CLASS_KEY,
       "org.apache.hadoop.hbase.regionserver.wal.IndexedWALEditCodec");
 
+    if (conf.get(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB) == null) {
+      conf.setLong(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.MAX_VALUE);
+    }
+
     // This results in processing one row at a time in each next operation of the aggregate region
     // scanner, i.e., one row pages. In other words, 0ms page allows only one row to be processed
     // within one page; 0ms page is equivalent to one-row page
