@@ -74,6 +74,8 @@ public class TransformMonitorExtendedIT extends BaseTest {
     serverProps.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
       Integer.toString(60 * 60)); // An hour
     serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
+    // The self-healing task runs the transform monitor. These tests wait for it.
+    serverProps.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(1));
 
     Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
     clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());

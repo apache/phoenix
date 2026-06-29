@@ -75,6 +75,8 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
     props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
     props.put(INDEX_CDC_CONSUMER_RETRY_PAUSE_MS, Integer.toString(5));
     props.put(PHOENIX_INDEX_CDC_MUTATION_SERIALIZE, Boolean.FALSE.toString());
+    // Eventual indexes need the self-healing task. It enables the CDC stream that feeds them.
+    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(1));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 

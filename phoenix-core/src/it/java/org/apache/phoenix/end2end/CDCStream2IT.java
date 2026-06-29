@@ -55,6 +55,8 @@ public class CDCStream2IT extends CDCBaseIT {
       Integer.toString(60 * 60)); // An hour
     props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
     props.put("hbase.coprocessor.master.classes", TestPhoenixMasterObserver.class.getName());
+    // The self-healing task enables the CDC stream. These tests wait for that state.
+    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(1));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 
