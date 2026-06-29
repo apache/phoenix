@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end.transform;
 
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_LOCAL_OR_VIEW_INDEX;
+import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_MUTABLE_TABLE_TO_SCAWO;
 import static org.apache.phoenix.exception.SQLExceptionCode.CANNOT_TRANSFORM_TABLE_WITH_LOCAL_INDEX;
 import static org.apache.phoenix.exception.SQLExceptionCode.VIEW_WITH_PROPERTIES;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
@@ -36,6 +37,7 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Properties;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.index.SingleCellIndexIT;
 import org.apache.phoenix.exception.SQLExceptionCode;
@@ -50,9 +52,11 @@ import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Strings;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class TransformIT extends ParallelStatsDisabledIT {
   private Properties testProps = PropertiesUtil.deepCopy(TEST_PROPERTIES);
 
@@ -131,7 +135,8 @@ public class TransformIT extends ParallelStatsDisabledIT {
 
       String createTableSql = "CREATE TABLE " + tableName
         + " (PK1 VARCHAR NOT NULL, INT_PK INTEGER NOT NULL, "
-        + "V1 VARCHAR, V2 INTEGER, V3 INTEGER, V4 VARCHAR, V5 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(PK1, INT_PK)) ";
+        + "V1 VARCHAR, V2 INTEGER, V3 INTEGER, V4 VARCHAR, V5 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(PK1, INT_PK)) "
+        + "IMMUTABLE_ROWS=true";
       conn.createStatement().execute(createTableSql);
 
       assertMetadata(conn, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, tableName);
@@ -267,6 +272,7 @@ public class TransformIT extends ParallelStatsDisabledIT {
   }
 
   private void testTransformForLiveMutations_mutatingTable(String tableDDL) throws Exception {
+    boolean isImmutable = tableDDL.toUpperCase().contains("IMMUTABLE_ROWS=TRUE");
     try (Connection conn = DriverManager.getConnection(getUrl(), testProps)) {
       conn.setAutoCommit(true);
       String schema = "S_" + generateUniqueName();
@@ -295,6 +301,19 @@ public class TransformIT extends ParallelStatsDisabledIT {
       String fullIdxName2 = SchemaUtil.getTableName(schema, idxName2);
       conn.createStatement()
         .execute("CREATE INDEX " + idxName2 + " ON " + fullTableName + " (V1) include (V2) ASYNC");
+
+      if (!isImmutable) {
+        // SINGLE_CELL_ARRAY_WITH_OFFSETS is incompatible with mutable rows, so the transform
+        // should be rejected instead of silently downgraded.
+        try {
+          conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET "
+            + " IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+          fail("Transforming a mutable table to SINGLE_CELL_ARRAY_WITH_OFFSETS should fail");
+        } catch (SQLException e) {
+          assertEquals(CANNOT_TRANSFORM_MUTABLE_TABLE_TO_SCAWO.getErrorCode(), e.getErrorCode());
+        }
+        return;
+      }
 
       // Now do a transform and check still the index table is empty since we didn't build it
       conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET "
@@ -331,9 +350,9 @@ public class TransformIT extends ParallelStatsDisabledIT {
       String tableName = "TBL_" + generateUniqueName();
       String fullTableName = SchemaUtil.getTableName(schema, tableName);
 
-      String createTableSql =
-        "CREATE TABLE " + fullTableName + " (PK1 VARCHAR NOT NULL, INT_PK INTEGER NOT NULL, "
-          + "V1 VARCHAR, V2 INTEGER CONSTRAINT NAME_PK PRIMARY KEY(PK1, INT_PK)) ";
+      String createTableSql = "CREATE TABLE " + fullTableName
+        + " (PK1 VARCHAR NOT NULL, INT_PK INTEGER NOT NULL, "
+        + "V1 VARCHAR, V2 INTEGER CONSTRAINT NAME_PK PRIMARY KEY(PK1, INT_PK)) IMMUTABLE_ROWS=true";
       conn.createStatement().execute(createTableSql);
       assertMetadata(conn, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, fullTableName);
 
@@ -427,6 +446,7 @@ public class TransformIT extends ParallelStatsDisabledIT {
 
   private void testTransformForLiveMutations_mutatingBaseTableForView(String tableDDL)
     throws Exception {
+    boolean isImmutable = tableDDL.toUpperCase().contains("IMMUTABLE_ROWS=TRUE");
     try (Connection conn = DriverManager.getConnection(getUrl(), testProps)) {
       conn.setAutoCommit(true);
       String schema = "S_" + generateUniqueName();
@@ -457,6 +477,19 @@ public class TransformIT extends ParallelStatsDisabledIT {
       String upsertStmt = "UPSERT INTO " + viewName
         + " (PK1, INT_PK, V1, VIEW_COL1, VIEW_COL2) VALUES ('%s', %d, '%s', %d, '%s')";
       conn.createStatement().execute(String.format(upsertStmt, "a", 1, "val1", 1, "col2_1"));
+
+      if (!isImmutable) {
+        // SINGLE_CELL_ARRAY_WITH_OFFSETS is incompatible with mutable rows, so the transform
+        // should be rejected instead of silently downgraded.
+        try {
+          conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET "
+            + " IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+          fail("Transforming a mutable table to SINGLE_CELL_ARRAY_WITH_OFFSETS should fail");
+        } catch (SQLException e) {
+          assertEquals(CANNOT_TRANSFORM_MUTABLE_TABLE_TO_SCAWO.getErrorCode(), e.getErrorCode());
+        }
+        return;
+      }
 
       conn.createStatement().execute("ALTER TABLE " + fullTableName + " SET "
         + " IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
@@ -523,7 +556,7 @@ public class TransformIT extends ParallelStatsDisabledIT {
       String createTableSql = "CREATE TABLE " + fullTableName
         + " (PK1 VARCHAR NOT NULL, INT_PK INTEGER NOT NULL, "
         + "V1 VARCHAR, V2 INTEGER, V3 INTEGER, V4 VARCHAR, V5 VARCHAR CONSTRAINT NAME_PK PRIMARY KEY(PK1, INT_PK)) "
-        + "IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2";
+        + "IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2";
       conn.createStatement().execute(createTableSql);
       assertMetadata(conn, PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
         PTable.QualifierEncodingScheme.TWO_BYTE_QUALIFIERS, fullTableName);
@@ -561,9 +594,9 @@ public class TransformIT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl(), testProps)) {
       conn.setAutoCommit(true);
 
-      String createTableSql =
-        "CREATE TABLE " + fullTableName + " (PK1 VARCHAR NOT NULL, INT_PK INTEGER NOT NULL, "
-          + "V1 VARCHAR, V2 INTEGER CONSTRAINT NAME_PK PRIMARY KEY(PK1, INT_PK)) ";
+      String createTableSql = "CREATE TABLE " + fullTableName
+        + " (PK1 VARCHAR NOT NULL, INT_PK INTEGER NOT NULL, "
+        + "V1 VARCHAR, V2 INTEGER CONSTRAINT NAME_PK PRIMARY KEY(PK1, INT_PK)) IMMUTABLE_ROWS=true";
       conn.createStatement().execute(createTableSql);
       assertMetadata(conn, ONE_CELL_PER_COLUMN, NON_ENCODED_QUALIFIERS, fullTableName);
 
