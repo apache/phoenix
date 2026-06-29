@@ -58,6 +58,14 @@ public class HAGroupStoreRecord {
     ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER,
     ACTIVE_IN_SYNC_TO_STANDBY,
     ACTIVE_WITH_OFFLINE_PEER,
+    /**
+     * Degraded standby. Used two ways: (1) a persisted state for a reader-degraded standby (see
+     * {@link HAGroupStoreManager#setReaderToDegraded(String)}), governed by the allowedTransitions
+     * below; and (2) a local, in-memory effective state that
+     * {@link HAGroupStoreClient#getEffectiveHAGroupStoreRecord()} presents when a STANDBY cluster
+     * cannot see its peer - that overlay is never persisted to ZK and is cleared (not transitioned)
+     * when the peer becomes visible again.
+     */
     DEGRADED_STANDBY,
     OFFLINE,
     STANDBY,
@@ -177,6 +185,16 @@ public class HAGroupStoreRecord {
     this.adminCRRVersion = adminCRRVersion;
     this.hdfsUrl = hdfsUrl;
     this.peerHdfsUrl = peerHdfsUrl;
+  }
+
+  /**
+   * Returns a copy of this record with the HA group state replaced. Used to present an effective
+   * state (for example DEGRADED_STANDBY when the peer is not visible) without mutating the
+   * persisted record. Thread-safe: returns a new immutable instance and never mutates this record.
+   */
+  public HAGroupStoreRecord withHAGroupState(HAGroupState newState) {
+    return new HAGroupStoreRecord(protocolVersion, haGroupName, newState, lastSyncStateTimeInMs,
+      policy, peerZKUrl, clusterUrl, peerClusterUrl, hdfsUrl, peerHdfsUrl, adminCRRVersion);
   }
 
   public static Optional<HAGroupStoreRecord> fromJson(byte[] bytes) {

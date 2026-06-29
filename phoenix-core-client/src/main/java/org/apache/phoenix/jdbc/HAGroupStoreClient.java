@@ -59,7 +59,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArraySet;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
@@ -110,7 +109,6 @@ public class HAGroupStoreClient implements Closeable {
   // Exclusive upper bound for initial-delay jitter on the periodic reconciler (0..30s).
   private static final long LEGACY_CRR_SYNC_JOB_MAX_JITTER_SECONDS = 31;
   private PhoenixHAAdmin phoenixHaAdmin;
-  private PhoenixHAAdmin peerPhoenixHaAdmin;
   // Admin + NodeCache on /phoenix/ha; null when feature disabled.
   private volatile PhoenixHAAdmin legacyHaAdmin;
   private volatile NodeCache legacyCrrNodeCache;
@@ -122,23 +120,36 @@ public class HAGroupStoreClient implements Closeable {
   private final String haGroupName;
   // PathChildrenCache for current cluster and HAGroupName
   private PathChildrenCache pathChildrenCache = null;
-  // PathChildrenCache for peer cluster and HAGroupName
-  private PathChildrenCache peerPathChildrenCache = null;
+  // Watches the peer cluster's HA record; owns the peer cache/admin, retry, and visibility.
+  private final PeerClusterWatcher peerWatcher;
+  // True while this RegionServer presents a local-only DEGRADED_STANDBY. The shared HA record is
+  // not changed; this only affects the effective local view and de-dupes the synthetic
+  // degrade/recover notifications.
+  private volatile boolean localDegradedStandbyActive = false;
   // Whether the client is healthy
   private volatile boolean isHealthy = false;
   // Configuration
   private final Configuration conf;
   // ZK URL for the current cluster and HAGroupName
   private String zkUrl;
-  // Peer Custom Event Listener
-  private final PathChildrenCacheListener peerCustomPathChildrenCacheListener;
   // Wait time for sync mode
   private final long waitTimeForSyncModeInMs;
   // Rotation time for a log
   private final long rotationTimeMs;
   // State tracking for transition detection
   private volatile HAGroupState lastKnownLocalState;
+  // Last peer state delivered to subscribers; used only to populate the "from" state in PEER
+  // notifications. Written from the peer watcher's single delivery thread.
   private volatile HAGroupState lastKnownPeerState;
+  // Last peer ZK URL applied to the peer watcher; used to skip a reconcile when it is unchanged.
+  private volatile String lastConfiguredPeerZKUrl;
+  // Guards the local-only DEGRADED_STANDBY flag; short critical sections only, and the lock
+  // getEffectiveHAGroupStoreRecord() uses. Notifications run outside this lock.
+  private final Object localDegradedStandbyLock = new Object();
+  // Serializes a LOCAL transition with its notification (present/clear/handleLocalStateChange),
+  // held across the notify so degrade/recover/state notifications cannot reorder. Unlike the lock
+  // above, this is not taken by getEffectiveHAGroupStoreRecord().
+  private final Object localTransitionLock = new Object();
 
   // Subscription storage for HA group state change notifications per client instance
   // Map key format: "clusterType:targetState" -> Set<Listeners>
@@ -175,11 +186,13 @@ public class HAGroupStoreClient implements Closeable {
     HAGroupStoreClient result =
       instances.getOrDefault(localZkUrl, new ConcurrentHashMap<>()).getOrDefault(haGroupName, null);
     if (result == null || !result.isHealthy) {
+      HAGroupStoreClient replaced = null;
       synchronized (HAGroupStoreClient.class) {
         result = instances.getOrDefault(localZkUrl, new ConcurrentHashMap<>())
           .getOrDefault(haGroupName, null);
         if (result == null || !result.isHealthy) {
-          result = new HAGroupStoreClient(conf, null, null, haGroupName, zkUrl);
+          HAGroupStoreClient stale = result;
+          result = new HAGroupStoreClient(conf, null, haGroupName, zkUrl);
           if (!result.isHealthy) {
             result.close();
             result = null;
@@ -193,8 +206,15 @@ public class HAGroupStoreClient implements Closeable {
               v.put(haGroupName, created);
               return v;
             });
+            replaced = stale;
           }
         }
+      }
+      // Reclaim the replaced unhealthy client's threads and caches. Outside the monitor because
+      // close() can block; safe because deregisterFromInstances() is value-based and will not
+      // remove the replacement we just registered.
+      if (replaced != null) {
+        replaced.close();
       }
     }
     return result;
@@ -244,10 +264,17 @@ public class HAGroupStoreClient implements Closeable {
     return result;
   }
 
+  /**
+   * Visible-for-testing constructor. A non-null {@code pathChildrenCacheListener} replaces the
+   * default LOCAL cache listener only; it does not affect peer handling. There is no peer-listener
+   * injection point anymore - peer cache events are owned by {@link PeerClusterWatcher}. Tests that
+   * need peer-event visibility should subscribe with
+   * {@code subscribeToTargetState(state, ClusterType.PEER, listener)} or use the package-private
+   * {@code peerWatcher} field directly.
+   */
   @VisibleForTesting
   HAGroupStoreClient(final Configuration conf,
-    final PathChildrenCacheListener pathChildrenCacheListener,
-    final PathChildrenCacheListener peerPathChildrenCacheListener, final String haGroupName,
+    final PathChildrenCacheListener pathChildrenCacheListener, final String haGroupName,
     final String zkUrl) {
     this.conf = conf;
     this.haGroupName = haGroupName;
@@ -258,21 +285,23 @@ public class HAGroupStoreClient implements Closeable {
       QueryServicesOptions.DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS);
     this.legacyCrrSyncEnabled = conf.getBoolean(PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED,
       DEFAULT_PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED);
-    // Custom Event Listener
-    this.peerCustomPathChildrenCacheListener = peerPathChildrenCacheListener;
+    this.peerWatcher = new PeerClusterWatcher(conf, haGroupName,
+      ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE, new PeerListener());
     try {
-      // Initialize Phoenix HA Admin
       this.phoenixHaAdmin =
         new PhoenixHAAdmin(this.zkUrl, conf, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
-      // Initialize local cache
+      long initTimeoutMs = conf.getLong(PHOENIX_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS,
+        DEFAULT_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS);
+      PathChildrenCacheListener localListener =
+        pathChildrenCacheListener != null ? pathChildrenCacheListener : localCacheListener();
       this.pathChildrenCache =
-        initializePathChildrenCache(phoenixHaAdmin, pathChildrenCacheListener, ClusterType.LOCAL);
-      // Initialize ZNode if not present in ZK
+        HAGroupStoreCacheUtil.startCache(phoenixHaAdmin.getCurator(), localListener, initTimeoutMs);
       initializeZNodeIfNeeded();
       if (this.pathChildrenCache != null) {
         this.isHealthy = true;
-        // Initialize peer cache
-        maybeInitializePeerPathChildrenCache();
+        HAGroupStoreRecord local = getHAGroupStoreRecord();
+        this.lastConfiguredPeerZKUrl = local != null ? local.getPeerZKUrl() : null;
+        peerWatcher.reconfigure(this.lastConfiguredPeerZKUrl);
       } else {
         LOGGER.error("PathChildrenCache is not initialized, HAGroupStoreClient for " + haGroupName
           + " is unhealthy");
@@ -311,14 +340,7 @@ public class HAGroupStoreClient implements Closeable {
     if (pathChildrenCache != null) {
       pathChildrenCache.rebuild();
     }
-    if (peerPathChildrenCache != null) {
-      try {
-        peerPathChildrenCache.rebuild();
-      } catch (Exception e) {
-        LOGGER.error("Unexpected error occurred while rebuilding peerPathChildrenCache, continuing",
-          e);
-      }
-    }
+    peerWatcher.rebuild();
     LOGGER.info("Rebuild Complete for HAGroupStoreClient for HA group {}", haGroupName);
   }
 
@@ -331,8 +353,7 @@ public class HAGroupStoreClient implements Closeable {
     if (!isHealthy) {
       throw new IOException("HAGroupStoreClient is not healthy");
     }
-    return fetchCacheRecordAndPopulateZKIfNeeded(this.pathChildrenCache, ClusterType.LOCAL)
-      .getLeft();
+    return fetchLocalRecordAndPopulateZKIfNeeded().getLeft();
   }
 
   /**
@@ -369,8 +390,7 @@ public class HAGroupStoreClient implements Closeable {
     if (!isHealthy) {
       throw new IOException("HAGroupStoreClient is not healthy");
     }
-    Pair<HAGroupStoreRecord, Stat> cacheRecord =
-      fetchCacheRecordAndPopulateZKIfNeeded(this.pathChildrenCache, ClusterType.LOCAL);
+    Pair<HAGroupStoreRecord, Stat> cacheRecord = fetchLocalRecordAndPopulateZKIfNeeded();
     HAGroupStoreRecord currentHAGroupStoreRecord = cacheRecord.getLeft();
     Stat currentHAGroupStoreRecordStat = cacheRecord.getRight();
     if (currentHAGroupStoreRecord == null) {
@@ -462,8 +482,7 @@ public class HAGroupStoreClient implements Closeable {
     if (!isHealthy) {
       throw new IOException("HAGroupStoreClient is not healthy");
     }
-    return fetchCacheRecordAndPopulateZKIfNeeded(this.peerPathChildrenCache, ClusterType.PEER)
-      .getLeft();
+    return peerWatcher.getCurrentPeerRecord();
   }
 
   private void initializeZNodeIfNeeded() throws IOException, SQLException {
@@ -866,212 +885,201 @@ public class HAGroupStoreClient implements Closeable {
     }
   }
 
-  private void maybeInitializePeerPathChildrenCache() throws IOException {
-    // There is an edge case when the cache is not initialized yet, but we get CHILD_ADDED event
-    // so we need to get the record from ZK.
-    HAGroupStoreRecord currentHAGroupStoreRecord =
-      phoenixHaAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getLeft();
-    if (currentHAGroupStoreRecord == null) {
-      LOGGER.error(
-        "Current HAGroupStoreRecord is null," + "skipping peer path children cache initialization");
-      return;
-    }
-    String peerZKUrl = currentHAGroupStoreRecord.getPeerZKUrl();
-    if (StringUtils.isNotBlank(peerZKUrl)) {
-      try {
-        // Setup peer connection if needed (first time or ZK Url changed)
-        if (
-          peerPathChildrenCache == null || peerPhoenixHaAdmin != null
-            && !StringUtils.equals(peerZKUrl, peerPhoenixHaAdmin.getZkUrl())
-        ) {
-          // Clean up existing peer connection if it exists
-          closePeerConnection();
-          // Setup new peer connection
-          this.peerPhoenixHaAdmin =
-            new PhoenixHAAdmin(peerZKUrl, conf, ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE);
-          // Create new PeerPathChildrenCache
-          this.peerPathChildrenCache = initializePathChildrenCache(peerPhoenixHaAdmin,
-            this.peerCustomPathChildrenCacheListener, ClusterType.PEER);
-        }
-      } catch (Exception e) {
-        closePeerConnection();
-        LOGGER.error("Unable to initialize PeerPathChildrenCache for HAGroupStoreClient", e);
-        // Don't think we should mark HAGroupStoreClient as unhealthy if
-        // peerCache is unhealthy, if needed we can introduce a config to control behavior.
-      }
-    } else {
-      // Close Peer Cache for this HAGroupName if currentClusterRecord is null
-      // or peerZKUrl is blank
-      closePeerConnection();
-      LOGGER.error("Not initializing PeerPathChildrenCache for HAGroupStoreClient "
-        + "with HAGroupName {} as peerZKUrl is blank", haGroupName);
-    }
-  }
-
-  private PathChildrenCache initializePathChildrenCache(PhoenixHAAdmin admin,
-    PathChildrenCacheListener customListener, ClusterType cacheType) {
-    LOGGER.info("Initializing {} PathChildrenCache with URL {}", cacheType, admin.getZkUrl());
-    PathChildrenCache newPathChildrenCache = null;
-    try {
-      newPathChildrenCache =
-        new PathChildrenCache(admin.getCurator(), ZKPaths.PATH_SEPARATOR, true);
-      final CountDownLatch latch = new CountDownLatch(1);
-      newPathChildrenCache.getListenable().addListener(
-        customListener != null ? customListener : createCacheListener(latch, cacheType));
-      newPathChildrenCache.start(PathChildrenCache.StartMode.POST_INITIALIZED_EVENT);
-      boolean initialized =
-        latch.await(conf.getLong(PHOENIX_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS,
-          DEFAULT_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS), TimeUnit.MILLISECONDS);
-      if (!initialized && customListener == null) {
-        newPathChildrenCache.close();
-        return null;
-      }
-      return newPathChildrenCache;
-    } catch (Exception e) {
-      if (newPathChildrenCache != null) {
-        try {
-          newPathChildrenCache.close();
-        } catch (IOException ioe) {
-          LOGGER.error("Failed to close {} PathChildrenCache with ZKUrl", cacheType, ioe);
-        }
-      }
-      LOGGER.error("Failed to initialize {} PathChildrenCache", cacheType, e);
-      return null;
-    }
-  }
-
-  private PathChildrenCacheListener createCacheListener(CountDownLatch latch,
-    ClusterType cacheType) {
+  /**
+   * Listener for the local cache: tracks local state transitions (suppressing STANDBY while
+   * degraded), keeps the peer watcher pointed at the current peer ZK, drives the legacy CRR sync,
+   * and toggles health on connection loss/reconnect. The initial-load latch is handled by
+   * {@link HAGroupStoreCacheUtil#startCache}.
+   */
+  private PathChildrenCacheListener localCacheListener() {
     return (client, event) -> {
-      final ChildData childData = event.getData();
-      Pair<HAGroupStoreRecord, Stat> eventRecordAndStat =
-        extractHAGroupStoreRecordOrNull(childData);
-      HAGroupStoreRecord eventRecord = eventRecordAndStat.getLeft();
-      Stat eventStat = eventRecordAndStat.getRight();
-      if (eventRecord != null && !Objects.equals(eventRecord.getHaGroupName(), haGroupName)) {
+      Pair<HAGroupStoreRecord, Stat> recordAndStat =
+        HAGroupStoreCacheUtil.recordAndStat(event.getData());
+      HAGroupStoreRecord record = recordAndStat.getLeft();
+      if (record != null && !Objects.equals(record.getHaGroupName(), haGroupName)) {
         return;
       }
-      LOGGER.info(
-        "HAGroupStoreClient Cache {} received event {} type {} at {} with ZKUrl {} and "
-          + "PeerZKUrl {} for haGroupName {}",
-        cacheType, eventRecord, event.getType(), System.currentTimeMillis(),
-        phoenixHaAdmin.getZkUrl(),
-        peerPhoenixHaAdmin != null ? peerPhoenixHaAdmin.getZkUrl() : "peerPhoenixHaAdmin is null",
-        haGroupName);
       switch (event.getType()) {
         case CHILD_ADDED:
         case CHILD_UPDATED:
-          if (eventRecord != null && Objects.equals(eventRecord.getHaGroupName(), haGroupName)) {
-            handleStateChange(eventRecord, eventStat, cacheType);
-            // Reinitialize peer path children cache if peer url is added or updated.
-            if (cacheType == ClusterType.LOCAL) {
-              maybeInitializePeerPathChildrenCache();
+          if (record != null) {
+            handleLocalStateChange(record, recordAndStat.getRight());
+            // Reconcile only when the peer ZK URL changed, off the Curator dispatcher so a slow or
+            // unreachable peer never blocks local event processing.
+            String peerZKUrl = record.getPeerZKUrl();
+            if (!Objects.equals(peerZKUrl, lastConfiguredPeerZKUrl)) {
+              lastConfiguredPeerZKUrl = peerZKUrl;
+              peerWatcher.reconfigureAsync(peerZKUrl);
             }
-            // Offload the legacy CRR sync (it does ZK + JDBC I/O) so we don't block
-            // Curator's per-namespace event dispatcher.
-            ScheduledExecutorService syncExec = legacyCrrSyncExecutor;
-            if (syncExec != null) {
-              try {
-                syncExec.execute(this::syncLegacyCRRIfRoleChanged);
-              } catch (RejectedExecutionException ree) {
-                // Executor already shutting down (close() race); drop silently.
-                LOGGER.debug("Legacy CRR sync skipped for HA group {}: executor shut down",
-                  haGroupName);
-              }
-            }
+            offloadLegacyCrrSync();
           }
-          break;
-        case CHILD_REMOVED:
-          // No-op: the legacy /phoenix/ha znode is never deleted by this client.
-          break;
-        case INITIALIZED:
-          latch.countDown();
           break;
         case CONNECTION_LOST:
         case CONNECTION_SUSPENDED:
-          if (ClusterType.LOCAL.equals(cacheType)) {
-            isHealthy = false;
-          }
-          LOGGER.warn("{} HAGroupStoreClient cache connection lost/suspended", cacheType);
+          isHealthy = false;
+          LOGGER.warn("LOCAL HAGroupStoreClient cache connection lost/suspended for HA group {}",
+            haGroupName);
           break;
         case CONNECTION_RECONNECTED:
-          if (ClusterType.LOCAL.equals(cacheType)) {
-            isHealthy = true;
-          }
-          LOGGER.info("{} HAGroupStoreClient cache connection reconnected", cacheType);
+          isHealthy = true;
+          LOGGER.info("LOCAL HAGroupStoreClient cache connection reconnected for HA group {}",
+            haGroupName);
           break;
         default:
-          LOGGER.warn("Unexpected {} event type {}, complete event {}", cacheType, event.getType(),
-            event);
+          break;
       }
     };
   }
 
-  private Pair<HAGroupStoreRecord, Stat>
-    fetchCacheRecordAndPopulateZKIfNeeded(PathChildrenCache cache, ClusterType cacheType) {
-    if (cache == null) {
-      LOGGER.warn("{} HAGroupStoreClient cache is null, returning null", cacheType);
+  /**
+   * Read the local record from the cache; if absent, rebuild once from the system table (the znode
+   * may have been deleted) and re-read. Returns (null, null) when still absent.
+   */
+  private Pair<HAGroupStoreRecord, Stat> fetchLocalRecordAndPopulateZKIfNeeded() {
+    if (pathChildrenCache == null) {
+      LOGGER.warn("LOCAL HAGroupStoreClient cache is null for HA group {}, returning null",
+        haGroupName);
       return Pair.of(null, null);
     }
     String targetPath = toPath(this.haGroupName);
-    // Try to get record from current cache data
-    Pair<HAGroupStoreRecord, Stat> result = extractRecordAndStat(cache, targetPath, cacheType);
+    Pair<HAGroupStoreRecord, Stat> result =
+      HAGroupStoreCacheUtil.recordAndStatAt(pathChildrenCache, targetPath);
     if (result.getLeft() != null) {
       return result;
     }
-
-    if (cacheType.equals(ClusterType.PEER)) {
-      return Pair.of(null, null);
-    }
-    // If no record found, try to rebuild and fetch again
-    LOGGER.info("No record found at path {} for {} cluster, trying to initialize ZNode "
-      + "from System Table in case it might have been deleted", targetPath, cacheType);
+    LOGGER.info("No record found at path {} for LOCAL cluster, trying to initialize ZNode from "
+      + "System Table in case it might have been deleted", targetPath);
     try {
       rebuild();
-      return extractRecordAndStat(cache, targetPath, cacheType);
+      return HAGroupStoreCacheUtil.recordAndStatAt(pathChildrenCache, targetPath);
     } catch (Exception e) {
-      LOGGER.error(
-        "Failed to initialize ZNode from System Table, giving up " + "and returning null", e);
+      LOGGER.error("Failed to initialize ZNode from System Table, giving up and returning null", e);
       return Pair.of(null, null);
     }
-  }
-
-  private Pair<HAGroupStoreRecord, Stat> extractRecordAndStat(PathChildrenCache cache,
-    String targetPath, ClusterType cacheType) {
-    ChildData childData = cache.getCurrentData(targetPath);
-    if (childData != null) {
-      Pair<HAGroupStoreRecord, Stat> recordAndStat = extractHAGroupStoreRecordOrNull(childData);
-      LOGGER.debug("Built {} cluster record: {}", cacheType, recordAndStat.getLeft());
-      return recordAndStat;
-    }
-    return Pair.of(null, null);
-  }
-
-  private Pair<HAGroupStoreRecord, Stat>
-    extractHAGroupStoreRecordOrNull(final ChildData childData) {
-    if (childData != null) {
-      byte[] data = childData.getData();
-      return Pair.of(HAGroupStoreRecord.fromJson(data).orElse(null), childData.getStat());
-    }
-    return Pair.of(null, null);
   }
 
   /**
-   * Closes the peer connection and cleans up peer-related resources.
+   * The effective local HA record, or {@code null} when no local record exists. Identical to
+   * {@link #getHAGroupStoreRecord()} except that, while this RegionServer cannot see the peer, a
+   * local STANDBY is reported as DEGRADED_STANDBY. The DEGRADED_STANDBY overlay is in-memory only
+   * and is never written to the shared HA record; peer connectivity is never exposed directly. The
+   * overlay is applied only on top of a successfully read local record, so this requires the LOCAL
+   * client to be healthy: a lost LOCAL connection is bounded (Curator reconnects, or the
+   * RegionServer is aborted on prolonged ZK loss), so no stale-record fallback is provided here.
+   * @throws IOException if the LOCAL client is not healthy (same contract as
+   *                     {@link #getHAGroupStoreRecord()})
    */
-  private void closePeerConnection() {
-    try {
-      if (peerPathChildrenCache != null) {
-        peerPathChildrenCache.close();
-        peerPathChildrenCache = null;
+  public HAGroupStoreRecord getEffectiveHAGroupStoreRecord() throws IOException {
+    synchronized (localDegradedStandbyLock) {
+      HAGroupStoreRecord local = getHAGroupStoreRecord();
+      if (
+        localDegradedStandbyActive && local != null
+          && local.getHAGroupState() == HAGroupState.STANDBY
+      ) {
+        return local.withHAGroupState(HAGroupState.DEGRADED_STANDBY);
       }
-      if (peerPhoenixHaAdmin != null) {
-        peerPhoenixHaAdmin.close();
-        peerPhoenixHaAdmin = null;
-      }
-    } catch (Exception e) {
-      LOGGER.warn("Failed to close peer connection", e);
+      return local;
     }
+  }
+
+  /**
+   * Receives peer observations from {@link PeerClusterWatcher}: peer record changes (already
+   * de-duplicated, with one forced redelivery on reconnect) and peer visible/blind transitions.
+   * Visibility transitions drive this RegionServer's local-only effective state; they are in-memory
+   * only and never written to the shared HA record.
+   */
+  private final class PeerListener implements PeerClusterWatcher.PeerStateListener {
+    @Override
+    public void onPeerStateChanged(HAGroupStoreRecord peerRecord, Stat stat) {
+      HAGroupState fromState = lastKnownPeerState;
+      HAGroupState toState = peerRecord.getHAGroupState();
+      lastKnownPeerState = toState;
+      LOGGER.info("Detected state transition for HA group {} from {} to {} on PEER cluster",
+        haGroupName, fromState, toState);
+      notifySubscribers(fromState, toState, stat != null ? stat.getMtime() : 0L, ClusterType.PEER,
+        peerRecord.getLastSyncStateTimeInMs());
+      // A peer role change alters the combined legacy CRR; re-derive it off this callback thread.
+      offloadLegacyCrrSync();
+    }
+
+    @Override
+    public void onPeerVisible() {
+      clearLocalDegradedStandbyIfStillStandby();
+    }
+
+    @Override
+    public void onPeerBlind() {
+      presentLocalDegradedStandbyIfStandby();
+    }
+  }
+
+  /** Offload the legacy CRR sync (ZK + JDBC I/O) off the calling cache/event thread. */
+  private void offloadLegacyCrrSync() {
+    ScheduledExecutorService syncExec = legacyCrrSyncExecutor;
+    if (syncExec != null) {
+      try {
+        syncExec.execute(this::syncLegacyCRRIfRoleChanged);
+      } catch (RejectedExecutionException ree) {
+        LOGGER.debug("Legacy CRR sync skipped for HA group {}: executor shut down", haGroupName);
+      }
+    }
+  }
+
+  /**
+   * If this cluster is STANDBY and the peer is blind, present an in-memory DEGRADED_STANDBY (the
+   * shared HA record in ZK and the local PathChildrenCache are untouched) and return true;
+   * otherwise return false. Idempotent. Serialized with clear via localTransitionLock.
+   */
+  private boolean presentLocalDegradedStandbyIfStandby() {
+    synchronized (localTransitionLock) {
+      HAGroupStoreRecord local;
+      synchronized (localDegradedStandbyLock) {
+        local = readLocalRecordQuietly();
+        if (
+          localDegradedStandbyActive || local == null
+            || local.getHAGroupState() != HAGroupState.STANDBY || !peerWatcher.isBlind()
+        ) {
+          return false;
+        }
+        localDegradedStandbyActive = true;
+      }
+      LOGGER.warn("Peer not visible for HA group {}; presenting local DEGRADED_STANDBY "
+        + "(reason=peer-blind)", haGroupName);
+      notifySubscribers(HAGroupState.STANDBY, HAGroupState.DEGRADED_STANDBY,
+        System.currentTimeMillis(), ClusterType.LOCAL, local.getLastSyncStateTimeInMs());
+      return true;
+    }
+  }
+
+  /**
+   * The peer is visible again: lift the local-only degrade. If this cluster is still STANDBY,
+   * notify subscribers that the effective local state is STANDBY again. If it failed over while
+   * blind, the real state already reached subscribers.
+   */
+  private void clearLocalDegradedStandbyIfStillStandby() {
+    synchronized (localTransitionLock) {
+      HAGroupStoreRecord local;
+      boolean recover;
+      synchronized (localDegradedStandbyLock) {
+        if (!localDegradedStandbyActive) {
+          return;
+        }
+        local = readLocalRecordQuietly();
+        localDegradedStandbyActive = false;
+        recover = local != null && local.getHAGroupState() == HAGroupState.STANDBY;
+      }
+      if (recover) {
+        LOGGER.warn("Peer visible again for HA group {}; clearing local DEGRADED_STANDBY "
+          + "(reason=peer-blind)", haGroupName);
+        notifySubscribers(HAGroupState.DEGRADED_STANDBY, HAGroupState.STANDBY,
+          System.currentTimeMillis(), ClusterType.LOCAL, local.getLastSyncStateTimeInMs());
+      }
+    }
+  }
+
+  /** Current local record straight from the cache, or null; never triggers a rebuild. */
+  private HAGroupStoreRecord readLocalRecordQuietly() {
+    return HAGroupStoreCacheUtil.recordAndStatAt(pathChildrenCache, toPath(haGroupName)).getLeft();
   }
 
   /**
@@ -1120,11 +1128,11 @@ public class HAGroupStoreClient implements Closeable {
       // listener sees either a live or null reference, never half-closed.
       shutdownSyncExecutor();
       shutdownLegacyCrrSyncExecutor();
+      peerWatcher.close();
       if (pathChildrenCache != null) {
         pathChildrenCache.close();
         pathChildrenCache = null;
       }
-      closePeerConnection();
       NodeCache nodeCache = this.legacyCrrNodeCache;
       this.legacyCrrNodeCache = null;
       if (nodeCache != null) {
@@ -1359,6 +1367,15 @@ public class HAGroupStoreClient implements Closeable {
 
   /**
    * Subscribe to be notified when any transition to a target state occurs.
+   * <p>
+   * Listener callbacks run on internal cache-event/transition threads and may be invoked while
+   * internal locks are held. A listener must not block and must not re-enter this client or the
+   * peer watcher (e.g. {@code getEffectiveHAGroupStoreRecord}, {@code reconfigure},
+   * {@code subscribeToTargetState}); doing so risks deadlock or lock-order inversion.
+   * <p>
+   * A PEER transition may be redelivered once after a peer reconnect (the watcher forces one
+   * redelivery so no transition is missed across the disconnect window), so listeners must tolerate
+   * duplicate notifications; side-effecting or counting listeners should be idempotent.
    * @param targetState the target state to watch for
    * @param clusterType whether to monitor local or peer cluster
    * @param listener    the listener to notify when any transition to the target state occurs
@@ -1391,32 +1408,37 @@ public class HAGroupStoreClient implements Closeable {
   }
 
   /**
-   * Handle state change detection and notify subscribers if a transition occurred.
-   * @param newRecord the new HA group store record
-   * @param cacheType the type of cache (LOCAL or PEER)
+   * Handle a local state transition and notify subscribers. While the peer is not visible a local
+   * STANDBY must surface as DEGRADED_STANDBY (fail closed): if the overlay is already active the
+   * real STANDBY is suppressed, and if the role only now reaches STANDBY while still blind the
+   * overlay is established here. Serialized with present/clear via localTransitionLock so the LOCAL
+   * notifications cannot reorder.
    */
-  private void handleStateChange(HAGroupStoreRecord newRecord, Stat newStat,
-    ClusterType cacheType) {
+  private void handleLocalStateChange(HAGroupStoreRecord newRecord, Stat newStat) {
     HAGroupState newState = newRecord.getHAGroupState();
-    HAGroupState oldState;
-    ClusterType clusterType;
-
-    if (ClusterType.LOCAL.equals(cacheType)) {
-      oldState = lastKnownLocalState;
+    synchronized (localTransitionLock) {
+      HAGroupState oldState = lastKnownLocalState;
       lastKnownLocalState = newState;
-      clusterType = ClusterType.LOCAL;
-    } else {
-      oldState = lastKnownPeerState;
-      lastKnownPeerState = newState;
-      clusterType = ClusterType.PEER;
-    }
-
-    // Only notify if there's an actual state transition or initial state
-    if (oldState == null || !oldState.equals(newState)) {
-      LOGGER.info("Detected state transition for HA group {} from {} to {} on {} cluster",
-        haGroupName, oldState, newState, clusterType);
-      notifySubscribers(oldState, newState, newStat.getMtime(), clusterType,
-        newRecord.getLastSyncStateTimeInMs());
+      // Fail closed for a final STANDBY while the peer is not visible. STANDBY_TO_ACTIVE and
+      // ABORT_TO_STANDBY pass through because replay listens for those failover signals.
+      if (newState == HAGroupState.STANDBY) {
+        if (localDegradedStandbyActive) {
+          LOGGER.info("Suppressing LOCAL STANDBY notification for HA group {} while peer is not "
+            + "visible (still presenting DEGRADED_STANDBY)", haGroupName);
+          return;
+        }
+        // Reached STANDBY while blind: present (idempotent, re-checks blindness). If it degraded,
+        // the bare STANDBY is suppressed; if the peer is visible, fall through and emit STANDBY.
+        if (presentLocalDegradedStandbyIfStandby()) {
+          return;
+        }
+      }
+      if (oldState == null || !oldState.equals(newState)) {
+        LOGGER.info("Detected state transition for HA group {} from {} to {} on LOCAL cluster",
+          haGroupName, oldState, newState);
+        notifySubscribers(oldState, newState, newStat.getMtime(), ClusterType.LOCAL,
+          newRecord.getLastSyncStateTimeInMs());
+      }
     }
   }
 

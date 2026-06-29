@@ -61,6 +61,7 @@ import static org.apache.phoenix.query.QueryServices.GROUPBY_MAX_CACHE_SIZE_ATTR
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILLABLE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.GROUPBY_SPILL_FILES_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_CLIENT_PREWARM_ENABLED;
+import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_PEER_CACHE_RETRY_INTERVAL_SECONDS;
 import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_SYNC_INTERVAL_SECONDS;
 import static org.apache.phoenix.query.QueryServices.HBASE_CLIENT_SCANNER_TIMEOUT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.IMMUTABLE_ROWS_ATTRIB;
@@ -527,6 +528,8 @@ public class QueryServicesOptions {
 
   // Default HA Group Store sync job interval in seconds (15 minutes = 900 seconds)
   public static final int DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS = 900;
+  // Default peer HA group store cache retry interval in seconds.
+  public static final long DEFAULT_HA_GROUP_STORE_PEER_CACHE_RETRY_INTERVAL_SECONDS = 60L;
 
   // Legacy /phoenix/ha CRR sync is opt-in (default off).
   public static final boolean DEFAULT_PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED = false;
@@ -660,6 +663,8 @@ public class QueryServicesOptions {
       .setIfUnset(REPLICATION_LOG_ROTATION_TIME_MS_KEY, DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS)
       .setIfUnset(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS,
         DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS)
+      .setIfUnset(HA_GROUP_STORE_PEER_CACHE_RETRY_INTERVAL_SECONDS,
+        DEFAULT_HA_GROUP_STORE_PEER_CACHE_RETRY_INTERVAL_SECONDS)
       .setIfUnset(HA_GROUP_STORE_CLIENT_PREWARM_ENABLED,
         DEFAULT_HA_GROUP_STORE_CLIENT_PREWARM_ENABLED)
       .setIfUnset(PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED, DEFAULT_PHOENIX_HA_LEGACY_CRR_SYNC_ENABLED)
