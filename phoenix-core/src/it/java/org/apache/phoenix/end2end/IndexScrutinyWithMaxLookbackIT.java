@@ -52,9 +52,11 @@ import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
+@Category(NeedsOwnMiniClusterTest.class)
 public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
 
   private static PreparedStatement upsertDataStmt;
@@ -96,20 +98,27 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
     }
   }
 
+  /**
+   * An in-place update of a covered (non-key) index column does not change the index row key, so
+   * the index row is never removed. The update merely adds a newer version of the covered column to
+   * the same index row. When such a row is scrutinized at an SCN that predates the update, the
+   * matching pre-update index version is still present, and the row must be counted as VALID.
+   */
   @Test
-  public void testScrutinyOnRowsBeyondMaxLookBack() throws Exception {
+  public void testScrutinyOnUpdatedRowsWithinMaxLookbackAreValid() throws Exception {
     setupTables();
     try {
       upsertDataAndScrutinize(dataTableName, dataTableFullName, testClock);
-      assertBeyondMaxLookbackOutput(dataTableFullName, indexTableFullName);
     } finally {
       EnvironmentEdgeManager.reset();
     }
-
   }
 
+  /**
+   * View-index counterpart of {@link #testScrutinyOnUpdatedRowsWithinMaxLookbackAreValid}.
+   */
   @Test
-  public void testScrutinyOnRowsBeyondMaxLookback_viewIndex() throws Exception {
+  public void testScrutinyOnUpdatedViewIndexRowsWithinMaxLookbackAreValid() throws Exception {
     schema = "S" + generateUniqueName();
     dataTableName = "T" + generateUniqueName();
     dataTableFullName = SchemaUtil.getTableName(schema, dataTableName);
@@ -117,7 +126,6 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
     isViewIndex = true;
     viewName = "V" + generateUniqueName();
     String viewFullName = SchemaUtil.getTableName(schema, viewName);
-    String indexFullName = SchemaUtil.getTableName(schema, indexTableName);
     String dataTableDDL = "CREATE TABLE %s (ID INTEGER NOT NULL PRIMARY KEY, NAME VARCHAR, "
       + "ZIP INTEGER) COLUMN_ENCODED_BYTES = 0, VERSIONS = 1 ";
     String viewDDL = "CREATE VIEW %s AS SELECT * FROM %s";
@@ -131,8 +139,11 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
       conn.createStatement().execute(String.format(indexTableDDL, indexTableName, viewFullName));
       conn.commit();
     }
-    upsertDataAndScrutinize(viewName, viewFullName, testClock);
-    assertBeyondMaxLookbackOutput(viewFullName, indexFullName);
+    try {
+      upsertDataAndScrutinize(viewName, viewFullName, testClock);
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
   }
 
   private void assertBeyondMaxLookbackOutput(String dataTableName, String indexTableName)
@@ -186,6 +197,12 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
     }
   }
 
+  /**
+   * Inserts two rows, performs an in-place update of the covered column of one row, then
+   * scrutinizes at an SCN captured just before the update, after advancing the clock so the
+   * original inserts are older than the max lookback age. Both rows must be reported VALID with no
+   * beyond-max-lookback or invalid rows.
+   */
   private void upsertDataAndScrutinize(String tableName, String tableFullName,
     ManualEnvironmentEdge testClock) throws Exception {
     try (Connection conn =
@@ -199,13 +216,18 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
       // for the initial inserts
       testClock.incrementValue(MAX_LOOKBACK / 2 * 1000);
       scrutinyTs = EnvironmentEdgeManager.currentTimeMillis();
+      // Update the covered column of row 1. Because scrutinyTs is captured before this update, the
+      // data table reports the pre-update value at scrutinyTs, and the matching pre-update index
+      // version is retained by max-lookback-aware compaction (see method javadoc).
       updateIndexRows(conn);
-      // now go past max lookback age for the initial 2 inserts
+      // Advance the clock so the initial inserts are older than max lookback, while keeping
+      // scrutinyTs itself within the max lookback window so IndexScrutinyTool will run (it
+      // rejects scanning at an SCN older than max lookback).
       testClock.incrementValue(MAX_LOOKBACK / 2 * 1000);
       List<Job> completedJobs = runScrutiny(schema, tableName, indexTableName, scrutinyTs);
       Job job = completedJobs.get(0);
       assertTrue(job.isSuccessful());
-      assertCounters(job.getCounters());
+      assertAllRowsValid(job.getCounters());
     }
   }
 
@@ -262,6 +284,12 @@ public class IndexScrutinyWithMaxLookbackIT extends IndexScrutinyToolBaseIT {
   private void assertCounters(Counters counters) {
     assertEquals(1, getCounterValue(counters, VALID_ROW_COUNT));
     assertEquals(1, getCounterValue(counters, BEYOND_MAX_LOOKBACK_COUNT));
+    assertEquals(0, getCounterValue(counters, INVALID_ROW_COUNT));
+  }
+
+  private void assertAllRowsValid(Counters counters) {
+    assertEquals(2, getCounterValue(counters, VALID_ROW_COUNT));
+    assertEquals(0, getCounterValue(counters, BEYOND_MAX_LOOKBACK_COUNT));
     assertEquals(0, getCounterValue(counters, INVALID_ROW_COUNT));
   }
 
