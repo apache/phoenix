@@ -440,6 +440,21 @@ public class TransformTool extends Configured implements Tool {
         "ALTER statement has not been run and the transform has not been created for this table");
     }
 
+    // Forward-compatibility guard: the persisted transform type does not correspond to any
+    // TransformType known to this binary. Fail fast with an operator-readable message rather than
+    // attempt a transform we cannot reason about. The operator must upgrade this binary to a
+    // version that recognises the type, or remove the SYSTEM.TRANSFORM row, before re-running.
+    if (transformRecord.getTransformType() == PTable.TransformType.UNKNOWN) {
+      throw new IllegalStateException(String.format(
+        "TransformTool cannot run for SYSTEM.TRANSFORM record with an unrecognized transform type. "
+          + "This row was likely written by a newer Phoenix binary that introduced a new "
+          + "TransformType this binary does not understand. Upgrade this binary to a version that "
+          + "supports the new type, or remove the SYSTEM.TRANSFORM row, before retrying. "
+          + "schema=%s, logicalTable=%s, newPhysicalTable=%s, tenantId=%s",
+        transformRecord.getSchemaName(), transformRecord.getLogicalTableName(),
+        transformRecord.getNewPhysicalTableName(), transformRecord.getTenantId()));
+    }
+
     if (pDataTable != null && pIndexTable != null) {
       if (!IndexTool.isValidIndexTable(connection, qDataTable, indexTable, tenantId)) {
         throw new IllegalArgumentException(String

@@ -267,7 +267,16 @@ public interface PTable extends PMetaDataEntity {
 
   public enum TransformType {
     METADATA_TRANSFORM((byte) 1),
-    METADATA_TRANSFORM_PARTIAL((byte) 2);
+    METADATA_TRANSFORM_PARTIAL((byte) 2),
+    /**
+     * Forward-compatibility sentinel returned by {@link #fromSerializedValue(int)} when the
+     * serialized byte read from SYSTEM.TRANSFORM does not correspond to any known
+     * {@code TransformType} constant. This allows an older binary to deserialize a row written by a
+     * newer binary that introduced an additional transform type without crashing the calling code
+     * path; callers that observe {@code UNKNOWN} must handle it defensively (skip, block, or
+     * fail-fast with an operator-readable message) rather than treat it as a known type.
+     */
+    UNKNOWN((byte) -1);
 
     private final byte[] byteValue;
     private final int serializedValue;
@@ -289,11 +298,20 @@ public interface PTable extends PMetaDataEntity {
       return METADATA_TRANSFORM;
     }
 
+    /**
+     * Resolve a serialized transform type to its enum constant. Returns {@link #UNKNOWN} for any
+     * value that does not match a known constant (including the sentinel value itself), so that
+     * rows written by a newer binary do not crash an older binary. The sentinel constant
+     * {@code UNKNOWN} itself is never returned via its own serialized value through normal write
+     * paths — it is only produced when the persisted value is unrecognized.
+     */
     public static TransformType fromSerializedValue(int serializedValue) {
-      if (serializedValue < 1 || serializedValue > TransformType.values().length) {
-        throw new IllegalArgumentException("Invalid TransformType " + serializedValue);
+      for (TransformType type : TransformType.values()) {
+        if (type != UNKNOWN && type.serializedValue == serializedValue) {
+          return type;
+        }
       }
-      return TransformType.values()[serializedValue - 1];
+      return UNKNOWN;
     }
 
     public static TransformType getPartialTransform(TransformType transformType) {

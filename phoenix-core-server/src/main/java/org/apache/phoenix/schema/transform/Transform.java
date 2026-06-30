@@ -138,6 +138,17 @@ public class Transform extends TransformClient {
    */
   public static void doCutover(PhoenixConnection connection,
     SystemTransformRecord systemTransformRecord) throws Exception {
+    // Forward-compatibility guard: a row written by a newer binary may carry a transform type this
+    // binary does not recognize. Skipping the cutover (rather than throwing) keeps the monitor task
+    // alive so that other transforms are not starved while the operator decides how to act.
+    if (systemTransformRecord.getTransformType() == PTable.TransformType.UNKNOWN) {
+      LOGGER.warn(
+        "Skipping cutover for transform with UNKNOWN transform type (likely written by a newer "
+          + "binary). Schema={}, logicalTable={}, newPhysicalTable={}, tenantId={}",
+        systemTransformRecord.getSchemaName(), systemTransformRecord.getLogicalTableName(),
+        systemTransformRecord.getNewPhysicalTableName(), systemTransformRecord.getTenantId());
+      return;
+    }
     String tenantId = systemTransformRecord.getTenantId();
     String schema = systemTransformRecord.getSchemaName();
     String tableName = systemTransformRecord.getLogicalTableName();
@@ -507,6 +518,28 @@ public class Transform extends TransformClient {
     SystemTransformRecord transformRecord = getTransformRecord(schemaName, logicaTableName,
       logicalParentName, tenantId, phoenixConnection);
     Transform.doCutover(phoenixConnection, transformRecord);
+    finishForceCutover(phoenixConnection, transformRecord);
+  }
+
+  /**
+   * Marks the transform record COMPLETED and commits after a successful force cutover. This must be
+   * skipped when the record carries {@link PTable.TransformType#UNKNOWN}: in that case
+   * {@link #doCutover(PhoenixConnection, SystemTransformRecord)} short-circuited without performing
+   * any cutover, so marking the record COMPLETED here would falsely report success for a transform
+   * this binary could not run. Mirrors the skip-with-warn behaviour of the other forward-compat
+   * guards. Package-private so the gate is independently testable without standing up a Reducer.
+   */
+  static void finishForceCutover(PhoenixConnection phoenixConnection,
+    SystemTransformRecord transformRecord) throws SQLException {
+    if (transformRecord.getTransformType() == PTable.TransformType.UNKNOWN) {
+      LOGGER.warn(
+        "Skipping COMPLETED update for force cutover of transform with UNKNOWN transform type "
+          + "(likely written by a newer binary); cutover did not run. Schema={}, logicalTable={}, "
+          + "newPhysicalTable={}, tenantId={}",
+        transformRecord.getSchemaName(), transformRecord.getLogicalTableName(),
+        transformRecord.getNewPhysicalTableName(), transformRecord.getTenantId());
+      return;
+    }
     updateTransformRecord(phoenixConnection, transformRecord, PTable.TransformStatus.COMPLETED);
     phoenixConnection.commit();
   }
