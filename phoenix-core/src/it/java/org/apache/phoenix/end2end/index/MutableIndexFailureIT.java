@@ -103,7 +103,6 @@ public class MutableIndexFailureIT extends BaseTest {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(MutableIndexFailureIT.class);
 
-  public static volatile boolean FAIL_WRITE = false;
   public static volatile String fullTableName;
 
   private String tableName;
@@ -415,7 +414,7 @@ public class MutableIndexFailureIT extends BaseTest {
 
       }
     } finally {
-      FAIL_WRITE = false;
+      FailingRegionObserver.FAIL_WRITE = false;
     }
   }
 
@@ -611,7 +610,7 @@ public class MutableIndexFailureIT extends BaseTest {
   }
 
   public static class FailingRegionObserver extends SimpleRegionObserver {
-    public static boolean TOGGLE_FAIL_WRITE_FOR_RETRY = false;
+    public static volatile boolean TOGGLE_FAIL_WRITE_FOR_RETRY = false;
     public static volatile boolean FAIL_WRITE = false;
     public static volatile boolean FAIL_NEXT_WRITE = false;
     public static final String FAIL_INDEX_NAME = "FAIL_IDX";
