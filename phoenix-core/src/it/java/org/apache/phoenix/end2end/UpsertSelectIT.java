@@ -107,10 +107,25 @@ public class UpsertSelectIT extends ParallelStatsDisabledIT {
 
   @After
   public void assertNoConnLeak() throws Exception {
-    boolean refCountLeaked = isAnyStoreRefCountLeaked();
+    // The server-side UPSERT SELECT path can open auxiliary connections that are closed
+    // asynchronously on background threads, so a simple synchronous read can race ahead of
+    // their decrement. Poll for the counter to settle down before declaring a leak.
+    waitForOpenConnectionsToSettle();
     assertTrue(PhoenixRuntime.areGlobalClientMetricsBeingCollected());
-    assertEquals(0, GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue());
+    boolean refCountLeaked = isAnyStoreRefCountLeaked();
     assertFalse("refCount leaked", refCountLeaked);
+  }
+
+  private static void waitForOpenConnectionsToSettle() throws InterruptedException {
+    final long timeoutMs = 30000;
+    final long pollIntervalMs = 100;
+    long deadline = EnvironmentEdgeManager.currentTimeMillis() + timeoutMs;
+    long openConnections = GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue();
+    while (openConnections != 0 && EnvironmentEdgeManager.currentTimeMillis() < deadline) {
+      Thread.sleep(pollIntervalMs);
+      openConnections = GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue();
+    }
+    assertEquals(0, openConnections);
   }
 
   // name is used by failsafe as file name in reports
