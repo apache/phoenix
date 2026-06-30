@@ -130,6 +130,12 @@ public class MaxConcurrentConnectionsIT extends BaseTest {
       if (conn != null) {
         conn.close();
       }
+      // Connection close is asynchronous; poll until both counters drain to 0
+      // before asserting (asserting synchronously is racy).
+      hbaseTestUtil.waitFor(30000, 100,
+        () -> GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue() == 0L);
+      hbaseTestUtil.waitFor(30000, 100,
+        () -> GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.getMetric().getValue() == 0L);
       long connections = GLOBAL_OPEN_PHOENIX_CONNECTIONS.getMetric().getValue();
       assertEquals(String.format("Found %d connections still open.", connections), 0, connections);
       connections = GLOBAL_OPEN_INTERNAL_PHOENIX_CONNECTIONS.getMetric().getValue();
@@ -169,7 +175,9 @@ public class MaxConcurrentConnectionsIT extends BaseTest {
     } finally {
       connection.close();
     }
-    // All 10 child connections should be removed successfully from the queue
+    // Child-connection reaping is asynchronous; wait until the queue
+    // drains before asserting.
+    hbaseTestUtil.waitFor(30000, 100, () -> connection.getChildConnectionsCount() == 0);
     assertEquals(0, connection.getChildConnectionsCount());
   }
 }
