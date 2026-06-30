@@ -26,7 +26,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Map;
-
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.TableName;
@@ -44,7 +43,6 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -56,22 +54,19 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
+import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
+
 /**
- * Integration test to verify the lifecycle of orphaned delete markers (DeleteFamily markers
- * without corresponding Put cells) during compaction.
- *
- * Orphan delete markers follow the same lifecycle as normal deleted rows:
- * - Within max-lookback: retained
- * - Outside max-lookback: purged
- * - Outside TTL: purged
- *
- * The root cause of the bug is HBase's DropDeletesCompactionScanQueryMatcher.tryDropDelete()
- * which drops delete markers whose timestamp < earliestPutTs when KeepDeletedCells=TTL and
- * timeToPurgeDeletes is 0. The fix sets timeToPurgeDeletes to Long.MAX_VALUE so HBase
- * never purges delete markers before Phoenix CompactionScanner processes them.
- *
- * Users who need orphan delete markers retained beyond max-lookback (e.g., for replication
- * scenarios) can use the per-table max-lookback override to extend it up to TTL.
+ * Integration test to verify the lifecycle of orphaned delete markers (DeleteFamily markers without
+ * corresponding Put cells) during compaction. Orphan delete markers follow the same lifecycle as
+ * normal deleted rows: - Within max-lookback: retained - Outside max-lookback: purged - Outside
+ * TTL: purged The root cause of the bug is HBase's
+ * DropDeletesCompactionScanQueryMatcher.tryDropDelete() which drops delete markers whose timestamp
+ * < earliestPutTs when KeepDeletedCells=TTL and timeToPurgeDeletes is 0. The fix sets
+ * timeToPurgeDeletes to Long.MAX_VALUE so HBase never purges delete markers before Phoenix
+ * CompactionScanner processes them. Users who need orphan delete markers retained beyond
+ * max-lookback (e.g., for replication scenarios) can use the per-table max-lookback override to
+ * extend it up to TTL.
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class OrphanDeleteMarkerCompactionIT extends BaseTest {
@@ -104,8 +99,8 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
 
   /**
    * Verifies that an orphaned delete marker within the max-lookback window survives major
-   * compaction. Without the timeToPurgeDeletes fix, HBase's tryDropDelete() would drop it
-   * because earliestPutTs (from a different row's HFile) > marker timestamp.
+   * compaction. Without the timeToPurgeDeletes fix, HBase's tryDropDelete() would drop it because
+   * earliestPutTs (from a different row's HFile) > marker timestamp.
    */
   @Test(timeout = 120000L)
   public void testOrphanedDeleteMarkerRetainedWithinMaxLookback() throws Exception {
@@ -113,16 +108,14 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
       String tableName = generateUniqueName();
       Statement stmt = conn.createStatement();
       stmt.execute("CREATE TABLE " + tableName
-        + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR)"
-        + " TTL=300");
+        + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR)" + " TTL=300");
       conn.commit();
 
       EnvironmentEdgeManager.injectEdge(injectEdge);
       injectEdge.incrementValue(1);
 
       TableName hbaseTableName = TableName.valueOf(tableName);
-      ConnectionQueryServices cqs =
-        conn.unwrap(PhoenixConnection.class).getQueryServices();
+      ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
       Table hTable = cqs.getTable(hbaseTableName.getName());
 
       // Write an orphaned DeleteFamily marker using raw HBase API.
@@ -148,8 +141,9 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
       injectEdge.incrementValue(1);
 
       int deleteMarkersBefore = countDeleteMarkers(conn, hbaseTableName);
-      assertTrue("Expected at least one delete marker before compaction, found "
-        + deleteMarkersBefore, deleteMarkersBefore > 0);
+      assertTrue(
+        "Expected at least one delete marker before compaction, found " + deleteMarkersBefore,
+        deleteMarkersBefore > 0);
 
       // Major compact
       TestUtil.majorCompact(getUtility(), hbaseTableName);
@@ -157,7 +151,8 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
 
       // Assert: marker within max-lookback is retained
       int deleteMarkersAfter = countDeleteMarkers(conn, hbaseTableName);
-      assertTrue("Orphaned delete marker within max-lookback should be retained after "
+      assertTrue(
+        "Orphaned delete marker within max-lookback should be retained after "
           + "major compaction. Before=" + deleteMarkersBefore + ", After=" + deleteMarkersAfter,
         deleteMarkersAfter > 0);
 
@@ -173,8 +168,8 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
   }
 
   /**
-   * Verifies that an orphaned delete marker is purged once it ages past the max-lookback
-   * window but is still within TTL — same lifecycle as a normal Phoenix deleted row.
+   * Verifies that an orphaned delete marker is purged once it ages past the max-lookback window but
+   * is still within TTL — same lifecycle as a normal Phoenix deleted row.
    */
   @Test(timeout = 120000L)
   public void testOrphanedDeleteMarkerPurgedBetweenMaxLookbackAndTTL() throws Exception {
@@ -182,16 +177,14 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
       String tableName = generateUniqueName();
       Statement stmt = conn.createStatement();
       stmt.execute("CREATE TABLE " + tableName
-        + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR)"
-        + " TTL=300");
+        + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR)" + " TTL=300");
       conn.commit();
 
       EnvironmentEdgeManager.injectEdge(injectEdge);
       injectEdge.incrementValue(1);
 
       TableName hbaseTableName = TableName.valueOf(tableName);
-      ConnectionQueryServices cqs =
-        conn.unwrap(PhoenixConnection.class).getQueryServices();
+      ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
       Table hTable = cqs.getTable(hbaseTableName.getName());
 
       // Write orphaned delete marker
@@ -234,16 +227,14 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
       String tableName = generateUniqueName();
       Statement stmt = conn.createStatement();
       stmt.execute("CREATE TABLE " + tableName
-        + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR)"
-        + " TTL=" + ttl);
+        + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR)" + " TTL=" + ttl);
       conn.commit();
 
       EnvironmentEdgeManager.injectEdge(injectEdge);
       injectEdge.incrementValue(1);
 
       TableName hbaseTableName = TableName.valueOf(tableName);
-      ConnectionQueryServices cqs =
-        conn.unwrap(PhoenixConnection.class).getQueryServices();
+      ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
       Table hTable = cqs.getTable(hbaseTableName.getName());
 
       // Write orphaned delete marker
@@ -269,17 +260,17 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
 
       // Assert: marker outside TTL is purged
       int deleteMarkersAfter = countDeleteMarkers(conn, hbaseTableName);
-      assertEquals("Orphaned delete marker should be purged after TTL expires",
-        0, deleteMarkersAfter);
+      assertEquals("Orphaned delete marker should be purged after TTL expires", 0,
+        deleteMarkersAfter);
 
       hTable.close();
     }
   }
 
   /**
-   * Verifies that overriding max-lookback to match TTL retains the orphaned delete marker
-   * in the max-lookback-to-TTL window. This is the escape hatch for replication scenarios
-   * where users need markers retained longer than the global max-lookback.
+   * Verifies that overriding max-lookback to match TTL retains the orphaned delete marker in the
+   * max-lookback-to-TTL window. This is the escape hatch for replication scenarios where users need
+   * markers retained longer than the global max-lookback.
    */
   @Test(timeout = 120000L)
   public void testMaxLookbackOverrideRetainsOrphanedDeleteMarkerUntilTTL() throws Exception {
@@ -288,8 +279,7 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
       String tableName = generateUniqueName();
       Statement stmt = conn.createStatement();
       stmt.execute("CREATE TABLE " + tableName
-        + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR)"
-        + " TTL=" + ttl);
+        + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR)" + " TTL=" + ttl);
       conn.commit();
 
       // Override max-lookback for this table to match TTL (60s instead of global 15s)
@@ -299,8 +289,7 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
       injectEdge.incrementValue(1);
 
       TableName hbaseTableName = TableName.valueOf(tableName);
-      ConnectionQueryServices cqs =
-        conn.unwrap(PhoenixConnection.class).getQueryServices();
+      ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
       Table hTable = cqs.getTable(hbaseTableName.getName());
 
       // Write orphaned delete marker
@@ -328,8 +317,7 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
       // Assert: marker is retained because the per-table max-lookback is 60s
       int deleteMarkersAfter = countDeleteMarkers(conn, hbaseTableName);
       assertTrue("Orphaned delete marker should be retained when within per-table "
-          + "max-lookback override. After=" + deleteMarkersAfter,
-        deleteMarkersAfter > 0);
+        + "max-lookback override. After=" + deleteMarkersAfter, deleteMarkersAfter > 0);
 
       // Now advance past the override (total ~31s more, so ~61s from marker creation)
       injectEdge.incrementValue(31 * 1000L);
@@ -340,16 +328,17 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
 
       // Assert: marker is now purged — exceeded max-lookback override
       deleteMarkersAfter = countDeleteMarkers(conn, hbaseTableName);
-      assertEquals("Orphaned delete marker should be purged after exceeding "
-        + "max-lookback override", 0, deleteMarkersAfter);
+      assertEquals(
+        "Orphaned delete marker should be purged after exceeding " + "max-lookback override", 0,
+        deleteMarkersAfter);
 
       hTable.close();
     }
   }
 
   /**
-   * Verifies minor compaction retains orphaned delete markers regardless of age
-   * (minor compactions never expire cells).
+   * Verifies minor compaction retains orphaned delete markers regardless of age (minor compactions
+   * never expire cells).
    */
   @Test(timeout = 120000L)
   public void testOrphanedDeleteMarkerRetainedDuringMinorCompaction() throws Exception {
@@ -357,16 +346,14 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
       String tableName = generateUniqueName();
       Statement stmt = conn.createStatement();
       stmt.execute("CREATE TABLE " + tableName
-        + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR)"
-        + " TTL=300");
+        + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR)" + " TTL=300");
       conn.commit();
 
       EnvironmentEdgeManager.injectEdge(injectEdge);
       injectEdge.incrementValue(1);
 
       TableName hbaseTableName = TableName.valueOf(tableName);
-      ConnectionQueryServices cqs =
-        conn.unwrap(PhoenixConnection.class).getQueryServices();
+      ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
       Table hTable = cqs.getTable(hbaseTableName.getName());
 
       // Write orphaned delete marker
@@ -399,9 +386,8 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
 
       // Assert: minor compaction never expires cells
       int deleteMarkersAfter = countDeleteMarkers(conn, hbaseTableName);
-      assertTrue("Orphaned delete marker should be retained after minor compaction. "
-          + "Before=" + deleteMarkersBefore + ", After=" + deleteMarkersAfter,
-        deleteMarkersAfter > 0);
+      assertTrue("Orphaned delete marker should be retained after minor compaction. " + "Before="
+        + deleteMarkersBefore + ", After=" + deleteMarkersAfter, deleteMarkersAfter > 0);
 
       // Verify correct query behavior
       ResultSet rs = stmt.executeQuery("SELECT * FROM " + tableName + " WHERE id = 'a'");
@@ -418,10 +404,8 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
     admin.flush(table);
   }
 
-  private int countDeleteMarkers(Connection conn, TableName tableName)
-    throws Exception {
-    ConnectionQueryServices cqs =
-      conn.unwrap(PhoenixConnection.class).getQueryServices();
+  private int countDeleteMarkers(Connection conn, TableName tableName) throws Exception {
+    ConnectionQueryServices cqs = conn.unwrap(PhoenixConnection.class).getQueryServices();
     Table table = cqs.getTable(tableName.getName());
     Scan scan = new Scan();
     scan.setRaw(true);
@@ -433,9 +417,10 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
         CellScanner cellScanner = result.cellScanner();
         while (cellScanner.advance()) {
           Cell cell = cellScanner.current();
-          if (cell.getType() == Cell.Type.DeleteFamily
-            || cell.getType() == Cell.Type.DeleteColumn
-            || cell.getType() == Cell.Type.Delete) {
+          if (
+            cell.getType() == Cell.Type.DeleteFamily || cell.getType() == Cell.Type.DeleteColumn
+              || cell.getType() == Cell.Type.Delete
+          ) {
             deleteMarkerCount++;
           }
         }
