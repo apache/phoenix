@@ -23,15 +23,12 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_IS_NAMESPACE
 
 import java.nio.charset.StandardCharsets;
 import java.sql.Connection;
-import org.antlr.runtime.CharStream;
 import org.apache.hadoop.conf.Configured;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
-import org.apache.hadoop.hbase.metrics.Gauge;
-import org.apache.hadoop.hbase.metrics.impl.MetricRegistriesImpl;
 import org.apache.hadoop.io.NullWritable;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.JobPriority;
@@ -40,14 +37,12 @@ import org.apache.hadoop.mapreduce.lib.db.DBInputFormat.NullDBWritable;
 import org.apache.hadoop.mapreduce.lib.output.NullOutputFormat;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
-import org.apache.htrace.SpanReceiver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.MRJobType;
 import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.util.SchemaUtil;
-import org.joda.time.Chronology;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -216,9 +211,7 @@ public class UpdateStatisticsTool extends Configured implements Tool {
     job.setPriority(this.jobPriority);
 
     TableMapReduceUtil.addDependencyJars(job);
-    TableMapReduceUtil.addDependencyJarsForClasses(job.getConfiguration(), PhoenixConnection.class,
-      Chronology.class, CharStream.class, SpanReceiver.class, Gauge.class,
-      MetricRegistriesImpl.class);
+    PhoenixMapReduceUtil.addPhoenixDependencyJars(job.getConfiguration());
 
     LOGGER.info("UpdateStatisticsTool running for: " + tableName + " on snapshot: " + snapshotName
       + " with restore dir: " + restoreDir);
