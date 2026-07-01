@@ -738,9 +738,12 @@ public class CompactionScanner implements InternalScanner {
       top: for (int index = 0; index < result.size(); index++) {
         Cell cell = result.get(index);
         if (cell.getTimestamp() > maxLookbackWindowStart) {
-          // All cells within the max lookback window are retained. Here we retain all
-          // except the ones at the lower edge of the window. Those will be included in
-          // the last row version in the rest of the body of the loop
+          // All cells within the max lookback window are retained regardless of type
+          // (puts, delete markers, etc.). This is the mechanism that preserves orphaned
+          // delete markers (those without corresponding puts, e.g. from replication)
+          // within the max-lookback window. The timeToPurgeDeletes setting in
+          // setScanOptionsForFlushesAndCompactions ensures HBase delivers these markers
+          // to CompactionScanner rather than dropping them at the StoreScanner layer.
           retainedCells.add(cell);
           continue;
         }
@@ -1076,6 +1079,11 @@ public class CompactionScanner implements InternalScanner {
       emptyColumn.clear();
       getLastRowVersionInMaxLookbackWindow(result, lastRowVersion, retainedCells, emptyColumn);
       if (lastRowVersion.isEmpty()) {
+        // For orphaned delete markers (no puts in the row), lastRowVersion is empty.
+        // Within max-lookback: already in retainedCells (added unconditionally above).
+        // Outside max-lookback on major: retainedCells is empty, so marker is purged.
+        // Outside max-lookback on minor/flush: marker was added to retainedCells by
+        // the !major branch in getLastRowVersionInMaxLookbackWindow.
         return true;
       }
       if (!major) {
