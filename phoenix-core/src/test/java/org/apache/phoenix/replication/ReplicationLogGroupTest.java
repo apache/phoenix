@@ -867,10 +867,6 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Write records across multiple rotations.
     for (int rotation = 0; rotation < NUM_ROTATIONS; rotation++) {
-      // Get the path of the current log file.
-      Path logPath = activeLog.getWriter().getContext().getFilePath();
-      logPaths.add(logPath);
-
       for (int i = 0; i < NUM_RECORDS_PER_ROTATION; i++) {
         int commitId = (rotation * NUM_RECORDS_PER_ROTATION) + i;
         LogFile.Record record =
@@ -879,6 +875,12 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
         logGroup.append(record.getHBaseTableName(), record.getCommitId(), record.getMutation());
       }
       logGroup.sync(); // Sync to commit the appends to the current writer.
+      // Capture the writer path AFTER sync, once this batch's apply() has settled currentWriter to
+      // the file these records landed on. Capturing before the appends races the async swap event:
+      // checkAndReplaceWriter's pendingWriter.getAndSet(null) and the currentWriter assignment are
+      // not atomic, so getWriter() can see the pending writer already taken by the consumer while
+      // currentWriter still points at the previous file, mis-recording the path.
+      logPaths.add(activeLog.getWriter().getContext().getFilePath());
       // Force a rotation to close the current writer.
       activeLog.forceRotation();
     }
@@ -937,9 +939,6 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     ReplicationLog activeLog = logGroup.getActiveLog();
 
     for (int rotation = 0; rotation < NUM_ROTATIONS; rotation++) {
-      Path logPath = activeLog.getWriter().getContext().getFilePath();
-      logPaths.add(logPath);
-
       for (int i = 0; i < NUM_RECORDS_PER_ROTATION; i++) {
         int commitId = (rotation * NUM_RECORDS_PER_ROTATION) + i;
         LogFile.Record record =
@@ -949,6 +948,12 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       }
 
       logGroup.sync();
+      // Capture the writer path AFTER sync, once this batch's apply() has settled currentWriter to
+      // the file these records landed on. Capturing before the appends races the async swap event:
+      // checkAndReplaceWriter's pendingWriter.getAndSet(null) and the currentWriter assignment are
+      // not atomic, so getWriter() can see the pending writer already taken by the consumer while
+      // currentWriter still points at the previous file, mis-recording the path.
+      logPaths.add(activeLog.getWriter().getContext().getFilePath());
       activeLog.forceRotation();
     }
 
