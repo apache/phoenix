@@ -1466,6 +1466,65 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
+   * Tests the idle-then-lease-recovery scenario: after a sync clears currentBatch, the system goes
+   * idle. A rotation tick stages a pending writer. The reader performs HDFS lease recovery,
+   * breaking the old writer's stream. When events resume, apply() drains the healthy staged writer
+   * before the action — the broken writer is never touched. No replay needed (empty batch).
+   * <p>
+   * Determinism: the broken-stream stubs are installed while the system is idle, before
+   * forceRotation() publishes the swap event, so the consumer thread never races stub installation
+   * on the initialWriter spy. Before verifying the initialWriter invocation counts we await its
+   * async close (submitClose on the swap), which happens-after every invocation the swap can make
+   * on that spy — so the count assertions cannot race the consumer/close-executor threads.
+   */
+  @Test
+  public void testIdleLeaseRecoveryDrainsStagedWriter() throws Exception {
+    final String tableName = "TBLILRDSW";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    final long commitId = 1L;
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
+
+    // Append + sync to establish baseline and clear currentBatch
+    logGroup.append(tableName, commitId, put);
+    logGroup.sync();
+
+    // Simulate HDFS lease recovery breaking the old writer's stream. Installed while idle — before
+    // forceRotation() publishes the swap event — so the consumer cannot race this stub install.
+    doThrow(new IOException("Simulated broken stream after lease recovery")).when(initialWriter)
+      .append(anyString(), anyLong(), any(List.class));
+    doThrow(new IOException("Simulated broken stream after lease recovery")).when(initialWriter)
+      .sync();
+
+    // Stage W2 in pendingWriter via forced rotation
+    activeLog.forceRotation();
+
+    // Events resume — apply() drains W2 before the action, so broken writer is never touched
+    logGroup.append(tableName, commitId + 1, put);
+    logGroup.sync();
+
+    LogFileWriter newWriter = activeLog.getWriter();
+    assertTrue("Should be using new writer after idle + lease recovery",
+      newWriter != initialWriter);
+
+    // New writer received the new append + sync (no replay — currentBatch was empty)
+    verify(newWriter, times(1)).append(eq(tableName), eq(commitId + 1),
+      eq(LogFileTestUtil.cellsOf(put)));
+    verify(newWriter, times(1)).sync();
+
+    // Await the async close of the old writer. This happens-after every invocation the swap makes
+    // on the initialWriter spy, so the count verifications below cannot race the consumer thread.
+    verify(initialWriter, timeout(5000).times(1)).close();
+
+    // Old writer: only the pre-idle append + sync, nothing after the break
+    verify(initialWriter, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)));
+    verify(initialWriter, times(1)).sync();
+  }
+
+  /**
    * Tests that a failed replay is retried on a fresh writer. The first rotated writer's append
    * fails during replay. Rotation creates a second fresh writer; replay succeeds on it.
    */

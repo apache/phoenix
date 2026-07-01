@@ -246,6 +246,9 @@ public class ReplicationLogProcessor implements Closeable {
 
       for (LogFile.Record record : logFileReader) {
         final TableName tableName = TableName.valueOf(record.getHBaseTableName());
+        // A record may reconstruct into multiple mutations. Batches split on the mutation
+        // boundary, so a single record's mutations can span two processReplicationLogBatch
+        // invocations -- do not assume per-record atomicity here.
         for (Mutation mutation : record.getMutations()) {
           tableToMutationsMap.computeIfAbsent(tableName, k -> new ArrayList<>()).add(mutation);
           currentBatchSize++;

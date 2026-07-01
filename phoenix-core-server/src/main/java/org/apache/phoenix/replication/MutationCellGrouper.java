@@ -29,12 +29,14 @@ import org.apache.hadoop.hbase.client.Put;
 /**
  * Groups a flat cell stream into Put/Delete mutations, mirroring the algorithm HBase's
  * ReplicationSink uses to reconstruct mutations from a WALEdit. A new mutation is started whenever
- * the row key or the put-vs-delete disposition differs from the immediately preceding cell;
- * consecutive cells sharing both are collected into one mutation. There is no precondition on the
- * input ordering: any cell stream produces valid mutations. Ordering only affects how the cells are
- * partitioned into Mutation objects (a row that recurs non-consecutively yields a separate mutation
- * per run), not correctness -- cell order is preserved, so replaying the resulting mutations in
- * order reproduces the effect of applying the input cells in order.
+ * the row key or the cell type differs from the immediately preceding cell; consecutive cells
+ * sharing both are collected into one mutation. Because the full cell type participates in the
+ * boundary, distinct delete subtypes (e.g. DeleteColumn vs. DeleteFamily) also split into separate
+ * mutations. There is no precondition on the input ordering: any cell stream produces valid
+ * mutations. Ordering only affects how the cells are partitioned into Mutation objects (a row that
+ * recurs non-consecutively yields a separate mutation per run), not correctness -- cell order is
+ * preserved, so replaying the resulting mutations in order reproduces the effect of applying the
+ * input cells in order.
  */
 public final class MutationCellGrouper {
 

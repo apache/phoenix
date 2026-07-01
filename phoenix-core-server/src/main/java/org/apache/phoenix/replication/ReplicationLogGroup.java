@@ -560,6 +560,9 @@ public class ReplicationLogGroup {
     for (List<Cell> familyCells : mutation.getFamilyCellMap().values()) {
       cells.addAll(familyCells);
     }
+    if (cells.isEmpty()) {
+      throw new IllegalArgumentException("Cannot append a mutation with no cells");
+    }
     publishDataEvent(new Record(tableName, commitId, cells));
   }
 
@@ -574,6 +577,9 @@ public class ReplicationLogGroup {
    * @throws IOException If the writer is closed or the ring buffer is full.
    */
   public void append(String tableName, long commitId, List<Cell> cells) throws IOException {
+    if (cells == null || cells.isEmpty()) {
+      throw new IllegalArgumentException("Cannot append a record with no cells");
+    }
     if (LOG.isTraceEnabled()) {
       LOG.trace("Append: table={}, commitId={}, cells={}", tableName, commitId, cells.size());
     }
