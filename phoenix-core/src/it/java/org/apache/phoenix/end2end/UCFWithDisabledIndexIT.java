@@ -27,9 +27,12 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
+import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
@@ -102,6 +105,23 @@ public class UCFWithDisabledIndexIT extends BaseTest {
 
   }
 
+  private static void waitForCoprocessorOnSystemCatalog(Class<?> coprocessorClass) throws Exception {
+    final TableName sysCatalog = TableName.valueOf("SYSTEM.CATALOG");
+    utility.waitFor(10000, 100, () -> {
+      List<HRegion> regions = utility.getHBaseCluster().getRegions(sysCatalog);
+      if (regions.isEmpty()) {
+        return false;
+      }
+      for (HRegion region : regions) {
+        if (region.getCoprocessorHost()
+            .findCoprocessor(coprocessorClass.getName()) == null) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }
+
   @Test
   public void testUcfWithNoGetTableCalls() throws Throwable {
     final String tableName = generateUniqueName();
@@ -118,7 +138,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
 
       stmt.execute("CREATE TABLE " + tableName
         + " (COL1 CHAR(10) NOT NULL, COL2 CHAR(5) NOT NULL, COL3 VARCHAR,"
-        + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))" + " UPDATE_CACHE_FREQUENCY=20000");
+        + " COL4 VARCHAR CONSTRAINT pk PRIMARY KEY(COL1, COL2))" + " UPDATE_CACHE_FREQUENCY=NEVER");
       stmt.execute("CREATE INDEX " + indexName + " ON " + tableName + " (COL3) INCLUDE (COL4)");
       stmt.execute("CREATE VIEW " + view01 + " (VCOL1 CHAR(8), COL5 VARCHAR) AS SELECT * FROM "
         + tableName + " WHERE COL1 = 'col1'");
@@ -203,6 +223,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
       updateIndexToRebuild(conn, tableName, indexName);
       TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
       TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+      waitForCoprocessorOnSystemCatalog(MetaDataEndpointImpl.class);
       verifyTableAndIndexRows(conn, tableName, indexName, false);
       conn.close();
     }
@@ -266,6 +287,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
     // re-attach original coproc
     TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
     TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+    waitForCoprocessorOnSystemCatalog(MetaDataEndpointImpl.class);
 
     final Statement stmt = conn.createStatement();
     stmt.execute("UPSERT INTO " + tableName + " (col1, col2, col3, col4) values ('c011', "
@@ -334,6 +356,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
     // attach coproc that does not allow getTable RPC call
     TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
     TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
+    waitForCoprocessorOnSystemCatalog(TestMetaDataEndpointImpl.class);
     return stmt;
   }
 
@@ -356,6 +379,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
       updateIndexToRebuild(conn, tableName, indexName);
       TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
       TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+      waitForCoprocessorOnSystemCatalog(MetaDataEndpointImpl.class);
       verifyTableAndIndexRows(conn, tableName, indexName, false);
       conn.close();
     }
@@ -385,6 +409,7 @@ public class UCFWithDisabledIndexIT extends BaseTest {
       updateIndexToRebuild(conn, tableName, indexName);
       TestUtil.removeCoprocessor(conn, "SYSTEM.CATALOG", TestMetaDataEndpointImpl.class);
       TestUtil.addCoprocessor(conn, "SYSTEM.CATALOG", MetaDataEndpointImpl.class);
+      waitForCoprocessorOnSystemCatalog(MetaDataEndpointImpl.class);
       verifyTableAndIndexRows(conn, tableName, indexName, true);
       conn.close();
     }
