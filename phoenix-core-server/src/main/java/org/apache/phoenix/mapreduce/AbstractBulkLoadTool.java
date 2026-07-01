@@ -97,6 +97,8 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
     new Option("k", "skip-header", false, "Skip the first line of CSV files (the header)");
   static final Option ENABLE_CORRUPT_INDEXES = new Option("corruptindexes", "corruptindexes", false,
     "Allow bulk loading into non-empty tables with global secondary indexes");
+  static final Option BAD_RECORDS_PATH_OPT = new Option("B", "bad-records-path", true,
+    "HDFS path to write rejected/bad records (implies --ignore-errors)");
 
   /**
    * Set configuration values based on parsed command line options.
@@ -122,6 +124,7 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
     options.addOption(HELP_OPT);
     options.addOption(SKIP_HEADER_OPT);
     options.addOption(ENABLE_CORRUPT_INDEXES);
+    options.addOption(BAD_RECORDS_PATH_OPT);
     return options;
   }
 
@@ -238,6 +241,14 @@ public abstract class AbstractBulkLoadTool extends Configured implements Tool {
       Preconditions.checkArgument(!importColumns.isEmpty(), "Column info list is empty");
       FormatToBytesWritableMapper.configureColumnInfoList(conf, importColumns);
       boolean ignoreInvalidRows = cmdLine.hasOption(IGNORE_ERRORS_OPT.getOpt());
+
+      // --bad-records-path implies --ignore-errors
+      if (cmdLine.hasOption(BAD_RECORDS_PATH_OPT.getOpt())) {
+        conf.set(FormatToBytesWritableMapper.BAD_RECORDS_PATH_CONFKEY,
+          cmdLine.getOptionValue(BAD_RECORDS_PATH_OPT.getOpt()));
+        ignoreInvalidRows = true;
+      }
+
       conf.setBoolean(FormatToBytesWritableMapper.IGNORE_INVALID_ROW_CONFKEY, ignoreInvalidRows);
       String tbn = SchemaUtil.getEscapedFullTableName(qualifiedTableName);
       conf.set(FormatToBytesWritableMapper.TABLE_NAME_CONFKEY, tbn);
