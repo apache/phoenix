@@ -59,15 +59,12 @@ public class MetaDataCachingIT extends BaseTest {
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
     Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
-    // We set here a tiny cache to verify that even if the total size of the cache is just enough to
-    // hold
-    // system tables and Phoenix is still functional. Please note the cache weight for system tables
-    // is set to
-    // zero to allow insertion of system tables even when the cache reaches its maximum weight.
+    // We set here a tiny cache to verify that even if the total size of the cache is just enough
+    // to hold system tables and Phoenix is still functional. Please note the cache weight for
+    // system tables is set to zero to allow insertion of system tables even when the cache reaches
+    // its maximum weight.
     props.put(QueryServices.MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB, "50000");
     props.put(QueryServices.CLIENT_CACHE_ENCODING, "object");
-    props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     props.put(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
