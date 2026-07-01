@@ -5463,38 +5463,143 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   }
 
   private void createSnapshot(String snapshotName, String tableName) throws SQLException {
-    Admin admin = null;
+    // The HMaster prepares a snapshot under a per-table master lock. A concurrent admin
+    // operation on the same table can transiently hold the lock, and TakeSnapshotHandler.prepare
+    // then bubbles a SnapshotCreationException("Could not build snapshot handler") whose root
+    // cause is DoNotRetryIOException("Master lock could not be acquired"). Because the snapshot
+    // is rejected at prepare (never registered with the master), retrying the same name
+    // is safe.
+    // A second flavor of transient failure is "already running another snapshot on the same table",
+    // produced by RPC-level retries. The original snapshot() RPC has already been accepted by the
+    // master and the snapshot procedure is in flight, but the client retries the call and the master
+    // rejects the duplicate. In that case the existing snapshot procedure will succeed, so we treat
+    // it as success once the snapshot of that name shows up in listSnapshots(). If it never appears
+    // within the polling window we fall through to a normal retry.
+    final int maxAttempts = 5;
+    final long backoffMs = 1000L;
+    final long alreadyRunningWaitMs =
+      TimeUnit.MINUTES.toMillis(2L);
     SQLException sqlE = null;
-    try {
-      admin = getAdmin();
-      admin.snapshot(snapshotName, TableName.valueOf(tableName));
-      LOGGER.info("Successfully created snapshot " + snapshotName + " for " + tableName);
-    } catch (SnapshotCreationException e) {
-      if (e.getMessage().contains("doesn't exist")) {
-        LOGGER.warn("Could not create snapshot {}, table is missing." + snapshotName, e);
-      } else {
-        sqlE = new SQLException(e);
-      }
-    } catch (Exception e) {
-      sqlE = new SQLException(e);
-    } finally {
+    for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+      sqlE = null;
+      Admin admin = null;
       try {
-        if (admin != null) {
-          admin.close();
+        admin = getAdmin();
+        admin.snapshot(snapshotName, TableName.valueOf(tableName));
+        LOGGER.info("Successfully created snapshot " + snapshotName + " for " + tableName);
+        return;
+      } catch (SnapshotCreationException e) {
+        if (e.getMessage() != null && e.getMessage().contains("doesn't exist")) {
+          LOGGER.warn("Could not create snapshot {}, table is missing." + snapshotName, e);
+          return;
+        }
+        if (isAlreadyRunningSnapshotFailure(e)) {
+          LOGGER.warn(
+            "Snapshot {} for {} rejected as already in flight (attempt {}/{}); "
+              + "polling for completion of the in-flight snapshot",
+            snapshotName, tableName, attempt, maxAttempts, e);
+          if (waitForSnapshotToAppear(admin, snapshotName, alreadyRunningWaitMs)) {
+            LOGGER.info("In-flight snapshot {} for {} completed; treating create as success",
+              snapshotName, tableName);
+            return;
+          }
+          sqlE = new SQLException(e);
+          if (attempt < maxAttempts) {
+            LOGGER.warn(
+              "In-flight snapshot {} for {} did not complete within {}ms; will retry create",
+              snapshotName, tableName, alreadyRunningWaitMs);
+          } else {
+            break;
+          }
+        } else {
+          sqlE = new SQLException(e);
+          if (attempt < maxAttempts && isTransientSnapshotFailure(e)) {
+            LOGGER.warn("Transient failure creating snapshot {} for {} (attempt {}/{}); retrying",
+              snapshotName, tableName, attempt, maxAttempts, e);
+          } else {
+            break;
+          }
         }
       } catch (Exception e) {
-        SQLException adminCloseEx = new SQLException(e);
-        if (sqlE == null) {
-          sqlE = adminCloseEx;
-        } else {
-          sqlE.setNextException(adminCloseEx);
-        }
+        sqlE = new SQLException(e);
+        break;
       } finally {
-        if (sqlE != null) {
-          throw sqlE;
+        if (admin != null) {
+          try {
+            admin.close();
+          } catch (Exception e) {
+            SQLException adminCloseEx = new SQLException(e);
+            if (sqlE == null) {
+              sqlE = adminCloseEx;
+            } else {
+              sqlE.setNextException(adminCloseEx);
+            }
+          }
         }
       }
+      try {
+        Thread.sleep(backoffMs);
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        break;
+      }
     }
+    if (sqlE != null) {
+      throw sqlE;
+    }
+  }
+
+  private static boolean isTransientSnapshotFailure(Throwable t) {
+    for (Throwable cur = t; cur != null; cur = cur.getCause()) {
+      String msg = cur.getMessage();
+      if (msg != null && msg.contains("Master lock could not be acquired")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static boolean isAlreadyRunningSnapshotFailure(Throwable t) {
+    for (Throwable cur = t; cur != null; cur = cur.getCause()) {
+      String msg = cur.getMessage();
+      if (msg != null && msg.contains("already running another snapshot on the same table")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Polls the master for completion of a snapshot named {@code snapshotName}. Returns true if the
+   * snapshot is observed in {@link Admin#listSnapshots(java.util.regex.Pattern)} within
+   * {@code timeoutMs}, false otherwise. The caller's thread interrupt status is restored if
+   * interrupted while sleeping.
+   */
+  private static boolean waitForSnapshotToAppear(Admin admin, String snapshotName, long timeoutMs) {
+    if (admin == null) {
+      return false;
+    }
+    long deadline = EnvironmentEdgeManager.currentTimeMillis() + timeoutMs;
+    java.util.regex.Pattern pattern =
+      java.util.regex.Pattern.compile(java.util.regex.Pattern.quote(snapshotName));
+    while (EnvironmentEdgeManager.currentTimeMillis() < deadline) {
+      try {
+        for (org.apache.hadoop.hbase.client.SnapshotDescription d : admin.listSnapshots(pattern)) {
+          if (snapshotName.equals(d.getName())) {
+            return true;
+          }
+        }
+      } catch (IOException ioe) {
+        LOGGER.debug("Polling for snapshot {} failed transiently", snapshotName, ioe);
+      }
+      try {
+        Thread.sleep(500L);
+      } catch (InterruptedException ie) {
+        Thread.currentThread().interrupt();
+        return false;
+      }
+    }
+    return false;
   }
 
   void ensureSystemTablesMigratedToSystemNamespace()
