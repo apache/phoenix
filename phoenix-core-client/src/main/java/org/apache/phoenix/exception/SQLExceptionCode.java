@@ -483,6 +483,10 @@ public enum SQLExceptionCode {
     "CDC on this table is either enabled or is in the process of being enabled."),
   CANNOT_SET_OR_ALTER_MAX_LOOKBACK_FOR_INDEX(10964, "44A46",
     "Cannot set or alter " + PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY + " on an index"),
+  TENANT_VIEW_WITHOUT_WHERE_TTL_CONFLICT(10965, "44A47",
+    "On a multi-tenant base table, among a tenant's views without a WHERE clause we allow "
+      + "either any number of such views without TTL, or exactly one such view with TTL. "
+      + "The requested operation would violate this rule."),
 
   /** Sequence related */
   SEQUENCE_ALREADY_EXIST(1200, "42Z00", "Sequence already exists.", new Factory() {
