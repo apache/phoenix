@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
@@ -36,12 +37,12 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.PNameFactory;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -206,11 +207,11 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
       .optimizeQuery().getExplainPlan();
     ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
     assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+    assertEquals("RANGE SCAN", explainPlanAttributes.getExplainScanType());
     assertEquals(
       SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped).toString(),
       explainPlanAttributes.getTableName());
-    assertEquals(" ['" + tenantId + "']", explainPlanAttributes.getKeyRanges());
+    assertEquals("['" + tenantId + "']", explainPlanAttributes.getKeyRanges());
 
     rs =
       conn.createStatement().executeQuery("select pk2,col1 from " + viewName + " where col1='f'");
@@ -223,14 +224,14 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
       .getExplainPlan();
     explainPlanAttributes = plan.getPlanStepsAsAttributes();
     assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
+    assertEquals("RANGE SCAN", explainPlanAttributes.getExplainScanType());
+    assertTrue(explainPlanAttributes.isServerFirstKeyOnlyProjection());
     if (localIndex) {
       assertEquals(fullIndexName + "("
         + SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped).toString()
         + ")", explainPlanAttributes.getTableName());
       assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
-      assertEquals(" [" + (1L + indexIdOffset) + ",'" + tenantId + "','f']",
+      assertEquals("[" + (1L + indexIdOffset) + ",'" + tenantId + "','f']",
         explainPlanAttributes.getKeyRanges());
     } else {
       assertEquals(
@@ -238,7 +239,7 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
           SchemaUtil.getPhysicalTableName(Bytes.toBytes(tableName), isNamespaceMapped).toBytes())),
         explainPlanAttributes.getTableName());
       assertNull(explainPlanAttributes.getClientSortAlgo());
-      assertEquals(" [" + (Short.MIN_VALUE + indexIdOffset) + ",'" + tenantId + "','f']",
+      assertEquals("[" + (Short.MIN_VALUE + indexIdOffset) + ",'" + tenantId + "','f']",
         explainPlanAttributes.getKeyRanges());
     }
 
@@ -358,27 +359,29 @@ public class TenantSpecificViewIndexIT extends BaseTenantSpecificViewIndexIT {
       viewConn.createStatement()
         .execute("CREATE VIEW IF NOT EXISTS " + viewName + " AS SELECT * FROM " + tableName);
 
-      String query = "EXPLAIN SELECT PARENT_ID FROM " + viewName + " WHERE PARENT_TYPE='001' "
+      String expectedIndexName = SchemaUtil.getTableName(SCHEMA1, "IDX");
+      String query1 = "SELECT PARENT_ID FROM " + viewName + " WHERE PARENT_TYPE='001' "
         + "AND (CREATED_DATE > to_date('2011-01-01') AND CREATED_DATE < to_date('2016-10-31'))"
         + "ORDER BY PARENT_TYPE,CREATED_DATE LIMIT 501";
+      assertPlan(viewConn, query1).iteratorType("SERIAL").scanType("RANGE SCAN")
+        .table(expectedIndexName)
+        .keyRanges("['tenant1        ','001','2011-01-01 00:00:00.001']"
+          + " - ['tenant1        ','001','2016-10-31 00:00:00.000']")
+        .serverFirstKeyOnlyProjection(true).serverRowLimit(501L).clientRowLimit(501)
+        .clientSteps("CLIENT 501 ROW LIMIT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+        .indexRejectedNone();
 
-      ResultSet rs = viewConn.createStatement().executeQuery(query);
-      String exptectedIndexName = SchemaUtil.getTableName(SCHEMA1, "IDX");
-      String expectedPlanFormat = "CLIENT SERIAL 1-WAY RANGE SCAN OVER " + exptectedIndexName
-        + " ['tenant1        ','001','%s 00:00:00.001'] - ['tenant1        ','001','%s 00:00:00.000']"
-        + "\n" + "    SERVER FILTER BY FIRST KEY ONLY" + "\n" + "    SERVER 501 ROW LIMIT" + "\n"
-        + "CLIENT 501 ROW LIMIT";
-      assertEquals(String.format(expectedPlanFormat, "2011-01-01", "2016-10-31"),
-        QueryUtil.getExplainPlan(rs));
-
-      query = "EXPLAIN SELECT PARENT_ID FROM " + viewName + " WHERE PARENT_TYPE='001' "
+      String query2 = "SELECT PARENT_ID FROM " + viewName + " WHERE PARENT_TYPE='001' "
         + " AND (CREATED_DATE >= to_date('2011-01-01') AND CREATED_DATE <= to_date('2016-01-01'))"
         + " AND (CREATED_DATE > to_date('2012-10-21') AND CREATED_DATE < to_date('2016-10-31')) "
         + "ORDER BY PARENT_TYPE,CREATED_DATE LIMIT 501";
-
-      rs = viewConn.createStatement().executeQuery(query);
-      assertEquals(String.format(expectedPlanFormat, "2012-10-21", "2016-01-01"),
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(viewConn, query2).iteratorType("SERIAL").scanType("RANGE SCAN")
+        .table(expectedIndexName)
+        .keyRanges("['tenant1        ','001','2012-10-21 00:00:00.001']"
+          + " - ['tenant1        ','001','2016-01-01 00:00:00.000']")
+        .serverFirstKeyOnlyProjection(true).serverRowLimit(501L).clientRowLimit(501)
+        .clientSteps("CLIENT 501 ROW LIMIT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+        .indexRejectedNone();
     }
   }
 

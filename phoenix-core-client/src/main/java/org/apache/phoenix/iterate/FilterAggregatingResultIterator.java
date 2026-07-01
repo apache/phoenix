@@ -20,7 +20,9 @@ package org.apache.phoenix.iterate;
 import java.sql.SQLException;
 import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainFilter;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
+import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.aggregator.Aggregator;
 import org.apache.phoenix.schema.tuple.Tuple;
@@ -37,12 +39,14 @@ import org.apache.phoenix.schema.types.PBoolean;
 public class FilterAggregatingResultIterator implements AggregatingResultIterator {
   private final AggregatingResultIterator delegate;
   private final Expression expression;
+  private final StatementContext context;
   private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
-  public FilterAggregatingResultIterator(AggregatingResultIterator delegate,
-    Expression expression) {
+  public FilterAggregatingResultIterator(AggregatingResultIterator delegate, Expression expression,
+    StatementContext context) {
     this.delegate = delegate;
     this.expression = expression;
+    this.context = context;
     if (expression.getDataType() != PBoolean.INSTANCE) {
       throw new IllegalArgumentException(
         "FilterResultIterator requires a boolean expression, but got " + expression);
@@ -81,8 +85,22 @@ public class FilterAggregatingResultIterator implements AggregatingResultIterato
   public void explain(List<String> planSteps,
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     delegate.explain(planSteps, explainPlanAttributesBuilder);
-    explainPlanAttributesBuilder.setClientFilterBy(expression.toString());
-    planSteps.add("CLIENT FILTER BY " + expression.toString());
+    if (context != null && context.isVerbose() && explainPlanAttributesBuilder != null) {
+      int from = planSteps.size();
+      List<ExplainFilter> filters = ExplainTable.renderVerboseFilters(context, expression,
+        expression.toString(), "CLIENT FILTER BY", planSteps);
+      for (int i = from; i < planSteps.size(); i++) {
+        explainPlanAttributesBuilder.addClientStep(planSteps.get(i));
+      }
+      explainPlanAttributesBuilder.setClientFilters(filters);
+    } else {
+      String step = "CLIENT FILTER BY " + expression.toString();
+      planSteps.add(step);
+      if (explainPlanAttributesBuilder != null) {
+        explainPlanAttributesBuilder.setClientFilterBy(expression.toString());
+        explainPlanAttributesBuilder.addClientStep(step);
+      }
+    }
   }
 
   @Override

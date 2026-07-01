@@ -21,6 +21,7 @@ import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverCons
 import static org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.MIN_QUALIFIER;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_CQ_COUNTER_INITIAL_VALUE;
 import static org.apache.phoenix.query.QueryConstants.ENCODED_EMPTY_COLUMN_NAME;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -35,15 +36,19 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Properties;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.parse.SQLParser;
@@ -53,7 +58,6 @@ import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Ignore;
@@ -502,11 +506,55 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
       .execute("create index INDEX_TEST_TABLE_INDEX_D on INDEX_TEST_TABLE(A,D) include(B,C,E,F)");
     conn1.createStatement()
       .execute("create index INDEX_TEST_TABLE_INDEX_F on INDEX_TEST_TABLE(A,F) include(B,C,D,E)");
-    ResultSet rs = conn2.createStatement().executeQuery(
-      "explain select * from INDEX_TEST_TABLE where A in ('1','2','3','4','5') and F in ('1111','2222','3333')");
-    assertEquals(
-      "CLIENT PARALLEL 1-WAY SKIP SCAN ON 15 KEYS OVER INDEX_TEST_TABLE_INDEX_F ['1','1111'] - ['5','3333']",
-      QueryUtil.getExplainPlan(rs));
+    assertPlan(conn2,
+      "select * from INDEX_TEST_TABLE where A in ('1','2','3','4','5') and F in ('1111','2222','3333')")
+        .scanType("SKIP SCAN ON 15 KEYS").table("INDEX_TEST_TABLE_INDEX_F")
+        .keyRanges("['1','1111'] - ['5','3333']")
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedCount(1)
+        .indexRejected(0, "INDEX_TEST_TABLE_INDEX_D", OptimizerReasons.REASON_NO_PK_PREFIX_BOUND);
+  }
+
+  @Test
+  public void testFunctionalIndexChosenRuleMatchesExpression() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    conn.createStatement().execute(
+      "create table fe_match (id varchar not null primary key, name varchar, val varchar)");
+    conn.createStatement().execute("create index fe_match_upper_idx on fe_match (UPPER(name))");
+    // The functional index's indexed expression matches the query's UPPER(NAME) path expression,
+    // so the chosen index carries a separate "matches <expr>" functional match disclosure with
+    // its selection rule.
+    assertPlan(conn, "select id from fe_match where UPPER(name) = 'ABC'")
+      .table("FE_MATCH_UPPER_IDX").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+      .functionalMatch("UPPER(NAME)");
+  }
+
+  @Test
+  public void testFunctionalIndexRejectedPathExpressionDoesNotMatch() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    conn.createStatement().execute(
+      "create table fe_nomatch (id varchar not null primary key, name varchar, val varchar, other varchar)");
+    conn.createStatement().execute("create index fe_nomatch_upper_idx on fe_nomatch (UPPER(name))");
+    conn.createStatement()
+      .execute("create index fe_nomatch_val_idx on fe_nomatch (val) include (other)");
+    // The query never references UPPER(NAME), so the functional index matched no path expression
+    // and its generic "does not cover projection" rejection is swapped for the more specific
+    // "path expression does not match".
+    assertPlan(conn, "select val, other from fe_nomatch where val = 'x'")
+      .table("FE_NOMATCH_VAL_IDX").indexRejectedContains("FE_NOMATCH_UPPER_IDX",
+        OptimizerReasons.REASON_PATH_EXPRESSION_DOES_NOT_MATCH);
+  }
+
+  @Test
+  public void testFunctionalIndexRejectedDoesNotCoverProjection() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    conn.createStatement().execute(
+      "create table fe_cover (id varchar not null primary key, name varchar, val varchar)");
+    conn.createStatement().execute("create index fe_cover_upper_idx on fe_cover (UPPER(name))");
+    // The functional index's expression DOES match UPPER(NAME) in the query, but VAL is not in the
+    // index, so the rejection stays "does not cover projection" rather than being swapped.
+    assertPlan(conn, "select UPPER(name), val from fe_cover where UPPER(name) = 'ABC'")
+      .table("FE_COVER").indexRejectedContains("FE_COVER_UPPER_IDX",
+        OptimizerReasons.REASON_DOES_NOT_COVER_PROJECTION);
   }
 
   @Test
@@ -911,5 +959,45 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
       rs.unwrap(PhoenixResultSet.class).getStatement().getQueryPlan().getContext().getScan();
     assertNull(scan.getAttribute(MIN_QUALIFIER));
     assertNull(scan.getAttribute(MAX_QUALIFIER));
+  }
+
+  /**
+   * Test the deep copy contract of the {@link StatementContext} copy constructor and
+   * {@link StatementContext#adoptRewriteState}.
+   */
+  @Test
+  public void testAdoptRewriteStateDoesNotBleedSourceMutations() throws Exception {
+    Connection conn = DriverManager.getConnection(getUrl());
+    PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+
+    StatementContext source = new StatementContext(stmt);
+    source.addAppliedRewrite("X");
+    source.recordAppliedIndexExpressionMatches("IDX", Collections.singletonList("A + B"));
+    Expression predicate = LiteralExpression.newConstant(1);
+    source.tagPredicate(predicate, "WHERE");
+
+    // Copy via the copy constructor, which shares copyRewriteStateFrom() with adoptRewriteState().
+    StatementContext copy = new StatementContext(source);
+
+    // The copy observed the breadcrumbs recorded before the copy.
+    assertTrue(copy.getAppliedRewrites().contains("X"));
+    assertEquals(Collections.singletonList("A + B"), copy.getAppliedIndexExpressionMatches("IDX"));
+    assertTrue(copy.getPredicateOrigins(predicate).contains("WHERE"));
+
+    // Mutating the source after the copy must not leak into the destination.
+    source.addAppliedRewrite("foo");
+    source.recordAppliedIndexExpressionMatches("IDX", Collections.singletonList("C + D"));
+    source.tagPredicate(predicate, "JOIN ON");
+
+    assertFalse(copy.getAppliedRewrites().contains("foo"));
+    assertFalse(copy.getAppliedIndexExpressionMatches("IDX").contains("C + D"));
+    assertFalse(copy.getPredicateOrigins(predicate).contains("JOIN ON"));
+
+    // adoptRewriteState() onto a fresh destination has the same isolation guarantee.
+    StatementContext adopted = new StatementContext(stmt);
+    adopted.adoptRewriteState(source);
+    assertTrue(adopted.getAppliedRewrites().contains("foo"));
+    source.addAppliedRewrite("bar");
+    assertFalse(adopted.getAppliedRewrites().contains("bar"));
   }
 }

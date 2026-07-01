@@ -22,6 +22,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAM
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SCHEM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceName;
 import static org.apache.phoenix.util.MetaDataUtil.getViewIndexSequenceSchemaName;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
@@ -63,6 +64,7 @@ import org.apache.phoenix.index.GlobalIndexChecker;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PNameFactory;
@@ -71,7 +73,6 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Assert;
@@ -256,14 +257,13 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
       conn1.commit();
 
       String sql = "SELECT * FROM " + fullViewName + " WHERE v2 = 100";
-      ResultSet rs = conn1.prepareStatement("EXPLAIN " + sql).executeQuery();
-      assertEquals(
-        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + fullIndexName + "("
-          + SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName), isNamespaceMapped)
-          + ") [1,'10',100]\n" + "    SERVER MERGE [0.V1]\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT",
-        QueryUtil.getExplainPlan(rs));
-      rs = conn1.prepareStatement(sql).executeQuery();
+      assertPlan(conn1, sql).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+        .table(fullIndexName + "("
+          + SchemaUtil.getPhysicalTableName(Bytes.toBytes(fullTableName), isNamespaceMapped) + ")")
+        .keyRanges("[1,'10',100]").serverMergeColumns("[0.V1]").serverFirstKeyOnlyProjection(true)
+        .clientSortAlgo("CLIENT MERGE SORT").indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS)
+        .indexRejectedNone();
+      ResultSet rs = conn1.prepareStatement(sql).executeQuery();
       assertTrue(rs.next());
       assertFalse(rs.next());
 
@@ -569,9 +569,7 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
 
     String select =
       "SELECT " + lastViewPKCol + " FROM " + childViewName + "  WHERE TEXT1='text1' LIMIT 10";
-    ResultSet rs1 = conn2.createStatement().executeQuery("EXPLAIN " + select);
-    String actualExplainPlan = QueryUtil.getExplainPlan(rs1);
-    assertTrue(actualExplainPlan.contains("_IDX_" + fullTableName));
+    assertPlan(conn2, select).table("_IDX_" + fullTableName);
 
     ResultSet rs = conn2.createStatement().executeQuery(select);
     assertTrue(rs.next());
@@ -585,11 +583,12 @@ public class ViewIndexIT extends SplitSystemCatalogIT {
     assertTrue(rs.next());
     assertEquals(expectedCount, rs.getInt(1));
     // Ensure that index is being used
-    rs = stmt.executeQuery("EXPLAIN SELECT COUNT(*) FROM " + fullTableName);
     if (fullBaseName != null) {
       // Uses index and finds correct number of rows
-      assertTrue(QueryUtil.getExplainPlan(rs).startsWith("CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-        + Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(fullBaseName)))));
+      assertPlan(conn, "SELECT COUNT(*) FROM " + fullTableName).iteratorType("PARALLEL 1-WAY")
+        .scanType("RANGE SCAN")
+        .table(Bytes.toString(MetaDataUtil.getViewIndexPhysicalName(Bytes.toBytes(fullBaseName))))
+        .indexRule(OptimizerReasons.RULE_NON_LOCAL_PREFERRED).indexRejectedNone();
     }
 
     // Force it not to use index and still finds correct number of rows

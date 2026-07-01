@@ -27,7 +27,6 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -37,7 +36,6 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
@@ -56,7 +54,6 @@ import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.QueryBuilder;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -251,14 +248,6 @@ public abstract class ParallelStatsDisabledWithRegionMovesIT extends BaseTest {
       assertTrue(e.getMessage().contains(expectedPhoenixExceptionMsg));
     }
     return rs;
-  }
-
-  public static void validateQueryPlan(Connection conn, QueryBuilder queryBuilder,
-    String expectedPhoenixPlan, String expectedSparkPlan) throws SQLException {
-    if (StringUtils.isNotBlank(expectedPhoenixPlan)) {
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + queryBuilder.build());
-      assertEquals(expectedPhoenixPlan, QueryUtil.getExplainPlan(rs));
-    }
   }
 
   protected static void assertResultSetWithRegionMoves(ResultSet rs, Object[][] rows,

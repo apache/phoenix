@@ -38,6 +38,8 @@ import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEF
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.BEFORE_REPAIR_EXTRA_VERIFIED_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.REBUILT_INDEX_ROW_COUNT;
 import static org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters.SCANNED_DATA_ROW_COUNT;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.getExplainAttributes;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -82,11 +84,9 @@ import org.apache.hadoop.mapreduce.Counter;
 import org.apache.hadoop.mapreduce.CounterGroup;
 import org.apache.hadoop.mapreduce.Counters;
 import org.apache.hadoop.mapreduce.Job;
-import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.mapreduce.index.IndexVerificationOutputRepository;
 import org.apache.phoenix.mapreduce.index.IndexVerificationResultRepository;
@@ -104,7 +104,6 @@ import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.IndexScrutiny;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -312,11 +311,8 @@ public class IndexToolIT extends BaseTest {
         dataTableFullName);
 
       // assert we are pulling from data table.
-      ExplainPlan plan = conn.prepareStatement(selectSql).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
+      ExplainPlanAttributes explainPlanAttributes = assertPlan(conn, selectSql)
+        .iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").attributes();
       assertEquals(dataTableFullName, explainPlanAttributes.getTableName().replaceAll(":", "."));
       assertEquals(
         "SERVER FILTER BY (LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'",
@@ -345,10 +341,7 @@ public class IndexToolIT extends BaseTest {
           QueryConstants.VERIFIED_BYTES);
       }
       // assert we are pulling from index table.
-      plan = conn.prepareStatement(selectSql).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-        .getExplainPlan();
-      explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+      explainPlanAttributes = assertPlan(conn, selectSql).scanType("RANGE SCAN").attributes();
       final String expectedTableName;
       if (localIndex) {
         expectedTableName = indexTableFullName + "(" + dataTableFullName + ")";
@@ -542,12 +535,8 @@ public class IndexToolIT extends BaseTest {
       runIndexTool(false, "", viewTenantName, indexNameTenant, tenantId, 0, new String[0]);
 
       String selectSql = String.format("SELECT ID FROM %s WHERE NAME='x'", viewTenantName);
-      ExplainPlan plan = connTenant.prepareStatement(selectSql)
-        .unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(viewIndexTableName, explainPlanAttributes.getTableName());
+      assertPlan(connTenant, selectSql).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
+        .table(viewIndexTableName);
 
       ResultSet rs = connTenant.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
@@ -779,16 +768,18 @@ public class IndexToolIT extends BaseTest {
         "SELECT ID FROM %s WHERE LPAD(UPPER(NAME, 'en_US'),8,'x')||'_xyz' = 'xxUNAME2_xyz'",
         qDataTableName);
 
-      ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-
       // assert we are pulling from data table.
-      assertEquals(String.format(
-        "CLIENT PARALLEL 1-WAY FULL SCAN OVER %s\n"
-          + "    SERVER FILTER BY (LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'",
-        dataTableNameForExplain), actualExplainPlan.replaceAll(":", "."));
+      ExplainPlanAttributes dataAttributes = getExplainAttributes(conn, selectSql);
+      assertPlan(dataAttributes).scanType("FULL SCAN").serverWhereFilter(
+        "SERVER FILTER BY (LPAD(UPPER(NAME, 'en_US'), 8, 'x') || '_xyz') = 'xxUNAME2_xyz'");
+      // Table names are case-sensitive and (under namespace mapping) carry a ':' separator, so
+      // compare against the normalized ('.') form rather than via tableContains().
+      String dataScanTable = dataAttributes.getTableName() == null
+        ? null
+        : dataAttributes.getTableName().replaceAll(":", ".");
+      assertEquals(dataTableNameForExplain, dataScanTable);
 
-      rs = stmt1.executeQuery(selectSql);
+      ResultSet rs = stmt1.executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(2, rs.getInt(1));
       assertFalse(rs.next());
@@ -803,12 +794,19 @@ public class IndexToolIT extends BaseTest {
       conn.commit();
 
       // assert we are pulling from index table.
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql);
-      actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      // Because the explain plan doesn't include double-quotes around case-sensitive table names,
-      // we need to tell assertExplainPlan to not normalize our table names.
-      assertExplainPlan(localIndex, actualExplainPlan, dataTableNameForExplain,
-        indexTableNameForExplain, false);
+      ExplainPlanAttributes indexAttributes = getExplainAttributes(conn, selectSql);
+      assertPlan(indexAttributes).scanType("RANGE SCAN");
+      // The explain plan doesn't include double-quotes around case-sensitive table names and (under
+      // namespace mapping) uses a ':' separator, so compare against the non-normalized ('.') form.
+      String indexScanTable = indexAttributes.getTableName() == null
+        ? null
+        : indexAttributes.getTableName().replaceAll(":", ".");
+      String expectedIndexTable = localIndex
+        ? indexTableNameForExplain + "(" + dataTableNameForExplain + ")"
+        : indexTableNameForExplain;
+      assertTrue(
+        "expected scanned table <" + indexScanTable + "> to use index <" + expectedIndexTable + ">",
+        indexScanTable != null && indexScanTable.contains(expectedIndexTable));
 
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
@@ -899,28 +897,40 @@ public class IndexToolIT extends BaseTest {
     }
   }
 
-  public static void assertExplainPlan(boolean localIndex, String actualExplainPlan,
-    String dataTableFullName, String indexTableFullName) {
-    assertExplainPlan(localIndex, actualExplainPlan, dataTableFullName, indexTableFullName, true);
+  /**
+   * Verify the optimizer chose to scan {@code indexTableFullName}. For a local index the scanned
+   * "table" is reported as {@code IDX(DATA)} and the key range starts with {@code [1,}.
+   */
+  public static void assertExplainPlan(Connection conn, boolean localIndex, String selectSql,
+    String dataTableFullName, String indexTableFullName) throws SQLException {
+    assertExplainPlan(conn, localIndex, selectSql, dataTableFullName, indexTableFullName, true);
   }
 
-  public static void assertExplainPlan(boolean localIndex, String actualExplainPlan,
-    String dataTableFullName, String indexTableFullName, boolean normalizeTableNames) {
-    String expectedExplainPlan;
+  public static void assertExplainPlan(Connection conn, boolean localIndex, String selectSql,
+    String dataTableFullName, String indexTableFullName, boolean normalizeTableNames)
+    throws SQLException {
+    String expectedTable;
     if (localIndex) {
-      expectedExplainPlan = String.format(" RANGE SCAN OVER %s [1,",
-        normalizeTableNames
-          ? SchemaUtil.normalizeIdentifier(indexTableFullName) + "("
-            + SchemaUtil.normalizeIdentifier(dataTableFullName) + ")"
-          : indexTableFullName + "(" + dataTableFullName + ")");
+      expectedTable = normalizeTableNames
+        ? SchemaUtil.normalizeIdentifier(indexTableFullName) + "("
+          + SchemaUtil.normalizeIdentifier(dataTableFullName) + ")"
+        : indexTableFullName + "(" + dataTableFullName + ")";
     } else {
-      expectedExplainPlan = String.format(" RANGE SCAN OVER %s",
-        normalizeTableNames
-          ? SchemaUtil.normalizeIdentifier(indexTableFullName)
-          : indexTableFullName);
+      expectedTable = normalizeTableNames
+        ? SchemaUtil.normalizeIdentifier(indexTableFullName)
+        : indexTableFullName;
     }
-    assertTrue(actualExplainPlan + "\n expected to contain \n" + expectedExplainPlan,
-      actualExplainPlan.replaceAll(":", ".").contains(expectedExplainPlan));
+    ExplainPlanAttributes attributes = getExplainAttributes(conn, selectSql);
+    assertPlan(attributes).scanType("RANGE SCAN");
+    String actualTable =
+      attributes.getTableName() == null ? null : attributes.getTableName().replaceAll(":", ".");
+    assertTrue("expected scanned table <" + actualTable + "> to contain <" + expectedTable + ">",
+      actualTable != null && actualTable.contains(expectedTable));
+    if (localIndex) {
+      String keyRanges = attributes.getKeyRanges();
+      assertTrue("expected local-index key ranges <" + keyRanges + "> to start with '[1,'",
+        keyRanges != null && keyRanges.trim().startsWith("[1,"));
+    }
   }
 
   public static CounterGroup getMRJobCounters(IndexTool indexTool) throws IOException {

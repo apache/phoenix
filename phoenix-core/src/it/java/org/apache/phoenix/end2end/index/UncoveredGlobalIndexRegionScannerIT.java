@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -27,6 +28,7 @@ import static org.junit.Assert.fail;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.sql.Timestamp;
 import java.util.Arrays;
@@ -44,11 +46,11 @@ import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.PhoenixParserException;
 import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
@@ -192,7 +194,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + "PHOENIX_ROW_TIMESTAMP() < TO_DATE('" + after + "','yyyy-MM-dd HH:mm:ss.SSS', '"
           + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       ResultSet rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -212,7 +214,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('c', 'bc', 'ccc', 'cccc')");
       conn.commit();
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -228,7 +230,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
           + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -241,9 +243,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         + dataTableName + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the data table
-      rs = conn.createStatement().executeQuery("EXPLAIN " + noIndexQuery);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(explainPlan.contains("FULL SCAN OVER " + dataTableName));
+      assertPlan(conn, noIndexQuery).scanType("FULL SCAN").table(dataTableName);
       rs = conn.createStatement().executeQuery(noIndexQuery);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -261,7 +261,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         "SELECT" + (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
           + " val1, val2, PHOENIX_ROW_TIMESTAMP()  from " + dataTableName + " WHERE val1 = 'de'";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("de", rs.getString(1));
@@ -288,7 +288,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + initial + "','yyyy-MM-dd HH:mm:ss.SSS', '"
           + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("a", rs.getString(1));
@@ -375,7 +375,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + "PHOENIX_ROW_TIMESTAMP() < TO_DATE('" + after + "','yyyy-MM-dd HH:mm:ss.SSS', '"
           + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       ResultSet rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -394,7 +394,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " values ('c', 'bc', 'ccc', 'cccc')");
       conn.commit();
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -409,7 +409,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after + "','yyyy-MM-dd HH:mm:ss.SSS', '"
           + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -421,9 +421,8 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         + dataTableName + " WHERE val1 = 'bc' AND " + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + after
         + "','yyyy-MM-dd HH:mm:ss.SSS', '" + timeZoneID + "')";
       // Verify that we will read from the data table
-      rs = conn.createStatement().executeQuery("EXPLAIN " + noIndexQuery);
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(explainPlan.contains(salted ? "RANGE" : "FULL" + " SCAN OVER " + dataTableName));
+      assertPlan(conn, noIndexQuery).scanType(salted ? "RANGE SCAN" : "FULL SCAN")
+        .table(dataTableName);
       rs = conn.createStatement().executeQuery(noIndexQuery);
       assertTrue(rs.next());
       assertEquals("bc", rs.getString(1));
@@ -441,7 +440,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         "SELECT" + (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
           + " val1, val2, PHOENIX_ROW_TIMESTAMP()  from " + dataTableName + " WHERE val1 = 'de'";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("de", rs.getString(1));
@@ -468,7 +467,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + "PHOENIX_ROW_TIMESTAMP() > TO_DATE('" + initial + "','yyyy-MM-dd HH:mm:ss.SSS', '"
           + timeZoneID + "')";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, query, dataTableName, indexTableName);
+      assertIndexPlan(conn, query, dataTableName, indexTableName, "PHOENIX_ROW_TIMESTAMP()");
       rs = conn.createStatement().executeQuery(query);
       assertTrue(rs.next());
       assertEquals("a", rs.getString(1));
@@ -532,6 +531,22 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
     }
   }
 
+  /**
+   * Asserts the query is served by the index, disclosing the optimizer's selection rule (and, for a
+   * functional index, the separate {@code matches <expr>}).
+   */
+  private void assertIndexPlan(Connection conn, String sql, String dataTableName,
+    String indexTableName, String functionalExpr) throws SQLException {
+    String rule = sql.contains("/*+ INDEX(")
+      ? OptimizerReasons.RULE_HINT
+      : OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS;
+    if (functionalExpr == null) {
+      assertExplainPlan(conn, sql, dataTableName, indexTableName, rule);
+    } else {
+      assertExplainPlan(conn, sql, dataTableName, indexTableName, rule, functionalExpr);
+    }
+  }
+
   @Test
   public void testUncoveredQuery() throws Exception {
     String dataTableName = generateUniqueName();
@@ -585,7 +600,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
           + " WHERE val1 = 'bc' AND (val2 = 'bcd' OR val3 ='bcde')";
       }
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals("b", rs.getString(1));
@@ -605,7 +620,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         selectSql = "SELECT count(val3) from " + dataTableName + " where val1 > '0' GROUP BY val1";
       }
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(2, rs.getInt(1));
@@ -619,7 +634,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         selectSql = "SELECT count(val3) from " + dataTableName + " where val1 > '0'";
       }
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(3, rs.getInt(1));
@@ -634,7 +649,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         selectSql = "SELECT val3 from " + dataTableName + " where val1 > '0' ORDER BY val1";
       }
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals("abcd", rs.getString(1));
@@ -673,11 +688,11 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         // is not included by the index table
         selectSql = "SELECT /*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ val4 from "
           + dataTableName + " WHERE val1 = 'bc' AND val2 = 'bcdd'";
-        assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+        assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       } else {
         // Verify that an index hint is not necessary for an uncovered index
         selectSql = "SELECT  val4 from " + dataTableName + " WHERE val1 = 'bc' AND val2 = 'bcdd'";
-        assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+        assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       }
 
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
@@ -759,7 +774,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         "SELECT" + (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
           + "Count(v3) from " + dataTableName + " where v1 = 5";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(count, rs.getInt(1));
@@ -795,7 +810,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
         "SELECT" + (uncovered ? " " : "/*+ INDEX(" + dataTableName + " " + indexTableName + ")*/ ")
           + "val2, val3 from " + dataTableName + " WHERE val1  = 'ab'";
       // Verify that we will read from the first index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals("abc", rs.getString(1));
@@ -816,7 +831,7 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       String selectSql = "SELECT id from " + dataTableName + " WHERE val1  = 'ab'";
 
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertIndexPlan(conn, selectSql, dataTableName, indexTableName, null);
       ResultSet rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals("a", rs.getString(1));
@@ -867,24 +882,18 @@ public class UncoveredGlobalIndexRegionScannerIT extends BaseTest {
       // Index hint is incorrect as full index name with schema is used
       String sql = "SELECT /*+ INDEX(" + fullDataTableName + " " + fullIndexName
         + ")*/ val2, val3 from " + fullDataTableName + " WHERE id = 'a'";
-      ResultSet rs = stmt.executeQuery("EXPLAIN " + sql);
-      String actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + fullDataTableName));
-      rs = stmt.executeQuery(sql);
+      assertPlan(conn, sql).scanType("POINT LOOKUP ON 1 KEY").table(fullDataTableName);
+      ResultSet rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
       // No explicit index hint and being point lookup no index will be used
       sql = "SELECT val2, val3 from " + fullDataTableName + " WHERE id = 'a'";
-      rs = stmt.executeQuery("EXPLAIN " + sql);
-      actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("POINT LOOKUP ON 1 KEY OVER " + fullDataTableName));
+      assertPlan(conn, sql).scanType("POINT LOOKUP ON 1 KEY").table(fullDataTableName);
       rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
       // Index hint with point lookup over data table, still index should be used
       sql = "SELECT /*+ INDEX(" + fullDataTableName + " " + indexName + ")*/ val2, val3 from "
         + fullDataTableName + " WHERE id = 'a'";
-      rs = stmt.executeQuery("EXPLAIN " + sql);
-      actualQueryPlan = QueryUtil.getExplainPlan(rs);
-      assertTrue(actualQueryPlan.contains("FULL SCAN OVER " + fullIndexName));
+      assertPlan(conn, sql).scanType("FULL SCAN").table(fullIndexName);
       rs = stmt.executeQuery(sql);
       assertTrue(rs.next());
     }

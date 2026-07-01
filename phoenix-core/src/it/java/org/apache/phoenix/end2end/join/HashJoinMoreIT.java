@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.join;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -33,48 +34,12 @@ import java.util.Properties;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
 @Category(ParallelStatsDisabledTest.class)
 public class HashJoinMoreIT extends ParallelStatsDisabledIT {
-  private final String[] plans = new String[] {
-    /*
-     * testJoinWithKeyRangeOptimization() SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1,
-     * rhs.col2 FROM TEMP_TABLE_COMPOSITE_PK lhs JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col1 =
-     * rhs.col2
-     */
-    "CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n" + "CLIENT MERGE SORT\n"
-      + "    PARALLEL INNER-JOIN TABLE 0\n" + "        CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n"
-      + "        CLIENT MERGE SORT",
-    /*
-     * testJoinWithKeyRangeOptimization() SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1,
-     * rhs.col2 FROM TEMP_TABLE_COMPOSITE_PK lhs JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 =
-     * rhs.col2
-     */
-    "CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n" + "CLIENT MERGE SORT\n"
-      + "    PARALLEL INNER-JOIN TABLE 0\n" + "        CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n"
-      + "        CLIENT MERGE SORT\n" + "    DYNAMIC SERVER FILTER BY LHS.COL0 IN (RHS.COL2)",
-    /*
-     * testJoinWithKeyRangeOptimization() SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1,
-     * rhs.col2 FROM TEMP_TABLE_COMPOSITE_PK lhs JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 =
-     * rhs.col1 AND lhs.col1 = rhs.col2
-     */
-    "CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n" + "CLIENT MERGE SORT\n"
-      + "    PARALLEL INNER-JOIN TABLE 0\n" + "        CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n"
-      + "        CLIENT MERGE SORT\n"
-      + "    DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1) IN ((RHS.COL1, RHS.COL2))",
-    /*
-     * testJoinWithKeyRangeOptimization() SELECT lhs.col0, lhs.col1, lhs.col2, rhs.col0, rhs.col1,
-     * rhs.col2 FROM TEMP_TABLE_COMPOSITE_PK lhs JOIN TEMP_TABLE_COMPOSITE_PK rhs ON lhs.col0 =
-     * rhs.col1 AND lhs.col2 = rhs.col3 - 1 AND lhs.col1 = rhs.col2
-     */
-    "CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n" + "CLIENT MERGE SORT\n"
-      + "    PARALLEL INNER-JOIN TABLE 0\n" + "        CLIENT PARALLEL 4-WAY FULL SCAN OVER %s\n"
-      + "        CLIENT MERGE SORT\n"
-      + "    DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1, LHS.COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))", };
 
   @Test
   public void testJoinOverSaltedTables() throws Exception {
@@ -327,9 +292,11 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      assertEquals(String.format(plans[0], tempTableWithCompositePK, tempTableWithCompositePK),
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(conn, query).scanType("FULL SCAN").table(tempTableWithCompositePK)
+        .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .scanType("FULL SCAN").table(tempTableWithCompositePK).clientSortAlgo("CLIENT MERGE SORT")
+        .end();
 
       // Two parts of PK but only one leading part
       query =
@@ -350,9 +317,12 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      assertEquals(String.format(plans[1], tempTableWithCompositePK, tempTableWithCompositePK),
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(conn, query).scanType("FULL SCAN").table(tempTableWithCompositePK)
+        .clientSortAlgo("CLIENT MERGE SORT")
+        .dynamicServerFilter("DYNAMIC SERVER FILTER BY LHS.COL0 IN (RHS.COL2)").subPlanCount(1)
+        .subPlan(0).abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .scanType("FULL SCAN").table(tempTableWithCompositePK).clientSortAlgo("CLIENT MERGE SORT")
+        .end();
 
       // Two leading parts of PK
       query =
@@ -382,9 +352,14 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      assertEquals(String.format(plans[2], tempTableWithCompositePK, tempTableWithCompositePK),
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(conn, query).scanType("FULL SCAN").table(tempTableWithCompositePK)
+        .clientSortAlgo("CLIENT MERGE SORT")
+        .dynamicServerFilter(
+          "DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1) IN ((RHS.COL1, RHS.COL2))")
+        .subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .scanType("FULL SCAN").table(tempTableWithCompositePK).clientSortAlgo("CLIENT MERGE SORT")
+        .end();
 
       // All parts of PK
       query =
@@ -414,9 +389,14 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      assertEquals(String.format(plans[3], tempTableWithCompositePK, tempTableWithCompositePK),
-        QueryUtil.getExplainPlan(rs));
+      assertPlan(conn, query).scanType("FULL SCAN").table(tempTableWithCompositePK)
+        .clientSortAlgo("CLIENT MERGE SORT")
+        .dynamicServerFilter(
+          "DYNAMIC SERVER FILTER BY (LHS.COL0, LHS.COL1, LHS.COL2) IN ((RHS.COL1, RHS.COL2, TO_INTEGER((RHS.COL3 - 1))))")
+        .subPlanCount(1).subPlan(0)
+        .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+        .scanType("FULL SCAN").table(tempTableWithCompositePK).clientSortAlgo("CLIENT MERGE SORT")
+        .end();
     } finally {
       conn.close();
     }
@@ -800,28 +780,22 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
           + "     ON L.BUCKET = E.BUCKET AND L.\"TIMESTAMP\"  = E.\"TIMESTAMP\"\n" + " ) C\n"
           + " GROUP BY C.BUCKET, C.\"TIMESTAMP\"";
 
-        String p = i == 0
-          ? "CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER EVENT_COUNT [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']\n"
-            + "    SERVER FILTER BY FIRST KEY ONLY\n"
-            + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"E.TIMESTAMP\", E.BUCKET]\n"
-            + "CLIENT MERGE SORT\n" + "    PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)\n"
-            + "        CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + t[i]
-            + " [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']\n"
-            + "            SERVER FILTER BY FIRST KEY ONLY AND SRC_LOCATION = DST_LOCATION\n"
-            + "        CLIENT MERGE SORT"
-          : "CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER EVENT_COUNT [X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']\n"
-            + "    SERVER FILTER BY FIRST KEY ONLY\n"
-            + "    SERVER AGGREGATE INTO DISTINCT ROWS BY [\"E.TIMESTAMP\", E.BUCKET]\n"
-            + "CLIENT MERGE SORT\n" + "    PARALLEL INNER-JOIN TABLE 0 (SKIP MERGE)\n"
-            + "        CLIENT PARALLEL 2-WAY SKIP SCAN ON 2 RANGES OVER " + t[i]
-            + " [X'00','5SEC',1462993420000000001,'Tr/Bal'] - [X'01','5SEC',1462993520000000000,'Tr/Bal']\n"
-            + "            SERVER FILTER BY FIRST KEY ONLY AND SRC_LOCATION = DST_LOCATION\n"
-            + "        CLIENT MERGE SORT";
+        String innerKeyRanges = i == 0
+          ? "[X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']"
+          : "[X'00','5SEC',1462993420000000001,'Tr/Bal'] - [X'01','5SEC',1462993520000000000,'Tr/Bal']";
 
-        ResultSet rs = conn.createStatement().executeQuery("explain " + q);
-        assertEquals(p, QueryUtil.getExplainPlan(rs));
+        assertPlan(conn, q).scanType("SKIP SCAN ON 2 RANGES").table("EVENT_COUNT").keyRanges(
+          "[X'00','5SEC',~1462993520000000000,'Tr/Bal'] - [X'01','5SEC',~1462993420000000000,'Tr/Bal']")
+          .serverFirstKeyOnlyProjection(true)
+          .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"E.TIMESTAMP\", E.BUCKET]")
+          .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(1).subPlan(0)
+          .abstractExplainPlan("PARALLEL INNER-JOIN TABLE 0  /* HASH BUILD RIGHT, SKIP MERGE */")
+          .scanType("SKIP SCAN ON 2 RANGES").table(t[i]).keyRanges(innerKeyRanges)
+          .serverFirstKeyOnlyProjection(true)
+          .serverWhereFilter("SERVER FILTER BY SRC_LOCATION = DST_LOCATION")
+          .clientSortAlgo("CLIENT MERGE SORT").end();
 
-        rs = conn.createStatement().executeQuery(q);
+        ResultSet rs = conn.createStatement().executeQuery(q);
         assertTrue(rs.next());
         assertEquals("5SEC", rs.getString(1));
         assertEquals(1462993520000000000L, rs.getLong(2));
@@ -920,12 +894,8 @@ public class HashJoinMoreIT extends ParallelStatsDisabledIT {
           + "FROM ( SELECT ACCOUNT_ID, BUCKET_ID, OBJECT_ID, MAX(OBJECT_VERSION) AS MAXVER "
           + "       FROM test2961 GROUP BY ACCOUNT_ID, BUCKET_ID, OBJECT_ID) AS X "
           + "       INNER JOIN test2961 AS OBJ ON X.ACCOUNT_ID = OBJ.ACCOUNT_ID AND X.BUCKET_ID = OBJ.BUCKET_ID AND X.OBJECT_ID = OBJ.OBJECT_ID AND  X.MAXVER = OBJ.OBJECT_VERSION";
-      rs = conn.createStatement().executeQuery("explain " + q);
-      String plan = QueryUtil.getExplainPlan(rs);
-      String dynamicFilter =
-        "DYNAMIC SERVER FILTER BY (OBJ.ACCOUNT_ID, OBJ.BUCKET_ID, OBJ.OBJECT_ID, OBJ.OBJECT_VERSION) IN ((X.ACCOUNT_ID, X.BUCKET_ID, X.OBJECT_ID, X.MAXVER))";
-      assertTrue("Expected '" + dynamicFilter + "' to be used for the query, but got:\n" + plan,
-        plan.contains(dynamicFilter));
+      assertPlan(conn, q).dynamicServerFilter(
+        "DYNAMIC SERVER FILTER BY (OBJ.ACCOUNT_ID, OBJ.BUCKET_ID, OBJ.OBJECT_ID, OBJ.OBJECT_VERSION) IN ((X.ACCOUNT_ID, X.BUCKET_ID, X.OBJECT_ID, X.MAXVER))");
       rs = conn.createStatement().executeQuery(q);
       assertTrue(rs.next());
       assertEquals("2222", rs.getString(4));

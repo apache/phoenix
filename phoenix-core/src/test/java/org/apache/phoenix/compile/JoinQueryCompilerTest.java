@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.compile;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_DISPLAY_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_CUSTOMER_TABLE_FULL_NAME;
 import static org.apache.phoenix.util.TestUtil.JOIN_ITEM_TABLE_DISPLAY_NAME;
@@ -30,13 +31,11 @@ import static org.junit.Assert.assertEquals;
 
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import org.apache.phoenix.compile.JoinCompiler.JoinTable;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -75,22 +74,25 @@ public class JoinQueryCompilerTest extends BaseConnectionlessQueryTest {
   public void testExplainPlan() throws Exception {
     Connection conn = DriverManager.getConnection(getUrl());
     String query =
-      "EXPLAIN SELECT s.\"supplier_id\", \"order_id\", c.name, i.name, quantity, o.\"date\" FROM "
+      "SELECT s.\"supplier_id\", \"order_id\", c.name, i.name, quantity, o.\"date\" FROM "
         + JOIN_ORDER_TABLE_FULL_NAME + " o LEFT JOIN " + JOIN_CUSTOMER_TABLE_FULL_NAME
         + " c ON o.\"customer_id\" = c.\"customer_id\" AND c.name LIKE 'C%' LEFT JOIN "
         + JOIN_ITEM_TABLE_FULL_NAME + " i ON o.\"item_id\" = i.\"item_id\" RIGHT JOIN "
         + JOIN_SUPPLIER_TABLE_FULL_NAME
         + " s ON s.\"supplier_id\" = i.\"supplier_id\" WHERE i.name LIKE 'T%'";
-    ResultSet rs = conn.createStatement().executeQuery(query);
-    assertEquals("CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_DISPLAY_NAME + "\n"
-      + "    SERVER FILTER BY FIRST KEY ONLY\n" + "    PARALLEL LEFT-JOIN TABLE 0\n"
-      + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_DISPLAY_NAME + "\n"
-      + "            PARALLEL LEFT-JOIN TABLE 0\n"
-      + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_CUSTOMER_TABLE_DISPLAY_NAME
-      + "\n" + "                    SERVER FILTER BY NAME LIKE 'C%'\n"
-      + "            PARALLEL LEFT-JOIN TABLE 1\n"
-      + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_DISPLAY_NAME
-      + "\n" + "    AFTER-JOIN SERVER FILTER BY I.NAME LIKE 'T%'", QueryUtil.getExplainPlan(rs));
+    // RIGHT JOIN drives the scan over SUPPLIER, with the rest of the join tree nested as sub-plans.
+    // The outer join is swapped to build the left input (HASH BUILD LEFT). The nested left-join
+    // tree builds its right inputs (HASH BUILD RIGHT).
+    assertPlan(conn, query).scanType("FULL SCAN").table(JOIN_SUPPLIER_TABLE_DISPLAY_NAME)
+      .serverFirstKeyOnlyProjection(true)
+      .afterJoinFilter("AFTER-JOIN SERVER FILTER BY I.NAME LIKE 'T%'").subPlanCount(1).subPlan(0)
+      .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD LEFT */")
+      .scanType("FULL SCAN").table(JOIN_ORDER_TABLE_DISPLAY_NAME).subPlanCount(2).subPlan(0)
+      .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 0  /* HASH BUILD RIGHT */")
+      .scanType("FULL SCAN").table(JOIN_CUSTOMER_TABLE_DISPLAY_NAME)
+      .serverWhereFilter("SERVER FILTER BY NAME LIKE 'C%'").end().subPlan(1)
+      .abstractExplainPlan("PARALLEL LEFT-JOIN TABLE 1  /* HASH BUILD RIGHT */")
+      .scanType("FULL SCAN").table(JOIN_ITEM_TABLE_DISPLAY_NAME).end().end();
   }
 
   @Test

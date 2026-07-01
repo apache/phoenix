@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.join;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -35,7 +36,6 @@ import java.util.List;
 import java.util.Properties;
 import org.apache.phoenix.end2end.ParallelStatsDisabledTest;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 import org.junit.runner.RunWith;
@@ -47,211 +47,26 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 @Category(ParallelStatsDisabledTest.class)
 @RunWith(Parameterized.class)
 public class SubqueryIT extends BaseJoinIT {
-  public SubqueryIT(String[] indexDDL, String[] plans) {
-    super(indexDDL, plans);
+  public SubqueryIT(String[] indexDDL) {
+    super(indexDDL);
   }
 
   @Parameters
   public static synchronized Collection<Object> data() {
     List<Object> testCases = Lists.newArrayList();
-    testCases.add(new String[][] { {},
-      { "CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-        + JOIN_ITEM_TABLE_FULL_NAME + "\n" + "    SERVER SORTED BY \\[I.NAME\\]\n"
-        + "CLIENT MERGE SORT\n" + "    PARALLEL INNER-JOIN TABLE 0\n"
-        + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_FULL_NAME + "\n"
-        + "    SKIP-SCAN-JOIN TABLE 1\n" + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-        + JOIN_ORDER_TABLE_FULL_NAME + " \\['000000000000001'\\] - \\[\\*\\]\n"
-        + "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
-        + "        CLIENT MERGE SORT\n"
-        + "    DYNAMIC SERVER FILTER BY \"I.item_id\" IN \\(\\$\\d+.\\$\\d+\\)",
-
-        "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SUPPLIER_TABLE_FULL_NAME + "\n"
-          + "    SERVER SORTED BY [I.NAME]\n" + "CLIENT MERGE SORT\n"
-          + "    PARALLEL LEFT-JOIN TABLE 0\n" + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-          + JOIN_ITEM_TABLE_FULL_NAME + "\n"
-          + "    PARALLEL SEMI-JOIN TABLE 1(DELAYED EVALUATION) (SKIP MERGE)\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n"
-          + "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n"
-          + "        CLIENT MERGE SORT",
-
-        "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + JOIN_COITEM_TABLE_FULL_NAME + "\n"
-          + "CLIENT MERGE SORT\n" + "    PARALLEL LEFT-JOIN TABLE 0\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + "\n"
-          + "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\".+.item_id\", .+.NAME\\]\n"
-          + "        CLIENT MERGE SORT\n"
-          + "            PARALLEL ANTI-JOIN TABLE 0 \\(SKIP MERGE\\)\n"
-          + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-          + "\n" + "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
-          + "                CLIENT MERGE SORT\n" + "    PARALLEL LEFT-JOIN TABLE 1\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + "\n"
-          + "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\".+.item_id\", .+.NAME\\]\n"
-          + "        CLIENT MERGE SORT\n" + "            SKIP-SCAN-JOIN TABLE 0\n"
-          + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-          + "\n" + "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
-          + "                CLIENT MERGE SORT\n" + "            DYNAMIC SERVER FILTER BY \""
-          + JOIN_ITEM_TABLE_FULL_NAME + ".item_id\" IN \\(\\$\\d+.\\$\\d+\\)\n"
-          + "    AFTER-JOIN SERVER FILTER BY \\(\\$\\d+.\\$\\d+ IS NOT NULL OR \\$\\d+.\\$\\d+ IS NOT NULL\\)",
-
-        "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ITEM_TABLE_FULL_NAME + "\n"
-          + "    SERVER SORTED BY [I.NAME]\n" + "CLIENT MERGE SORT\n"
-          + "    PARALLEL ANTI-JOIN TABLE 0 (SKIP MERGE)\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n"
-          + "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n"
-          + "        CLIENT MERGE SORT",
-
-        "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_CUSTOMER_TABLE_FULL_NAME + "\n"
-          + "    SKIP-SCAN-JOIN TABLE 0\n" + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-          + JOIN_ITEM_TABLE_FULL_NAME + "\n"
-          + "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"O.customer_id\"\\]\n"
-          + "        CLIENT MERGE SORT\n" + "            PARALLEL INNER-JOIN TABLE 0\n"
-          + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-          + "\n" + "            PARALLEL LEFT-JOIN TABLE 1\\(DELAYED EVALUATION\\)\n"
-          + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-          + "\n" + "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
-          + "                CLIENT MERGE SORT\n"
-          + "            DYNAMIC SERVER FILTER BY \"I.item_id\" IN \\(\"O.item_id\"\\)\n"
-          + "            AFTER-JOIN SERVER FILTER BY \\(I.NAME = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)\n"
-          + "    DYNAMIC SERVER FILTER BY \"" + JOIN_CUSTOMER_TABLE_FULL_NAME
-          + ".customer_id\" IN \\(\\$\\d+.\\$\\d+\\)" } });
+    testCases.add(new String[][] { {} });
     testCases.add(new String[][] {
       { "CREATE INDEX \"idx_customer\" ON " + JOIN_CUSTOMER_TABLE_FULL_NAME + " (name)",
         "CREATE INDEX \"idx_item\" ON " + JOIN_ITEM_TABLE_FULL_NAME
           + " (name) INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
-        "CREATE INDEX \"idx_supplier\" ON " + JOIN_SUPPLIER_TABLE_FULL_NAME + " (name)" },
-      { "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n"
-        + "    PARALLEL INNER-JOIN TABLE 0\n" + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER "
-        + JOIN_SCHEMA + ".idx_supplier\n" + "            SERVER FILTER BY FIRST KEY ONLY\n"
-        + "    PARALLEL SEMI-JOIN TABLE 1 \\(SKIP MERGE\\)\n"
-        + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-        + " \\['000000000000001'\\] - \\[\\*\\]\n"
-        + "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
-        + "        CLIENT MERGE SORT",
-
-        "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_supplier\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" + "    SERVER SORTED BY [\"I.0:NAME\"]\n"
-          + "CLIENT MERGE SORT\n" + "    PARALLEL LEFT-JOIN TABLE 0\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n"
-          + "    PARALLEL SEMI-JOIN TABLE 1(DELAYED EVALUATION) (SKIP MERGE)\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n"
-          + "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n"
-          + "        CLIENT MERGE SORT",
-
-        "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + JOIN_COITEM_TABLE_FULL_NAME + "\n"
-          + "CLIENT MERGE SORT\n" + "    PARALLEL LEFT-JOIN TABLE 0\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n"
-          + "            SERVER FILTER BY FIRST KEY ONLY\n"
-          + "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n"
-          + "            PARALLEL ANTI-JOIN TABLE 0 \\(SKIP MERGE\\)\n"
-          + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-          + "\n" + "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
-          + "                CLIENT MERGE SORT\n" + "    PARALLEL LEFT-JOIN TABLE 1\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n"
-          + "            SERVER FILTER BY FIRST KEY ONLY\n"
-          + "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n"
-          + "            PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n"
-          + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-          + "\n" + "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
-          + "                CLIENT MERGE SORT\n"
-          + "    AFTER-JOIN SERVER FILTER BY \\(\\$\\d+.\\$\\d+ IS NOT NULL OR \\$\\d+.\\$\\d+ IS NOT NULL\\)",
-
-        "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n"
-          + "    PARALLEL ANTI-JOIN TABLE 0 (SKIP MERGE)\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n"
-          + "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n"
-          + "        CLIENT MERGE SORT",
-
-        "CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_customer\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n"
-          + "    PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_SCHEMA + ".idx_item\n"
-          + "            SERVER FILTER BY FIRST KEY ONLY\n"
-          + "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"O.customer_id\"\\]\n"
-          + "        CLIENT MERGE SORT\n" + "            PARALLEL INNER-JOIN TABLE 0\n"
-          + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-          + "\n" + "            PARALLEL LEFT-JOIN TABLE 1\\(DELAYED EVALUATION\\)\n"
-          + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-          + "\n" + "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
-          + "                CLIENT MERGE SORT\n"
-          + "            AFTER-JOIN SERVER FILTER BY \\(\"I.0:NAME\" = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)" } });
-    testCases.add(new String[][] {
-      { "CREATE LOCAL INDEX " + JOIN_CUSTOMER_INDEX + " ON " + JOIN_CUSTOMER_TABLE_FULL_NAME
+        "CREATE INDEX \"idx_supplier\" ON " + JOIN_SUPPLIER_TABLE_FULL_NAME + " (name)" } });
+    testCases.add(new String[][] { {
+      "CREATE LOCAL INDEX " + JOIN_CUSTOMER_INDEX + " ON " + JOIN_CUSTOMER_TABLE_FULL_NAME
         + " (name)",
-        "CREATE LOCAL INDEX " + JOIN_ITEM_INDEX + " ON " + JOIN_ITEM_TABLE_FULL_NAME + " "
-          + "(name) INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
-        "CREATE LOCAL INDEX " + JOIN_SUPPLIER_INDEX + " ON " + JOIN_SUPPLIER_TABLE_FULL_NAME
-          + " (name)" },
-      { "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME + "\\("
-        + JOIN_ITEM_TABLE_FULL_NAME + "\\) \\[1\\]\n" + "CLIENT MERGE SORT\n"
-        + "    PARALLEL INNER-JOIN TABLE 0\n" + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-        + JOIN_SUPPLIER_INDEX_FULL_NAME + "\\(" + JOIN_SUPPLIER_TABLE_FULL_NAME + "\\) \\[1\\]\n"
-        + "            SERVER FILTER BY FIRST KEY ONLY\n" + "        CLIENT MERGE SORT\n"
-        + "    PARALLEL SEMI-JOIN TABLE 1 \\(SKIP MERGE\\)\n"
-        + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-        + " \\['000000000000001'\\] - \\[\\*\\]\n"
-        + "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
-        + "        CLIENT MERGE SORT\n"
-        + "    DYNAMIC SERVER FILTER BY \"I.:item_id\" IN \\(\\$\\d+.\\$\\d+\\)",
-
-        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_SUPPLIER_INDEX_FULL_NAME + "("
-          + JOIN_SUPPLIER_TABLE_FULL_NAME + ") [1]\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
-          + "    SERVER SORTED BY [\"I.0:NAME\"]\n" + "CLIENT MERGE SORT\n"
-          + "    PARALLEL LEFT-JOIN TABLE 0\n" + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER "
-          + JOIN_ITEM_INDEX_FULL_NAME + "(" + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n"
-          + "        CLIENT MERGE SORT\n"
-          + "    PARALLEL SEMI-JOIN TABLE 1(DELAYED EVALUATION) (SKIP MERGE)\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n"
-          + "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n"
-          + "        CLIENT MERGE SORT",
-
-        "CLIENT PARALLEL 4-WAY FULL SCAN OVER " + JOIN_COITEM_TABLE_FULL_NAME + "\n"
-          + "CLIENT MERGE SORT\n" + "    PARALLEL LEFT-JOIN TABLE 0\n"
-          + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME + "\\("
-          + JOIN_ITEM_TABLE_FULL_NAME + "\\) \\[1\\]\n"
-          + "            SERVER FILTER BY FIRST KEY ONLY\n"
-          + "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n"
-          + "        CLIENT MERGE SORT\n"
-          + "            PARALLEL ANTI-JOIN TABLE 0 \\(SKIP MERGE\\)\n"
-          + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-          + "\n" + "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
-          + "                CLIENT MERGE SORT\n" + "    PARALLEL LEFT-JOIN TABLE 1\n"
-          + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME + "\\("
-          + JOIN_ITEM_TABLE_FULL_NAME + "\\) \\[1\\]\n"
-          + "            SERVER FILTER BY FIRST KEY ONLY\n"
-          + "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n"
-          + "        CLIENT MERGE SORT\n"
-          + "            PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n"
-          + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-          + "\n" + "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
-          + "                CLIENT MERGE SORT\n" + "            DYNAMIC SERVER FILTER BY \""
-          + JOIN_ITEM_INDEX_FULL_NAME + ".:item_id\" IN \\(\\$\\d+.\\$\\d+\\)\n"
-          + "    AFTER-JOIN SERVER FILTER BY \\(\\$\\d+.\\$\\d+ IS NOT NULL OR \\$\\d+.\\$\\d+ IS NOT NULL\\)",
-
-        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME + "("
-          + JOIN_ITEM_TABLE_FULL_NAME + ") [1]\n" + "    SERVER FILTER BY FIRST KEY ONLY\n"
-          + "CLIENT MERGE SORT\n" + "    PARALLEL ANTI-JOIN TABLE 0 (SKIP MERGE)\n"
-          + "        CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n"
-          + "            SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]\n"
-          + "        CLIENT MERGE SORT",
-
-        "CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_CUSTOMER_INDEX_FULL_NAME + "\\("
-          + JOIN_CUSTOMER_TABLE_FULL_NAME + "\\) \\[1\\]\n"
-          + "    SERVER FILTER BY FIRST KEY ONLY\n" + "CLIENT MERGE SORT\n"
-          + "    PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n"
-          + "        CLIENT PARALLEL 1-WAY RANGE SCAN OVER " + JOIN_ITEM_INDEX_FULL_NAME + "\\("
-          + JOIN_ITEM_TABLE_FULL_NAME + "\\) \\[1\\]\n"
-          + "            SERVER FILTER BY FIRST KEY ONLY\n"
-          + "            SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"O.customer_id\"\\]\n"
-          + "        CLIENT MERGE SORT\n" + "            PARALLEL INNER-JOIN TABLE 0\n"
-          + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-          + "\n" + "            PARALLEL LEFT-JOIN TABLE 1\\(DELAYED EVALUATION\\)\n"
-          + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
-          + "\n" + "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
-          + "                CLIENT MERGE SORT\n"
-          + "            DYNAMIC SERVER FILTER BY \"I.:item_id\" IN \\(\"O.item_id\"\\)\n"
-          + "            AFTER-JOIN SERVER FILTER BY \\(\"I.0:NAME\" = 'T2' OR O.QUANTITY > \\$\\d+.\\$\\d+\\)\n"
-          + "    DYNAMIC SERVER FILTER BY \"" + JOIN_CUSTOMER_INDEX_FULL_NAME
-          + ".:customer_id\" IN " + "\\(\\$\\d+.\\$\\d+\\)" } });
+      "CREATE LOCAL INDEX " + JOIN_ITEM_INDEX + " ON " + JOIN_ITEM_TABLE_FULL_NAME + " "
+        + "(name) INCLUDE (price, discount1, discount2, \"supplier_id\", description)",
+      "CREATE LOCAL INDEX " + JOIN_SUPPLIER_INDEX + " ON " + JOIN_SUPPLIER_TABLE_FULL_NAME
+        + " (name)" } });
     return testCases;
   }
 
@@ -433,9 +248,10 @@ public class SubqueryIT extends BaseJoinIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      String plan = QueryUtil.getExplainPlan(rs);
-      assertPlansMatch(plans[0], plan);
+      assertPlan(conn, query).subPlan(1).scanType("RANGE SCAN").table(tableName4)
+        .keyRanges("['000000000000001'] - [*]")
+        .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]")
+        .clientSortAlgo("CLIENT MERGE SORT");
 
       query = "SELECT i.\"item_id\", s.name FROM " + tableName2 + " s LEFT JOIN " + tableName1
         + " i ON i.\"supplier_id\" = s.\"supplier_id\" WHERE i.\"item_id\" IN (SELECT \"item_id\" FROM "
@@ -457,8 +273,9 @@ public class SubqueryIT extends BaseJoinIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      assertPlansEqual(plans[1], QueryUtil.getExplainPlan(rs));
+      assertPlan(conn, query).subPlan(1).scanType("FULL SCAN").table(tableName4)
+        .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]")
+        .clientSortAlgo("CLIENT MERGE SORT");
 
       query = "SELECT * FROM " + tableName5
         + " WHERE (item_id, item_name) IN (SELECT \"item_id\", name FROM " + tableName1
@@ -480,9 +297,7 @@ public class SubqueryIT extends BaseJoinIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      plan = QueryUtil.getExplainPlan(rs);
-      assertPlansMatch(plans[2], plan);
+      assertCoitemDoubleSubqueryPlan(conn, query, tableName4, tableName5);
     } finally {
       conn.close();
     }
@@ -513,8 +328,9 @@ public class SubqueryIT extends BaseJoinIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      assertPlansEqual(plans[3], QueryUtil.getExplainPlan(rs));
+      assertPlan(conn, query).subPlan(0).scanType("FULL SCAN").table(tableName4)
+        .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]")
+        .clientSortAlgo("CLIENT MERGE SORT");
 
       query = "SELECT * FROM " + tableName5 + " co WHERE EXISTS (SELECT 1 FROM " + tableName1
         + " i WHERE NOT EXISTS (SELECT 1 FROM " + tableName4
@@ -537,9 +353,7 @@ public class SubqueryIT extends BaseJoinIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      String plan = QueryUtil.getExplainPlan(rs);
-      assertPlansMatch(plans[2], plan);
+      assertCoitemDoubleSubqueryPlan(conn, query, tableName4, tableName5);
 
       // PHOENIX-3633
       query = "SELECT * FROM " + tableName4 + " o WHERE NOT EXISTS (SELECT 1 FROM " + tableName1
@@ -627,9 +441,11 @@ public class SubqueryIT extends BaseJoinIT {
 
       assertFalse(rs.next());
 
-      rs = conn.createStatement().executeQuery("EXPLAIN " + query);
-      String plan = QueryUtil.getExplainPlan(rs);
-      assertPlansMatch(plans[4], plan);
+      assertPlan(conn, query).subPlan(0)
+        .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"O.customer_id\"]")
+        .clientSortAlgo("CLIENT MERGE SORT").subPlan(1).scanType("FULL SCAN").table(tableName4)
+        .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]")
+        .clientSortAlgo("CLIENT MERGE SORT");
 
       query = "SELECT \"order_id\" FROM " + tableName4
         + " o WHERE quantity = (SELECT quantity FROM " + tableName4
@@ -1120,5 +936,16 @@ public class SubqueryIT extends BaseJoinIT {
       assertEquals("0000000004", rs2.getString("customer_id"));
       assertEquals("C4", rs2.getString("NAME"));
     }
+  }
+
+  private void assertCoitemDoubleSubqueryPlan(Connection conn, String query, String orderTable,
+    String coitemTable) throws SQLException {
+    assertPlan(conn, query).scanType("FULL SCAN").table(coitemTable).iteratorType("PARALLEL")
+      .clientSortAlgo("CLIENT MERGE SORT").subPlanCount(2).subPlan(0).subPlan(0)
+      .scanType("FULL SCAN").table(orderTable)
+      .serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT").end().end().subPlan(1).subPlan(0).scanType("FULL SCAN")
+      .table(orderTable).serverAggregate("SERVER AGGREGATE INTO DISTINCT ROWS BY [\"item_id\"]")
+      .clientSortAlgo("CLIENT MERGE SORT");
   }
 }

@@ -90,6 +90,7 @@ import org.apache.phoenix.compile.CreateTableCompiler;
 import org.apache.phoenix.compile.DeclareCursorCompiler;
 import org.apache.phoenix.compile.DeleteCompiler;
 import org.apache.phoenix.compile.DropSequenceCompiler;
+import org.apache.phoenix.compile.ExplainJsonRenderer;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExpressionProjector;
@@ -160,8 +161,8 @@ import org.apache.phoenix.parse.DropSchemaStatement;
 import org.apache.phoenix.parse.DropSequenceStatement;
 import org.apache.phoenix.parse.DropTableStatement;
 import org.apache.phoenix.parse.ExecuteUpgradeStatement;
+import org.apache.phoenix.parse.ExplainOptions;
 import org.apache.phoenix.parse.ExplainStatement;
-import org.apache.phoenix.parse.ExplainType;
 import org.apache.phoenix.parse.FetchStatement;
 import org.apache.phoenix.parse.FilterableStatement;
 import org.apache.phoenix.parse.HintNode;
@@ -391,8 +392,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             // Send mutations to hbase, so they are visible to subsequent reads.
             // Use original plan for data table so that data and immutable indexes will be sent
             // TODO: for joins, we need to iterate through all tables, but we need the original
-            // table,
-            // not the projected table, so plan.getContext().getResolver().getTables() won't work.
+            // table, not the projected table, so plan.getContext().getResolver().getTables()
+            // won't work.
             if (plan.getContext().getScanRanges().isPointLookup()) {
               pointLookup = true;
             }
@@ -443,12 +444,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
             overallQuerymetrics.startQuery();
             overallQuerymetrics.setQueryParsingTimeMS(getSqlQueryParsingTime());
             rs = newResultSet(resultIterator, plan.getProjector(), plan.getContext());
-            // newResultset sets lastResultset
-            // ExecutableShowCreateTable/ExecutableShowTablesStatement/ExecutableShowSchemasStatement
-            // using a delegateStmt
+            // newResultset sets lastResultset ExecutableShowCreateTable /
+            // ExecutableShowTablesStatement / ExecutableShowSchemasStatement using a delegateStmt
             // to compile a queryPlan, the resultSet will set to the delegateStmt, so need set
-            // resultSet
-            // to the origin statement.
+            // resultSet to the origin statement.
             setLastResultSet(rs);
             setLastQueryPlan(plan);
             setLastUpdateCount(NO_UPDATE);
@@ -769,11 +768,9 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
                   ) {
                     TableMetricsManager.updateLatencyHistogramForMutations(tableName,
                       executeMutationTimeSpent, false);
-                    // We won't have size histograms for delete mutations when auto commit is set to
-                    // true and
-                    // if plan is of ServerSelectDeleteMutationPlan or
-                    // ServerUpsertSelectMutationPlan
-                    // since the update happens on server.
+                    // We won't have size histograms for delete mutations when auto commit is set
+                    // to true and if plan is of ServerSelectDeleteMutationPlan or
+                    // ServerUpsertSelectMutationPlan since the update happens on server.
                   } else {
                     state.addExecuteMutationTime(executeMutationTimeSpent, tableName);
                   }
@@ -865,12 +862,16 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       if (!getUdfParseNodes().isEmpty()) {
         phoenixStatement.throwIfUnallowedUserDefinedFunctions(getUdfParseNodes());
       }
-
-      RewriteResult rewriteResult = ParseNodeUtil.rewrite(this, phoenixStatement.getConnection());
+      // Pre-build the top-level StatementContext so the early SubselectRewriter/SubqueryRewriter
+      // pass can record top of plan rewrite breadcrumbs onto it. The same accumulator is then
+      // adopted by the compilation context via QueryCompiler.withRewriteContext.
+      StatementContext rewriteContext = StatementContext.forRewrite(phoenixStatement);
+      RewriteResult rewriteResult = ParseNodeUtil.rewrite(this, rewriteContext);
       QueryPlan queryPlan = new QueryCompiler(phoenixStatement,
         rewriteResult.getRewrittenSelectStatement(), rewriteResult.getColumnResolver(),
         Collections.<PDatum> emptyList(), phoenixStatement.getConnection().getIteratorFactory(),
-        new SequenceManager(phoenixStatement), true, false, null).compile();
+        new SequenceManager(phoenixStatement), true, false, null).withRewriteContext(rewriteContext)
+          .compile();
       queryPlan.getContext().getSequenceManager().validateSequences(seqAction);
       return queryPlan;
     }
@@ -887,6 +888,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       return true;
     }
 
+    @SuppressWarnings("rawtypes")
     @Override
     public PDataType getDataType() {
       return PVarchar.INSTANCE;
@@ -954,8 +956,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
   private static class ExecutableExplainStatement extends ExplainStatement
     implements CompilableStatement {
 
-    ExecutableExplainStatement(BindableStatement statement, ExplainType explainType) {
-      super(statement, explainType);
+    ExecutableExplainStatement(BindableStatement statement, ExplainOptions options) {
+      super(statement, options);
     }
 
     @Override
@@ -994,41 +996,61 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
           stmt.getConnection().getQueryServices().getOptimizer().optimize(stmt, dataPlan);
       }
       final StatementPlan plan = compilePlan;
-      List<String> planSteps = plan.getExplainPlan().getPlanSteps();
-      ExplainType explainType = getExplainType();
-      if (explainType == ExplainType.DEFAULT) {
-        List<String> updatedExplainPlanSteps = new ArrayList<>(planSteps);
-        updatedExplainPlanSteps.removeIf(
-          planStep -> planStep != null && planStep.contains(ExplainTable.REGION_LOCATIONS));
-        planSteps = Collections.unmodifiableList(updatedExplainPlanSteps);
+      // Propagate the parsed EXPLAIN options onto the resolved plan's context so the renderer has
+      // access to the requested options.
+      if (plan.getContext() != null) {
+        plan.getContext().setExplainOptions(getOptions());
+      }
+      ExplainPlan explainPlan = plan.getExplainPlan();
+      List<String> planSteps;
+      if (getOptions().getFormat() == ExplainOptions.Format.JSON) {
+        // FORMAT JSON returns a single row whose cell carries the serialized attributes tree. The
+        // top-of-plan disclosure block is already inside the attributes, so renderTopOfPlanText is
+        // not invoked here.
+        planSteps = Collections
+          .singletonList(ExplainJsonRenderer.render(explainPlan.getPlanStepsAsAttributes()));
+      } else {
+        // Prepend the top-of-plan disclosure blocks. This is the only place the disclosure text is
+        // emitted.
+        planSteps = new ArrayList<>(explainPlan.getPlanSteps());
+        ExplainTable.renderTopOfPlanText(planSteps, explainPlan.getPlanStepsAsAttributes());
+        planSteps = Collections.unmodifiableList(planSteps);
       }
       List<Tuple> tuples = Lists.newArrayListWithExpectedSize(planSteps.size());
       Long estimatedBytesToScan = plan.getEstimatedBytesToScan();
       Long estimatedRowsToScan = plan.getEstimatedRowsToScan();
       Long estimateInfoTimestamp = plan.getEstimateInfoTimestamp();
+      // The three estimate columns are plan totals, not per-step values. Emit them only on the
+      // top-of-plan. Subsequent rows carry just the plan step column.
+      boolean firstRow = true;
       for (String planStep : planSteps) {
         byte[] row = PVarchar.INSTANCE.toBytes(planStep);
-        List<Cell> cells = Lists.newArrayListWithCapacity(3);
+        // The top-of-plan row carries the plan step plus up to three estimate cells. Every other
+        // row carries only the plan step.
+        List<Cell> cells = Lists.newArrayListWithCapacity(firstRow ? 4 : 1);
         cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_COLUMN,
           MetaDataProtocol.MIN_TABLE_TIMESTAMP, ByteUtil.EMPTY_BYTE_ARRAY));
-        if (estimatedBytesToScan != null) {
-          cells.add(
-            PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_BYTES_ESTIMATE,
-              MetaDataProtocol.MIN_TABLE_TIMESTAMP, PLong.INSTANCE.toBytes(estimatedBytesToScan)));
-        }
-        if (estimatedRowsToScan != null) {
-          cells.add(
-            PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ROWS_ESTIMATE,
-              MetaDataProtocol.MIN_TABLE_TIMESTAMP, PLong.INSTANCE.toBytes(estimatedRowsToScan)));
-        }
-        if (estimateInfoTimestamp != null) {
-          cells.add(
-            PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ESTIMATE_INFO_TS,
-              MetaDataProtocol.MIN_TABLE_TIMESTAMP, PLong.INSTANCE.toBytes(estimateInfoTimestamp)));
+        if (firstRow) {
+          if (estimatedBytesToScan != null) {
+            cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY,
+              EXPLAIN_PLAN_BYTES_ESTIMATE, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+              PLong.INSTANCE.toBytes(estimatedBytesToScan)));
+          }
+          if (estimatedRowsToScan != null) {
+            cells.add(
+              PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY, EXPLAIN_PLAN_ROWS_ESTIMATE,
+                MetaDataProtocol.MIN_TABLE_TIMESTAMP, PLong.INSTANCE.toBytes(estimatedRowsToScan)));
+          }
+          if (estimateInfoTimestamp != null) {
+            cells.add(PhoenixKeyValueUtil.newKeyValue(row, EXPLAIN_PLAN_FAMILY,
+              EXPLAIN_PLAN_ESTIMATE_INFO_TS, MetaDataProtocol.MIN_TABLE_TIMESTAMP,
+              PLong.INSTANCE.toBytes(estimateInfoTimestamp)));
+          }
         }
         Collections.sort(cells, CellComparator.getInstance());
         Tuple tuple = new MultiKeyValueTuple(cells);
         tuples.add(tuple);
+        firstRow = false;
       }
       final Long estimatedBytes = estimatedBytesToScan;
       final Long estimatedRows = estimatedRowsToScan;
@@ -1263,7 +1285,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       return new BaseMutationPlan(context, this.getOperation()) {
         @Override
         public ExplainPlan getExplainPlan() throws SQLException {
-          return new ExplainPlan(Collections.singletonList("Truncate Table"));
+          return new ExplainPlan(Collections.singletonList("TRUNCATE TABLE"));
         }
 
         @Override
@@ -1303,6 +1325,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(cdcObjName, dataTable, includeScopes, props, ifNotExists, bindCount);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1464,6 +1487,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(cursor, select);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1481,6 +1505,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(cursor);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1495,6 +1520,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(cursor);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1509,6 +1535,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(cursor, isNext, fetchLimit);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1604,6 +1631,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(schema, pattern);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1621,6 +1649,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(pattern);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1637,6 +1666,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
       super(tableName);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public QueryPlan compilePlan(final PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -1801,6 +1831,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
         isGrantStatement);
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public MutationPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
@@ -2368,8 +2399,8 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
 
     @Override
-    public ExplainStatement explain(BindableStatement statement, ExplainType explainType) {
-      return new ExecutableExplainStatement(statement, explainType);
+    public ExplainStatement explain(BindableStatement statement, ExplainOptions options) {
+      return new ExecutableExplainStatement(statement, options);
     }
 
     @Override
@@ -2428,6 +2459,7 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     }
   }
 
+  @SuppressWarnings("rawtypes")
   public Format getFormatter(PDataType type) {
     return connection.getFormatter(type);
   }
@@ -3000,10 +3032,6 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
   private void setLastUpdateCount(int lastUpdateCount) {
     this.lastUpdateCount = lastUpdateCount;
-  }
-
-  private String getLastUpdateTable() {
-    return lastUpdateTable;
   }
 
   private void setLastUpdateTable(String lastUpdateTable) {

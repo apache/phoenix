@@ -22,6 +22,7 @@ import static org.apache.phoenix.query.QueryConstants.UNGROUPED_AGG_ROW_KEY;
 
 import java.io.IOException;
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import org.apache.hadoop.hbase.Cell;
@@ -29,6 +30,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainFilter;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -48,6 +50,7 @@ import org.apache.phoenix.iterate.AggregatingResultIterator;
 import org.apache.phoenix.iterate.BaseGroupedAggregatingResultIterator;
 import org.apache.phoenix.iterate.ClientHashAggregatingResultIterator;
 import org.apache.phoenix.iterate.DistinctAggregatingResultIterator;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.FilterAggregatingResultIterator;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.GroupedAggregatingResultIterator;
@@ -135,7 +138,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
   public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
     ResultIterator iterator = delegate.iterator(scanGrouper, scan);
     if (where != null) {
-      iterator = new FilterResultIterator(iterator, where);
+      iterator = new FilterResultIterator(iterator, where, context);
     }
 
     AggregatingResultIterator aggResultIterator;
@@ -185,7 +188,7 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
     }
 
     if (having != null) {
-      aggResultIterator = new FilterAggregatingResultIterator(aggResultIterator, having);
+      aggResultIterator = new FilterAggregatingResultIterator(aggResultIterator, having, context);
     }
 
     if (statement.isDistinct() && statement.isAggregate()) { // Dedup on client if select distinct
@@ -220,71 +223,112 @@ public class ClientAggregatePlan extends ClientProcessingPlan {
 
   @Override
   public ExplainPlan getExplainPlan() throws SQLException {
+    // Carry the requested EXPLAIN options down to the delegate so every participating scan renders
+    // the same disclosures (e.g. VERBOSE predicate-origin attribution) as the driver scan.
+    delegate.getContext().setExplainOptions(context.getExplainOptions());
     ExplainPlan explainPlan = delegate.getExplainPlan();
     List<String> planSteps = Lists.newArrayList(explainPlan.getPlanSteps());
     ExplainPlanAttributes explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
     ExplainPlanAttributesBuilder newBuilder =
       new ExplainPlanAttributesBuilder(explainPlanAttributes);
     if (where != null) {
-      planSteps.add("CLIENT FILTER BY " + where.toString());
-      newBuilder.setClientFilterBy(where.toString());
+      if (context.isVerbose()) {
+        List<String> filterLines = new ArrayList<>();
+        List<ExplainFilter> clientFilters = ExplainTable.renderVerboseFilters(context, where,
+          where.toString(), "CLIENT FILTER BY", filterLines);
+        for (String filterLine : filterLines) {
+          planSteps.add(filterLine);
+          newBuilder.addClientStep(filterLine);
+        }
+        newBuilder.setClientFilters(clientFilters);
+      } else {
+        String step = "CLIENT FILTER BY " + where.toString();
+        planSteps.add(step);
+        newBuilder.setClientFilterBy(where.toString());
+        newBuilder.addClientStep(step);
+      }
     }
     if (groupBy.isEmpty()) {
-      planSteps.add("CLIENT AGGREGATE INTO SINGLE ROW");
-      newBuilder.setClientAggregate("CLIENT AGGREGATE INTO SINGLE ROW");
+      String step = "CLIENT AGGREGATE INTO SINGLE ROW";
+      planSteps.add(step);
+      newBuilder.setClientAggregate(step);
+      newBuilder.addClientStep(step);
     } else if (groupBy.isOrderPreserving()) {
-      planSteps.add(
-        "CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY " + groupBy.getExpressions().toString());
-      newBuilder.setClientAggregate(
-        "CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY " + groupBy.getExpressions().toString());
+      String step =
+        "CLIENT AGGREGATE INTO ORDERED DISTINCT ROWS BY " + groupBy.getExpressions().toString();
+      planSteps.add(step);
+      newBuilder.setClientAggregate(step);
+      newBuilder.addClientStep(step);
     } else if (useHashAgg) {
-      planSteps
-        .add("CLIENT HASH AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
-      newBuilder.setClientAggregate(
-        "CLIENT HASH AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
+      String step =
+        "CLIENT HASH AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString();
+      planSteps.add(step);
+      newBuilder.setClientAggregate(step);
+      newBuilder.addClientStep(step);
       if (orderBy == OrderBy.FWD_ROW_KEY_ORDER_BY || orderBy == OrderBy.REV_ROW_KEY_ORDER_BY) {
-        planSteps.add("CLIENT SORTED BY " + groupBy.getKeyExpressions().toString());
+        String sortStep = "CLIENT SORTED BY " + groupBy.getKeyExpressions().toString();
+        planSteps.add(sortStep);
         newBuilder.setClientSortedBy(groupBy.getKeyExpressions().toString());
+        newBuilder.addClientStep(sortStep);
       }
     } else {
-      planSteps.add("CLIENT SORTED BY " + groupBy.getKeyExpressions().toString());
-      planSteps
-        .add("CLIENT AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
+      String sortStep = "CLIENT SORTED BY " + groupBy.getKeyExpressions().toString();
+      String aggStep =
+        "CLIENT AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString();
+      planSteps.add(sortStep);
+      planSteps.add(aggStep);
       newBuilder.setClientSortedBy(groupBy.getKeyExpressions().toString());
-      newBuilder.setClientAggregate(
-        "CLIENT AGGREGATE INTO DISTINCT ROWS BY " + groupBy.getExpressions().toString());
+      newBuilder.setClientAggregate(aggStep);
+      newBuilder.addClientStep(sortStep);
+      newBuilder.addClientStep(aggStep);
     }
     if (having != null) {
-      planSteps.add("CLIENT AFTER-AGGREGATION FILTER BY " + having.toString());
-      newBuilder.setClientAfterAggregate("CLIENT AFTER-AGGREGATION FILTER BY " + having.toString());
+      String step = "CLIENT AFTER-AGGREGATION FILTER BY " + having.toString();
+      planSteps.add(step);
+      newBuilder.setClientAfterAggregate(step);
+      newBuilder.addClientStep(step);
     }
     if (statement.isDistinct() && statement.isAggregate()) {
-      planSteps.add("CLIENT DISTINCT ON " + projector.toString());
+      String step = "CLIENT DISTINCT ON " + projector.toString();
+      planSteps.add(step);
       newBuilder.setClientDistinctFilter(projector.toString());
+      newBuilder.addClientStep(step);
     }
     if (offset != null) {
-      planSteps.add("CLIENT OFFSET " + offset);
+      String step = "CLIENT OFFSET " + offset;
+      planSteps.add(step);
       newBuilder.setClientOffset(offset);
+      newBuilder.addClientStep(step);
     }
     if (orderBy.getOrderByExpressions().isEmpty()) {
       if (limit != null) {
-        planSteps.add("CLIENT " + limit + " ROW LIMIT");
+        String step = "CLIENT " + limit + " ROW LIMIT";
+        planSteps.add(step);
         newBuilder.setClientRowLimit(limit);
+        newBuilder.addClientStep(step);
       }
     } else {
-      planSteps
-        .add("CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
-          + " SORTED BY " + orderBy.getOrderByExpressions().toString());
+      String step =
+        "CLIENT" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
+          + " SORTED BY " + orderBy.getOrderByExpressions().toString();
+      planSteps.add(step);
       newBuilder.setClientRowLimit(limit);
       newBuilder.setClientSortedBy(orderBy.getOrderByExpressions().toString());
+      newBuilder.addClientStep(step);
     }
     if (context.getSequenceManager().getSequenceCount() > 0) {
       int nSequences = context.getSequenceManager().getSequenceCount();
-      planSteps.add(
-        "CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S"));
+      String step =
+        "CLIENT RESERVE VALUES FROM " + nSequences + " SEQUENCE" + (nSequences == 1 ? "" : "S");
+      planSteps.add(step);
       newBuilder.setClientSequenceCount(nSequences);
+      newBuilder.addClientStep(step);
     }
 
+    if (context.isRoot()) {
+      ExplainTable.populateTopOfPlanAttributes(newBuilder, context, getTableRef());
+      ExplainTable.populateTopOfPlanEstimates(newBuilder, this);
+    }
     return new ExplainPlan(planSteps, newBuilder.build());
   }
 

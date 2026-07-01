@@ -21,9 +21,14 @@ import java.sql.SQLException;
 import java.text.Format;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
+import java.util.EnumMap;
+import java.util.IdentityHashMap;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -31,6 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.log.QueryLogger;
@@ -39,6 +45,9 @@ import org.apache.phoenix.monitoring.ReadMetricQueue;
 import org.apache.phoenix.monitoring.ScanMetricsHolder;
 import org.apache.phoenix.monitoring.SlowestScanMetricsQueue;
 import org.apache.phoenix.monitoring.TopNTreeMultiMap;
+import org.apache.phoenix.parse.ExplainOptions;
+import org.apache.phoenix.parse.HintNode.Hint;
+import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
@@ -101,9 +110,38 @@ public class StatementContext {
   private boolean hasRawRowSizeFunction = false;
   private final SlowestScanMetricsQueue slowestScanMetricsQueue;
   private final int slowestScanMetricsCount;
+  private List<String> appliedRewrites;
+  private int derivedTableFlattenCount;
+  private Map<String, List<String>> appliedIndexExpressionMatches;
+  private Map<String, Map<String, String>> appliedIndexExpressionPairs;
+  private Set<String> functionalIndexNames;
+  private Set<Pair<String, String>> partialIndexCheckedSet;
+  private Map<String, List<Expression>> serverParsedProjections;
+  private StatementContext parentContext;
+  private ExplainOptions explainOptions = ExplainOptions.DEFAULT;
+  private Map<Expression, Set<String>> predicateOrigins;
+  private Map<ParseNode, String> decorrelatedSubqueryAlias;
+  private Map<Hint, String> ignoredHints;
 
   public StatementContext(PhoenixStatement statement) {
     this(statement, new Scan());
+  }
+
+  /**
+   * Build a top-level {@link StatementContext} suitable for the early
+   * {@link SubselectRewriter}/{@link SubqueryRewriter} rewrite pass, accumulating rewrite
+   * breadcrumbs.
+   */
+  public static StatementContext forRewrite(PhoenixStatement statement) {
+    return forRewrite(statement, new BindManager(statement.getParameters()));
+  }
+
+  /**
+   * Variant of {@link #forRewrite(PhoenixStatement)} that reuses an existing {@link BindManager}.
+   */
+  public static StatementContext forRewrite(PhoenixStatement statement, BindManager bindManager) {
+    return new StatementContext(statement, FromCompiler.EMPTY_TABLE_RESOLVER, bindManager,
+      new Scan(), new SequenceManager(statement));
   }
 
   public StatementContext(StatementContext context) {
@@ -132,11 +170,14 @@ public class StatementContext {
     this.isClientSideUpsertSelect = context.isClientSideUpsertSelect;
     this.isUncoveredIndex = context.isUncoveredIndex;
     this.hasFirstValidResult = new AtomicBoolean(context.getHasFirstValidResult());
-    this.subStatementContexts = Sets.newHashSet();
+    this.subStatementContexts = Sets.newLinkedHashSet();
     this.totalSegmentsFunction = context.totalSegmentsFunction;
     this.totalSegmentsValue = context.totalSegmentsValue;
     this.hasRowSizeFunction = context.hasRowSizeFunction;
     this.hasRawRowSizeFunction = context.hasRawRowSizeFunction;
+    this.parentContext = context.parentContext;
+    this.explainOptions = context.explainOptions;
+    copyRewriteStateFrom(context);
   }
 
   /**
@@ -198,7 +239,18 @@ public class StatementContext {
       : SlowestScanMetricsQueue.NOOP_SLOWEST_SCAN_METRICS_QUEUE;
     this.retryingPersistentCache = Maps.<Long, Boolean> newHashMap();
     this.hasFirstValidResult = new AtomicBoolean(false);
-    this.subStatementContexts = Sets.newHashSet();
+    this.subStatementContexts = Sets.newLinkedHashSet();
+    this.appliedRewrites = new ArrayList<>();
+    this.derivedTableFlattenCount = 0;
+    this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
+    this.appliedIndexExpressionPairs = Maps.newLinkedHashMap();
+    this.functionalIndexNames = Sets.newLinkedHashSet();
+    this.partialIndexCheckedSet = Sets.newLinkedHashSet();
+    this.serverParsedProjections = null;
+    this.parentContext = null;
+    this.predicateOrigins = new IdentityHashMap<>();
+    this.decorrelatedSubqueryAlias = new IdentityHashMap<>();
+    this.ignoredHints = new EnumMap<>(Hint.class);
   }
 
   /**
@@ -453,11 +505,258 @@ public class StatementContext {
   }
 
   public void addSubStatementContext(StatementContext sub) {
+    addSubStatementContext(sub, true);
+  }
+
+  public void addSubStatementContext(StatementContext sub, boolean linkParentForDisclosure) {
     subStatementContexts.add(sub);
+    if (linkParentForDisclosure) {
+      sub.parentContext = this;
+    }
   }
 
   public Set<StatementContext> getSubStatementContexts() {
     return subStatementContexts;
+  }
+
+  /**
+   * Records a top-of-plan rewrite breadcrumb (e.g. "STAR JOIN ON 2 RIGHT LEGS"). Breadcrumbs are
+   * diagnostic only and never affect the compiled plan.
+   */
+  public void addAppliedRewrite(String rewrite) {
+    appliedRewrites.add(rewrite);
+  }
+
+  public List<String> getAppliedRewrites() {
+    return appliedRewrites;
+  }
+
+  /**
+   * Adopt the rewrite breadcrumb accumulator (and related diagnostic state) of another context.
+   * Used to carry breadcrumbs recorded by the early
+   * {@link SubselectRewriter}/{@link SubqueryRewriter} pass on a pre-built context across the
+   * rewrite boundary onto the actual compilation context. Fresh collections are allocated (see
+   * {@link #copyRewriteStateFrom}) so this context and {@code source} continue to mutate
+   * independently.
+   */
+  public void adoptRewriteState(StatementContext source) {
+    copyRewriteStateFrom(source);
+  }
+
+  /**
+   * Copy the rewrite breadcrumb accumulators and related diagnostic state from {@code source} into
+   * this context, allocating fresh collections so the two contexts never share mutable backing
+   * collections. Shared by the copy constructor and {@link #adoptRewriteState}, both of which hand
+   * the resulting context to a compile pass that continues to mutate this state.
+   */
+  private void copyRewriteStateFrom(StatementContext source) {
+    this.appliedRewrites =
+      source.appliedRewrites == null ? new ArrayList<>() : new ArrayList<>(source.appliedRewrites);
+    this.derivedTableFlattenCount = source.derivedTableFlattenCount;
+    this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
+    for (Map.Entry<String, List<String>> entry : source.appliedIndexExpressionMatches.entrySet()) {
+      this.appliedIndexExpressionMatches.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+    }
+    this.appliedIndexExpressionPairs = Maps.newLinkedHashMap();
+    for (Map.Entry<String, Map<String, String>> entry : source.appliedIndexExpressionPairs
+      .entrySet()) {
+      this.appliedIndexExpressionPairs.put(entry.getKey(), new LinkedHashMap<>(entry.getValue()));
+    }
+    this.functionalIndexNames = Sets.newLinkedHashSet(source.functionalIndexNames);
+    this.partialIndexCheckedSet = Sets.newLinkedHashSet(source.partialIndexCheckedSet);
+    // serverParsedProjections is nullable and only ever replaced wholesale via its setter (never
+    // mutated in place), so the reference can be carried over directly.
+    this.serverParsedProjections = source.serverParsedProjections;
+    this.predicateOrigins = new IdentityHashMap<>();
+    for (Map.Entry<Expression, Set<String>> entry : source.predicateOrigins.entrySet()) {
+      this.predicateOrigins.put(entry.getKey(), new LinkedHashSet<>(entry.getValue()));
+    }
+    this.decorrelatedSubqueryAlias = new IdentityHashMap<>(source.decorrelatedSubqueryAlias);
+    this.ignoredHints = new EnumMap<>(source.ignoredHints);
+  }
+
+  public void incrementDerivedTableFlattenCount() {
+    derivedTableFlattenCount++;
+  }
+
+  public int getDerivedTableFlattenCount() {
+    return derivedTableFlattenCount;
+  }
+
+  /**
+   * Records the path expressions that actually substituted against this query for the given
+   * functional index. Used by the optimizer to label the chosen index's rule as
+   * {@code matches <expr>} and to distinguish functional index rejections that matched no query
+   * expression. Deduplicated per index, preserving first seen order.
+   */
+  public void recordAppliedIndexExpressionMatches(String indexName,
+    Collection<String> expressions) {
+    if (expressions == null || expressions.isEmpty()) {
+      return;
+    }
+    List<String> matches =
+      appliedIndexExpressionMatches.computeIfAbsent(indexName, k -> new ArrayList<>());
+    for (String expression : expressions) {
+      if (!matches.contains(expression)) {
+        matches.add(expression);
+      }
+    }
+  }
+
+  /**
+   * Returns the path expressions that actually substituted against this query for the given
+   * functional index, or an empty list if none were recorded.
+   */
+  public List<String> getAppliedIndexExpressionMatches(String indexName) {
+    List<String> matches = appliedIndexExpressionMatches.get(indexName);
+    return matches == null ? Collections.emptyList() : matches;
+  }
+
+  /**
+   * Records the {@code <index column name, indexed expression string>} pairs for substitutions that
+   * actually fired against this query for the given functional index. Carries enough information
+   * for the optimizer to emit one {@code REWRITE INDEX EXPRESSION <expr> AS <col>} breadcrumb per
+   * applied substitution after the chosen plan is selected. Deduplicated per index, preserving
+   * first-seen insertion order.
+   */
+  public void recordAppliedIndexExpressionPairs(String indexName, Map<String, String> pairs) {
+    if (pairs == null || pairs.isEmpty()) {
+      return;
+    }
+    Map<String, String> existing =
+      appliedIndexExpressionPairs.computeIfAbsent(indexName, k -> new LinkedHashMap<>());
+    for (Map.Entry<String, String> entry : pairs.entrySet()) {
+      existing.putIfAbsent(entry.getKey(), entry.getValue());
+    }
+  }
+
+  /**
+   * Returns the {@code <index column name, indexed expression string>} pairs that actually
+   * substituted against this query for the given functional index, or an empty map if none.
+   */
+  public Map<String, String> getAppliedIndexExpressionPairs(String indexName) {
+    Map<String, String> pairs = appliedIndexExpressionPairs.get(indexName);
+    return pairs == null ? Collections.emptyMap() : pairs;
+  }
+
+  /** Marks the given index as a functional index. */
+  public void recordFunctionalIndex(String indexName) {
+    functionalIndexNames.add(indexName);
+  }
+
+  /** Returns whether the given index was recorded as a functional index during rewriting. */
+  public boolean isFunctionalIndex(String indexName) {
+    return functionalIndexNames.contains(indexName);
+  }
+
+  /**
+   * Dedup set used by the optimizer so a partial index applicability breadcrumb is recorded only
+   * once per (table, index) pair even when the same index is scored across multiple paths.
+   * @return true if the pair had not been recorded before
+   */
+  public boolean markPartialIndexChecked(String tableName, String indexName) {
+    return partialIndexCheckedSet.add(new Pair<>(tableName, indexName));
+  }
+
+  /**
+   * Server-evaluated parsed projection expressions, keyed by the scan attribute they were
+   * serialized into ({@code _SpecificArrayIndex}, {@code _JsonValueFunction},
+   * {@code _JsonQueryFunction}, {@code _BsonValueFunction}). Populated by
+   * {@link ProjectionCompiler} when at least one JSON/BSON/array path expression is pushed to the
+   * server, and consumed by {@code ExplainTable} to render the per-type {@code SERVER * PROJECTION}
+   * clauses. {@code null} when no server-side parsed projection compile occurred.
+   */
+  public Map<String, List<Expression>> getServerParsedProjections() {
+    return serverParsedProjections;
+  }
+
+  public void setServerParsedProjections(Map<String, List<Expression>> serverParsedProjections) {
+    this.serverParsedProjections = serverParsedProjections;
+  }
+
+  public StatementContext getParentContext() {
+    return parentContext;
+  }
+
+  /**
+   * The options parsed from the {@code EXPLAIN} statement's option list. Defaults to
+   * {@link ExplainOptions#DEFAULT}.
+   */
+  public ExplainOptions getExplainOptions() {
+    return explainOptions;
+  }
+
+  public void setExplainOptions(ExplainOptions explainOptions) {
+    this.explainOptions = explainOptions == null ? ExplainOptions.DEFAULT : explainOptions;
+  }
+
+  /** Returns true if the {@code EXPLAIN} statement requested {@code VERBOSE} output. */
+  public boolean isVerbose() {
+    return explainOptions != null && explainOptions.isVerbose();
+  }
+
+  /**
+   * Tag a predicate {@link Expression} with the given origin (e.g. {@code "WHERE"},
+   * {@code "JOIN ON"}). Tags accumulate as a set so a predicate fused from multiple sources carries
+   * every contributing origin. Keyed by object identity, since Phoenix rewrites and re-instantiates
+   * expressions during compilation. Diagnostic only; never affects the compiled plan.
+   */
+  public void tagPredicate(Expression expression, String origin) {
+    if (expression == null || origin == null) {
+      return;
+    }
+    predicateOrigins.computeIfAbsent(expression, k -> new LinkedHashSet<>()).add(origin);
+  }
+
+  /** Returns the predicate origin tags accumulated during compilation. Identity keyed. */
+  public Map<Expression, Set<String>> getPredicateOrigins() {
+    return predicateOrigins;
+  }
+
+  /** Returns the origin tags recorded for {@code expression}, or an empty set if none. */
+  public Set<String> getPredicateOrigins(Expression expression) {
+    Set<String> tags = predicateOrigins.get(expression);
+    return tags == null ? Collections.emptySet() : tags;
+  }
+
+  /**
+   * Records that the given decorrelated join-condition parse node originated from the subquery with
+   * the given temp alias.
+   */
+  public void putDecorrelatedSubqueryAlias(ParseNode joinConditionNode, String subqueryAlias) {
+    if (joinConditionNode != null && subqueryAlias != null) {
+      decorrelatedSubqueryAlias.put(joinConditionNode, subqueryAlias);
+    }
+  }
+
+  /**
+   * Returns the subquery temp alias the given join-condition parse node was decorrelated from, or
+   * {@code null} if the node is not a decorrelated predicate.
+   */
+  public String getDecorrelatedSubqueryAlias(ParseNode joinConditionNode) {
+    return decorrelatedSubqueryAlias.get(joinConditionNode);
+  }
+
+  /**
+   * Records that the planner intentionally ignored {@code hint} for the given {@code reason}.
+   * Surfaced under {@code EXPLAIN (VERBOSE)} as a {@code /*- HINT(args) -- reason *}{@code /}
+   * comment. The first reason recorded for a hint wins. Diagnostic only.
+   */
+  public void recordIgnoredHint(Hint hint, String reason) {
+    if (hint == null || reason == null) {
+      return;
+    }
+    ignoredHints.putIfAbsent(hint, reason);
+  }
+
+  /** Returns the hints the planner intentionally ignored, mapped to the reason. */
+  public Map<Hint, String> getIgnoredHints() {
+    return ignoredHints;
+  }
+
+  /** Returns true if this is the top-level (root) statement context, i.e. it has no parent. */
+  public boolean isRoot() {
+    return parentContext == null;
   }
 
   public boolean hasTotalSegmentsFunction() {

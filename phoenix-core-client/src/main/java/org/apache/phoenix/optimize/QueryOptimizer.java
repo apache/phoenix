@@ -20,6 +20,7 @@ package org.apache.phoenix.optimize;
 import static org.apache.phoenix.query.QueryConstants.CDC_JSON_COL_NAME;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -156,7 +157,7 @@ public class QueryOptimizer {
         && (select.getWhere() == null || !select.getWhere().hasSubquery())
     ) {
       return getApplicablePlansForSingleFlatQuery(dataPlan, statement, targetColumns,
-        parallelIteratorFactory, stopAtBestPlan);
+        parallelIteratorFactory, stopAtBestPlan, new DecisionState());
     }
 
     Map<TableRef, QueryPlan> dataPlans = null;
@@ -176,7 +177,6 @@ public class QueryOptimizer {
         if (stmt.getWhere() != null && stmt.getWhere().hasSubquery()) {
           StatementContext context =
             new StatementContext(statement, resolver, new Scan(), new SequenceManager(statement));
-          ;
           ParseNode dummyWhere =
             GenSubqueryParamValuesRewriter.replaceWithDummyValues(stmt.getWhere(), context);
           stmt = FACTORY.select(stmt, dummyWhere);
@@ -200,16 +200,18 @@ public class QueryOptimizer {
 
       if (replacement != null) {
         select = rewriteQueryWithIndexReplacement(statement.getConnection(), resolver, select,
-          replacement);
+          replacement, dataPlan.getContext());
       }
     }
 
     // Re-compile the plan with option "optimizeSubquery" turned on, so that enclosed
-    // sub-queries can be optimized recursively.
+    // sub-queries can be optimized recursively. Carry forward the top-of-plan rewrite breadcrumbs
+    // recorded on the data plan's context so they survive the recompile onto the optimized plan's
+    // context.
     QueryCompiler compiler = new QueryCompiler(statement, select,
       FromCompiler.getResolverForQuery(select, statement.getConnection()), targetColumns,
       parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), true, true, dataPlans,
-      dataPlan.getContext());
+      dataPlan.getContext()).withRewriteContext(dataPlan.getContext());
     return Collections.singletonList(compiler.compile());
   }
 
@@ -217,14 +219,29 @@ public class QueryOptimizer {
     PTable index) throws SQLException {
     StatementContext context = new StatementContext(dataPlan.getContext());
     context.setResolver(FromCompiler.getResolver(dataPlan.getTableRef()));
-    return WhereCompiler.contains(
-      index.getIndexWhereExpression(dataPlan.getContext().getConnection()),
-      WhereCompiler.transformDNF(select.getWhere(), context));
+    boolean usable =
+      WhereCompiler.contains(index.getIndexWhereExpression(dataPlan.getContext().getConnection()),
+        WhereCompiler.transformDNF(select.getWhere(), context));
+    StatementContext rootContext = dataPlan.getContext();
+    String tableName = dataPlan.getTableRef().getTable().getName().getString();
+    String indexName = index.getName().getString();
+    // Dedupe so the breadcrumb is recorded once per table and index pair even when the optimizer
+    // scores the same index across multiple candidate paths.
+    if (rootContext.markPartialIndexChecked(tableName, indexName)) {
+      // Name the index in the breadcrumb so multiple partial indexes stay distinct after the
+      // rewrite list is deduped by string. Otherwise they collapse into a single ambiguous line.
+      rootContext.addAppliedRewrite(usable
+        ? "PARTIAL INDEX " + indexName + " APPLICABLE"
+        : "PARTIAL INDEX " + indexName
+          + " NOT APPLICABLE -- index WHERE not implied by query WHERE");
+    }
+    return usable;
   }
 
   private List<QueryPlan> getApplicablePlansForSingleFlatQuery(QueryPlan dataPlan,
     PhoenixStatement statement, List<? extends PDatum> targetColumns,
-    ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan) throws SQLException {
+    ParallelIteratorFactory parallelIteratorFactory, boolean stopAtBestPlan, DecisionState state)
+    throws SQLException {
     SelectStatement select = (SelectStatement) dataPlan.getStatement();
     String indexHint = select.getHint().getHint(Hint.INDEX);
     // Exit early if we have a point lookup w/o index hint as we can't get better than that
@@ -232,7 +249,11 @@ public class QueryOptimizer {
       indexHint == null && dataPlan.getContext().getScanRanges().isPointLookup() && stopAtBestPlan
         && dataPlan.isApplicable()
     ) {
-      return Collections.<QueryPlan> singletonList(dataPlan);
+      if (select.getHint().hasHint(Hint.NO_INDEX)) {
+        dataPlan.getContext().recordIgnoredHint(Hint.NO_INDEX, "point lookup short-circuit");
+      }
+      return Collections.<QueryPlan> singletonList(
+        recordDecision(dataPlan, OptimizerReasons.RULE_POINT_LOOKUP, state));
     }
 
     ColumnResolver indexResolver = null;
@@ -264,6 +285,9 @@ public class QueryOptimizer {
       table = cdcBuilder.build();
       dataPlan.getTableRef().setTable(table);
       forCDC = true;
+      if (select.getHint().hasHint(Hint.NO_INDEX)) {
+        dataPlan.getContext().recordIgnoredHint(Hint.NO_INDEX, "CDC table");
+      }
     }
 
     List<PTable> indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
@@ -271,15 +295,20 @@ public class QueryOptimizer {
       dataPlan.isApplicable() && (indexes.isEmpty() || dataPlan.isDegenerate()
         || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX))
     ) {
-      return Collections.<QueryPlan> singletonList(dataPlan);
+      if (select.getHint().hasHint(Hint.NO_INDEX)) {
+        state.rejectAll(indexes, OptimizerReasons.REASON_EXCLUDED_BY_NO_INDEX_HINT);
+        if (indexes.isEmpty()) {
+          // NO_INDEX had no effect: the table has no indexes to exclude.
+          dataPlan.getContext().recordIgnoredHint(Hint.NO_INDEX, "no indexes on table");
+        }
+      }
+      return Collections.<
+        QueryPlan> singletonList(recordDecision(dataPlan, OptimizerReasons.RULE_DATA_TABLE, state));
     }
     // The targetColumns is set for UPSERT SELECT to ensure that the proper type conversion takes
-    // place.
-    // For a SELECT, it is empty. In this case, we want to set the targetColumns to match the
-    // projection
-    // from the dataPlan to ensure that the metadata for when an index is used matches the metadata
-    // for
-    // when the data table is used.
+    // place. For a SELECT, it is empty. In this case, we want to set the targetColumns to match
+    // the projection from the dataPlan to ensure that the metadata for when an index is used
+    // matches the metadata for when the data table is used.
     if (targetColumns.isEmpty()) {
       List<? extends ColumnProjector> projectors = dataPlan.getProjector().getColumnProjectors();
       List<PDatum> targetDatums = Lists.newArrayListWithExpectedSize(projectors.size());
@@ -297,7 +326,7 @@ public class QueryOptimizer {
     if (!forCDC) {
       plans.add(dataPlan);
       hintedPlan = getHintedQueryPlan(statement, translatedIndexSelect, indexes, targetColumns,
-        parallelIteratorFactory, plans);
+        parallelIteratorFactory, plans, state);
       if (hintedPlan != null) {
         PTable index = hintedPlan.getTableRef().getTable();
         // Ignore any index hint with a CDC index as it is a truncated index, it only
@@ -307,10 +336,16 @@ public class QueryOptimizer {
             stopAtBestPlan && hintedPlan.isApplicable()
               && (index.getIndexWhere() == null || isPartialIndexUsable(select, dataPlan, index))
           ) {
-            return Collections.singletonList(hintedPlan);
+            List<QueryPlan> hinted = Collections
+              .singletonList(recordDecision(hintedPlan, OptimizerReasons.RULE_HINT, state));
+            carryForwardRewrites(dataPlan.getContext(), hinted);
+            return hinted;
           }
           plans.add(0, hintedPlan);
         }
+      } else if (indexHint != null) {
+        // An INDEX(...) hint was supplied but no hinted index could be built into a usable plan.
+        dataPlan.getContext().recordIgnoredHint(Hint.INDEX, "no matching index applicable");
       }
     }
 
@@ -321,17 +356,26 @@ public class QueryOptimizer {
         // the data table mutations outside the max lookback window
         continue;
       }
-      QueryPlan plan = addPlan(statement, translatedIndexSelect, index, targetColumns,
+      AddPlanResult result = addPlan(statement, translatedIndexSelect, index, targetColumns,
         parallelIteratorFactory, dataPlan, false, indexResolver);
+      QueryPlan plan = result.plan;
       if (
         plan != null
           && (index.getIndexWhere() == null || isPartialIndexUsable(select, dataPlan, index))
       ) {
         // Query can't possibly return anything so just return this plan.
         if (plan.isDegenerate()) {
-          return Collections.singletonList(plan);
+          List<QueryPlan> degenerate = Collections.singletonList(plan);
+          carryForwardRewrites(dataPlan.getContext(), degenerate);
+          return degenerate;
         }
         plans.add(plan);
+      } else if (plan == null) {
+        // Index candidate could not be built into a usable plan; record why it was rejected.
+        state.reject(result.rejection);
+      } else {
+        // Plan built, but the partial-index predicate is not satisfied by this query's WHERE.
+        state.reject(index, OptimizerReasons.REASON_PARTIAL_INDEX_PREDICATE_NOT_SATISFIED);
       }
     }
 
@@ -349,14 +393,46 @@ public class QueryOptimizer {
     }
 
     // OrderPlans
-    return hintedPlan == null
-      ? orderPlansBestToWorst(select, applicablePlans, stopAtBestPlan)
+    List<QueryPlan> orderedPlans = hintedPlan == null
+      ? orderPlansBestToWorst(select, applicablePlans, stopAtBestPlan, state, forCDC)
       : applicablePlans;
+    carryForwardRewrites(dataPlan.getContext(), orderedPlans);
+    return orderedPlans;
+  }
+
+  /**
+   * Carry the rewrite breadcrumbs recorded on the data plan's context onto the candidate plans'
+   * contexts. The partial index applicability decisions are recorded once per index on the shared
+   * root context while scoring plans, so that all of them stay visible even though only one wins.
+   */
+  private static void carryForwardRewrites(StatementContext from, List<QueryPlan> plans) {
+    List<String> rewrites = from.getAppliedRewrites();
+    Map<Hint, String> ignoredHints = from.getIgnoredHints();
+    if (rewrites.isEmpty() && (ignoredHints == null || ignoredHints.isEmpty())) {
+      return;
+    }
+    for (QueryPlan plan : plans) {
+      StatementContext to = plan.getContext();
+      if (to == from) {
+        continue;
+      }
+      for (String rewrite : rewrites) {
+        if (!to.getAppliedRewrites().contains(rewrite)) {
+          to.addAppliedRewrite(rewrite);
+        }
+      }
+      if (ignoredHints != null) {
+        for (Map.Entry<Hint, String> entry : ignoredHints.entrySet()) {
+          to.recordIgnoredHint(entry.getKey(), entry.getValue());
+        }
+      }
+    }
   }
 
   private QueryPlan getHintedQueryPlan(PhoenixStatement statement, SelectStatement select,
     List<PTable> indexes, List<? extends PDatum> targetColumns,
-    ParallelIteratorFactory parallelIteratorFactory, List<QueryPlan> plans) throws SQLException {
+    ParallelIteratorFactory parallelIteratorFactory, List<QueryPlan> plans, DecisionState state)
+    throws SQLException {
     QueryPlan dataPlan = plans.get(0);
     String indexHint = select.getHint().getHint(Hint.INDEX);
     if (indexHint == null) {
@@ -395,11 +471,12 @@ public class QueryOptimizer {
           // Hinted index is applicable, so return it's index
           PTable index = indexes.get(indexPos);
           indexes.remove(indexPos);
-          QueryPlan plan = addPlan(statement, select, index, targetColumns, parallelIteratorFactory,
-            dataPlan, true, null);
-          if (plan != null) {
-            return plan;
+          AddPlanResult result = addPlan(statement, select, index, targetColumns,
+            parallelIteratorFactory, dataPlan, true, null);
+          if (result.plan != null) {
+            return result.plan;
           }
+          state.reject(result.rejection);
         }
         startIndex = endIndex + 1;
       }
@@ -416,7 +493,7 @@ public class QueryOptimizer {
     return -1;
   }
 
-  private QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index,
+  private AddPlanResult addPlan(PhoenixStatement statement, SelectStatement select, PTable index,
     List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory,
     QueryPlan dataPlan, boolean isHinted, ColumnResolver indexResolver) throws SQLException {
     String tableAlias = dataPlan.getTableRef().getTableAlias();
@@ -436,7 +513,8 @@ public class QueryOptimizer {
       isHinted, indexSelect, resolver);
   }
 
-  private QueryPlan addPlan(PhoenixStatement statement, SelectStatement select, PTable index,
+  @SuppressWarnings("rawtypes")
+  private AddPlanResult addPlan(PhoenixStatement statement, SelectStatement select, PTable index,
     List<? extends PDatum> targetColumns, ParallelIteratorFactory parallelIteratorFactory,
     QueryPlan dataPlan, boolean isHinted, SelectStatement indexSelect, ColumnResolver resolver)
     throws SQLException {
@@ -472,12 +550,24 @@ public class QueryOptimizer {
         }
         // translate nodes that match expressions that are indexed to the
         // associated column parse node
+        IndexExpressionParseNodeRewriter indexExpressionRewriter =
+          new IndexExpressionParseNodeRewriter(index, null, statement.getConnection(),
+            indexSelect.getUdfParseNodes());
         SelectStatement rewrittenIndexSelect =
-          ParseNodeRewriter.rewrite(indexSelect, new IndexExpressionParseNodeRewriter(index, null,
-            statement.getConnection(), indexSelect.getUdfParseNodes()));
+          ParseNodeRewriter.rewrite(indexSelect, indexExpressionRewriter);
+        // Record which functional index expressions actually matched this query, so the
+        // optimizer can label the chosen index's rule and distinguish functional index rejections
+        // that matched nothing.
+        if (indexExpressionRewriter.hasFunctionalColumns()) {
+          dataPlan.getContext().recordFunctionalIndex(index.getTableName().getString());
+        }
+        dataPlan.getContext().recordAppliedIndexExpressionMatches(index.getTableName().getString(),
+          indexExpressionRewriter.getAppliedFunctionalSubstitutions().values());
+        dataPlan.getContext().recordAppliedIndexExpressionPairs(index.getTableName().getString(),
+          indexExpressionRewriter.getAppliedFunctionalSubstitutions());
         QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver,
           targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(),
-          isProjected, true, dataPlans);
+          isProjected, true, dataPlans).withRewriteContext(dataPlan.getContext());
 
         QueryPlan plan = compiler.compile();
         if (indexTable.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
@@ -520,10 +610,8 @@ public class QueryOptimizer {
             maintainer.getIndexedColumnInfo();
           for (org.apache.hadoop.hbase.util.Pair<String, String> pair : indexedColumns) {
             // The first member of the pair is the column family. For the data table PK columns, the
-            // column
-            // family is set to null. The data PK columns should not be added to the set of data
-            // columns
-            // to join back to index rows
+            // column family is set to null. The data PK columns should not be added to the set of
+            // data columns to join back to index rows
             if (pair.getFirst() != null) {
               PColumn pColumn = dataTable.getColumnForColumnName(pair.getSecond());
               // The following adds the column to the set
@@ -539,15 +627,14 @@ public class QueryOptimizer {
         indexTable = indexTableRef.getTable();
         indexState = indexTable.getIndexState();
         // Checking number of columns handles the wildcard cases correctly, as in that case the
-        // index
-        // must contain all columns from the data table to be able to be used.
+        // index must contain all columns from the data table to be able to be used.
         if (
           indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE
             || (indexState == PIndexState.PENDING_DISABLE && isUnderPendingDisableThreshold(
               indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))
         ) {
           if (plan.getProjector().getColumnCount() == nColumns) {
-            return plan;
+            return AddPlanResult.success(plan);
           } else {
             String schemaNameStr =
               index.getSchemaName() == null ? null : index.getSchemaName().getString();
@@ -614,20 +701,22 @@ public class QueryOptimizer {
                 new Hint[] { Hint.INDEX, Hint.NO_CHILD_PARENT_JOIN_OPTIMIZATION }),
               FACTORY.hint("NO_INDEX"));
             SelectStatement query = FACTORY.select(dataSelect, hint, outerWhere);
-            RewriteResult rewriteResult = ParseNodeUtil.rewrite(query, statement.getConnection());
+            RewriteResult rewriteResult = ParseNodeUtil.rewrite(query, dataPlan.getContext());
             QueryPlan plan =
               new QueryCompiler(statement, rewriteResult.getRewrittenSelectStatement(),
                 rewriteResult.getColumnResolver(), targetColumns, parallelIteratorFactory,
-                dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans).compile();
-            return plan;
+                dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans)
+                  .withRewriteContext(dataPlan.getContext()).compile();
+            return AddPlanResult.success(plan);
           }
         }
       } catch (RowValueConstructorOffsetNotCoercibleException e) {
         // Could not coerce the user provided RVC Offset so we do not have a plan to add.
-        return null;
+        return AddPlanResult.rejected(index, OptimizerReasons.REASON_DEGENERATE_RANGE);
       }
     }
-    return null;
+    return AddPlanResult.rejected(index, adjustReasonForFunctionalIndex(index,
+      OptimizerReasons.REASON_DOES_NOT_COVER_PROJECTION, dataPlan.getContext()));
   }
 
   // returns true if we can still use the index
@@ -650,9 +739,11 @@ public class QueryOptimizer {
    * @return list of plans ordered from best to worst.
    */
   private List<QueryPlan> orderPlansBestToWorst(SelectStatement select, List<QueryPlan> plans,
-    boolean stopAtBestPlan) {
+    boolean stopAtBestPlan, DecisionState state, boolean forCDC) {
     final QueryPlan dataPlan = plans.get(0);
     if (plans.size() == 1) {
+      recordDecision(plans.get(0),
+        forCDC ? OptimizerReasons.RULE_CDC_INDEX : OptimizerReasons.RULE_ONLY_CANDIDATE, state);
       return plans;
     }
 
@@ -666,6 +757,14 @@ public class QueryOptimizer {
       // Return ordered list based on cost if stats are available; otherwise fall
       // back to static ordering.
       if (!plans.get(0).getCost().isUnknown()) {
+        QueryPlan costWinner = plans.get(0);
+        for (int i = 1; i < plans.size(); i++) {
+          PTable losingTable = plans.get(i).getTableRef().getTable();
+          if (losingTable.getType() == PTableType.INDEX) {
+            state.reject(losingTable, OptimizerReasons.REASON_COST_BASED_LOSS);
+          }
+        }
+        recordDecision(costWinner, OptimizerReasons.RULE_COST_BASED, state);
         return stopAtBestPlan ? plans.subList(0, 1) : plans;
       }
     }
@@ -789,7 +888,222 @@ public class QueryOptimizer {
 
     });
 
+    // Capture the optimizer's rationale for the chosen plan without altering the ordering above.
+    QueryPlan winner = bestCandidates.get(0);
+    QueryPlan runnerUp =
+      bestCandidates.size() > 1 ? bestCandidates.get(1) : firstOther(plans, winner);
+    tagComparatorRejections(winner, plans, boundRanges, state);
+    recordDecision(winner, labelComparatorRule(winner, runnerUp, boundRanges), state);
+
     return stopAtBestPlan ? bestCandidates.subList(0, 1) : bestCandidates;
+  }
+
+  /**
+   * Outcome of attempting to build an index candidate plan in {@link #addPlan}. Carries either the
+   * successfully built {@code plan} or a {@code rejection} explaining why the candidate index was
+   * not usable.
+   */
+  private static final class AddPlanResult {
+    final QueryPlan plan;
+    final RejectedIndexEntry rejection;
+
+    private AddPlanResult(QueryPlan plan, RejectedIndexEntry rejection) {
+      this.plan = plan;
+      this.rejection = rejection;
+    }
+
+    static AddPlanResult success(QueryPlan plan) {
+      return new AddPlanResult(plan, null);
+    }
+
+    static AddPlanResult rejected(PTable index, String reason) {
+      return new AddPlanResult(null,
+        new RejectedIndexEntry(index.getTableName().getString(), reason));
+    }
+  }
+
+  /**
+   * Accumulates the rejected index entries gathered while selecting an index for a single flat
+   * query. Rejections are deduplicated by index name.
+   */
+  private static final class DecisionState {
+    private final List<RejectedIndexEntry> rejections = new ArrayList<>();
+
+    void reject(String name, String reason) {
+      for (RejectedIndexEntry existing : rejections) {
+        if (existing.getName().equals(name)) {
+          return;
+        }
+      }
+      rejections.add(new RejectedIndexEntry(name, reason));
+    }
+
+    void reject(PTable index, String reason) {
+      reject(index.getTableName().getString(), reason);
+    }
+
+    void reject(RejectedIndexEntry entry) {
+      if (entry != null) {
+        reject(entry.getName(), entry.getReason());
+      }
+    }
+
+    void rejectAll(List<PTable> indexes, String reason) {
+      for (PTable index : indexes) {
+        reject(index, reason);
+      }
+    }
+
+    List<RejectedIndexEntry> getRejections() {
+      return rejections;
+    }
+  }
+
+  /**
+   * Records the optimizer's index selection rationale on the chosen plan and returns it so callers
+   * can use this inline at a {@code return} site.
+   */
+  private static QueryPlan recordDecision(QueryPlan winner, String rule, DecisionState state) {
+    // The rule names the selection reason (e.g. hint, more bound PK columns). When the winner is a
+    // functional index that matched a query expression, the "matches <expr>" disclosure is
+    // recorded separately so both the selection reason and the functional match are surfaced.
+    String functionalMatch = functionalIndexRule(winner);
+    winner.setOptimizerDecision(
+      new OptimizerDecision(winner.getTableRef().getTable().getTableName().getString(), rule,
+        functionalMatch, state == null ? null : state.getRejections()));
+    recordFunctionalIndexExpressionBreadcrumbs(winner);
+    return winner;
+  }
+
+  /**
+   * Emit one {@code INDEX EXPRESSION <expr> AS <col>} rewrite breadcrumb on the chosen plan's
+   * context for every functional-index substitution that actually matched a query expression. The
+   * pairs were captured at index-candidate-build time (see {@code addPlan} and
+   * {@code rewriteQueryWithIndexReplacement}) and are looked up here only for the winner, so
+   * unmatched expressions and unchosen indexes never produce breadcrumbs.
+   */
+  private static void recordFunctionalIndexExpressionBreadcrumbs(QueryPlan winner) {
+    String tableName = winner.getTableRef().getTable().getTableName().getString();
+    Map<String, String> pairs = winner.getContext().getAppliedIndexExpressionPairs(tableName);
+    if (pairs.isEmpty()) {
+      return;
+    }
+    for (Map.Entry<String, String> entry : pairs.entrySet()) {
+      // Skip if any caller already recorded an equivalent breadcrumb for this winner.
+      String breadcrumb = "INDEX EXPRESSION " + entry.getValue() + " AS " + entry.getKey();
+      if (!winner.getContext().getAppliedRewrites().contains(breadcrumb)) {
+        winner.getContext().addAppliedRewrite(breadcrumb);
+      }
+    }
+  }
+
+  /**
+   * Returns {@link OptimizerReasons#matches(String)} for {@code winner} when it is a functional
+   * index whose indexed expression actually substituted a path expression in the user's query, or
+   * {@code null} when the functional index rule override does not apply. The applied matches are
+   * only ever recorded for genuine expression substitutions, so a non-empty match list implies the
+   * chosen plan is a functional index that matched.
+   */
+  private static String functionalIndexRule(QueryPlan winner) {
+    PTable table = winner.getTableRef().getTable();
+    List<String> matches =
+      winner.getContext().getAppliedIndexExpressionMatches(table.getTableName().getString());
+    if (matches.isEmpty()) {
+      return null;
+    }
+    return OptimizerReasons.matches(matches.get(0));
+  }
+
+  /**
+   * Swaps a generic coverage driven rejection reason for
+   * {@link OptimizerReasons#REASON_PATH_EXPRESSION_DOES_NOT_MATCH} when {@code index} is a
+   * functional index for which no query expression matched its indexed expression. Other reasons,
+   * and functional indexes that did match an expression, keep their original reason.
+   */
+  private static String adjustReasonForFunctionalIndex(PTable index, String reason,
+    StatementContext rewriteContext) {
+    if (!rewriteContext.isFunctionalIndex(index.getTableName().getString())) {
+      return reason;
+    }
+    if (
+      !OptimizerReasons.REASON_DOES_NOT_COVER_PROJECTION.equals(reason)
+        && !OptimizerReasons.REASON_NO_PK_PREFIX_BOUND.equals(reason)
+        && !OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE.equals(reason)
+    ) {
+      return reason;
+    }
+    if (
+      !rewriteContext.getAppliedIndexExpressionMatches(index.getTableName().getString()).isEmpty()
+    ) {
+      return reason;
+    }
+    return OptimizerReasons.REASON_PATH_EXPRESSION_DOES_NOT_MATCH;
+  }
+
+  /** First plan in {@code plans} that is not {@code exclude}, or {@code null} if there is none. */
+  private static QueryPlan firstOther(List<QueryPlan> plans, QueryPlan exclude) {
+    for (QueryPlan plan : plans) {
+      if (plan != exclude) {
+        return plan;
+      }
+    }
+    return null;
+  }
+
+  /** The bound-PK-column count for {@code plan}. */
+  private static int adjustedBoundCount(QueryPlan plan, int boundRanges) {
+    PTable table = plan.getTableRef().getTable();
+    int boundCount = plan.getContext().getScanRanges().getBoundPkColumnCount();
+    boundCount += table.getViewIndexId() == null ? 0 : (boundRanges - 1);
+    boundCount -= plan.getContext().getScanRanges().isSalted() ? 1 : 0;
+    return boundCount;
+  }
+
+  /**
+   * Returns the {@code RULE_*} label for the chosen plan by replaying the comparator ladder in
+   * {@link #orderPlansBestToWorst} against the runner up and returning the first decisive branch.
+   */
+  private static String labelComparatorRule(QueryPlan winner, QueryPlan runnerUp, int boundRanges) {
+    if (runnerUp == null) {
+      return OptimizerReasons.RULE_ONLY_CANDIDATE;
+    }
+    PTable winnerTable = winner.getTableRef().getTable();
+    PTable runnerUpTable = runnerUp.getTableRef().getTable();
+    if (adjustedBoundCount(winner, boundRanges) != adjustedBoundCount(runnerUp, boundRanges)) {
+      return OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS;
+    }
+    if (winner.getGroupBy() != null && runnerUp.getGroupBy() != null) {
+      if (winner.getGroupBy().isOrderPreserving() != runnerUp.getGroupBy().isOrderPreserving()) {
+        return OptimizerReasons.RULE_ORDER_PRESERVING;
+      }
+    }
+    if (winnerTable.getIndexWhere() != null && runnerUpTable.getIndexWhere() == null) {
+      return OptimizerReasons.RULE_PARTIAL_INDEX_APPLICABLE;
+    }
+    return OptimizerReasons.RULE_NON_LOCAL_PREFERRED;
+  }
+
+  /** Tags every index candidate that lost to {@code winner} with a rejection reason. */
+  private static void tagComparatorRejections(QueryPlan winner, List<QueryPlan> plans,
+    int boundRanges, DecisionState state) {
+    int winnerBound = adjustedBoundCount(winner, boundRanges);
+    boolean winnerNonLocal = winner.getTableRef().getTable().getIndexType() != IndexType.LOCAL;
+    for (QueryPlan plan : plans) {
+      if (plan == winner) {
+        continue;
+      }
+      PTable table = plan.getTableRef().getTable();
+      if (table.getType() != PTableType.INDEX) {
+        continue;
+      }
+      if (adjustedBoundCount(plan, boundRanges) < winnerBound) {
+        state.reject(table, adjustReasonForFunctionalIndex(table,
+          OptimizerReasons.REASON_NO_PK_PREFIX_BOUND, winner.getContext()));
+      } else if (table.getIndexType() == IndexType.LOCAL && winnerNonLocal) {
+        state.reject(table, adjustReasonForFunctionalIndex(table,
+          OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE, winner.getContext()));
+      }
+    }
   }
 
   private static class WhereConditionRewriter extends AndRewriterBooleanParseNodeVisitor {
@@ -830,7 +1144,8 @@ public class QueryOptimizer {
 
   private static SelectStatement rewriteQueryWithIndexReplacement(
     final PhoenixConnection connection, final ColumnResolver resolver, final SelectStatement select,
-    final Map<TableRef, TableRef> replacement) throws SQLException {
+    final Map<TableRef, TableRef> replacement, final StatementContext breadcrumbContext)
+    throws SQLException {
     TableNode from = select.getFrom();
     TableNode newFrom = from.accept(new QueryOptimizerTableNode(resolver, replacement));
     if (from == newFrom) {
@@ -841,9 +1156,23 @@ public class QueryOptimizer {
       IndexStatementRewriter.translate(FACTORY.select(select, newFrom), resolver, replacement);
     for (TableRef indexTableRef : replacement.values()) {
       // replace expressions with corresponding matching columns for functional indexes
-      indexSelect = ParseNodeRewriter.rewrite(indexSelect,
+      IndexExpressionParseNodeRewriter indexExpressionRewriter =
         new IndexExpressionParseNodeRewriter(indexTableRef.getTable(),
-          indexTableRef.getTableAlias(), connection, indexSelect.getUdfParseNodes()));
+          indexTableRef.getTableAlias(), connection, indexSelect.getUdfParseNodes(),
+          breadcrumbContext);
+      indexSelect = ParseNodeRewriter.rewrite(indexSelect, indexExpressionRewriter);
+      // Surface which functional index expressions actually matched so the optimizer can label
+      // the chosen index's rule and distinguish functional index rejections that matched nothing.
+      if (indexExpressionRewriter.hasFunctionalColumns()) {
+        breadcrumbContext
+          .recordFunctionalIndex(indexTableRef.getTable().getTableName().getString());
+      }
+      breadcrumbContext.recordAppliedIndexExpressionMatches(
+        indexTableRef.getTable().getTableName().getString(),
+        indexExpressionRewriter.getAppliedFunctionalSubstitutions().values());
+      breadcrumbContext.recordAppliedIndexExpressionPairs(
+        indexTableRef.getTable().getTableName().getString(),
+        indexExpressionRewriter.getAppliedFunctionalSubstitutions());
     }
 
     return indexSelect;

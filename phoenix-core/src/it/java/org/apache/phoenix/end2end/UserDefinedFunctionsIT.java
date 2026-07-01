@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_SCHEMA;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_FUNCTION_TABLE;
 import static org.apache.phoenix.query.QueryServices.DYNAMIC_JARS_DIR_KEY;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_TERMINATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
@@ -55,10 +56,7 @@ import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.expression.function.UDFExpression;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.jdbc.PhoenixTestDriver;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.FunctionAlreadyExistsException;
@@ -842,13 +840,8 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     stmt.execute("create index idx on t5(myreverse5(lastname_reverse))");
     String query = "select myreverse5(lastname_reverse) from t5";
 
-    ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-      .optimizeQuery().getExplainPlan();
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals("IDX", explainPlanAttributes.getTableName());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
+    assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table("IDX")
+      .serverFirstKeyOnlyProjection(true);
 
     ResultSet rs = stmt.executeQuery(query);
     assertTrue(rs.next());
@@ -858,15 +851,9 @@ public class UserDefinedFunctionsIT extends BaseOwnClusterIT {
     query =
       "select k,k1,myreverse5(lastname_reverse) from t5 where myreverse5(lastname_reverse)='kcoj'";
 
-    plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-      .getExplainPlan();
-    explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
-    assertEquals("IDX2(T5)", explainPlanAttributes.getTableName());
-    assertEquals(" [1,'kcoj']", explainPlanAttributes.getKeyRanges());
-    assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-    assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
+    assertPlan(conn, query).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN").table("IDX2(T5)")
+      .keyRanges("[1,'kcoj']").serverFirstKeyOnlyProjection(true)
+      .clientSortAlgo("CLIENT MERGE SORT");
 
     rs = stmt.executeQuery(query);
     assertTrue(rs.next());
