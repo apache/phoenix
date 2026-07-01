@@ -36,7 +36,9 @@ import org.apache.phoenix.transaction.TransactionFactory.Provider;
 public class OmidTransactionProvider implements PhoenixTransactionProvider {
   private static final OmidTransactionProvider INSTANCE = new OmidTransactionProvider();
 
-  private HBaseTransactionManager transactionManager = null;
+  // volatile so that test-framework injection (injectTestService) is published to other
+  // threads without requiring all readers to synchronize on the singleton.
+  private volatile HBaseTransactionManager transactionManager = null;
   private volatile CommitTable.Client commitTableClient = null;
 
   public static final OmidTransactionProvider getInstance() {
@@ -78,18 +80,22 @@ public class OmidTransactionProvider implements PhoenixTransactionProvider {
       }
     }
 
-    return new OmidTransactionClient(transactionManager);
+    return new OmidTransactionClient(this);
   }
 
+  /**
+   * A thin view onto the {@link OmidTransactionProvider} singleton's current
+   * {@link HBaseTransactionManager}.
+   */
   static class OmidTransactionClient implements PhoenixTransactionClient {
-    private final HBaseTransactionManager transactionManager;
+    private final OmidTransactionProvider provider;
 
-    public OmidTransactionClient(HBaseTransactionManager transactionManager) {
-      this.transactionManager = transactionManager;
+    public OmidTransactionClient(OmidTransactionProvider provider) {
+      this.provider = provider;
     }
 
     public HBaseTransactionManager getTransactionClient() {
-      return transactionManager;
+      return provider.transactionManager;
     }
 
     @Override
