@@ -78,6 +78,7 @@ import org.apache.hadoop.mapreduce.lib.partition.TotalOrderPartitioner;
 import org.apache.phoenix.mapreduce.bulkload.TableRowkeyPair;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRef;
 import org.apache.phoenix.mapreduce.bulkload.TargetTableRefFunctions;
+import org.apache.phoenix.mapreduce.util.PhoenixMapReduceUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -685,6 +686,7 @@ public class MultiHfileOutputFormat extends FileOutputFormat<TableRowkeyPair, Ce
 
     configurePartitioner(job, tablesStartKeys);
     TableMapReduceUtil.addDependencyJars(job);
+    PhoenixMapReduceUtil.addPhoenixDependencyJars(job.getConfiguration());
     TableMapReduceUtil.initCredentials(job);
 
   }
