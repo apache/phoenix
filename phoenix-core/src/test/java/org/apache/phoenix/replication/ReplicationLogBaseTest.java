@@ -19,6 +19,7 @@ package org.apache.phoenix.replication;
 
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 
@@ -110,6 +111,11 @@ public class ReplicationLogBaseTest {
     // initialize the group store record
     storeRecord = initHAGroupStoreRecord();
     doReturn(Optional.of(storeRecord)).when(haGroupStoreManager).getHAGroupStoreRecord(anyString());
+    // ReplicationLogGroup.init reads the effective record; with no peer watcher in these mocks it
+    // equals the raw record. Answer dynamically so tests that reassign storeRecord get a matching
+    // effective record without having to re-stub this method too.
+    doAnswer(invocation -> Optional.of(storeRecord)).when(haGroupStoreManager)
+      .getEffectiveHAGroupStoreRecord(anyString());
 
     logGroup = createAndInitLogGroup();
   }

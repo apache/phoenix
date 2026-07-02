@@ -288,6 +288,22 @@ public class HAGroupStoreManager {
   }
 
   /**
+   * Returns the effective HAGroupStoreRecord the replayer should act on. This matches
+   * {@link #getHAGroupStoreRecord(String)} except that, while this RegionServer's replay is failed
+   * closed because the peer cluster is not visible, a STANDBY record is reported as
+   * DEGRADED_STANDBY. Peer connectivity itself is never exposed.
+   * @param haGroupName name of the HA group
+   * @return Optional effective HAGroupStoreRecord, empty if the HA group is not found.
+   * @throws IOException when HAGroupStoreClient is not healthy.
+   */
+  public Optional<HAGroupStoreRecord> getEffectiveHAGroupStoreRecord(final String haGroupName)
+    throws IOException {
+    HAGroupStoreClient haGroupStoreClient =
+      getHAGroupStoreClientAndSetupFailoverManagement(haGroupName);
+    return Optional.ofNullable(haGroupStoreClient.getEffectiveHAGroupStoreRecord());
+  }
+
+  /**
    * Returns the HAGroupStoreRecord for a specific HA group from peer cluster.
    * @param haGroupName name of the HA group
    * @return Optional HAGroupStoreRecord for the HA group from peer cluster can be empty if the HA
@@ -448,6 +464,7 @@ public class HAGroupStoreManager {
     if (currentRecord == null) {
       throw new IOException("Current HAGroupStoreRecord is null for HA group: " + haGroupName);
     }
+    LOGGER.info("Persisting DEGRADED_STANDBY (reason=reader-degrade) for HA group {}", haGroupName);
     return haGroupStoreClient
       .setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
   }
@@ -506,6 +523,15 @@ public class HAGroupStoreManager {
 
   /**
    * Subscribe to be notified when any transition to a target state occurs.
+   * <p>
+   * Listener callbacks run on internal cache-event/transition threads and may be invoked while
+   * internal locks are held. A listener must not block and must not re-enter the HAGroupStore
+   * client or the peer watcher (e.g. {@code getEffectiveHAGroupStoreRecord}, {@code reconfigure},
+   * {@code subscribeToTargetState}); doing so risks deadlock or lock-order inversion.
+   * <p>
+   * A PEER transition may be redelivered once after a peer reconnect (the watcher forces one
+   * redelivery so no transition is missed across the disconnect window), so listeners must tolerate
+   * duplicate notifications; side-effecting or counting listeners should be idempotent.
    * @param haGroupName the name of the HA group to monitor
    * @param toState     the target state to watch for
    * @param clusterType whether to monitor local or peer cluster
