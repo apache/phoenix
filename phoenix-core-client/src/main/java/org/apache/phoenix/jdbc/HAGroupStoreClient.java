@@ -959,6 +959,18 @@ public class HAGroupStoreClient implements Closeable {
   }
 
   /**
+   * Effective LOCAL state: a STANDBY reads as DEGRADED_STANDBY while the in-memory peer-blind
+   * overlay is active; every other state is unchanged. Single source of truth for the overlay,
+   * shared by the read path ({@link #getEffectiveHAGroupStoreRecord()}) and the LOCAL transition
+   * notifications, so the "effective" mapping is defined in exactly one place.
+   */
+  private static HAGroupState effectiveLocalState(HAGroupState rawState, boolean degradedActive) {
+    return (degradedActive && rawState == HAGroupState.STANDBY)
+      ? HAGroupState.DEGRADED_STANDBY
+      : rawState;
+  }
+
+  /**
    * The effective local HA record, or {@code null} when no local record exists. Identical to
    * {@link #getHAGroupStoreRecord()} except that, while this RegionServer cannot see the peer, a
    * local STANDBY is reported as DEGRADED_STANDBY. The DEGRADED_STANDBY overlay is in-memory only
@@ -970,15 +982,16 @@ public class HAGroupStoreClient implements Closeable {
    *                     {@link #getHAGroupStoreRecord()})
    */
   public HAGroupStoreRecord getEffectiveHAGroupStoreRecord() throws IOException {
+    // Fetch (which may rebuild: SYSTEM.HA_GROUP query + local/peer ZK) outside the lock, so a slow
+    // rebuild cannot stall the peer visibility callbacks (present/clear) that need the same lock.
+    HAGroupStoreRecord local = getHAGroupStoreRecord();
+    if (local == null) {
+      return null;
+    }
     synchronized (localDegradedStandbyLock) {
-      HAGroupStoreRecord local = getHAGroupStoreRecord();
-      if (
-        localDegradedStandbyActive && local != null
-          && local.getHAGroupState() == HAGroupState.STANDBY
-      ) {
-        return local.withHAGroupState(HAGroupState.DEGRADED_STANDBY);
-      }
-      return local;
+      HAGroupState effective =
+        effectiveLocalState(local.getHAGroupState(), localDegradedStandbyActive);
+      return effective == local.getHAGroupState() ? local : local.withHAGroupState(effective);
     }
   }
 
@@ -1009,7 +1022,9 @@ public class HAGroupStoreClient implements Closeable {
 
     @Override
     public void onPeerBlind() {
-      presentLocalDegradedStandbyIfStandby();
+      // Peer just went blind while local is STANDBY (present re-checks): subscribers last saw the
+      // raw STANDBY, so that is the prior effective state.
+      presentLocalDegradedStandbyIfStandby(HAGroupState.STANDBY);
     }
   }
 
@@ -1029,8 +1044,11 @@ public class HAGroupStoreClient implements Closeable {
    * If this cluster is STANDBY and the peer is blind, present an in-memory DEGRADED_STANDBY (the
    * shared HA record in ZK and the local PathChildrenCache are untouched) and return true;
    * otherwise return false. Idempotent. Serialized with clear via localTransitionLock.
+   * @param priorEffectiveState the effective LOCAL state subscribers last saw, used as the
+   *                            notification's from-state (e.g. STANDBY when the peer drops, or the
+   *                            pre-transition state when the role only now reached STANDBY)
    */
-  private boolean presentLocalDegradedStandbyIfStandby() {
+  private boolean presentLocalDegradedStandbyIfStandby(HAGroupState priorEffectiveState) {
     synchronized (localTransitionLock) {
       HAGroupStoreRecord local;
       synchronized (localDegradedStandbyLock) {
@@ -1045,7 +1063,9 @@ public class HAGroupStoreClient implements Closeable {
       }
       LOGGER.warn("Peer not visible for HA group {}; presenting local DEGRADED_STANDBY "
         + "(reason=peer-blind)", haGroupName);
-      notifySubscribers(HAGroupState.STANDBY, HAGroupState.DEGRADED_STANDBY,
+      // from = what subscribers last saw, not a bare STANDBY: reaching STANDBY from e.g.
+      // ABORT_TO_STANDBY while blind must read ABORT_TO_STANDBY -> DEGRADED_STANDBY.
+      notifySubscribers(priorEffectiveState, HAGroupState.DEGRADED_STANDBY,
         System.currentTimeMillis(), ClusterType.LOCAL, local.getLastSyncStateTimeInMs());
       return true;
     }
@@ -1070,7 +1090,7 @@ public class HAGroupStoreClient implements Closeable {
       }
       if (recover) {
         LOGGER.warn("Peer visible again for HA group {}; clearing local DEGRADED_STANDBY "
-          + "(reason=peer-blind)", haGroupName);
+          + "(reason=peer-visible)", haGroupName);
         notifySubscribers(HAGroupState.DEGRADED_STANDBY, HAGroupState.STANDBY,
           System.currentTimeMillis(), ClusterType.LOCAL, local.getLastSyncStateTimeInMs());
       }
@@ -1429,14 +1449,23 @@ public class HAGroupStoreClient implements Closeable {
         }
         // Reached STANDBY while blind: present (idempotent, re-checks blindness). If it degraded,
         // the bare STANDBY is suppressed; if the peer is visible, fall through and emit STANDBY.
-        if (presentLocalDegradedStandbyIfStandby()) {
+        // Pass the prior effective state (the overlay is inactive here, so it is oldState) so a
+        // degrade from a non-STANDBY predecessor reads correctly.
+        if (
+          presentLocalDegradedStandbyIfStandby(
+            effectiveLocalState(oldState, localDegradedStandbyActive))
+        ) {
           return;
         }
       }
       if (oldState == null || !oldState.equals(newState)) {
+        // from = the effective state subscribers last saw, derived from the prior raw state and the
+        // overlay flag (unchanged on this path) -- not the bare raw oldState. This is what makes a
+        // failover while degraded read DEGRADED_STANDBY -> STANDBY_TO_ACTIVE.
+        HAGroupState from = effectiveLocalState(oldState, localDegradedStandbyActive);
         LOGGER.info("Detected state transition for HA group {} from {} to {} on LOCAL cluster",
-          haGroupName, oldState, newState);
-        notifySubscribers(oldState, newState, newStat.getMtime(), ClusterType.LOCAL,
+          haGroupName, from, newState);
+        notifySubscribers(from, newState, newStat.getMtime(), ClusterType.LOCAL,
           newRecord.getLastSyncStateTimeInMs());
       }
     }

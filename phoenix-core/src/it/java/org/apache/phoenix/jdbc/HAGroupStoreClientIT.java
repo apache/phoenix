@@ -53,6 +53,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Predicate;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.tuple.Pair;
@@ -731,6 +732,214 @@ public class HAGroupStoreClientIT extends HABaseIT {
       recovers.get() >= 1);
     assertEquals(HAGroupStoreRecord.HAGroupState.STANDBY,
       haGroupStoreClient.getEffectiveHAGroupStoreRecord().getHAGroupState());
+  }
+
+  /**
+   * While the peer is blind (connection lost after a peer record was cached), the peer accessor
+   * must fail closed and return null rather than the stale cached record: the Curator
+   * PathChildrenCache keeps serving its last-known data across a CONNECTION_SUSPENDED/LOST, so
+   * returning it would leak a stale peer role into ClusterRoleRecord/routing and the
+   * SYSTEM.HA_GROUP / legacy CRR sync.
+   */
+  @Test
+  public void testPeerRecordIsNullWhileBlind() throws Exception {
+    String haGroupName = testName.getMethodName();
+    // Local record (this cluster ACTIVE) pointing at the peer.
+    createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName,
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+        0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.masterUrl,
+        this.peerMasterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L));
+    // Peer record (cluster 2) in STANDBY, so the peer cache holds a record that can go stale.
+    createOrUpdateHAGroupStoreRecordOnZookeeper(peerHaAdmin, haGroupName,
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.peerMasterUrl,
+        this.masterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L));
+
+    int peerZkPort = Integer.parseInt(
+      CLUSTERS.getHBaseCluster2().getConfiguration().get("hbase.zookeeper.property.clientPort"));
+
+    HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient
+      .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
+    assertNotNull(haGroupStoreClient);
+
+    Field peerWatcherField = HAGroupStoreClient.class.getDeclaredField("peerWatcher");
+    peerWatcherField.setAccessible(true);
+    PeerClusterWatcher peerWatcher = (PeerClusterWatcher) peerWatcherField.get(haGroupStoreClient);
+
+    // Peer visible: the peer record (STANDBY) is exposed to callers.
+    long deadline = System.currentTimeMillis() + 60000L;
+    while (
+      haGroupStoreClient.getHAGroupStoreRecordFromPeer() == null
+        && System.currentTimeMillis() < deadline
+    ) {
+      Thread.sleep(500L);
+    }
+    HAGroupStoreRecord peerWhileVisible = haGroupStoreClient.getHAGroupStoreRecordFromPeer();
+    assertNotNull("Peer record must be visible while peer ZK is reachable", peerWhileVisible);
+    assertEquals(HAGroupStoreRecord.HAGroupState.STANDBY, peerWhileVisible.getHAGroupState());
+
+    // Peer ZK goes away: the watcher goes blind but the PathChildrenCache keeps its last-known
+    // data.
+    CLUSTERS.getHBaseCluster2().shutdownMiniZKCluster();
+    deadline = System.currentTimeMillis() + 60000L;
+    while (!peerWatcher.isBlind() && System.currentTimeMillis() < deadline) {
+      Thread.sleep(500L);
+    }
+    assertTrue("Watcher should report blind after peer ZK is shut down", peerWatcher.isBlind());
+
+    // Fail closed: the peer accessor returns null while blind, not the stale cached record.
+    assertNull("Peer record must be null while blind (fail closed, no stale peer role leak)",
+      haGroupStoreClient.getHAGroupStoreRecordFromPeer());
+
+    // Recovery: once peer ZK returns and the watcher is visible again, the record is exposed.
+    CLUSTERS.getHBaseCluster2().startMiniZKCluster(1, peerZkPort);
+    deadline = System.currentTimeMillis() + 60000L;
+    while (
+      haGroupStoreClient.getHAGroupStoreRecordFromPeer() == null
+        && System.currentTimeMillis() < deadline
+    ) {
+      Thread.sleep(500L);
+    }
+    assertNotNull("Peer record must be exposed again after the peer becomes visible",
+      haGroupStoreClient.getHAGroupStoreRecordFromPeer());
+  }
+
+  /**
+   * A peer ZK outage that lasts well beyond the peer curator's retry budget still recovers. That
+   * budget (a bounded {@code ExponentialBackoffRetry}, derived below from the HA ZK retry config)
+   * bounds operation retries via the RetryLoop, not the ZK client's background reconnect or
+   * Curator's session-expiry reset; the shared curator is never torn down on a blind transition
+   * (only {@code setBlind()} runs). So when the peer ZK returns, {@code CONNECTION_RECONNECTED}
+   * fires and the watcher goes visible again. This confirms {@code retryIfBlind}'s
+   * {@code cache == null} gate needs no watchdog for an already-built cache (the
+   * {@code cache != null} blind state self-heals).
+   */
+  @Test
+  public void testProlongedPeerOutageBeyondRetryBudgetRecovers() throws Exception {
+    String haGroupName = testName.getMethodName();
+    createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName,
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+        0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.masterUrl,
+        this.peerMasterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L));
+    createOrUpdateHAGroupStoreRecordOnZookeeper(peerHaAdmin, haGroupName,
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.peerMasterUrl,
+        this.masterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L));
+
+    int peerZkPort = Integer.parseInt(
+      CLUSTERS.getHBaseCluster2().getConfiguration().get("hbase.zookeeper.property.clientPort"));
+
+    // Derive bounds from the HA ZK retry config the peer curator uses instead of hardcoding: the
+    // retry budget's upper bound is all maxRetries back-offs at the max sleep cap. Keep the peer
+    // down past that budget so a budget-limited client would have given up; use it as a generous
+    // ceiling for the blind-detection and recovery polls too.
+    long retryBudgetMs = (long) HighAvailabilityGroup.PHOENIX_HA_ZK_RETRY_MAX_DEFAULT
+      * HighAvailabilityGroup.PHOENIX_HA_ZK_RETRY_MAX_SLEEP_MS_DEFAULT;
+    long prolongedOutageMs = 2 * retryBudgetMs;
+    long awaitMs = prolongedOutageMs;
+
+    HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient
+      .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
+    assertNotNull(haGroupStoreClient);
+
+    Field peerWatcherField = HAGroupStoreClient.class.getDeclaredField("peerWatcher");
+    peerWatcherField.setAccessible(true);
+    PeerClusterWatcher peerWatcher = (PeerClusterWatcher) peerWatcherField.get(haGroupStoreClient);
+
+    long deadline = System.currentTimeMillis() + awaitMs;
+    while (
+      haGroupStoreClient.getHAGroupStoreRecordFromPeer() == null
+        && System.currentTimeMillis() < deadline
+    ) {
+      Thread.sleep(500L);
+    }
+    assertNotNull("Peer record must be visible before the outage",
+      haGroupStoreClient.getHAGroupStoreRecordFromPeer());
+
+    // Peer ZK down; keep it down well past the retry budget so a budget-limited client would have
+    // given up.
+    CLUSTERS.getHBaseCluster2().shutdownMiniZKCluster();
+    deadline = System.currentTimeMillis() + awaitMs;
+    while (!peerWatcher.isBlind() && System.currentTimeMillis() < deadline) {
+      Thread.sleep(500L);
+    }
+    assertTrue("Watcher should be blind during the outage", peerWatcher.isBlind());
+    Thread.sleep(prolongedOutageMs);
+    assertTrue("Watcher should remain blind while peer ZK stays down", peerWatcher.isBlind());
+
+    // Peer ZK returns: the shared curator reconnects and the watcher recovers on its own.
+    CLUSTERS.getHBaseCluster2().startMiniZKCluster(1, peerZkPort);
+    deadline = System.currentTimeMillis() + awaitMs;
+    while (peerWatcher.isBlind() && System.currentTimeMillis() < deadline) {
+      Thread.sleep(500L);
+    }
+    assertFalse("Watcher must recover (go visible) after a prolonged outage, with no watchdog",
+      peerWatcher.isBlind());
+    deadline = System.currentTimeMillis() + awaitMs;
+    while (
+      haGroupStoreClient.getHAGroupStoreRecordFromPeer() == null
+        && System.currentTimeMillis() < deadline
+    ) {
+      Thread.sleep(500L);
+    }
+    assertNotNull("Peer record must be exposed again after recovery",
+      haGroupStoreClient.getHAGroupStoreRecordFromPeer());
+  }
+
+  /**
+   * A LOCAL role transition while degraded reports the observed effective state as the
+   * notification's from-state. With the peer blind (local presenting DEGRADED_STANDBY), a local
+   * STANDBY -> STANDBY_TO_ACTIVE transition must surface as DEGRADED_STANDBY -> STANDBY_TO_ACTIVE
+   * (what subscribers last saw), not STANDBY -> STANDBY_TO_ACTIVE.
+   */
+  @Test
+  public void testTransitionWhileDegradedReportsDegradedStandbyAsFromState() throws Exception {
+    String haGroupName = testName.getMethodName();
+    createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName,
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.masterUrl,
+        this.peerMasterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L));
+
+    HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient
+      .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
+    assertNotNull(haGroupStoreClient);
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+    // Latch for the preceding degrade so we only advance the role once DEGRADED_STANDBY is in
+    // effect, and capture the from-state delivered with the LOCAL STANDBY_TO_ACTIVE transition.
+    CountDownLatch degraded = new CountDownLatch(1);
+    haGroupStoreClient.subscribeToTargetState(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY,
+      ClusterType.LOCAL,
+      (group, fromState, toState, modifiedTime, clusterType, lastSyncTime) -> degraded.countDown());
+    AtomicReference<HAGroupStoreRecord.HAGroupState> observedFromState = new AtomicReference<>();
+    CountDownLatch transitionDelivered = new CountDownLatch(1);
+    haGroupStoreClient.subscribeToTargetState(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE,
+      ClusterType.LOCAL, (group, fromState, toState, modifiedTime, clusterType, lastSyncTime) -> {
+        observedFromState.set(fromState);
+        transitionDelivered.countDown();
+      });
+
+    int peerZkPort = Integer.parseInt(
+      CLUSTERS.getHBaseCluster2().getConfiguration().get("hbase.zookeeper.property.clientPort"));
+
+    // Peer ZK goes away: the local STANDBY presents DEGRADED_STANDBY (local ZK stays up).
+    CLUSTERS.getHBaseCluster2().shutdownMiniZKCluster();
+    assertTrue("Local STANDBY should present DEGRADED_STANDBY once the peer is blind",
+      degraded.await(60, TimeUnit.SECONDS));
+
+    // Advance the local role while still blind: STANDBY -> STANDBY_TO_ACTIVE.
+    createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName,
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE,
+        0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.masterUrl,
+        this.peerMasterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L));
+
+    assertTrue("STANDBY_TO_ACTIVE transition should be delivered",
+      transitionDelivered.await(60, TimeUnit.SECONDS));
+    assertEquals("A transition while degraded must report DEGRADED_STANDBY as the from-state",
+      HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, observedFromState.get());
+
+    // Restore peer ZK so teardown can delete the peer record.
+    CLUSTERS.getHBaseCluster2().startMiniZKCluster(1, peerZkPort);
   }
 
   /**

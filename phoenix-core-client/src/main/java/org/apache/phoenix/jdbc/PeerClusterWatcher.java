@@ -52,10 +52,13 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.MoreExecu
 final class PeerClusterWatcher implements Closeable {
 
   /**
-   * Sink for what the watcher observes; implemented by {@link HAGroupStoreClient}. Callbacks run
-   * while the watcher holds {@code transitionLock} (outside {@code stateLock}), so implementations
-   * must not re-enter the watcher (e.g. {@code reconfigure} / {@code close}) and should offload
-   * blocking work.
+   * Sink for what the watcher observes; implemented by {@link HAGroupStoreClient}.
+   * {@code onPeerVisible} and {@code onPeerBlind} fire while the watcher holds
+   * {@code transitionLock} (outside {@code stateLock}); {@code onPeerStateChanged} fires from
+   * {@code deliver()} without {@code transitionLock} (only a brief {@code stateLock} for the
+   * version de-dup, and the callback runs outside it). Regardless, implementations must not
+   * re-enter the watcher (e.g. {@code reconfigure} / {@code close}) and should offload blocking
+   * work.
    */
   interface PeerStateListener {
     /**
@@ -169,6 +172,13 @@ final class PeerClusterWatcher implements Closeable {
 
   /** Current peer record, or null when the peer is not visible. */
   HAGroupStoreRecord getCurrentPeerRecord() {
+    // Fail closed while blind: the PathChildrenCache keeps serving its last-known data after a
+    // CONNECTION_SUSPENDED/LOST (the cache is not torn down), so returning it here would leak a
+    // stale peer role into callers (ClusterRoleRecord derivation, SYSTEM.HA_GROUP sync, legacy
+    // CRR).
+    if (isBlind()) {
+      return null;
+    }
     // Read the cache under the lock: close() nulls the field and closes the cache only after
     // acquiring this lock, so the O(1) in-memory read here always sees a live cache.
     synchronized (stateLock) {
