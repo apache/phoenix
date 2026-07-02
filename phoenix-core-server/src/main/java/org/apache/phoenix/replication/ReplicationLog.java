@@ -218,7 +218,6 @@ public class ReplicationLog {
 
   @VisibleForTesting
   protected LogFileWriter getWriter() {
-    checkAndReplaceWriter(false);
     return currentWriter;
   }
 

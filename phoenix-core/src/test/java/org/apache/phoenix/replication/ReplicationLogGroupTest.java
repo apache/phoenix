@@ -461,8 +461,13 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     LogFileWriter innerWriter = logGroup.getActiveLog().getWriter();
     assertNotNull("Inner writer should not be null", innerWriter);
 
-    // Append some data
+    // Append some data. The sync blocks until the consumer thread completes the sync future from
+    // inside onEvent, which proves it has run past BatchEventProcessor.run()'s opening clearAlert()
+    // and is parked in waitFor(). Without this, close() can fire before the consumer thread is
+    // scheduled; disruptor.shutdown()'s halt() then raises an alert that run()'s clearAlert()
+    // immediately wipes, so onShutdown (and thus the writer close) never runs.
     logGroup.append(tableName, commitId, put);
+    logGroup.sync();
 
     // Close the log writer
     logGroup.close();
@@ -2086,13 +2091,15 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // pendingWriter — no further append/sync needed.
     waitForRotationTick(roundDurationSeconds);
 
+    // The swap runs on the consumer thread via the synthetic swap event. Await the initial
+    // writer's async close first: checkAndReplaceWriter assigns currentWriter before submitClose,
+    // so observing close() establishes happens-before on the swapped-in writer.
+    verify(initialWriter, timeout(5000).times(1)).close();
+
     // The active writer should now be the one staged by the rotation tick.
     LogFileWriter writerAfterIdleRotation = activeLog.getWriter();
     assertTrue("Writer should have swapped after idle rotation tick without further events",
       writerAfterIdleRotation != initialWriter);
-
-    // The initial writer should have been closed asynchronously by the swap.
-    verify(initialWriter, timeout(5000).times(1)).close();
   }
 
   /**
