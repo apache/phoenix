@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.jdbc;
 
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_CACHE_AGE_MS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_REFRESH_COUNT;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 
@@ -629,6 +632,7 @@ public class HighAvailabilityGroup {
 
     LOG.info("Initial cluster role for HA group {} is {}", info, roleRecordFromEndpoint);
     roleRecord = roleRecordFromEndpoint;
+    lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
     state = State.READY;
   }
 
@@ -644,6 +648,11 @@ public class HighAvailabilityGroup {
         .setMessage("HA group is not ready!").setHaGroupInfo(info.toString()).build()
         .buildException();
     }
+    // GAUGE: most-recent-sample of "milliseconds since the last successful CRR refresh".
+    // Use set(...) to overwrite the prior sample; do NOT increment/update — that would turn
+    // the gauge into an accumulator and break "current age" semantics.
+    GLOBAL_HA_CRR_CACHE_AGE_MS.getMetric()
+      .set(System.currentTimeMillis() - lastClusterRoleRecordRefreshTime);
     return roleRecord.getPolicy().provide(this, properties, haurlInfo);
   }
 
@@ -1065,7 +1074,14 @@ public class HighAvailabilityGroup {
       }
 
       ClusterRoleRecord newRoleRecord = getClusterRoleRecordFromEndpoint();
+      // Count only refreshes that actually fetched a CRR from the endpoint. Callers that
+      // short-circuit on shouldRefreshRoleRecord() above never touch the network and would
+      // otherwise inflate this counter against its name (a "refresh" with no fetch is a no-op
+      // from a CRR-state perspective).
+      GLOBAL_HA_CRR_REFRESH_COUNT.increment();
       if (roleRecord == null) {
+        // First-load init path: no prior cache state to compare against, so this is not a
+        // failover transition and HA_FAILOVER_COUNT is intentionally NOT incremented here.
         roleRecord = newRoleRecord;
         lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
         state = State.READY;
@@ -1106,8 +1122,10 @@ public class HighAvailabilityGroup {
       long maxTransitionTimeMs = StringUtils.isNotEmpty(transitionTimeoutProp)
         ? Long.parseLong(transitionTimeoutProp)
         : PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT;
+      boolean transitionSucceeded = false;
       try {
         future.get(maxTransitionTimeMs, TimeUnit.MILLISECONDS);
+        transitionSucceeded = true;
       } catch (InterruptedException ie) {
         LOG.error("Got interrupted when transiting cluster roles for HA group {}", info, ie);
         future.cancel(true);
@@ -1133,6 +1151,17 @@ public class HighAvailabilityGroup {
         // The goal here is to gain higher availability even though existing resources against
         // previous ACTIVE cluster may have not been closed cleanly.
       }
+      // Count the transition as a failover only when the policy-side transition actually
+      // succeeded AND an active cluster is established or moves between peers. Operator-driven
+      // transitions to a no-active state (both clusters STANDBY) are not counted as failovers;
+      // recovery from no-active back to having an ACTIVE peer is counted. Transitions where
+      // future.get() failed (ExecutionException/TimeoutException) are best-effort fall-through
+      // per the comment above, but they are NOT counted as successful failovers. Gate decision
+      // factored into the package-private static {@link #shouldCountFailover} so it can be
+      // unit-tested directly without driving a full mini-cluster transition.
+      if (shouldCountFailover(transitionSucceeded, oldRecord, newRoleRecord)) {
+        GLOBAL_HA_FAILOVER_COUNT.increment();
+      }
       // Update the role record and the last refresh time
       roleRecord = newRoleRecord;
       lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
@@ -1155,5 +1184,60 @@ public class HighAvailabilityGroup {
     }
     long cacheAge = System.currentTimeMillis() - lastClusterRoleRecordRefreshTime;
     return cacheAge >= clusterRoleRecordCacheFrequency;
+  }
+
+  /**
+   * Returns the current age, in milliseconds, of the last successful ClusterRoleRecord refresh
+   * (i.e. {@code now - lastClusterRoleRecordRefreshTime}). Intended for periodic sampling by
+   * external callers (e.g. the CRR poller) so the {@code HA_CRR_CACHE_AGE_MS} counter-backed gauge
+   * reflects current age without waiting for the next {@link #connect} call.
+   * <p>
+   * Returns the sentinel value <strong>{@code -1L} when no refresh has occurred yet</strong> (i.e.
+   * {@code lastClusterRoleRecordRefreshTime == 0}). This disambiguates "never sampled" from
+   * "refreshed within the same millisecond" — both of which would otherwise return {@code 0L} and
+   * be indistinguishable on the gauge. Dashboards and alert rules should treat {@code -1L} as "no
+   * data yet" and gate threshold checks on {@code value >= 0}.
+   * <p>
+   * The {@code -1L} sentinel also supersedes a latent bug in the prior {@code connect()}-only
+   * gauge-publish path: because the CRR poller is scheduled with an initial delay of {@code 0} (see
+   * {@code GetClusterRoleRecordUtil#schedulePoller}) it can fire its first tick before
+   * {@link #init} has assigned {@code lastClusterRoleRecordRefreshTime}, in which case the raw
+   * arithmetic {@code now - 0} would publish a giant value (~{@code currentTimeMillis()}) to the
+   * gauge and spuriously trip every "age > threshold" alert. Returning {@code -1L} during that race
+   * window publishes a clean "not yet sampled" marker instead.
+   * <p>
+   * Do NOT change this back to {@code return 0L}: the connect()-site at line ~654 still uses raw
+   * arithmetic (it is state-gated and unreachable before {@code init()} seeds the timestamp), so
+   * the {@code -1L} sentinel only ever surfaces through the poller-tick sample path.
+   */
+  public long getCacheAgeMs() {
+    if (lastClusterRoleRecordRefreshTime == 0) {
+      return -1L;
+    }
+    return System.currentTimeMillis() - lastClusterRoleRecordRefreshTime;
+  }
+
+  /**
+   * Decides whether a CRR transition counts as a "failover" for {@code HA_FAILOVER_COUNT} purposes.
+   * Returns {@code true} iff:
+   * <ol>
+   * <li>the policy-side transition (via {@code future.get(timeout)}) actually succeeded — a
+   * {@code TimeoutException} / {@code ExecutionException} fall-through is NOT a failover, AND</li>
+   * <li>the active-cluster URL actually moved between peers (or recovered from no-active), AND</li>
+   * <li>the new record has an ACTIVE cluster — transitions INTO a no-active state are not
+   * failovers.</li>
+   * </ol>
+   * Pure function of its inputs (no global state read, no clock read) so it is straightforward to
+   * unit-test the gate without driving a full mini-cluster transition. Package-private rather than
+   * private so {@code HighAvailabilityGroupTest} can call it directly.
+   * @param transitionSucceeded whether {@code future.get(maxTransitionTimeMs)} returned normally
+   * @param oldRecord           the previous {@link ClusterRoleRecord}
+   * @param newRecord           the candidate new {@link ClusterRoleRecord}
+   * @return whether to increment {@code HA_FAILOVER_COUNT} for this transition
+   */
+  static boolean shouldCountFailover(boolean transitionSucceeded, ClusterRoleRecord oldRecord,
+    ClusterRoleRecord newRecord) {
+    return transitionSucceeded && !oldRecord.getActiveUrl().equals(newRecord.getActiveUrl())
+      && newRecord.getActiveUrl().isPresent();
   }
 }

@@ -42,6 +42,7 @@ import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityGroup;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -227,6 +228,20 @@ public class GetClusterRoleRecordUtil {
       Runnable pollingTask = () -> {
         // Increment unconditionally so a failed tick still alternates next iteration.
         long tick = tickCount.getAndIncrement();
+        GlobalClientMetrics.GLOBAL_HA_POLLER_TICK_COUNT.increment();
+        // Sample current CRR cache age into the gauge each tick. Without this, the
+        // HA_CRR_CACHE_AGE_MS counter-backed gauge is only updated on connect() and would
+        // not advance during idle periods between connects, making it look fresher than it
+        // actually is. Sampling here puts the gauge on a steady wall-clock cadence matching
+        // the poller's polling interval.
+        try {
+          GlobalClientMetrics.GLOBAL_HA_CRR_CACHE_AGE_MS.getMetric().set(haGroup.getCacheAgeMs());
+        } catch (Throwable t) {
+          // Metric sampling is best-effort; never let a metric write break the poller tick.
+          LOGGER.warn(
+            "Failed to sample HA_CRR_CACHE_AGE_MS on poller tick for HA group {}; " + "continuing",
+            haGroupName, t);
+        }
         String tickUrl = selectUrlForTick(url1, url2, tick);
         try {
           ClusterRoleRecord polledCrr =
@@ -253,6 +268,7 @@ public class GetClusterRoleRecordUtil {
             }
           }
         } catch (SQLException e) {
+          GlobalClientMetrics.GLOBAL_HA_POLLER_TICK_FAILURES.increment();
           LOGGER.error(
             "Exception found while polling for ClusterRoleRecord on {} for HA group" + " {}: {}",
             tickUrl, haGroupName, e.getMessage());
