@@ -59,6 +59,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Abortable;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
@@ -329,15 +330,19 @@ public class ReplicationLogGroup {
     }
   }
 
+  /**
+   * Append payload carried through the ring buffer. Always carries a flat {@link List} of
+   * {@link Cell}s; the per-mutation public API extracts the cells before publishing.
+   */
   protected static class Record {
-    public String tableName;
-    public long commitId;
-    public Mutation mutation;
+    public final String tableName;
+    public final long commitId;
+    public final List<Cell> cells;
 
-    public Record(String tableName, long commitId, Mutation mutation) {
+    public Record(String tableName, long commitId, List<Cell> cells) {
       this.tableName = tableName;
       this.commitId = commitId;
-      this.mutation = mutation;
+      this.cells = cells;
     }
   }
 
@@ -551,6 +556,37 @@ public class ReplicationLogGroup {
     if (LOG.isTraceEnabled()) {
       LOG.trace("Append: table={}, commitId={}, mutation={}", tableName, commitId, mutation);
     }
+    List<Cell> cells = new ArrayList<>();
+    for (List<Cell> familyCells : mutation.getFamilyCellMap().values()) {
+      cells.addAll(familyCells);
+    }
+    if (cells.isEmpty()) {
+      throw new IllegalArgumentException("Cannot append a mutation with no cells");
+    }
+    publishDataEvent(new Record(tableName, commitId, cells));
+  }
+
+  /**
+   * Append a coalesced batch of cells as a single record on the log. The cells must already be
+   * grouped by row+type so consumers can reconstruct Put/Delete mutations on the row+type boundary
+   * (see {@link MutationCellGrouper}). Behaves identically to
+   * {@link #append(String, long, Mutation)} with respect to backpressure and fail-stop.
+   * @param tableName The HBase table name shared by every cell in {@code cells}.
+   * @param commitId  The commit identifier (e.g., SCN) for the batch.
+   * @param cells     The flat ordered cell stream for one batch on one table.
+   * @throws IOException If the writer is closed or the ring buffer is full.
+   */
+  public void append(String tableName, long commitId, List<Cell> cells) throws IOException {
+    if (cells == null || cells.isEmpty()) {
+      throw new IllegalArgumentException("Cannot append a record with no cells");
+    }
+    if (LOG.isTraceEnabled()) {
+      LOG.trace("Append: table={}, commitId={}, cells={}", tableName, commitId, cells.size());
+    }
+    publishDataEvent(new Record(tableName, commitId, cells));
+  }
+
+  private void publishDataEvent(Record record) throws IOException {
     if (isClosed()) {
       throw new IOException("Closed");
     }
@@ -566,7 +602,7 @@ public class ReplicationLogGroup {
       long sequence = ringBuffer.next();
       try {
         LogEvent event = ringBuffer.get(sequence);
-        event.setValues(EVENT_TYPE_DATA, new Record(tableName, commitId, mutation), null);
+        event.setValues(EVENT_TYPE_DATA, record, null);
       } finally {
         // Update ring buffer events metric
         ringBuffer.publish(sequence);

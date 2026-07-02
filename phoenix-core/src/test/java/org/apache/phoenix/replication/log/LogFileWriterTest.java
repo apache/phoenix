@@ -73,10 +73,10 @@ public class LogFileWriterTest {
     initLogFileWriter();
     LogFile.Record r1 = LogFileTestUtil.newPutRecord("TBLTLFW", 100, "row1", 10L, 1);
     LogFile.Record r2 = LogFileTestUtil.newDeleteRecord("TBLTLFW", 101, "row2", 11L, 1);
-    writer.append(r1.getHBaseTableName(), r1.getCommitId(), r1.getMutation());
+    writer.append(r1.getHBaseTableName(), r1.getCommitId(), r1.getCells());
     LOG.debug("Appended " + r1);
     writer.sync();
-    writer.append(r2.getHBaseTableName(), r2.getCommitId(), r2.getMutation());
+    writer.append(r2.getHBaseTableName(), r2.getCommitId(), r2.getCells());
     LOG.debug("Appended " + r2);
     writer.close();
 
@@ -108,7 +108,7 @@ public class LogFileWriterTest {
       LogFile.Record record =
         LogFileTestUtil.newPutRecord("TBLFRI", 100L + i, "row" + i, 10L + i, 1);
       originals.add(record);
-      writer.append(record.getHBaseTableName(), record.getCommitId(), record.getMutation());
+      writer.append(record.getHBaseTableName(), record.getCommitId(), record.getCells());
     }
     writer.close();
 

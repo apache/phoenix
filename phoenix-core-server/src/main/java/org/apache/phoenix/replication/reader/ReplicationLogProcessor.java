@@ -246,21 +246,22 @@ public class ReplicationLogProcessor implements Closeable {
 
       for (LogFile.Record record : logFileReader) {
         final TableName tableName = TableName.valueOf(record.getHBaseTableName());
-        final Mutation mutation = record.getMutation();
+        // A record may reconstruct into multiple mutations. Batches split on the mutation
+        // boundary, so a single record's mutations can span two processReplicationLogBatch
+        // invocations -- do not assume per-record atomicity here.
+        for (Mutation mutation : record.getMutations()) {
+          tableToMutationsMap.computeIfAbsent(tableName, k -> new ArrayList<>()).add(mutation);
+          currentBatchSize++;
+          currentBatchSizeBytes += mutation.heapSize();
 
-        tableToMutationsMap.computeIfAbsent(tableName, k -> new ArrayList<>()).add(mutation);
-
-        // Increment current batch size and current batch size bytes
-        currentBatchSize++;
-        currentBatchSizeBytes += mutation.heapSize();
-
-        // Process when we reach either the batch count or size limit
-        if (currentBatchSize >= getBatchSize() || currentBatchSizeBytes >= getBatchSizeBytes()) {
-          processReplicationLogBatch(tableToMutationsMap);
-          totalProcessed += currentBatchSize;
-          tableToMutationsMap.clear();
-          currentBatchSize = 0;
-          currentBatchSizeBytes = 0;
+          // Process when we reach either the batch count or size limit
+          if (currentBatchSize >= getBatchSize() || currentBatchSizeBytes >= getBatchSizeBytes()) {
+            processReplicationLogBatch(tableToMutationsMap);
+            totalProcessed += currentBatchSize;
+            tableToMutationsMap.clear();
+            currentBatchSize = 0;
+            currentBatchSizeBytes = 0;
+          }
         }
       }
 

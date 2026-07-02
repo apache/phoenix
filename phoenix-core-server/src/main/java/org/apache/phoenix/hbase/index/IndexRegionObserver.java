@@ -130,6 +130,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.replication.MutationCellGrouper;
 import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.SystemCatalogWALEntryFilter;
 import org.apache.phoenix.schema.CompiledConditionalTTLExpression;
@@ -163,7 +164,6 @@ import org.xerial.snappy.Snappy;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
-import org.apache.phoenix.thirdparty.com.google.common.collect.Iterables;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -861,7 +861,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
     if (!regularCells.isEmpty()) {
       String tableName = logKey.getTableName().getNameAsString();
-      for (Mutation split : splitCellsIntoMutations(regularCells)) {
+      for (Mutation split : MutationCellGrouper.splitCellsIntoMutations(regularCells)) {
         if (!this.ignoreReplicationFilter.test(split)) {
           logGroup.append(tableName, -1, split);
         }
@@ -2873,52 +2873,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     return status.getOperationStatusCode() == SUCCESS && status.getResult() != null;
   }
 
-  /**
-   * Splits cells into individual Put/Delete mutations grouped by (row key, put-vs-delete). HBase's
-   * checkAndMergeCPMutations merges coprocessor cells into the data mutation, so a single Put may
-   * contain Delete cells with different row keys (e.g., local index). This method recovers distinct
-   * mutations using the same grouping algorithm as HBase's ReplicationSink.
-   */
-  private static boolean isNewRowOrType(Cell previousCell, Cell cell) {
-    return previousCell == null || previousCell.getType() != cell.getType()
-      || !CellUtil.matchingRows(previousCell, cell);
-  }
-
-  static List<Mutation> splitCellsIntoMutations(Iterable<Cell> cells) throws IOException {
-    List<Mutation> result = new ArrayList<>();
-    Cell previousCell = null;
-    Mutation current = null;
-    for (Cell cell : cells) {
-      if (isNewRowOrType(previousCell, cell)) {
-        if (current != null) {
-          result.add(current);
-        }
-        if (CellUtil.isDelete(cell)) {
-          current = new Delete(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
-        } else {
-          current = new Put(cell.getRowArray(), cell.getRowOffset(), cell.getRowLength());
-        }
-      }
-      if (CellUtil.isDelete(cell)) {
-        ((Delete) current).add(cell);
-      } else {
-        ((Put) current).add(cell);
-      }
-      previousCell = cell;
-    }
-    if (current != null) {
-      result.add(current);
-    }
-    return result;
-  }
-
-  static List<Mutation> splitCellsIntoMutations(Mutation merged) throws IOException {
-    if (merged.isEmpty()) {
-      return Collections.singletonList(merged);
-    }
-    return splitCellsIntoMutations(Iterables.concat(merged.getFamilyCellMap().values()));
-  }
-
   private void replicateMutations(RegionCoprocessorEnvironment env,
     MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context)
     throws IOException {
@@ -2939,6 +2893,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // Record ReplicationSyncTime only when we are actually doing work (not on early-return paths).
     long start = EnvironmentEdgeManager.currentTimeMillis();
     try {
+      List<Cell> dataTableCells = new ArrayList<>();
       for (int i = 0; i < miniBatchOp.size(); i++) {
         Mutation m = miniBatchOp.getOperation(i);
         if (this.ignoreReplicationFilter.test(m)) {
@@ -2946,37 +2901,45 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
         // When coprocessors add cells (local index, conditional TTL, ON DUPLICATE KEY UPDATE),
         // HBase merges them into the data mutation which can mix row keys and cell types.
-        // Split those back into individual Put/Delete mutations for correct serialization.
-        if (miniBatchOp.getOperationsFromCoprocessors(i) == null) {
-          group.append(this.dataTableName, -1, m);
-        } else {
-          for (Mutation split : splitCellsIntoMutations(m)) {
-            group.append(this.dataTableName, -1, split);
-          }
-        }
+        // We stream the cells through as-is — the consumer reconstructs Put/Delete mutations
+        // on the row+type boundary.
+        appendCells(dataTableCells, m);
       }
-      if (context.preIndexUpdates != null) {
-        for (Map.Entry<HTableInterfaceReference, Mutation> entry : context.preIndexUpdates
-          .entries()) {
-          if (this.ignoreReplicationFilter.test(entry.getValue())) {
-            continue;
-          }
-          group.append(entry.getKey().getTableName(), -1, entry.getValue());
-        }
+      if (!dataTableCells.isEmpty()) {
+        group.append(this.dataTableName, -1, dataTableCells);
       }
-      if (context.postIndexUpdates != null) {
-        for (Map.Entry<HTableInterfaceReference, Mutation> entry : context.postIndexUpdates
-          .entries()) {
-          if (this.ignoreReplicationFilter.test(entry.getValue())) {
-            continue;
-          }
-          group.append(entry.getKey().getTableName(), -1, entry.getValue());
-        }
-      }
+      appendIndexUpdates(group, context.preIndexUpdates);
+      appendIndexUpdates(group, context.postIndexUpdates);
       group.sync();
     } finally {
       long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
       metricSource.updateReplicationSyncTime(this.dataTableName, duration);
+    }
+  }
+
+  private void appendIndexUpdates(ReplicationLogGroup group,
+    ListMultimap<HTableInterfaceReference, Mutation> updates) throws IOException {
+    if (updates == null) {
+      return;
+    }
+    for (Map.Entry<HTableInterfaceReference, Collection<Mutation>> entry : updates.asMap()
+      .entrySet()) {
+      List<Cell> cells = new ArrayList<>();
+      for (Mutation m : entry.getValue()) {
+        if (this.ignoreReplicationFilter.test(m)) {
+          continue;
+        }
+        appendCells(cells, m);
+      }
+      if (!cells.isEmpty()) {
+        group.append(entry.getKey().getTableName(), -1, cells);
+      }
+    }
+  }
+
+  private static void appendCells(List<Cell> bucket, Mutation m) {
+    for (List<Cell> familyCells : m.getFamilyCellMap().values()) {
+      bucket.addAll(familyCells);
     }
   }
 }

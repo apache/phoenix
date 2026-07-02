@@ -34,10 +34,12 @@ import java.util.Random;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
+import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.junit.Assume;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -107,8 +109,7 @@ public class LogFileCodecTest {
     List<LogFile.Record> originals =
       Arrays.asList(LogFileTestUtil.newPutRecord("TBL1", 100L, "row1", 12345L, 1),
         LogFileTestUtil.newPutRecord("TBL2", 101L, "row2", 12346L, 2),
-        LogFileTestUtil.newPutRecord("TBL1", 102L, "row3", 12347L, 0) // No columns
-      );
+        LogFileTestUtil.newPutRecord("TBL1", 102L, "row3", 12347L, 3));
 
     // Encode
     ByteArrayOutputStream baos = new ByteArrayOutputStream();
@@ -261,21 +262,23 @@ public class LogFileCodecTest {
     singleRecordTest(LogFileTestUtil.newPutRecord("TBLMANYVALS", 1L, "row", 12345L, 100));
   }
 
-  @Test
-  public void testCodecWithEmptyPut() throws IOException {
+  @Test(expected = IllegalArgumentException.class)
+  public void testCodecRejectsEmptyPut() throws IOException {
     long ts = 12345L;
     Put put = new Put(Bytes.toBytes("row"));
     put.setTimestamp(ts);
-    singleRecordTest(
-      new LogFileRecord().setHBaseTableName("TBLEMPTYPUT").setCommitId(1L).setMutation(put));
+    LogFileCodec codec = new LogFileCodec();
+    codec.getEncoder(new DataOutputStream(new ByteArrayOutputStream()))
+      .write(new LogFileRecord().setHBaseTableName("TBLEMPTYPUT").setCommitId(1L).setMutation(put));
   }
 
-  @Test
-  public void testCodecWithEmptyDelete() throws IOException {
+  @Test(expected = IllegalArgumentException.class)
+  public void testCodecRejectsEmptyDelete() throws IOException {
     long ts = 12345L;
     Delete delete = new Delete(Bytes.toBytes("row"));
     delete.setTimestamp(ts);
-    singleRecordTest(
+    LogFileCodec codec = new LogFileCodec();
+    codec.getEncoder(new DataOutputStream(new ByteArrayOutputStream())).write(
       new LogFileRecord().setHBaseTableName("TBLEMPTYDEL").setCommitId(1L).setMutation(delete));
   }
 
@@ -452,6 +455,179 @@ public class LogFileCodecTest {
     del4.addFamilyVersion(cf, ts);
     singleRecordTest(
       new LogFileRecord().setHBaseTableName("TBLCTDFV").setCommitId(1L).setMutation(del4));
+  }
+
+  @Test
+  public void testMultipleFamiliesRoundTrip() throws IOException {
+    long ts = 12345L;
+    byte[] row = Bytes.toBytes("row");
+    // Add families in non-sorted insertion order to verify the codec preserves the iteration
+    // order of mutation.getFamilyCellMap() (which is a TreeMap, so families come out sorted).
+    Put put = new Put(row);
+    put.setTimestamp(ts);
+    put.addColumn(Bytes.toBytes("z_cf"), Bytes.toBytes("q1"), ts, Bytes.toBytes("vz"));
+    put.addColumn(Bytes.toBytes("a_cf"), Bytes.toBytes("q1"), ts, Bytes.toBytes("va"));
+    put.addColumn(Bytes.toBytes("m_cf"), Bytes.toBytes("q1"), ts, Bytes.toBytes("vm"));
+    put.addColumn(Bytes.toBytes("a_cf"), Bytes.toBytes("q2"), ts, Bytes.toBytes("va2"));
+
+    LogFile.Record original =
+      new LogFileRecord().setHBaseTableName("TBLMULTIFAM").setCommitId(1L).setMutation(put);
+    singleRecordTest(original);
+
+    // Verify the cells are ordered family-then-qualifier (TreeMap ordering of getFamilyCellMap)
+    List<Cell> cells = original.getCells();
+    assertEquals(4, cells.size());
+    assertTrue("first family should be a_cf",
+      Bytes.equals(CellUtil.cloneFamily(cells.get(0)), Bytes.toBytes("a_cf")));
+    assertTrue("second family should be a_cf",
+      Bytes.equals(CellUtil.cloneFamily(cells.get(1)), Bytes.toBytes("a_cf")));
+    assertTrue("third family should be m_cf",
+      Bytes.equals(CellUtil.cloneFamily(cells.get(2)), Bytes.toBytes("m_cf")));
+    assertTrue("fourth family should be z_cf",
+      Bytes.equals(CellUtil.cloneFamily(cells.get(3)), Bytes.toBytes("z_cf")));
+  }
+
+  /**
+   * Framing A/B microbenchmark. Isolates the codec-level cost of record framing. The per-cell wire
+   * format is identical in both modes (same flat-cell encoding); the only thing that differs is how
+   * often the per-record header (record length + table name + commitId + attribute count) is paid:
+   * <ul>
+   * <li>Mode A (per-mutation): one {@link LogFileRecord} per mutation, encoded separately, so the
+   * header is paid {@code mutationCount} times.</li>
+   * <li>Mode B (per-batch): one record carrying the whole batch's flat cell stream, encoded once,
+   * so the header is paid once.</li>
+   * </ul>
+   * Both modes build their cells identically and share one codec instance, so any delta in
+   * {@code wireBytes} is attributable to framing overhead and any delta in {@code appendNs} to the
+   * extra per-record encode calls. Opt in with {@code -Dtest.runFramingBenchmark=true}; tune with
+   * {@code -Dtest.mutationCount}, {@code -Dtest.cellsPerMutation}, {@code -Dtest.valueSize},
+   * {@code -Dtest.benchmarkIterations}.
+   */
+  @Test
+  public void testFramingMicrobenchmark() throws IOException {
+    Assume.assumeTrue("Framing microbenchmark, opt in with -Dtest.runFramingBenchmark=true",
+      Boolean.getBoolean("test.runFramingBenchmark"));
+    final String tableName = "TBLFRAME";
+    final int mutationCount = Integer.getInteger("test.mutationCount", 100);
+    final int cellsPerMutation = Integer.getInteger("test.cellsPerMutation", 4);
+    final int valueSize = Integer.getInteger("test.valueSize", 64);
+    final int iterations = Integer.getInteger("test.benchmarkIterations", 2000);
+    final int warmup = Math.max(1, iterations / 10);
+
+    // Build the batch's cells once. Each mutation contributes cellsPerMutation cells, each carrying
+    // a valueSize-byte value so the cell payload is production-realistic relative to the header.
+    // The flat concatenation is what mode B encodes, while mode A re-frames each mutation's slice.
+    List<List<Cell>> perMutationCells = new ArrayList<>(mutationCount);
+    List<Cell> batchCells = new ArrayList<>(mutationCount * cellsPerMutation);
+    byte[] value = new byte[valueSize];
+    for (int m = 0; m < mutationCount; m++) {
+      Put put = new Put(Bytes.toBytes("row" + m));
+      put.setTimestamp(m);
+      for (int c = 0; c < cellsPerMutation; c++) {
+        put.addColumn(Bytes.toBytes("col" + c), Bytes.toBytes("q"), m, value);
+      }
+      List<Cell> cells = new ArrayList<>(put.getFamilyCellMap().size());
+      for (List<Cell> familyCells : put.getFamilyCellMap().values()) {
+        cells.addAll(familyCells);
+      }
+      perMutationCells.add(cells);
+      batchCells.addAll(cells);
+    }
+
+    LogFileCodec codec = new LogFileCodec();
+
+    // Mode A: one record per mutation, framed separately.
+    BenchResult a = runFramingMode(iterations, warmup, () -> {
+      ByteArrayOutputStream bos = new ByteArrayOutputStream();
+      DataOutputStream dos = new DataOutputStream(bos);
+      LogFile.Codec.Encoder encoder = codec.getEncoder(dos);
+      int recordCount = 0;
+      for (int m = 0; m < mutationCount; m++) {
+        LogFile.Record record = new LogFileRecord().setHBaseTableName(tableName).setCommitId(m)
+          .setCells(perMutationCells.get(m));
+        encoder.write(record);
+        recordCount++;
+      }
+      dos.flush();
+      return new int[] { bos.size(), recordCount };
+    });
+
+    // Mode B: one record carrying the whole batch, framed once.
+    BenchResult b = runFramingMode(iterations, warmup, () -> {
+      ByteArrayOutputStream bos = new ByteArrayOutputStream();
+      DataOutputStream dos = new DataOutputStream(bos);
+      LogFile.Codec.Encoder encoder = codec.getEncoder(dos);
+      LogFile.Record record =
+        new LogFileRecord().setHBaseTableName(tableName).setCommitId(0L).setCells(batchCells);
+      encoder.write(record);
+      dos.flush();
+      return new int[] { bos.size(), 1 };
+    });
+
+    long totalCells = (long) mutationCount * cellsPerMutation;
+    LOG.info(
+      "Framing benchmark params: mutationCount={} cellsPerMutation={} valueSize={} totalCells={} "
+        + "iterations={}",
+      mutationCount, cellsPerMutation, valueSize, totalCells, iterations);
+    logFramingMode("A(per-mutation)", a, totalCells);
+    logFramingMode("B(per-batch)", b, totalCells);
+    LOG.info(
+      "Framing A/B ratios: appendNs A/B={} wireBytes A/B={} wireBytesSaved={} "
+        + "(headerBytesPerRecord~={})",
+      String.format("%.2f", (double) a.appendNs / Math.max(1, b.appendNs)),
+      String.format("%.3f", (double) a.wireBytes / Math.max(1, b.wireBytes)),
+      a.wireBytes - b.wireBytes,
+      mutationCount > 1 ? (a.wireBytes - b.wireBytes) / (mutationCount - 1) : 0);
+  }
+
+  /** Aggregated result of one framing mode: best-of encode time and the wire size produced. */
+  private static final class BenchResult {
+    final long appendNs;
+    final int wireBytes;
+    final int recordCount;
+
+    BenchResult(long appendNs, int wireBytes, int recordCount) {
+      this.appendNs = appendNs;
+      this.wireBytes = wireBytes;
+      this.recordCount = recordCount;
+    }
+  }
+
+  /** Body of one framing mode; returns {@code [wireBytes, recordCount]}. */
+  private interface FramingBody {
+    int[] run() throws IOException;
+  }
+
+  /**
+   * Runs {@code body} for {@code warmup} untimed iterations, then {@code iterations} timed ones,
+   * returning the minimum single-iteration encode time (least contaminated by GC/JIT) and the wire
+   * size + record count from the final iteration.
+   */
+  private static BenchResult runFramingMode(int iterations, int warmup, FramingBody body)
+    throws IOException {
+    for (int i = 0; i < warmup; i++) {
+      body.run();
+    }
+    long minNs = Long.MAX_VALUE;
+    int[] last = null;
+    for (int i = 0; i < iterations; i++) {
+      long startNs = System.nanoTime();
+      last = body.run();
+      long elapsed = System.nanoTime() - startNs;
+      if (elapsed < minNs) {
+        minNs = elapsed;
+      }
+    }
+    return new BenchResult(minNs, last[0], last[1]);
+  }
+
+  private static void logFramingMode(String label, BenchResult r, long totalCells) {
+    LOG.info(
+      "Framing mode {}: appendNs(min)={} recordCount={} wireBytes={} bytesPerCell={} "
+        + "nsPerCell={}",
+      label, r.appendNs, r.recordCount, r.wireBytes,
+      String.format("%.2f", (double) r.wireBytes / Math.max(1, totalCells)),
+      String.format("%.2f", (double) r.appendNs / Math.max(1, totalCells)));
   }
 
 }

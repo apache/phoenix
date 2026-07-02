@@ -17,9 +17,16 @@
  */
 package org.apache.phoenix.replication.log;
 
-import org.apache.hadoop.hbase.client.Delete;
+import java.io.IOException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.client.Mutation;
-import org.apache.hadoop.hbase.client.Put;
+import org.apache.phoenix.replication.MutationCellGrouper;
+
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
     justification = "Intentional")
@@ -27,7 +34,8 @@ public class LogFileRecord implements LogFile.Record {
 
   private String tableName;
   private long commitId;
-  private Mutation mutation;
+  private List<Cell> cells = Collections.emptyList();
+  private Map<String, byte[]> attributes = Collections.emptyMap();
   private int serializedLength;
 
   public LogFileRecord() {
@@ -56,13 +64,60 @@ public class LogFileRecord implements LogFile.Record {
   }
 
   @Override
-  public Mutation getMutation() {
-    return this.mutation;
+  public List<Cell> getCells() {
+    return cells;
+  }
+
+  @Override
+  public LogFile.Record setCells(List<Cell> cells) {
+    Preconditions.checkNotNull(cells, "cells must not be null");
+    this.cells = cells;
+    return this;
+  }
+
+  @Override
+  public Map<String, byte[]> getAttributes() {
+    return attributes;
+  }
+
+  @Override
+  public LogFile.Record setAttributes(Map<String, byte[]> attributes) {
+    Preconditions.checkNotNull(attributes, "attributes must not be null");
+    this.attributes = attributes;
+    return this;
+  }
+
+  @Override
+  public List<Mutation> getMutations() throws IOException {
+    List<Mutation> result = MutationCellGrouper.splitCellsIntoMutations(cells);
+    if (!attributes.isEmpty()) {
+      for (Mutation m : result) {
+        for (Map.Entry<String, byte[]> e : attributes.entrySet()) {
+          m.setAttribute(e.getKey(), e.getValue());
+        }
+      }
+    }
+    return result;
+  }
+
+  @Override
+  public Mutation getMutation() throws IOException {
+    List<Mutation> mutations = getMutations();
+    if (mutations.size() != 1) {
+      throw new IllegalStateException("Record does not contain exactly one mutation (count="
+        + mutations.size() + "); use getMutations() instead");
+    }
+    return mutations.get(0);
   }
 
   @Override
   public LogFile.Record setMutation(Mutation mutation) {
-    this.mutation = mutation;
+    List<Cell> body = new ArrayList<>();
+    for (List<Cell> familyCells : mutation.getFamilyCellMap().values()) {
+      body.addAll(familyCells);
+    }
+    this.cells = body;
+    this.attributes = Collections.emptyMap();
     return this;
   }
 
@@ -80,69 +135,9 @@ public class LogFileRecord implements LogFile.Record {
   }
 
   @Override
-  public int hashCode() {
-    int code = tableName.hashCode();
-    code ^= Long.hashCode(commitId);
-    code ^= mutation.toString().hashCode();
-    return code;
-  }
-
-  @Override
-  public boolean equals(Object obj) {
-    if (this == obj) {
-      return true;
-    }
-    if (obj == null) {
-      return false;
-    }
-    if (getClass() != obj.getClass()) {
-      return false;
-    }
-    LogFileRecord other = (LogFileRecord) obj;
-    return tableName.equals(other.tableName) && commitId == other.commitId
-      && mutation.toString().equals(other.mutation.toString());
-  }
-
-  @Override
   public String toString() {
-    return "LogFileRecord [mutation=" + mutation.toString() + ", tableName=" + tableName
-      + ", commitId=" + commitId + " ]";
-  }
-
-  // Internals only below. Not for LogFile interface consumer use.
-
-  protected enum MutationType {
-    PUT(1),
-    DELETE(2);
-
-    private int code;
-
-    MutationType(int code) {
-      this.code = code;
-    }
-
-    int getCode() {
-      return code;
-    }
-
-    static MutationType get(Mutation mutation) {
-      if (mutation instanceof Put) {
-        return PUT;
-      } else if (mutation instanceof Delete) {
-        return DELETE;
-      }
-      throw new UnsupportedOperationException("Unsupported mutation type: " + mutation);
-    }
-
-    static MutationType codeToType(int code) {
-      for (MutationType type : MutationType.values()) {
-        if (type.code == code) {
-          return type;
-        }
-      }
-      throw new UnsupportedOperationException("Unsupported mutation code: " + code);
-    }
-
+    return "LogFileRecord [tableName=" + tableName + ", commitId=" + commitId + ", cellCount="
+      + cells.size() + ", attrCount=" + attributes.size() + "]";
   }
 
 }

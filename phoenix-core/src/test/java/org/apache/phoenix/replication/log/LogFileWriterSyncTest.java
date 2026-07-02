@@ -88,9 +88,9 @@ public class LogFileWriterSyncTest {
 
     // Append data
     Mutation m1 = LogFileTestUtil.newPut("row1", 1L, 1);
-    writer.append("TBL", 1L, m1);
+    writer.append("TBL", 1L, LogFileTestUtil.cellsOf(m1));
     Mutation m2 = LogFileTestUtil.newPut("row2", 2L, 1);
-    writer.append("TBL", 2L, m2);
+    writer.append("TBL", 2L, LogFileTestUtil.cellsOf(m2));
 
     // Sync the writer
     writer.sync();
@@ -101,7 +101,7 @@ public class LogFileWriterSyncTest {
 
     // Append more data after sync
     Mutation m3 = LogFileTestUtil.newPut("row3", 12L, 1);
-    writer.append("TBL", 3L, m3);
+    writer.append("TBL", 3L, LogFileTestUtil.cellsOf(m3));
 
     // Sync again
     writer.sync();
@@ -116,7 +116,7 @@ public class LogFileWriterSyncTest {
 
     // Append A, then sync
     Mutation m1 = LogFileTestUtil.newPut("row1", 1L, 1);
-    writer.append("TBL", 1L, m1);
+    writer.append("TBL", 1L, LogFileTestUtil.cellsOf(m1));
     writer.sync();
 
     // Verify first hsync
@@ -124,7 +124,7 @@ public class LogFileWriterSyncTest {
 
     // Append B after sync
     Mutation m2 = LogFileTestUtil.newPut("row2", 2L, 1);
-    writer.append("TBL", 2L, m2);
+    writer.append("TBL", 2L, LogFileTestUtil.cellsOf(m2));
 
     // Verify hsync was NOT called immediately after appending B. It might be called later on
     // close or another sync.
@@ -143,7 +143,7 @@ public class LogFileWriterSyncTest {
 
     // Append A
     Mutation m1 = LogFileTestUtil.newPut("row1", 1L, 1);
-    writer.append("TBL", 1L, m1);
+    writer.append("TBL", 1L, LogFileTestUtil.cellsOf(m1));
 
     // Sync 1
     writer.sync();
@@ -156,7 +156,7 @@ public class LogFileWriterSyncTest {
 
     // Append B
     Mutation m2 = LogFileTestUtil.newPut("row2", 2L, 1);
-    writer.append("TBL", 2L, m2);
+    writer.append("TBL", 2L, LogFileTestUtil.cellsOf(m2));
 
     // Sync 3
     writer.sync();
@@ -181,7 +181,7 @@ public class LogFileWriterSyncTest {
 
     // Append a record
     Mutation m1 = LogFileTestUtil.newPut("row", 1L, 1);
-    writer.append("TBL", 1L, m1);
+    writer.append("TBL", 1L, LogFileTestUtil.cellsOf(m1));
 
     // Sync again
     writer.sync();
@@ -211,7 +211,7 @@ public class LogFileWriterSyncTest {
 
     try {
       Mutation m1 = LogFileTestUtil.newPut("row1", 1L, 1);
-      hflushWriter.append("TBL", 1L, m1);
+      hflushWriter.append("TBL", 1L, LogFileTestUtil.cellsOf(m1));
       hflushWriter.sync();
 
       verify(hflushOutput, times(1)).hflush();
