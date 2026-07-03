@@ -44,9 +44,9 @@ import org.junit.experimental.categories.Category;
  * {@link MetricsMetadataSourceFactory#getMetadataMetricsSource()} singleton, whose counters
  * (CREATE_TABLE_COUNT, METADATA_CACHE_ESTIMATED_USED_SIZE, METADATA_CACHE_ADD_COUNT, ...) are
  * incremented by every server-side metadata operation in the same JVM. Running this test class in
- * the {@link ParallelStatsDisabledTest} group lets parallel tests in other classes in the same
- * fork mutate those counters between this test's "capture baseline" and "verify after CREATE
- * TABLE" calls, producing intermittent strict-equality assertion failures such as:
+ * the {@link ParallelStatsDisabledTest} group lets parallel tests in other classes in the same fork
+ * mutate those counters between this test's "capture baseline" and "verify after CREATE TABLE"
+ * calls, producing intermittent strict-equality assertion failures such as:
  *
  * <pre>
  *   testMetadataMetricsOfCreateTable
@@ -54,8 +54,8 @@ import org.junit.experimental.categories.Category;
  * </pre>
  *
  * Categorize as {@link NeedsOwnMiniClusterTest} so failsafe runs this class in its own forked JVM
- * (reuseForks=false), guaranteeing exclusive ownership of the metric singleton for the duration
- * of the suite. Tests within this class still run sequentially in that fork, which is sufficient
+ * (reuseForks=false), guaranteeing exclusive ownership of the metric singleton for the duration of
+ * the suite. Tests within this class still run sequentially in that fork, which is sufficient
  * because each individual test captures and verifies its own counter deltas in a single thread.
  */
 @Category(NeedsOwnMiniClusterTest.class)
