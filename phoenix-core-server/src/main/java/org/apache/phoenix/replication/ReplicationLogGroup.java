@@ -50,6 +50,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -555,8 +556,7 @@ public class ReplicationLogGroup {
   protected void initializeDisruptor() throws IOException {
     int ringBufferSize =
       conf.getInt(REPLICATION_LOG_RINGBUFFER_SIZE_KEY, DEFAULT_REPLICATION_LOG_RINGBUFFER_SIZE);
-    this.disruptorExecutor = Executors.newCachedThreadPool(new ThreadFactoryBuilder()
-      .setNameFormat("ReplicationLogGroup-" + getHAGroupName() + "-%d").setDaemon(true).build());
+    this.disruptorExecutor = createDisruptorExecutor();
     disruptor = new Disruptor<>(LogEvent.EVENT_FACTORY, ringBufferSize, disruptorExecutor,
       ProducerType.MULTI, new YieldingWaitStrategy());
     eventHandler = new LogEventHandler();
@@ -565,6 +565,12 @@ public class ReplicationLogGroup {
     LogExceptionHandler exceptionHandler = new LogExceptionHandler();
     disruptor.setDefaultExceptionHandler(exceptionHandler);
     ringBuffer = disruptor.start();
+  }
+
+  @VisibleForTesting
+  protected ExecutorService createDisruptorExecutor() {
+    return Executors.newCachedThreadPool(new ThreadFactoryBuilder()
+      .setNameFormat("ReplicationLogGroup-" + getHAGroupName() + "-%d").setDaemon(true).build());
   }
 
   /**
@@ -757,6 +763,19 @@ public class ReplicationLogGroup {
     }
     LOG.info("Closing HAGroup {}", this);
     INSTANCES.remove(instanceKey(serverName, haGroupName));
+    // Wait for the consumer thread to enter its run loop before shutting down. Otherwise a close()
+    // that races init() can halt() before the consumer starts; run()'s opening clearAlert() then
+    // wipes the alert and onShutdown (writer close) never runs.
+    try {
+      if (!eventHandler.awaitStarted(shutdownTimeoutMs, TimeUnit.MILLISECONDS)) {
+        LOG.warn("HAGroup {} consumer thread did not start within {}ms before close", this,
+          shutdownTimeoutMs);
+      }
+    } catch (InterruptedException e) {
+      LOG.warn("HAGroup {} interrupted while awaiting consumer thread start; "
+        + "proceeding with shutdown without the start gate", this, e);
+      Thread.currentThread().interrupt();
+    }
     try {
       disruptor.shutdown(shutdownTimeoutMs, TimeUnit.MILLISECONDS);
     } catch (com.lmax.disruptor.TimeoutException e) {
@@ -1052,6 +1071,10 @@ public class ReplicationLogGroup {
     private volatile IOException fatalException;
     // Counts events drained per Disruptor batch. Single-threaded access from onEvent.
     private int batchEventCount;
+    // Counted down by onStart() once the consumer thread has entered its run loop (past
+    // BatchEventProcessor.run()'s opening clearAlert()). close() awaits this before halting so
+    // halt()'s alert cannot be swallowed by a clearAlert() that races an immediate close.
+    private final CountDownLatch startedLatch = new CountDownLatch(1);
 
     public LogEventHandler() {
     }
@@ -1299,7 +1322,14 @@ public class ReplicationLogGroup {
 
     @Override
     public void onStart() {
-      // no-op
+      // run() has already cleared any pending alert by the time onStart runs, so a subsequent
+      // halt() from close() is guaranteed to be observed by the wait loop.
+      startedLatch.countDown();
+    }
+
+    /** Await (bounded) until the consumer thread has entered its run loop. */
+    boolean awaitStarted(long timeout, TimeUnit unit) throws InterruptedException {
+      return startedLatch.await(timeout, unit);
     }
 
     @Override
