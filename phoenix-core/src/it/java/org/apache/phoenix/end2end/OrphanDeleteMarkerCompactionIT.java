@@ -75,11 +75,12 @@ public class OrphanDeleteMarkerCompactionIT extends BaseTest {
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    Map<String, String> props = Maps.newHashMapWithExpectedSize(4);
+    Map<String, String> props = Maps.newHashMapWithExpectedSize(5);
     props.put(QueryServices.GLOBAL_INDEX_ROW_AGE_THRESHOLD_TO_DELETE_MS_ATTRIB, Long.toString(0));
     props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
       Integer.toString(MAX_LOOKBACK_AGE));
     props.put(HRegion.MEMSTORE_PERIODIC_FLUSH_INTERVAL, "0");
+    props.put("hbase.procedure.remote.dispatcher.delay.msec", "0");
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
   }
 
