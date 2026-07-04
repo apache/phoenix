@@ -1528,6 +1528,9 @@ public class MutationState implements SQLCloseable {
         // no-op if table doesn't have Conditional TTL
         ScanUtil.annotateMutationWithConditionalTTL(connection, tableInfo.getPTable(),
           mutationList);
+        // no-op unless table/view has a literal TTL; threads the view's literal TTL and any
+        // non-strict flag so the server-side internal current-row scan masks like a client read
+        ScanUtil.annotateMutationWithLiteralTTL(connection, tableInfo.getPTable(), mutationList);
         // If we haven't retried yet, retry for this case only, as it's possible that
         // a split will occur after we send the index metadata cache to all known
         // region servers.

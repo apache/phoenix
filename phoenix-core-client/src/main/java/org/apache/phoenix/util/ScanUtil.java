@@ -92,6 +92,7 @@ import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.CompiledTTLExpression;
 import org.apache.phoenix.schema.IllegalDataException;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTable;
@@ -1858,6 +1859,76 @@ public class ScanUtil {
       if (!table.isStrictTTL()) {
         mutation.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL,
           PBoolean.INSTANCE.toBytes(table.isStrictTTL()));
+      }
+    }
+  }
+
+  /**
+   * Annotates mutations for a table/view with a literal TTL so the server-side internal current-row
+   * scan (IndexRegionObserver.getCurrentRowStates) can mask expired rows exactly like a client read.
+   * This is the literal-TTL sibling of {@link #annotateMutationWithConditionalTTL}; the two are
+   * disjoint (one is guarded on a literal expression, the other on a conditional expression) so at
+   * most one fires for a given table.
+   * <p>
+   * The guiding principle is to thread precisely what the read path
+   * ({@link #setScanAttributesForPhoenixTTL}) would set as the {@code _TTL} scan attribute:
+   * <ul>
+   * <li>For a base <b>TABLE</b>, the numeric literal TTL lives on the HBase CF descriptor, so the
+   * server's {@link org.apache.phoenix.coprocessor.TTLRegionScanner} CF-descriptor fallback derives
+   * it. We set no {@code _TTL} attribute (matching the read path for base tables).</li>
+   * <li>For a <b>VIEW</b>, the view-level TTL is stored in SYSTEM.CATALOG and not on the shared CF
+   * descriptor (which carries the base table's TTL), so the view's compiled literal expression must
+   * be threaded per-mutation as {@code _TTL}, but only when {@code serialize()} is non-null — the
+   * exact non-null filter the read path uses. {@code serialize()} returns null only for NONE, which
+   * correctly threads nothing (matching the read path).</li>
+   * <li>For either type, {@code IS_STRICT_TTL=false} is set only when the table/view is non-strict,
+   * so absence defaults to strict, matching the read-path convention and avoiding over-masking of a
+   * non-strict table.</li>
+   * </ul>
+   */
+  public static void annotateMutationWithLiteralTTL(PhoenixConnection connection, PTable table,
+    List<? extends Mutation> mutations) throws SQLException {
+
+    if (!(table.getTTLExpression() instanceof LiteralTTLExpression)) {
+      // Conditional TTL is handled by annotateMutationWithConditionalTTL; NONE has no literal to
+      // thread. Only a literal TTL (finite or FOREVER) reaches the internal-scan masking path.
+      return;
+    }
+    if (table.isImmutableRows()) {
+      // optimization for immutable tables since we don't need to read the current row
+      // before writing
+      return;
+    }
+
+    // For a view, honor the view-TTL feature flag exactly as setScanAttributesForPhoenixTTL does.
+    boolean isView = table.getType() == PTableType.VIEW;
+    boolean viewTTLEnabled = !isView
+      || connection.getQueryServices().getConfiguration().getBoolean(
+        QueryServices.PHOENIX_VIEW_TTL_ENABLED, QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED);
+
+    byte[] ttlForScan = null;
+    if (isView && viewTTLEnabled) {
+      // A view's literal TTL is not on the shared CF descriptor, so thread it per-mutation. This
+      // is non-null for FOREVER and finite literals and null only for NONE, matching the read path
+      // at setScanAttributesForPhoenixTTL (ScanUtil non-null filter). FOREVER must be threaded, not
+      // skipped: the view CF-descriptor fallback carries the base table's (possibly finite) TTL, so
+      // an absent _TTL would wrongly mask a view whose rows should live forever.
+      ttlForScan = table.getCompiledTTLExpression(connection).serialize();
+    }
+
+    byte[] isStrictTTL =
+      table.isStrictTTL() ? null : PBoolean.INSTANCE.toBytes(table.isStrictTTL());
+    if (ttlForScan == null && isStrictTTL == null) {
+      // Strict base literal TTL: the CF-descriptor fallback and default-strict masking already
+      // reproduce the client read, so no attribute is needed.
+      return;
+    }
+    for (Mutation mutation : mutations) {
+      if (ttlForScan != null) {
+        mutation.setAttribute(BaseScannerRegionObserverConstants.TTL, ttlForScan);
+      }
+      if (isStrictTTL != null) {
+        mutation.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL, isStrictTTL);
       }
     }
   }
