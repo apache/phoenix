@@ -18,13 +18,20 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
+import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.util.ScanUtil;
 
 /**
  * Utilities for internal server-side region scans that must honor Phoenix TTL exactly like a client
@@ -46,24 +53,34 @@ public class ServerScanUtil {
   }
 
   /**
-   * Sets the Phoenix TTL scan attributes on an internal data-table scan so {@link TTLRegionScanner}
-   * masks exactly like a client read:
+   * Sets the Phoenix TTL and paging scan attributes on an internal data-table scan so it behaves
+   * exactly like a client read.
+   * <p>
+   * TTL masking attributes ({@link TTLRegionScanner} reads these):
    * <ul>
-   * <li>the empty-column CF/CQ, sourced from the data table's {@link IndexMaintainer} (identical
-   * across all maintainers of a data table);</li>
+   * <li>the empty-column CF/CQ, supplied by the caller. When a secondary index is being maintained
+   * they come from the data table's {@link IndexMaintainer} (identical across all maintainers of a
+   * data table); when the current-row read is triggered without any index (an atomic / ON DUPLICATE
+   * KEY / {@code returnResult} / row-delete on a TTL table) there is no maintainer, so they are the
+   * bytes the client threaded on the mutation
+   * ({@link org.apache.phoenix.util.ScanUtil#annotateMutationWithLiteralTTL}). Both resolve to the
+   * same data-table empty column;</li>
    * <li>{@code IS_STRICT_TTL=false} when {@code isStrictTTL == false}, so a non-strict table is not
    * masked (absence of the attribute defaults to strict, matching the read path);</li>
    * <li>the view's literal TTL as the standard {@code _TTL} scan attribute when
    * {@code literalTTLForScan != null}. A base table's literal TTL is left unset so
    * {@link TTLRegionScanner}'s CF-descriptor fallback derives it.</li>
    * </ul>
+   * Paging setup (mirrors the client read path: {@code ScanUtil.setScanAttributeForPaging} plus the
+   * {@code BaseScannerRegionObserver.preScannerOpen} filter wrapping): sets
+   * {@code SERVER_PAGE_SIZE_MS} and wraps the scan filter in a {@link PagingFilter} so the internal
+   * scan is bounded by the server page budget just like a client scan. See
+   * {@link #setInternalScanAttributesForPaging}.
    */
-  public static void setInternalScanAttributes(Scan scan, IndexMaintainer dataTableMaintainer,
-    byte[] literalTTLForScan, boolean isStrictTTL) {
-    scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME,
-      dataTableMaintainer.getDataEmptyKeyValueCF());
-    scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
-      dataTableMaintainer.getEmptyKeyValueQualifierForDataTable());
+  public static void setInternalScanAttributes(Configuration conf, Scan scan, byte[] emptyCF,
+    byte[] emptyCQ, byte[] literalTTLForScan, boolean isStrictTTL) {
+    scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
+    scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
     if (!isStrictTTL) {
       // Absence of the attribute defaults to strict-true (ScanUtil.isStrictTTL), so only set it
       // when the table/view is non-strict, mirroring setScanAttributesForPhoenixTTL.
@@ -73,6 +90,44 @@ public class ServerScanUtil {
     if (literalTTLForScan != null) {
       // Only views carry a literal TTL here; a base table relies on the CF-descriptor fallback.
       scan.setAttribute(BaseScannerRegionObserverConstants.TTL, literalTTLForScan);
+    }
+    setInternalScanAttributesForPaging(conf, scan);
+  }
+
+  /**
+   * Reproduces the client read path's server-paging setup for an internal scan. On the client the
+   * {@code SERVER_PAGE_SIZE_MS} attribute is set by
+   * {@code ScanUtil.setScanAttributeForPaging(Scan, PhoenixConnection)} and the scan filter is later
+   * wrapped in a {@link PagingFilter} by {@code BaseScannerRegionObserver.preScannerOpen}. Internal
+   * scans opened directly via {@code region.getScanner(scan)} bypass both, so this method performs
+   * both steps up-front. The region-server {@link Configuration} is the source of the paging props
+   * here, standing in for the client's {@code PhoenixConnection} props.
+   * <p>
+   * Ordering matters: {@code PagingRegionScanner}'s constructor reads the {@link PagingFilter} and
+   * the page size off the scan, so this must run before
+   * {@link #openRegionScanner(RegionCoprocessorEnvironment, Region, Scan)} builds the scanner.
+   */
+  public static void setInternalScanAttributesForPaging(Configuration conf, Scan scan) {
+    if (
+      !conf.getBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
+        QueryServicesOptions.DEFAULT_PHOENIX_SERVER_PAGING_ENABLED)
+    ) {
+      return;
+    }
+    long pageSizeMs = conf.getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
+    if (pageSizeMs == -1) {
+      // Use half of the HBase RPC timeout value as the server page size, mirroring the client
+      // ScanUtil.setScanAttributeForPaging fallback.
+      pageSizeMs = (long) (conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
+        HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
+    }
+    scan.setAttribute(BaseScannerRegionObserverConstants.SERVER_PAGE_SIZE_MS,
+      Bytes.toBytes(Long.valueOf(pageSizeMs)));
+    // Wrap the scan filter in a PagingFilter as the top-level filter, matching
+    // BaseScannerRegionObserver.preScannerOpen. PagingRegionScanner then detects when PagingFilter
+    // has paged the scan out and returns a dummy result; readDataTableRows skips those dummies.
+    if (!(scan.getFilter() instanceof PagingFilter)) {
+      scan.setFilter(new PagingFilter(scan.getFilter(), ScanUtil.getPageSizeMsForFilter(scan)));
     }
   }
 

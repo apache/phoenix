@@ -143,6 +143,7 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MutationUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
+import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerIndexUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
@@ -180,8 +181,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * column referenced by any index (indexed or covered) that the touch did not itself write,
    * sourcing the value from the masked current-row read. This stamps the data-side covered cell at
    * the same {@code batchTimestamp} as the index-side cell so any later compaction retains or
-   * expires the data and index rows together, closing the covered-column timestamp-skew divergence
-   * (RCA Point 2). It only fires when an effective Phoenix TTL applies (a current-row read is
+   * expires the data and index rows together, closing the covered-column timestamp-skew divergence.
+   * It only fires when an effective Phoenix TTL applies (a current-row read is
    * already happening for a non-immutable table with a global covered/indexed index), so non-TTL
    * tables are unaffected regardless of this flag. It can be disabled to avoid the write
    * amplification, SCN/time-travel, and CDC-fidelity costs it introduces.
@@ -402,6 +403,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // the internal current-row scan masks with the view's TTL. Null for base tables (their literal
     // TTL is on the CF descriptor) and for conditional TTL (left on the mutation for its own path).
     private byte[] literalTTLForInternalScan;
+    // The empty-column CF/CQ threaded by the client (ScanUtil.annotateMutationWithLiteralTTL) for
+    // any table/view with an effective literal TTL. They let the internal current-row scan mask
+    // even when no IndexMaintainer is available to supply them — the no-index atomic / ON DUPLICATE
+    // KEY / returnResult / row-delete path on a TTL table. Null when no literal TTL applies. Unlike
+    // the _TTL attribute these are left on the mutations (they are inert on the write path).
+    private byte[] emptyCFForInternalScan;
+    private byte[] emptyCQForInternalScan;
 
     public BatchMutateContext() {
       this.clientVersion = 0;
@@ -977,17 +985,27 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * RCA Point 2. On a partial "touch" upsert that does not re-write an index-referenced column, the
-   * data-side cell keeps its original timestamp while the index-side cell is rebuilt at
-   * {@code batchTimestamp}. A later major compaction then opens a {@code >ttl} gap on the data side
-   * but not the index side, dropping the value only on the data table — the exact divergence in the
-   * RCA. To close it, for every index-enabled non-atomic Put we inject each non-PK column referenced
-   * by any index ({@link IndexMaintainer#getAllColumnsForDataTable()}, the union of indexed and
-   * covered columns) that the touch omitted, sourcing the value from the masked current-row state.
+   * On a partial "touch" upsert that does not re-write an index-referenced column, the data-side
+   * cell keeps its original timestamp while the index side is rebuilt at {@code batchTimestamp}. A
+   * later major compaction then opens a {@code >ttl} gap on the data side but not the index side,
+   * dropping the value only on the data table, so the data row and index row diverge. To close it,
+   * for every index-enabled non-atomic Put we inject each non-PK column referenced by any index
+   * ({@link IndexMaintainer#getAllColumnsForDataTable()}, the union of indexed and covered columns)
+   * that the touch omitted, sourcing the value from the masked current-row state.
    * The cells are added at {@link HConstants#LATEST_TIMESTAMP} so the subsequent
    * {@link #setTimestamps} call re-stamps them to {@code batchTimestamp}, making the data-side and
    * index-side cells share both the timestamp and the empty-column neighbor. Any compaction then
    * feeds identical timestamps into the same gap analysis on both sides.
+   * <p>
+   * Both covered global indexes and uncovered global indexes are handled. A covered index stores
+   * the value as an index cell rebuilt at {@code batchTimestamp}; an uncovered index encodes its
+   * indexed columns positionally into the index row key, also rebuilt at {@code batchTimestamp}.
+   * Either way the index side survives a compaction that trims the stale data-side cell, so the
+   * indexed column must be re-persisted on the data side for both — otherwise an uncovered index's
+   * live row silently drops out of an indexed-column predicate (the read path re-verifies the key
+   * against the data row and excludes, rather than resurrects, the trimmed value). Local indexes
+   * are excluded: their prior-row state flows through the separate {@code CachedLocalTable} path,
+   * not this current-row read.
    * <p>
    * This runs after {@code updateMutationsForConditionalTTL}, so a conditionally-expired row has
    * {@code dataRowStates.put(key, null)} and the {@code current == null} guard correctly skips
@@ -999,16 +1017,18 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (!indexTTLColumnResyncEnabled) {
       return;
     }
-    if (!context.hasGlobalIndex || context.dataRowStates == null) {
-      // Only covered/indexed global indexes can diverge this way; without a current-row read
-      // there is nothing to re-persist from.
+    if ((!context.hasGlobalIndex && !context.hasUncoveredIndex) || context.dataRowStates == null) {
+      // Only covered global or uncovered global indexes can diverge this way; without a current-row
+      // read there is nothing to re-persist from.
       return;
     }
-    // Union of non-PK columns referenced by any index (indexed + covered). PK columns live in the
-    // row key, never as cells in a Put, so they are naturally excluded by the has()/get() checks.
+    // Union of non-PK columns referenced by any covered or uncovered global index (indexed +
+    // covered). PK columns live in the row key, never as cells in a Put, so they are naturally
+    // excluded by the has()/get() checks. Local indexes are skipped (separate CachedLocalTable
+    // maintenance path).
     Set<ColumnReference> indexReferencedCols = new HashSet<>();
     for (IndexMaintainer maintainer : indexMetaData.getIndexMaintainers()) {
-      if (maintainer.isLocalIndex() || maintainer.isUncovered()) {
+      if (maintainer.isLocalIndex()) {
         continue;
       }
       indexReferencedCols.addAll(maintainer.getAllColumnsForDataTable());
@@ -1266,7 +1286,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * internal current-row scan. A covered global index is preferred, but the empty CF/CQ is a
    * data-table property identical across all maintainers, so any works; the first is used as a
    * fallback. Returns null when there are no maintainers (e.g. an atomic-only mutation with no
-   * index), in which case the internal scan is left unmasked (there is no index to diverge).
+   * index); in that case {@link #getCurrentRowStates} falls back to the empty-column CF/CQ the
+   * client threaded on the mutation, so a no-index current-row read on a TTL table is still masked.
    */
   private IndexMaintainer getDataTableMaintainerForInternalScan(
     PhoenixIndexMetaData indexMetaData) {
@@ -1289,10 +1310,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * The disk read is opened through {@link ServerScanUtil} so it is TTL-masked exactly like a
    * client read: the internal scan otherwise bypasses the {@code postScannerOpen} coprocessor hook
    * (the only place a scan is wrapped in {@code TTLRegionScanner}) and would rebuild the index from
-   * logically-expired-but-physically-present cells. {@code dataTableMaintainer} supplies the
-   * empty-column CF/CQ, {@code literalTTLForScan} carries a view's literal TTL (null for base
-   * tables, which use the CF-descriptor fallback), and {@code isStrictTTL} avoids over-masking a
-   * non-strict table. Masking is a strict no-op when Phoenix compaction is disabled.
+   * logically-expired-but-physically-present cells. The empty-column CF/CQ come from
+   * {@code dataTableMaintainer} when a secondary index is being maintained, and otherwise (the
+   * no-index atomic / ON DUPLICATE KEY / {@code returnResult} / row-delete path on a TTL table) from
+   * the bytes the client threaded on the mutation and captured into the batch context;
+   * {@code literalTTLForScan} carries a view's literal TTL (null for base tables, which use the
+   * CF-descriptor fallback), and {@code isStrictTTL} avoids over-masking a non-strict table. Masking
+   * is a strict no-op when Phoenix compaction is disabled. The internal
+   * scan is also given the client read path's server-paging setup (a {@code SERVER_PAGE_SIZE_MS}
+   * attribute and a {@code PagingFilter} wrap), so it is bounded by the server page budget just like
+   * a client scan; {@code readDataTableRows} skips the dummy results that paging can emit.
    */
   private void getCurrentRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
     BatchMutateContext context, IndexMaintainer dataTableMaintainer, byte[] literalTTLForScan,
@@ -1345,6 +1372,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return;
     }
 
+    // Resolve the empty-column CF/CQ that let TTLRegionScanner mask this internal scan. When a
+    // secondary index is being maintained they come from the data-table maintainer; otherwise (the
+    // no-index atomic / ON DUPLICATE KEY / returnResult / row-delete path on a TTL table) they are
+    // the bytes the client threaded on the mutation and captured into the batch context. Both
+    // resolve to the same data-table empty column. When neither is available the scan is left
+    // unmasked (no effective TTL, or a non-TTL table), which is safe.
+    byte[] emptyCF = dataTableMaintainer != null
+      ? dataTableMaintainer.getDataEmptyKeyValueCF()
+      : context.emptyCFForInternalScan;
+    byte[] emptyCQ = dataTableMaintainer != null
+      ? dataTableMaintainer.getEmptyKeyValueQualifierForDataTable()
+      : context.emptyCQForInternalScan;
+    boolean maskInternalScan = emptyCF != null && emptyCQ != null;
+
     if (this.useBloomFilter) {
       for (KeyRange key : keys) {
         // Scan.java usage alters scan instances, safer to create scan instance per usage
@@ -1353,9 +1394,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // for bloom filters scan should be a get
         scan.withStartRow(key.getLowerRange(), true);
         scan.withStopRow(key.getLowerRange(), true);
-        if (dataTableMaintainer != null) {
-          ServerScanUtil.setInternalScanAttributes(scan, dataTableMaintainer, literalTTLForScan,
-            isStrictTTL);
+        if (maskInternalScan) {
+          ServerScanUtil.setInternalScanAttributes(c.getEnvironment().getConfiguration(), scan,
+            emptyCF, emptyCQ, literalTTLForScan, isStrictTTL);
         }
         readDataTableRows(c, context, scan);
       }
@@ -1365,9 +1406,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       scanRanges.initializeScan(scan);
       SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
       scan.setFilter(skipScanFilter);
-      if (dataTableMaintainer != null) {
-        ServerScanUtil.setInternalScanAttributes(scan, dataTableMaintainer, literalTTLForScan,
-          isStrictTTL);
+      if (maskInternalScan) {
+        ServerScanUtil.setInternalScanAttributes(c.getEnvironment().getConfiguration(), scan,
+          emptyCF, emptyCQ, literalTTLForScan, isStrictTTL);
       }
       readDataTableRows(c, context, scan);
     }
@@ -1385,6 +1426,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         List<Cell> cells = new ArrayList<Cell>();
         more = scanner.next(cells);
         if (cells.isEmpty()) {
+          continue;
+        }
+        // With server paging wired in (ServerScanUtil.setInternalScanAttributes), PagingRegionScanner
+        // returns a dummy result when a page is paged out; skip it and let the loop resume rather
+        // than build a Put from the dummy cell.
+        if (ScanUtil.isDummy(cells)) {
           continue;
         }
         byte[] rowKey = CellUtil.cloneRow(cells.get(0));
@@ -1810,14 +1857,26 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * The client threads a view's literal TTL via the same {@code _TTL} mutation attribute that the
-   * server otherwise treats as conditional TTL ({@code PhoenixIndexBuilder.hasConditionalTTL}). We
-   * make that attribute polymorphic: inspect the representative mutation's {@code _TTL}, and if it
-   * deserializes to a {@link LiteralTTLExpression} (a view's literal TTL), capture its bytes for the
-   * internal current-row scan and remove {@code _TTL} from every mutation. If it is conditional (or
-   * absent), leave everything untouched so the existing conditional-TTL path runs normally.
+   * Captures the literal-TTL internal-scan attributes the client threads
+   * ({@link org.apache.phoenix.util.ScanUtil#annotateMutationWithLiteralTTL}) off the representative
+   * mutation so the internal current-row scan can mask exactly like a client read.
    * <p>
-   * Removal must happen before {@link #identifyMutationTypes} so that
+   * Two things are captured:
+   * <ul>
+   * <li>The <b>empty-column CF/CQ</b> — threaded whenever an effective (non-NONE) literal TTL
+   * applies, for both base tables and views. They let {@code setInternalScanAttributes} mask even
+   * when no {@link IndexMaintainer} is available to supply them: the no-index atomic / ON DUPLICATE
+   * KEY / {@code returnResult} / row-delete path on a TTL table. They are inert on the write path
+   * (nothing reads a mutation's empty-column attribute), so they are left on the mutations, not
+   * removed.</li>
+   * <li>The view's literal <b>{@code _TTL}</b> — the client threads it via the same {@code _TTL}
+   * mutation attribute the server otherwise treats as conditional TTL
+   * ({@code PhoenixIndexBuilder.hasConditionalTTL}). We make that attribute polymorphic: if the
+   * representative mutation's {@code _TTL} deserializes to a {@link LiteralTTLExpression} (a view's
+   * literal TTL), capture its bytes and remove {@code _TTL} from every mutation; if it is
+   * conditional (or absent), leave it untouched so the conditional-TTL path runs normally.</li>
+   * </ul>
+   * The {@code _TTL} removal must happen before {@link #identifyMutationTypes} so that
    * {@code hasConditionalTTL(m)} returns false at every consumer (it sets
    * {@code context.hasConditionalTTL}, which would otherwise reach the blind cast to
    * {@code CompiledConditionalTTLExpression} in {@link #updateMutationsForConditionalTTL}). A table
@@ -1830,8 +1889,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (miniBatchOp.size() == 0) {
       return;
     }
-    byte[] ttlBytes =
-      miniBatchOp.getOperation(0).getAttribute(BaseScannerRegionObserverConstants.TTL);
+    Mutation representative = miniBatchOp.getOperation(0);
+    // Empty-column CF/CQ are threaded independently of _TTL (a base finite-TTL table threads them
+    // but no _TTL), so capture them regardless of the _TTL attribute below. Left on the mutations.
+    context.emptyCFForInternalScan =
+      representative.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
+    context.emptyCQForInternalScan =
+      representative.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
+
+    byte[] ttlBytes = representative.getAttribute(BaseScannerRegionObserverConstants.TTL);
     if (ttlBytes == null) {
       return;
     }
@@ -2077,7 +2143,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     long batchTimestamp = getBatchTimestamp(context, table);
     // Re-persist index-referenced columns a partial touch omitted, so the data-side covered cell
     // and the index-side cell share batchTimestamp and any compaction retains/expires them
-    // together (RCA Point 2). Must run before setTimestamps so injected LATEST cells are stamped.
+    // together. Must run before setTimestamps so injected LATEST cells are stamped.
     rewriteIndexReferencedColumns(miniBatchOp, context, indexMetaData);
     // Update the timestamps of the data table mutations to prevent overlapping timestamps
     // (which prevents index inconsistencies as this case is not handled).

@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end.index;
 
 import static org.apache.phoenix.end2end.index.IndexDataTableTTLSyncIT.COVCOL_VALUE;
+import static org.apache.phoenix.end2end.index.IndexDataTableTTLSyncIT.IDXCOL_VALUE;
 import static org.apache.phoenix.end2end.index.IndexDataTableTTLSyncIT.maxTimestampForValue;
 import static org.junit.Assert.assertTrue;
 
@@ -44,11 +45,11 @@ import org.junit.experimental.categories.Category;
  * once server-side at coprocessor {@code start()}, so it can only be exercised with its own mini
  * cluster — hence a separate class from {@link IndexDataTableTTLSyncIT}.
  * <p>
- * With the flag off, the Point 2 rewrite is skipped: a covcol-omitting touch does NOT re-inject
+ * With the flag off, the column re-sync is skipped: a covcol-omitting touch does NOT re-inject
  * covcol into the data Put, so the data-side covcol keeps its original write timestamp. This is the
  * mirror of the on-by-default assertion in {@link IndexDataTableTTLSyncIT} and demonstrates that the
- * pre-fix timestamp skew (which a later major compaction turns into data/index divergence) returns
- * when an operator opts out.
+ * timestamp skew (which a later major compaction turns into data/index divergence) returns when an
+ * operator opts out.
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class IndexDataTableTTLSyncFlagOffIT extends BaseTest {
@@ -107,6 +108,48 @@ public class IndexDataTableTTLSyncFlagOffIT extends BaseTest {
       assertTrue("with resync disabled, covcol must NOT be re-stamped; originalCovTs="
         + originalCovTs + " touchTime=" + touchTime + " dataCovTs=" + dataCovTs,
         dataCovTs == originalCovTs && dataCovTs < touchTime);
+    }
+  }
+
+  /**
+   * The uncovered-index counterpart to the covered case above: with the flag off, an
+   * {@code idxcol}-omitting touch does NOT re-inject the uncovered index's indexed column, so the
+   * data-side {@code idxcol} keeps its original write timestamp. This is the mirror of
+   * {@link IndexDataTableTTLSyncIT#testUncoveredIndexIndexedColumnResync} and confirms the kill
+   * switch governs the uncovered path too.
+   */
+  @Test
+  public void testResyncDisabledLeavesUncoveredIdxColAtOriginalTimestamp() throws Exception {
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + tableName
+        + " (id VARCHAR NOT NULL PRIMARY KEY, idxcol VARCHAR, touchcol VARCHAR) TTL="
+        + IndexDataTableTTLSyncIT.TTL + ", COLUMN_ENCODED_BYTES=0");
+      conn.createStatement()
+        .execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (idxcol)");
+      conn.commit();
+
+      EnvironmentEdgeManager.injectEdge(injectEdge);
+
+      conn.createStatement().execute("UPSERT INTO " + tableName
+        + " (id, idxcol, touchcol) VALUES ('r1', '" + IDXCOL_VALUE + "', 'x0')");
+      conn.commit();
+      long originalIdxTs =
+        maxTimestampForValue(conn, TableName.valueOf(tableName), Bytes.toBytes("r1"), IDXCOL_VALUE);
+
+      injectEdge.incrementValue(1000);
+      long touchTime = injectEdge.currentTime();
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " (id, touchcol) VALUES ('r1', 'x1')");
+      conn.commit();
+
+      // Flag off: no re-injection, so the data idxcol keeps its original timestamp (< touchTime).
+      long dataIdxTs =
+        maxTimestampForValue(conn, TableName.valueOf(tableName), Bytes.toBytes("r1"), IDXCOL_VALUE);
+      assertTrue("with resync disabled, uncovered idxcol must NOT be re-stamped; originalIdxTs="
+        + originalIdxTs + " touchTime=" + touchTime + " dataIdxTs=" + dataIdxTs,
+        dataIdxTs == originalIdxTs && dataIdxTs < touchTime);
     }
   }
 }

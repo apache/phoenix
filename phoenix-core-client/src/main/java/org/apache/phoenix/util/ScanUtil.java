@@ -1884,6 +1884,17 @@ public class ScanUtil {
    * <li>For either type, {@code IS_STRICT_TTL=false} is set only when the table/view is non-strict,
    * so absence defaults to strict, matching the read-path convention and avoiding over-masking of a
    * non-strict table.</li>
+   * <li>For either type, the empty-column CF/CQ are threaded <b>unconditionally</b> (for any mutable
+   * literal-TTL table/view, regardless of the TTL value or the view-TTL flag), exactly as the client
+   * read path does: {@link #setScanAttributesForClient} sets the empty column on every non-analyze
+   * scan. They merely identify the table's empty column and only <i>enable</i> masking;
+   * {@link org.apache.phoenix.coprocessor.TTLRegionScanner} still independently requires an effective,
+   * non-FOREVER, strict TTL to actually mask, so setting them whenever a current-row read may happen
+   * makes the internal scan mask <i>identically</i> to a client read rather than diverging from it.
+   * They are also the only source of these values for the no-index current-row read (an atomic / ON
+   * DUPLICATE KEY / {@code returnResult} / row-delete on a TTL table), which has no
+   * {@code IndexMaintainer} on the server. Derived exactly as the read path derives them via
+   * {@link SchemaUtil#getEmptyColumnFamily(PTable)} / {@link SchemaUtil#getEmptyColumnQualifier}.</li>
    * </ul>
    */
   public static void annotateMutationWithLiteralTTL(PhoenixConnection connection, PTable table,
@@ -1906,23 +1917,31 @@ public class ScanUtil {
       || connection.getQueryServices().getConfiguration().getBoolean(
         QueryServices.PHOENIX_VIEW_TTL_ENABLED, QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED);
 
+    // The view's literal TTL is threaded as _TTL only for a view with view-TTL enabled, since it is
+    // not on the shared CF descriptor. A view with view-TTL disabled sets no _TTL on the read path
+    // (it returns after only IS_STRICT_TTL), so neither do we; a base table's literal TTL is on the
+    // CF descriptor, so the server's TTLRegionScanner fallback derives it and we thread no _TTL.
     byte[] ttlForScan = null;
     if (isView && viewTTLEnabled) {
-      // A view's literal TTL is not on the shared CF descriptor, so thread it per-mutation. This
-      // is non-null for FOREVER and finite literals and null only for NONE, matching the read path
-      // at setScanAttributesForPhoenixTTL (ScanUtil non-null filter). FOREVER must be threaded, not
-      // skipped: the view CF-descriptor fallback carries the base table's (possibly finite) TTL, so
-      // an absent _TTL would wrongly mask a view whose rows should live forever.
+      // serialize() is non-null for FOREVER and finite literals and null only for NONE, the exact
+      // non-null filter the read path uses at setScanAttributesForPhoenixTTL. FOREVER must be
+      // threaded, not skipped: the view CF-descriptor fallback carries the base table's (possibly
+      // finite) TTL, so an absent _TTL would wrongly mask a view whose rows should live forever.
       ttlForScan = table.getCompiledTTLExpression(connection).serialize();
     }
 
+    // The empty-column CF/CQ are threaded unconditionally, exactly as the client read path
+    // (setScanAttributesForClient) sets them on every non-analyze scan. They only identify the
+    // table's empty column and enable masking; TTLRegionScanner still independently requires an
+    // effective, non-FOREVER, strict TTL to actually mask, so setting them whenever a current-row
+    // read may happen makes the internal scan mask identically to a client read. They are also the
+    // only source of these values for the no-index current-row read (atomic / ON DUPLICATE KEY /
+    // returnResult / row-delete), which has no IndexMaintainer on the server.
+    byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
+    byte[] emptyCQ = SchemaUtil.getEmptyColumnQualifier(table);
+
     byte[] isStrictTTL =
       table.isStrictTTL() ? null : PBoolean.INSTANCE.toBytes(table.isStrictTTL());
-    if (ttlForScan == null && isStrictTTL == null) {
-      // Strict base literal TTL: the CF-descriptor fallback and default-strict masking already
-      // reproduce the client read, so no attribute is needed.
-      return;
-    }
     for (Mutation mutation : mutations) {
       if (ttlForScan != null) {
         mutation.setAttribute(BaseScannerRegionObserverConstants.TTL, ttlForScan);
@@ -1930,6 +1949,8 @@ public class ScanUtil {
       if (isStrictTTL != null) {
         mutation.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL, isStrictTTL);
       }
+      mutation.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
+      mutation.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
     }
   }
 
