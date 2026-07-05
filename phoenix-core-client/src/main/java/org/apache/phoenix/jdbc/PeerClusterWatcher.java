@@ -172,16 +172,13 @@ final class PeerClusterWatcher implements Closeable {
 
   /** Current peer record, or null when the peer is not visible. */
   HAGroupStoreRecord getCurrentPeerRecord() {
-    // Fail closed while blind: the PathChildrenCache keeps serving its last-known data after a
-    // CONNECTION_SUSPENDED/LOST (the cache is not torn down), so returning it here would leak a
-    // stale peer role into callers (ClusterRoleRecord derivation, SYSTEM.HA_GROUP sync, legacy
-    // CRR).
-    if (isBlind()) {
-      return null;
-    }
-    // Read the cache under the lock: close() nulls the field and closes the cache only after
-    // acquiring this lock, so the O(1) in-memory read here always sees a live cache.
+    // Fail closed while blind. Check and read under stateLock so a concurrent setBlind() (which
+    // flips visibility under the same lock) cannot slip between the check and the read and leak the
+    // stale last-known cache record.
     synchronized (stateLock) {
+      if (isBlind()) {
+        return null;
+      }
       return HAGroupStoreCacheUtil.recordAndStatAt(cache, toPath(haGroupName)).getLeft();
     }
   }
