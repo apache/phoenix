@@ -971,7 +971,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * cell keeps its original timestamp while the index side is rebuilt at {@code batchTimestamp}. A
    * later major compaction then opens a {@code >ttl} gap on the data side but not the index side,
    * dropping the value only on the data table, so the data row and index row diverge. To close it,
-   * for every index-enabled non-atomic Put we inject each non-PK column referenced by any index
+   * for every index-enabled Put — a plain upsert or a reconstructed atomic / ON DUPLICATE KEY
+   * upsert alike — we inject each non-PK column referenced by any index
    * ({@link IndexMaintainer#getAllColumnsForDataTable()}, the union of indexed and covered columns)
    * that the touch left unchanged, sourcing the value from the merged next row state
    * ({@code dataRowStates.getSecond()}).
@@ -1066,10 +1067,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   /**
    * Union of non-PK columns referenced by any covered or uncovered global index (indexed +
    * covered). PK columns live in the row key, never as cells in a Put, so they are naturally
-   * excluded by callers' has()/get() checks. Local indexes are skipped (separate CachedLocalTable
-   * maintenance path). Shared by {@code rewriteIndexReferencedColumns} (plain-Put path) and
-   * {@code generateOnDupMutations} (atomic / ON DUPLICATE KEY path) so both re-persist an identical
-   * column set.
+   * excluded by callers' has()/get() checks.
    */
   private static Set<ColumnReference> getIndexReferencedColumns(
     PhoenixIndexMetaData indexMetaData) {
@@ -2505,27 +2503,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // true, will be null if there is no expression on this column, otherwise false
     Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap = new HashMap<>();
 
-    // Snapshot of the current data row's cells, keyed by ColumnReference. Populated once, up front,
-    // before any conditional update logic mutates state. It answers an OLD_ROW return request. It
-    // is a local; only exposed on the context for an OLD_ROW return request (unchanged semantics).
-    Map<ColumnReference, Pair<Cell, Boolean>> oldRowColumnCellExprMap = new HashMap<>();
-
     byte[] rowKey = atomicPut.getRow();
     ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(rowKey);
     // Get the latest data row state
     Pair<Put, Put> dataRowState = context.dataRowStates.get(rowKeyPtr);
     Put currentDataRowState = dataRowState != null ? dataRowState.getFirst() : null;
 
-    // Capture the original row state (no-op when currentDataRowState is null for a new row).
-    updateCurrColumnCellExpr(currentDataRowState, oldRowColumnCellExprMap);
+    // Create separate map for old row data when OLD_ROW is requested
+    // This must be done before any conditional update logic to preserve original state
     if (context.returnResult && context.returnOldRow && currentDataRowState != null) {
-      context.oldRowColumnCellExprMap = oldRowColumnCellExprMap;
+      context.oldRowColumnCellExprMap = new HashMap<>();
+      updateCurrColumnCellExpr(currentDataRowState, context.oldRowColumnCellExprMap);
     }
 
     // if result needs to be returned but the DML does not have ON DUPLICATE KEY present,
-    // perform the mutation and return the result. Any index-referenced column this upsert omits is
-    // re-persisted later by rewriteIndexReferencedColumns, which now also covers atomic /
-    // returnResult Puts once they have been merged into the batch's next row state.
+    // perform the mutation and return the result.
     if (opBytes == null) {
       mutations.add(atomicPut);
       updateCurrColumnCellExpr(currentDataRowState != null ? currentDataRowState : atomicPut,
