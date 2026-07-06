@@ -652,6 +652,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   private Predicate<Mutation> ignoreReplicationFilter;
 
+  public IndexRegionObserver() {
+  }
+
+  @VisibleForTesting
+  IndexRegionObserver(String dataTableName) {
+    this.dataTableName = dataTableName;
+  }
+
   @Override
   public Optional<RegionObserver> getRegionObserver() {
     return Optional.of(this);
@@ -1421,7 +1429,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * calling this.
    */
   @VisibleForTesting
-  static List<ReplicatedRowGroup> buildReplicatedRowGroups(List<Mutation> enabledMutations)
+  List<ReplicatedRowGroup> buildReplicatedRowGroups(List<Mutation> enabledMutations)
     throws IOException {
     LinkedHashMap<RowTsKey, List<Mutation>> groups = new LinkedHashMap<>();
     for (Mutation m : enabledMutations) {
@@ -1536,13 +1544,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * mutation arrived on the standby with no pre-image, which should never happen because the active
    * runs {@code prepareDataRowStates} (and writes a pre-image cell) for every table with a
    * global/uncovered/transform/CDC index.
+   * <p>
+   * The one way this can legitimately occur is schema skew: the standby carries an index the active
+   * lacked when it shipped the batch, so the mutation is index-enabled on replay but no pre-image
+   * was captured on the active. That already breaks the feature's foundational assumption — index
+   * regeneration requires the active and standby to agree on the set of index maintainers — so we
+   * fail loud (a non-retryable {@link DoNotRetryIOException}) rather than silently regenerate the
+   * index against a missing prior state, which would corrupt it.
    */
   @VisibleForTesting
-  static Put decodePreImage(Mutation m) throws IOException {
+  Put decodePreImage(Mutation m) throws IOException {
     byte[] preImageBytes = m.getAttribute(PRE_IMAGE);
     if (preImageBytes == null) {
-      throw new DoNotRetryIOException("Replicated mutation on indexed table is missing the "
-        + PRE_IMAGE + " attribute: row=" + Bytes.toStringBinary(m.getRow()));
+      throw new DoNotRetryIOException("Replicated mutation on table " + dataTableName
+        + " is missing the " + PRE_IMAGE + " attribute: row=" + Bytes.toStringBinary(m.getRow()));
     }
     if (preImageBytes.length == 0) {
       return null;
@@ -2652,7 +2667,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         Collection<? extends Mutation> mutations =
           buildReplayLocalIndexInputs(groups, preImageCellsByRowTs);
         handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData,
-          new PreImageLocalTable(preImageCellsByRowTs));
+          new PreImageLocalTable(dataTableName, preImageCellsByRowTs));
       } else {
         Collection<? extends Mutation> mutations = groupMutations(miniBatchOp, context);
         // dataRowStates is populated only by the global/uncovered/transform/atomic/... branch, so a

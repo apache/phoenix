@@ -47,6 +47,9 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
  * recurs non-consecutively yields a separate mutation per run), not correctness -- cell order is
  * preserved, so replaying the resulting mutations in order reproduces the effect of applying the
  * input cells in order.
+ * <p>
+ * Stateless and thread-safe: a non-instantiable holder of static methods that operate solely on
+ * their arguments.
  */
 public final class MutationCellGrouper {
 

@@ -55,6 +55,8 @@ public class IndexRegionObserverReplayTest {
   private static final byte[] Q3 = Bytes.toBytes("c3");
   private static final long TS = 100L;
 
+  private final IndexRegionObserver iro = new IndexRegionObserver("T");
+
   /** A Put on the given row at the given ts, one cell per qualifier. */
   private static Put putRowTs(byte[] row, long ts, byte[]... qualifiers) {
     Put put = new Put(row);
@@ -76,7 +78,7 @@ public class IndexRegionObserverReplayTest {
   public void testDecodePreImageMissingAttributeThrows() {
     Put m = putRowTs(ROW, TS, Q1);
     try {
-      IndexRegionObserver.decodePreImage(m);
+      iro.decodePreImage(m);
       fail("expected DoNotRetryIOException when PRE_IMAGE attribute is absent");
     } catch (DoNotRetryIOException expected) {
       assertTrue(expected.getMessage().contains(IndexRegionObserver.PRE_IMAGE));
@@ -90,7 +92,7 @@ public class IndexRegionObserverReplayTest {
     Put m = putRowTs(ROW, TS, Q1);
     m.setAttribute(IndexRegionObserver.PRE_IMAGE, HConstants.EMPTY_BYTE_ARRAY);
     assertNull("zero-length PRE_IMAGE is the 'active saw empty row' sentinel",
-      IndexRegionObserver.decodePreImage(m));
+      iro.decodePreImage(m));
   }
 
   @Test
@@ -98,7 +100,7 @@ public class IndexRegionObserverReplayTest {
     Put preImage = putRowTs(ROW, TS, Q1, Q2);
     Put carrier = withPreImage(new Put(ROW), preImage);
 
-    Put decoded = IndexRegionObserver.decodePreImage(carrier);
+    Put decoded = iro.decodePreImage(carrier);
     assertTrue(decoded.has(CF, Q1));
     assertTrue(decoded.has(CF, Q2));
     assertTrue(CellUtil.matchingRow(decoded.getFamilyCellMap().get(CF).get(0), ROW));
@@ -203,7 +205,7 @@ public class IndexRegionObserverReplayTest {
     Put g2 = withPreImage(putRowTs(ROW, 200L, Q2), putRowTs(ROW, 200L, Q1));
 
     List<IndexRegionObserver.ReplicatedRowGroup> groups =
-      IndexRegionObserver.buildReplicatedRowGroups(Arrays.<Mutation> asList(g1, g2));
+      iro.buildReplicatedRowGroups(Arrays.<Mutation> asList(g1, g2));
 
     assertEquals("two distinct (row, ts) groups", 2, groups.size());
     assertEquals(100L, groups.get(0).ts);
@@ -220,7 +222,7 @@ public class IndexRegionObserverReplayTest {
     Put g2 = withPreImage(putRowTs(ROW, 200L, Q2), putRowTs(ROW, 200L, Q1));
 
     List<IndexRegionObserver.ReplicatedRowGroup> groups =
-      IndexRegionObserver.buildReplicatedRowGroups(Arrays.<Mutation> asList(g1, g2));
+      iro.buildReplicatedRowGroups(Arrays.<Mutation> asList(g1, g2));
 
     // group 1: no pre-image + a Put(Q1) -> next has Q1
     assertTrue(groups.get(0).nextState.has(CF, Q1));
@@ -235,7 +237,7 @@ public class IndexRegionObserverReplayTest {
     Put b = withPreImage(putRowTs(ROW, 100L, Q2), null);
 
     List<IndexRegionObserver.ReplicatedRowGroup> groups =
-      IndexRegionObserver.buildReplicatedRowGroups(Arrays.<Mutation> asList(a, b));
+      iro.buildReplicatedRowGroups(Arrays.<Mutation> asList(a, b));
 
     assertEquals("same (row, ts) collapses into one group", 1, groups.size());
     assertEquals(2, groups.get(0).mutations.size());
@@ -264,8 +266,8 @@ public class IndexRegionObserverReplayTest {
     // (R2, ts1): no pre-image; Put X adds Q1 -> next {Q1}.
     Put r2t1Put = withPreImage(putRowTs(R2, ts1, Q1), null);
 
-    List<IndexRegionObserver.ReplicatedRowGroup> groups = IndexRegionObserver
-      .buildReplicatedRowGroups(Arrays.<Mutation> asList(r1t1Put, r1t1Del, r1t2Put, r2t1Put));
+    List<IndexRegionObserver.ReplicatedRowGroup> groups =
+      iro.buildReplicatedRowGroups(Arrays.<Mutation> asList(r1t1Put, r1t1Del, r1t2Put, r2t1Put));
 
     // (a) exactly three groups, in first-seen order.
     assertEquals("three (row, ts) groups", 3, groups.size());

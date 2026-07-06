@@ -48,15 +48,21 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
  * A {@code null} cell list is the "active saw an empty row" sentinel and is the documented
  * {@link LocalHBaseState#getCurrentRowState} return for "no prior row". A key that is absent
  * entirely (never populated) is a contract violation and throws, so the sentinel stays unambiguous.
+ * <p>
+ * Not thread-safe, and does not need to be: an instance is built per replay batch and consumed by
+ * that batch's single-threaded local-index build. The backing map is populated once at construction
+ * and never mutated afterward.
  */
 public class PreImageLocalTable implements LocalHBaseState {
 
   /** Distinct marker for "key absent", so a stored null (empty-row sentinel) is not mistaken. */
   private static final List<Cell> ABSENT = Collections.emptyList();
 
+  private final String dataTableName;
   private final Map<RowTsKey, List<Cell>> preImageCellsByRowTs;
 
-  public PreImageLocalTable(Map<RowTsKey, List<Cell>> preImageCellsByRowTs) {
+  public PreImageLocalTable(String dataTableName, Map<RowTsKey, List<Cell>> preImageCellsByRowTs) {
+    this.dataTableName = dataTableName;
     this.preImageCellsByRowTs =
       Preconditions.checkNotNull(preImageCellsByRowTs, "preImageCellsByRowTs must not be null");
   }
@@ -83,8 +89,8 @@ public class PreImageLocalTable implements LocalHBaseState {
     // as the empty-row sentinel and silently regenerate the index against an empty prior state.
     List<Cell> cells = preImageCellsByRowTs.getOrDefault(key, ABSENT);
     if (cells == ABSENT) {
-      throw new DoNotRetryIOException(
-        "No pre-image for replayed local-index row; (row, ts) key not populated: " + key);
+      throw new DoNotRetryIOException("No pre-image for replayed local-index row on table "
+        + dataTableName + "; (row, ts) key not populated: " + key);
     }
     return cells;
   }
