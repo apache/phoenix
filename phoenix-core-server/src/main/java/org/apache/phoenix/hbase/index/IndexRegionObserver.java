@@ -737,12 +737,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   private void addOnDupMutationsToBatch(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-    BatchMutateContext context, PhoenixIndexMetaData indexMetaData) throws IOException {
+    BatchMutateContext context) throws IOException {
     for (int i = 0; i < miniBatchOp.size(); i++) {
       Mutation m = miniBatchOp.getOperation(i);
       if ((this.builder.isAtomicOp(m) || this.builder.returnResult(m)) && m instanceof Put) {
-        List<Mutation> mutations = generateOnDupMutations(context, (Put) m, miniBatchOp,
-          indexMetaData);
+        List<Mutation> mutations = generateOnDupMutations(context, (Put) m, miniBatchOp);
         if (!mutations.isEmpty()) {
           addOnDupMutationsToBatch(miniBatchOp, i, mutations);
         } else {
@@ -974,11 +973,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * dropping the value only on the data table, so the data row and index row diverge. To close it,
    * for every index-enabled non-atomic Put we inject each non-PK column referenced by any index
    * ({@link IndexMaintainer#getAllColumnsForDataTable()}, the union of indexed and covered columns)
-   * that the touch omitted, sourcing the value from the masked current-row state.
-   * The cells are added at {@link HConstants#LATEST_TIMESTAMP} so the subsequent
-   * {@link #setTimestamps} call re-stamps them to {@code batchTimestamp}, making the data-side and
-   * index-side cells share both the timestamp and the empty-column neighbor. Any compaction then
-   * feeds identical timestamps into the same gap analysis on both sides.
+   * that the touch left unchanged, sourcing the value from the merged next row state
+   * ({@code dataRowStates.getSecond()}).
+   * The cells are added directly at {@code batchTimestamp} (this runs after {@link #setTimestamps}),
+   * making the data-side and index-side cells share both the timestamp and the empty-column
+   * neighbor. Any compaction then feeds identical timestamps into the same gap analysis on both
+   * sides.
+   * <p>
+   * The value is sourced from the merged next row state rather than the raw current row so that a
+   * column the touch sets to NULL is honored: such a column is emitted as a separate {@code Delete}
+   * (not a cell in the Put) and is therefore absent from {@code getSecond()} after
+   * {@code applyPendingDeleteMutations}, so it is correctly not re-persisted. Reading from the
+   * current row ({@code getFirst()}) would instead resurrect the just-deleted value. Conversely, a
+   * column the touch neither writes nor deletes is carried over into {@code getSecond()} from the
+   * current row and is the one that must be re-persisted. Because the index is likewise generated
+   * from {@code getSecond()}, both sides always agree on the value.
    * <p>
    * Both covered global indexes and uncovered global indexes are handled. A covered index stores
    * the value as an index cell rebuilt at {@code batchTimestamp}; an uncovered index encodes its
@@ -988,13 +997,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * live row silently drops out of an indexed-column predicate (the read path re-verifies the key
    * against the data row and excludes, rather than resurrects, the trimmed value).
    * <p>
-   * This runs after {@code updateMutationsForConditionalTTL}, so a conditionally-expired row has
-   * {@code dataRowStates.put(key, null)} and the {@code current == null} guard correctly skips
-   * resurrecting it. Atomic / ON DUPLICATE KEY Puts are excluded — they are already reconstructed by
-   * {@code generateOnDupMutations} — and immutable tables no-op because no current-row read happened.
+   * This runs after {@code prepareDataRowStates}, so {@code getSecond()} reflects this batch's puts
+   * and deletes. A conditionally-expired row was reset by {@code updateMutationsForConditionalTTL}
+   * ({@code dataRowStates.put(key, null)}), so its rebuilt next state contains only the touch's own
+   * columns and nothing extra is re-persisted; a full row delete leaves {@code getSecond() == null},
+   * which the guard skips. Atomic / ON DUPLICATE KEY Puts are handled here too: {@code
+   * generateOnDupMutations} reconstructs them and merges the result into the in-batch Put (and thus
+   * into its next row state) before this runs, so sourcing from {@code getSecond()} re-persists the
+   * index-referenced columns they omit — including correctly honoring a column an ON DUPLICATE KEY
+   * UPDATE set to NULL, which a snapshot of the pre-upsert row would instead resurrect. A no-op
+   * atomic op is skipped via the {@code isAtomicOperationComplete} guard (nothing is written), and
+   * immutable tables no-op because no current-row read happened.
    */
   private void rewriteIndexReferencedColumns(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-    BatchMutateContext context, PhoenixIndexMetaData indexMetaData) throws IOException {
+    BatchMutateContext context, PhoenixIndexMetaData indexMetaData, long batchTimestamp)
+    throws IOException {
     if ((!context.hasGlobalIndex && !context.hasUncoveredIndex) || context.dataRowStates == null) {
       // Only covered global or uncovered global indexes can diverge this way; without a current-row
       // read there is nothing to re-persist from.
@@ -1005,18 +1022,23 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return;
     }
     for (int i = 0; i < miniBatchOp.size(); i++) {
+      // Skip completed atomic ops (ON DUPLICATE KEY IGNORE on an existing row, or a no-op ON
+      // DUPLICATE KEY UPDATE): nothing is written for them, so there is nothing to re-persist and
+      // injecting would turn a genuine no-op into a spurious write. A non-no-op atomic Put is not
+      // complete here; its generateOnDupMutations result has already been merged into the in-batch
+      // Put and its next row state, so it is processed like any other Put below.
+      if (isAtomicOperationComplete(miniBatchOp.getOperationStatus(i))) {
+        continue;
+      }
       Mutation m = miniBatchOp.getOperation(i);
       if (!(m instanceof Put) || !this.builder.isEnabled(m)) {
         continue;
       }
-      // Exclude atomic / ON DUPLICATE KEY Puts; they are reconstructed by generateOnDupMutations.
-      if (this.builder.isAtomicOp(m) || this.builder.returnResult(m)) {
-        continue;
-      }
       Pair<Put, Put> rowState = context.dataRowStates.get(new ImmutableBytesPtr(m.getRow()));
-      Put current = rowState != null ? rowState.getFirst() : null;
-      if (current == null) {
-        // Expired/masked row or a brand new row: nothing to re-persist.
+      Put next = rowState != null ? rowState.getSecond() : null;
+      if (next == null) {
+        // Expired/masked row, a brand new row with no carried-over state, or a row fully deleted in
+        // this batch: nothing to re-persist.
         continue;
       }
       Put put = (Put) m;
@@ -1027,15 +1049,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           // The touch already writes this column; leave it (idempotence guard).
           continue;
         }
-        List<Cell> currentCells = current.get(family, qualifier);
-        if (currentCells == null || currentCells.isEmpty()) {
+        List<Cell> nextCells = next.get(family, qualifier);
+        if (nextCells == null || nextCells.isEmpty()) {
+          // Absent from the merged next state: either never set, or set to NULL by this touch
+          // (a Delete removed it). Either way it must not be re-persisted.
           continue;
         }
-        // Re-persist the current value at LATEST_TIMESTAMP; setTimestamps stamps it to
-        // batchTimestamp uniformly with the rest of this Put.
-        Cell currentCell = currentCells.get(0);
-        put.addColumn(family, qualifier, HConstants.LATEST_TIMESTAMP,
-          CellUtil.cloneValue(currentCell));
+        // Re-persist the merged value directly at batchTimestamp (setTimestamps has already run),
+        // so the data-side cell matches the index-side cell built at the same timestamp.
+        Cell nextCell = nextCells.get(0);
+        put.addColumn(family, qualifier, batchTimestamp, CellUtil.cloneValue(nextCell));
       }
     }
   }
@@ -1058,44 +1081,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       indexReferencedCols.addAll(maintainer.getAllColumnsForDataTable());
     }
     return indexReferencedCols;
-  }
-
-  /**
-   * The atomic / ON DUPLICATE KEY analogue of {@code rewriteIndexReferencedColumns}. Those Puts are
-   * reconstructed by {@code generateOnDupMutations} rather than written verbatim, so they are
-   * excluded from {@code rewriteIndexReferencedColumns} and must be re-synced inline here.
-   * <p>
-   * Injects every index-referenced non-PK column that this upsert omitted, sourcing the value from
-   * the pre-upsert row snapshot ({@code oldRowColumnCellExprMap}). Each injected cell is added at
-   * {@code HConstants.LATEST_TIMESTAMP} so the later {@code setTimestamps} re-stamps it to
-   * {@code batchTimestamp} uniformly with the rest of the Put — making the data-side cell and the
-   * index-side cell share both timestamp and empty-column neighbor, so any compaction retains or
-   * expires them together.
-   * <p>
-   * Idempotent: a column the upsert already writes is left alone ({@code put.has(...)} guard), and a
-   * column absent from the current row (new row / never set) is skipped.
-   */
-  private void rewriteIndexReferencedColumnsForAtomicPut(Put put,
-    Set<ColumnReference> indexReferencedCols,
-    Map<ColumnReference, Pair<Cell, Boolean>> oldRowColumnCellExprMap) {
-    if (indexReferencedCols.isEmpty() || oldRowColumnCellExprMap.isEmpty()) {
-      return;
-    }
-    for (ColumnReference ref : indexReferencedCols) {
-      byte[] family = ref.getFamily();
-      byte[] qualifier = ref.getQualifier();
-      if (put.has(family, qualifier)) {
-        // The upsert already writes this column; leave it (idempotence guard).
-        continue;
-      }
-      Pair<Cell, Boolean> oldPair = oldRowColumnCellExprMap.get(ref);
-      if (oldPair == null || oldPair.getFirst() == null) {
-        // Absent from the pre-upsert row (new row or never set): nothing to re-persist.
-        continue;
-      }
-      put.addColumn(family, qualifier, HConstants.LATEST_TIMESTAMP,
-        CellUtil.cloneValue(oldPair.getFirst()));
-    }
   }
 
   /**
@@ -1385,7 +1370,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // non-TTL table (CF-descriptor FOREVER) or when Phoenix compaction is disabled.
     byte[] emptyCF = context.emptyCFForInternalScan;
     byte[] emptyCQ = context.emptyCQForInternalScan;
-    boolean maskInternalScan = emptyCF != null && emptyCQ != null;
 
     if (this.useBloomFilter) {
       for (KeyRange key : keys) {
@@ -1395,10 +1379,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // for bloom filters scan should be a get
         scan.withStartRow(key.getLowerRange(), true);
         scan.withStopRow(key.getLowerRange(), true);
-        if (maskInternalScan) {
-          ServerScanUtil.setInternalScanAttributes(c.getEnvironment().getConfiguration(), scan,
-            emptyCF, emptyCQ, literalTTLForScan, isStrictTTL);
-        }
+        ServerScanUtil.setInternalScanAttributes(c.getEnvironment().getConfiguration(), scan,
+          emptyCF, emptyCQ, literalTTLForScan, isStrictTTL);
         readDataTableRows(c, context, scan);
       }
     } else {
@@ -1407,10 +1389,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       scanRanges.initializeScan(scan);
       SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
       scan.setFilter(skipScanFilter);
-      if (maskInternalScan) {
-        ServerScanUtil.setInternalScanAttributes(c.getEnvironment().getConfiguration(), scan,
-          emptyCF, emptyCQ, literalTTLForScan, isStrictTTL);
-      }
+      ServerScanUtil.setInternalScanAttributes(c.getEnvironment().getConfiguration(), scan,
+        emptyCF, emptyCQ, literalTTLForScan, isStrictTTL);
       readDataTableRows(c, context, scan);
     }
   }
@@ -2126,7 +2106,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (context.hasAtomic || context.returnResult) {
       long start = EnvironmentEdgeManager.currentTimeMillis();
       // add the mutations for conditional updates to the mini batch
-      addOnDupMutationsToBatch(miniBatchOp, context, indexMetaData);
+      addOnDupMutationsToBatch(miniBatchOp, context);
 
       // release locks for ON DUPLICATE KEY IGNORE since we won't be changing those rows
       // this is needed so that we can exit early
@@ -2142,16 +2122,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
     TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
     long batchTimestamp = getBatchTimestamp(context, table);
-    // Re-persist index-referenced columns a partial touch omitted, so the data-side covered cell
-    // and the index-side cell share batchTimestamp and any compaction retains/expires them
-    // together. Must run before setTimestamps so injected LATEST cells are stamped.
-    rewriteIndexReferencedColumns(miniBatchOp, context, indexMetaData);
     // Update the timestamps of the data table mutations to prevent overlapping timestamps
     // (which prevents index inconsistencies as this case is not handled).
     setTimestamps(miniBatchOp, builder, batchTimestamp, isStrictTTLEnabled(miniBatchOp));
     if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
       // Prepare next data rows states for pending mutations (for global indexes)
       prepareDataRowStates(c, miniBatchOp, context, batchTimestamp);
+      // Re-persist index-referenced columns a partial touch left unchanged, sourcing from the
+      // merged next row state so the data-side cell and the index-side cell share batchTimestamp
+      // and any compaction retains/expires them together. Must run after prepareDataRowStates so
+      // the next state reflects this batch's puts and deletes (a column set to NULL is absent from
+      // it and is correctly not re-persisted); injects at batchTimestamp since setTimestamps has
+      // already run.
+      rewriteIndexReferencedColumns(miniBatchOp, context, indexMetaData, batchTimestamp);
       // early exit if it turns out we don't have any edits
       long start = EnvironmentEdgeManager.currentTimeMillis();
       preparePreIndexMutations(context, batchTimestamp, indexMetaData);
@@ -2498,8 +2481,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * Delete mutation (with DeleteColumn type cells for all columns set to null).
    */
   private List<Mutation> generateOnDupMutations(BatchMutateContext context, Put atomicPut,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp, PhoenixIndexMetaData indexMetaData)
-    throws IOException {
+    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
     List<Mutation> mutations = Lists.newArrayListWithExpectedSize(2);
     byte[] opBytes = atomicPut.getAttribute(ATOMIC_OP_ATTRIB);
     byte[] returnResult = atomicPut.getAttribute(RETURN_RESULT);
@@ -2524,10 +2506,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap = new HashMap<>();
 
     // Snapshot of the current data row's cells, keyed by ColumnReference. Populated once, up front,
-    // before any conditional update logic mutates state. It serves two purposes: answering an
-    // OLD_ROW return request, and re-persisting index-referenced columns this atomic upsert omits
-    // (see rewriteIndexReferencedColumnsForAtomicPut). It is a local; only exposed on the context
-    // for an OLD_ROW return request (unchanged semantics).
+    // before any conditional update logic mutates state. It answers an OLD_ROW return request. It
+    // is a local; only exposed on the context for an OLD_ROW return request (unchanged semantics).
     Map<ColumnReference, Pair<Cell, Boolean>> oldRowColumnCellExprMap = new HashMap<>();
 
     byte[] rowKey = atomicPut.getRow();
@@ -2542,19 +2522,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       context.oldRowColumnCellExprMap = oldRowColumnCellExprMap;
     }
 
-    // Union of non-PK columns referenced by any covered/uncovered global index. Used to re-persist
-    // columns this atomic upsert omits so the data-side cell and the index-side cell share
-    // batchTimestamp and a later compaction retains/expires them together.
-    Set<ColumnReference> indexReferencedCols = getIndexReferencedColumns(indexMetaData);
-
     // if result needs to be returned but the DML does not have ON DUPLICATE KEY present,
-    // perform the mutation and return the result.
+    // perform the mutation and return the result. Any index-referenced column this upsert omits is
+    // re-persisted later by rewriteIndexReferencedColumns, which now also covers atomic /
+    // returnResult Puts once they have been merged into the batch's next row state.
     if (opBytes == null) {
-      // Re-persist any index-referenced column this plain upsert omitted (excluded from
-      // rewriteIndexReferencedColumns since returnResult(m) is true), so the data and index rows
-      // expire together under compaction.
-      rewriteIndexReferencedColumnsForAtomicPut(atomicPut, indexReferencedCols,
-        oldRowColumnCellExprMap);
       mutations.add(atomicPut);
       updateCurrColumnCellExpr(currentDataRowState != null ? currentDataRowState : atomicPut,
         currColumnCellExprMap);
@@ -2724,14 +2696,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         delete.add(cell);
       }
     }
-    // Re-persist any index-referenced column this reconstructed upsert omitted, but only when the
-    // Put already writes something — so the empty column (row liveness) advances at batchTimestamp
-    // anyway. Injecting into an otherwise-empty Put would turn a genuine no-op ON DUPLICATE KEY
-    // UPDATE into a spurious write.
-    if (!put.isEmpty()) {
-      rewriteIndexReferencedColumnsForAtomicPut(put, indexReferencedCols, oldRowColumnCellExprMap);
-    }
-
     if (!put.isEmpty() || !delete.isEmpty()) {
       PTable table = operations.get(0).getFirst();
       addEmptyKVCellToPut(put, tuple, table);
