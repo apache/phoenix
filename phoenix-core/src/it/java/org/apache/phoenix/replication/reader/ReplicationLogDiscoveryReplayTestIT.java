@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.replication.reader;
 
+import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -35,6 +36,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -46,11 +48,13 @@ import org.apache.phoenix.jdbc.HABaseIT;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
+import org.apache.phoenix.jdbc.PhoenixHAAdmin;
 import org.apache.phoenix.replication.ReplicationLogTracker;
 import org.apache.phoenix.replication.ReplicationRound;
 import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
 import org.apache.phoenix.replication.metrics.*;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
+import org.apache.zookeeper.data.Stat;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -1114,6 +1118,174 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
     } finally {
       fileTracker.close();
     }
+  }
+
+  /**
+   * Tests the runtime degrade -> abort -> recover sequence. The replayer starts DEGRADED with a
+   * failover already requested; the failover is then aborted (failoverPending cleared) and the
+   * cluster recovers via SYNCED_RECOVERY back to SYNC. Validates that the aborted failover is NOT
+   * triggered when replay returns to SYNC, that lastRoundInSync is preserved during DEGRADED and
+   * caught up after recovery, and that the final state is SYNC. Abort is simulated via
+   * setFailoverPending, matching how the other transition tests in this class drive listener-driven
+   * changes.
+   */
+  @Test
+  public void testReplay_StateTransition_DegradedToAbortToRecover() throws IOException {
+    TestableReplicationLogTracker fileTracker =
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+
+    try {
+      long initialEndTime = 1704499200000L;
+      long roundTimeMills =
+        fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds()
+          * 1000L;
+      long bufferMillis = (long) (roundTimeMills * 0.15);
+
+      // DEGRADED record (peer-blind degraded standby).
+      HAGroupStoreRecord mockRecord =
+        new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+          HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, initialEndTime,
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+
+      // Allow processing up to 5 rounds.
+      long currentTime = initialEndTime + (5 * roundTimeMills) + bufferMillis;
+      EnvironmentEdge edge = () -> currentTime;
+      EnvironmentEdgeManager.injectEdge(edge);
+
+      try {
+        TestableReplicationLogDiscoveryReplay discovery =
+          new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+        discovery.init();
+
+        ReplicationRound lastInSyncRound =
+          new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
+        discovery.setLastRoundProcessed(new ReplicationRound(initialEndTime + roundTimeMills,
+          initialEndTime + (2 * roundTimeMills)));
+        discovery.setLastRoundInSync(lastInSyncRound);
+        discovery
+          .setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
+        // A failover was requested while the cluster was degraded.
+        discovery.setFailoverPending(true);
+
+        // Abort the failover after round 1, then recover (SYNCED_RECOVERY) after round 2 - same
+        // round dynamics as the degrade->recovery test: 2 in DEGRADED, rewind, then 5 in SYNC.
+        discovery.setFailoverPendingAfterRounds(1, false);
+        discovery.setStateChangeAfterRounds(2,
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY);
+
+        discovery.replay();
+
+        assertEquals("processRound should be called 7 times", 7,
+          discovery.getProcessRoundCallCount());
+
+        // The abort cleared the pending failover...
+        assertFalse("Failover pending should be cleared by the abort",
+          discovery.getFailoverPending());
+        // ...so even though replay returned to SYNC, the failover must NOT be triggered.
+        assertEquals("Aborted failover must not be triggered on return to SYNC", 0,
+          discovery.getTriggerFailoverCallCount());
+
+        // Recovery completed: state back to SYNC and in-sync caught up to last processed.
+        assertEquals("State should be SYNC after recovery",
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+          discovery.getReplicationReplayState());
+
+        ReplicationRound expectedFinalRound = new ReplicationRound(
+          initialEndTime + (4 * roundTimeMills), initialEndTime + (5 * roundTimeMills));
+        assertEquals("Last round processed should be the final round", expectedFinalRound,
+          discovery.getLastRoundProcessed());
+        assertEquals("Last round in sync should match last round processed after recovery",
+          expectedFinalRound, discovery.getLastRoundInSync());
+      } finally {
+        EnvironmentEdgeManager.reset();
+      }
+    } finally {
+      fileTracker.close();
+    }
+  }
+
+  /**
+   * End-to-end runtime test that drives ReplicationLogDiscoveryReplay's real LOCAL listeners
+   * (degraded/recovery/trigger/abort) through a degrade -&gt; failover-request -&gt; abort -&gt;
+   * recover sequence by transitioning the LOCAL HA record in ZooKeeper, asserting the replayer's
+   * runtime state reacts. Uses the null-injected-record discovery so it reads the real effective
+   * record and subscribes its listeners to HAGroupStoreManager - exercising the listener wiring
+   * that the setter-driven transition tests above do not.
+   */
+  @Test
+  public void testReplay_RuntimeListeners_DegradeAbortRecover() throws Exception {
+    PhoenixHAAdmin haAdmin = CLUSTERS.getHaAdmin1();
+    // Base state: local STANDBY, written before init() so the discovery's client picks it up.
+    writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY);
+
+    TestableReplicationLogTracker fileTracker =
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+    fileTracker.init();
+    try {
+      // Null injected record: read the real effective record and subscribe the real LOCAL listeners
+      // to HAGroupStoreManager.
+      TestableReplicationLogDiscoveryReplay discovery =
+        new TestableReplicationLogDiscoveryReplay(fileTracker, null);
+      discovery.init();
+      // Let the initial STANDBY load settle so it cannot race the degrade below.
+      Thread.sleep(5000L);
+
+      // degrade: LOCAL -> DEGRADED_STANDBY must drive the degradedListener to DEGRADED.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
+      awaitCondition(
+        () -> discovery.getReplicationReplayState()
+            == ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
+        "degradedListener should drive replay state to DEGRADED");
+
+      // failover requested: LOCAL -> STANDBY_TO_ACTIVE must set failoverPending.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE);
+      awaitCondition(discovery::getFailoverPending,
+        "triggerFailoverListner should set failoverPending");
+
+      // abort: LOCAL -> ABORT_TO_STANDBY must clear failoverPending.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY);
+      awaitCondition(() -> !discovery.getFailoverPending(),
+        "abortFailoverListner should clear failoverPending");
+
+      // recover: LOCAL -> STANDBY must drive the recoveryListener to SYNCED_RECOVERY.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY);
+      awaitCondition(
+        () -> discovery.getReplicationReplayState()
+            == ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY,
+        "recoveryListener should drive replay state to SYNCED_RECOVERY");
+    } finally {
+      fileTracker.close();
+      haAdmin.getCurator().delete().quietly().forPath(toPath(haGroupName));
+    }
+  }
+
+  /** Write (create, or version-checked update) the LOCAL HA record for this group on ZooKeeper. */
+  private void writeLocalRecord(PhoenixHAAdmin haAdmin, HAGroupStoreRecord.HAGroupState state)
+    throws Exception {
+    HAGroupStoreRecord record =
+      new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName, state, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+        CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+    String path = toPath(haGroupName);
+    if (haAdmin.getCurator().checkExists().forPath(path) == null) {
+      haAdmin.createHAGroupStoreRecordInZooKeeper(record);
+    } else {
+      Pair<HAGroupStoreRecord, Stat> current =
+        haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
+      haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, record,
+        current.getRight().getVersion());
+    }
+  }
+
+  /** Poll until the condition holds or a fixed timeout elapses, then assert it. */
+  private static void awaitCondition(java.util.function.BooleanSupplier condition, String message)
+    throws InterruptedException {
+    long deadline = System.currentTimeMillis() + 30000L;
+    while (!condition.getAsBoolean() && System.currentTimeMillis() < deadline) {
+      Thread.sleep(250L);
+    }
+    assertTrue(message, condition.getAsBoolean());
   }
 
   /**
@@ -2185,6 +2357,80 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
   }
 
   /**
+   * End-to-end peer-visibility wiring: when this STANDBY cluster cannot see its peer, the effective
+   * record presented to the replayer is DEGRADED_STANDBY, so a replayer initializing during the
+   * outage starts failed closed (DEGRADED) even though the persisted record is still STANDBY.
+   * Exercises the real {@link HAGroupStoreManager} path (no injected record).
+   */
+  @Test
+  public void testInitializeLastRoundProcessed_PeerBlindStartsDegraded() throws Exception {
+    final String haGroupName = "testPeerBlindStartsDegradedHAGroup";
+    // Local cluster STANDBY; peer is cluster 2.
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl, peerZkUrl,
+      CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.STANDBY, ClusterRoleRecord.ClusterRole.ACTIVE, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+
+    int peerZkPort = Integer.parseInt(
+      CLUSTERS.getHBaseCluster2().getConfiguration().get("hbase.zookeeper.property.clientPort"));
+    HAGroupStoreManager manager = HAGroupStoreManager.getInstance(conf1);
+    TestableReplicationLogTracker fileTracker = null;
+    try {
+      // Materialize the client + peer connection; effective state is the real STANDBY.
+      awaitEffectiveState(manager, haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY);
+
+      // Peer ZK goes away; the client reports peer-blind and presents DEGRADED_STANDBY.
+      CLUSTERS.getHBaseCluster2().shutdownMiniZKCluster();
+      awaitEffectiveState(manager, haGroupName, HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
+
+      // A replayer initializing now reads the effective record and starts DEGRADED.
+      fileTracker = createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+      fileTracker.init();
+      TestableReplicationLogDiscoveryReplay discovery =
+        new TestableReplicationLogDiscoveryReplay(fileTracker, null);
+      discovery.initializeLastRoundProcessed();
+      assertEquals("Replayer must start DEGRADED while the peer is not visible",
+        ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
+        discovery.getReplicationReplayState());
+    } finally {
+      // Restore peer ZK so later tests start from a healthy peer.
+      try {
+        CLUSTERS.getHBaseCluster2().startMiniZKCluster(1, peerZkPort);
+      } catch (Exception ignore) {
+        LOG.warn("Failed to restart peer ZK after test");
+      }
+      if (fileTracker != null) {
+        fileTracker.close();
+      }
+      try {
+        HAGroupStoreTestUtil.deleteHAGroupRecordInSystemTable(haGroupName, zkUrl);
+      } catch (Exception e) {
+        LOG.warn("Failed to clean up HA group store record", e);
+      }
+    }
+  }
+
+  /**
+   * Poll the effective HA state from the manager until it reaches {@code expected} or times out.
+   */
+  private void awaitEffectiveState(HAGroupStoreManager manager, String haGroupName,
+    HAGroupStoreRecord.HAGroupState expected) throws Exception {
+    long deadline = System.currentTimeMillis() + 60000L;
+    HAGroupStoreRecord.HAGroupState actual = null;
+    while (System.currentTimeMillis() < deadline) {
+      Optional<HAGroupStoreRecord> record = manager.getEffectiveHAGroupStoreRecord(haGroupName);
+      if (record.isPresent()) {
+        actual = record.get().getHAGroupState();
+        if (actual == expected) {
+          return;
+        }
+      }
+      Thread.sleep(500L);
+    }
+    assertEquals("Effective HA state did not reach expected within timeout", expected, actual);
+  }
+
+  /**
    * Tests getConsistencyPoint method in SYNC state with in-progress files present. Should return
    * the minimum timestamp from in-progress files.
    */
@@ -2556,8 +2802,10 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
     }
 
     @Override
-    protected HAGroupStoreRecord getHAGroupRecord() {
-      return haGroupStoreRecord;
+    protected HAGroupStoreRecord getHAGroupRecord() throws IOException {
+      // A null injected record means "use the real effective record from HAGroupStoreManager", so
+      // tests can exercise the peer-visibility wiring end to end.
+      return haGroupStoreRecord != null ? haGroupStoreRecord : super.getHAGroupRecord();
     }
 
     @Override

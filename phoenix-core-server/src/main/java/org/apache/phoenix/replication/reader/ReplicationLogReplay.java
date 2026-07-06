@@ -104,7 +104,8 @@ public class ReplicationLogReplay {
   protected void init() throws IOException {
     LOG.info("Initializing ReplicationLogReplay for haGroup: {}", haGroupName);
     HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf);
-    Optional<HAGroupStoreRecord> haRecord = haGroupStoreManager.getHAGroupStoreRecord(haGroupName);
+    Optional<HAGroupStoreRecord> haRecord =
+      haGroupStoreManager.getEffectiveHAGroupStoreRecord(haGroupName);
     if (!haRecord.isPresent()) {
       String message = String.format(
         "HAGroup %s got an empty group store record while initializing ReplicationLogReplay",

@@ -162,6 +162,30 @@ public class HAGroupStoreRecordTest {
   }
 
   @Test
+  public void testWithHAGroupState() {
+    HAGroupStoreRecord original = new HAGroupStoreRecord(PROTOCOL_VERSION, testName.getMethodName(),
+      HAGroupStoreRecord.HAGroupState.STANDBY, 12345L, HighAvailabilityPolicy.FAILOVER.toString(),
+      "peerZKUrl", "clusterUrl", "peerClusterUrl", TEST_HDFS_URL, TEST_PEER_HDFS_URL, 7L);
+
+    HAGroupStoreRecord overlaid =
+      original.withHAGroupState(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
+
+    // Only the state changes; every other field is preserved and the original is untouched.
+    assertEquals(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, overlaid.getHAGroupState());
+    assertEquals(HAGroupStoreRecord.HAGroupState.STANDBY, original.getHAGroupState());
+    assertEquals(original.getProtocolVersion(), overlaid.getProtocolVersion());
+    assertEquals(original.getHaGroupName(), overlaid.getHaGroupName());
+    assertEquals(original.getLastSyncStateTimeInMs(), overlaid.getLastSyncStateTimeInMs());
+    assertEquals(original.getPolicy(), overlaid.getPolicy());
+    assertEquals(original.getPeerZKUrl(), overlaid.getPeerZKUrl());
+    assertEquals(original.getClusterUrl(), overlaid.getClusterUrl());
+    assertEquals(original.getPeerClusterUrl(), overlaid.getPeerClusterUrl());
+    assertEquals(original.getHdfsUrl(), overlaid.getHdfsUrl());
+    assertEquals(original.getPeerHdfsUrl(), overlaid.getPeerHdfsUrl());
+    assertEquals(original.getAdminCRRVersion(), overlaid.getAdminCRRVersion());
+  }
+
+  @Test
   public void testEqualsAndHashCode() {
     String haGroupName = testName.getMethodName();
     HAGroupStoreRecord record1 = getHAGroupStoreRecord(haGroupName, PROTOCOL_VERSION,

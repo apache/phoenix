@@ -459,9 +459,15 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     return this.failoverPending.get();
   }
 
+  /**
+   * Effective HA record used to decide the replay mode at startup. A STANDBY whose peer cluster is
+   * not currently visible is reported as DEGRADED_STANDBY, so this RegionServer starts failed
+   * closed until the peer is confirmed reachable. Runtime degrade/recover transitions arrive
+   * through the LOCAL state subscribers registered in {@link #init()}.
+   */
   protected HAGroupStoreRecord getHAGroupRecord() throws IOException {
     Optional<HAGroupStoreRecord> optionalHAGroupStateRecord =
-      HAGroupStoreManager.getInstance(conf).getHAGroupStoreRecord(haGroupName);
+      HAGroupStoreManager.getInstance(conf).getEffectiveHAGroupStoreRecord(haGroupName);
     if (!optionalHAGroupStateRecord.isPresent()) {
       throw new IOException("HAGroupStoreRecord not found for HA Group: " + haGroupName);
     }

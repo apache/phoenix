@@ -659,6 +659,18 @@ public interface QueryServices extends SQLCloseable {
 
   // HA Group Store sync job interval in seconds
   String HA_GROUP_STORE_SYNC_INTERVAL_SECONDS = "phoenix.ha.group.store.sync.interval.seconds";
+  /**
+   * How often (in seconds) to retry building the peer HA group store cache when the peer ZK is
+   * unreachable. Defaults to
+   * {@link QueryServicesOptions#DEFAULT_HA_GROUP_STORE_PEER_CACHE_RETRY_INTERVAL_SECONDS}. A
+   * non-positive value disables the periodic retry; the watcher still creates its executor so peer
+   * reconfigures run off the Curator event thread. Retries log the first and every tenth attempt at
+   * WARN and the rest at DEBUG. In large deployments (many RegionServers x many HA groups),
+   * consider raising this further: during a sustained peer ZK outage each HA group retries on this
+   * fixed period, so the aggregate retry rate scales with RegionServer count x HA-group count.
+   */
+  String HA_GROUP_STORE_PEER_CACHE_RETRY_INTERVAL_SECONDS =
+    "phoenix.ha.group.store.peer.cache.retry.interval.seconds";
 
   // "CRR" = Cluster Role Record. Master switch for syncing the legacy /phoenix/ha cluster
   // role record from /phoenix/consistentHA. When false, no legacy znode is read, written, or

@@ -469,7 +469,8 @@ public class ReplicationLogGroup {
    */
   protected void init() throws IOException {
     LOG.info("Initializing ReplicationLogGroup {}", haGroupName);
-    Optional<HAGroupStoreRecord> haRecord = haGroupStoreManager.getHAGroupStoreRecord(haGroupName);
+    Optional<HAGroupStoreRecord> haRecord =
+      haGroupStoreManager.getEffectiveHAGroupStoreRecord(haGroupName);
     if (!haRecord.isPresent()) {
       String message =
         String.format("HAGroup %s got an empty group store record while initializing mode", this);
