@@ -1282,38 +1282,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * Selects an {@link IndexMaintainer} to source the data table's empty-column CF/CQ for the
-   * internal current-row scan. A covered global index is preferred, but the empty CF/CQ is a
-   * data-table property identical across all maintainers, so any works; the first is used as a
-   * fallback. Returns null when there are no maintainers (e.g. an atomic-only mutation with no
-   * index); in that case {@link #getCurrentRowStates} falls back to the empty-column CF/CQ the
-   * client threaded on the mutation, so a no-index current-row read on a TTL table is still masked.
-   */
-  private IndexMaintainer getDataTableMaintainerForInternalScan(
-    PhoenixIndexMetaData indexMetaData) {
-    IndexMaintainer fallback = null;
-    for (IndexMaintainer maintainer : indexMetaData.getIndexMaintainers()) {
-      if (fallback == null) {
-        fallback = maintainer;
-      }
-      if (!maintainer.isLocalIndex() && !maintainer.isUncovered()) {
-        // A covered global index — the path this masking is designed for.
-        return maintainer;
-      }
-    }
-    return fallback;
-  }
-
-  /**
    * Retrieve the data row state either from memory or disk. The rows are locked by the caller.
    * <p>
    * The disk read is opened through {@link ServerScanUtil} so it is TTL-masked exactly like a
    * client read: the internal scan otherwise bypasses the {@code postScannerOpen} coprocessor hook
    * (the only place a scan is wrapped in {@code TTLRegionScanner}) and would rebuild the index from
-   * logically-expired-but-physically-present cells. The empty-column CF/CQ come from
-   * {@code dataTableMaintainer} when a secondary index is being maintained, and otherwise (the
-   * no-index atomic / ON DUPLICATE KEY / {@code returnResult} / row-delete path on a TTL table) from
-   * the bytes the client threaded on the mutation and captured into the batch context;
+   * logically-expired-but-physically-present cells. The empty-column CF/CQ that enable masking are
+   * the bytes the client threaded on the mutation
+   * ({@link org.apache.phoenix.util.ScanUtil#annotateMutationWithLiteralTTL}) and captured into the
+   * batch context — the single source for every path that reaches here, index or no-index alike;
    * {@code literalTTLForScan} carries a view's literal TTL (null for base tables, which use the
    * CF-descriptor fallback), and {@code isStrictTTL} avoids over-masking a non-strict table. Masking
    * is a strict no-op when Phoenix compaction is disabled. The internal
@@ -1322,8 +1299,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * a client scan; {@code readDataTableRows} skips the dummy results that paging can emit.
    */
   private void getCurrentRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
-    BatchMutateContext context, IndexMaintainer dataTableMaintainer, byte[] literalTTLForScan,
-    boolean isStrictTTL) throws IOException {
+    BatchMutateContext context, byte[] literalTTLForScan, boolean isStrictTTL) throws IOException {
     Set<KeyRange> keys = new HashSet<KeyRange>(context.rowsToLock.size());
     for (ImmutableBytesPtr rowKeyPtr : context.rowsToLock) {
       PendingRow pendingRow = new PendingRow(rowKeyPtr, context);
@@ -1372,18 +1348,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return;
     }
 
-    // Resolve the empty-column CF/CQ that let TTLRegionScanner mask this internal scan. When a
-    // secondary index is being maintained they come from the data-table maintainer; otherwise (the
-    // no-index atomic / ON DUPLICATE KEY / returnResult / row-delete path on a TTL table) they are
-    // the bytes the client threaded on the mutation and captured into the batch context. Both
-    // resolve to the same data-table empty column. When neither is available the scan is left
-    // unmasked (no effective TTL, or a non-TTL table), which is safe.
-    byte[] emptyCF = dataTableMaintainer != null
-      ? dataTableMaintainer.getDataEmptyKeyValueCF()
-      : context.emptyCFForInternalScan;
-    byte[] emptyCQ = dataTableMaintainer != null
-      ? dataTableMaintainer.getEmptyKeyValueQualifierForDataTable()
-      : context.emptyCQForInternalScan;
+    // The empty-column CF/CQ that let TTLRegionScanner mask this internal scan are the bytes the
+    // client threaded on the mutation (ScanUtil.annotateMutationWithLiteralTTL) and captured into
+    // the batch context. This is the single source for every path that reaches here — the
+    // secondary-index case and the no-index atomic / ON DUPLICATE KEY / returnResult / row-delete
+    // case alike — and it ties internal-scan masking to the same client signal that governs client
+    // read masking (setScanAttributesForClient), so the two stay consistent. When they are absent
+    // (a mutation not annotated by the client) the scan is left unmasked, which is safe: such a
+    // client's own reads are likewise unmasked, and TTLRegionScanner masking is a no-op anyway on a
+    // non-TTL table (CF-descriptor FOREVER) or when Phoenix compaction is disabled.
+    byte[] emptyCF = context.emptyCFForInternalScan;
+    byte[] emptyCQ = context.emptyCQForInternalScan;
     boolean maskInternalScan = emptyCF != null && emptyCQ != null;
 
     if (this.useBloomFilter) {
@@ -2107,8 +2082,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           || !context.immutableRows && context.hasUncoveredIndex
             && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp)
       ) {
-        getCurrentRowStates(c, context, getDataTableMaintainerForInternalScan(indexMetaData),
-          context.literalTTLForInternalScan, isStrictTTLEnabled(miniBatchOp));
+        getCurrentRowStates(c, context, context.literalTTLForInternalScan,
+          isStrictTTLEnabled(miniBatchOp));
       }
       onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
     }
