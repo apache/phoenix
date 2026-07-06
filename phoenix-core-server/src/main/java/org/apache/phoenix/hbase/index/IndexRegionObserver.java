@@ -42,6 +42,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -56,6 +57,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.CellBuilderFactory;
+import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellScanner;
 import org.apache.hadoop.hbase.CellUtil;
@@ -114,6 +117,9 @@ import org.apache.phoenix.hbase.index.builder.FatalIndexBuildingFailureException
 import org.apache.phoenix.hbase.index.builder.IndexBuildManager;
 import org.apache.phoenix.hbase.index.builder.IndexBuilder;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
+import org.apache.phoenix.hbase.index.covered.data.CachedLocalTable;
+import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
+import org.apache.phoenix.hbase.index.covered.data.PreImageLocalTable;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.metrics.MetricsHaBypassSourceFactory;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSource;
@@ -121,7 +127,6 @@ import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
-import org.apache.phoenix.hbase.index.wal.IndexedKeyValue;
 import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LazyParallelWriterIndexCommitter;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -163,6 +168,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.xerial.snappy.Snappy;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ArrayListMultimap;
 import org.apache.phoenix.thirdparty.com.google.common.collect.ListMultimap;
@@ -250,6 +256,26 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   public static final String PHOENIX_INDEX_CDC_MUTATION_SERIALIZE =
     "phoenix.index.cdc.mutation.serialize";
   public static final boolean DEFAULT_PHOENIX_INDEX_CDC_MUTATION_SERIALIZE = false;
+  // Generic marker attribute set on every mutation produced by the standby reader from a
+  // replication-log record. Value is opaque (presence is the signal). Detected in
+  // preBatchMutateWithExceptions to set context.isReplication, which gates the primary-side clock
+  // work (getBatchTimestamp/setTimestamps) off so the cell timestamps shipped from the active
+  // cluster are preserved. Never set on primary-side mutations.
+  public static final String REPLICATED_MUTATION = "_ReplicatedMutation";
+  // Per-row mutation attribute that the standby reader synthesizes from the pre-image cell and
+  // attaches to each reconstructed mutation when its row had a pre-image entry. Value is the
+  // PB-encoded primary-side Put (or empty bytes when the primary observed an empty row at lock
+  // time). IRO on the standby consumes this to derive each (row, ts) group's data-row state and
+  // write index updates directly, instead of scanning the data table — that scan is unsafe under
+  // out-of-order replay. Absent when the row had no pre-image (e.g. local-index-only or pure-data
+  // tables on the active).
+  public static final String PRE_IMAGE = "_PhoenixPreImage";
+  // Qualifier for the per-row pre-image cell injected into the replication cell stream and the
+  // WAL edit at PRE phase. Cells with this (METAFAMILY, qualifier) pair carry a serialized PB Put
+  // representing the row's state on the primary before the current batch was applied. The standby
+  // reader peels these cells off and attaches the bytes as {@link #PRE_IMAGE} on the reconstructed
+  // mutation.
+  public static final byte[] PRE_IMAGE_WAL_QUALIFIER = Bytes.toBytes("_PhoenixPreImage");
 
   /**
    * Class to represent pending data table rows
@@ -333,6 +359,51 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     FAILED
   }
 
+  /**
+   * Composite key for {@link BatchMutateContext#cdcPreMutationsBytes} and
+   * {@link BatchMutateContext#cdcPostMutationsBytes} and for the standby's per-(row, ts) grouping.
+   * The active path always has ts == batchTimestamp, so the {@code (row, ts)} key behaves like
+   * {@code (row)} on the active. The standby can have multiple entries per row when records from
+   * two active-side batches for the same row coalesce in one mini-batch.
+   */
+  public static final class RowTsKey {
+    private final ImmutableBytesPtr row;
+    private final long ts;
+
+    public RowTsKey(ImmutableBytesPtr row, long ts) {
+      this.row = row;
+      this.ts = ts;
+    }
+
+    public ImmutableBytesPtr getRow() {
+      return row;
+    }
+
+    public long getTs() {
+      return ts;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+      if (!(o instanceof RowTsKey)) {
+        return false;
+      }
+      RowTsKey other = (RowTsKey) o;
+      return ts == other.ts && row.equals(other.row);
+    }
+
+    @Override
+    public int hashCode() {
+      return 31 * row.hashCode() + Long.hashCode(ts);
+    }
+
+    @Override
+    public String toString() {
+      return "RowTsKey [row=" + Bytes.toStringBinary(row.copyBytesIfNecessary()) + ", ts=" + ts
+        + "]";
+    }
+  }
+
   // Hack to get around not being able to save any state between
   // coprocessor calls. TODO: remove after HBASE-18127 when available
 
@@ -361,15 +432,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // The collection of candidate index mutations that will be applied after the data table
     // mutations.
     private ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates;
-    // Map of data table row key to IndexMutations bytes
-    // containing pre-index mutations for eventually consistent indexes
-    // (index mutations with UNVERIFIED Puts only, no Deletes)
-    private Map<ImmutableBytesPtr, byte[]> cdcPreMutationsBytes;
-    // Map of data table row key to IndexMutations bytes
-    // containing post-index mutations for eventually consistent indexes
-    // (index mutations with VERIFIED Puts for covered,
-    // no Put mutations for uncovered, and Deletes if needed)
-    private Map<ImmutableBytesPtr, byte[]> cdcPostMutationsBytes;
+    // Map of (data table row key, group ts) to IndexMutations bytes containing pre-index mutations
+    // for eventually consistent indexes (UNVERIFIED Puts only, no Deletes). Keyed by (row, ts) so
+    // multiple per-row entries from the standby's per-(row, ts) grouping don't collide. On the
+    // active path each row produces exactly one entry (ts == batchTimestamp), so lookup is
+    // unchanged.
+    private Map<RowTsKey, byte[]> cdcPreMutationsBytes;
+    // Map of (data table row key, group ts) to IndexMutations bytes containing post-index
+    // mutations for eventually consistent indexes (VERIFIED Puts for covered, no Put mutations
+    // for uncovered, and Deletes if needed).
+    private Map<RowTsKey, byte[]> cdcPostMutationsBytes;
     private List<RowLock> rowLocks =
       Lists.newArrayListWithExpectedSize(QueryServicesOptions.DEFAULT_MUTATE_BATCH_SIZE);
     // TreeSet to improve locking efficiency and avoid deadlock (PHOENIX-6871 and HBASE-17924)
@@ -405,8 +477,28 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private boolean returnOldRow;
     private boolean hasConditionalTTL; // table has Conditional TTL
     private boolean immutableRows;
+    // True when this batch was produced by the standby reader from a replication-log record (i.e.
+    // every mutation carries the {@link IndexRegionObserver#REPLICATED_MUTATION} marker). Batch-
+    // uniform by construction: the standby reader stamps every reconstructed mutation, so checking
+    // the first one is sufficient. The standby uses this to skip the data-table scan in the PRE
+    // phase (pre-image cells are carried as the per-row {@link IndexRegionObserver#PRE_IMAGE}
+    // attribute when the table has a global/uncovered/transform index — same schema on both
+    // clusters, so when we're inside that branch on the standby we always have pre-images).
+    private boolean isReplication;
     // HAGroup associated with the batch
     private Optional<ReplicationLogGroup> logGroup = Optional.empty();
+    // Per-row cell buckets captured in PRE phase that will be appended to the replication log in
+    // postBatchMutateIndispensably's replicateMutations. Captured unconditionally for every
+    // non-ignored mutation right after setTimestamps; later, when prepareDataRowStates runs (i.e.
+    // when the table has a global, uncovered, or transform index), the per-row pre-image cell is
+    // appended to the same row's bucket. Insertion order = batch order so cell ordering across
+    // rows is preserved on flatten. Null until captured. Replication attributes are NOT stored
+    // here; they are recomputed from originalMutations in replicateMutations.
+    private LinkedHashMap<ImmutableBytesPtr, List<Cell>> replicationCellsByRow;
+    // Per-(row, ts) groups folded from this replicated batch, computed once and shared by the
+    // global-index path (prepareReplicatedIndexMutations) and the local-index path. Null until
+    // first built; only populated on the standby replay path (isReplication).
+    private List<ReplicatedRowGroup> replicatedRowGroups;
 
     public BatchMutateContext() {
       this.clientVersion = 0;
@@ -824,9 +916,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * @return HA group if present or empty if missing
    */
   private Optional<ReplicationLogGroup> getHAGroupFromWALKey(RegionCoprocessorEnvironment env,
-    org.apache.hadoop.hbase.wal.WALKey logKey) throws IOException {
-    byte[] haGroupName =
-      logKey.getExtendedAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
+    Map<String, byte[]> walKeyAttrs) throws IOException {
+    byte[] haGroupName = walKeyAttrs.get(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
     if (haGroupName != null) {
       ReplicationLogGroup logGroup = ReplicationLogGroup.get(env.getConfiguration(),
         env.getServerName(), Bytes.toString(haGroupName), abortable);
@@ -846,13 +937,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (!shouldReplicate) {
       return;
     }
-    Optional<ReplicationLogGroup> logGroup = getHAGroupFromWALKey(ctx.getEnvironment(), logKey);
+    Map<String, byte[]> walKeyAttrs = getAttributeValuesFromWALKey(logKey);
+    Optional<ReplicationLogGroup> logGroup =
+      getHAGroupFromWALKey(ctx.getEnvironment(), walKeyAttrs);
     if (!logGroup.isPresent()) {
       return;
     }
     long start = EnvironmentEdgeManager.currentTimeMillis();
     try {
-      replicateEditOnWALRestore(logGroup.get(), logKey, logEdit);
+      replicateEditOnWALRestore(logGroup.get(), logKey, walKeyAttrs, logEdit);
     } finally {
       long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
       metricSource.updatePreWALRestoreTime(dataTableName, duration);
@@ -860,32 +953,30 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * A batch of mutations is recorded in a single WAL edit so a WAL edit can have cells belonging to
-   * multiple rows. Further, for one mutation the WAL edit contains the individual cells that are
-   * part of the mutation.
+   * Forward the WAL edit's cell stream — including any METAFAMILY pre-image cells that were
+   * injected at PRE phase — to the replication log as a single batch. The standby reader peels the
+   * pre-image cells and reconstructs Put/Delete mutations on the way out. Ignored mutations were
+   * filtered out of {@code replicationCellsByRow} during {@code captureReplicationCells}, so the
+   * WAL edit already excludes them; no per-mutation filtering is required here.
    * @param logGroup HA Group
    * @param logKey   WAL log key
    * @param logEdit  WAL edit record
    */
   private void replicateEditOnWALRestore(ReplicationLogGroup logGroup, WALKey logKey,
-    WALEdit logEdit) throws IOException {
-    List<Cell> regularCells = new ArrayList<>();
-    for (Cell kv : logEdit.getCells()) {
-      if (kv instanceof IndexedKeyValue) {
-        IndexedKeyValue ikv = (IndexedKeyValue) kv;
-        logGroup.append(Bytes.toString(ikv.getIndexTable()), -1, ikv.getMutation());
-      } else {
-        regularCells.add(kv);
+    Map<String, byte[]> walKeyAttrs, WALEdit logEdit) throws IOException {
+    String tableName = logKey.getTableName().getNameAsString();
+    List<Cell> cells = logEdit.getCells();
+    if (cells == null || cells.isEmpty()) {
+      return;
+    }
+    Map<String, byte[]> replicationAttrs = new HashMap<>();
+    for (String attrKey : ReplicationLogGroup.REPLICATION_ATTR_KEYS) {
+      byte[] val = walKeyAttrs.get(attrKey);
+      if (val != null) {
+        replicationAttrs.put(attrKey, val);
       }
     }
-    if (!regularCells.isEmpty()) {
-      String tableName = logKey.getTableName().getNameAsString();
-      for (Mutation split : MutationCellGrouper.splitCellsIntoMutations(regularCells)) {
-        if (!this.ignoreReplicationFilter.test(split)) {
-          logGroup.append(tableName, -1, split);
-        }
-      }
-    }
+    logGroup.append(tableName, -1, cells, replicationAttrs);
     logGroup.sync();
   }
 
@@ -1234,19 +1325,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
     }
 
-    for (List<Cell> cells : delete.getFamilyCellMap().values()) {
-      for (Cell cell : cells) {
-        switch (cell.getType()) {
-          case DeleteFamily:
-          case DeleteFamilyVersion:
-            nextDataRowState.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
-            break;
-          case DeleteColumn:
-          case Delete:
-            removeColumn(nextDataRowState, cell);
-        }
-      }
-    }
+    applyDeleteCells(delete, nextDataRowState);
     if (nextDataRowState != null && nextDataRowState.getFamilyCellMap().size() == 0) {
       dataRowState.setSecond(null);
     }
@@ -1307,16 +1386,401 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
+   * One {@code (row, ts)} group of a replicated mini-batch on the standby: the group's mutations,
+   * the per-row pre-image the active shipped for that batch, and the data-row state derived by
+   * folding the group's cells onto that pre-image. Built once by {@link #buildReplicatedRowGroups}
+   * and consumed by both the global-index path ({@link #prepareReplicatedIndexMutations}, which
+   * uses {@code preImage} + {@code nextState}) and the local-index path (which uses
+   * {@code preImage} as the builder's prior row state). Different {@code (row, ts)} groups for the
+   * same row are kept separate — that's how the standby recovers the active-batch boundary the
+   * reader's coalescing can erase.
+   */
+  static final class ReplicatedRowGroup {
+    final ImmutableBytesPtr row;
+    final long ts;
+    final List<Mutation> mutations;
+    final Put preImage;
+    final Put nextState;
+
+    ReplicatedRowGroup(ImmutableBytesPtr row, long ts, List<Mutation> mutations, Put preImage,
+      Put nextState) {
+      this.row = row;
+      this.ts = ts;
+      this.mutations = mutations;
+      this.preImage = preImage;
+      this.nextState = nextState;
+    }
+  }
+
+  /**
+   * Group already-enabled replicated mutations by {@code (row, ts)} and, for each group, decode the
+   * shipped {@link #PRE_IMAGE} (from the group's first mutation — the active wrote one pre-image
+   * cell per row per batch, so all mutations in a group share it) and fold the group's cells onto
+   * it to derive the next data-row state. Groups are returned in first-seen order. The caller is
+   * responsible for filtering out non-indexed mutations (e.g. via {@code builder.isEnabled}) before
+   * calling this.
+   */
+  @VisibleForTesting
+  static List<ReplicatedRowGroup> buildReplicatedRowGroups(List<Mutation> enabledMutations)
+    throws IOException {
+    LinkedHashMap<RowTsKey, List<Mutation>> groups = new LinkedHashMap<>();
+    for (Mutation m : enabledMutations) {
+      RowTsKey key = new RowTsKey(new ImmutableBytesPtr(m.getRow()), IndexUtil.getMaxTimestamp(m));
+      groups.computeIfAbsent(key, k -> new ArrayList<>()).add(m);
+    }
+    List<ReplicatedRowGroup> result = new ArrayList<>(groups.size());
+    for (Map.Entry<RowTsKey, List<Mutation>> entry : groups.entrySet()) {
+      List<Mutation> groupMutations = entry.getValue();
+      Put preImage = decodePreImage(groupMutations.get(0));
+      Put nextState = deriveNextState(preImage, groupMutations);
+      result.add(new ReplicatedRowGroup(entry.getKey().getRow(), entry.getKey().getTs(),
+        groupMutations, preImage, nextState));
+    }
+    return result;
+  }
+
+  /**
+   * Collect the mini-batch's index-enabled mutations into a list, preserving order.
+   */
+  private List<Mutation> enabledMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+    List<Mutation> enabled = new ArrayList<>(miniBatchOp.size());
+    for (int i = 0; i < miniBatchOp.size(); i++) {
+      Mutation m = miniBatchOp.getOperation(i);
+      if (this.builder.isEnabled(m)) {
+        enabled.add(m);
+      }
+    }
+    return enabled;
+  }
+
+  /**
+   * Fold this replicated batch into {@code (row, ts)} groups, once per batch. A table with both a
+   * global and a local index reaches this from both index paths; caching on the context avoids
+   * re-walking the mini-batch and re-parsing every group's pre-image protobuf a second time.
+   */
+  private List<ReplicatedRowGroup> getReplicatedRowGroups(
+    MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context)
+    throws IOException {
+    if (context.replicatedRowGroups == null) {
+      context.replicatedRowGroups = buildReplicatedRowGroups(enabledMutations(miniBatchOp));
+    }
+    return context.replicatedRowGroups;
+  }
+
+  /**
+   * Build the local-index replay inputs from already-grouped replicated mutations: one uniform-ts
+   * {@link MultiMutation} per {@code (row, ts)} group (the pending mutations the local builder
+   * processes) and, as a side effect, populate {@code preImageCellsByRowTs} mapping each group's
+   * {@code (row, ts)} to the pre-image cells the active shipped (the builder's prior row state).
+   * The map is keyed by {@code (row, ts)} so a row recurring across concatenated active batches
+   * gets each batch's own pre-image rather than collapsing to the earliest. A {@code null}
+   * pre-image (active saw an empty row) maps to a {@code null} cell list — the documented "no prior
+   * row" sentinel. The returned {@link MultiMutation}s mirror what {@code groupMutations} produces
+   * on the active, but grouped by {@code (row, ts)} so each is uniform-ts as
+   * {@code NonTxIndexBuilder} requires.
+   */
+  private Collection<? extends Mutation> buildReplayLocalIndexInputs(
+    List<ReplicatedRowGroup> groups, Map<RowTsKey, List<Cell>> preImageCellsByRowTs) {
+    List<Mutation> pending = new ArrayList<>(groups.size());
+    for (ReplicatedRowGroup group : groups) {
+      MultiMutation mm = new MultiMutation(group.row);
+      for (Mutation m : group.mutations) {
+        mm.addAll(m);
+      }
+      pending.add(mm);
+      List<Cell> priorCells =
+        group.preImage == null ? null : MutationCellGrouper.flattenCells(group.preImage);
+      preImageCellsByRowTs.put(new RowTsKey(group.row, group.ts), priorCells);
+    }
+    return pending;
+  }
+
+  /**
+   * Standby-side counterpart to {@link #prepareIndexMutations}. Groups the mini-batch's mutations
+   * by {@code (row, ts)} so all mutations from the same active-side batch on the same row are
+   * processed together against one shared pre-image. Different {@code (row, ts)} groups for the
+   * same row produce separate index updates — that's how the standby recovers the active-batch
+   * boundary that the reader's coalescing can erase.
+   * <p>
+   * For each group: decode {@link #PRE_IMAGE} from the first mutation (all mutations in a group
+   * share one pre-image because the active wrote one pre-image cell per row per batch), apply the
+   * group's cells on top to derive {@code nextDataRowState}, then call
+   * {@link #generateIndexMutationsForRow} with the group's ts so the resulting index Mutation cells
+   * carry the correct timestamp.
+   * <p>
+   * Skips {@code getCurrentRowStates} (unsafe under out-of-order replay) and writes directly to
+   * {@code context.indexUpdates}.
+   */
+  private void prepareReplicatedIndexMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+    BatchMutateContext context, List<IndexMaintainer> maintainers) throws IOException {
+    List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables =
+      buildIndexTablesList(maintainers);
+    for (ReplicatedRowGroup group : getReplicatedRowGroups(miniBatchOp, context)) {
+      if (group.preImage == null && group.nextState == null) {
+        continue;
+      }
+      ListMultimap<HTableInterfaceReference, Mutation> idxUpdates = ArrayListMultimap.create();
+      generateIndexMutationsForRow(group.row, group.preImage, group.nextState, group.ts,
+        encodedRegionName, QueryConstants.UNVERIFIED_BYTES, indexTables, idxUpdates);
+      for (Map.Entry<HTableInterfaceReference, Mutation> idxUpdate : idxUpdates.entries()) {
+        context.indexUpdates.put(idxUpdate.getKey(),
+          new Pair<>(idxUpdate.getValue(), group.row.get()));
+      }
+    }
+  }
+
+  /**
+   * Decodes the {@link #PRE_IMAGE} attribute on a standby-side replicated mutation. Returns
+   * {@code null} when the active observed an empty row at lock time (sentinel: zero-length value).
+   * Throws when the attribute is absent — that signals a contract violation: an indexed-table
+   * mutation arrived on the standby with no pre-image, which should never happen because the active
+   * runs {@code prepareDataRowStates} (and writes a pre-image cell) for every table with a
+   * global/uncovered/transform/CDC index.
+   */
+  @VisibleForTesting
+  static Put decodePreImage(Mutation m) throws IOException {
+    byte[] preImageBytes = m.getAttribute(PRE_IMAGE);
+    if (preImageBytes == null) {
+      throw new DoNotRetryIOException("Replicated mutation on indexed table is missing the "
+        + PRE_IMAGE + " attribute: row=" + Bytes.toStringBinary(m.getRow()));
+    }
+    if (preImageBytes.length == 0) {
+      return null;
+    }
+    return ProtobufUtil.toPut(ClientProtos.MutationProto.parseFrom(preImageBytes));
+  }
+
+  /**
+   * Encode a pre-image Put into the bytes carried by the {@link #PRE_IMAGE_WAL_QUALIFIER} cell
+   * (and, after the reader peels it off, the {@link #PRE_IMAGE} attribute). A {@code null}
+   * pre-image means the active side saw an empty row; it encodes to a zero-length array, the
+   * sentinel {@link #decodePreImage} maps back to {@code null}.
+   */
+  @VisibleForTesting
+  static byte[] encodePreImage(Put preImage) throws IOException {
+    return preImage != null
+      ? ProtobufUtil.toMutation(ClientProtos.MutationProto.MutationType.PUT, preImage).toByteArray()
+      : HConstants.EMPTY_BYTE_ARRAY;
+  }
+
+  /**
+   * Build the METAFAMILY pre-image cell that the active appends to the WAL edit (and that the
+   * reader peels off into the {@link #PRE_IMAGE} attribute). {@code priorState} is the row state
+   * the active observed at lock time; {@code null} encodes to the empty-row sentinel.
+   */
+  @VisibleForTesting
+  public static Cell buildPreImageCell(byte[] row, Put priorState) throws IOException {
+    return CellBuilderFactory.create(CellBuilderType.SHALLOW_COPY).setRow(row)
+      .setFamily(WALEdit.METAFAMILY).setQualifier(PRE_IMAGE_WAL_QUALIFIER)
+      .setTimestamp(HConstants.LATEST_TIMESTAMP).setType(Cell.Type.Put)
+      .setValue(encodePreImage(priorState)).build();
+  }
+
+  /**
+   * Applies a Delete's cells to a Put, returning the resulting Put or {@code null} if the row goes
+   * empty. Used by {@link #prepareReplicatedIndexMutations} to derive {@code nextDataRowState} from
+   * a (preImage + cells) sequence within one (row, ts) group.
+   */
+  @VisibleForTesting
+  static Put applyDeleteToPut(Delete delete, Put put) {
+    if (put == null) {
+      return null;
+    }
+    applyDeleteCells(delete, put);
+    return put.getFamilyCellMap().isEmpty() ? null : put;
+  }
+
+  /**
+   * Applies a Delete's tombstone cells to {@code put} in place: DeleteFamily/DeleteFamilyVersion
+   * drop the whole family, DeleteColumn/Delete drop the column. Shared by {@link #applyDeleteToPut}
+   * (replay next-state derivation) and {@link #applyOnePendingDeleteMutation} (active next-state).
+   */
+  private static void applyDeleteCells(Delete delete, Put put) {
+    for (List<Cell> cells : delete.getFamilyCellMap().values()) {
+      for (Cell cell : cells) {
+        switch (cell.getType()) {
+          case DeleteFamily:
+          case DeleteFamilyVersion:
+            put.getFamilyCellMap().remove(CellUtil.cloneFamily(cell));
+            break;
+          case DeleteColumn:
+          case Delete:
+            removeColumn(put, cell);
+            break;
+          default:
+            break;
+        }
+      }
+    }
+  }
+
+  /**
+   * Fold a (row, ts) group's mutations onto its pre-image to derive the next data-row state. Puts
+   * are merged on top of the running state ({@code applyNew}); Deletes peel cells back out
+   * ({@link #applyDeleteToPut}). Returns {@code null} if there is no pre-image and the group never
+   * produces a Put, or if a Delete empties the row. Mirrors the single-row fold Phoenix performs on
+   * the active side when building {@code nextDataRowState}.
+   */
+  @VisibleForTesting
+  static Put deriveNextState(Put preImage, List<Mutation> groupMutations) throws IOException {
+    Put nextState = preImage != null ? new Put(preImage) : null;
+    for (Mutation m : groupMutations) {
+      if (m instanceof Put) {
+        nextState = nextState != null ? applyNew((Put) m, nextState) : new Put((Put) m);
+      } else if (m instanceof Delete) {
+        nextState = applyDeleteToPut((Delete) m, nextState);
+      }
+    }
+    return nextState;
+  }
+
+  /**
+   * Capture the cell stream that will be appended to the replication log.
+   * <p>
+   * Called unconditionally from {@link #preBatchMutateWithExceptions} after {@code setTimestamps}
+   * so cells carry their final timestamps and any post-on-dup / post-conditional-TTL cells from
+   * earlier phases are reflected. Every Phoenix-write batch ships through Phoenix replication and
+   * lands in the standby's {@code preBatchMutate}, regardless of which indexes the active table
+   * has. Tables with global/uncovered/transform indexes get an additional pre-image cell appended
+   * later by {@link #capturePreImageCells} (called from {@link #prepareDataRowStates}); other
+   * tables ship data cells only and the standby IRO falls through to its primary code path.
+   * <p>
+   * Each non-ignored mutation contributes its family cells to its row's bucket in
+   * {@code context.replicationCellsByRow}. CP-injected mutations visible at this call site (on-dup
+   * Deletes from {@link #addOnDupMutationsToBatch}, conditional-TTL masking Deletes from
+   * {@link #updateMutationsForConditionalTTL}) are appended to the same row's bucket. Local-index
+   * updates are NOT visible here: {@link #handleLocalIndexUpdates} runs later via
+   * {@code addOperationsFromCP(0, …)} so they correctly stay out of the replication log.
+   * <p>
+   * The map's key set is the set of replicated rows (no separate set field needed); a row whose
+   * only mutation was filtered by {@code ignoreReplicationFilter} does not appear in the map.
+   */
+  private void captureReplicationCells(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+    BatchMutateContext context) {
+    if (!shouldReplicate || ignoreSyncReplicationForTesting) {
+      return;
+    }
+    if (!context.logGroup.isPresent()) {
+      return;
+    }
+    LinkedHashMap<ImmutableBytesPtr, List<Cell>> cellsByRow = new LinkedHashMap<>();
+    for (int i = 0; i < miniBatchOp.size(); i++) {
+      Mutation m = miniBatchOp.getOperation(i);
+      if (ignoreReplicationFilter.test(m)) {
+        continue;
+      }
+      ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(m.getRow());
+      List<Cell> bucket = cellsByRow.computeIfAbsent(rowKeyPtr, k -> new ArrayList<>());
+      for (List<Cell> cells : m.getFamilyCellMap().values()) {
+        bucket.addAll(cells);
+      }
+      Mutation[] cpMutations = miniBatchOp.getOperationsFromCoprocessors(i);
+      if (cpMutations != null) {
+        for (Mutation cp : cpMutations) {
+          for (List<Cell> cells : cp.getFamilyCellMap().values()) {
+            bucket.addAll(cells);
+          }
+        }
+      }
+    }
+    context.replicationCellsByRow = cellsByRow;
+  }
+
+  /**
+   * Emit one pre-image cell per replicated row that has a {@code dataRowStates} entry. Appends the
+   * cell to the row's bucket in {@code context.replicationCellsByRow} and to
+   * {@code miniBatchOp.getWalEdit(0)} so the WAL-restore path ships the same payload as the
+   * synchronous {@link #replicateMutations} call.
+   * <p>
+   * Pre-image bytes are PB-encoded {@link Put}; an empty value is the sentinel for "primary
+   * observed an empty row at lock time" so the standby can distinguish that from "no primary
+   * information shipped". Rows not in {@code dataRowStates} (e.g. row not visited) contribute no
+   * pre-image cell — the standby falls back to its no-pre-image code path for those rows.
+   * <p>
+   * Called from {@link #preBatchMutateWithExceptions} immediately after
+   * {@link #prepareDataRowStates} returns, on the global/uncovered/transform-index branch only. For
+   * tables without such indexes, {@code captureReplicationCells} alone produces the cell stream (no
+   * pre-image cells).
+   */
+  private void capturePreImageCells(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+    BatchMutateContext context) throws IOException {
+    if (context.replicationCellsByRow == null || context.replicationCellsByRow.isEmpty()) {
+      return;
+    }
+    WALEdit walEdit = miniBatchOp.getWalEdit(0);
+    if (walEdit == null) {
+      walEdit = new WALEdit();
+    }
+    for (Map.Entry<ImmutableBytesPtr, List<Cell>> entry : context.replicationCellsByRow
+      .entrySet()) {
+      ImmutableBytesPtr rowKeyPtr = entry.getKey();
+      Pair<Put, Put> rowState = context.dataRowStates.get(rowKeyPtr);
+      if (rowState == null) {
+        continue;
+      }
+      Cell preImageCell = buildPreImageCell(rowKeyPtr.copyBytes(), rowState.getFirst());
+      entry.getValue().add(preImageCell);
+      walEdit.add(preImageCell);
+    }
+    if (!walEdit.isEmpty()) {
+      miniBatchOp.setWalEdit(0, walEdit);
+    }
+  }
+
+  /**
+   * Active-side pre-image capture for a <i>local-only</i> replicated table. Such a table has no
+   * global/uncovered/transform index, so it never enters the branch that runs
+   * {@link #prepareDataRowStates} + {@link #capturePreImageCells}; without this it would ship no
+   * pre-image and the standby's {@link PreImageLocalTable} would have nothing to read. The local
+   * index build already reads the prior row state through {@code cachedLocalTable} (a region scan
+   * scoped to index-relevant columns), so we reuse that exact state as the pre-image — no extra
+   * scan, and the same column scope the standby's local builder consumes. {@code dataRowStates} is
+   * populated with the prior row as {@code first} (a {@code null} prior row encodes to the
+   * empty-row sentinel) so {@link #capturePreImageCells} can emit one pre-image cell per replicated
+   * row.
+   */
+  private void captureLocalIndexPreImageCells(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+    BatchMutateContext context, Collection<? extends Mutation> groupedMutations,
+    CachedLocalTable cachedLocalTable) throws IOException {
+    if (context.replicationCellsByRow == null || context.replicationCellsByRow.isEmpty()) {
+      return;
+    }
+    context.dataRowStates = new HashMap<>(groupedMutations.size());
+    for (Mutation m : groupedMutations) {
+      List<Cell> priorCells =
+        cachedLocalTable.getCurrentRowState(m, Collections.<ColumnReference> emptyList(), false);
+      Put priorState = null;
+      if (priorCells != null && !priorCells.isEmpty()) {
+        priorState = new Put(m.getRow());
+        for (Cell cell : priorCells) {
+          priorState.add(cell);
+        }
+      }
+      context.dataRowStates.put(new ImmutableBytesPtr(m.getRow()), new Pair<>(priorState, null));
+    }
+    capturePreImageCells(miniBatchOp, context);
+  }
+
+  /**
    * The index update generation for local indexes uses the existing index update generation code
    * (i.e., the {@link IndexBuilder} implementation).
    */
   private void handleLocalIndexUpdates(TableName table,
     MiniBatchOperationInProgress<Mutation> miniBatchOp,
-    Collection<? extends Mutation> pendingMutations, PhoenixIndexMetaData indexMetaData)
-    throws Throwable {
+    Collection<? extends Mutation> pendingMutations, PhoenixIndexMetaData indexMetaData,
+    LocalHBaseState localHBaseState) throws Throwable {
     ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates =
       ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>> create();
-    this.builder.getIndexUpdates(indexUpdates, miniBatchOp, pendingMutations, indexMetaData);
+    if (localHBaseState != null) {
+      // Caller supplied the prior-row-state source: the standby replay passes a PreImageLocalTable
+      // (prior state from the shipped PRE_IMAGE, not a region scan), and the active local-only
+      // replicated path passes the CachedLocalTable it already built (so the pre-image capture and
+      // the index build share one scan).
+      this.builder.getIndexUpdates(indexUpdates, miniBatchOp, pendingMutations, indexMetaData,
+        localHBaseState);
+    } else {
+      this.builder.getIndexUpdates(indexUpdates, miniBatchOp, pendingMutations, indexMetaData);
+    }
     byte[] tableName = table.getName();
     HTableInterfaceReference hTableInterfaceReference =
       new HTableInterfaceReference(new ImmutableBytesPtr(tableName));
@@ -1558,7 +2022,29 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * previous data row state with the pending row mutation.
    */
   private void prepareIndexMutations(BatchMutateContext context, List<IndexMaintainer> maintainers,
-    long ts) throws IOException {
+    long batchTimestamp) throws IOException {
+    List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables =
+      buildIndexTablesList(maintainers);
+    for (Map.Entry<ImmutableBytesPtr, Pair<Put, Put>> entry : context.dataRowStates.entrySet()) {
+      ImmutableBytesPtr rowKeyPtr = entry.getKey();
+      Pair<Put, Put> dataRowState = entry.getValue();
+      Put currentDataRowState = dataRowState.getFirst();
+      Put nextDataRowState = dataRowState.getSecond();
+      if (currentDataRowState == null && nextDataRowState == null) {
+        continue;
+      }
+      ListMultimap<HTableInterfaceReference, Mutation> idxUpdates = ArrayListMultimap.create();
+      generateIndexMutationsForRow(rowKeyPtr, currentDataRowState, nextDataRowState, batchTimestamp,
+        encodedRegionName, QueryConstants.UNVERIFIED_BYTES, indexTables, idxUpdates);
+      for (Map.Entry<HTableInterfaceReference, Mutation> idxUpdate : idxUpdates.entries()) {
+        context.indexUpdates.put(idxUpdate.getKey(),
+          new Pair<>(idxUpdate.getValue(), rowKeyPtr.get()));
+      }
+    }
+  }
+
+  private List<Pair<IndexMaintainer, HTableInterfaceReference>>
+    buildIndexTablesList(List<IndexMaintainer> maintainers) {
     List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables =
       new ArrayList<>(maintainers.size());
     for (IndexMaintainer indexMaintainer : maintainers) {
@@ -1575,22 +2061,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         new HTableInterfaceReference(new ImmutableBytesPtr(indexMaintainer.getIndexTableName()));
       indexTables.add(new Pair<>(indexMaintainer, hTableInterfaceReference));
     }
-    for (Map.Entry<ImmutableBytesPtr, Pair<Put, Put>> entry : context.dataRowStates.entrySet()) {
-      ImmutableBytesPtr rowKeyPtr = entry.getKey();
-      Pair<Put, Put> dataRowState = entry.getValue();
-      Put currentDataRowState = dataRowState.getFirst();
-      Put nextDataRowState = dataRowState.getSecond();
-      if (currentDataRowState == null && nextDataRowState == null) {
-        continue;
-      }
-      ListMultimap<HTableInterfaceReference, Mutation> idxUpdates = ArrayListMultimap.create();
-      generateIndexMutationsForRow(rowKeyPtr, currentDataRowState, nextDataRowState, ts,
-        encodedRegionName, QueryConstants.UNVERIFIED_BYTES, indexTables, idxUpdates);
-      for (Map.Entry<HTableInterfaceReference, Mutation> idxUpdate : idxUpdates.entries()) {
-        context.indexUpdates.put(idxUpdate.getKey(),
-          new Pair<>(idxUpdate.getValue(), rowKeyPtr.get()));
-      }
-    }
+    return indexTables;
   }
 
   /**
@@ -1601,8 +2072,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * are applied. In phase 3, the status for an index table row is either set to "verified" or the
    * row is deleted.
    */
-  private void preparePreIndexMutations(BatchMutateContext context, long batchTimestamp,
-    PhoenixIndexMetaData indexMetaData) throws Throwable {
+  private void preparePreIndexMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+    BatchMutateContext context, long batchTimestamp, PhoenixIndexMetaData indexMetaData)
+    throws Throwable {
     List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
     // get the current span, or just use a null-span to avoid a bunch of if statements
     try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
@@ -1614,11 +2086,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // The rest of this method is for handling global index updates
       context.indexUpdates =
         ArrayListMultimap.<HTableInterfaceReference, Pair<Mutation, byte[]>> create();
-      prepareIndexMutations(context, maintainers, batchTimestamp);
+      if (context.isReplication) {
+        // Replicated batches carry per-row pre-images and per-cell timestamps from the active.
+        // Group by (row, ts) so each active-side batch's mutations are processed against their own
+        // pre-image — recovers the active-batch boundary the reader's coalescing can erase.
+        prepareReplicatedIndexMutations(miniBatchOp, context, maintainers);
+      } else {
+        prepareIndexMutations(context, maintainers, batchTimestamp);
+      }
 
       if (serializeCDCMutations) {
-        prepareEventuallyConsistentIndexMutations(context, batchTimestamp, maintainers,
-          compressCDCMutations);
+        prepareEventuallyConsistentIndexMutations(context, maintainers, compressCDCMutations);
       }
 
       context.preIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
@@ -1638,14 +2116,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         List<Pair<Mutation, byte[]>> updates = context.indexUpdates.get(hTableInterfaceReference);
         for (Pair<Mutation, byte[]> update : updates) {
           Mutation m = update.getFirst();
+          long ts = IndexUtil.getMaxTimestamp(m);
+          RowTsKey cdcKey = new RowTsKey(new ImmutableBytesPtr(update.getSecond()), ts);
           if (m instanceof Put) {
             if (indexMaintainer.isCDCIndex() && context.cdcPreMutationsBytes != null) {
-              ImmutableBytesPtr dataRowKeyPtr = new ImmutableBytesPtr(update.getSecond());
-              byte[] cdcMutationsBytes = context.cdcPreMutationsBytes.get(dataRowKeyPtr);
+              byte[] cdcMutationsBytes = context.cdcPreMutationsBytes.get(cdcKey);
               if (cdcMutationsBytes != null) {
                 ((Put) m).addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                  QueryConstants.CDC_INDEX_PRE_MUTATIONS_CQ_BYTES, batchTimestamp,
-                  cdcMutationsBytes);
+                  QueryConstants.CDC_INDEX_PRE_MUTATIONS_CQ_BYTES, ts, cdcMutationsBytes);
               }
             }
             // This will be done before the data table row is updated (i.e., in the first write
@@ -1656,15 +2134,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             // row unverified again. Only do this for DeleteFamily
             // Set the status of the index row to "unverified"
             Put unverifiedPut = new Put(m.getRow());
-            unverifiedPut.addColumn(emptyCF, emptyCQ, batchTimestamp,
-              QueryConstants.UNVERIFIED_BYTES);
+            unverifiedPut.addColumn(emptyCF, emptyCQ, ts, QueryConstants.UNVERIFIED_BYTES);
             if (indexMaintainer.isCDCIndex() && context.cdcPreMutationsBytes != null) {
-              ImmutableBytesPtr dataRowKeyPtr = new ImmutableBytesPtr(update.getSecond());
-              byte[] cdcMutationsBytes = context.cdcPreMutationsBytes.get(dataRowKeyPtr);
+              byte[] cdcMutationsBytes = context.cdcPreMutationsBytes.get(cdcKey);
               if (cdcMutationsBytes != null) {
                 unverifiedPut.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                  QueryConstants.CDC_INDEX_PRE_MUTATIONS_CQ_BYTES, batchTimestamp,
-                  cdcMutationsBytes);
+                  QueryConstants.CDC_INDEX_PRE_MUTATIONS_CQ_BYTES, ts, cdcMutationsBytes);
               }
             }
             // This will be done before the data table row is updated (i.e., in the first write
@@ -1678,21 +2153,21 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * Prepares pre-phase and post-phase cdc mutations for eventually consistent indexes.
+   * Prepares pre-phase and post-phase cdc mutations for eventually consistent indexes. Each
+   * resulting builder/bytes entry is keyed by {@code (dataRowKey, ts)} where ts is read from the
+   * index Mutation's own cells (already stamped by {@link #generateIndexMutationsForRow}). On the
+   * active path each row produces one entry (ts == batchTimestamp); on the standby's per-(row, ts)
+   * grouping, two batches for the same row produce two entries.
    * @param context           batch mutate context.
-   * @param batchTimestamp    the timestamp to use for mutations.
    * @param maintainers       the list of index maintainers.
    * @param compressMutations whether to Snappy-compress the serialized proto bytes.
    * @throws IOException if there is an error.
    */
   private static void prepareEventuallyConsistentIndexMutations(BatchMutateContext context,
-    long batchTimestamp, List<IndexMaintainer> maintainers, boolean compressMutations)
-    throws IOException {
-    // Store pre-index and post-index mutations for each data table rowkey
-    Map<ImmutableBytesPtr, IndexMutationsProtos.IndexMutations.Builder> preBuilderMap =
-      new HashMap<>();
-    Map<ImmutableBytesPtr, IndexMutationsProtos.IndexMutations.Builder> postBuilderMap =
-      new HashMap<>();
+    List<IndexMaintainer> maintainers, boolean compressMutations) throws IOException {
+    // Store pre-index and post-index mutations per (data row, ts) group.
+    Map<RowTsKey, IndexMutationsProtos.IndexMutations.Builder> preBuilderMap = new HashMap<>();
+    Map<RowTsKey, IndexMutationsProtos.IndexMutations.Builder> postBuilderMap = new HashMap<>();
 
     for (IndexMaintainer indexMaintainer : maintainers) {
       if (
@@ -1709,11 +2184,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       for (Pair<Mutation, byte[]> update : updates) {
         Mutation m = update.getFirst();
         byte[] dataRowKey = update.getSecond();
-        ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(dataRowKey);
-        IndexMutationsProtos.IndexMutations.Builder preBuilder = preBuilderMap
-          .computeIfAbsent(rowKeyPtr, k -> IndexMutationsProtos.IndexMutations.newBuilder());
+        long ts = IndexUtil.getMaxTimestamp(m);
+        RowTsKey key = new RowTsKey(new ImmutableBytesPtr(dataRowKey), ts);
+        IndexMutationsProtos.IndexMutations.Builder preBuilder =
+          preBuilderMap.computeIfAbsent(key, k -> IndexMutationsProtos.IndexMutations.newBuilder());
         IndexMutationsProtos.IndexMutations.Builder postBuilder = postBuilderMap
-          .computeIfAbsent(rowKeyPtr, k -> IndexMutationsProtos.IndexMutations.newBuilder());
+          .computeIfAbsent(key, k -> IndexMutationsProtos.IndexMutations.newBuilder());
         if (m instanceof Put) {
           preBuilder.addTables(ByteString.copyFrom(indexMaintainer.getIndexTableName()));
           byte[] preMutation =
@@ -1721,7 +2197,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           preBuilder.addMutations(ByteString.copyFrom(preMutation));
           if (!indexMaintainer.isUncovered()) {
             Put verifiedPut = new Put(m.getRow());
-            verifiedPut.addColumn(emptyCF, emptyCQ, batchTimestamp, QueryConstants.VERIFIED_BYTES);
+            verifiedPut.addColumn(emptyCF, emptyCQ, ts, QueryConstants.VERIFIED_BYTES);
             postBuilder.addTables(ByteString.copyFrom(indexMaintainer.getIndexTableName()));
             byte[] postMutation = ProtobufUtil
               .toMutation(ClientProtos.MutationProto.MutationType.PUT, verifiedPut).toByteArray();
@@ -1730,8 +2206,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         } else {
           if (IndexUtil.isDeleteFamily(m)) {
             Put unverifiedPut = new Put(m.getRow());
-            unverifiedPut.addColumn(emptyCF, emptyCQ, batchTimestamp,
-              QueryConstants.UNVERIFIED_BYTES);
+            unverifiedPut.addColumn(emptyCF, emptyCQ, ts, QueryConstants.UNVERIFIED_BYTES);
             preBuilder.addTables(ByteString.copyFrom(indexMaintainer.getIndexTableName()));
             byte[] preMutation = ProtobufUtil
               .toMutation(ClientProtos.MutationProto.MutationType.PUT, unverifiedPut).toByteArray();
@@ -1747,9 +2222,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
     if (!preBuilderMap.isEmpty()) {
       context.cdcPreMutationsBytes = new HashMap<>();
-      for (Map.Entry<ImmutableBytesPtr,
-        IndexMutationsProtos.IndexMutations.Builder> entry : preBuilderMap.entrySet()) {
-        ImmutableBytesPtr rowKey = entry.getKey();
+      for (Map.Entry<RowTsKey, IndexMutationsProtos.IndexMutations.Builder> entry : preBuilderMap
+        .entrySet()) {
+        RowTsKey key = entry.getKey();
         IndexMutationsProtos.IndexMutations.Builder builder = entry.getValue();
         if (builder.getTablesCount() != builder.getMutationsCount()) {
           throw new DoNotRetryIOException(
@@ -1758,7 +2233,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
         if (builder.getTablesCount() > 0) {
           byte[] protoBytes = builder.build().toByteArray();
-          context.cdcPreMutationsBytes.put(rowKey,
+          context.cdcPreMutationsBytes.put(key,
             compressMutations ? Snappy.compress(protoBytes) : protoBytes);
         }
       }
@@ -1766,9 +2241,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
     if (!postBuilderMap.isEmpty()) {
       context.cdcPostMutationsBytes = new HashMap<>();
-      for (Map.Entry<ImmutableBytesPtr,
-        IndexMutationsProtos.IndexMutations.Builder> entry : postBuilderMap.entrySet()) {
-        ImmutableBytesPtr rowKey = entry.getKey();
+      for (Map.Entry<RowTsKey, IndexMutationsProtos.IndexMutations.Builder> entry : postBuilderMap
+        .entrySet()) {
+        RowTsKey key = entry.getKey();
         IndexMutationsProtos.IndexMutations.Builder builder = entry.getValue();
         if (builder.getTablesCount() != builder.getMutationsCount()) {
           throw new DoNotRetryIOException(
@@ -1777,7 +2252,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         }
         if (builder.getTablesCount() > 0) {
           byte[] protoBytes = builder.build().toByteArray();
-          context.cdcPostMutationsBytes.put(rowKey,
+          context.cdcPostMutationsBytes.put(key,
             compressMutations ? Snappy.compress(protoBytes) : protoBytes);
         }
       }
@@ -1797,7 +2272,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     return (PhoenixIndexMetaData) indexMetaData;
   }
 
-  private void preparePostIndexMutations(BatchMutateContext context, long batchTimestamp,
+  private void preparePostIndexMutations(BatchMutateContext context,
     PhoenixIndexMetaData indexMetaData) {
     context.postIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
     List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
@@ -1819,7 +2294,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           if (!indexMaintainer.isUncovered()) {
             Put verifiedPut = new Put(m.getRow());
             // Set the status of the index row to "verified"
-            verifiedPut.addColumn(emptyCF, emptyCQ, batchTimestamp, QueryConstants.VERIFIED_BYTES);
+            verifiedPut.addColumn(emptyCF, emptyCQ, IndexUtil.getMaxTimestamp(m),
+              QueryConstants.VERIFIED_BYTES);
             context.postIndexUpdates.put(hTableInterfaceReference, verifiedPut);
           }
         } else {
@@ -1839,13 +2315,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         for (Pair<Mutation, byte[]> update : updates) {
           Mutation m = update.getFirst();
           if (m instanceof Put) {
-            ImmutableBytesPtr dataRowKeyPtr = new ImmutableBytesPtr(update.getSecond());
-            byte[] cdcMutationsBytes = context.cdcPostMutationsBytes.get(dataRowKeyPtr);
+            long ts = IndexUtil.getMaxTimestamp(m);
+            RowTsKey cdcKey = new RowTsKey(new ImmutableBytesPtr(update.getSecond()), ts);
+            byte[] cdcMutationsBytes = context.cdcPostMutationsBytes.get(cdcKey);
             if (cdcMutationsBytes != null) {
               Put postPut = new Put(m.getRow());
               postPut.addColumn(QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES,
-                QueryConstants.CDC_INDEX_POST_MUTATIONS_CQ_BYTES, batchTimestamp,
-                cdcMutationsBytes);
+                QueryConstants.CDC_INDEX_POST_MUTATIONS_CQ_BYTES, ts, cdcMutationsBytes);
               context.postIndexUpdates.put(hTableInterfaceReference, postPut);
             }
           }
@@ -2042,6 +2518,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     identifyIndexMaintainerTypes(indexMetaData, context);
     identifyMutationTypes(miniBatchOp, context);
     context.populateOriginalMutations(miniBatchOp);
+    // The standby reader stamps every reconstructed mutation with REPLICATED_MUTATION; checking
+    // the first one is sufficient since the marker is batch-uniform by construction.
+    context.isReplication = !context.getOriginalMutations().isEmpty()
+      && context.getOriginalMutations().get(0).getAttribute(REPLICATED_MUTATION) != null;
+    // Replicated batches must not carry active-side resolution flags. These are resolved on the
+    // active cluster before replication, so cells reach the standby already in their final form.
+    Preconditions.checkState(
+      !context.isReplication
+        || (!context.hasAtomic && !context.returnResult && !context.hasConditionalTTL),
+      "replicated batch must not carry active-side resolution flags");
 
     if (context.hasRowDelete) {
       // Need to add cell tags to Delete Marker before we do any index processing
@@ -2109,16 +2595,34 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-    long batchTimestamp = getBatchTimestamp(context, table);
-    // Update the timestamps of the data table mutations to prevent overlapping timestamps
-    // (which prevents index inconsistencies as this case is not handled).
-    setTimestamps(miniBatchOp, builder, batchTimestamp, isStrictTTLEnabled(miniBatchOp));
+    long batchTimestamp = 0;
+    if (!context.isReplication) {
+      // Replicated batches already carry final per-cell timestamps from the active cluster;
+      // re-stamping them would clobber the per-row ts that index entries must align with.
+      batchTimestamp = getBatchTimestamp(context, table);
+      // Update the timestamps of the data table mutations to prevent overlapping timestamps
+      // (which prevents index inconsistencies as this case is not handled).
+      setTimestamps(miniBatchOp, builder, batchTimestamp, isStrictTTLEnabled(miniBatchOp));
+      // Snapshot the cell stream for replication after timestamps are final, before the index
+      // branches run. Replicated batches do not re-replicate, so the capture is skipped on the
+      // standby. The pre-image cells are appended later, after prepareDataRowStates populates
+      // dataRowStates.
+      captureReplicationCells(miniBatchOp, context);
+    }
     if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
-      // Prepare next data rows states for pending mutations (for global indexes)
-      prepareDataRowStates(c, miniBatchOp, context, batchTimestamp);
+      if (!context.isReplication) {
+        // Prepare next data rows states for pending mutations (for global indexes). Skipped on the
+        // standby — preparePreIndexMutations populates indexUpdates from per-(row, ts) groups
+        // using the per-row PRE_IMAGE attribute instead.
+        prepareDataRowStates(c, miniBatchOp, context, batchTimestamp);
+        // dataRowStates is now populated; append per-row pre-image cells to the captured buckets
+        // and to the WAL edit so the WAL-restore path ships the same payload as
+        // replicateMutations.
+        capturePreImageCells(miniBatchOp, context);
+      }
       // early exit if it turns out we don't have any edits
       long start = EnvironmentEdgeManager.currentTimeMillis();
-      preparePreIndexMutations(context, batchTimestamp, indexMetaData);
+      preparePreIndexMutations(miniBatchOp, context, batchTimestamp, indexMetaData);
       metricSource.updateIndexPrepareTime(dataTableName,
         EnvironmentEdgeManager.currentTimeMillis() - start);
       // Release the locks before making RPC calls for index updates
@@ -2127,63 +2631,50 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       doPre(context);
       // Acquire the locks again before letting the region proceed with data table updates
       lockRows(context);
-      if (context.lastConcurrentBatchContext != null) {
+      // Concurrent batches on the standby are safe without waiting: each replicated batch is
+      // self-sufficient via its PRE_IMAGE, the standby never reads from the data table (so a
+      // concurrent batch can't make our row state stale), and every index cell carries the
+      // active's timestamp — interleaved PRE/POST writes resolve to the same final index state
+      // as the active via HBase cell versioning.
+      if (!context.isReplication && context.lastConcurrentBatchContext != null) {
         waitForPreviousConcurrentBatch(table, context);
       }
-      preparePostIndexMutations(context, batchTimestamp, indexMetaData);
-      addGlobalIndexMutationsToWAL(miniBatchOp, context);
+      preparePostIndexMutations(context, indexMetaData);
     }
     if (context.hasLocalIndex) {
       // Group all the updates for a single row into a single update to be processed (for local
-      // indexes)
-      Collection<? extends Mutation> mutations = groupMutations(miniBatchOp, context);
-      handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData);
+      // indexes). On the standby, group by (row, ts) so each replayed active-side batch's cells
+      // stay in their own uniform-ts mutation for NonTxIndexBuilder, and serve the builder's prior
+      // row state from each group's shipped PRE_IMAGE instead of a (not-yet-written) region scan.
+      if (context.isReplication) {
+        List<ReplicatedRowGroup> groups = getReplicatedRowGroups(miniBatchOp, context);
+        Map<RowTsKey, List<Cell>> preImageCellsByRowTs = new HashMap<>();
+        Collection<? extends Mutation> mutations =
+          buildReplayLocalIndexInputs(groups, preImageCellsByRowTs);
+        handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData,
+          new PreImageLocalTable(preImageCellsByRowTs));
+      } else {
+        Collection<? extends Mutation> mutations = groupMutations(miniBatchOp, context);
+        // dataRowStates is populated only by the global/uncovered/transform/atomic/... branch, so a
+        // null map here means this table has only a local index and never ran the global-style
+        // pre-image capture. A non-null replicationCellsByRow means captureReplicationCells ran,
+        // i.e. this is a replicated active-side batch. Together they identify a replicated
+        // local-only table, which must ship a pre-image so the standby can regenerate its local
+        // index. Build the prior-state scan once and reuse it for both the pre-image capture and
+        // the index build. Mixed tables already captured a (superset) pre-image in the earlier
+        // branch; non-replicated local-only tables keep the unchanged path (no extra work).
+        if (context.dataRowStates == null && context.replicationCellsByRow != null) {
+          CachedLocalTable cachedLocalTable =
+            CachedLocalTable.build(mutations, indexMetaData, c.getEnvironment().getRegion());
+          captureLocalIndexPreImageCells(miniBatchOp, context, mutations, cachedLocalTable);
+          handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData, cachedLocalTable);
+        } else {
+          handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData, null);
+        }
+      }
     }
     if (failDataTableUpdatesForTesting) {
       throw new DoNotRetryIOException("Simulating the data table write failure");
-    }
-  }
-
-  /**
-   * We need to add the index mutations to the data table's WAL to handle cases where the RS crashes
-   * before the postBatchMutateIndispensably hook is called where the mutations are synchronously
-   * replicated. This is needed because during WAL restore we don't have the IndexMaintainer object
-   * to generate the corresponding index mutations.
-   */
-  private void addGlobalIndexMutationsToWAL(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-    BatchMutateContext context) {
-    if (!this.shouldReplicate) {
-      return;
-    }
-
-    WALEdit edit = miniBatchOp.getWalEdit(0);
-    if (edit == null) {
-      edit = new WALEdit();
-      miniBatchOp.setWalEdit(0, edit);
-    }
-
-    if (context.preIndexUpdates != null) {
-      for (Map.Entry<HTableInterfaceReference, Mutation> entry : context.preIndexUpdates
-        .entries()) {
-        if (this.ignoreReplicationFilter.test(entry.getValue())) {
-          continue;
-        }
-        // This creates cells of family type WALEdit.METAFAMILY which are not applied
-        // on restore
-        edit.add(IndexedKeyValue.newIndexedKeyValue(entry.getKey().get(), entry.getValue()));
-      }
-    }
-
-    if (context.postIndexUpdates != null) {
-      for (Map.Entry<HTableInterfaceReference, Mutation> entry : context.postIndexUpdates
-        .entries()) {
-        if (this.ignoreReplicationFilter.test(entry.getValue())) {
-          continue;
-        }
-        // This creates cells of family type WALEdit.METAFAMILY which are not applied
-        // on restore
-        edit.add(IndexedKeyValue.newIndexedKeyValue(entry.getKey().get(), entry.getValue()));
-      }
     }
   }
 
@@ -2245,6 +2736,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (shouldReplicate) {
       BatchMutateContext context = getBatchMutateContext(c);
       appendHAGroupAttributeToWALKey(key, context);
+      appendReplicationAttributesToWALKey(key, context);
     }
   }
 
@@ -2273,6 +2765,18 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       String haGroupName = context.logGroup.get().getHAGroupName();
       IndexRegionObserver.appendToWALKey(key,
         BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB, Bytes.toBytes(haGroupName));
+    }
+  }
+
+  private void appendReplicationAttributesToWALKey(WALKey key,
+    IndexRegionObserver.BatchMutateContext context) {
+    if (context == null || context.getOriginalMutations().isEmpty()) {
+      return;
+    }
+    Map<String, byte[]> replicationAttributes =
+      MutationCellGrouper.extractReplicationAttributes(context.getOriginalMutations().get(0));
+    for (Map.Entry<String, byte[]> e : replicationAttributes.entrySet()) {
+      IndexRegionObserver.appendToWALKey(key, e.getKey(), e.getValue());
     }
   }
 
@@ -2895,70 +3399,48 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private void replicateMutations(RegionCoprocessorEnvironment env,
     MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context)
     throws IOException {
-
-    if (!this.shouldReplicate) {
+    if (!shouldReplicate || ignoreSyncReplicationForTesting) {
       return;
     }
-    if (ignoreSyncReplicationForTesting) {
+    if (!context.logGroup.isPresent()) {
       return;
     }
-
-    Optional<ReplicationLogGroup> logGroup = getHAGroupFromBatch(env, miniBatchOp);
-    if (!logGroup.isPresent()) {
+    // Replicated batches on the standby never re-replicate.
+    if (context.isReplication) {
       return;
     }
-    ReplicationLogGroup group = logGroup.get();
-
-    // Record ReplicationSyncTime only when we are actually doing work (not on early-return paths).
-    long start = EnvironmentEdgeManager.currentTimeMillis();
-    try {
-      List<Cell> dataTableCells = new ArrayList<>();
+    if (context.getOriginalMutations().isEmpty()) {
+      return;
+    }
+    List<Cell> flattened = new ArrayList<>();
+    if (context.replicationCellsByRow != null && !context.replicationCellsByRow.isEmpty()) {
+      // Indexed path: cells were captured in the PRE phase right after setTimestamps, with the
+      // per-row pre-image sidecar cells appended. Ship the captured stream as-is.
+      for (List<Cell> bucket : context.replicationCellsByRow.values()) {
+        flattened.addAll(bucket);
+      }
+    } else {
+      // No-index path: preBatchMutateWithExceptions short-circuits at the rowsToLock.isEmpty()
+      // early-exit before captureReplicationCells runs. setTimestamps is a no-op for such tables,
+      // so the cells still carry LATEST_TIMESTAMP in PRE; HBase finalizes them only after
+      // preBatchMutate returns. Read the now-final cells directly from miniBatchOp here in POST.
+      // There are no indexes (so no pre-image cells) and no CP-injected mutations (those come from
+      // atomic/ON-DUP handling, which would have populated rowsToLock and skipped the early-exit).
       for (int i = 0; i < miniBatchOp.size(); i++) {
         Mutation m = miniBatchOp.getOperation(i);
-        if (this.ignoreReplicationFilter.test(m)) {
+        if (ignoreReplicationFilter.test(m)) {
           continue;
         }
-        // When coprocessors add cells (local index, conditional TTL, ON DUPLICATE KEY UPDATE),
-        // HBase merges them into the data mutation which can mix row keys and cell types.
-        // We stream the cells through as-is — the consumer reconstructs Put/Delete mutations
-        // on the row+type boundary.
-        appendCells(dataTableCells, m);
+        flattened.addAll(MutationCellGrouper.flattenCells(m));
       }
-      if (!dataTableCells.isEmpty()) {
-        group.append(this.dataTableName, -1, dataTableCells);
-      }
-      appendIndexUpdates(group, context.preIndexUpdates);
-      appendIndexUpdates(group, context.postIndexUpdates);
-      group.sync();
-    } finally {
-      long duration = EnvironmentEdgeManager.currentTimeMillis() - start;
-      metricSource.updateReplicationSyncTime(this.dataTableName, duration);
-    }
-  }
-
-  private void appendIndexUpdates(ReplicationLogGroup group,
-    ListMultimap<HTableInterfaceReference, Mutation> updates) throws IOException {
-    if (updates == null) {
-      return;
-    }
-    for (Map.Entry<HTableInterfaceReference, Collection<Mutation>> entry : updates.asMap()
-      .entrySet()) {
-      List<Cell> cells = new ArrayList<>();
-      for (Mutation m : entry.getValue()) {
-        if (this.ignoreReplicationFilter.test(m)) {
-          continue;
-        }
-        appendCells(cells, m);
-      }
-      if (!cells.isEmpty()) {
-        group.append(entry.getKey().getTableName(), -1, cells);
+      if (flattened.isEmpty()) {
+        return;
       }
     }
-  }
-
-  private static void appendCells(List<Cell> bucket, Mutation m) {
-    for (List<Cell> familyCells : m.getFamilyCellMap().values()) {
-      bucket.addAll(familyCells);
-    }
+    Map<String, byte[]> replicationAttributes =
+      MutationCellGrouper.extractReplicationAttributes(context.getOriginalMutations().get(0));
+    ReplicationLogGroup logGroup = context.logGroup.get();
+    logGroup.append(dataTableName, -1, flattened, replicationAttributes);
+    logGroup.sync();
   }
 }

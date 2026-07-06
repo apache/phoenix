@@ -33,6 +33,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.LeaseRecoverable;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.TableName;
@@ -246,22 +247,25 @@ public class ReplicationLogProcessor implements Closeable {
 
       for (LogFile.Record record : logFileReader) {
         final TableName tableName = TableName.valueOf(record.getHBaseTableName());
-        // A record may reconstruct into multiple mutations. Batches split on the mutation
-        // boundary, so a single record's mutations can span two processReplicationLogBatch
-        // invocations -- do not assume per-record atomicity here.
+        // A record is a batch: its body is a flat cell stream that may contain METAFAMILY
+        // pre-image cells. getMutations() peels those pre-image cells off, stamps every
+        // reconstructed mutation with the generic REPLICATED_MUTATION marker, and attaches the
+        // per-row pre-image bytes as PRE_IMAGE on the owning row's mutation. The standby IRO
+        // uses PRE_IMAGE to populate dataRowStates without scanning the data table.
+        // All mutations of a record are added to the current batch together and the size check
+        // is deferred to the record boundary, so a record (and every (row, ts) group within it)
+        // is never split across two batches.
         for (Mutation mutation : record.getMutations()) {
           tableToMutationsMap.computeIfAbsent(tableName, k -> new ArrayList<>()).add(mutation);
           currentBatchSize++;
           currentBatchSizeBytes += mutation.heapSize();
-
-          // Process when we reach either the batch count or size limit
-          if (currentBatchSize >= getBatchSize() || currentBatchSizeBytes >= getBatchSizeBytes()) {
-            processReplicationLogBatch(tableToMutationsMap);
-            totalProcessed += currentBatchSize;
-            tableToMutationsMap.clear();
-            currentBatchSize = 0;
-            currentBatchSizeBytes = 0;
-          }
+        }
+        if (currentBatchSize >= getBatchSize() || currentBatchSizeBytes >= getBatchSizeBytes()) {
+          processReplicationLogBatch(tableToMutationsMap);
+          totalProcessed += currentBatchSize;
+          tableToMutationsMap.clear();
+          currentBatchSize = 0;
+          currentBatchSizeBytes = 0;
         }
       }
 
@@ -402,6 +406,14 @@ public class ReplicationLogProcessor implements Closeable {
       }
       attempt++;
       getMetrics().incrementFailedBatchCount();
+      // A DoNotRetryIOException is deterministic (e.g. a schema/contract violation): retrying the
+      // same mutations will fail identically. Honor that contract as HBase's own retrying caller
+      // does and stop immediately rather than burning batchRetryCount attempts with backoff sleeps.
+      if (isNonRetryable(lastError)) {
+        LOG.error("Not retrying batch operations; failure is non-retryable. Failed tables: {}",
+          currentOperations.keySet());
+        break;
+      }
       // Add delay between retries (exponential backoff)
       if (attempt <= batchRetryCount && !currentOperations.isEmpty()) {
         try {
@@ -423,6 +435,21 @@ public class ReplicationLogProcessor implements Closeable {
         batchRetryCount, currentOperations.keySet());
       throw lastError;
     }
+  }
+
+  /**
+   * Returns true if the failure is a {@link DoNotRetryIOException}, walking the cause chain because
+   * the batch client wraps it (as a
+   * {@link org.apache.hadoop.hbase.client.RetriesExhaustedException} cause) by the time it reaches
+   * us.
+   */
+  private static boolean isNonRetryable(Throwable error) {
+    for (Throwable cur = error; cur != null; cur = cur.getCause()) {
+      if (cur instanceof DoNotRetryIOException) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -469,7 +496,7 @@ public class ReplicationLogProcessor implements Closeable {
         // Add failed mutations to retry list
         failedOperations.put(tableName, tableMutationMap.get(tableName));
         getMetrics().incrementFailedMutationsCount(tableMutationMap.get(tableName).size());
-        LOG.debug("Failed to apply mutations for table {}: {}", tableName, e.getMessage());
+        LOG.debug("Failed to apply mutations for table {}", tableName, e);
         lastException = e;
       }
     }

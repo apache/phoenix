@@ -39,26 +39,25 @@ public class TestTrackingParallelWriterIndexCommitter extends TrackingParallelWr
 
   public static class TestConnectionFactory extends ServerUtil.ConnectionFactory {
 
-    private static Map<ServerUtil.ConnectionType, Connection> connections =
-      new ConcurrentHashMap<ServerUtil.ConnectionType, Connection>();
+    private static Map<String, Connection> connections =
+      new ConcurrentHashMap<String, Connection>();
 
     public static Connection getConnection(final ServerUtil.ConnectionType connectionType,
       final RegionCoprocessorEnvironment env) {
       final String key =
         String.format("%s-%s", env.getServerName(), connectionType.name().toLowerCase());
       LOGGER.info("Connecting to {}", key);
-      return connections.computeIfAbsent(connectionType,
-        new Function<ServerUtil.ConnectionType, Connection>() {
-          @Override
-          public Connection apply(ServerUtil.ConnectionType t) {
-            try {
-              return env.createConnection(
-                getTypeSpecificConfiguration(connectionType, env.getConfiguration()));
-            } catch (IOException e) {
-              throw new RuntimeException(e);
-            }
+      return connections.computeIfAbsent(key, new Function<String, Connection>() {
+        @Override
+        public Connection apply(String k) {
+          try {
+            return env.createConnection(
+              getTypeSpecificConfiguration(connectionType, env.getConfiguration()));
+          } catch (IOException e) {
+            throw new RuntimeException(e);
           }
-        });
+        }
+      });
     }
 
     public static void shutdown() {

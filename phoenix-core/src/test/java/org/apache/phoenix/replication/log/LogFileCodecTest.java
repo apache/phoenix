@@ -38,8 +38,13 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
+import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.index.PhoenixIndexCodec;
+import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.junit.Assume;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -740,6 +745,100 @@ public class LogFileCodecTest {
       label, r.appendNs, r.recordCount, r.wireBytes,
       String.format("%.2f", (double) r.wireBytes / Math.max(1, totalCells)),
       String.format("%.2f", (double) r.appendNs / Math.max(1, totalCells)));
+  }
+
+  @Test
+  public void testMutationAttributesRoundTrip() throws IOException {
+    long ts = 12345L;
+    Put put = new Put(Bytes.toBytes("row"));
+    put.setTimestamp(ts);
+    put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q"), ts, Bytes.toBytes("v"));
+    put.setAttribute(PhoenixIndexCodec.INDEX_UUID, HConstants.EMPTY_BYTE_ARRAY);
+    put.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
+      Bytes.toBytes("MY_SCHEMA"));
+    put.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+      Bytes.toBytes("MY_TABLE"));
+    put.setAttribute(MutationState.MutationMetadataType.TENANT_ID.toString(),
+      Bytes.toBytes("tenant1"));
+    put.setAttribute(IndexRegionObserver.REPLICATED_MUTATION, HConstants.EMPTY_BYTE_ARRAY);
+
+    LogFile.Record original =
+      new LogFileRecord().setHBaseTableName("TBLATTR").setCommitId(1L).setMutation(put);
+
+    LogFileCodec codec = new LogFileCodec();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    codec.getEncoder(new DataOutputStream(baos)).write(original);
+    LogFile.Codec.Decoder decoder =
+      codec.getDecoder(new DataInputStream(new ByteArrayInputStream(baos.toByteArray())));
+
+    assertTrue(decoder.advance());
+    Mutation decoded = decoder.current().getMutation();
+
+    for (String attrKey : ReplicationLogGroup.REPLICATION_ATTR_KEYS) {
+      byte[] expected = put.getAttribute(attrKey);
+      byte[] actual = decoded.getAttribute(attrKey);
+      assertTrue("Attribute " + attrKey + " should be present", actual != null);
+      assertTrue("Attribute " + attrKey + " value should match", Arrays.equals(expected, actual));
+    }
+  }
+
+  @Test
+  public void testNoAttributesRoundTrip() throws IOException {
+    long ts = 12345L;
+    Put put = new Put(Bytes.toBytes("row"));
+    put.setTimestamp(ts);
+    put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q"), ts, Bytes.toBytes("v"));
+
+    LogFile.Record original =
+      new LogFileRecord().setHBaseTableName("TBLNOATTR").setCommitId(1L).setMutation(put);
+
+    LogFileCodec codec = new LogFileCodec();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    codec.getEncoder(new DataOutputStream(baos)).write(original);
+    LogFile.Codec.Decoder decoder =
+      codec.getDecoder(new DataInputStream(new ByteArrayInputStream(baos.toByteArray())));
+
+    assertTrue(decoder.advance());
+    Mutation decoded = decoder.current().getMutation();
+
+    for (String attrKey : ReplicationLogGroup.REPLICATION_ATTR_KEYS) {
+      byte[] actual = decoded.getAttribute(attrKey);
+      assertTrue("Attribute " + attrKey + " should not be present", actual == null);
+    }
+  }
+
+  @Test
+  public void testPartialAttributesRoundTrip() throws IOException {
+    long ts = 12345L;
+    Put put = new Put(Bytes.toBytes("row"));
+    put.setTimestamp(ts);
+    put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q"), ts, Bytes.toBytes("v"));
+    put.setAttribute(PhoenixIndexCodec.INDEX_UUID, HConstants.EMPTY_BYTE_ARRAY);
+    put.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(), Bytes.toBytes("S"));
+
+    LogFile.Record original =
+      new LogFileRecord().setHBaseTableName("TBLPARTATTR").setCommitId(1L).setMutation(put);
+
+    LogFileCodec codec = new LogFileCodec();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    codec.getEncoder(new DataOutputStream(baos)).write(original);
+    LogFile.Codec.Decoder decoder =
+      codec.getDecoder(new DataInputStream(new ByteArrayInputStream(baos.toByteArray())));
+
+    assertTrue(decoder.advance());
+    Mutation decoded = decoder.current().getMutation();
+
+    assertTrue("INDEX_UUID should be present",
+      decoded.getAttribute(PhoenixIndexCodec.INDEX_UUID) != null);
+    assertTrue("INDEX_UUID should be empty",
+      decoded.getAttribute(PhoenixIndexCodec.INDEX_UUID).length == 0);
+    assertTrue("SCHEMA_NAME should match", Arrays.equals(Bytes.toBytes("S"),
+      decoded.getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString())));
+    assertTrue("LOGICAL_TABLE_NAME should not be present",
+      decoded.getAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString())
+          == null);
+    assertTrue("TENANT_ID should not be present",
+      decoded.getAttribute(MutationState.MutationMetadataType.TENANT_ID.toString()) == null);
   }
 
 }

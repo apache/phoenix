@@ -29,6 +29,8 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
+import java.sql.ResultSet;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -49,6 +51,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.HRegionInfo;
 import org.apache.hadoop.hbase.NotServingRegionException;
 import org.apache.hadoop.hbase.TableName;
@@ -67,8 +70,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.replication.MutationCellGrouper;
 import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFileReader;
 import org.apache.phoenix.replication.log.LogFileReaderContext;
@@ -398,6 +403,71 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
   }
 
   /**
+   * A DoNotRetryIOException is deterministic, so processReplicationLogBatch must fail immediately
+   * instead of burning batchRetryCount+1 attempts. The exception is wrapped (as the batch client
+   * wraps it in a RetriesExhaustedException cause), so this also covers the cause-chain walk.
+   */
+  @Test
+  public void testProcessBatchDoesNotRetryDoNotRetryIOException() throws Exception {
+    ReplicationLogProcessor spyProcessor =
+      Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
+    try {
+      assertTrue("Test assumes a non-zero retry budget", spyProcessor.getBatchRetryCount() > 0);
+      IOException wrapped =
+        new IOException("outer", new DoNotRetryIOException("deterministic failure"));
+      Map<TableName, List<Mutation>> failed =
+        Collections.singletonMap(TableName.valueOf("T"), Collections.emptyList());
+      Mockito.doReturn(new ReplicationLogProcessor.ApplyMutationBatchResult(failed, wrapped))
+        .when(spyProcessor).applyMutations(Mockito.any());
+
+      try {
+        spyProcessor.processReplicationLogBatch(
+          Collections.singletonMap(TableName.valueOf("T"), Collections.emptyList()));
+        fail("Should propagate the non-retryable failure");
+      } catch (IOException e) {
+        // Expected.
+      }
+
+      // Exactly one attempt: no retries for a DoNotRetryIOException.
+      Mockito.verify(spyProcessor, Mockito.times(1)).applyMutations(Mockito.any());
+    } finally {
+      spyProcessor.close();
+    }
+  }
+
+  /**
+   * A retryable failure still exhausts the full retry budget: batchRetryCount+1 attempts.
+   */
+  @Test
+  public void testProcessBatchRetriesRetryableException() throws Exception {
+    ReplicationLogProcessor spyProcessor =
+      Mockito.spy(new ReplicationLogProcessor(conf, testHAGroupName));
+    try {
+      IOException wrapped =
+        new IOException("outer", new NotServingRegionException("transient failure"));
+      Map<TableName, List<Mutation>> failed =
+        Collections.singletonMap(TableName.valueOf("T"), Collections.emptyList());
+      Mockito.doReturn(new ReplicationLogProcessor.ApplyMutationBatchResult(failed, wrapped))
+        .when(spyProcessor).applyMutations(Mockito.any());
+      // Avoid real backoff sleeps in the retry loop.
+      Mockito.doReturn(0L).when(spyProcessor).calculateRetryDelay(Mockito.anyInt());
+
+      try {
+        spyProcessor.processReplicationLogBatch(
+          Collections.singletonMap(TableName.valueOf("T"), Collections.emptyList()));
+        fail("Should propagate the failure after exhausting retries");
+      } catch (IOException e) {
+        // Expected.
+      }
+
+      Mockito.verify(spyProcessor, Mockito.times(spyProcessor.getBatchRetryCount() + 1))
+        .applyMutations(Mockito.any());
+    } finally {
+      spyProcessor.close();
+    }
+  }
+
+  /**
    * Tests that configuration parameters are properly read and applied.
    */
   @Test
@@ -720,7 +790,13 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
       new Path(testFolder.newFile("testProcessLogFileBatchSizeLogic").toURI());
     final String tableName = "T_" + generateUniqueName();
     final int batchSize = 5;
-    final long batchSizeBytes = 1800;
+    // Sized so the first batch flushes on bytes (3 small + 1 big mutation) while the second flushes
+    // on count (5 small). Each reconstructed mutation carries the REPLICATED_MUTATION attribute
+    // (~120 bytes), so a stamped small mutation is ~464 bytes and the big one ~1024. First batch =
+    // 3*464+1024 = 2416 (must be >= threshold to flush on bytes); second batch = 5*464 = 2320 (must
+    // stay < threshold so it flushes on count, not bytes). The threshold must sit in (2320, 2416];
+    // 2400 leaves headroom on both sides.
+    final long batchSizeBytes = 2400;
 
     // Create log file with mutations of varying sizes
     LogFileWriter writer = initLogFileWriter(batchSizeFilePath);
@@ -895,6 +971,89 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
       metricValues.getLogFileReplayFailureCount());
 
     // Clean up
+    spyProcessor.close();
+  }
+
+  /**
+   * A single record's body is a flat cell stream that reconstructs into multiple mutations of mixed
+   * type (e.g. a batch that upserts some rows and, on one of those rows, also nulls a column -- a
+   * same-row Put plus DeleteColumn). The batch size check is deferred to the record boundary, so
+   * all mutations of one record must land in the same processReplicationLogBatch call even when the
+   * record's mutation count exceeds the configured batch size. This protects the (row, ts) grouping
+   * the standby IRO relies on: splitting a same-row Put and Delete across two batches would let
+   * each fold against the shared pre-image independently instead of together.
+   */
+  @Test
+  public void testProcessLogFileDoesNotSplitRecordAcrossBatches() throws Exception {
+    final Path filePath =
+      new Path(testFolder.newFile("testDoesNotSplitRecordAcrossBatches").toURI());
+    final String tableName = "T_" + generateUniqueName();
+    // Batch size smaller than the number of mutations in the big record below, so the old in-loop
+    // flush would have split the record (the rowA Put/Delete straddle the count-2 boundary).
+    final int batchSize = 2;
+
+    LogFileWriter writer = initLogFileWriter(filePath);
+
+    // Record 0: one record whose flat cell stream mixes Puts and a Delete and reconstructs into 4
+    // mutations in cell order: Put(rowZ), Put(rowA), Delete(rowA), Put(rowB). rowA carries a
+    // same-row
+    // Put+DeleteColumn group; the Put lands at mutation index 1 and the Delete at index 2, so a
+    // count-2 flush would separate them.
+    Put putZ = LogFileTestUtil.newPut("rowZ", 1L, 1);
+    Put putA = LogFileTestUtil.newPut("rowA", 1L, 2);
+    Delete deleteA = LogFileTestUtil.newDelete("rowA", 1L, 1);
+    Put putB = LogFileTestUtil.newPut("rowB", 1L, 1);
+    List<Mutation> bigRecordMutations = new ArrayList<>();
+    Collections.addAll(bigRecordMutations, putZ, putA, deleteA, putB);
+    List<Cell> bigRecordCells = new ArrayList<>();
+    for (Mutation m : bigRecordMutations) {
+      bigRecordCells.addAll(LogFileTestUtil.cellsOf(m));
+    }
+    writer.append(tableName, 0, bigRecordCells);
+
+    // Record 1: a single-mutation record that would coalesce onto a following batch.
+    Put tailPut = LogFileTestUtil.newPut("tailRow", 2L, 1);
+    writer.append(tableName, 1, LogFileTestUtil.cellsOf(tailPut));
+
+    writer.close();
+
+    Configuration testConf = new Configuration(conf);
+    testConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE, batchSize);
+
+    ReplicationLogProcessor spyProcessor =
+      Mockito.spy(new ReplicationLogProcessor(testConf, testHAGroupName));
+
+    List<Map<TableName, List<Mutation>>> capturedArguments = new ArrayList<>();
+    Mockito.doAnswer(invocation -> {
+      Map<TableName, List<Mutation>> originalMap = invocation.getArgument(0);
+      capturedArguments.add(new HashMap<>(originalMap));
+      return null;
+    }).when(spyProcessor).processReplicationLogBatch(Mockito.any(Map.class));
+
+    spyProcessor.processLogFile(localFs, filePath);
+
+    TableName expectedTableName = TableName.valueOf(tableName);
+
+    // The big record (4 mutations) crosses the size threshold at its own boundary and flushes as a
+    // single batch; the tail record forms the second batch. The record is never split, so the
+    // rowA Put and Delete stay together.
+    assertEquals("Record boundary should produce exactly 2 batches", 2, capturedArguments.size());
+
+    List<Mutation> firstBatch = capturedArguments.get(0).get(expectedTableName);
+    assertNotNull("First batch mutations should not be null", firstBatch);
+    assertEquals("First batch must hold the whole big record (all 4 mutations together)", 4,
+      firstBatch.size());
+    for (int i = 0; i < bigRecordMutations.size(); i++) {
+      LogFileTestUtil.assertMutationEquals("First batch mutation " + i + " mismatch",
+        bigRecordMutations.get(i), firstBatch.get(i));
+    }
+
+    List<Mutation> secondBatch = capturedArguments.get(1).get(expectedTableName);
+    assertNotNull("Second batch mutations should not be null", secondBatch);
+    assertEquals("Second batch should hold the tail record", 1, secondBatch.size());
+    LogFileTestUtil.assertMutationEquals("Second batch mutation mismatch", tailPut,
+      secondBatch.get(0));
+
     spyProcessor.close();
   }
 
@@ -1980,5 +2139,157 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
       .setTimestamp(timestamp) // Use mutation timestamp for all cells
       .setType(cell.getType())
       .setValue(cell.getValueArray(), cell.getValueOffset(), cell.getValueLength()).build();
+  }
+
+  /**
+   * Out-of-order replay (the original blocker for PHOENIX-7931): two batches touch the same row,
+   * and the later one is replayed first. The standby regenerates the global index from each batch's
+   * shipped pre-image rather than from a region scan, so the result is order-independent. Scenario:
+   * <ul>
+   * <li>M1 (ts=100): full row insert {ID=row1, COL_1=A, COL_2=X}, pre-image = empty row</li>
+   * <li>M2 (ts=200): partial update {ID=row1, COL_1=B} (COL_2 not included), pre-image = {COL_1=A,
+   * COL_2=X} (the row state the active observed before M2)</li>
+   * </ul>
+   * Replayed out of order (M2 then M1), naive regeneration would read COL_2=null for M2 (the row is
+   * absent) and produce an inconsistent index entry (B, null). Because M2 carries its own
+   * pre-image, the standby derives nextState=(B, X) and the index entry for COL_1=B correctly holds
+   * COL_2=X.
+   * <p>
+   * The fixture reproduces what the active capture pipeline ships: data cells plus one METAFAMILY
+   * pre-image cell per row (via {@link IndexRegionObserver#buildPreImageCell}), with the
+   * replication attribute envelope (empty INDEX_UUID forcing server-side PTable resolution,
+   * schema/table names).
+   */
+  @Test
+  public void testOutOfOrderReplayRegeneratesConsistentIndex() throws Exception {
+    final String tableName = "T_" + generateUniqueName();
+    final String indexName = "I_" + generateUniqueName();
+    final long ts1 = 100000L;
+    final long ts2 = 200000L;
+
+    // Create table with index covering COL_1 and including COL_2
+    try (Connection conn = getConnection()) {
+      conn.createStatement().execute(String.format(
+        "CREATE TABLE %s (ID VARCHAR PRIMARY KEY, COL_1 VARCHAR, COL_2 VARCHAR)", tableName));
+      conn.createStatement().execute(
+        String.format("CREATE INDEX %s ON %s (COL_1) INCLUDE (COL_2)", indexName, tableName));
+      conn.commit();
+    }
+
+    // Generate M1: full row insert at ts=100
+    List<Mutation> m1Mutations;
+    try (Connection conn = getConnection()) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      pconn.createStatement()
+        .execute(String.format("UPSERT INTO %s VALUES ('row1', 'A', 'X')", tableName));
+      m1Mutations = extractMutationsWithTimestamp(pconn, ts1);
+    }
+
+    // Generate M2: partial update at ts=200 (only COL_1, no COL_2)
+    List<Mutation> m2Mutations;
+    Put m2PreImage;
+    try (Connection conn = getConnection()) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      pconn.createStatement()
+        .execute(String.format("UPSERT INTO %s (ID, COL_1) VALUES ('row1', 'B')", tableName));
+      m2Mutations = extractMutationsWithTimestamp(pconn, ts2);
+      // M2's pre-image is the full row state M1 wrote: {COL_1=A, COL_2=X}. This is what the active
+      // observed at lock time and shipped alongside M2.
+      m2PreImage = new Put(Bytes.toBytes("row1"));
+      for (Mutation m : m1Mutations) {
+        for (Cell cell : LogFileTestUtil.cellsOf(m)) {
+          m2PreImage.add(cell);
+        }
+      }
+    }
+
+    // Write M1 to file1 (pre-image = empty row), M2 to file2 (pre-image = M1's state)
+    Path file1 = new Path(testFolder.newFile("file1.plog").toURI());
+    Path file2 = new Path(testFolder.newFile("file2.plog").toURI());
+    appendReplicatedBatch(file1, tableName, m1Mutations, null);
+    appendReplicatedBatch(file2, tableName, m2Mutations, m2PreImage);
+
+    // Replay out of order: file2 (M2, ts=200) first, then file1 (M1, ts=100)
+    ReplicationLogProcessor processor = ReplicationLogProcessor.get(conf, testHAGroupName);
+    try {
+      processor.processLogFile(localFs, file2);
+      processor.processLogFile(localFs, file1);
+    } finally {
+      processor.close();
+    }
+
+    // Verify data table: correct due to HBase cell versioning.
+    // Final state is COL_1=B (ts=200 wins) and COL_2=X (ts=100, only version).
+    try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
+      ResultSet rs = stmt
+        .executeQuery(String.format("SELECT COL_1, COL_2 FROM %s WHERE ID = 'row1'", tableName));
+      assertTrue("Should have a row", rs.next());
+      assertEquals("Data table COL_1 should be B (ts=200 wins)", "B", rs.getString(1));
+      assertEquals("Data table COL_2 should be X (from M1)", "X", rs.getString(2));
+      rs.close();
+    }
+
+    // Verify index table via index hint: the regenerated entry for COL_1=B must carry COL_2=X,
+    // matching the data table, because M2's own pre-image supplied COL_2 even though M2 was
+    // replayed
+    // first (when the row was absent).
+    try (Connection conn = getConnection(); Statement stmt = conn.createStatement()) {
+      ResultSet rs = stmt
+        .executeQuery(String.format("SELECT /*+ INDEX(%s %s) */ COL_2 FROM %s WHERE COL_1 = 'B'",
+          tableName, indexName, tableName));
+      assertTrue("Index should have an entry for COL_1=B", rs.next());
+      assertEquals("Index COL_2 should be X (consistent with data table)", "X", rs.getString(1));
+      rs.close();
+    }
+  }
+
+  /**
+   * Append one replicated batch to a fresh log file, reproducing the active capture pipeline's wire
+   * format: each record's cell stream is the mutation's data cells plus one METAFAMILY pre-image
+   * cell, and the record carries the replication attribute envelope (empty INDEX_UUID +
+   * schema/table names). A {@code null} {@code preImage} encodes the empty-row sentinel.
+   */
+  private void appendReplicatedBatch(Path file, String tableName, List<Mutation> mutations,
+    Put preImage) throws IOException {
+    List<Cell> cells = MutationCellGrouper.buildReplicatedCells(mutations, preImage);
+    Map<String, byte[]> attrs = MutationCellGrouper.buildReplicationAttributes("", tableName);
+    LogFileWriter writer = initLogFileWriter(file);
+    try {
+      writer.append(tableName, -1, cells, attrs);
+      writer.sync();
+    } finally {
+      writer.close();
+    }
+  }
+
+  private List<Mutation> extractMutationsWithTimestamp(PhoenixConnection pconn, long timestamp)
+    throws Exception {
+    List<Mutation> result = new ArrayList<>();
+    Iterator<Pair<byte[], List<Mutation>>> iterator = pconn.getMutationState().toMutations();
+    while (iterator.hasNext()) {
+      Pair<byte[], List<Mutation>> pair = iterator.next();
+      for (Mutation mutation : pair.getSecond()) {
+        if (mutation instanceof Put) {
+          Put put = (Put) mutation;
+          Put newPut = new Put(put.getRow());
+          newPut.setTimestamp(timestamp);
+          for (Cell cell : put.getFamilyCellMap().values().stream().flatMap(List::stream)
+            .collect(Collectors.toList())) {
+            newPut.add(cloneCellWithCustomTimestamp(cell, timestamp));
+          }
+          result.add(newPut);
+        } else if (mutation instanceof Delete) {
+          Delete delete = (Delete) mutation;
+          Delete newDelete = new Delete(delete.getRow());
+          newDelete.setTimestamp(timestamp);
+          for (Cell cell : delete.getFamilyCellMap().values().stream().flatMap(List::stream)
+            .collect(Collectors.toList())) {
+            newDelete.add(cloneCellWithCustomTimestamp(cell, timestamp));
+          }
+          result.add(newDelete);
+        }
+      }
+    }
+    return result;
   }
 }
