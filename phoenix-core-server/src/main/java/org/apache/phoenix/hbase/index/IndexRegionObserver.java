@@ -176,20 +176,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private static final OperationStatus NOWRITE = new OperationStatus(SUCCESS);
   public static final String PHOENIX_APPEND_METADATA_TO_WAL = "phoenix.append.metadata.to.wal";
   public static final boolean DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL = false;
-  /**
-   * When true (default), a partial "touch" upsert re-persists into the data-table Put every non-PK
-   * column referenced by any index (indexed or covered) that the touch did not itself write,
-   * sourcing the value from the masked current-row read. This stamps the data-side covered cell at
-   * the same {@code batchTimestamp} as the index-side cell so any later compaction retains or
-   * expires the data and index rows together, closing the covered-column timestamp-skew divergence.
-   * It only fires when an effective Phoenix TTL applies (a current-row read is
-   * already happening for a non-immutable table with a global covered/indexed index), so non-TTL
-   * tables are unaffected regardless of this flag. It can be disabled to avoid the write
-   * amplification, SCN/time-travel, and CDC-fidelity costs it introduces.
-   */
-  public static final String PHOENIX_INDEX_TTL_COLUMN_RESYNC_ENABLED =
-    "phoenix.index.ttl.column.resync.enabled";
-  public static final boolean DEFAULT_PHOENIX_INDEX_TTL_COLUMN_RESYNC_ENABLED = true;
   public static final String PHOENIX_INDEX_CDC_CONSUMER_ENABLED =
     "phoenix.index.cdc.consumer.enabled";
   public static final boolean DEFAULT_PHOENIX_INDEX_CDC_CONSUMER_ENABLED = true;
@@ -516,7 +502,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private boolean serializeCDCMutations = DEFAULT_PHOENIX_INDEX_CDC_MUTATION_SERIALIZE;
   private boolean isNamespaceEnabled = false;
   private boolean useBloomFilter = false;
-  private boolean indexTTLColumnResyncEnabled = DEFAULT_PHOENIX_INDEX_TTL_COLUMN_RESYNC_ENABLED;
   private long lastTimestamp = 0;
   private List<Set<ImmutableBytesPtr>> batchesWithLastTimestamp = new ArrayList<>();
   private IndexCDCConsumer indexCDCConsumer;
@@ -571,9 +556,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       this.dataTableName = env.getRegionInfo().getTable().getNameAsString();
       this.shouldWALAppend = env.getConfiguration().getBoolean(PHOENIX_APPEND_METADATA_TO_WAL,
         DEFAULT_PHOENIX_APPEND_METADATA_TO_WAL);
-      this.indexTTLColumnResyncEnabled =
-        env.getConfiguration().getBoolean(PHOENIX_INDEX_TTL_COLUMN_RESYNC_ENABLED,
-          DEFAULT_PHOENIX_INDEX_TTL_COLUMN_RESYNC_ENABLED);
       this.indexCDCConsumerEnabled = env.getConfiguration()
         .getBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, DEFAULT_PHOENIX_INDEX_CDC_CONSUMER_ENABLED);
       this.compressCDCMutations =
@@ -755,11 +737,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   private void addOnDupMutationsToBatch(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-    BatchMutateContext context) throws IOException {
+    BatchMutateContext context, PhoenixIndexMetaData indexMetaData) throws IOException {
     for (int i = 0; i < miniBatchOp.size(); i++) {
       Mutation m = miniBatchOp.getOperation(i);
       if ((this.builder.isAtomicOp(m) || this.builder.returnResult(m)) && m instanceof Put) {
-        List<Mutation> mutations = generateOnDupMutations(context, (Put) m, miniBatchOp);
+        List<Mutation> mutations = generateOnDupMutations(context, (Put) m, miniBatchOp,
+          indexMetaData);
         if (!mutations.isEmpty()) {
           addOnDupMutationsToBatch(miniBatchOp, i, mutations);
         } else {
@@ -1003,9 +986,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * Either way the index side survives a compaction that trims the stale data-side cell, so the
    * indexed column must be re-persisted on the data side for both — otherwise an uncovered index's
    * live row silently drops out of an indexed-column predicate (the read path re-verifies the key
-   * against the data row and excludes, rather than resurrects, the trimmed value). Local indexes
-   * are excluded: their prior-row state flows through the separate {@code CachedLocalTable} path,
-   * not this current-row read.
+   * against the data row and excludes, rather than resurrects, the trimmed value).
    * <p>
    * This runs after {@code updateMutationsForConditionalTTL}, so a conditionally-expired row has
    * {@code dataRowStates.put(key, null)} and the {@code current == null} guard correctly skips
@@ -1014,25 +995,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    */
   private void rewriteIndexReferencedColumns(MiniBatchOperationInProgress<Mutation> miniBatchOp,
     BatchMutateContext context, PhoenixIndexMetaData indexMetaData) throws IOException {
-    if (!indexTTLColumnResyncEnabled) {
-      return;
-    }
     if ((!context.hasGlobalIndex && !context.hasUncoveredIndex) || context.dataRowStates == null) {
       // Only covered global or uncovered global indexes can diverge this way; without a current-row
       // read there is nothing to re-persist from.
       return;
     }
-    // Union of non-PK columns referenced by any covered or uncovered global index (indexed +
-    // covered). PK columns live in the row key, never as cells in a Put, so they are naturally
-    // excluded by the has()/get() checks. Local indexes are skipped (separate CachedLocalTable
-    // maintenance path).
-    Set<ColumnReference> indexReferencedCols = new HashSet<>();
-    for (IndexMaintainer maintainer : indexMetaData.getIndexMaintainers()) {
-      if (maintainer.isLocalIndex()) {
-        continue;
-      }
-      indexReferencedCols.addAll(maintainer.getAllColumnsForDataTable());
-    }
+    Set<ColumnReference> indexReferencedCols = getIndexReferencedColumns(indexMetaData);
     if (indexReferencedCols.isEmpty()) {
       return;
     }
@@ -1069,6 +1037,64 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         put.addColumn(family, qualifier, HConstants.LATEST_TIMESTAMP,
           CellUtil.cloneValue(currentCell));
       }
+    }
+  }
+
+  /**
+   * Union of non-PK columns referenced by any covered or uncovered global index (indexed +
+   * covered). PK columns live in the row key, never as cells in a Put, so they are naturally
+   * excluded by callers' has()/get() checks. Local indexes are skipped (separate CachedLocalTable
+   * maintenance path). Shared by {@code rewriteIndexReferencedColumns} (plain-Put path) and
+   * {@code generateOnDupMutations} (atomic / ON DUPLICATE KEY path) so both re-persist an identical
+   * column set.
+   */
+  private static Set<ColumnReference> getIndexReferencedColumns(
+    PhoenixIndexMetaData indexMetaData) {
+    Set<ColumnReference> indexReferencedCols = new HashSet<>();
+    for (IndexMaintainer maintainer : indexMetaData.getIndexMaintainers()) {
+      if (maintainer.isLocalIndex()) {
+        continue;
+      }
+      indexReferencedCols.addAll(maintainer.getAllColumnsForDataTable());
+    }
+    return indexReferencedCols;
+  }
+
+  /**
+   * The atomic / ON DUPLICATE KEY analogue of {@code rewriteIndexReferencedColumns}. Those Puts are
+   * reconstructed by {@code generateOnDupMutations} rather than written verbatim, so they are
+   * excluded from {@code rewriteIndexReferencedColumns} and must be re-synced inline here.
+   * <p>
+   * Injects every index-referenced non-PK column that this upsert omitted, sourcing the value from
+   * the pre-upsert row snapshot ({@code oldRowColumnCellExprMap}). Each injected cell is added at
+   * {@code HConstants.LATEST_TIMESTAMP} so the later {@code setTimestamps} re-stamps it to
+   * {@code batchTimestamp} uniformly with the rest of the Put — making the data-side cell and the
+   * index-side cell share both timestamp and empty-column neighbor, so any compaction retains or
+   * expires them together.
+   * <p>
+   * Idempotent: a column the upsert already writes is left alone ({@code put.has(...)} guard), and a
+   * column absent from the current row (new row / never set) is skipped.
+   */
+  private void rewriteIndexReferencedColumnsForAtomicPut(Put put,
+    Set<ColumnReference> indexReferencedCols,
+    Map<ColumnReference, Pair<Cell, Boolean>> oldRowColumnCellExprMap) {
+    if (indexReferencedCols.isEmpty() || oldRowColumnCellExprMap.isEmpty()) {
+      return;
+    }
+    for (ColumnReference ref : indexReferencedCols) {
+      byte[] family = ref.getFamily();
+      byte[] qualifier = ref.getQualifier();
+      if (put.has(family, qualifier)) {
+        // The upsert already writes this column; leave it (idempotence guard).
+        continue;
+      }
+      Pair<Cell, Boolean> oldPair = oldRowColumnCellExprMap.get(ref);
+      if (oldPair == null || oldPair.getFirst() == null) {
+        // Absent from the pre-upsert row (new row or never set): nothing to re-persist.
+        continue;
+      }
+      put.addColumn(family, qualifier, HConstants.LATEST_TIMESTAMP,
+        CellUtil.cloneValue(oldPair.getFirst()));
     }
   }
 
@@ -2100,7 +2126,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (context.hasAtomic || context.returnResult) {
       long start = EnvironmentEdgeManager.currentTimeMillis();
       // add the mutations for conditional updates to the mini batch
-      addOnDupMutationsToBatch(miniBatchOp, context);
+      addOnDupMutationsToBatch(miniBatchOp, context, indexMetaData);
 
       // release locks for ON DUPLICATE KEY IGNORE since we won't be changing those rows
       // this is needed so that we can exit early
@@ -2472,7 +2498,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * Delete mutation (with DeleteColumn type cells for all columns set to null).
    */
   private List<Mutation> generateOnDupMutations(BatchMutateContext context, Put atomicPut,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+    MiniBatchOperationInProgress<Mutation> miniBatchOp, PhoenixIndexMetaData indexMetaData)
+    throws IOException {
     List<Mutation> mutations = Lists.newArrayListWithExpectedSize(2);
     byte[] opBytes = atomicPut.getAttribute(ATOMIC_OP_ATTRIB);
     byte[] returnResult = atomicPut.getAttribute(RETURN_RESULT);
@@ -2496,22 +2523,38 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // true, will be null if there is no expression on this column, otherwise false
     Map<ColumnReference, Pair<Cell, Boolean>> currColumnCellExprMap = new HashMap<>();
 
+    // Snapshot of the current data row's cells, keyed by ColumnReference. Populated once, up front,
+    // before any conditional update logic mutates state. It serves two purposes: answering an
+    // OLD_ROW return request, and re-persisting index-referenced columns this atomic upsert omits
+    // (see rewriteIndexReferencedColumnsForAtomicPut). It is a local; only exposed on the context
+    // for an OLD_ROW return request (unchanged semantics).
+    Map<ColumnReference, Pair<Cell, Boolean>> oldRowColumnCellExprMap = new HashMap<>();
+
     byte[] rowKey = atomicPut.getRow();
     ImmutableBytesPtr rowKeyPtr = new ImmutableBytesPtr(rowKey);
     // Get the latest data row state
     Pair<Put, Put> dataRowState = context.dataRowStates.get(rowKeyPtr);
     Put currentDataRowState = dataRowState != null ? dataRowState.getFirst() : null;
 
-    // Create separate map for old row data when OLD_ROW is requested
-    // This must be done before any conditional update logic to preserve original state
+    // Capture the original row state (no-op when currentDataRowState is null for a new row).
+    updateCurrColumnCellExpr(currentDataRowState, oldRowColumnCellExprMap);
     if (context.returnResult && context.returnOldRow && currentDataRowState != null) {
-      context.oldRowColumnCellExprMap = new HashMap<>();
-      updateCurrColumnCellExpr(currentDataRowState, context.oldRowColumnCellExprMap);
+      context.oldRowColumnCellExprMap = oldRowColumnCellExprMap;
     }
+
+    // Union of non-PK columns referenced by any covered/uncovered global index. Used to re-persist
+    // columns this atomic upsert omits so the data-side cell and the index-side cell share
+    // batchTimestamp and a later compaction retains/expires them together.
+    Set<ColumnReference> indexReferencedCols = getIndexReferencedColumns(indexMetaData);
 
     // if result needs to be returned but the DML does not have ON DUPLICATE KEY present,
     // perform the mutation and return the result.
     if (opBytes == null) {
+      // Re-persist any index-referenced column this plain upsert omitted (excluded from
+      // rewriteIndexReferencedColumns since returnResult(m) is true), so the data and index rows
+      // expire together under compaction.
+      rewriteIndexReferencedColumnsForAtomicPut(atomicPut, indexReferencedCols,
+        oldRowColumnCellExprMap);
       mutations.add(atomicPut);
       updateCurrColumnCellExpr(currentDataRowState != null ? currentDataRowState : atomicPut,
         currColumnCellExprMap);
@@ -2680,6 +2723,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       } else {
         delete.add(cell);
       }
+    }
+    // Re-persist any index-referenced column this reconstructed upsert omitted, but only when the
+    // Put already writes something — so the empty column (row liveness) advances at batchTimestamp
+    // anyway. Injecting into an otherwise-empty Put would turn a genuine no-op ON DUPLICATE KEY
+    // UPDATE into a spurious write.
+    if (!put.isEmpty()) {
+      rewriteIndexReferencedColumnsForAtomicPut(put, indexReferencedCols, oldRowColumnCellExprMap);
     }
 
     if (!put.isEmpty() || !delete.isEmpty()) {

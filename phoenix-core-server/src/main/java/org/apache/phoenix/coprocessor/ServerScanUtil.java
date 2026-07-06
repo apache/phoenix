@@ -71,11 +71,6 @@ public class ServerScanUtil {
    * {@code literalTTLForScan != null}. A base table's literal TTL is left unset so
    * {@link TTLRegionScanner}'s CF-descriptor fallback derives it.</li>
    * </ul>
-   * Paging setup (mirrors the client read path: {@code ScanUtil.setScanAttributeForPaging} plus the
-   * {@code BaseScannerRegionObserver.preScannerOpen} filter wrapping): sets
-   * {@code SERVER_PAGE_SIZE_MS} and wraps the scan filter in a {@link PagingFilter} so the internal
-   * scan is bounded by the server page budget just like a client scan. See
-   * {@link #setInternalScanAttributesForPaging}.
    */
   public static void setInternalScanAttributes(Configuration conf, Scan scan, byte[] emptyCF,
     byte[] emptyCQ, byte[] literalTTLForScan, boolean isStrictTTL) {

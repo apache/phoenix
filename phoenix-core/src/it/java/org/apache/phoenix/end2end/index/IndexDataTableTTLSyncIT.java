@@ -76,9 +76,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
  * and it stays aligned with the index cell. Under a {@link ManualEnvironmentEdge} the server's
  * {@code batchTimestamp} equals the touch's wall-clock, so the load-bearing, timing-independent signal
  * is: <b>after a covcol-omitting touch, a raw scan's maximum {@code covcol} timestamp on the data side
- * advances to the touch time</b>. Pre-fix (or with the resync flag off) it stays at the original write
- * time. This class runs with the resync flag defaulting on; {@link IndexDataTableTTLSyncFlagOffIT}
- * asserts the same probe stays at the original timestamp when the flag is off.
+ * advances to the touch time</b>. Pre-fix it stays at the original write time.
  * <p>
  * {@link #testNoIndexAtomicUpsertMasksExpiredRow} covers the no-index masking path: an atomic
  * {@code ON DUPLICATE KEY UPDATE} on a TTL table with no secondary index still triggers an internal
@@ -112,9 +110,8 @@ public class IndexDataTableTTLSyncIT extends BaseTest {
   }
 
   /**
-   * Common server props for the TTL-sync ITs. Kept as a static helper so
-   * {@link IndexDataTableTTLSyncFlagOffIT} reuses the exact same cluster configuration and only adds
-   * the resync-disabled flag.
+   * Common server props for the TTL-sync IT: max-lookback and immediate global-index row aging so a
+   * major compaction deterministically exercises the covered-column timestamp-skew divergence.
    */
   static Map<String, String> baseServerProps() {
     Map<String, String> props = Maps.newHashMapWithExpectedSize(4);

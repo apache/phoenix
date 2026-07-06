@@ -1925,8 +1925,7 @@ public class ScanUtil {
     if (isView && viewTTLEnabled) {
       // serialize() is non-null for FOREVER and finite literals and null only for NONE, the exact
       // non-null filter the read path uses at setScanAttributesForPhoenixTTL. FOREVER must be
-      // threaded, not skipped: the view CF-descriptor fallback carries the base table's (possibly
-      // finite) TTL, so an absent _TTL would wrongly mask a view whose rows should live forever.
+      // threaded, not skipped.
       ttlForScan = table.getCompiledTTLExpression(connection).serialize();
     }
 
