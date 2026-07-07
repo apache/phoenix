@@ -777,18 +777,29 @@ public class CDCQueryIT extends CDCBaseIT {
           lastDeletionTSpos = uniqueTimestamps.size() - 1;
         }
       }
-      Random rand = new Random();
-      int randMinTSpos = rand.nextInt(lastDeletionTSpos - 1);
-      int randMaxTSpos =
-        randMinTSpos + 1 + rand.nextInt(uniqueTimestamps.size() - (randMinTSpos + 1));
+      // Always verify the full range.
       verifyChangesViaSCN(tenantId, conn, cdcFullName, pkColumns, datatableName, dataColumns,
         changes, 0, System.currentTimeMillis());
-      verifyChangesViaSCN(tenantId, conn, cdcFullName, pkColumns, datatableName, dataColumns,
-        changes, randMinTSpos, randMaxTSpos);
-      verifyChangesViaSCN(tenantId, conn, cdcFullName, pkColumns, datatableName, dataColumns,
-        changes, randMinTSpos, lastDeletionTSpos);
-      verifyChangesViaSCN(tenantId, conn, cdcFullName, pkColumns, datatableName, dataColumns,
-        changes, lastDeletionTSpos, randMaxTSpos);
+      // The random sub-range checks below require a deletion at a unique-timestamp position of
+      // at least 2 so that Random.nextInt(lastDeletionTSpos - 1) receives a positive bound, plus
+      // at least one unique timestamp after randMinTSpos so the second nextInt bound is positive
+      // too. When the generated change set does not satisfy this (no deletions, or a deletion
+      // only at position 0 or 1), skip the random sub-range exercise; the full-range
+      // verification above still covers the data.
+      if (lastDeletionTSpos != null && lastDeletionTSpos >= 2) {
+        Random rand = new Random();
+        int randMinTSpos = rand.nextInt(lastDeletionTSpos - 1);
+        int remainingTSCount = uniqueTimestamps.size() - (randMinTSpos + 1);
+        if (remainingTSCount > 0) {
+          int randMaxTSpos = randMinTSpos + 1 + rand.nextInt(remainingTSCount);
+          verifyChangesViaSCN(tenantId, conn, cdcFullName, pkColumns, datatableName, dataColumns,
+            changes, randMinTSpos, randMaxTSpos);
+          verifyChangesViaSCN(tenantId, conn, cdcFullName, pkColumns, datatableName, dataColumns,
+            changes, randMinTSpos, lastDeletionTSpos);
+          verifyChangesViaSCN(tenantId, conn, cdcFullName, pkColumns, datatableName, dataColumns,
+            changes, lastDeletionTSpos, randMaxTSpos);
+        }
+      }
     }
   }
 
