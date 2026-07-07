@@ -5164,14 +5164,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     // is safe.
     // A second flavor of transient failure is "already running another snapshot on the same table",
     // produced by RPC-level retries. The original snapshot() RPC has already been accepted by the
-    // master and the snapshot procedure is in flight, but the client retries the call and the master
+    // master and the snapshot procedure is in flight, but the client retries the call and the
+    // master
     // rejects the duplicate. In that case the existing snapshot procedure will succeed, so we treat
     // it as success once the snapshot of that name shows up in listSnapshots(). If it never appears
     // within the polling window we fall through to a normal retry.
     final int maxAttempts = 5;
     final long backoffMs = 1000L;
-    final long alreadyRunningWaitMs =
-      TimeUnit.MINUTES.toMillis(2L);
+    final long alreadyRunningWaitMs = TimeUnit.MINUTES.toMillis(2L);
     SQLException sqlE = null;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       sqlE = null;

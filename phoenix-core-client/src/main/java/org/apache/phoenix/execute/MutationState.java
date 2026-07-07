@@ -31,9 +31,6 @@ import static org.apache.phoenix.monitoring.MetricType.NUM_METADATA_LOOKUP_FAILU
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_FAILURE_SQL_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.UPSERT_AGGREGATE_SUCCESS_SQL_COUNTER;
 import static org.apache.phoenix.query.QueryServices.INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
-import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_INDEX_REGION_OBSERVER_ENABLED_ALL_TABLES;
 import static org.apache.phoenix.query.QueryServices.PRESERVE_MUTATIONS_ON_LIMIT_EXCEEDED_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.SOURCE_OPERATION_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.WILDCARD_QUERY_DYNAMIC_COLS_ATTRIB;
