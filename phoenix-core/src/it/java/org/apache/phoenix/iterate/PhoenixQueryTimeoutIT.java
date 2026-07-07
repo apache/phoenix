@@ -201,8 +201,10 @@ public class PhoenixQueryTimeoutIT extends ParallelStatsDisabledIT {
           return false;
         }
         for (HRegion region : regions) {
-          if (region.getCoprocessorHost().findCoprocessor(
-              DelayedRegionObserver.class.getName()) == null) {
+          if (
+            region.getCoprocessorHost().findCoprocessor(DelayedRegionObserver.class.getName())
+                == null
+          ) {
             return false;
           }
         }
