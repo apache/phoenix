@@ -2560,8 +2560,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     lockRows(context);
     // acquired the locks, move to the next phase PRE
     context.currentPhase = BatchMutatePhase.PRE;
-    long onDupCheckTime = 0;
 
+    // The standby replay path is deliberately separate: it regenerates index updates from the
+    // per-row PRE_IMAGE the active shipped, never reading prior state from the data-table region.
+    // Routing it here keeps every active-only step (row-state scans, timestamp assignment, atomic
+    // resolution, replication capture) out of a batch that must not run any of them.
+    if (context.isReplication) {
+      preBatchMutateReplication(c, miniBatchOp, context, indexMetaData);
+      return;
+    }
+
+    long onDupCheckTime = 0;
     if (
       context.hasAtomic || context.returnResult || context.hasGlobalIndex
         || context.hasUncoveredIndex || context.hasTransform || context.hasConditionalTTL
@@ -2610,87 +2619,111 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-    long batchTimestamp = 0;
-    if (!context.isReplication) {
-      // Replicated batches already carry final per-cell timestamps from the active cluster;
-      // re-stamping them would clobber the per-row ts that index entries must align with.
-      batchTimestamp = getBatchTimestamp(context, table);
-      // Update the timestamps of the data table mutations to prevent overlapping timestamps
-      // (which prevents index inconsistencies as this case is not handled).
-      setTimestamps(miniBatchOp, builder, batchTimestamp, isStrictTTLEnabled(miniBatchOp));
-      // Snapshot the cell stream for replication after timestamps are final, before the index
-      // branches run. Replicated batches do not re-replicate, so the capture is skipped on the
-      // standby. The pre-image cells are appended later, after prepareDataRowStates populates
-      // dataRowStates.
-      captureReplicationCells(miniBatchOp, context);
-    }
+    long batchTimestamp = getBatchTimestamp(context, table);
+    // Update the timestamps of the data table mutations to prevent overlapping timestamps
+    // (which prevents index inconsistencies as this case is not handled).
+    setTimestamps(miniBatchOp, builder, batchTimestamp, isStrictTTLEnabled(miniBatchOp));
+    // Snapshot the cell stream for replication after timestamps are final, before the index
+    // branches run. The pre-image cells are appended later, after prepareDataRowStates populates
+    // dataRowStates.
+    captureReplicationCells(miniBatchOp, context);
     if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
-      if (!context.isReplication) {
-        // Prepare next data rows states for pending mutations (for global indexes). Skipped on the
-        // standby — preparePreIndexMutations populates indexUpdates from per-(row, ts) groups
-        // using the per-row PRE_IMAGE attribute instead.
-        prepareDataRowStates(c, miniBatchOp, context, batchTimestamp);
-        // dataRowStates is now populated; append per-row pre-image cells to the captured buckets
-        // and to the WAL edit so the WAL-restore path ships the same payload as
-        // replicateMutations.
-        capturePreImageCells(miniBatchOp, context);
-      }
-      // early exit if it turns out we don't have any edits
-      long start = EnvironmentEdgeManager.currentTimeMillis();
-      preparePreIndexMutations(miniBatchOp, context, batchTimestamp, indexMetaData);
-      metricSource.updateIndexPrepareTime(dataTableName,
-        EnvironmentEdgeManager.currentTimeMillis() - start);
-      // Release the locks before making RPC calls for index updates
-      unlockRows(context);
-      // Do the first phase index updates
-      doPre(context);
-      // Acquire the locks again before letting the region proceed with data table updates
-      lockRows(context);
-      // Concurrent batches on the standby are safe without waiting: each replicated batch is
-      // self-sufficient via its PRE_IMAGE, the standby never reads from the data table (so a
-      // concurrent batch can't make our row state stale), and every index cell carries the
-      // active's timestamp — interleaved PRE/POST writes resolve to the same final index state
-      // as the active via HBase cell versioning.
-      if (!context.isReplication && context.lastConcurrentBatchContext != null) {
-        waitForPreviousConcurrentBatch(table, context);
-      }
-      preparePostIndexMutations(context, indexMetaData);
+      // Prepare next data rows states for pending mutations (for global indexes).
+      prepareDataRowStates(c, miniBatchOp, context, batchTimestamp);
+      // dataRowStates is now populated; append per-row pre-image cells to the captured buckets
+      // and to the WAL edit so the WAL-restore path ships the same payload as replicateMutations.
+      capturePreImageCells(miniBatchOp, context);
+      prepareAndCommitGlobalIndexUpdates(table, miniBatchOp, context, batchTimestamp,
+        indexMetaData);
     }
     if (context.hasLocalIndex) {
       // Group all the updates for a single row into a single update to be processed (for local
-      // indexes). On the standby, group by (row, ts) so each replayed active-side batch's cells
-      // stay in their own uniform-ts mutation for NonTxIndexBuilder, and serve the builder's prior
-      // row state from each group's shipped PRE_IMAGE instead of a (not-yet-written) region scan.
-      if (context.isReplication) {
-        List<ReplicatedRowGroup> groups = getReplicatedRowGroups(miniBatchOp, context);
-        Map<RowTsKey, List<Cell>> preImageCellsByRowTs = new HashMap<>();
-        Collection<? extends Mutation> mutations =
-          buildReplayLocalIndexInputs(groups, preImageCellsByRowTs);
-        handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData,
-          new PreImageLocalTable(dataTableName, preImageCellsByRowTs));
+      // indexes).
+      Collection<? extends Mutation> mutations = groupMutations(miniBatchOp, context);
+      // dataRowStates is populated only by the global/uncovered/transform/atomic/... branch, so a
+      // null map here means this table has only a local index and never ran the global-style
+      // pre-image capture. A non-null replicationCellsByRow means captureReplicationCells ran,
+      // i.e. this is a replicated active-side batch. Together they identify a replicated
+      // local-only table, which must ship a pre-image so the standby can regenerate its local
+      // index. Build the prior-state scan once and reuse it for both the pre-image capture and
+      // the index build. Mixed tables already captured a (superset) pre-image in the earlier
+      // branch; non-replicated local-only tables keep the unchanged path (no extra work).
+      if (context.dataRowStates == null && context.replicationCellsByRow != null) {
+        CachedLocalTable cachedLocalTable =
+          CachedLocalTable.build(mutations, indexMetaData, c.getEnvironment().getRegion());
+        captureLocalIndexPreImageCells(miniBatchOp, context, mutations, cachedLocalTable);
+        handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData, cachedLocalTable);
       } else {
-        Collection<? extends Mutation> mutations = groupMutations(miniBatchOp, context);
-        // dataRowStates is populated only by the global/uncovered/transform/atomic/... branch, so a
-        // null map here means this table has only a local index and never ran the global-style
-        // pre-image capture. A non-null replicationCellsByRow means captureReplicationCells ran,
-        // i.e. this is a replicated active-side batch. Together they identify a replicated
-        // local-only table, which must ship a pre-image so the standby can regenerate its local
-        // index. Build the prior-state scan once and reuse it for both the pre-image capture and
-        // the index build. Mixed tables already captured a (superset) pre-image in the earlier
-        // branch; non-replicated local-only tables keep the unchanged path (no extra work).
-        if (context.dataRowStates == null && context.replicationCellsByRow != null) {
-          CachedLocalTable cachedLocalTable =
-            CachedLocalTable.build(mutations, indexMetaData, c.getEnvironment().getRegion());
-          captureLocalIndexPreImageCells(miniBatchOp, context, mutations, cachedLocalTable);
-          handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData, cachedLocalTable);
-        } else {
-          handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData, null);
-        }
+        handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData, null);
       }
     }
     if (failDataTableUpdatesForTesting) {
       throw new DoNotRetryIOException("Simulating the data table write failure");
     }
+  }
+
+  /**
+   * Standby replay path for {@link #preBatchMutateWithExceptions}. Reached only for replicated
+   * batches (batches whose mutations carry the {@link #REPLICATED_MUTATION} marker), after the
+   * shared prologue has locked the rows and set the PRE phase. Deliberately runs none of the
+   * active-only steps: no timestamp assignment (cells already carry the active's final per-cell
+   * timestamps), no data-table row-state scan (index updates are regenerated from the per-row
+   * PRE_IMAGE the active shipped), no replication capture (a replayed batch is not re-replicated),
+   * and no concurrent-batch wait (each replicated batch is self-sufficient via its PRE_IMAGE, so
+   * concurrent standby batches on the same row need no ordering).
+   */
+  private void preBatchMutateReplication(ObserverContext<RegionCoprocessorEnvironment> c,
+    MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context,
+    PhoenixIndexMetaData indexMetaData) throws Throwable {
+    TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
+    if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
+      // batchTimestamp is unused on this path: prepareReplicatedIndexMutations derives each index
+      // update's timestamp from its (row, ts) group, not from a batch-wide timestamp.
+      prepareAndCommitGlobalIndexUpdates(table, miniBatchOp, context, 0, indexMetaData);
+    }
+    if (context.hasLocalIndex) {
+      // Group by (row, ts) so each replayed active-side batch's cells stay in their own uniform-ts
+      // mutation for NonTxIndexBuilder, and serve the builder's prior row state from each group's
+      // shipped PRE_IMAGE instead of a (not-yet-written) region scan.
+      List<ReplicatedRowGroup> groups = getReplicatedRowGroups(miniBatchOp, context);
+      Map<RowTsKey, List<Cell>> preImageCellsByRowTs = new HashMap<>();
+      Collection<? extends Mutation> mutations =
+        buildReplayLocalIndexInputs(groups, preImageCellsByRowTs);
+      handleLocalIndexUpdates(table, miniBatchOp, mutations, indexMetaData,
+        new PreImageLocalTable(dataTableName, preImageCellsByRowTs));
+    }
+    if (failDataTableUpdatesForTesting) {
+      throw new DoNotRetryIOException("Simulating the data table write failure");
+    }
+  }
+
+  /**
+   * Shared two-phase index-commit sequence for the global/uncovered/transform branch, run
+   * identically on the active and standby paths. The two paths differ only in how
+   * {@link #preparePreIndexMutations} fills {@code context.indexUpdates} (computed from
+   * {@code dataRowStates} on the active, regenerated from the per-row PRE_IMAGE on the standby);
+   * from there the prepare -> unlock -> doPre -> lock -> wait -> post protocol is the same.
+   */
+  private void prepareAndCommitGlobalIndexUpdates(TableName table,
+    MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context,
+    long batchTimestamp, PhoenixIndexMetaData indexMetaData) throws Throwable {
+    // early exit if it turns out we don't have any edits
+    long start = EnvironmentEdgeManager.currentTimeMillis();
+    preparePreIndexMutations(miniBatchOp, context, batchTimestamp, indexMetaData);
+    metricSource.updateIndexPrepareTime(dataTableName,
+      EnvironmentEdgeManager.currentTimeMillis() - start);
+    // Release the locks before making RPC calls for index updates
+    unlockRows(context);
+    // Do the first phase index updates
+    doPre(context);
+    // Acquire the locks again before letting the region proceed with data table updates
+    lockRows(context);
+    // Only populated by getCurrentRowStates, which the standby skips, so this is always null on
+    // replication: each replicated batch is self-sufficient via its PRE_IMAGE and needs no wait.
+    if (context.lastConcurrentBatchContext != null) {
+      waitForPreviousConcurrentBatch(table, context);
+    }
+    preparePostIndexMutations(context, indexMetaData);
   }
 
   /**
