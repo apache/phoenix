@@ -346,6 +346,7 @@ public class IndexScrutinyTool extends Configured implements Tool {
       job.setMapOutputKeyClass(Text.class);
       job.setMapOutputValueClass(Text.class);
       TableMapReduceUtil.addDependencyJars(job);
+      PhoenixMapReduceUtil.addPhoenixDependencyJars(job.getConfiguration());
       return job;
     }
 

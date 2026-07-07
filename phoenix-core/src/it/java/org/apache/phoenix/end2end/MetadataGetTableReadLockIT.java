@@ -97,7 +97,8 @@ public class MetadataGetTableReadLockIT extends BaseTest {
     }
   }
 
-  private static void waitForCoprocessorOnSystemCatalog(Class<?> coprocessorClass) throws Exception {
+  private static void waitForCoprocessorOnSystemCatalog(Class<?> coprocessorClass)
+    throws Exception {
     final TableName sysCatalog = TableName.valueOf("SYSTEM.CATALOG");
     utility.waitFor(10000, 100, () -> {
       List<HRegion> regions = utility.getHBaseCluster().getRegions(sysCatalog);
@@ -105,8 +106,7 @@ public class MetadataGetTableReadLockIT extends BaseTest {
         return false;
       }
       for (HRegion region : regions) {
-        if (region.getCoprocessorHost()
-            .findCoprocessor(coprocessorClass.getName()) == null) {
+        if (region.getCoprocessorHost().findCoprocessor(coprocessorClass.getName()) == null) {
           return false;
         }
       }
