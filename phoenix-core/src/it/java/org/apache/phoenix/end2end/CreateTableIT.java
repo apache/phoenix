@@ -25,6 +25,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -1769,4 +1770,82 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
     }
   }
 
+  @Test
+  public void testCreateTableWithIfNotExistsDoesNotMutateExistingHBaseTableProperties() throws Exception {
+    String tableName = generateUniqueName();
+    Properties props = new Properties();
+
+    // Step 1: Create table with VERSIONS=1 and TTL=86400
+    String createDdl = "CREATE TABLE " + tableName + " (" + " PK VARCHAR NOT NULL PRIMARY KEY,"
+      + " COL1 VARCHAR," + " COL2 INTEGER" + " ) VERSIONS=1, TTL=86400";
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement().execute(createDdl);
+    }
+
+    // Verify initial HBase table properties
+    Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+    TableDescriptor descBefore = admin.getDescriptor(TableName.valueOf(tableName));
+    ColumnFamilyDescriptor[] cfsBefore = descBefore.getColumnFamilies();
+    assertEquals(1, cfsBefore.length);
+    assertEquals(1, cfsBefore[0].getMaxVersions());
+    assertEquals(86400, cfsBefore[0].getTimeToLive());
+
+    // Step 2: Execute CREATE TABLE IF NOT EXISTS with different properties
+    String createIfNotExistsDdl =
+      "CREATE TABLE IF NOT EXISTS " + tableName + " (" + " PK VARCHAR NOT NULL PRIMARY KEY,"
+        + " COL1 VARCHAR," + " COL2 INTEGER" + " ) VERSIONS=5, TTL=120000";
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement().execute(createIfNotExistsDdl);
+    }
+
+    // Step 3: Verify that HBase table properties are NOT changed
+    TableDescriptor descAfter = admin.getDescriptor(TableName.valueOf(tableName));
+    ColumnFamilyDescriptor[] cfsAfter = descAfter.getColumnFamilies();
+    assertEquals(1, cfsAfter.length);
+    assertEquals("VERSIONS should not be modified by IF NOT EXISTS", 1,
+      cfsAfter[0].getMaxVersions());
+    assertEquals("TTL should not be modified by IF NOT EXISTS", 86400, cfsAfter[0].getTimeToLive());
+  }
+
+  @Test
+  public void testCreateTableWithoutIfNotExistsShouldMutateExistingHBaseTableProperties() throws Exception {
+    String tableName = generateUniqueName();
+    Properties props = new Properties();
+
+    // Step 1: Create table with VERSIONS=1 and TTL=86400
+    String createDdl = "CREATE TABLE " + tableName + " (" + " PK VARCHAR NOT NULL PRIMARY KEY,"
+            + " COL1 VARCHAR," + " COL2 INTEGER" + " ) VERSIONS=1, TTL=86400";
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement().execute(createDdl);
+    }
+
+    // Verify initial HBase table properties
+    Admin admin = driver.getConnectionQueryServices(getUrl(), props).getAdmin();
+    TableDescriptor descBefore = admin.getDescriptor(TableName.valueOf(tableName));
+    ColumnFamilyDescriptor[] cfsBefore = descBefore.getColumnFamilies();
+    assertEquals(1, cfsBefore.length);
+    assertEquals(1, cfsBefore[0].getMaxVersions());
+    assertEquals(86400, cfsBefore[0].getTimeToLive());
+
+    // Step 2: Execute CREATE TABLE without IF NOT EXISTS with different properties
+    String createWithoutIfNotExistsDdl =
+            "CREATE TABLE " + tableName + " (" + " PK VARCHAR NOT NULL PRIMARY KEY," + " COL1 VARCHAR,"
+                    + " COL2 INTEGER" + " ) VERSIONS=6, TTL=120000";
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      // Should fail as table exists already.
+      TableAlreadyExistsException exception = assertThrows(TableAlreadyExistsException.class,
+              () -> conn.createStatement().execute(createWithoutIfNotExistsDdl));
+      assertEquals("ERROR 1013 (42M04): Table already exists. tableName=" + tableName,
+              exception.getMessage());
+    }
+
+    // Step 3: Verify that HBase table properties are changed
+    TableDescriptor descAfter2 = admin.getDescriptor(TableName.valueOf(tableName));
+    ColumnFamilyDescriptor[] cfsAfter2 = descAfter2.getColumnFamilies();
+    assertEquals(1, cfsAfter2.length);
+    assertEquals("VERSIONS should be modified without IF NOT EXISTS", 6,
+            cfsAfter2[0].getMaxVersions());
+    assertEquals("TTL should be modified without IF NOT EXISTS", 120000,
+            cfsAfter2[0].getTimeToLive());
+  }
 }
