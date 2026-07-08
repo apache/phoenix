@@ -93,7 +93,9 @@ public class ReplicationLogDiscoveryReplayConsistencyPointTest {
    */
   @Test
   public void testSyncStateAlignsMinInProgressTimestampToRoundStart() throws IOException {
-    // File B (later) is in progress; File A (earlier, ROUND_START + 5000) is still in IN.
+    // Only the later file (T+30s) is in IN-PROGRESS here; the older sibling that would still be in
+    // the IN directory is not materialized because this unit test asserts purely on the alignment
+    // of the raw min IN-PROGRESS timestamp down to the round start (the IT covers the IN sibling).
     createInProgressFile(ROUND_START + 30000L);
     ReplicationRound roundN = new ReplicationRound(ROUND_START, ROUND_START + ROUND_MILLIS);
     discovery.setLastRoundInSync(roundN);
