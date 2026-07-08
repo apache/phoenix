@@ -17,7 +17,6 @@
  */
 package org.apache.phoenix.replication.log;
 
-import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
@@ -32,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValue;
+import org.apache.hadoop.hbase.io.ByteArrayOutputStream;
 import org.apache.hadoop.hbase.io.ByteBuffInputStream;
 import org.apache.hadoop.hbase.nio.ByteBuff;
 import org.apache.hadoop.hbase.util.Bytes;
@@ -106,11 +106,16 @@ public class LogFileCodec implements LogFile.Codec {
 
   private static class RecordEncoder implements LogFile.Codec.Encoder {
     private final DataOutput out;
+    // Scratch buffer that accumulates one record's body so we can length-prefix it. Reused
+    // across records; HBase's ByteArrayOutputStream lets us write straight from its backing
+    // array via getBuffer(), avoiding a per-record toByteArray() copy.
     private final ByteArrayOutputStream currentRecord;
+    private final DataOutputStream recordOut;
 
     RecordEncoder(DataOutput out) {
       this.out = out;
       currentRecord = new ByteArrayOutputStream();
+      recordOut = new DataOutputStream(currentRecord);
     }
 
     @Override
@@ -118,7 +123,6 @@ public class LogFileCodec implements LogFile.Codec {
       if (record.getCells().isEmpty()) {
         throw new IllegalArgumentException("Cannot encode a record with no cells");
       }
-      DataOutput recordOut = new DataOutputStream(currentRecord);
 
       // Header: table name + commit id
       byte[] nameBytes = record.getHBaseTableName().getBytes(StandardCharsets.UTF_8);
@@ -161,12 +165,12 @@ public class LogFileCodec implements LogFile.Codec {
         }
       }
 
-      byte[] currentRecordBytes = currentRecord.toByteArray();
-      WritableUtils.writeVInt(out, currentRecordBytes.length);
-      out.write(currentRecordBytes);
+      int recordBodyLen = currentRecord.size();
+      WritableUtils.writeVInt(out, recordBodyLen);
+      out.write(currentRecord.getBuffer(), 0, recordBodyLen);
 
-      ((LogFileRecord) record).setSerializedLength(
-        currentRecordBytes.length + WritableUtils.getVIntSize(currentRecordBytes.length));
+      ((LogFileRecord) record)
+        .setSerializedLength(recordBodyLen + WritableUtils.getVIntSize(recordBodyLen));
 
       currentRecord.reset();
     }
