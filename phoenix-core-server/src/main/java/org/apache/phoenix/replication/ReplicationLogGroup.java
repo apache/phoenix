@@ -148,7 +148,7 @@ public class ReplicationLogGroup {
   public static final long DEFAULT_REPLICATION_LOG_ROTATION_TIME_MS = 60 * 1000L;
   public static final String REPLICATION_LOG_ROTATION_SIZE_BYTES_KEY =
     "phoenix.replication.log.rotation.size.bytes";
-  public static final long DEFAULT_REPLICATION_LOG_ROTATION_SIZE_BYTES = 256 * 1024 * 1024L;
+  public static final long DEFAULT_REPLICATION_LOG_ROTATION_SIZE_BYTES = 128 * 1024 * 1024L;
   public static final String REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE_KEY =
     "phoenix.replication.log.rotation.size.percentage";
   public static final double DEFAULT_REPLICATION_LOG_ROTATION_SIZE_PERCENTAGE = 0.95;
