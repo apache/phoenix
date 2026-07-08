@@ -654,12 +654,14 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
   }
 
   /**
-   * PHOENIX-7938: within a round, a later-timestamp file is moved to IN-PROGRESS while an older
-   * sibling remains in the IN directory. The SYNC-state consistency point must align to the round
-   * start, not the raw minimum IN-PROGRESS timestamp.
+   * PHOENIX-7938: files within a round are moved to IN-PROGRESS in random order, so the minimum
+   * IN-PROGRESS timestamp may not be the oldest file of its round (an older sibling can still be
+   * waiting in the IN directory). The SYNC-state consistency point must therefore align the minimum
+   * IN-PROGRESS timestamp down to its round start rather than use it raw. Verified end-to-end
+   * against the real tracker and filesystem.
    */
   @Test
-  public void testGetConsistencyPoint_SyncState_InProgressFileNotOldestOfRound()
+  public void testGetConsistencyPoint_SyncState_AlignsInProgressMinToRoundStart()
     throws IOException {
     TestableReplicationLogTracker fileTracker =
       createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
@@ -669,18 +671,16 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds()
           * 1000L;
       long roundStart = 1704153600000L; // aligned to a round boundary (2024-01-02 00:00:00)
-      long earlierFileTs = roundStart + 5000L;  // File A - still waiting in the IN directory
-      long laterFileTs = roundStart + 30000L;   // File B - picked first, moved to IN-PROGRESS
+      long inProgressFileTs = roundStart + 30000L; // 30s into the round, off the round boundary
       ReplicationRound roundN = new ReplicationRound(roundStart, roundStart + roundTimeMills);
 
-      // File B (later ts) is in progress; File A (earlier ts) sits unprocessed in its IN shard.
+      // Seed a single IN-PROGRESS file 30s into the round. getConsistencyPoint() reads only the
+      // IN-PROGRESS directory, so this is the minimum timestamp; the fix must align it down to the
+      // round start rather than expose it raw, because an older sibling from the same round could
+      // still be waiting in the IN directory (files are moved to IN-PROGRESS in random order).
       Path inProgressDir = fileTracker.getInProgressDirPath();
       rootFs.mkdirs(inProgressDir);
-      rootFs.create(new Path(inProgressDir, laterFileTs + "_rs-1_uuid.plog"), true).close();
-      Path shardPath =
-        fileTracker.getReplicationShardDirectoryManager().getShardDirectory(roundN.getStartTime());
-      rootFs.mkdirs(shardPath);
-      rootFs.create(new Path(shardPath, earlierFileTs + "_rs-1.plog"), true).close();
+      rootFs.create(new Path(inProgressDir, inProgressFileTs + "_rs-1_uuid.plog"), true).close();
 
       long currentTime = roundStart + (2 * roundTimeMills);
       EnvironmentEdge edge = () -> currentTime;
