@@ -44,8 +44,10 @@ import org.junit.rules.TemporaryFolder;
 public class ReplicationLogDiscoveryReplayConsistencyPointTest {
 
   private static final String HA_GROUP_NAME = "testGroup";
-  // Round duration default is 60s = 60000ms; ROUND_START is aligned to a round boundary.
-  private static final long ROUND_MILLIS = 60000L;
+  // Derive from the production default instead of hardcoding, so this tracks the real round
+  // duration if the default changes. ROUND_START is aligned to a round boundary.
+  private static final long ROUND_MILLIS =
+    ReplicationShardDirectoryManager.DEFAULT_REPLICATION_ROUND_DURATION_SECONDS * 1000L;
   private static final long ROUND_START = 1704153600000L; // divisible by 60000
 
   @Rule
