@@ -151,6 +151,13 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
           clusterType == ClusterType.LOCAL
             && HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(toState)
         ) {
+          // Direct DEGRADED_STANDBY -> STANDBY_TO_ACTIVE skips the STANDBY event that normally
+          // drives recovery. If we are DEGRADED, schedule the rewind so replay() re-syncs from
+          // lastRoundInSync before shouldTriggerFailover() (which gates on SYNC) can promote.
+          // compareAndSet, not set: a listener firing while already SYNC (healthy failover) or
+          // SYNCED_RECOVERY (rewind already pending) must not clobber a good state.
+          replicationReplayState.compareAndSet(ReplicationReplayState.DEGRADED,
+            ReplicationReplayState.SYNCED_RECOVERY);
           failoverPending.set(true);
           LOG.info(
             "Failover trigger detected for {}. replicationReplayState={}. "
