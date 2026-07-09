@@ -104,7 +104,7 @@ public abstract class ReplicationLogDiscovery {
   protected final ReplicationLogTracker replicationLogTracker;
   protected ScheduledExecutorService scheduler;
   protected volatile boolean isRunning = false;
-  protected ReplicationRound lastRoundProcessed;
+  protected volatile ReplicationRound lastRoundProcessed;
   protected MetricsReplicationLogDiscovery metrics;
   protected long roundTimeMills;
   protected long bufferMillis;
