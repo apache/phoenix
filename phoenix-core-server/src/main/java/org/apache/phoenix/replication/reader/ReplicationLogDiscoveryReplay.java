@@ -209,46 +209,43 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
   }
 
   /**
-   * Initializes lastRoundProcessed and lastRoundInSync based on HA group state. For DEGRADED states
-   * (DEGRADED_STANDBY, DEGRADED_STANDBY_FOR_WRITER): - Sets replicationReplayState to DEGRADED -
-   * Initializes lastRoundProcessed from minimum of: in-progress files, new files, or current time -
-   * Initializes lastRoundInSync from minimum of: lastSyncStateTimeInMs (from HA Store) or minimum
-   * timestamp from IN and IN PROGRESS files - This ensures lastRoundInSync represents the last
-   * known good sync point before degradation For SYNC states (STANDBY): - Sets
-   * replicationReplayState to SYNC - Calls parent's initializeLastRoundProcessed() to initialize
-   * lastRoundProcessed - Sets lastRoundInSync equal to lastRoundProcessed (both are in sync)
+   * Initializes lastRoundProcessed and lastRoundInSync based on the persisted HA group state.
+   * <ul>
+   * <li>DEGRADED_STANDBY: sets replicationReplayState to DEGRADED and initializes both rounds from
+   * the last known good sync point via {@link #initLastRoundsFromLastSyncPoint(HAGroupStoreRecord)}
+   * (lastRoundInSync from the minimum of lastSyncStateTimeInMs and the file frontier, so it
+   * represents the last consistent point before degradation).</li>
+   * <li>STANDBY_TO_ACTIVE: a restart while already mid-failover (e.g. after a direct
+   * DEGRADED_STANDBY -&gt; STANDBY_TO_ACTIVE transition). Sets replicationReplayState to
+   * SYNCED_RECOVERY and initializes both rounds the same way, so the first replay() rewinds to
+   * lastRoundInSync before failover can promote.</li>
+   * <li>Other states (e.g. STANDBY): sets replicationReplayState to SYNC, delegates to the parent
+   * to initialize lastRoundProcessed, and sets lastRoundInSync equal to lastRoundProcessed.</li>
+   * </ul>
+   * When the state is STANDBY_TO_ACTIVE, failoverPending is also armed.
    * @throws IOException if there's an error reading HA group state or file timestamps
    */
   @Override
   protected void initializeLastRoundProcessed() throws IOException {
     LOG.info("Initializing last round processed for haGroup: {}", haGroupName);
     HAGroupStoreRecord haGroupStoreRecord = getHAGroupRecord();
-    LOG.info("Found HA Group state during initialization as {} for haGroup: {}",
-      haGroupStoreRecord.getHAGroupState(), haGroupName);
-    if (
-      HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.equals(haGroupStoreRecord.getHAGroupState())
-    ) {
+    HAGroupStoreRecord.HAGroupState haGroupState = haGroupStoreRecord.getHAGroupState();
+    LOG.info("Found HA Group state during initialization as {} for haGroup: {}", haGroupState,
+      haGroupName);
+    if (HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.equals(haGroupState)) {
       replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED,
         ReplicationReplayState.DEGRADED);
-      long minimumTimestampFromFiles = EnvironmentEdgeManager.currentTime();
-      Optional<Long> minTimestampFromInProgressFiles = getMinTimestampFromInProgressFiles();
-      Optional<Long> minTimestampFromNewFiles = getMinTimestampFromNewFiles();
-      if (minTimestampFromInProgressFiles.isPresent()) {
-        LOG.info("Found minimum timestamp from IN PROGRESS files as {}",
-          minTimestampFromInProgressFiles.get());
-        minimumTimestampFromFiles =
-          Math.min(minimumTimestampFromFiles, minTimestampFromInProgressFiles.get());
-      }
-      if (minTimestampFromNewFiles.isPresent()) {
-        LOG.info("Found minimum timestamp from IN files as {}", minTimestampFromNewFiles.get());
-        minimumTimestampFromFiles =
-          Math.min(minimumTimestampFromFiles, minTimestampFromNewFiles.get());
-      }
-      this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
-        .getReplicationRoundFromEndTime(minimumTimestampFromFiles);
-      this.lastRoundInSync =
-        replicationLogTracker.getReplicationShardDirectoryManager().getReplicationRoundFromEndTime(
-          Math.min(haGroupStoreRecord.getLastSyncStateTimeInMs(), minimumTimestampFromFiles));
+      initLastRoundsFromLastSyncPoint(haGroupStoreRecord);
+    } else if (HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(haGroupState)) {
+      // Restarted while already in STANDBY_TO_ACTIVE (e.g. an RS bounce after a direct
+      // DEGRADED_STANDBY -> STANDBY_TO_ACTIVE transition). No listener fires on a fresh process, so
+      // initialize as if recovering: lastRoundInSync at the last good sync point, lastRoundProcessed
+      // from the file frontier, and state SYNCED_RECOVERY so the first replay() rewinds before
+      // shouldTriggerFailover() can promote. Conservative by design: if we actually came from a
+      // healthy STANDBY, lastSyncStateTimeInMs ~= the file frontier and the rewind is a no-op.
+      replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED,
+        ReplicationReplayState.SYNCED_RECOVERY);
+      initLastRoundsFromLastSyncPoint(haGroupStoreRecord);
     } else {
       replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED,
         ReplicationReplayState.SYNC);
@@ -262,11 +259,40 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
       lastRoundProcessed, lastRoundInSync, replicationReplayState);
 
     // Update the failoverPending variable during initialization
-    if (
-      HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(haGroupStoreRecord.getHAGroupState())
-    ) {
+    if (HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(haGroupState)) {
       failoverPending.compareAndSet(false, true);
     }
+  }
+
+  /**
+   * Initializes {@link #lastRoundProcessed} and {@link #lastRoundInSync} from the last known good
+   * sync point. Used by the DEGRADED_STANDBY and STANDBY_TO_ACTIVE branches, which both need a
+   * rewind to the last consistent point. lastRoundProcessed is derived from the minimum timestamp
+   * across IN-PROGRESS and IN files (or current time when no files exist); lastRoundInSync is
+   * derived from the minimum of the record's lastSyncStateTimeInMs and that file frontier, so it
+   * never sits ahead of the last synced data.
+   */
+  private void initLastRoundsFromLastSyncPoint(HAGroupStoreRecord haGroupStoreRecord)
+    throws IOException {
+    long minimumTimestampFromFiles = EnvironmentEdgeManager.currentTime();
+    Optional<Long> minTimestampFromInProgressFiles = getMinTimestampFromInProgressFiles();
+    Optional<Long> minTimestampFromNewFiles = getMinTimestampFromNewFiles();
+    if (minTimestampFromInProgressFiles.isPresent()) {
+      LOG.info("Found minimum timestamp from IN PROGRESS files as {}",
+        minTimestampFromInProgressFiles.get());
+      minimumTimestampFromFiles =
+        Math.min(minimumTimestampFromFiles, minTimestampFromInProgressFiles.get());
+    }
+    if (minTimestampFromNewFiles.isPresent()) {
+      LOG.info("Found minimum timestamp from IN files as {}", minTimestampFromNewFiles.get());
+      minimumTimestampFromFiles =
+        Math.min(minimumTimestampFromFiles, minTimestampFromNewFiles.get());
+    }
+    this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
+      .getReplicationRoundFromEndTime(minimumTimestampFromFiles);
+    this.lastRoundInSync =
+      replicationLogTracker.getReplicationShardDirectoryManager().getReplicationRoundFromEndTime(
+        Math.min(haGroupStoreRecord.getLastSyncStateTimeInMs(), minimumTimestampFromFiles));
   }
 
   /**

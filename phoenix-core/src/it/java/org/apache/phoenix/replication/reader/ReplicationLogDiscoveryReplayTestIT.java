@@ -461,7 +461,36 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
 
     testInitializeLastRoundProcessedHelper(currentTime, null, null, null,
       HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, expectedLastRoundProcessed,
-      expectedLastRoundInSync, ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC, true);
+      expectedLastRoundInSync,
+      ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY, true);
+  }
+
+  @Test
+  public void testInitializeLastRoundProcessed_StandbyToActiveStateWithLastSyncStateAsMin()
+    throws IOException {
+    long newFileTimestamp = 1704240060000L;
+    long lastSyncStateTime = 1704240030000L;
+    long currentTime = 1704240900000L;
+    long roundTimeMills = 60000L; // 1 minute
+
+    // lastRoundProcessed uses the minimum of new files and current time (the file frontier).
+    long expectedEndTime =
+      (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+    ReplicationRound expectedLastRoundProcessed =
+      new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+
+    // lastRoundInSync uses the minimum of lastSyncStateTime and file timestamps, so on restart into
+    // STANDBY_TO_ACTIVE it stays one round BEHIND lastRoundProcessed (not collapsed onto it) - this
+    // is the rewind target that guarantees zero RPO after a direct DEGRADED_STANDBY transition.
+    long expectedSyncEndTime =
+      (lastSyncStateTime / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+    ReplicationRound expectedLastRoundInSync =
+      new ReplicationRound(expectedSyncEndTime - roundTimeMills, expectedSyncEndTime);
+
+    testInitializeLastRoundProcessedHelper(currentTime, lastSyncStateTime, newFileTimestamp, null,
+      HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, expectedLastRoundProcessed,
+      expectedLastRoundInSync,
+      ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY, true);
   }
 
   /**
