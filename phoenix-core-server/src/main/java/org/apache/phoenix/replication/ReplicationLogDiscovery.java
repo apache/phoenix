@@ -383,15 +383,28 @@ public abstract class ReplicationLogDiscovery {
   protected abstract MetricsReplicationLogDiscovery createMetricsSource();
 
   /**
-   * Initializes lastRoundProcessed based on minimum timestamp from 1. In-progress files (highest
-   * priority) - indicates partially processed rounds 2. New files (medium priority) - indicates
-   * unprocessed rounds waiting to be replayed 3. Current time (fallback) - used when no files
-   * exist, starts from current time The minimum timestamp is converted to a replication round using
-   * getReplicationRoundFromEndTime(), which rounds down to the nearest round boundary to ensure we
-   * start from a complete round.
+   * Initializes lastRoundProcessed, sampling the current time up front to use as the no-files
+   * fallback (see {@link #initializeLastRoundProcessed(long)}). Sampling here - before the file
+   * scans - keeps the fallback anchored to when initialization began.
    * @throws IOException if there's an error reading file timestamps
    */
   protected void initializeLastRoundProcessed() throws IOException {
+    initializeLastRoundProcessed(EnvironmentEdgeManager.currentTime());
+  }
+
+  /**
+   * Initializes lastRoundProcessed based on minimum timestamp from 1. In-progress files (highest
+   * priority) - indicates partially processed rounds 2. New files (medium priority) - indicates
+   * unprocessed rounds waiting to be replayed 3. fallbackCurrentTime - used when no files exist,
+   * starts from the supplied time The minimum timestamp is converted to a replication round using
+   * getReplicationRoundFromEndTime(), which rounds down to the nearest round boundary to ensure we
+   * start from a complete round.
+   * @param fallbackCurrentTime the timestamp to start from when no files exist; sampled by the
+   *          caller at the start of initialization rather than re-read here, so a slow init (or a
+   *          state transition during init) cannot push the starting round forward
+   * @throws IOException if there's an error reading file timestamps
+   */
+  protected void initializeLastRoundProcessed(long fallbackCurrentTime) throws IOException {
     Optional<Long> minTimestampFromInProgressFiles = getMinTimestampFromInProgressFiles();
     if (minTimestampFromInProgressFiles.isPresent()) {
       LOG.info(
@@ -412,11 +425,10 @@ public abstract class ReplicationLogDiscovery {
         this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
           .getReplicationRoundFromEndTime(minTimestampFromNewFiles.get());
       } else {
-        long currentTime = EnvironmentEdgeManager.currentTime();
         LOG.info("Initializing lastRoundProcessed for haGroup: {} from current time {}",
-          haGroupName, currentTime);
+          haGroupName, fallbackCurrentTime);
         this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
-          .getReplicationRoundFromEndTime(currentTime);
+          .getReplicationRoundFromEndTime(fallbackCurrentTime);
       }
     }
   }

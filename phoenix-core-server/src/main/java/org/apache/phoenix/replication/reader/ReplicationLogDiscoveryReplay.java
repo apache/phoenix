@@ -228,6 +228,10 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
   @Override
   protected void initializeLastRoundProcessed() throws IOException {
     LOG.info("Initializing last round processed for haGroup: {}", haGroupName);
+    // Sample current time BEFORE reading the HA group state, so if the group transitions (e.g.
+    // SYNC -> DEGRADED_STANDBY) during init, the starting round still anchors to when init began
+    // rather than to a later point after the state read and file scans.
+    long frontierStartTime = EnvironmentEdgeManager.currentTime();
     HAGroupStoreRecord haGroupStoreRecord = getHAGroupRecord();
     HAGroupStoreRecord.HAGroupState haGroupState = haGroupStoreRecord.getHAGroupState();
     LOG.info("Found HA Group state during initialization as {} for haGroup: {}", haGroupState,
@@ -235,7 +239,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     if (HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.equals(haGroupState)) {
       replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED,
         ReplicationReplayState.DEGRADED);
-      initLastRoundsFromLastSyncPoint(haGroupStoreRecord);
+      initLastRoundsFromLastSyncPoint(haGroupStoreRecord, frontierStartTime);
     } else if (HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(haGroupState)) {
       // Restarted while already in STANDBY_TO_ACTIVE (e.g. an RS bounce after a direct
       // DEGRADED_STANDBY -> STANDBY_TO_ACTIVE transition). No listener fires on a fresh process, so
@@ -245,11 +249,11 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
       // healthy STANDBY, lastSyncStateTimeInMs ~= the file frontier and the rewind is a no-op.
       replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED,
         ReplicationReplayState.SYNCED_RECOVERY);
-      initLastRoundsFromLastSyncPoint(haGroupStoreRecord);
+      initLastRoundsFromLastSyncPoint(haGroupStoreRecord, frontierStartTime);
     } else {
       replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED,
         ReplicationReplayState.SYNC);
-      super.initializeLastRoundProcessed();
+      super.initializeLastRoundProcessed(frontierStartTime);
       this.lastRoundInSync =
         new ReplicationRound(lastRoundProcessed.getStartTime(), lastRoundProcessed.getEndTime());
     }
@@ -268,13 +272,18 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
    * Initializes {@link #lastRoundProcessed} and {@link #lastRoundInSync} from the last known good
    * sync point. Used by the DEGRADED_STANDBY and STANDBY_TO_ACTIVE branches, which both need a
    * rewind to the last consistent point. lastRoundProcessed is derived from the minimum timestamp
-   * across IN-PROGRESS and IN files (or current time when no files exist); lastRoundInSync is
-   * derived from the minimum of the record's lastSyncStateTimeInMs and that file frontier, so it
-   * never sits ahead of the last synced data.
+   * across IN-PROGRESS and IN files (or {@code frontierStartTime} when no files exist);
+   * lastRoundInSync is derived from the minimum of the record's lastSyncStateTimeInMs and that file
+   * frontier, so it never sits ahead of the last synced data. When lastSyncStateTimeInMs is 0 (no
+   * known sync point), it falls back to the file frontier so lastRoundInSync collapses onto
+   * lastRoundProcessed instead of rewinding to the epoch.
+   * @param haGroupStoreRecord the persisted HA group record supplying lastSyncStateTimeInMs
+   * @param frontierStartTime current time sampled at the start of initialization; the file frontier
+   *          upper bound, and the sole basis when no files exist
    */
-  private void initLastRoundsFromLastSyncPoint(HAGroupStoreRecord haGroupStoreRecord)
-    throws IOException {
-    long minimumTimestampFromFiles = EnvironmentEdgeManager.currentTime();
+  private void initLastRoundsFromLastSyncPoint(HAGroupStoreRecord haGroupStoreRecord,
+    long frontierStartTime) throws IOException {
+    long minimumTimestampFromFiles = frontierStartTime;
     Optional<Long> minTimestampFromInProgressFiles = getMinTimestampFromInProgressFiles();
     Optional<Long> minTimestampFromNewFiles = getMinTimestampFromNewFiles();
     if (minTimestampFromInProgressFiles.isPresent()) {
