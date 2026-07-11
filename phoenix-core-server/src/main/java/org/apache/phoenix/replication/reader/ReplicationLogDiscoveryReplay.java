@@ -290,9 +290,17 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     }
     this.lastRoundProcessed = replicationLogTracker.getReplicationShardDirectoryManager()
       .getReplicationRoundFromEndTime(minimumTimestampFromFiles);
-    this.lastRoundInSync =
-      replicationLogTracker.getReplicationShardDirectoryManager().getReplicationRoundFromEndTime(
-        Math.min(haGroupStoreRecord.getLastSyncStateTimeInMs(), minimumTimestampFromFiles));
+    // A lastSyncStateTimeInMs of 0 means "no known sync point" (never synced, or a record that
+    // predates the field). Do NOT feed 0 into the min: getReplicationRoundFromEndTime(0) returns
+    // ReplicationRound(0, 0), which would rewind SYNCED_RECOVERY to the epoch and drive the
+    // consistency point to 0 (retain-everything). Fall back to the file frontier so lastRoundInSync
+    // collapses onto lastRoundProcessed (no rewind) when there is no known sync point.
+    long lastSyncStateTimeInMs = haGroupStoreRecord.getLastSyncStateTimeInMs();
+    long lastSyncBasis = lastSyncStateTimeInMs > 0L
+      ? Math.min(lastSyncStateTimeInMs, minimumTimestampFromFiles)
+      : minimumTimestampFromFiles;
+    this.lastRoundInSync = replicationLogTracker.getReplicationShardDirectoryManager()
+      .getReplicationRoundFromEndTime(lastSyncBasis);
   }
 
   /**

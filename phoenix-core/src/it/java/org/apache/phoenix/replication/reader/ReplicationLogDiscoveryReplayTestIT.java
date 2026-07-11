@@ -493,6 +493,31 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
       ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY, true);
   }
 
+  @Test
+  public void testInitializeLastRoundProcessed_StandbyToActiveStateWithZeroLastSyncTime()
+    throws IOException {
+    long newFileTimestamp = 1704240060000L;
+    long lastSyncStateTime = 0L; // never synced / unset - must NOT rewind to the epoch
+    long currentTime = 1704240900000L;
+    long roundTimeMills = 60000L; // 1 minute
+
+    // lastRoundProcessed uses the minimum of new files and current time (the file frontier).
+    long expectedEndTime =
+      (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+    ReplicationRound expectedLastRoundProcessed =
+      new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+
+    // With lastSyncStateTimeInMs == 0 (unset), lastRoundInSync must collapse onto the file frontier
+    // (== lastRoundProcessed) instead of ReplicationRound(0, 0), which would rewind SYNCED_RECOVERY
+    // all the way to the epoch and drive the consistency point to 0 (retain-everything).
+    ReplicationRound expectedLastRoundInSync = expectedLastRoundProcessed;
+
+    testInitializeLastRoundProcessedHelper(currentTime, lastSyncStateTime, newFileTimestamp, null,
+      HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, expectedLastRoundProcessed,
+      expectedLastRoundInSync,
+      ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY, true);
+  }
+
   /**
    * Helper method to test initializeLastRoundProcessed with various file and state configurations.
    * Handles file creation, state setup, and validation of lastRoundProcessed and lastRoundInSync.
