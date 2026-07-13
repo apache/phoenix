@@ -351,6 +351,31 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
   }
 
   @Test
+  public void testInitializeLastRoundProcessed_DegradedStateWithZeroLastSyncTime()
+    throws IOException {
+    long newFileTimestamp = 1704240060000L;
+    long lastSyncStateTime = 0L; // never synced / unset - must NOT rewind to the epoch
+    long currentTime = 1704240900000L;
+    long roundTimeMills = 60000L; // 1 minute
+
+    // lastRoundProcessed uses the minimum of new files and current time (the file frontier).
+    long expectedEndTime =
+      (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+    ReplicationRound expectedLastRoundProcessed =
+      new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+
+    // The zero-lastSyncStateTimeInMs guard is shared by the DEGRADED_STANDBY and STANDBY_TO_ACTIVE
+    // init paths. On the DEGRADED path too, lastRoundInSync must collapse onto the file frontier
+    // (== lastRoundProcessed) instead of ReplicationRound(0, 0), which would rewind all the way to
+    // the epoch and drive the consistency point to 0 (retain-everything).
+    ReplicationRound expectedLastRoundInSync = expectedLastRoundProcessed;
+
+    testInitializeLastRoundProcessedHelper(currentTime, lastSyncStateTime, newFileTimestamp, null,
+      HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, expectedLastRoundProcessed,
+      expectedLastRoundInSync, ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED, false);
+  }
+
+  @Test
   public void testInitializeLastRoundProcessed_SyncStateWithInProgressFiles() throws IOException {
     long currentTime = 1704412800000L;
     long inProgressTimestamp = 1704412680000L; // 2 min before current time
