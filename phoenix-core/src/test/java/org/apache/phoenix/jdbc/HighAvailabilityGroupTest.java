@@ -18,11 +18,14 @@
 package org.apache.phoenix.jdbc;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
 
 import java.sql.SQLException;
 import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -122,5 +125,64 @@ public class HighAvailabilityGroupTest {
 
   private void getAndAssertUrlInfo(String url, String additionalParams) throws Exception {
     getAndAssertUrlInfo(url, additionalParams, null);
+  }
+
+  /**
+   * Verifies the gate decision for {@code HA_FAILOVER_COUNT} — exercised directly via the
+   * package-private {@link HighAvailabilityGroup#shouldCountFailover} helper rather than driving a
+   * mini-cluster transition. Together these cases pin down that the gate (a) counts a real ACTIVE
+   * URL move, (b) does NOT count a no-op (same active URL), (c) does NOT count a transition INTO a
+   * no-active state, and (d) does NOT count a transition where the policy callback failed
+   * ({@code transitionSucceeded == false}, i.e. {@code future.get()} threw {@code TimeoutException}
+   * / {@code ExecutionException}). The (d) negative-path assertion is the regression guard: someone
+   * removing the {@code transitionSucceeded &&} clause from
+   * {@code HighAvailabilityGroup#shouldCountFailover} would silently start counting failed
+   * transitions as successful failovers, and this test would fail.
+   */
+  @Test
+  public void testShouldCountFailoverGate() {
+    String haGroupName = "testShouldCountFailoverGate";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+
+    ClusterRoleRecord aActiveBStandby = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 1L);
+    ClusterRoleRecord aStandbyBActive = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.STANDBY, url2, ClusterRole.ACTIVE, 2L);
+    ClusterRoleRecord bothStandby = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.STANDBY, url2, ClusterRole.STANDBY, 3L);
+
+    // (a) Real active-URL move with a successful policy transition → COUNT.
+    assertTrue(
+      "ACTIVE moving from cluster 1 to cluster 2 with successful policy transition "
+        + "should count as a failover",
+      HighAvailabilityGroup.shouldCountFailover(true, aActiveBStandby, aStandbyBActive));
+
+    // (b) Same active URL (no-op transition) → DO NOT COUNT, even if policy succeeded.
+    assertFalse(
+      "Same active URL on both sides should NOT count as a failover even with a "
+        + "successful policy transition",
+      HighAvailabilityGroup.shouldCountFailover(true, aActiveBStandby, aActiveBStandby));
+
+    // (c) Transition INTO no-active state (both STANDBY) → DO NOT COUNT.
+    assertFalse("Transition into a no-active (both STANDBY) state should NOT count as a failover",
+      HighAvailabilityGroup.shouldCountFailover(true, aActiveBStandby, bothStandby));
+
+    // (d) NEGATIVE PATH — policy callback failed (transitionSucceeded=false, simulating
+    // future.get() throwing TimeoutException or ExecutionException) → DO NOT COUNT, even if
+    // the active URL appears to have moved. This is the regression guard for the
+    // {@code transitionSucceeded &&} clause; removing it would silently inflate
+    // HA_FAILOVER_COUNT on failed transitions.
+    assertFalse(
+      "Failed policy transition (transitionSucceeded=false) must NOT count as a failover even "
+        + "when the candidate new record shows a different active URL",
+      HighAvailabilityGroup.shouldCountFailover(false, aActiveBStandby, aStandbyBActive));
+
+    // (e) Recovery from no-active back to having an ACTIVE peer with a successful
+    // transition → COUNT (operationally a real failover-recovery event).
+    assertTrue(
+      "Recovery from no-active back to ACTIVE with a successful policy transition "
+        + "should count as a failover",
+      HighAvailabilityGroup.shouldCountFailover(true, bothStandby, aStandbyBActive));
   }
 }
