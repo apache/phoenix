@@ -62,21 +62,24 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
  * Verifies that internal server-side index-maintenance current-row reads honor Phoenix TTL exactly
- * like a client read, and that index-referenced data columns are re-persisted so the data table and
- * a global index stay aligned under compaction.
+ * like a client read, and that the read is anchored at the batch timestamp so the data table and a
+ * global index stay aligned under compaction.
  * <p>
  * The scenario is the divergence being fixed: a covered column ({@code covcol}) is written once,
  * then never re-written by later partial "touch" upserts. On the index side {@code covcol} is
- * rebuilt at every touch's {@code batchTimestamp}; on the data side it would otherwise keep its
- * original timestamp, and a later major compaction opens a {@code >ttl} gap on only the data side,
- * dropping {@code covcol} there while the index keeps it.
+ * rebuilt at every touch's {@code batchTimestamp} from the masked current-row read; on the data side
+ * {@code covcol} keeps its original timestamp. The fix anchors that internal read's masking clock at
+ * {@code batchTimestamp} (the same instant the index is built at) via
+ * {@code scan.setTimeRange(0, batchTimestamp)}, so both sides always agree on whether {@code covcol}
+ * is still alive: whatever the read masks the index rebuild omits, and whatever the read keeps a
+ * later major compaction keeps on the data side too. The row and its index then expire as a unit
+ * rather than {@code covcol} being dropped on only one side.
  * <p>
- * The column re-sync re-injects {@code covcol} (and any indexed column) into the touch's data Put at
- * {@code HConstants.LATEST_TIMESTAMP}, so {@code setTimestamps} re-stamps it to {@code batchTimestamp}
- * and it stays aligned with the index cell. Under a {@link ManualEnvironmentEdge} the server's
- * {@code batchTimestamp} equals the touch's wall-clock, so the load-bearing, timing-independent signal
- * is: <b>after a covcol-omitting touch, a raw scan's maximum {@code covcol} timestamp on the data side
- * advances to the touch time</b>. Pre-fix it stays at the original write time.
+ * Because the fix no longer re-stamps the data-side cell, the load-bearing, timing-independent
+ * signal is: <b>after a covcol-omitting touch, a raw scan's maximum {@code covcol} timestamp on the
+ * data side stays at its original write time</b> (it does NOT advance to the touch time), while the
+ * data read and the index read still agree on the value. Under a {@link ManualEnvironmentEdge} the
+ * server's {@code batchTimestamp} equals the touch's wall clock, making this deterministic.
  * <p>
  * {@link #testNoIndexAtomicUpsertMasksExpiredRow} covers the no-index masking path: an atomic
  * {@code ON DUPLICATE KEY UPDATE} on a TTL table with no secondary index still triggers an internal
@@ -158,8 +161,10 @@ public class IndexDataTableTTLSyncIT extends BaseTest {
 
   /**
    * Base table with a literal TTL and a covered global index. After a partial touch that never
-   * writes covcol, the fix re-stamps covcol on the data side to the touch's batchTimestamp; a full
-   * expiry after that shows the data row and the index expiring as a unit.
+   * writes covcol, the data-side covcol keeps its original timestamp (the fix does not re-stamp it);
+   * the masked internal read anchored at batchTimestamp keeps the data and index agreeing on covcol
+   * while the row is alive, and a full expiry after that shows the data row and the index expiring as
+   * a unit.
    */
   @Test
   public void testBaseTableCoveredColumnResync() throws Exception {
@@ -187,20 +192,21 @@ public class IndexDataTableTTLSyncIT extends BaseTest {
         .execute("UPSERT INTO " + tableName + " (id, touchcol) VALUES ('r1', 'x1')");
       conn.commit();
 
-      // Load-bearing, deterministic signal: covcol was re-injected into the touch's data Put and
-      // re-stamped to batchTimestamp (== touchTime under the manual edge). Pre-fix it stays at the
-      // original write time.
+      // Load-bearing, deterministic signal: the touch does NOT write covcol and the fix does not
+      // re-stamp it, so the data-side covcol keeps its original write timestamp - it stays strictly
+      // below the touch time. (Pre-fix the re-sync advanced it to batchTimestamp == touchTime.)
       long dataCovTs =
         maxTimestampForValue(conn, TableName.valueOf(tableName), Bytes.toBytes("r1"), COVCOL_VALUE);
-      assertTrue("covcol should be re-stamped forward on the data side; touchTime=" + touchTime
-        + " dataCovTs=" + dataCovTs, dataCovTs >= touchTime);
+      assertTrue("covcol should keep its original write timestamp on the data side; touchTime="
+        + touchTime + " dataCovTs=" + dataCovTs, dataCovTs < touchTime);
 
-      // Data and index agree on covcol: the masked internal scan and the column re-sync keep them
-      // aligned.
+      // Data and index agree on covcol: the internal scan anchored at batchTimestamp masks covcol
+      // identically to how the index is rebuilt, so both sides see the same live value.
       assertCovColConsistent(conn, tableName, "r1", "k1", COVCOL_VALUE);
 
-      // Advancing past TTL + max-lookback and compacting expires the row on BOTH sides together,
-      // because post-fix covcol sits at batchTimestamp next to empty@batchTimestamp on each side.
+      // Advancing past TTL + max-lookback and compacting expires the row on BOTH sides together: the
+      // whole row version is older than maxLookback + ttl, so compaction purges the data row and the
+      // index row as a unit.
       injectEdge.incrementValue((TTL + MAX_LOOKBACK_AGE + 1) * 1000L);
       flushAndMajorCompact(conn, tableName);
       flushAndMajorCompact(conn, indexName);
@@ -216,14 +222,16 @@ public class IndexDataTableTTLSyncIT extends BaseTest {
    * trim the stale data-side {@code idxcol} while the row stays alive, so the index key encodes a
    * value the data row no longer has — and because the uncovered read path re-verifies the rebuilt
    * key against the data row, the live row silently drops out of an {@code idxcol} predicate rather
-   * than surfacing the stale value. The re-sync must therefore cover uncovered indexes too: it
-   * re-injects {@code idxcol} into the touch's data Put at {@code LATEST_TIMESTAMP} so
-   * {@code setTimestamps} advances it to {@code batchTimestamp} alongside the index key.
+   * than surfacing the stale value. Anchoring the internal read at {@code batchTimestamp} covers
+   * uncovered indexes too: the index key is rebuilt from the same masked current-row state, so it
+   * only ever encodes a value the anchored read still sees alive, and compaction converges the data
+   * side to the same keep/drop decision.
    * <p>
    * Load-bearing, timing-independent signal (mirrors {@link #testBaseTableCoveredColumnResync}):
    * after an {@code idxcol}-omitting touch of a still-alive row, a raw scan's maximum {@code idxcol}
-   * timestamp on the data side advances to the touch time. Pre-fix (uncovered skipped) it stays at
-   * the original write time.
+   * timestamp on the data side stays at its original write time (the fix does not re-stamp it), while
+   * the row is still retrievable through the uncovered index because both sides agree the value is
+   * alive.
    */
   @Test
   public void testUncoveredIndexIndexedColumnResync() throws Exception {
@@ -245,20 +253,20 @@ public class IndexDataTableTTLSyncIT extends BaseTest {
       conn.commit();
 
       // Partial touch that does not write idxcol, well within the TTL so the row is alive and the
-      // masked internal scan still returns idxcol for the re-sync to re-persist.
+      // internal scan anchored at batchTimestamp still returns idxcol for the index rebuild.
       injectEdge.incrementValue(1000);
       long touchTime = injectEdge.currentTime();
       conn.createStatement()
         .execute("UPSERT INTO " + tableName + " (id, touchcol) VALUES ('r1', 'x1')");
       conn.commit();
 
-      // The uncovered index's indexed column was re-injected into the touch's data Put and
-      // re-stamped to batchTimestamp (== touchTime under the manual edge). Pre-fix it stays at the
-      // original write time.
+      // The touch does not write idxcol and the fix does not re-stamp it, so the data-side idxcol
+      // keeps its original write timestamp - strictly below the touch time. (Pre-fix the re-sync
+      // advanced it to batchTimestamp == touchTime.)
       long dataIdxTs =
         maxTimestampForValue(conn, TableName.valueOf(tableName), Bytes.toBytes("r1"), IDXCOL_VALUE);
-      assertTrue("uncovered idxcol should be re-stamped forward on the data side; touchTime="
-        + touchTime + " dataIdxTs=" + dataIdxTs, dataIdxTs >= touchTime);
+      assertTrue("uncovered idxcol should keep its original write timestamp on the data side; "
+        + "touchTime=" + touchTime + " dataIdxTs=" + dataIdxTs, dataIdxTs < touchTime);
 
       // The row is retrievable through the uncovered index (join-back + key re-verification passes
       // because the data-side idxcol still encodes the same key) and touchcol reflects the touch.
@@ -281,7 +289,8 @@ public class IndexDataTableTTLSyncIT extends BaseTest {
   /**
    * View with a view-level literal TTL (not on the shared CF descriptor) and a covered index on the
    * view. Exercises the literal-_TTL per-mutation threading: the internal scan masks with the view's
-   * TTL, and covcol is re-stamped just like the base-table case.
+   * TTL, anchored at batchTimestamp, and covcol keeps its original data-side timestamp just like the
+   * base-table case while the data and index reads stay consistent.
    */
   @Test
   public void testViewCoveredColumnResync() throws Exception {
@@ -313,8 +322,8 @@ public class IndexDataTableTTLSyncIT extends BaseTest {
 
       long dataCovTs = maxTimestampForValue(conn, TableName.valueOf(baseTableName),
         Bytes.toBytes("r1"), COVCOL_VALUE);
-      assertTrue("covcol should be re-stamped forward on the view's data side; touchTime="
-        + touchTime + " dataCovTs=" + dataCovTs, dataCovTs >= touchTime);
+      assertTrue("covcol should keep its original write timestamp on the view's data side; touchTime="
+        + touchTime + " dataCovTs=" + dataCovTs, dataCovTs < touchTime);
 
       assertCovColConsistent(conn, viewName, "r1", "k1", COVCOL_VALUE);
     }
@@ -322,10 +331,12 @@ public class IndexDataTableTTLSyncIT extends BaseTest {
 
   /**
    * A non-strict table must not be over-masked: the strictness flag is threaded to the internal
-   * scan, so a value that a non-strict client read still returns is retained and re-stamped rather
-   * than dropped. If strictness were NOT ported, the internal scan would default to strict and mask
-   * covcol away past the TTL, so the rewrite would find nothing to re-persist and the probe would
-   * stay at the original timestamp.
+   * scan, so a value that a non-strict client read still returns is retained rather than masked out
+   * of the index rebuild. If strictness were NOT ported, the internal scan would default to strict
+   * and mask covcol away past the TTL, so the index would be rebuilt without covcol and the
+   * data/index consistency check would fail. The load-bearing check here is therefore
+   * {@link #assertCovColConsistent}; the raw-scan timestamp probe only confirms the covcol cell is
+   * still physically present at its original write time (raw scans see cells regardless of masking).
    */
   @Test
   public void testNonStrictTableNotOverMasked() throws Exception {
@@ -355,9 +366,11 @@ public class IndexDataTableTTLSyncIT extends BaseTest {
 
       long dataCovTs =
         maxTimestampForValue(conn, TableName.valueOf(tableName), Bytes.toBytes("r1"), COVCOL_VALUE);
-      assertTrue("non-strict covcol should be retained and re-stamped, not masked away; touchTime="
-        + touchTime + " dataCovTs=" + dataCovTs, dataCovTs >= touchTime);
+      assertTrue("non-strict covcol should be retained at its original write timestamp, not masked "
+        + "away; touchTime=" + touchTime + " dataCovTs=" + dataCovTs, dataCovTs < touchTime);
 
+      // The decisive check: a non-strict internal read is not over-masked, so the index is rebuilt
+      // with covcol and both the data read and the index read still return it.
       assertCovColConsistent(conn, tableName, "r1", "k1", COVCOL_VALUE);
     }
   }

@@ -1905,11 +1905,19 @@ public class ScanUtil {
       // thread. Only a literal TTL (finite or FOREVER) reaches the internal-scan masking path.
       return;
     }
-    if (table.isImmutableRows()) {
-      // optimization for immutable tables since we don't need to read the current row
-      // before writing
-      return;
-    }
+    // NOTE: unlike annotateMutationWithConditionalTTL, we do NOT skip immutable tables here. For
+    // conditional TTL the server reads the current row only when context.hasConditionalTTL, which is
+    // itself derived from the _TTL mutation attribute this annotation would set - so skipping
+    // immutable tables is self-consistent (no attribute => no conditional read). For a LITERAL TTL
+    // the server-side current-row read in IndexRegionObserver.getCurrentRowStates is triggered by
+    // table/index structure and mutation type, NOT by any attribute set here: a global index whose
+    // data/index storage schemes differ leaves context.immutableRows false (see
+    // identifyIndexMaintainerTypes) and reads the row to rebuild the full index entry, and the
+    // atomic / returnResult / row-delete paths read it regardless of immutability. If we skipped
+    // immutable tables, that read would be unmasked and could rebuild the index from TTL-expired
+    // cells - the very divergence this masking exists to prevent. The threaded attributes are inert
+    // (they only enable masking on a scan TTLRegionScanner independently gates) when no current-row
+    // read happens, so annotating immutable tables is safe.
 
     // For a view, honor the view-TTL feature flag exactly as setScanAttributesForPhoenixTTL does.
     boolean isView = table.getType() == PTableType.VIEW;

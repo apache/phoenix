@@ -967,121 +967,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * On a partial "touch" upsert that does not re-write an index-referenced column, the data-side
-   * cell keeps its original timestamp while the index side is rebuilt at {@code batchTimestamp}. A
-   * later major compaction then opens a {@code >ttl} gap on the data side but not the index side,
-   * dropping the value only on the data table, so the data row and index row diverge. To close it,
-   * for every index-enabled Put — a plain upsert or a reconstructed atomic / ON DUPLICATE KEY
-   * upsert alike — we inject each non-PK column referenced by any index
-   * ({@link IndexMaintainer#getAllColumnsForDataTable()}, the union of indexed and covered columns)
-   * that the touch left unchanged, sourcing the value from the merged next row state
-   * ({@code dataRowStates.getSecond()}).
-   * The cells are added directly at {@code batchTimestamp} (this runs after {@link #setTimestamps}),
-   * making the data-side and index-side cells share both the timestamp and the empty-column
-   * neighbor. Any compaction then feeds identical timestamps into the same gap analysis on both
-   * sides.
-   * <p>
-   * The value is sourced from the merged next row state rather than the raw current row so that a
-   * column the touch sets to NULL is honored: such a column is emitted as a separate {@code Delete}
-   * (not a cell in the Put) and is therefore absent from {@code getSecond()} after
-   * {@code applyPendingDeleteMutations}, so it is correctly not re-persisted. Reading from the
-   * current row ({@code getFirst()}) would instead resurrect the just-deleted value. Conversely, a
-   * column the touch neither writes nor deletes is carried over into {@code getSecond()} from the
-   * current row and is the one that must be re-persisted. Because the index is likewise generated
-   * from {@code getSecond()}, both sides always agree on the value.
-   * <p>
-   * Both covered global indexes and uncovered global indexes are handled. A covered index stores
-   * the value as an index cell rebuilt at {@code batchTimestamp}; an uncovered index encodes its
-   * indexed columns positionally into the index row key, also rebuilt at {@code batchTimestamp}.
-   * Either way the index side survives a compaction that trims the stale data-side cell, so the
-   * indexed column must be re-persisted on the data side for both — otherwise an uncovered index's
-   * live row silently drops out of an indexed-column predicate (the read path re-verifies the key
-   * against the data row and excludes, rather than resurrects, the trimmed value).
-   * <p>
-   * This runs after {@code prepareDataRowStates}, so {@code getSecond()} reflects this batch's puts
-   * and deletes. A conditionally-expired row was reset by {@code updateMutationsForConditionalTTL}
-   * ({@code dataRowStates.put(key, null)}), so its rebuilt next state contains only the touch's own
-   * columns and nothing extra is re-persisted; a full row delete leaves {@code getSecond() == null},
-   * which the guard skips. Atomic / ON DUPLICATE KEY Puts are handled here too: {@code
-   * generateOnDupMutations} reconstructs them and merges the result into the in-batch Put (and thus
-   * into its next row state) before this runs, so sourcing from {@code getSecond()} re-persists the
-   * index-referenced columns they omit — including correctly honoring a column an ON DUPLICATE KEY
-   * UPDATE set to NULL, which a snapshot of the pre-upsert row would instead resurrect. A no-op
-   * atomic op is skipped via the {@code isAtomicOperationComplete} guard (nothing is written), and
-   * immutable tables no-op because no current-row read happened.
-   */
-  private void rewriteIndexReferencedColumns(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-    BatchMutateContext context, PhoenixIndexMetaData indexMetaData, long batchTimestamp)
-    throws IOException {
-    if ((!context.hasGlobalIndex && !context.hasUncoveredIndex) || context.dataRowStates == null) {
-      // Only covered global or uncovered global indexes can diverge this way; without a current-row
-      // read there is nothing to re-persist from.
-      return;
-    }
-    Set<ColumnReference> indexReferencedCols = getIndexReferencedColumns(indexMetaData);
-    if (indexReferencedCols.isEmpty()) {
-      return;
-    }
-    for (int i = 0; i < miniBatchOp.size(); i++) {
-      // Skip completed atomic ops (ON DUPLICATE KEY IGNORE on an existing row, or a no-op ON
-      // DUPLICATE KEY UPDATE): nothing is written for them, so there is nothing to re-persist and
-      // injecting would turn a genuine no-op into a spurious write. A non-no-op atomic Put is not
-      // complete here; its generateOnDupMutations result has already been merged into the in-batch
-      // Put and its next row state, so it is processed like any other Put below.
-      if (isAtomicOperationComplete(miniBatchOp.getOperationStatus(i))) {
-        continue;
-      }
-      Mutation m = miniBatchOp.getOperation(i);
-      if (!(m instanceof Put) || !this.builder.isEnabled(m)) {
-        continue;
-      }
-      Pair<Put, Put> rowState = context.dataRowStates.get(new ImmutableBytesPtr(m.getRow()));
-      Put next = rowState != null ? rowState.getSecond() : null;
-      if (next == null) {
-        // Expired/masked row, a brand new row with no carried-over state, or a row fully deleted in
-        // this batch: nothing to re-persist.
-        continue;
-      }
-      Put put = (Put) m;
-      for (ColumnReference ref : indexReferencedCols) {
-        byte[] family = ref.getFamily();
-        byte[] qualifier = ref.getQualifier();
-        if (put.has(family, qualifier)) {
-          // The touch already writes this column; leave it (idempotence guard).
-          continue;
-        }
-        List<Cell> nextCells = next.get(family, qualifier);
-        if (nextCells == null || nextCells.isEmpty()) {
-          // Absent from the merged next state: either never set, or set to NULL by this touch
-          // (a Delete removed it). Either way it must not be re-persisted.
-          continue;
-        }
-        // Re-persist the merged value directly at batchTimestamp (setTimestamps has already run),
-        // so the data-side cell matches the index-side cell built at the same timestamp.
-        Cell nextCell = nextCells.get(0);
-        put.addColumn(family, qualifier, batchTimestamp, CellUtil.cloneValue(nextCell));
-      }
-    }
-  }
-
-  /**
-   * Union of non-PK columns referenced by any covered or uncovered global index (indexed +
-   * covered). PK columns live in the row key, never as cells in a Put, so they are naturally
-   * excluded by callers' has()/get() checks.
-   */
-  private static Set<ColumnReference> getIndexReferencedColumns(
-    PhoenixIndexMetaData indexMetaData) {
-    Set<ColumnReference> indexReferencedCols = new HashSet<>();
-    for (IndexMaintainer maintainer : indexMetaData.getIndexMaintainers()) {
-      if (maintainer.isLocalIndex()) {
-        continue;
-      }
-      indexReferencedCols.addAll(maintainer.getAllColumnsForDataTable());
-    }
-    return indexReferencedCols;
-  }
-
-  /**
    * This method applies pending delete mutations on the next row states
    */
   private void applyPendingDeleteMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
@@ -1306,9 +1191,22 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * scan is also given the client read path's server-paging setup (a {@code SERVER_PAGE_SIZE_MS}
    * attribute and a {@code PagingFilter} wrap), so it is bounded by the server page budget just like
    * a client scan; {@code readDataTableRows} skips the dummy results that paging can emit.
+   * <p>
+   * The scan's time range is set to {@code [0, batchTimestamp)} so {@link TTLRegionScanner} anchors
+   * its masking clock ({@code currentTime = scan.getTimeRange().getMax()}) at {@code batchTimestamp}
+   * — the exact timestamp at which the index side is rebuilt — rather than at the scan-open wall
+   * clock. On a partial "touch" upsert, {@code getBatchTimestamp} bumps {@code batchTimestamp}
+   * slightly past that wall clock to avoid timestamp collisions, so a cell whose TTL boundary falls
+   * in that sub-millisecond window would otherwise be masked here (as of the scan-open instant) yet
+   * be visible to the index build (as of {@code batchTimestamp}), leaving the data row and index row
+   * inconsistent. Anchoring both at {@code batchTimestamp} makes the read trim expired cells as of
+   * exactly the timestamp the index is built at, so the two never disagree. The half-open range
+   * drops nothing current: every pre-existing cell of a locked row was written by an earlier batch
+   * at {@code ts < batchTimestamp} under the Phoenix write path.
    */
   private void getCurrentRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
-    BatchMutateContext context, byte[] literalTTLForScan, boolean isStrictTTL) throws IOException {
+    BatchMutateContext context, byte[] literalTTLForScan, boolean isStrictTTL, long batchTimestamp)
+    throws IOException {
     Set<KeyRange> keys = new HashSet<KeyRange>(context.rowsToLock.size());
     for (ImmutableBytesPtr rowKeyPtr : context.rowsToLock) {
       PendingRow pendingRow = new PendingRow(rowKeyPtr, context);
@@ -1377,6 +1275,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // for bloom filters scan should be a get
         scan.withStartRow(key.getLowerRange(), true);
         scan.withStopRow(key.getLowerRange(), true);
+        // Anchor TTLRegionScanner's masking clock at batchTimestamp (see method comment): the
+        // half-open [0, batchTimestamp) range makes getTimeRange().getMax() == batchTimestamp, so
+        // the read trims expired cells as of exactly the timestamp the index is built at.
+        scan.setTimeRange(0, batchTimestamp);
         ServerScanUtil.setInternalScanAttributes(c.getEnvironment().getConfiguration(), scan,
           emptyCF, emptyCQ, literalTTLForScan, isStrictTTL);
         readDataTableRows(c, context, scan);
@@ -1387,6 +1289,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       scanRanges.initializeScan(scan);
       SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
       scan.setFilter(skipScanFilter);
+      // Anchor TTLRegionScanner's masking clock at batchTimestamp (see method comment): the
+      // half-open [0, batchTimestamp) range makes getTimeRange().getMax() == batchTimestamp, so
+      // the read trims expired cells as of exactly the timestamp the index is built at.
+      scan.setTimeRange(0, batchTimestamp);
       ServerScanUtil.setInternalScanAttributes(c.getEnvironment().getConfiguration(), scan,
         emptyCF, emptyCQ, literalTTLForScan, isStrictTTL);
       readDataTableRows(c, context, scan);
@@ -2008,13 +1914,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // The timestamp for this batch will be different from the last batch processed.
         lastTimestamp = ts;
         batchesWithLastTimestamp.clear();
-        batchesWithLastTimestamp.add(context.rowsToLock);
+        // Register a snapshot, not the live rowsToLock: this now runs before
+        // releaseLocksForOnDupIgnoreMutations may structurally mutate rowsToLock (remove) outside
+        // synchronized(this), which would corrupt a concurrent shouldSleep iteration under
+        // synchronized(this). The snapshot is a superset of every later state (rowsToLock only
+        // shrinks after lockRows), so shouldSleep stays conservative: at most an extra sleep, never
+        // a missed one.
+        batchesWithLastTimestamp.add(new TreeSet<>(context.rowsToLock));
         return ts;
       } else {
         if (!shouldSleep(context)) {
           // There is no need to sleep as the last batches with the same timestamp
           // do not have a common row this batch
-          batchesWithLastTimestamp.add(context.rowsToLock);
+          batchesWithLastTimestamp.add(new TreeSet<>(context.rowsToLock));
           return ts;
         }
       }
@@ -2033,7 +1945,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // We do not have to check again if we need to sleep again since we got the next
       // timestamp while holding the row locks. This mean there cannot be a new
       // mutation with the same row attempting get the same timestamp
-      batchesWithLastTimestamp.add(context.rowsToLock);
+      batchesWithLastTimestamp.add(new TreeSet<>(context.rowsToLock));
       return ts;
     }
   }
@@ -2070,6 +1982,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     context.currentPhase = BatchMutatePhase.PRE;
     long onDupCheckTime = 0;
 
+    // Compute the batch timestamp now, while holding the row locks and before the current-row read,
+    // so the internal current-row scan can anchor its TTL masking clock at exactly the timestamp the
+    // index is built at (see getCurrentRowStates). getBatchTimestamp only needs the locked rows,
+    // which are already populated, and the "got the next timestamp while holding the row locks"
+    // invariant still holds since the locks are held through the rest of this method.
+    TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
+    long batchTimestamp = getBatchTimestamp(context, table);
+
     if (
       context.hasAtomic || context.returnResult || context.hasGlobalIndex
         || context.hasUncoveredIndex || context.hasTransform || context.hasConditionalTTL
@@ -2087,7 +2007,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp)
       ) {
         getCurrentRowStates(c, context, context.literalTTLForInternalScan,
-          isStrictTTLEnabled(miniBatchOp));
+          isStrictTTLEnabled(miniBatchOp), batchTimestamp);
       }
       onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
     }
@@ -2118,21 +2038,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
     }
 
-    TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-    long batchTimestamp = getBatchTimestamp(context, table);
     // Update the timestamps of the data table mutations to prevent overlapping timestamps
     // (which prevents index inconsistencies as this case is not handled).
     setTimestamps(miniBatchOp, builder, batchTimestamp, isStrictTTLEnabled(miniBatchOp));
     if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
       // Prepare next data rows states for pending mutations (for global indexes)
       prepareDataRowStates(c, miniBatchOp, context, batchTimestamp);
-      // Re-persist index-referenced columns a partial touch left unchanged, sourcing from the
-      // merged next row state so the data-side cell and the index-side cell share batchTimestamp
-      // and any compaction retains/expires them together. Must run after prepareDataRowStates so
-      // the next state reflects this batch's puts and deletes (a column set to NULL is absent from
-      // it and is correctly not re-persisted); injects at batchTimestamp since setTimestamps has
-      // already run.
-      rewriteIndexReferencedColumns(miniBatchOp, context, indexMetaData, batchTimestamp);
       // early exit if it turns out we don't have any edits
       long start = EnvironmentEdgeManager.currentTimeMillis();
       preparePreIndexMutations(context, batchTimestamp, indexMetaData);
