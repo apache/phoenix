@@ -307,6 +307,45 @@ public class LogFileCodecTest {
       new LogFileRecord().setHBaseTableName("TBLLVAL").setCommitId(1L).setMutation(put));
   }
 
+  @Test
+  public void testCodecLargeRecordThenSmallReusesBufferCleanly() throws IOException {
+    // The encoder reuses one scratch buffer across records and writes its backing array via
+    // getBuffer() bounded by size(). A large record grows the buffer; the following small record
+    // must not carry a stale tail from the large one. Encoding both through the SAME encoder and
+    // asserting both round-trip (with no extra records) pins that invariant: writing more than
+    // size() bytes would misframe the stream after the small record.
+    long ts = 12345L;
+    byte[] largeValue = new byte[128 * 1024];
+    Arrays.fill(largeValue, (byte) 0xAB);
+    Put largePut = new Put(Bytes.toBytes("largeRow"));
+    largePut.setTimestamp(ts);
+    largePut.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q"), ts, largeValue);
+    LogFile.Record large =
+      new LogFileRecord().setHBaseTableName("TBLREUSE").setCommitId(1L).setMutation(largePut);
+
+    Put smallPut = new Put(Bytes.toBytes("smallRow"));
+    smallPut.setTimestamp(ts);
+    smallPut.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q"), ts, Bytes.toBytes("v"));
+    LogFile.Record small =
+      new LogFileRecord().setHBaseTableName("TBLREUSE").setCommitId(2L).setMutation(smallPut);
+
+    LogFileCodec codec = new LogFileCodec();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    DataOutputStream dos = new DataOutputStream(baos);
+    LogFile.Codec.Encoder encoder = codec.getEncoder(dos);
+    encoder.write(large);
+    encoder.write(small);
+    dos.close();
+
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    LogFile.Codec.Decoder decoder = codec.getDecoder(new DataInputStream(bais));
+    assertTrue("Should decode the large record", decoder.advance());
+    LogFileTestUtil.assertRecordEquals("Large record should match", large, decoder.current());
+    assertTrue("Should decode the small record", decoder.advance());
+    LogFileTestUtil.assertRecordEquals("Small record should match", small, decoder.current());
+    assertFalse("Should be no trailing garbage after the small record", decoder.advance());
+  }
+
   // Cell timestamp preservation tests
   // These verify that per-cell timestamps survive a codec round-trip when they differ from the
   // mutation-level timestamp. Before the fix the encoder omitted cell.getTimestamp() entirely
@@ -585,8 +624,8 @@ public class LogFileCodecTest {
    * Allocation A/B microbenchmark. Drives the full {@link LogFileFormatWriter#append} path (record
    * framing in the codec plus block sealing in the format writer) and measures heap bytes allocated
    * by the writer thread, using the JVM's per-thread allocation counter. This isolates the copy
-   * churn targeted by the buffer-reuse change: the codec's per-record {@code toByteArray()} and the
-   * format writer's per-block {@code toByteArray()}. Output is bytes-allocated-per-record; run this
+   * churn targeted by the buffer-reuse change: the per-record and per-block buffer copies that
+   * change replaced with {@code getBuffer()} reads. Output is bytes-allocated-per-record; run this
    * on the baseline and the candidate (e.g. via {@code git stash}) and compare the two numbers.
    * <p>
    * Opt in with {@code -Dtest.runAllocationBenchmark=true}; tune with {@code -Dtest.mutationCount},
