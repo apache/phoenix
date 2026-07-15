@@ -88,6 +88,7 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
   private Path standbyInDir;
   private String tableName;
   private long syncPointAfterA;
+  private int logFileCountAfterA;
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
@@ -167,7 +168,9 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
         discovery.getReplicationReplayState());
     // Stage 1: SYNC batch A replicates to cluster2 and advances the sync point.
     stageWriteAndReplayBatchA();
-    // Stages 2-3 are added in Tasks 4-5.
+    // Stage 2: enter store-and-forward, write batch B, await it forwarded to cluster2 'in'.
+    stageEnterStoreAndForwardAndForwardBatchB();
+    // Stage 3 is added in Task 5.
   }
 
   /** Poll until {@code condition} holds or {@code timeoutMs} elapses, then assert it. */
@@ -238,5 +241,33 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
     syncPointAfterA = discovery.getLastRoundInSync().getEndTime();
     assertTrue("lastRoundInSync must be set after batch A", syncPointAfterA > 0L);
     LOG.info("Stage 1 complete: batch A in sync, syncPointAfterA={}", syncPointAfterA);
+  }
+
+  /**
+   * Stage 2: flip the live Cluster1 writer SYNC -&gt; STORE_AND_FORWARD (real StoreAndForwardModeImpl
+   * onEnter: local 'out' log + forwarder + periodic ACTIVE_NOT_IN_SYNC persistence on Cluster1),
+   * write batch B (buffered to Cluster1 'out'), and wait for the real forwarder to copy B's .plog
+   * files into Cluster2's 'in' directory. Does NOT drive replay here, so B stays unreplayed.
+   */
+  private void stageEnterStoreAndForwardAndForwardBatchB() throws Exception {
+    logFileCountAfterA = CrossClusterReplicationTestUtil.findLogFiles(standbyInDir, standbyFs).size();
+
+    boolean swapped = ReplicationLogGroupTestAccess.forceStoreAndForward(logGroup);
+    assertTrue("writer must have been in SYNC and flipped to STORE_AND_FORWARD", swapped);
+    assertTrue("writer must now report STORE_AND_FORWARD",
+        ReplicationLogGroupTestAccess.isStoreAndForward(logGroup));
+
+    upsertRows(B_START, B_COUNT);
+
+    // The forwarder copies out->in on its own executor; poll (do not race) for B's new files.
+    awaitCondition(() -> {
+      try {
+        return CrossClusterReplicationTestUtil.findLogFiles(standbyInDir, standbyFs).size()
+            > logFileCountAfterA;
+      } catch (IOException e) {
+        return false;
+      }
+    }, 60000L, "forwarder must copy batch B's .plog files into cluster2 'in'");
+    LOG.info("Stage 2 complete: store-and-forward active, batch B forwarded to cluster2 'in'");
   }
 }
