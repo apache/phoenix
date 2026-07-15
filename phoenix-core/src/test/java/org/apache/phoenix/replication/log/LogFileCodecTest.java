@@ -828,10 +828,10 @@ public class LogFileCodecTest {
     assertTrue(decoder.advance());
     Mutation decoded = decoder.current().getMutation();
 
-    assertTrue("INDEX_UUID should be present",
-      decoded.getAttribute(PhoenixIndexCodec.INDEX_UUID) != null);
-    assertTrue("INDEX_UUID should be empty",
-      decoded.getAttribute(PhoenixIndexCodec.INDEX_UUID).length == 0);
+    assertTrue(
+      "INDEX_UUID is not part of the replication envelope, so a UUID set on the mutation "
+        + "must not round-trip through the record",
+      decoded.getAttribute(PhoenixIndexCodec.INDEX_UUID) == null);
     assertTrue("SCHEMA_NAME should match", Arrays.equals(Bytes.toBytes("S"),
       decoded.getAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString())));
     assertTrue("LOGICAL_TABLE_NAME should not be present",

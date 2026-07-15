@@ -132,7 +132,9 @@ import org.apache.phoenix.hbase.index.write.IndexWriter;
 import org.apache.phoenix.hbase.index.write.LazyParallelWriterIndexCommitter;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
+import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
+import org.apache.phoenix.index.PhoenixIndexMetaDataBuilder;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
@@ -551,6 +553,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
     public int getMaxPendingRowCount() {
       return maxPendingRowCount;
+    }
+
+    /** True if the batch's table carries any index the standby must regenerate. */
+    public boolean hasIndex() {
+      return hasGlobalIndex || hasUncoveredIndex || hasLocalIndex || hasTransform;
     }
   }
 
@@ -987,6 +994,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       if (val != null) {
         replicationAttrs.put(attrKey, val);
       }
+    }
+    // INDEX_UUID rides the WAL key only when appendReplicationAttributesToWALKey stamped it (i.e.
+    // the batch's table was indexed, gated on hasIndex()); copy it through verbatim so this path
+    // follows the same server-PTable resolution the synchronous path triggers.
+    byte[] indexUuid = walKeyAttrs.get(PhoenixIndexCodec.INDEX_UUID);
+    if (indexUuid != null) {
+      replicationAttrs.put(PhoenixIndexCodec.INDEX_UUID, indexUuid);
     }
     logGroup.append(tableName, -1, replicable, replicationAttrs);
     logGroup.sync();
@@ -2788,8 +2802,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (context == null || context.getOriginalMutations().isEmpty()) {
       return;
     }
-    Map<String, byte[]> replicationAttributes =
-      MutationCellGrouper.extractReplicationAttributes(context.getOriginalMutations().get(0));
+    Map<String, byte[]> replicationAttributes = buildReplicationAttributes(context);
     for (Map.Entry<String, byte[]> e : replicationAttributes.entrySet()) {
       IndexRegionObserver.appendToWALKey(key, e.getKey(), e.getValue());
     }
@@ -3473,9 +3486,28 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (flattened.isEmpty()) {
       return;
     }
-    Map<String, byte[]> replicationAttributes =
-      MutationCellGrouper.extractReplicationAttributes(context.getOriginalMutations().get(0));
+    Map<String, byte[]> replicationAttributes = buildReplicationAttributes(context);
     logGroup.append(dataTableName, -1, flattened, replicationAttributes);
     logGroup.sync();
+  }
+
+  /**
+   * Build the replication attribute envelope shipped with a batch: the well-known metadata keys
+   * carried on the batch's mutations, plus an empty {@link PhoenixIndexCodec#INDEX_UUID} when (and
+   * only when) the table carries an index. An empty UUID forces the standby down the server-PTable
+   * resolution path (see {@link PhoenixIndexMetaDataBuilder}), which rebuilds index maintainers
+   * from the schema/table/tenant attributes in this same envelope. It is stamped only for indexed
+   * tables: a non-indexed table needs no regeneration, and an empty UUID there would push the
+   * standby into the server-cache branch and fail with INDEX_METADATA_NOT_FOUND. The active's own
+   * resolved index maintainers ({@link BatchMutateContext#hasIndex()}) are the source of truth, not
+   * the client-set UUID attribute.
+   */
+  private static Map<String, byte[]> buildReplicationAttributes(BatchMutateContext context) {
+    Map<String, byte[]> replicationAttributes =
+      MutationCellGrouper.extractReplicationAttributes(context.getOriginalMutations().get(0));
+    if (context.hasIndex()) {
+      MutationCellGrouper.stampIndexAttribute(replicationAttributes);
+    }
+    return replicationAttributes;
   }
 }

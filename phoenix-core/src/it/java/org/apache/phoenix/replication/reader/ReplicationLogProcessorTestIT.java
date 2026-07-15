@@ -70,6 +70,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryServices;
@@ -2252,7 +2253,13 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
   private void appendReplicatedBatch(Path file, String tableName, List<Mutation> mutations,
     Put preImage) throws IOException {
     List<Cell> cells = MutationCellGrouper.buildReplicatedCells(mutations, preImage);
-    Map<String, byte[]> attrs = MutationCellGrouper.buildReplicationAttributes("", tableName);
+    Mutation attrCarrier = mutations.get(0);
+    attrCarrier.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
+      Bytes.toBytes(""));
+    attrCarrier.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+      Bytes.toBytes(tableName));
+    Map<String, byte[]> attrs = MutationCellGrouper.extractReplicationAttributes(attrCarrier);
+    MutationCellGrouper.stampIndexAttribute(attrs);
     LogFileWriter writer = initLogFileWriter(file);
     try {
       writer.append(tableName, -1, cells, attrs);

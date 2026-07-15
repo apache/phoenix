@@ -370,10 +370,10 @@ public class MutationCellGrouperTest extends BaseConnectionlessQueryTest {
 
     Map<String, byte[]> extracted = MutationCellGrouper.extractReplicationAttributes(p);
 
-    assertArrayEquals(
-      "INDEX_UUID must be normalized to empty so the standby resolves index "
-        + "maintainers from its own PTable rather than the active's server-cache key",
-      HConstants.EMPTY_BYTE_ARRAY, extracted.get(PhoenixIndexCodec.INDEX_UUID));
+    assertNull(
+      "INDEX_UUID is not part of the extracted envelope; the active stamps an empty UUID "
+        + "itself, gated on its resolved index maintainers",
+      extracted.get(PhoenixIndexCodec.INDEX_UUID));
     assertArrayEquals(Bytes.toBytes("S"),
       extracted.get(MutationState.MutationMetadataType.SCHEMA_NAME.toString()));
     assertNull("non-replication attribute must be filtered out",

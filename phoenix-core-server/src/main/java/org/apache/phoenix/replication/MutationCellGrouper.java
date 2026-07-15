@@ -19,7 +19,6 @@ package org.apache.phoenix.replication;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,9 +28,7 @@ import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.wal.WALEdit;
-import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.PhoenixIndexCodec;
@@ -75,27 +72,24 @@ public final class MutationCellGrouper {
 
   /**
    * Extract the well-known replication attributes
-   * ({@link ReplicationLogGroup#REPLICATION_ATTR_KEYS}) from the mutation. Returns an empty map if
-   * the mutation has no attributes or none match.
+   * ({@link ReplicationLogGroup#REPLICATION_ATTR_KEYS}) from the mutation, copied verbatim. Returns
+   * an empty (mutable) map if the mutation has no attributes or none match.
    * <p>
-   * {@link PhoenixIndexCodec#INDEX_UUID}, when present, is always written as an empty byte array
-   * regardless of its value on the mutation. A non-empty UUID is a server-cache key scoped to the
-   * active cluster's region servers and is meaningless on the standby (it would fail to resolve
-   * with INDEX_METADATA_NOT_FOUND). An empty UUID forces the standby down the server-PTable
-   * resolution path, which rebuilds index maintainers from the schema/table/tenant attributes
-   * carried in this same envelope.
+   * {@link PhoenixIndexCodec#INDEX_UUID} is deliberately NOT part of this envelope: whether the
+   * standby regenerates indexes is decided by the active from its resolved index maintainers, not
+   * from the client-set UUID attribute. The active stamps an empty UUID onto the returned map only
+   * for indexed tables (see {@code IndexRegionObserver}).
    */
   public static Map<String, byte[]> extractReplicationAttributes(Mutation mutation) {
+    Map<String, byte[]> envelope = new HashMap<>();
     Map<String, byte[]> mutationAttrs = mutation.getAttributesMap();
     if (mutationAttrs == null || mutationAttrs.isEmpty()) {
-      return Collections.emptyMap();
+      return envelope;
     }
-    Map<String, byte[]> envelope = new HashMap<>();
     for (String key : ReplicationLogGroup.REPLICATION_ATTR_KEYS) {
       byte[] v = mutationAttrs.get(key);
       if (v != null) {
-        envelope.put(key,
-          PhoenixIndexCodec.INDEX_UUID.equals(key) ? HConstants.EMPTY_BYTE_ARRAY : v);
+        envelope.put(key, v);
       }
     }
     return envelope;
@@ -121,19 +115,14 @@ public final class MutationCellGrouper {
   }
 
   /**
-   * Build the replication attribute envelope that rides alongside a {@link #buildReplicatedCells}
-   * cell stream: an empty {@link PhoenixIndexCodec#INDEX_UUID} (forcing the standby down the
-   * server-PTable resolution path, see {@link #extractReplicationAttributes}) plus the schema and
-   * logical table names the standby uses to rebuild index maintainers.
+   * Stamp an empty {@link PhoenixIndexCodec#INDEX_UUID} onto a replication attribute envelope. An
+   * empty UUID forces the standby down the server-PTable resolution path, which rebuilds index
+   * maintainers from the schema/table/tenant attributes in the same envelope. Callers apply this
+   * only for indexed tables (a non-indexed table needs no regeneration, and an empty UUID there
+   * would fail on the standby with INDEX_METADATA_NOT_FOUND).
    */
-  public static Map<String, byte[]> buildReplicationAttributes(String schemaName,
-    String logicalTableName) {
-    Map<String, byte[]> attrs = new HashMap<>();
+  public static void stampIndexAttribute(Map<String, byte[]> attrs) {
     attrs.put(PhoenixIndexCodec.INDEX_UUID, HConstants.EMPTY_BYTE_ARRAY);
-    attrs.put(MutationState.MutationMetadataType.SCHEMA_NAME.toString(), Bytes.toBytes(schemaName));
-    attrs.put(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
-      Bytes.toBytes(logicalTableName));
-    return attrs;
   }
 
   /**

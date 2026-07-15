@@ -65,7 +65,6 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.execute.MutationState;
-import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
@@ -196,10 +195,15 @@ public class ReplicationLogGroup {
    * {@code PRE_IMAGE} (per-row primary-side pre-image bytes) are intentionally NOT in this list.
    * Both are reader-synthesized: the standby stamps {@code REPLICATED_MUTATION} on every
    * reconstructed mutation, and {@code PRE_IMAGE} on those whose row had a pre-image cell.
+   * <p>
+   * {@code INDEX_UUID} is also NOT in this list. It is not copied from the mutation: the active
+   * decides from its own resolved index maintainers whether the table is indexed and, only then,
+   * stamps an empty UUID onto the envelope (see {@code IndexRegionObserver}). Keying off the
+   * client-set attribute here would make the standby's index regeneration depend on client behavior
+   * rather than on whether the table actually has indexes.
    */
-  public static final List<String> REPLICATION_ATTR_KEYS =
-    Collections.unmodifiableList(Arrays.asList(PhoenixIndexCodec.INDEX_UUID,
-      MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
+  public static final List<String> REPLICATION_ATTR_KEYS = Collections
+    .unmodifiableList(Arrays.asList(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
       MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
       MutationState.MutationMetadataType.TENANT_ID.toString()));
 
