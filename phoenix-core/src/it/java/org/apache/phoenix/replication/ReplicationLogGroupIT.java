@@ -32,27 +32,20 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.HBaseTestingUtility;
 import org.apache.hadoop.hbase.MiniHBaseCluster;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableName;
-import org.apache.hadoop.hbase.client.ConnectionFactory;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.RegionLocator;
-import org.apache.hadoop.hbase.client.Result;
-import org.apache.hadoop.hbase.client.ResultScanner;
-import org.apache.hadoop.hbase.client.Scan;
-import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.JVMClusterUtil;
@@ -722,64 +715,10 @@ public class ReplicationLogGroupIT extends HABaseIT {
   }
 
   private List<Path> findLogFiles(Path dir, FileSystem fs) throws IOException {
-    List<Path> files = new ArrayList<>();
-    findLogFilesRecursive(dir, fs, files);
-    return files;
-  }
-
-  private void findLogFilesRecursive(Path dir, FileSystem fs, List<Path> files) throws IOException {
-    if (!fs.exists(dir)) {
-      return;
-    }
-    for (FileStatus status : fs.listStatus(dir)) {
-      if (status.isDirectory()) {
-        findLogFilesRecursive(status.getPath(), fs, files);
-      } else if (status.getPath().getName().endsWith(".plog")) {
-        files.add(status.getPath());
-      }
-    }
+    return CrossClusterReplicationTestUtil.findLogFiles(dir, fs);
   }
 
   private void assertTablesEqualAcrossClusters(String hbaseTableName) throws Exception {
-    TableName tn = TableName.valueOf(hbaseTableName);
-    try (
-      org.apache.hadoop.hbase.client.Connection hconn1 = ConnectionFactory.createConnection(conf1);
-      org.apache.hadoop.hbase.client.Connection hconn2 = ConnectionFactory.createConnection(conf2);
-      Table table1 = hconn1.getTable(tn); Table table2 = hconn2.getTable(tn)) {
-
-      Scan scan = new Scan();
-      scan.readAllVersions();
-
-      try (ResultScanner scanner1 = table1.getScanner(scan);
-        ResultScanner scanner2 = table2.getScanner(scan)) {
-        int rowCount = 0;
-        while (true) {
-          Result r1 = scanner1.next();
-          Result r2 = scanner2.next();
-          if (r1 == null && r2 == null) {
-            break;
-          }
-          assertNotNull(
-            String.format("Table %s: cluster 2 has fewer rows at row %d", hbaseTableName, rowCount),
-            r2);
-          assertNotNull(
-            String.format("Table %s: cluster 1 has fewer rows at row %d", hbaseTableName, rowCount),
-            r1);
-          try {
-            Result.compareResults(r1, r2, true);
-          } catch (Exception e) {
-            LOG.error("Table {} row {} mismatch. Dumping both tables:", hbaseTableName, rowCount);
-            LOG.error("--- Cluster 1 ---");
-            TestUtil.dumpTable(table1);
-            LOG.error("--- Cluster 2 ---");
-            TestUtil.dumpTable(table2);
-            fail(String.format("Table %s row %d mismatch: %s", hbaseTableName, rowCount,
-              e.getMessage()));
-          }
-          rowCount++;
-        }
-        LOG.info("Table {} matches across clusters: {} rows verified", hbaseTableName, rowCount);
-      }
-    }
+    CrossClusterReplicationTestUtil.assertTablesEqualAcrossClusters(conf1, conf2, hbaseTableName);
   }
 }
