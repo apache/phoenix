@@ -584,7 +584,7 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
           // round that are waiting in the IN directory (files are picked in random order).
           long minTimestampInProgress = optionalMinTimestampInProgressTimestamp.get();
           consistencyPoint = replicationLogTracker.getReplicationShardDirectoryManager()
-            .getReplicationRoundFromStartTime(minTimestampInProgress).getStartTime();
+            .getNearestRoundStartTimestamp(minTimestampInProgress);
         } else if (lastRoundInSync != null) {
           // Use lastRoundInSync end time if no in-progress files
           // Since we are in sync mode, both lastRoundProcessed and lastRoundInSync would be same.
