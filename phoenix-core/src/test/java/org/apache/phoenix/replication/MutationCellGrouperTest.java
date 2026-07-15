@@ -391,6 +391,30 @@ public class MutationCellGrouperTest extends BaseConnectionlessQueryTest {
     assertTrue(extracted.isEmpty());
   }
 
+  /**
+   * A non-indexed table's write carries the schema/table/tenant metadata attributes but no
+   * {@link PhoenixIndexCodec#INDEX_UUID} (the client only sets INDEX_UUID when index metadata is
+   * present). The extracted envelope must likewise omit INDEX_UUID: an empty UUID here would push
+   * the standby down the server-cache resolution branch and fail with INDEX_METADATA_NOT_FOUND
+   * instead of recognizing the table as non-indexed.
+   */
+  @Test
+  public void testExtractReplicationAttributesOmitsIndexUuidForNonIndexedTable() throws Exception {
+    Put p = new Put(Bytes.toBytes("r"));
+    p.setAttribute(MutationState.MutationMetadataType.SCHEMA_NAME.toString(), Bytes.toBytes("S"));
+    p.setAttribute(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+      Bytes.toBytes("T"));
+
+    Map<String, byte[]> extracted = MutationCellGrouper.extractReplicationAttributes(p);
+
+    assertNull("a non-indexed table's mutation carries no INDEX_UUID, so the envelope must not "
+      + "invent one", extracted.get(PhoenixIndexCodec.INDEX_UUID));
+    assertArrayEquals(Bytes.toBytes("S"),
+      extracted.get(MutationState.MutationMetadataType.SCHEMA_NAME.toString()));
+    assertArrayEquals(Bytes.toBytes("T"),
+      extracted.get(MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString()));
+  }
+
   // ---------- contiguity stress (pre-image cell never breaks groupable runs) ----------
 
   @Test
