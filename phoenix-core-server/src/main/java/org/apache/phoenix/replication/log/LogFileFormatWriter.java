@@ -17,11 +17,11 @@
  */
 package org.apache.phoenix.replication.log;
 
-import java.io.ByteArrayOutputStream;
 import java.io.Closeable;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import org.apache.hadoop.hbase.io.ByteArrayOutputStream;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.io.compress.Compressor;
 import org.slf4j.Logger;
@@ -109,7 +109,10 @@ public class LogFileFormatWriter implements Closeable {
       return; // No active block or block is empty
     }
     blockDataStream.flush(); // Ensure all encoded records are in the byte array
-    byte[] uncompressedBytes = currentBlockBytes.toByteArray();
+    // Read straight from the buffer's backing array to avoid a whole-block copy. Only the first
+    // uncompressedLen bytes are valid; the array itself may be larger.
+    byte[] uncompressedBytes = currentBlockBytes.getBuffer();
+    int uncompressedLen = currentBlockBytes.size();
     ByteBuffer writeBuf;
     int writeLen;
     Compression.Algorithm ourCompression = context.getCompression();
@@ -117,12 +120,12 @@ public class LogFileFormatWriter implements Closeable {
       Compressor compressor = ourCompression.getCompressor();
       try {
         compressor.reset();
-        compressor.setInput(uncompressedBytes, 0, uncompressedBytes.length);
+        compressor.setInput(uncompressedBytes, 0, uncompressedLen);
         compressor.finish(); // We are going to one-shot this.
         // Give 25% overhead for pathological cases
         // We can't go below this by much because the Snappy compressor will require more
         // than 20% overhead in some cases or else it will refuse to try.
-        int compressBuffNeeded = (int) (uncompressedBytes.length * 1.25f);
+        int compressBuffNeeded = (int) (uncompressedLen * 1.25f);
         if (compressBuf == null || compressBuf.capacity() < compressBuffNeeded) {
           compressBuf = ByteBuffer.allocate(compressBuffNeeded);
         }
@@ -137,13 +140,13 @@ public class LogFileFormatWriter implements Closeable {
         context.getCompression().returnCompressor(compressor);
       }
     } else {
-      writeBuf = ByteBuffer.wrap(uncompressedBytes);
-      writeLen = uncompressedBytes.length;
+      writeBuf = ByteBuffer.wrap(uncompressedBytes, 0, uncompressedLen);
+      writeLen = uncompressedLen;
     }
 
     // Write block header
     LogFile.BlockHeader blockHeader = new LogBlockHeader().setDataCompression(ourCompression)
-      .setUncompressedDataSize(uncompressedBytes.length).setCompressedDataSize(writeLen);
+      .setUncompressedDataSize(uncompressedLen).setCompressedDataSize(writeLen);
     blockHeader.write(output);
 
     output.write(writeBuf.array(), writeBuf.arrayOffset(), writeLen);

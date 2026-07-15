@@ -35,6 +35,7 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellBuilderFactory;
 import org.apache.hadoop.hbase.CellBuilderType;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Put;
@@ -304,6 +305,45 @@ public class LogFileCodecTest {
     put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q"), ts, largeValue);
     singleRecordTest(
       new LogFileRecord().setHBaseTableName("TBLLVAL").setCommitId(1L).setMutation(put));
+  }
+
+  @Test
+  public void testCodecLargeRecordThenSmallReusesBufferCleanly() throws IOException {
+    // The encoder reuses one scratch buffer across records and writes its backing array via
+    // getBuffer() bounded by size(). A large record grows the buffer; the following small record
+    // must not carry a stale tail from the large one. Encoding both through the SAME encoder and
+    // asserting both round-trip (with no extra records) pins that invariant: writing more than
+    // size() bytes would misframe the stream after the small record.
+    long ts = 12345L;
+    byte[] largeValue = new byte[128 * 1024];
+    Arrays.fill(largeValue, (byte) 0xAB);
+    Put largePut = new Put(Bytes.toBytes("largeRow"));
+    largePut.setTimestamp(ts);
+    largePut.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q"), ts, largeValue);
+    LogFile.Record large =
+      new LogFileRecord().setHBaseTableName("TBLREUSE").setCommitId(1L).setMutation(largePut);
+
+    Put smallPut = new Put(Bytes.toBytes("smallRow"));
+    smallPut.setTimestamp(ts);
+    smallPut.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("q"), ts, Bytes.toBytes("v"));
+    LogFile.Record small =
+      new LogFileRecord().setHBaseTableName("TBLREUSE").setCommitId(2L).setMutation(smallPut);
+
+    LogFileCodec codec = new LogFileCodec();
+    ByteArrayOutputStream baos = new ByteArrayOutputStream();
+    DataOutputStream dos = new DataOutputStream(baos);
+    LogFile.Codec.Encoder encoder = codec.getEncoder(dos);
+    encoder.write(large);
+    encoder.write(small);
+    dos.close();
+
+    ByteArrayInputStream bais = new ByteArrayInputStream(baos.toByteArray());
+    LogFile.Codec.Decoder decoder = codec.getDecoder(new DataInputStream(bais));
+    assertTrue("Should decode the large record", decoder.advance());
+    LogFileTestUtil.assertRecordEquals("Large record should match", large, decoder.current());
+    assertTrue("Should decode the small record", decoder.advance());
+    LogFileTestUtil.assertRecordEquals("Small record should match", small, decoder.current());
+    assertFalse("Should be no trailing garbage after the small record", decoder.advance());
   }
 
   // Cell timestamp preservation tests
@@ -578,6 +618,78 @@ public class LogFileCodecTest {
       String.format("%.3f", (double) a.wireBytes / Math.max(1, b.wireBytes)),
       a.wireBytes - b.wireBytes,
       mutationCount > 1 ? (a.wireBytes - b.wireBytes) / (mutationCount - 1) : 0);
+  }
+
+  /**
+   * Allocation A/B microbenchmark. Drives the full {@link LogFileFormatWriter#append} path (record
+   * framing in the codec plus block sealing in the format writer) and measures heap bytes allocated
+   * by the writer thread, using the JVM's per-thread allocation counter. This isolates the copy
+   * churn targeted by the buffer-reuse change: the per-record and per-block buffer copies that
+   * change replaced with {@code getBuffer()} reads. Output is bytes-allocated-per-record; run this
+   * on the baseline and the candidate (e.g. via {@code git stash}) and compare the two numbers.
+   * <p>
+   * Opt in with {@code -Dtest.runAllocationBenchmark=true}; tune with {@code -Dtest.mutationCount},
+   * {@code -Dtest.cellsPerMutation}, {@code -Dtest.valueSize}, {@code -Dtest.benchmarkIterations}.
+   */
+  @Test
+  public void testAllocationMicrobenchmark() throws IOException {
+    Assume.assumeTrue("Allocation microbenchmark, opt in with -Dtest.runAllocationBenchmark=true",
+      Boolean.getBoolean("test.runAllocationBenchmark"));
+    final com.sun.management.ThreadMXBean threadBean =
+      (com.sun.management.ThreadMXBean) java.lang.management.ManagementFactory.getThreadMXBean();
+    Assume.assumeTrue("JVM does not support thread allocation measurement",
+      threadBean.isThreadAllocatedMemorySupported());
+
+    final String tableName = "TBLALLOC";
+    final int mutationCount = Integer.getInteger("test.mutationCount", 1000);
+    final int cellsPerMutation = Integer.getInteger("test.cellsPerMutation", 4);
+    final int valueSize = Integer.getInteger("test.valueSize", 64);
+    final int iterations = Integer.getInteger("test.benchmarkIterations", 200);
+    final int warmup = Math.max(1, iterations / 10);
+
+    // Pre-build the records once so record construction is not counted in the measured allocation.
+    List<LogFile.Record> records = new ArrayList<>(mutationCount);
+    byte[] value = new byte[valueSize];
+    for (int m = 0; m < mutationCount; m++) {
+      Put put = new Put(Bytes.toBytes("row" + m));
+      put.setTimestamp(m);
+      for (int c = 0; c < cellsPerMutation; c++) {
+        put.addColumn(Bytes.toBytes("col" + c), Bytes.toBytes("q"), m, value);
+      }
+      List<Cell> cells = new ArrayList<>(cellsPerMutation);
+      for (List<Cell> familyCells : put.getFamilyCellMap().values()) {
+        cells.addAll(familyCells);
+      }
+      records.add(new LogFileRecord().setHBaseTableName(tableName).setCommitId(m).setCells(cells));
+    }
+    // Large block so a full mutationCount run seals few blocks; block churn is still exercised.
+    final long blockSize = 1024 * 1024;
+
+    long minBytes = Long.MAX_VALUE;
+    for (int i = 0; i < warmup + iterations; i++) {
+      LogFileTestUtil.SyncableByteArrayOutputStream sink =
+        new LogFileTestUtil.SyncableByteArrayOutputStream();
+      LogFileWriterContext ctx = new LogFileWriterContext(HBaseConfiguration.create())
+        .setMaxBlockSize(blockSize).setCodec(new LogFileCodec());
+      LogFileFormatWriter w = new LogFileFormatWriter();
+      w.init(ctx, sink);
+      long threadId = Thread.currentThread().getId();
+      long before = threadBean.getThreadAllocatedBytes(threadId);
+      for (LogFile.Record r : records) {
+        w.append(r);
+      }
+      w.close();
+      long allocated = threadBean.getThreadAllocatedBytes(threadId) - before;
+      if (i >= warmup && allocated < minBytes) {
+        minBytes = allocated;
+      }
+    }
+
+    LOG.info(
+      "Allocation benchmark params: mutationCount={} cellsPerMutation={} valueSize={} iterations={}",
+      mutationCount, cellsPerMutation, valueSize, iterations);
+    LOG.info("Allocation benchmark: totalBytes(min)={} bytesPerRecord={}", minBytes,
+      String.format("%.1f", (double) minBytes / mutationCount));
   }
 
   /** Aggregated result of one framing mode: best-of encode time and the wire size produced. */
