@@ -43,6 +43,7 @@ import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HighAvailabilityGroup;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.HighAvailabilityTestingUtility;
+import org.apache.phoenix.replication.CrossClusterReplicationTestUtil;
 import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.ReplicationLogGroupTestAccess;
 import org.apache.phoenix.replication.ReplicationLogTracker;
@@ -86,6 +87,7 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
   private FileSystem standbyFs;
   private Path standbyInDir;
   private String tableName;
+  private long syncPointAfterA;
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
@@ -163,7 +165,9 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
     assertEquals("replay must initialize in SYNC while cluster2 is STANDBY",
         ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
         discovery.getReplicationReplayState());
-    // Stages 1-3 are added in Tasks 3-5.
+    // Stage 1: SYNC batch A replicates to cluster2 and advances the sync point.
+    stageWriteAndReplayBatchA();
+    // Stages 2-3 are added in Tasks 4-5.
   }
 
   /** Poll until {@code condition} holds or {@code timeoutMs} elapses, then assert it. */
@@ -208,5 +212,31 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
       }
       conn.commit();
     }
+  }
+
+  /**
+   * Stage 1: write batch A on Cluster1 in SYNC mode (.plog goes straight to Cluster2's 'in' dir),
+   * then drive replay until every A row is present on Cluster2 and lastRoundInSync has advanced to
+   * cover A. Records the sync point so Task 5 can assert it later advances to cover B.
+   */
+  private void stageWriteAndReplayBatchA() throws Exception {
+    upsertRows(A_START, A_COUNT);
+
+    // Drive replay until A has been applied to Cluster2 and the sync point advanced past epoch.
+    driveReplayUntil(() -> {
+      try {
+        CrossClusterReplicationTestUtil.assertTablesEqualAcrossClusters(conf1, conf2, tableName);
+        return discovery.getLastRoundInSync() != null
+            && discovery.getLastRoundInSync().getEndTime() > 0L;
+      } catch (AssertionError notYet) {
+        return false;
+      } catch (Exception e) {
+        return false;
+      }
+    }, 90000L, "batch A must replicate to cluster2 and advance lastRoundInSync");
+
+    syncPointAfterA = discovery.getLastRoundInSync().getEndTime();
+    assertTrue("lastRoundInSync must be set after batch A", syncPointAfterA > 0L);
+    LOG.info("Stage 1 complete: batch A in sync, syncPointAfterA={}", syncPointAfterA);
   }
 }
