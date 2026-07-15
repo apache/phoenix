@@ -277,9 +277,20 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
    * Drive Cluster2's LOCAL HA record to {@code target} through the same cached client the real
    * triggerFailover uses. setHAGroupStatusIfNeeded returns a positive dwell-time when the
    * transition is throttled; retry until it applies (returns 0) or the deadline elapses.
-   * If already at the target state, this is a no-op.
+   *
+   * <p>Cluster2 is peer-aware: when Cluster1 persists {@code ACTIVE_NOT_IN_SYNC} on entering
+   * store-and-forward, Cluster2 auto-reacts and drives its own LOCAL record to
+   * {@code DEGRADED_STANDBY}. That reaction may still be in flight when this helper runs, so we
+   * first poll a bounded window for the record to settle at {@code target} and treat "already at
+   * target" as a no-op — otherwise a redundant transition (e.g. DEGRADED_STANDBY -&gt;
+   * DEGRADED_STANDBY) would throw InvalidClusterRoleTransitionException on a slow box.
    */
   private void transitionCluster2(HAGroupStoreRecord.HAGroupState target) throws Exception {
+    // Let any in-flight peer-aware reaction settle so the no-op check below fires deterministically.
+    long settleDeadline = System.currentTimeMillis() + 10000L;
+    while (System.currentTimeMillis() < settleDeadline && !cluster2StateIs(target)) {
+      Thread.sleep(500L);
+    }
     // Check if already at target - no-op if so (avoid redundant transition exception).
     if (cluster2StateIs(target)) {
       return;
