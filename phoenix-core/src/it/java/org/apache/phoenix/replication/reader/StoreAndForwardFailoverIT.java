@@ -63,8 +63,7 @@ import org.slf4j.LoggerFactory;
 /**
  * End-to-end zero-RPO test for a direct DEGRADED_STANDBY -&gt; STANDBY_TO_ACTIVE failover in
  * store-and-forward mode (PHOENIX-7920). Cluster1 runs the real writer; Cluster2 runs a
- * manually-driven real ReplicationLogDiscoveryReplay (the auto-scheduler is disabled). See the
- * design spec: docs/superpowers/specs/2026-07-15-phoenix-7920-store-and-forward-failover-e2e-design.md
+ * manually-driven real ReplicationLogDiscoveryReplay (the auto-scheduler is disabled).
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class StoreAndForwardFailoverIT extends HABaseIT {
@@ -354,8 +353,11 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
     awaitCondition(() -> cluster2StateIs(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE),
         30000L, "cluster2 record should reflect STANDBY_TO_ACTIVE before driving failover");
 
-    // Drive replay: SYNCED_RECOVERY rewinds to lastRoundInSync (A), re-replays B in SYNC, then
-    // shouldTriggerFailover() passes and triggerFailover() sets ACTIVE_IN_SYNC on Cluster2.
+    logGroup.close();
+
+    // Drive replay: SYNCED_RECOVERY rewinds to lastRoundInSync (A), re-replays B in SYNC. With no
+    // new files arriving, the replay drains, shouldTriggerFailover() passes, and triggerFailover()
+    // sets ACTIVE_IN_SYNC on Cluster2.
     driveReplayUntil(() -> cluster2StateIs(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC),
         120000L, "cluster2 must promote to ACTIVE_IN_SYNC after the direct failover");
 
