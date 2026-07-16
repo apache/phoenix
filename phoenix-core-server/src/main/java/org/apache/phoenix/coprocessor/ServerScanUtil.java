@@ -27,7 +27,6 @@ import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.filter.PagingFilter;
-import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PBoolean;
@@ -58,13 +57,10 @@ public class ServerScanUtil {
    * <p>
    * TTL masking attributes ({@link TTLRegionScanner} reads these):
    * <ul>
-   * <li>the empty-column CF/CQ, supplied by the caller. When a secondary index is being maintained
-   * they come from the data table's {@link IndexMaintainer} (identical across all maintainers of a
-   * data table); when the current-row read is triggered without any index (an atomic / ON DUPLICATE
-   * KEY / {@code returnResult} / row-delete on a TTL table) there is no maintainer, so they are the
-   * bytes the client threaded on the mutation
-   * ({@link org.apache.phoenix.util.ScanUtil#annotateMutationWithLiteralTTL}). Both resolve to the
-   * same data-table empty column;</li>
+   * <li>the empty-column CF/CQ, supplied by the caller from the bytes the client threaded on the
+   * mutation ({@link org.apache.phoenix.util.ScanUtil#annotateMutationWithLiteralTTL}) — the single
+   * source for every path, secondary-index and no-index (atomic / ON DUPLICATE KEY /
+   * {@code returnResult} / row-delete) alike;</li>
    * <li>{@code IS_STRICT_TTL=false} when {@code isStrictTTL == false}, so a non-strict table is not
    * masked (absence of the attribute defaults to strict, matching the read path);</li>
    * <li>the view's literal TTL as the standard {@code _TTL} scan attribute when
@@ -92,11 +88,11 @@ public class ServerScanUtil {
   /**
    * Reproduces the client read path's server-paging setup for an internal scan. On the client the
    * {@code SERVER_PAGE_SIZE_MS} attribute is set by
-   * {@code ScanUtil.setScanAttributeForPaging(Scan, PhoenixConnection)} and the scan filter is later
-   * wrapped in a {@link PagingFilter} by {@code BaseScannerRegionObserver.preScannerOpen}. Internal
-   * scans opened directly via {@code region.getScanner(scan)} bypass both, so this method performs
-   * both steps up-front. The region-server {@link Configuration} is the source of the paging props
-   * here, standing in for the client's {@code PhoenixConnection} props.
+   * {@code ScanUtil.setScanAttributeForPaging(Scan, PhoenixConnection)} and the scan filter is
+   * later wrapped in a {@link PagingFilter} by {@code BaseScannerRegionObserver.preScannerOpen}.
+   * Internal scans opened directly via {@code region.getScanner(scan)} bypass both, so this method
+   * performs both steps up-front. The region-server {@link Configuration} is the source of the
+   * paging props here, standing in for the client's {@code PhoenixConnection} props.
    * <p>
    * Ordering matters: {@code PagingRegionScanner}'s constructor reads the {@link PagingFilter} and
    * the page size off the scan, so this must run before
@@ -113,8 +109,9 @@ public class ServerScanUtil {
     if (pageSizeMs == -1) {
       // Use half of the HBase RPC timeout value as the server page size, mirroring the client
       // ScanUtil.setScanAttributeForPaging fallback.
-      pageSizeMs = (long) (conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY,
-        HConstants.DEFAULT_HBASE_RPC_TIMEOUT) * 0.5);
+      pageSizeMs =
+        (long) (conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT)
+          * 0.5);
     }
     scan.setAttribute(BaseScannerRegionObserverConstants.SERVER_PAGE_SIZE_MS,
       Bytes.toBytes(Long.valueOf(pageSizeMs)));

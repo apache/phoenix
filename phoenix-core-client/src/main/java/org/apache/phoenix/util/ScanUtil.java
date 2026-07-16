@@ -1865,10 +1865,10 @@ public class ScanUtil {
 
   /**
    * Annotates mutations for a table/view with a literal TTL so the server-side internal current-row
-   * scan (IndexRegionObserver.getCurrentRowStates) can mask expired rows exactly like a client read.
-   * This is the literal-TTL sibling of {@link #annotateMutationWithConditionalTTL}; the two are
-   * disjoint (one is guarded on a literal expression, the other on a conditional expression) so at
-   * most one fires for a given table.
+   * scan (IndexRegionObserver.getCurrentRowStates) can mask expired rows exactly like a client
+   * read. This is the literal-TTL sibling of {@link #annotateMutationWithConditionalTTL}; the two
+   * are disjoint (one is guarded on a literal expression, the other on a conditional expression) so
+   * at most one fires for a given table.
    * <p>
    * The guiding principle is to thread precisely what the read path
    * ({@link #setScanAttributesForPhoenixTTL}) would set as the {@code _TTL} scan attribute:
@@ -1884,17 +1884,18 @@ public class ScanUtil {
    * <li>For either type, {@code IS_STRICT_TTL=false} is set only when the table/view is non-strict,
    * so absence defaults to strict, matching the read-path convention and avoiding over-masking of a
    * non-strict table.</li>
-   * <li>For either type, the empty-column CF/CQ are threaded <b>unconditionally</b> (for any mutable
-   * literal-TTL table/view, regardless of the TTL value or the view-TTL flag), exactly as the client
-   * read path does: {@link #setScanAttributesForClient} sets the empty column on every non-analyze
-   * scan. They merely identify the table's empty column and only <i>enable</i> masking;
-   * {@link org.apache.phoenix.coprocessor.TTLRegionScanner} still independently requires an effective,
-   * non-FOREVER, strict TTL to actually mask, so setting them whenever a current-row read may happen
-   * makes the internal scan mask <i>identically</i> to a client read rather than diverging from it.
-   * They are also the only source of these values for the no-index current-row read (an atomic / ON
-   * DUPLICATE KEY / {@code returnResult} / row-delete on a TTL table), which has no
-   * {@code IndexMaintainer} on the server. Derived exactly as the read path derives them via
-   * {@link SchemaUtil#getEmptyColumnFamily(PTable)} / {@link SchemaUtil#getEmptyColumnQualifier}.</li>
+   * <li>For either type, the empty-column CF/CQ are threaded <b>unconditionally</b> (for any
+   * mutable literal-TTL table/view, regardless of the TTL value or the view-TTL flag), exactly as
+   * the client read path does: {@link #setScanAttributesForClient} sets the empty column on every
+   * non-analyze scan. They merely identify the table's empty column and only <i>enable</i> masking;
+   * {@link org.apache.phoenix.coprocessor.TTLRegionScanner} still independently requires an
+   * effective, non-FOREVER, strict TTL to actually mask, so setting them whenever a current-row
+   * read may happen makes the internal scan mask <i>identically</i> to a client read rather than
+   * diverging from it. They are also the only source of these values for the no-index current-row
+   * read (an atomic / ON DUPLICATE KEY / {@code returnResult} / row-delete on a TTL table), which
+   * has no {@code IndexMaintainer} on the server. Derived exactly as the read path derives them via
+   * {@link SchemaUtil#getEmptyColumnFamily(PTable)} /
+   * {@link SchemaUtil#getEmptyColumnQualifier}.</li>
    * </ul>
    */
   public static void annotateMutationWithLiteralTTL(PhoenixConnection connection, PTable table,
@@ -1906,7 +1907,8 @@ public class ScanUtil {
       return;
     }
     // NOTE: unlike annotateMutationWithConditionalTTL, we do NOT skip immutable tables here. For
-    // conditional TTL the server reads the current row only when context.hasConditionalTTL, which is
+    // conditional TTL the server reads the current row only when context.hasConditionalTTL, which
+    // is
     // itself derived from the _TTL mutation attribute this annotation would set - so skipping
     // immutable tables is self-consistent (no attribute => no conditional read). For a LITERAL TTL
     // the server-side current-row read in IndexRegionObserver.getCurrentRowStates is triggered by
@@ -1921,9 +1923,9 @@ public class ScanUtil {
 
     // For a view, honor the view-TTL feature flag exactly as setScanAttributesForPhoenixTTL does.
     boolean isView = table.getType() == PTableType.VIEW;
-    boolean viewTTLEnabled = !isView
-      || connection.getQueryServices().getConfiguration().getBoolean(
-        QueryServices.PHOENIX_VIEW_TTL_ENABLED, QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED);
+    boolean viewTTLEnabled = !isView || connection.getQueryServices().getConfiguration().getBoolean(
+      QueryServices.PHOENIX_VIEW_TTL_ENABLED,
+      QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED);
 
     // The view's literal TTL is threaded as _TTL only for a view with view-TTL enabled, since it is
     // not on the shared CF descriptor. A view with view-TTL disabled sets no _TTL on the read path
@@ -1957,7 +1959,8 @@ public class ScanUtil {
         mutation.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL, isStrictTTL);
       }
       mutation.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
-      mutation.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
+      mutation.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME,
+        emptyCQ);
     }
   }
 
