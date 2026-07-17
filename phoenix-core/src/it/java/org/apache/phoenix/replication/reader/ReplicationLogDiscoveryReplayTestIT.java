@@ -372,7 +372,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
 
     testInitializeLastRoundProcessedHelper(currentTime, lastSyncStateTime, newFileTimestamp, null,
       HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, expectedLastRoundProcessed,
-      expectedLastRoundInSync, ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED, false);
+      expectedLastRoundInSync, ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
+      false);
   }
 
   @Test
@@ -486,8 +487,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
 
     testInitializeLastRoundProcessedHelper(currentTime, null, null, null,
       HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, expectedLastRoundProcessed,
-      expectedLastRoundInSync,
-      ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY, true);
+      expectedLastRoundInSync, ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY,
+      true);
   }
 
   @Test
@@ -514,8 +515,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
 
     testInitializeLastRoundProcessedHelper(currentTime, lastSyncStateTime, newFileTimestamp, null,
       HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, expectedLastRoundProcessed,
-      expectedLastRoundInSync,
-      ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY, true);
+      expectedLastRoundInSync, ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY,
+      true);
   }
 
   @Test
@@ -539,8 +540,8 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
 
     testInitializeLastRoundProcessedHelper(currentTime, lastSyncStateTime, newFileTimestamp, null,
       HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, expectedLastRoundProcessed,
-      expectedLastRoundInSync,
-      ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY, true);
+      expectedLastRoundInSync, ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY,
+      true);
   }
 
   /**
@@ -1389,9 +1390,9 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
   /**
    * PHOENIX-7920: the healthy failover path STANDBY -&gt; STANDBY_TO_ACTIVE (no prior degrade) must
    * NOT change the replay state. init from STANDBY leaves state SYNC, and the trigger listener's
-   * compareAndSet(DEGRADED, SYNCED_RECOVERY) is a no-op from SYNC, arming only failoverPending. This
-   * guards against a naive unconditional set(SYNCED_RECOVERY) that would force a needless rewind on
-   * every healthy failover.
+   * compareAndSet(DEGRADED, SYNCED_RECOVERY) is a no-op from SYNC, arming only failoverPending.
+   * This guards against a naive unconditional set(SYNCED_RECOVERY) that would force a needless
+   * rewind on every healthy failover.
    */
   @Test
   public void testReplay_RuntimeListeners_HealthyStandbyToActiveKeepsSync() throws Exception {

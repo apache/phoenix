@@ -129,7 +129,7 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
       try {
         Optional<HAGroupStoreRecord> eff = c2Manager.getEffectiveHAGroupStoreRecord(haGroupName);
         return eff.isPresent()
-            && eff.get().getHAGroupState() == HAGroupStoreRecord.HAGroupState.STANDBY;
+          && eff.get().getHAGroupState() == HAGroupStoreRecord.HAGroupState.STANDBY;
       } catch (IOException e) {
         return false;
       }
@@ -141,9 +141,9 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
     standbyInDir = ReplicationLogGroupTestAccess.peerStandbyDir(logGroup);
     standbyFs = standbyInDir.getFileSystem(conf2);
     ReplicationShardDirectoryManager shardMgr =
-        new ReplicationShardDirectoryManager(conf2, standbyFs, standbyInDir);
+      new ReplicationShardDirectoryManager(conf2, standbyFs, standbyInDir);
     replayTracker = new ReplicationLogTracker(conf2, haGroupName, shardMgr,
-        new MetricsReplicationLogTrackerReplayImpl(haGroupName));
+      new MetricsReplicationLogTrackerReplayImpl(haGroupName));
     replayTracker.init();
     discovery = new ReplicationLogDiscoveryReplay(replayTracker);
     discovery.init();
@@ -164,8 +164,8 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
   public void testDirectFailoverInStoreAndForwardModeIsZeroRPO() throws Exception {
     // Stage 0: the replay initialized in SYNC while Cluster2 is STANDBY.
     assertEquals("replay must initialize in SYNC while cluster2 is STANDBY",
-        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
-        discovery.getReplicationReplayState());
+      ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+      discovery.getReplicationReplayState());
     // Stage 1: SYNC batch A replicates to cluster2 and advances the sync point.
     stageWriteAndReplayBatchA();
     // Stage 2: enter store-and-forward, write batch B, await it forwarded to cluster2 'in'.
@@ -176,7 +176,7 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
 
   /** Poll until {@code condition} holds or {@code timeoutMs} elapses, then assert it. */
   private static void awaitCondition(BooleanSupplier condition, long timeoutMs, String message)
-      throws InterruptedException {
+    throws InterruptedException {
     long deadline = System.currentTimeMillis() + timeoutMs;
     while (!condition.getAsBoolean() && System.currentTimeMillis() < deadline) {
       Thread.sleep(250L);
@@ -185,12 +185,12 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
   }
 
   /**
-   * Repeatedly call {@code discovery.replay()} (short real-clock rounds) until {@code done} holds or
-   * {@code timeoutMs} elapses, then assert {@code done}. This is how the test advances the manually
-   * driven replayer in the absence of the auto-scheduler.
+   * Repeatedly call {@code discovery.replay()} (short real-clock rounds) until {@code done} holds
+   * or {@code timeoutMs} elapses, then assert {@code done}. This is how the test advances the
+   * manually driven replayer in the absence of the auto-scheduler.
    */
   private void driveReplayUntil(BooleanSupplier done, long timeoutMs, String message)
-      throws Exception {
+    throws Exception {
     long deadline = System.currentTimeMillis() + timeoutMs;
     while (System.currentTimeMillis() < deadline) {
       discovery.replay();
@@ -203,12 +203,13 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
     assertTrue(message, done.getAsBoolean());
   }
 
-  /** Upsert {@code count} rows [startId, startId+count) into the replicated table via the HA URL. */
+  /**
+   * Upsert {@code count} rows [startId, startId+count) into the replicated table via the HA URL.
+   */
   private void upsertRows(int startId, int count) throws SQLException {
     try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
-        .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
-      PreparedStatement stmt =
-          conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?)");
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      PreparedStatement stmt = conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?)");
       for (int i = 0; i < count; i++) {
         stmt.setInt(1, startId + i);
         stmt.setInt(2, startId + i);
@@ -231,7 +232,7 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
       try {
         CrossClusterReplicationTestUtil.assertTablesEqualAcrossClusters(conf1, conf2, tableName);
         return discovery.getLastRoundInSync() != null
-            && discovery.getLastRoundInSync().getEndTime() > 0L;
+          && discovery.getLastRoundInSync().getEndTime() > 0L;
       } catch (AssertionError notYet) {
         return false;
       } catch (Exception e) {
@@ -245,18 +246,20 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
   }
 
   /**
-   * Stage 2: flip the live Cluster1 writer SYNC -&gt; STORE_AND_FORWARD (real StoreAndForwardModeImpl
-   * onEnter: local 'out' log + forwarder + periodic ACTIVE_NOT_IN_SYNC persistence on Cluster1),
-   * write batch B (buffered to Cluster1 'out'), and wait for the real forwarder to copy B's .plog
-   * files into Cluster2's 'in' directory. Does NOT drive replay here, so B stays unreplayed.
+   * Stage 2: flip the live Cluster1 writer SYNC -&gt; STORE_AND_FORWARD (real
+   * StoreAndForwardModeImpl onEnter: local 'out' log + forwarder + periodic ACTIVE_NOT_IN_SYNC
+   * persistence on Cluster1), write batch B (buffered to Cluster1 'out'), and wait for the real
+   * forwarder to copy B's .plog files into Cluster2's 'in' directory. Does NOT drive replay here,
+   * so B stays unreplayed.
    */
   private void stageEnterStoreAndForwardAndForwardBatchB() throws Exception {
-    logFileCountAfterA = CrossClusterReplicationTestUtil.findLogFiles(standbyInDir, standbyFs).size();
+    logFileCountAfterA =
+      CrossClusterReplicationTestUtil.findLogFiles(standbyInDir, standbyFs).size();
 
     boolean swapped = ReplicationLogGroupTestAccess.forceStoreAndForward(logGroup);
     assertTrue("writer must have been in SYNC and flipped to STORE_AND_FORWARD", swapped);
     assertTrue("writer must now report STORE_AND_FORWARD",
-        ReplicationLogGroupTestAccess.isStoreAndForward(logGroup));
+      ReplicationLogGroupTestAccess.isStoreAndForward(logGroup));
 
     upsertRows(B_START, B_COUNT);
 
@@ -276,8 +279,8 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
    * Drive Cluster2's LOCAL HA record to {@code target} through the same cached client the real
    * triggerFailover uses. setHAGroupStatusIfNeeded returns a positive dwell-time when the
    * transition is throttled; retry until it applies (returns 0) or the deadline elapses.
-   *
-   * <p>Cluster2 is peer-aware: when Cluster1 persists {@code ACTIVE_NOT_IN_SYNC} on entering
+   * <p>
+   * Cluster2 is peer-aware: when Cluster1 persists {@code ACTIVE_NOT_IN_SYNC} on entering
    * store-and-forward, Cluster2 auto-reacts and drives its own LOCAL record to
    * {@code DEGRADED_STANDBY}. That reaction may still be in flight when this helper runs, so we
    * first poll a bounded window for the record to settle at {@code target} and treat "already at
@@ -285,7 +288,8 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
    * DEGRADED_STANDBY) would throw InvalidClusterRoleTransitionException on a slow box.
    */
   private void transitionCluster2(HAGroupStoreRecord.HAGroupState target) throws Exception {
-    // Let any in-flight peer-aware reaction settle so the no-op check below fires deterministically.
+    // Let any in-flight peer-aware reaction settle so the no-op check below fires
+    // deterministically.
     long settleDeadline = System.currentTimeMillis() + 10000L;
     while (System.currentTimeMillis() < settleDeadline && !cluster2StateIs(target)) {
       Thread.sleep(500L);
@@ -305,14 +309,14 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
       Thread.sleep(Math.min(lastWait, 2000L));
     }
     throw new AssertionError("cluster2 transition to " + target
-        + " was still throttled at deadline (lastWait=" + lastWait + ")");
+      + " was still throttled at deadline (lastWait=" + lastWait + ")");
   }
 
   /** True if Cluster2's persisted HA record is currently {@code state}. */
   private boolean cluster2StateIs(HAGroupStoreRecord.HAGroupState state) {
     try {
       Optional<HAGroupStoreRecord> rec =
-          HAGroupStoreManager.getInstance(conf2).getHAGroupStoreRecord(haGroupName);
+        HAGroupStoreManager.getInstance(conf2).getHAGroupStoreRecord(haGroupName);
       return rec.isPresent() && rec.get().getHAGroupState() == state;
     } catch (IOException e) {
       return false;
@@ -324,50 +328,52 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
    * DEGRADED_STANDBY -&gt; STANDBY_TO_ACTIVE, then drive replay until Cluster2 promotes to
    * ACTIVE_IN_SYNC. Assert zero RPO: every A and B row is present cell-for-cell on Cluster2, the
    * replay state is back to SYNC, and lastRoundInSync advanced past its post-A value to cover B.
-   *
-   * <p>Regression guard: without PHOENIX-7920's triggerFailoverListner CAS(DEGRADED,
-   * SYNCED_RECOVERY), the direct transition leaves the replay state at DEGRADED forever,
-   * shouldTriggerFailover() never passes, Cluster2 never reaches ACTIVE_IN_SYNC, and the promotion
-   * poll below times out (red).
+   * <p>
+   * Regression guard: without PHOENIX-7920's triggerFailoverListner CAS(DEGRADED, SYNCED_RECOVERY),
+   * the direct transition leaves the replay state at DEGRADED forever, shouldTriggerFailover()
+   * never passes, Cluster2 never reaches ACTIVE_IN_SYNC, and the promotion poll below times out
+   * (red).
    */
   private void stageDegradeDirectFailoverAndAssertZeroRPO() throws Exception {
     // Degrade: LOCAL -> DEGRADED_STANDBY drives the degradedListener to DEGRADED and freezes
     // lastRoundInSync at the batch-A sync point (B is forwarded but not yet replayed).
     transitionCluster2(HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
-    awaitCondition(() -> discovery.getReplicationReplayState()
-        == ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
-        30000L, "degradedListener should drive replay state to DEGRADED");
+    awaitCondition(
+      () -> discovery.getReplicationReplayState()
+          == ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
+      30000L, "degradedListener should drive replay state to DEGRADED");
     assertEquals("lastRoundInSync must stay frozen at the batch-A sync point during DEGRADED",
-        syncPointAfterA, discovery.getLastRoundInSync().getEndTime());
+      syncPointAfterA, discovery.getLastRoundInSync().getEndTime());
 
     // Direct failover: LOCAL -> STANDBY_TO_ACTIVE (no STANDBY hop). triggerFailoverListner must
     // CAS DEGRADED -> SYNCED_RECOVERY and arm failoverPending.
     transitionCluster2(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE);
-    awaitCondition(() -> discovery.getReplicationReplayState()
-        == ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY,
-        30000L, "direct DEGRADED_STANDBY -> STANDBY_TO_ACTIVE must move replay to SYNCED_RECOVERY");
+    awaitCondition(
+      () -> discovery.getReplicationReplayState()
+          == ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY,
+      30000L, "direct DEGRADED_STANDBY -> STANDBY_TO_ACTIVE must move replay to SYNCED_RECOVERY");
     assertTrue("failoverPending must be armed after STANDBY_TO_ACTIVE",
-        discovery.getFailoverPending());
+      discovery.getFailoverPending());
 
     // Make sure the client cache reflects STANDBY_TO_ACTIVE before triggerFailover reads it.
-    awaitCondition(() -> cluster2StateIs(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE),
-        30000L, "cluster2 record should reflect STANDBY_TO_ACTIVE before driving failover");
+    awaitCondition(() -> cluster2StateIs(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE), 30000L,
+      "cluster2 record should reflect STANDBY_TO_ACTIVE before driving failover");
 
     logGroup.close();
 
     // Drive replay: SYNCED_RECOVERY rewinds to lastRoundInSync (A), re-replays B in SYNC. With no
     // new files arriving, the replay drains, shouldTriggerFailover() passes, and triggerFailover()
     // sets ACTIVE_IN_SYNC on Cluster2.
-    driveReplayUntil(() -> cluster2StateIs(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC),
-        120000L, "cluster2 must promote to ACTIVE_IN_SYNC after the direct failover");
+    driveReplayUntil(() -> cluster2StateIs(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC), 120000L,
+      "cluster2 must promote to ACTIVE_IN_SYNC after the direct failover");
 
     // Zero-RPO assertions.
     CrossClusterReplicationTestUtil.assertTablesEqualAcrossClusters(conf1, conf2, tableName);
     assertEquals("replay state must be SYNC after promotion",
-        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
-        discovery.getReplicationReplayState());
+      ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+      discovery.getReplicationReplayState());
     assertTrue("lastRoundInSync must advance past the batch-A sync point to cover batch B",
-        discovery.getLastRoundInSync().getEndTime() > syncPointAfterA);
+      discovery.getLastRoundInSync().getEndTime() > syncPointAfterA);
     LOG.info("Stage 3 complete: cluster2 promoted to ACTIVE_IN_SYNC with zero RPO");
   }
 }

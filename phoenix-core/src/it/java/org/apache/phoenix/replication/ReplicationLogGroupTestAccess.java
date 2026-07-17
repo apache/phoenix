@@ -26,10 +26,10 @@ import org.apache.hadoop.fs.Path;
 /**
  * Integration-test-only access shim for the package-visible mode controls on
  * {@link ReplicationLogGroup}. Lets an IT in another package flip a live writer SYNC -&gt;
- * STORE_AND_FORWARD deterministically, exercising the REAL {@link StoreAndForwardModeImpl}
- * (local 'out' log + forwarder + periodic ACTIVE_NOT_IN_SYNC persistence) without having to
- * injure a real peer HDFS to provoke the sync failure that triggers store-and-forward in
- * production. Lives in the test source tree, so no production code is modified.
+ * STORE_AND_FORWARD deterministically, exercising the REAL {@link StoreAndForwardModeImpl} (local
+ * 'out' log + forwarder + periodic ACTIVE_NOT_IN_SYNC persistence) without having to injure a real
+ * peer HDFS to provoke the sync failure that triggers store-and-forward in production. Lives in the
+ * test source tree, so no production code is modified.
  */
 public final class ReplicationLogGroupTestAccess {
 
@@ -58,8 +58,8 @@ public final class ReplicationLogGroupTestAccess {
   }
 
   /**
-   * The peer (standby) 'in' directory this writer forwards to — the exact path a replay instance
-   * on the peer cluster must read.
+   * The peer (standby) 'in' directory this writer forwards to — the exact path a replay instance on
+   * the peer cluster must read.
    */
   public static Path peerStandbyDir(ReplicationLogGroup logGroup) throws IOException {
     return logGroup.getOrCreatePeerShardManager().getRootDirectoryPath();

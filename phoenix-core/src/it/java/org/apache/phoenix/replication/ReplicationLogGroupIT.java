@@ -24,9 +24,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -237,7 +235,7 @@ public class ReplicationLogGroupIT extends HABaseIT {
 
     // Replay replication log on cluster 2
     FileSystem fs = standByLogDir.getFileSystem(conf2);
-    List<Path> logFiles = findLogFiles(standByLogDir, fs);
+    List<Path> logFiles = CrossClusterReplicationTestUtil.findLogFiles(standByLogDir, fs);
     assertTrue("Should have at least one log file", !logFiles.isEmpty());
     ReplicationLogProcessor processor = ReplicationLogProcessor.get(conf2, haGroupName);
     try {
@@ -712,10 +710,6 @@ public class ReplicationLogGroupIT extends HABaseIT {
     assertEquals(2, systemTables.size());
     assertEquals(1, getCountForTable(systemTables, SYSTEM_CHILD_LINK_NAME));
     assertTrue(getCountForTable(systemTables, SYSTEM_CATALOG_NAME) > 0);
-  }
-
-  private List<Path> findLogFiles(Path dir, FileSystem fs) throws IOException {
-    return CrossClusterReplicationTestUtil.findLogFiles(dir, fs);
   }
 
   private void assertTablesEqualAcrossClusters(String hbaseTableName) throws Exception {

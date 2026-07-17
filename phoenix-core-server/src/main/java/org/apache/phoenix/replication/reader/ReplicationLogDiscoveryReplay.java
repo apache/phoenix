@@ -243,7 +243,8 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     } else if (HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(haGroupState)) {
       // Restarted while already in STANDBY_TO_ACTIVE (e.g. an RS bounce after a direct
       // DEGRADED_STANDBY -> STANDBY_TO_ACTIVE transition). No listener fires on a fresh process, so
-      // initialize as if recovering: lastRoundInSync at the last good sync point, lastRoundProcessed
+      // initialize as if recovering: lastRoundInSync at the last good sync point,
+      // lastRoundProcessed
       // from the file frontier, and state SYNCED_RECOVERY so the first replay() rewinds before
       // shouldTriggerFailover() can promote. Conservative by design: if we actually came from a
       // healthy STANDBY, lastSyncStateTimeInMs ~= the file frontier and the rewind is a no-op.
@@ -278,8 +279,8 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
    * known sync point), it falls back to the file frontier so lastRoundInSync collapses onto
    * lastRoundProcessed instead of rewinding to the epoch.
    * @param haGroupStoreRecord the persisted HA group record supplying lastSyncStateTimeInMs
-   * @param frontierStartTime current time sampled at the start of initialization; the file frontier
-   *          upper bound, and the sole basis when no files exist
+   * @param frontierStartTime  current time sampled at the start of initialization; the file
+   *                           frontier upper bound, and the sole basis when no files exist
    */
   private void initLastRoundsFromLastSyncPoint(HAGroupStoreRecord haGroupStoreRecord,
     long frontierStartTime) throws IOException {

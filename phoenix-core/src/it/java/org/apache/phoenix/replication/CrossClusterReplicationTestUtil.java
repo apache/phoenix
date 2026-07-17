@@ -41,8 +41,7 @@ import org.slf4j.LoggerFactory;
 /** Shared cross-cluster helpers for replication ITs (extracted from ReplicationLogGroupIT). */
 public final class CrossClusterReplicationTestUtil {
 
-  private static final Logger LOG =
-    LoggerFactory.getLogger(CrossClusterReplicationTestUtil.class);
+  private static final Logger LOG = LoggerFactory.getLogger(CrossClusterReplicationTestUtil.class);
 
   private CrossClusterReplicationTestUtil() {
   }
@@ -69,8 +68,9 @@ public final class CrossClusterReplicationTestUtil {
   }
 
   /**
-   * Assert the given HBase table has cell-identical rows (all versions) on cluster 1 ({@code conf1})
-   * and cluster 2 ({@code conf2}). Dumps both tables on the first mismatch before failing.
+   * Assert the given HBase table has cell-identical rows (all versions) on cluster 1
+   * ({@code conf1}) and cluster 2 ({@code conf2}). Dumps both tables on the first mismatch before
+   * failing.
    */
   public static void assertTablesEqualAcrossClusters(Configuration conf1, Configuration conf2,
     String hbaseTableName) throws Exception {

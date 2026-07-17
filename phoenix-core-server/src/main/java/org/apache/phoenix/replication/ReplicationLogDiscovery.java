@@ -400,8 +400,9 @@ public abstract class ReplicationLogDiscovery {
    * getReplicationRoundFromEndTime(), which rounds down to the nearest round boundary to ensure we
    * start from a complete round.
    * @param fallbackCurrentTime the timestamp to start from when no files exist; sampled by the
-   *          caller at the start of initialization rather than re-read here, so a slow init (or a
-   *          state transition during init) cannot push the starting round forward
+   *                            caller at the start of initialization rather than re-read here, so a
+   *                            slow init (or a state transition during init) cannot push the
+   *                            starting round forward
    * @throws IOException if there's an error reading file timestamps
    */
   protected void initializeLastRoundProcessed(long fallbackCurrentTime) throws IOException {
