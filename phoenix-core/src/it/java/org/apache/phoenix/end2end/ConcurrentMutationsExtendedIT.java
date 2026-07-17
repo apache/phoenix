@@ -377,7 +377,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     Thread t2 = new Thread(r2);
     t2.start();
 
-    doneSignal.await(ROW_LOCK_WAIT_TIME + 5000, TimeUnit.SECONDS);
+    assertTrue("Ran out of time", doneSignal.await(60, TimeUnit.SECONDS));
     assertNull(failedMsg[0], failedMsg[0]);
     if (eventual) {
       Thread.sleep(35000);
@@ -439,7 +439,7 @@ public class ConcurrentMutationsExtendedIT extends ParallelStatsDisabledIT {
     Thread t2 = new Thread(r2);
     t2.start();
 
-    doneSignal.await(ROW_LOCK_WAIT_TIME + 5000, TimeUnit.SECONDS);
+    assertTrue("Ran out of time", doneSignal.await(60, TimeUnit.SECONDS));
     if (eventual) {
       Thread.sleep(35000);
     }
