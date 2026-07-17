@@ -66,22 +66,21 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFac
 /**
  * Verifies the number of RPC calls from {@link MetaDataClient} updateCache() for transactional and
  * non-transactional tables.
- *
- * <p>Categorized as {@link NeedsOwnMiniClusterTest} so failsafe runs this class in its own forked
- * JVM (reuseForks=false). The {@link #helpTestUpdateCache} helper wraps the JVM-singleton
+ * <p>
+ * Categorized as {@link NeedsOwnMiniClusterTest} so failsafe runs this class in its own forked JVM
+ * (reuseForks=false). The {@link #helpTestUpdateCache} helper wraps the JVM-singleton
  * {@link ConnectionQueryServices} returned by {@code driver.getConnectionQueryServices(...)} in a
- * Mockito spy. Because the Phoenix driver caches that CQS as a process-global singleton and the
- * spy delegates to the real instance with {@code this} bound to the spy, every internal Phoenix
- * call back through the services field is recorded in the spy's {@code InvocationContainerImpl},
- * holding strong references to all arguments. Under the {@code ParallelStatsDisabledTest}
- * execution ({@code reuseForks=true}) this class previously ran in a fork that had already
- * accumulated thousands of tests' worth of cached metadata, regions, and live ZK clients on the
- * same singleton; combined with the spy's invocation-history retention, the fork was tipping over
- * with {@code OutOfMemoryError: Java heap space} (5.8 GB heap dump from the ZK
- * {@code main-SendThread}) on {@link #testUpdateCacheForNonTxnTable}. Running in its own JVM
- * gives the test a fresh CQS singleton with no cross-test accumulation. This follows the same
- * convention as {@code MetaDataEndPointIT} and other singleton-state-sensitive tests in this
- * project.
+ * Mockito spy. Because the Phoenix driver caches that CQS as a process-global singleton and the spy
+ * delegates to the real instance with {@code this} bound to the spy, every internal Phoenix call
+ * back through the services field is recorded in the spy's {@code InvocationContainerImpl}, holding
+ * strong references to all arguments. Under the {@code ParallelStatsDisabledTest} execution
+ * ({@code reuseForks=true}) this class previously ran in a fork that had already accumulated
+ * thousands of tests' worth of cached metadata, regions, and live ZK clients on the same singleton;
+ * combined with the spy's invocation-history retention, the fork was tipping over with
+ * {@code OutOfMemoryError: Java heap space} (5.8 GB heap dump from the ZK {@code main-SendThread})
+ * on {@link #testUpdateCacheForNonTxnTable}. Running in its own JVM gives the test a fresh CQS
+ * singleton with no cross-test accumulation. This follows the same convention as
+ * {@code MetaDataEndPointIT} and other singleton-state-sensitive tests in this project.
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class UpdateCacheIT extends ParallelStatsDisabledIT {
