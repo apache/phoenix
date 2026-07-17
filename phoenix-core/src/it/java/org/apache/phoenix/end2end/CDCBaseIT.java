@@ -332,8 +332,12 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
       for (int j = 0; j < nRows; ++j) {
         if (rand.nextInt(nRows) % 2 == 0) {
           boolean isDelete;
-          if (i > nBatches / 2 && !gotDelete) {
-            // Force a delete if there was none so far.
+          // Only force a delete on rows that have already been upserted in this run; deleting a
+          // never-inserted row produces a no-op tombstone on the data table while CDC still
+          // surfaces a later upsert for the same key, deterministically tripping the
+          // delete-vs-upsert assertion in verifyChangesViaSCN. If no candidate exists yet, defer
+          // the forced delete to a later batch (the loop will reconsider on the next iteration).
+          if (i > nBatches / 2 && !gotDelete && mutatedRows.contains(rows.get(j))) {
             isDelete = true;
           } else {
             isDelete = mutatedRows.contains(rows.get(j)) && rand.nextInt(5) == 0;
