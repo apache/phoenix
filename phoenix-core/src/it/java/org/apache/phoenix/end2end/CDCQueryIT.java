@@ -778,7 +778,7 @@ public class CDCQueryIT extends CDCBaseIT {
         }
       }
       Random rand = new Random();
-      int randMinTSpos = rand.nextInt(lastDeletionTSpos - 1);
+      int randMinTSpos = rand.nextInt(Math.max(1, lastDeletionTSpos - 1));
       int randMaxTSpos =
         randMinTSpos + 1 + rand.nextInt(uniqueTimestamps.size() - (randMinTSpos + 1));
       verifyChangesViaSCN(tenantId, conn, cdcFullName, pkColumns, datatableName, dataColumns,
