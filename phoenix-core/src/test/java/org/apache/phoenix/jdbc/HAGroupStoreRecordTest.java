@@ -253,6 +253,25 @@ public class HAGroupStoreRecordTest {
 
   // Tests for HAGroupState enum
   @Test
+  public void testHAGroupStateMetricContract() {
+    assertEquals(1, HAGroupStoreRecord.HAGroupState.ABORT_TO_ACTIVE_IN_SYNC.getMetricCode());
+    assertEquals(2, HAGroupStoreRecord.HAGroupState.ABORT_TO_ACTIVE_NOT_IN_SYNC.getMetricCode());
+    assertEquals(3, HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY.getMetricCode());
+    assertEquals(4, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC.getMetricCode());
+    assertEquals(5, HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC.getMetricCode());
+    assertEquals(6, HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY.getMetricCode());
+    assertEquals(7,
+      HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER.getMetricCode());
+    assertEquals(8, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY.getMetricCode());
+    assertEquals(9, HAGroupStoreRecord.HAGroupState.ACTIVE_WITH_OFFLINE_PEER.getMetricCode());
+    assertEquals(10, HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.getMetricCode());
+    assertEquals(11, HAGroupStoreRecord.HAGroupState.OFFLINE.getMetricCode());
+    assertEquals(12, HAGroupStoreRecord.HAGroupState.STANDBY.getMetricCode());
+    assertEquals(13, HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.getMetricCode());
+    assertEquals(0, HAGroupStoreRecord.HAGroupState.UNKNOWN.getMetricCode());
+  }
+
+  @Test
   public void testHAGroupStateGetClusterRole() {
     // Test that each HAGroupState maps to the correct ClusterRole
     assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE,
