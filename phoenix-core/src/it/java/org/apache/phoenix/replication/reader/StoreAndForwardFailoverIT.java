@@ -75,6 +75,12 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
   private static final int B_START = 50;
   private static final int B_COUNT = 50;
 
+  // Cluster2's peer-aware reaction to Cluster1's ACTIVE_NOT_IN_SYNC drives its LOCAL record to
+  // DEGRADED_STANDBY asynchronously; bound how long transitionCluster2 waits for that reaction to
+  // land (and how often it polls) before attempting its own transition.
+  private static final long PEER_REACTION_SETTLE_MILLIS = 10000L;
+  private static final long PEER_REACTION_POLL_MILLIS = 500L;
+
   @Rule
   public TestName name = new TestName();
 
@@ -98,6 +104,11 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
     // Disable the auto replay scheduler so our manually-driven instance is the only replayer.
     // (HABaseIT.doBaseSetup enables it; the writer/forwarder are gated on SYNCHRONOUS_REPLICATION,
     // not on this flag, so they are unaffected.)
+    // This flag has a second consumer: CompactionScanner also gates the replication
+    // consistency-point compaction guard on it, so setting it false disables that guard during
+    // major compactions too. Both effects share this one flag and cannot be separated. It is
+    // immaterial here: this test triggers no major compaction and asserts cross-cluster
+    // cell-equality directly, so the guard's absence does not affect what it verifies.
     conf1.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, false);
     conf2.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, false);
     CLUSTERS.start();
@@ -282,17 +293,22 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
    * <p>
    * Cluster2 is peer-aware: when Cluster1 persists {@code ACTIVE_NOT_IN_SYNC} on entering
    * store-and-forward, Cluster2 auto-reacts and drives its own LOCAL record to
-   * {@code DEGRADED_STANDBY}. That reaction may still be in flight when this helper runs, so we
-   * first poll a bounded window for the record to settle at {@code target} and treat "already at
-   * target" as a no-op — otherwise a redundant transition (e.g. DEGRADED_STANDBY -&gt;
-   * DEGRADED_STANDBY) would throw InvalidClusterRoleTransitionException on a slow box.
+   * {@code DEGRADED_STANDBY}. That reaction may still be in flight when this helper runs, so for
+   * the {@code DEGRADED_STANDBY} target only we first poll a bounded window for the record to
+   * settle and treat "already at target" as a no-op — otherwise a redundant transition (e.g.
+   * DEGRADED_STANDBY -&gt; DEGRADED_STANDBY) would throw InvalidClusterRoleTransitionException on a
+   * slow box. Other targets (e.g. {@code STANDBY_TO_ACTIVE}) are never peer-driven, so the
+   * settle-poll is skipped for them to avoid dead time.
    */
   private void transitionCluster2(HAGroupStoreRecord.HAGroupState target) throws Exception {
-    // Let any in-flight peer-aware reaction settle so the no-op check below fires
-    // deterministically.
-    long settleDeadline = System.currentTimeMillis() + 10000L;
-    while (System.currentTimeMillis() < settleDeadline && !cluster2StateIs(target)) {
-      Thread.sleep(500L);
+    // Only DEGRADED_STANDBY is reached by the peer-aware auto-reaction; let any in-flight reaction
+    // settle so the no-op check below fires deterministically. Skipping this for non-peer-driven
+    // targets avoids waiting on a condition that can never become true.
+    if (target == HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY) {
+      long settleDeadline = System.currentTimeMillis() + PEER_REACTION_SETTLE_MILLIS;
+      while (System.currentTimeMillis() < settleDeadline && !cluster2StateIs(target)) {
+        Thread.sleep(PEER_REACTION_POLL_MILLIS);
+      }
     }
     // Check if already at target - no-op if so (avoid redundant transition exception).
     if (cluster2StateIs(target)) {

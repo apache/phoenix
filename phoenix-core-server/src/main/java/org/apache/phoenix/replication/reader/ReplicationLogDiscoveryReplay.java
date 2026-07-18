@@ -127,6 +127,13 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
           clusterType == ClusterType.LOCAL
             && HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.equals(toState)
         ) {
+          // Unconditional set (not compareAndSet): degradation is an authoritative, fail-closed
+          // signal. Whatever the current state (SYNC, SYNCED_RECOVERY, or even NOT_INITIALIZED if a
+          // degrade lands mid-init), replay must stop advancing the sync point. There is no single
+          // valid "from" state to CAS against, so a CAS would silently drop legitimate degrade
+          // signals arriving from the other states. Contrast triggerFailoverListner below, which is
+          // deliberately conditional (compareAndSet from DEGRADED only) so it cannot clobber a
+          // healthy SYNC or an already-pending SYNCED_RECOVERY.
           replicationReplayState.set(ReplicationReplayState.DEGRADED);
           LOG.info("Cluster degraded detected for {}. replicationReplayState={}", haGroupName,
             ReplicationReplayState.DEGRADED);
@@ -216,9 +223,11 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
    * (lastRoundInSync from the minimum of lastSyncStateTimeInMs and the file frontier, so it
    * represents the last consistent point before degradation).</li>
    * <li>STANDBY_TO_ACTIVE: a restart while already mid-failover (e.g. after a direct
-   * DEGRADED_STANDBY -&gt; STANDBY_TO_ACTIVE transition). Sets replicationReplayState to
-   * SYNCED_RECOVERY and initializes both rounds the same way, so the first replay() rewinds to
-   * lastRoundInSync before failover can promote.</li>
+   * DEGRADED_STANDBY -&gt; STANDBY_TO_ACTIVE transition). Initializes both rounds from the last
+   * known good sync point, then sets replicationReplayState to SYNCED_RECOVERY only when a rewind
+   * is actually pending (lastRoundInSync behind lastRoundProcessed) so the first replay() rewinds
+   * before failover can promote; when the rounds are already equal it initializes directly to SYNC
+   * so promotion is not delayed by a round window.</li>
    * <li>Other states (e.g. STANDBY): sets replicationReplayState to SYNC, delegates to the parent
    * to initialize lastRoundProcessed, and sets lastRoundInSync equal to lastRoundProcessed.</li>
    * </ul>
@@ -236,6 +245,11 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     HAGroupStoreRecord.HAGroupState haGroupState = haGroupStoreRecord.getHAGroupState();
     LOG.info("Found HA Group state during initialization as {} for haGroup: {}", haGroupState,
       haGroupName);
+    // Each branch below sets the initial state with compareAndSet(NOT_INITIALIZED, ...), not a
+    // plain set: the LOCAL state listeners are subscribed in init() before this runs, so a
+    // concurrent LOCAL transition may have already advanced the state off NOT_INITIALIZED. When
+    // that happens the CAS no-ops and we deliberately keep the listener's value -- a live
+    // transition is more recent (and thus more authoritative) than the record snapshot read above.
     if (HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY.equals(haGroupState)) {
       replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED,
         ReplicationReplayState.DEGRADED);
@@ -245,12 +259,33 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
       // DEGRADED_STANDBY -> STANDBY_TO_ACTIVE transition). No listener fires on a fresh process, so
       // initialize as if recovering: lastRoundInSync at the last good sync point,
       // lastRoundProcessed
-      // from the file frontier, and state SYNCED_RECOVERY so the first replay() rewinds before
-      // shouldTriggerFailover() can promote. Conservative by design: if we actually came from a
-      // healthy STANDBY, lastSyncStateTimeInMs ~= the file frontier and the rewind is a no-op.
-      replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED,
-        ReplicationReplayState.SYNCED_RECOVERY);
+      // from the file frontier.
       initLastRoundsFromLastSyncPoint(haGroupStoreRecord, frontierStartTime);
+      // Enter SYNCED_RECOVERY only when there is real rewind work (lastRoundInSync behind
+      // lastRoundProcessed) so the first replay() rewinds before shouldTriggerFailover() promotes.
+      // When the rounds are equal (the common "already fully replayed, RS bounced before
+      // setHAGroupStatusToSync() completed" case) there is nothing to rewind, so initialize
+      // directly to SYNC. Otherwise the SYNCED_RECOVERY -> SYNC CAS (which only fires inside the
+      // round-processing loop) would not run until a round becomes time-eligible, delaying
+      // promotion by ~one round window.
+      ReplicationReplayState initialState =
+        lastRoundInSync.getEndTime() < lastRoundProcessed.getEndTime()
+          ? ReplicationReplayState.SYNCED_RECOVERY
+          : ReplicationReplayState.SYNC;
+      // Distinct, greppable signal that this process restarted mid-failover, and which sub-case it
+      // hit, so a restart-driven promotion is diagnosable from logs (not inferred from the generic
+      // init summary below).
+      if (initialState == ReplicationReplayState.SYNCED_RECOVERY) {
+        LOG.info(
+          "Restart into STANDBY_TO_ACTIVE with rewind pending for haGroup {}: lastRoundInSync={} "
+            + "behind lastRoundProcessed={}; entering SYNCED_RECOVERY to re-sync before promotion.",
+          haGroupName, lastRoundInSync, lastRoundProcessed);
+      } else {
+        LOG.info("Restart into STANDBY_TO_ACTIVE with nothing to rewind for haGroup {}: "
+          + "lastRoundInSync == lastRoundProcessed ({}); entering SYNC, promotion eligible "
+          + "immediately.", haGroupName, lastRoundProcessed);
+      }
+      replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED, initialState);
     } else {
       replicationReplayState.compareAndSet(ReplicationReplayState.NOT_INITIALIZED,
         ReplicationReplayState.SYNC);
@@ -263,9 +298,11 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
         + "replication replay state as {}",
       lastRoundProcessed, lastRoundInSync, replicationReplayState);
 
-    // Update the failoverPending variable during initialization
+    // Arm failoverPending during initialization when restarting mid-failover. Plain set (not
+    // compareAndSet): it starts false and this is the only initializer, so there is no prior value
+    // to guard; this also matches triggerFailoverListner, which arms the same flag with set(true).
     if (HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(haGroupState)) {
-      failoverPending.compareAndSet(false, true);
+      failoverPending.set(true);
     }
   }
 
