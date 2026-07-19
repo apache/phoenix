@@ -25,15 +25,40 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
 /**
  * Metrics for one HAGroupStore group on a RegionServer.
  * <p>
- * Lifecycle gauges and distributed reaction counters are best-effort diagnostics. They are not
- * transactionally coordinated across client replacement or RegionServers and never feed HA
- * decisions.
+ * Lifecycle gauges are best-effort and re-baselined when a client is constructed. Counters and the
+ * histogram operation count are cumulative for the JVM lifetime; histogram distributions cover the
+ * latest Metrics2 collection interval. Metrics are not transactionally coordinated across client
+ * replacement or RegionServers and never feed HA decisions.
+ * <p>
+ * {@code haGroup} is the only source-specific tag. Monitoring systems must supply cluster,
+ * environment, host, and RegionServer identity as external scrape-target labels; role is mutable
+ * and is represented by the state gauges rather than a tag.
+ * <p>
+ * State gauge code mapping:
+ * <ul>
+ * <li>0 = UNKNOWN</li>
+ * <li>1 = ABORT_TO_ACTIVE_IN_SYNC</li>
+ * <li>2 = ABORT_TO_ACTIVE_NOT_IN_SYNC</li>
+ * <li>3 = ABORT_TO_STANDBY</li>
+ * <li>4 = ACTIVE_IN_SYNC</li>
+ * <li>5 = ACTIVE_NOT_IN_SYNC</li>
+ * <li>6 = ACTIVE_NOT_IN_SYNC_TO_STANDBY</li>
+ * <li>7 = ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER</li>
+ * <li>8 = ACTIVE_IN_SYNC_TO_STANDBY</li>
+ * <li>9 = ACTIVE_WITH_OFFLINE_PEER</li>
+ * <li>10 = DEGRADED_STANDBY</li>
+ * <li>11 = OFFLINE</li>
+ * <li>12 = STANDBY</li>
+ * <li>13 = STANDBY_TO_ACTIVE</li>
+ * </ul>
  */
 public interface HAGroupStoreMetricsSource extends BaseSource {
 
   String METRICS_NAME = "HAGroupStore";
   String METRICS_CONTEXT = "phoenix";
   String METRICS_DESCRIPTION = "Metrics for HAGroupStore operations";
+  // Server-oriented JMX identity consistent with sibling HBase/Phoenix sources. Short-lived admin
+  // CLI invocations can create an incidental bean under the same context.
   String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
   String HA_GROUP_TAG_NAME = "haGroup";
@@ -47,7 +72,8 @@ public interface HAGroupStoreMetricsSource extends BaseSource {
     "Configured peer visibility status: 0 visible or unconfigured, non-zero blind";
   String DEGRADED_STANDBY_ACTIVE = "haGroupStoreDegradedStandbyActive";
   String DEGRADED_STANDBY_ACTIVE_DESC =
-    "Whether the local peer-blind degraded standby overlay is active";
+    "Local in-memory peer-blind fail-closed overlay: 0 inactive, 1 active on raw STANDBY; "
+      + "never persisted to ZooKeeper and distinct from persisted DEGRADED_STANDBY";
   String CURRENT_LOCAL_STATE = "haGroupStoreCurrentLocalState";
   String CURRENT_LOCAL_STATE_DESC = "Current raw local HA group state code";
   String CURRENT_PEER_STATE = "haGroupStoreCurrentPeerState";
@@ -75,7 +101,8 @@ public interface HAGroupStoreMetricsSource extends BaseSource {
   String SUBSCRIBER_NOTIFY_TIME_MS_EXPORTED_BASE = "HaGroupStoreSubscriberNotifyTimeMs";
   String SUBSCRIBER_NOTIFY_TIME_MS_DESC =
     "Time spent synchronously notifying HA group subscribers in whole milliseconds; "
-      + "durations below one millisecond are recorded as zero";
+      + "durations below one millisecond are recorded as zero-valued samples and still increment "
+      + "the operation count";
 
   void setLocalCacheHealthy(boolean healthy);
 

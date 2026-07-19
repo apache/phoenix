@@ -325,6 +325,7 @@ public class HAGroupStoreClient implements Closeable {
 
     } catch (Exception e) {
       this.isHealthy = false;
+      resetMetricGauges();
       close();
       LOGGER.error("Unexpected error occurred while initializing HAGroupStoreClient, "
         + "marking cache as unhealthy", e);
@@ -925,6 +926,8 @@ public class HAGroupStoreClient implements Closeable {
             // unreachable peer never blocks local event processing.
             String peerZKUrl = record.getPeerZKUrl();
             if (!Objects.equals(peerZKUrl, lastConfiguredPeerZKUrl)) {
+              // An in-flight callback from the prior peer can briefly overwrite UNKNOWN. The new
+              // watcher self-heals this best-effort gauge; exact generation fencing is unnecessary.
               metricsSource.setCurrentPeerState(HAGroupState.UNKNOWN);
               lastConfiguredPeerZKUrl = peerZKUrl;
               peerWatcher.reconfigureAsync(peerZKUrl);
@@ -1532,7 +1535,7 @@ public class HAGroupStoreClient implements Closeable {
 
     // Notify all listeners with error isolation
     if (!listenersToNotify.isEmpty()) {
-      LOGGER.info("Notifying {} listeners of state transitionfor HA group {} from {} to {} on {} "
+      LOGGER.info("Notifying {} listeners of state transition for HA group {} from {} to {} on {} "
         + "cluster", listenersToNotify.size(), haGroupName, fromState, toState, clusterType);
 
       long startTimeNs = System.nanoTime();

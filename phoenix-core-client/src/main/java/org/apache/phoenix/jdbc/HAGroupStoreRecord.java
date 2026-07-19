@@ -47,6 +47,10 @@ public class HAGroupStoreRecord {
 
   /**
    * Enum representing the HA group state with each state having a corresponding ClusterRole.
+   * <p>
+   * Metric codes are a stable external monitoring contract. They are independent of enum ordinal:
+   * never renumber or reuse an existing code, assign new states new codes, and keep code {@code 0}
+   * reserved for {@link #UNKNOWN}.
    */
   public enum HAGroupState {
     ABORT_TO_ACTIVE_IN_SYNC(1),
@@ -79,6 +83,10 @@ public class HAGroupStoreRecord {
       this.metricCode = metricCode;
     }
 
+    /**
+     * Returns the stable, append-only code exported by HAGroupStore state gauges.
+     * @return non-ordinal monitoring code; {@code 0} is reserved for {@link #UNKNOWN}
+     */
     public int getMetricCode() {
       return metricCode;
     }

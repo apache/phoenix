@@ -17,7 +17,10 @@
  */
 package org.apache.phoenix.jdbc.metrics;
 
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+
 /** Immutable snapshot of HAGroupStore metrics used by tests. */
+@VisibleForTesting
 public final class HAGroupStoreMetricValues {
 
   private final long localCacheHealthStatus;

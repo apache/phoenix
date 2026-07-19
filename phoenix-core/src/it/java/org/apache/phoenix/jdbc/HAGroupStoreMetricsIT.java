@@ -20,8 +20,10 @@ package org.apache.phoenix.jdbc;
 import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
+import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_SYNC_INTERVAL_SECONDS;
 import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -29,6 +31,7 @@ import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import org.apache.commons.lang3.tuple.Pair;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
@@ -140,6 +143,25 @@ public class HAGroupStoreMetricsIT extends HABaseIT {
       CLUSTERS.getHBaseCluster1().startMiniZKCluster(1, port);
     }
     awaitMetrics(values -> values.getLocalCacheHealthStatus() == 0);
+  }
+
+  @Test
+  public void testLateInitializationFailureResetsGauges() throws Exception {
+    writeLocal(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+    Configuration invalidConf =
+      new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
+    invalidConf.setLong(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS, 0L);
+
+    assertNull(HAGroupStoreClient.getInstanceForZkUrl(invalidConf, group(), zkUrl));
+
+    HAGroupStoreMetricValues values = metrics();
+    assertEquals(1L, values.getLocalCacheHealthStatus());
+    assertEquals(1L, values.getPeerVisibilityStatus());
+    assertEquals(0L, values.getDegradedStandbyActive());
+    assertEquals(HAGroupStoreRecord.HAGroupState.UNKNOWN.getMetricCode(),
+      values.getCurrentLocalState());
+    assertEquals(HAGroupStoreRecord.HAGroupState.UNKNOWN.getMetricCode(),
+      values.getCurrentPeerState());
   }
 
   @Test
