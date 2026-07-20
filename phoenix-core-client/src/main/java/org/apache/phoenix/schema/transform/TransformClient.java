@@ -152,6 +152,7 @@ public class TransformClient {
     if (isTransformNeeded) {
       SystemTransformRecord existingTransform =
         getTransformRecord(schemaName, logicalTableName, parentTableName, tenantId, connection);
+      enforceKnownTransformType(existingTransform, schemaName, logicalTableName);
       if (existingTransform != null && existingTransform.isActive()) {
         throw new SQLExceptionInfo.Builder(
           SQLExceptionCode.CANNOT_TRANSFORM_ALREADY_TRANSFORMING_TABLE)
@@ -160,6 +161,30 @@ public class TransformClient {
       }
     }
     return isTransformNeeded;
+  }
+
+  /**
+   * Forward-compatibility guard: throw
+   * {@link SQLExceptionCode#CANNOT_TRANSFORM_ALREADY_TRANSFORMING_TABLE} when an existing
+   * SYSTEM.TRANSFORM row carries a transform type this binary does not recognise. Such a row was
+   * very likely written by a newer binary; this binary cannot reason about whether the on-disk
+   * schema state is consistent with a new ALTER, so it blocks defensively regardless of the row's
+   * status — even a {@code COMPLETED} row of an unknown type may have left the schema in a state we
+   * do not understand. Package-private to allow direct unit testing without a live SYSTEM.TRANSFORM
+   * table.
+   */
+  static void enforceKnownTransformType(SystemTransformRecord existingTransform, String schemaName,
+    String logicalTableName) throws SQLException {
+    if (
+      existingTransform != null
+        && existingTransform.getTransformType() == PTable.TransformType.UNKNOWN
+    ) {
+      throw new SQLExceptionInfo.Builder(
+        SQLExceptionCode.CANNOT_TRANSFORM_ALREADY_TRANSFORMING_TABLE)
+          .setMessage(" Existing transform record has an unrecognized transform type "
+            + "(likely written by a newer binary); blocking new transform on this table ")
+          .setSchemaName(schemaName).setTableName(logicalTableName).build().buildException();
+    }
   }
 
   protected static SystemTransformRecord getTransformRecord(PhoenixConnection connection,

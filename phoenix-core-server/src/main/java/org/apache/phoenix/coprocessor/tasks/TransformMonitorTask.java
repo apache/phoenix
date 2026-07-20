@@ -78,6 +78,14 @@ public class TransformMonitorTask extends BaseTask {
         return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.FAIL,
           "No transform record is found");
       }
+      // Forward-compatibility guard: if the persisted transform type was written by a newer binary
+      // that introduced a new TransformType constant, this binary will see UNKNOWN. Skip the row
+      // without retrying — the monitor task cannot make a safe decision about how to advance it.
+      TaskRegionObserver.TaskResult unknownTypeResult =
+        skipIfUnknownTransformType(systemTransformRecord);
+      if (unknownTypeResult != null) {
+        return unknownTypeResult;
+      }
       String tableName = SchemaUtil.getTableName(systemTransformRecord.getSchemaName(),
         systemTransformRecord.getLogicalTableName());
 
@@ -216,6 +224,25 @@ public class TransformMonitorTask extends BaseTask {
   public TaskRegionObserver.TaskResult checkCurrentResult(Task.TaskRecord taskRecord)
     throws Exception {
     // We don't need to check MR job result here since the job itself changes task state.
+    return null;
+  }
+
+  /**
+   * If the supplied transform record carries an {@link PTable.TransformType#UNKNOWN} transform type
+   * (typically because the row was written by a newer binary that introduced a new transform type
+   * this binary does not understand), return a {@link TaskRegionObserver.TaskResultCode#SKIPPED}
+   * result with an operator-readable message. Otherwise return {@code null} to signal that normal
+   * processing should continue. Package-private to keep the gate independently testable without
+   * standing up a full coprocessor environment.
+   */
+  static TaskRegionObserver.TaskResult
+    skipIfUnknownTransformType(SystemTransformRecord systemTransformRecord) {
+    if (systemTransformRecord.getTransformType() == PTable.TransformType.UNKNOWN) {
+      String msg = "Skipping transform monitor for record with UNKNOWN transform type; "
+        + "likely written by a newer binary. " + systemTransformRecord.getString();
+      LOGGER.warn(msg);
+      return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SKIPPED, msg);
+    }
     return null;
   }
 }
