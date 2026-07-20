@@ -278,8 +278,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   // WAL edit at PRE phase. Cells with this (METAFAMILY, qualifier) pair carry a serialized PB Put
   // representing the row's state on the primary before the current batch was applied. The standby
   // reader peels these cells off and attaches the bytes as {@link #PRE_IMAGE} on the reconstructed
-  // mutation.
-  public static final byte[] PRE_IMAGE_WAL_QUALIFIER = Bytes.toBytes("_PhoenixPreImage");
+  // mutation. Namespaced with a "PHOENIX::" prefix to mirror HBase's own METAFAMILY qualifiers
+  // (HBASE::COMPACTION, HBASE::FLUSH, ...) so it stays clear of the reserved HBASE:: space and of
+  // any future qualifier-prefix enforcement (see HBASE-8457). The METAFAMILY family is what makes
+  // HBase skip this cell on recovered-edits replay (HRegion.replayRecoveredEdits keys the skip on
+  // family, not qualifier), which is intended: the pre-image must never land in a data store.
+  public static final byte[] PRE_IMAGE_WAL_QUALIFIER = Bytes.toBytes("PHOENIX::PRE_IMAGE");
 
   /**
    * Class to represent pending data table rows
