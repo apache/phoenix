@@ -368,15 +368,16 @@ public class ReplicationLogTracker {
         // Format: <ts>_<server>_<UUID>_<renameTs>.plog → extract prefix (first 2 parts)
         String[] parts = fileName.split("_");
         String prefix = parts[0] + "_" + parts[1];
-        newFileName =
-          prefix + "_" + UUID.randomUUID() + "_" + EnvironmentEdgeManager.currentTime() + ".plog";
+        newFileName = prefix + "_" + UUID.randomUUID() + "_" + EnvironmentEdgeManager.currentTime()
+          + ReplicationShardDirectoryManager.LOG_FILE_EXTENSION;
         targetDirectory = file.getParent();
       } else {
         // File is not in in-progress directory, add UUID + rename timestamp and move to
         // IN_PROGRESS directory
         String baseName = fileName.substring(0, fileName.lastIndexOf("."));
         newFileName =
-          baseName + "_" + UUID.randomUUID() + "_" + EnvironmentEdgeManager.currentTime() + ".plog";
+          baseName + "_" + UUID.randomUUID() + "_" + EnvironmentEdgeManager.currentTime()
+            + ReplicationShardDirectoryManager.LOG_FILE_EXTENSION;
         targetDirectory = getInProgressDirPath();
       }
 
@@ -406,7 +407,7 @@ public class ReplicationLogTracker {
    */
   protected boolean isValidLogFile(Path file) {
     final String fileName = file.getName();
-    return fileName.endsWith(".plog");
+    return fileName.endsWith(ReplicationShardDirectoryManager.LOG_FILE_EXTENSION);
   }
 
   /**
@@ -417,6 +418,22 @@ public class ReplicationLogTracker {
   public long getFileTimestamp(Path file) throws NumberFormatException {
     String[] parts = file.getName().split("_");
     return Long.parseLong(parts[0]);
+  }
+
+  /**
+   * Extracts the server name (origin writer identity) from a log file name. Format:
+   * <ts>_<server>[_<UUID>_<renameTs>].plog → server is the second underscore-separated part. Server
+   * names ({@code host,port,startcode}) never contain underscores but do contain dots (e.g.
+   * {@code 10.244.2.10,16020,...}), so we strip only the trailing ".plog" suffix present on the
+   * 2-part (fresh) form and leave the 4-part (in-progress) form untouched.
+   * @param file - The file path to extract the server name from.
+   */
+  public String getServerName(Path file) {
+    String server = file.getName().split("_")[1];
+    return server.endsWith(ReplicationShardDirectoryManager.LOG_FILE_EXTENSION)
+      ? server.substring(0,
+        server.length() - ReplicationShardDirectoryManager.LOG_FILE_EXTENSION.length())
+      : server;
   }
 
   /**

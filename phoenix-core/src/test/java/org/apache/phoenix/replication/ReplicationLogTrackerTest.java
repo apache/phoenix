@@ -1158,6 +1158,40 @@ public class ReplicationLogTrackerTest {
   }
 
   @Test
+  public void testGetServerName() throws IOException {
+    tracker.init();
+    // A simple server name, plus real HBase ServerNames (host,port,startcode) whose host part
+    // contains dots -- an IP-style k8s name and an FQDN. Both dotted forms must survive intact,
+    // since a naive dot-split would truncate them to the first label.
+    assertServerNameStableAcrossForms("rs1");
+    assertServerNameStableAcrossForms("10.244.2.10,16020,1784436416263");
+    assertServerNameStableAcrossForms("host1.example.com,16020,1784436416263");
+  }
+
+  /**
+   * Asserts that getServerName returns {@code serverName} for both the fresh 2-part file
+   * (<ts>_<server>.plog) and the 4-part in-progress form produced by the real markInProgress code
+   * (<ts>_<server>_<UUID>_<renameTs>.plog), rather than hand-crafting the in-progress name.
+   */
+  private void assertServerNameStableAcrossForms(String serverName) throws IOException {
+    ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
+    Path shardPath = shardManager.getAllShardPaths().get(0);
+    localFs.mkdirs(shardPath);
+
+    // Fresh 2-part file
+    Path freshFile = new Path(shardPath, "1704153600000_" + serverName + ".plog");
+    localFs.create(freshFile, true).close();
+    assertEquals("Server name should be extracted from fresh file", serverName,
+      tracker.getServerName(freshFile));
+
+    // Derive the 4-part in-progress name via the real code path instead of hand-crafting a UUID
+    Optional<Path> inProgressFile = tracker.markInProgress(freshFile);
+    assertTrue("markInProgress should succeed", inProgressFile.isPresent());
+    assertEquals("Server name should match on the in-progress form", serverName,
+      tracker.getServerName(inProgressFile.get()));
+  }
+
+  @Test
   public void testGetOlderInProgressFiles() throws IOException {
     // Initialize tracker
     tracker.init();
