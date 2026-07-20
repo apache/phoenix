@@ -290,7 +290,18 @@ public interface PTable extends PMetaDataEntity {
       return byteValue;
     }
 
+    /**
+     * Returns the serialized byte value to persist in SYSTEM.TRANSFORM. Throws if called on the
+     * UNKNOWN sentinel, which is a read-only forward-compatibility placeholder and must never be
+     * written to storage. A newer binary introduced a transform type this binary does not
+     * recognize.
+     */
     public int getSerializedValue() {
+      if (this == UNKNOWN) {
+        throw new IllegalStateException(this.name()
+          + " is a read-only forward-compatibility sentinel and cannot be serialized. "
+          + "This transform type was written by a newer binary and is not recognized by this version.");
+      }
       return this.serializedValue;
     }
 

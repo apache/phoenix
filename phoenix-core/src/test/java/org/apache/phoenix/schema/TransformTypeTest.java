@@ -17,9 +17,9 @@
  */
 package org.apache.phoenix.schema;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertThrows;
 
 import org.apache.phoenix.schema.PTable.TransformType;
 import org.junit.Test;
@@ -47,7 +47,6 @@ public class TransformTypeTest {
   public void fromSerializedValueReturnsUnknownForFutureValue() {
     // Simulates a SYSTEM.TRANSFORM row written by a newer binary that introduced a third type.
     TransformType resolved = TransformType.fromSerializedValue(3);
-    assertNotNull(resolved);
     assertSame(TransformType.UNKNOWN, resolved);
   }
 
@@ -64,18 +63,17 @@ public class TransformTypeTest {
 
   @Test
   public void unknownSentinelIsSelfConsistent() {
-    // The UNKNOWN constant's own serialized value (-1) also resolves to UNKNOWN: the lookup
-    // table only contains known constants, and the sentinel is the fallback for everything else.
-    assertSame(TransformType.UNKNOWN,
-      TransformType.fromSerializedValue(TransformType.UNKNOWN.getSerializedValue()));
+    // The UNKNOWN constant's sentinel value (-1) resolves to UNKNOWN: the lookup table only
+    // contains known constants, and the sentinel is the fallback for everything else.
+    assertSame(TransformType.UNKNOWN, TransformType.fromSerializedValue(-1));
   }
 
   @Test
   public void unknownHasNonCollidingSerializedValue() {
-    int unknownValue = TransformType.UNKNOWN.getSerializedValue();
+    // No known type serializes to the UNKNOWN sentinel value (-1).
     for (TransformType type : TransformType.values()) {
       if (type != TransformType.UNKNOWN) {
-        assertEquals(false, type.getSerializedValue() == unknownValue);
+        assertFalse(type.getSerializedValue() == -1);
       }
     }
   }
@@ -83,5 +81,21 @@ public class TransformTypeTest {
   @Test
   public void getDefaultIsNotUnknown() {
     assertSame(TransformType.METADATA_TRANSFORM, TransformType.getDefault());
+  }
+
+  @Test
+  public void getSerializedValueThrowsForUnknown() {
+    // UNKNOWN is a read-only forward-compat sentinel and must never be persisted.
+    assertThrows(IllegalStateException.class, () -> TransformType.UNKNOWN.getSerializedValue());
+  }
+
+  @Test
+  public void knownTypesRoundTripThroughSerialization() {
+    // Each known type can be serialized and deserialized without loss.
+    for (TransformType type : TransformType.values()) {
+      if (type != TransformType.UNKNOWN) {
+        assertSame(type, TransformType.fromSerializedValue(type.getSerializedValue()));
+      }
+    }
   }
 }
