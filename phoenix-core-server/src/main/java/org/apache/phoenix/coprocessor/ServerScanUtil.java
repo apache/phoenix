@@ -41,10 +41,6 @@ import org.apache.phoenix.util.ScanUtil;
  * bypass that hook, so they set no attributes and are never TTL-masked. These helpers reproduce
  * both steps for server-side callers (e.g. {@code IndexRegionObserver} current-row reads) so an
  * internal scan masks identically to a client scan.
- * <p>
- * This class lives in the {@code org.apache.phoenix.coprocessor} package so it can reference the
- * server-only {@link TTLRegionScanner} and {@link PagingRegionScanner}; the client-side
- * {@code ScanUtil} cannot.
  */
 public class ServerScanUtil {
 

@@ -65,7 +65,7 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 /**
  * Verifies that internal server-side index-maintenance current-row reads honor Phoenix TTL exactly
  * like a client read, and that the read is anchored at the mutation timestamp so the data table and
- * a global index stay aligned under compaction.
+ * a global index stay aligned under compaction/TTL masking.
  * <p>
  * The scenario is the divergence being fixed: a covered column (covcol) is written once, then never
  * re-written by later partial "touch" upserts. On the index side covcol is rebuilt at every touch's
@@ -443,14 +443,14 @@ public class IndexDataTableSyncIT extends BaseTest {
       conn.commit();
       assertCovColConsistent(conn, tableName, indexName, "r1", "k1", COVCOL_VALUE);
 
-      // Phase 2: a second partial touch that also omits covcol. It is READ while the row is still
-      // alive (one tick before the boundary) but COMMITTED past a > TTL gap, so its
-      // mutationTimestamp is well past covcol@t0's expiry. The masked read now drops covcol@t0, so
-      // the index is rebuilt WITHOUT covcol.
-      injectEdge.incrementValue(TTL * 1000L - 1);
+      // Phase 2: a second partial touch that also omits covcol, committed past covcol@t0's TTL
+      // boundary. With autoCommit off the UPSERT VALUES only buffers on the client; the server-side
+      // masked current-row read and the mutationTimestamp are both established at commit, by which
+      // point the clock is past covcol@t0's expiry. So the masked read drops covcol@t0 and the
+      // index is rebuilt WITHOUT covcol.
+      injectEdge.incrementValue(TTL * 1000L + 1);
       conn.createStatement()
         .executeUpdate("UPSERT INTO " + tableName + " (id, touchcol) VALUES ('r1', 'x2')");
-      injectEdge.incrementValue(2);
       conn.commit();
 
       assertDataTouchColAlive(conn, tableName, "r1", "x2");
@@ -461,30 +461,6 @@ public class IndexDataTableSyncIT extends BaseTest {
     }
   }
 
-  /**
-   * A major compaction that races an in-flight partial touch. This reproduces the narrow window the
-   * design notes call out: {@code preBatchMutateWithExceptions} releases the data-table row locks
-   * before the (potentially slow) first-phase index write and re-acquires them afterwards
-   * (IndexRegionObserver.java unlockRows before doPre, lockRows after), so a concurrent major
-   * compaction on the data table can run between the masked current-row read and the moment the
-   * touch's data-side cells are persisted.
-   * <p>
-   * The interleaving is made deterministic by a {@link BlockingIndexWriteObserver} installed on the
-   * index table: the touch's first-phase index write (doPre -> table.batch to the index) blocks in
-   * the index region's preBatchMutate, which is strictly after the data-table current-row read and
-   * strictly before doPre completes. While it is parked we fire the major compaction on the data
-   * table, then release the index write.
-   * <p>
-   * When the current row is read the clock is well within the TTL, so the masked read returns
-   * covcol@t0 and the index is rebuilt with covcol. When the compaction runs the clock has advanced
-   * past the TTL but not past TTL + max-lookback, so covcol@t0 is older than the row's freshest
-   * cell by more than the TTL yet is retained physically: CompactionScanner keeps the last row
-   * version unless {@code compactionTime - maxTimestamp > maxLookbackInMillis + ttl}
-   * (CompactionScanner.retainCellsOfLastRowVersion), which is false here (65s <= 60s + 10s). The
-   * non-zero max-lookback is exactly what makes the race harmless: the pre-existing covcol@t0
-   * cannot be collected out from under the index rebuild, so the data table and the index still
-   * agree covcol is present after the touch commits.
-   */
   @Test
   public void testConcurrentMajorCompactionDuringIndexWriteKeepsDataAndIndexConsistent()
     throws Exception {
@@ -519,7 +495,7 @@ public class IndexDataTableSyncIT extends BaseTest {
       CountDownLatch indexWriteProceed = new CountDownLatch(1);
       BlockingIndexWriteObserver.arm(indexName, indexWriteReached, indexWriteProceed);
       TestUtil.addCoprocessor(conn, indexName, BlockingIndexWriteObserver.class);
-      injectEdge.setValue(t0 + 30_000L);
+      injectEdge.setValue(t0 + 50_000L);
 
       // Run the touch on its own thread/connection: it parks inside the index region's
       // preBatchMutate (i.e. inside doPre) after the data-table read and after the data locks were
@@ -541,9 +517,9 @@ public class IndexDataTableSyncIT extends BaseTest {
       assertTrue("index write did not reach the observer in time",
         indexWriteReached.await(60, TimeUnit.SECONDS));
 
-      // The row is now past the TTL (65s) but not past TTL + max-lookback (70s), so the concurrent
+      // The row is now past the TTL (61s) but not past TTL + max-lookback (70s), so the concurrent
       // major compaction on the data table must NOT physically collect covcol@t0.
-      injectEdge.setValue(t0 + 65_000L);
+      injectEdge.setValue(t0 + 61_000L);
       TestUtil.majorCompact(getUtility(), TableName.valueOf(tableName));
 
       // Release the parked index write and let the touch finish its data-side persist.
@@ -554,8 +530,8 @@ public class IndexDataTableSyncIT extends BaseTest {
         throw touchError.get();
       }
 
-      // The touch's fresh heartbeat (@t0+30s) keeps the row alive at the current clock (t0+65s, gap
-      // 35s < TTL). covcol@t0 survived the concurrent compaction, so the data table and the index
+      // The touch's fresh heartbeat (@t0+50s) keeps the row alive at the current clock (t0+61s, gap
+      // 11s < TTL). covcol@t0 survived the concurrent compaction, so the data table and the index
       // still agree covcol is present.
       assertCovColConsistent(conn, tableName, indexName, "r1", "k1", COVCOL_VALUE);
     }

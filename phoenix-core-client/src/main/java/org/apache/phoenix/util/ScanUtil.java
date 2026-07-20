@@ -1902,8 +1902,6 @@ public class ScanUtil {
     List<? extends Mutation> mutations) throws SQLException {
 
     if (!(table.getTTLExpression() instanceof LiteralTTLExpression)) {
-      // Conditional TTL is handled by annotateMutationWithConditionalTTL; NONE has no literal to
-      // thread. Only a literal TTL (finite or FOREVER) reaches the internal-scan masking path.
       return;
     }
     // NOTE: unlike annotateMutationWithConditionalTTL, we do NOT skip immutable tables here. For
@@ -1939,13 +1937,6 @@ public class ScanUtil {
       ttlForScan = table.getCompiledTTLExpression(connection).serialize();
     }
 
-    // The empty-column CF/CQ are threaded unconditionally, exactly as the client read path
-    // (setScanAttributesForClient) sets them on every non-analyze scan. They only identify the
-    // table's empty column and enable masking; TTLRegionScanner still independently requires an
-    // effective, non-FOREVER, strict TTL to actually mask, so setting them whenever a current-row
-    // read may happen makes the internal scan mask identically to a client read. They are also the
-    // only source of these values for the no-index current-row read (atomic / ON DUPLICATE KEY /
-    // returnResult / row-delete), which has no IndexMaintainer on the server.
     byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(table);
     byte[] emptyCQ = SchemaUtil.getEmptyColumnQualifier(table);
 
