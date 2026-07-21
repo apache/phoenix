@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.replication;
 
+import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_POLL_INTERVAL_MS;
+import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_STARTUP_DELAY_MS;
+import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_CONSUMER_ENABLED;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
 
@@ -46,15 +49,29 @@ public class ReplicationLogGroupEventualIndexIT extends ReplicationLogGroupBaseI
   }
 
   /**
-   * Disables the IndexCDCConsumer on both clusters, then starts them. CDC-index regeneration is
-   * verified directly and the consumer's downstream secondary-index convergence is out of scope, so
-   * it stays off. The {@code serializeCDCMutations} subclass calls this after setting its own
-   * toggle so the consumer-disable lives in one place.
+   * Enables the IndexCDCConsumer on both clusters, then starts them. The consumer runs on each
+   * cluster independently: index mutations are never replicated, so cluster 2's eventual secondary
+   * index is materialized solely by cluster 2's own consumer draining the CDC index the standby
+   * regenerated. The test therefore verifies both the regenerated CDC index and the downstream
+   * secondary index it feeds. Startup delay and timestamp buffer are trimmed so a single fixed
+   * {@link #waitForEventualConsistency()} reliably covers a generate+apply cycle on both clusters.
+   * The {@code serializeCDCMutations} subclass calls this after setting its own toggle so the
+   * consumer wiring lives in one place.
    */
   protected static void setupEventualIndexClusters() throws Exception {
-    conf1.setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, false);
-    conf2.setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, false);
+    for (org.apache.hadoop.conf.Configuration conf : new org.apache.hadoop.conf.Configuration[] {
+      conf1, conf2 }) {
+      conf.setBoolean(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, true);
+      conf.setLong(INDEX_CDC_CONSUMER_STARTUP_DELAY_MS, 1000);
+      conf.setLong(INDEX_CDC_CONSUMER_POLL_INTERVAL_MS, 500);
+      conf.setLong(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, 1000);
+    }
     setupClusters();
+  }
+
+  /** Fixed pause to let the per-region IndexCDCConsumer drain the CDC index on both clusters. */
+  protected void waitForEventualConsistency() throws Exception {
+    Thread.sleep(15000);
   }
 
   /**
@@ -67,8 +84,16 @@ public class ReplicationLogGroupEventualIndexIT extends ReplicationLogGroupBaseI
    * }, MetaDataClient.java:2473). That CDC index is STRONG/uncovered and written inline on the data
    * path, so the standby regenerates it from the data record + per-(row,ts) pre-image with its own
    * partition_id, exactly like a plain CDC index. This verifies the CDC index table matches across
-   * clusters (modulo partition_id). The eventual secondary index table itself is written only by
-   * the (here-disabled) IndexCDCConsumer, so it stays empty on both clusters and is not compared.
+   * clusters (modulo partition_id).
+   * <p>
+   * The downstream eventual secondary index is populated by the IndexCDCConsumer, which runs on
+   * each cluster independently — index mutations are never replicated, so cluster 2's copy is
+   * materialized solely by cluster 2's consumer draining the CDC index the standby regenerated.
+   * After a {@link #waitForEventualConsistency()} pause the two secondary-index tables are compared
+   * for exact cell equality: it is a global covered index (no partition_id in its rowkey) and its
+   * cells are stamped with the data row's timestamp, which replication preserves, so the two
+   * consumers must produce byte-identical tables.
+   * <p>
    * The serialized downstream-index payload column is present iff {@code serializeCDCMutations} is
    * enabled (asserted via {@link #assertCDCIndexPayloadMatchesConfig}); the {@code serialize=true}
    * variant is exercised by {@link ReplicationLogGroupEventualIndexWithSerializeCDCIT}.
@@ -139,6 +164,14 @@ public class ReplicationLogGroupEventualIndexIT extends ReplicationLogGroupBaseI
       // serialize=true run that failed to propagate would fail loudly rather than pass
       // degenerately.
       assertCDCIndexPayloadMatchesConfig(cdcIndexName);
+
+      // Let each cluster's IndexCDCConsumer drain its CDC index into the downstream secondary
+      // index,
+      // then assert the two secondary-index tables are byte-identical. Cluster 2's copy is built
+      // only by its own consumer from the regenerated CDC index, so this closes the loop from
+      // replicated data -> regenerated CDC index -> consumed eventual index.
+      waitForEventualConsistency();
+      assertTablesEqualAcrossClusters(indexName);
     }
   }
 }
