@@ -121,6 +121,10 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
 
     LOG.info("Initializing ReplicationLogDiscoveryReplay for haGroup: {}", haGroupName);
 
+    // The LOCAL HA-state listeners below run synchronously on the HA store's state-change
+    // notification callback, so they must not block: each does only fast, wait-free work
+    // (an atomic state transition plus logging). Blocking here would stall delivery of
+    // subsequent HA state notifications for this group.
     HAGroupStateListener degradedListener =
       (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
         if (
@@ -146,7 +150,15 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
           clusterType == ClusterType.LOCAL
             && HAGroupStoreRecord.HAGroupState.STANDBY.equals(toState)
         ) {
-          replicationReplayState.set(ReplicationReplayState.SYNCED_RECOVERY);
+          // compareAndSet from DEGRADED only, not an unconditional set(): DEGRADED is the only
+          // state whose lastRoundInSync lags lastRoundProcessed, hence the only state a recovery
+          // to STANDBY must rewind from. A STANDBY event that lands while already SYNC (e.g.
+          // ABORT_TO_STANDBY -> STANDBY after a prior rewind, or a cache-reconnect redelivery)
+          // would otherwise flip SYNC -> SYNCED_RECOVERY and needlessly re-process the frontier
+          // round. Symmetric with triggerFailoverListner below; contrast degradedListener above,
+          // whose unconditional fail-closed set() is intentional.
+          replicationReplayState.compareAndSet(ReplicationReplayState.DEGRADED,
+            ReplicationReplayState.SYNCED_RECOVERY);
           LOG.info("Cluster recovered detected for {}. replicationReplayState={}", haGroupName,
             getReplicationReplayState());
         }

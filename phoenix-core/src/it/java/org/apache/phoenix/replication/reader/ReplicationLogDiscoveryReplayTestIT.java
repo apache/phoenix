@@ -1473,16 +1473,120 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
         discovery.getReplicationReplayState());
 
-      // healthy failover: LOCAL -> STANDBY_TO_ACTIVE from SYNC must arm failoverPending...
+      // healthy failover: LOCAL -> STANDBY_TO_ACTIVE from SYNC must arm failoverPending. Waiting on
+      // failoverPending is itself the synchronization barrier: triggerFailoverListner runs its
+      // compareAndSet(DEGRADED, SYNCED_RECOVERY) BEFORE failoverPending.set(true) within the same
+      // callback, and both are atomics, so once the test observes failoverPending the replay state
+      // has already taken its final value. That makes the "state unchanged" check below
+      // deterministic rather than a race against a fixed sleep.
       writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE);
       awaitCondition(discovery::getFailoverPending,
         "triggerFailoverListner should set failoverPending");
-      // ...and must leave the state at SYNC (CAS from DEGRADED is a no-op here). Sleep briefly so a
-      // (wrong) unconditional set(SYNCED_RECOVERY) would have landed before we assert.
-      Thread.sleep(2000L);
+      // The CAS is a no-op from SYNC, so the state must be SYNC here (not SYNCED_RECOVERY). A
+      // (wrong) unconditional set(SYNCED_RECOVERY) would already be visible alongside
+      // failoverPending.
       assertEquals("STANDBY_TO_ACTIVE from SYNC must not change replay state",
         ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
         discovery.getReplicationReplayState());
+      // Settle briefly and re-check both invariants to catch a late or redelivered event wrongly
+      // flipping the state or clearing the pending flag.
+      Thread.sleep(500L);
+      assertTrue("failoverPending must remain armed after settling",
+        discovery.getFailoverPending());
+      assertEquals("replay state must remain SYNC after settling",
+        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+        discovery.getReplicationReplayState());
+    } finally {
+      fileTracker.close();
+      haAdmin.getCurator().delete().quietly().forPath(toPath(haGroupName));
+    }
+  }
+
+  /**
+   * PHOENIX-7920 (C2 regression guard): recoveryListener uses compareAndSet(DEGRADED,
+   * SYNCED_RECOVERY), NOT an unconditional set(). This drives the two behaviours that distinguish
+   * the CAS from a naive set through the real LOCAL listeners over ZooKeeper.
+   * <p>
+   * Phase 1 (must NOT over-fire): a LOCAL -&gt; STANDBY event that arrives while the replay state
+   * is already SYNC must leave it SYNC. STANDBY is reached without ever passing through
+   * DEGRADED_STANDBY, via an aborted-failover round trip (STANDBY -&gt; STANDBY_TO_ACTIVE -&gt;
+   * ABORT_TO_STANDBY -&gt; STANDBY). recoveryListener has no observable side effect from SYNC, so
+   * determinism is manufactured in two steps: first we wait for the client cache to surface STANDBY
+   * (proving that event was delivered, not coalesced into the next write); then a trailing
+   * STANDBY_TO_ACTIVE acts as a barrier - its failoverPending write runs on the same single
+   * cache-dispatcher thread strictly after the STANDBY event's recoveryListener callback, so once
+   * we observe failoverPending that callback has already completed. Its compareAndSet(DEGRADED,
+   * SYNCED_RECOVERY) is a no-op from SYNC (and from SYNCED_RECOVERY), so it does not disturb
+   * whatever recoveryListener left. With a wrong unconditional set() the state would read
+   * SYNCED_RECOVERY here.
+   * <p>
+   * Phase 2 (must still fire from DEGRADED): DEGRADED_STANDBY -&gt; STANDBY must reach
+   * SYNCED_RECOVERY, proving the CAS still schedules the rewind on a genuine recovery.
+   */
+  @Test
+  public void testReplay_RuntimeListeners_SpuriousStandbyKeepsSyncButDegradedRecovers()
+    throws Exception {
+    PhoenixHAAdmin haAdmin = CLUSTERS.getHaAdmin1();
+    // Base state: local STANDBY, written before init() so the discovery's client picks it up.
+    writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY);
+
+    TestableReplicationLogTracker fileTracker =
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+    fileTracker.init();
+    try {
+      TestableReplicationLogDiscoveryReplay discovery =
+        new TestableReplicationLogDiscoveryReplay(fileTracker, null);
+      discovery.init();
+      // Let the initial STANDBY load settle so init has resolved to SYNC before we proceed.
+      Thread.sleep(5000L);
+      assertEquals("init from STANDBY should leave replay state SYNC",
+        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+        discovery.getReplicationReplayState());
+
+      // ---- Phase 1: spurious LOCAL -> STANDBY while SYNC must keep SYNC ----
+      // Aborted-failover round trip that never touches DEGRADED_STANDBY. Each step before the
+      // spurious STANDBY is gated on its own observable effect so the cache cannot coalesce events.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE);
+      awaitCondition(discovery::getFailoverPending,
+        "triggerFailoverListner should set failoverPending");
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY);
+      awaitCondition(() -> !discovery.getFailoverPending(),
+        "abortFailoverListner should clear failoverPending");
+
+      // The spurious event. Confirm the client cache actually surfaced STANDBY (so it was not
+      // coalesced into the barrier write below) before proceeding.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY);
+      awaitCondition(() -> effectiveLocalStateIs(HAGroupStoreRecord.HAGroupState.STANDBY),
+        "client cache should surface the spurious LOCAL STANDBY");
+
+      // Barrier: a trailing STANDBY_TO_ACTIVE. Observing its failoverPending guarantees the STANDBY
+      // event's recoveryListener callback (dispatched earlier on the same thread) has completed.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE);
+      awaitCondition(discovery::getFailoverPending,
+        "trailing STANDBY_TO_ACTIVE should re-arm failoverPending (recovery-callback barrier)");
+      assertEquals(
+        "spurious LOCAL -> STANDBY while SYNC must not flip replay state to SYNCED_RECOVERY",
+        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+        discovery.getReplicationReplayState());
+
+      // ---- Phase 2: genuine DEGRADED_STANDBY -> STANDBY must reach SYNCED_RECOVERY ----
+      // Return to a plain STANDBY, then degrade, then recover. Each hop is gated on its effect.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY);
+      awaitCondition(() -> !discovery.getFailoverPending(),
+        "abortFailoverListner should clear failoverPending again");
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY);
+      awaitCondition(() -> effectiveLocalStateIs(HAGroupStoreRecord.HAGroupState.STANDBY),
+        "client cache should surface STANDBY before degrade");
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
+      awaitCondition(
+        () -> discovery.getReplicationReplayState()
+            == ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
+        "degradedListener should drive replay state to DEGRADED");
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY);
+      awaitCondition(
+        () -> discovery.getReplicationReplayState()
+            == ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY,
+        "recoveryListener CAS must drive DEGRADED -> SYNCED_RECOVERY on a genuine recovery");
     } finally {
       fileTracker.close();
       haAdmin.getCurator().delete().quietly().forPath(toPath(haGroupName));
@@ -1584,6 +1688,17 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
       haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, record,
         current.getRight().getVersion());
+    }
+  }
+
+  /** True if the discovery's LOCAL client cache currently surfaces {@code state} as effective. */
+  private boolean effectiveLocalStateIs(HAGroupStoreRecord.HAGroupState state) {
+    try {
+      Optional<HAGroupStoreRecord> rec =
+        HAGroupStoreManager.getInstance(conf1).getEffectiveHAGroupStoreRecord(haGroupName);
+      return rec.isPresent() && rec.get().getHAGroupState() == state;
+    } catch (IOException e) {
+      return false;
     }
   }
 
