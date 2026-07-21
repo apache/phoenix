@@ -1992,6 +1992,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         }
         return null;
       } else {
+        if (createIfNotExists && doesPhoenixTableAlreadyExist(existingDesc)) {
+          // Already a Phoenix-managed table, skip remaining modifications entirely.
+          return existingDesc;
+        }
+        // We create phoenix table that maps to existing HBase table - we shall continue to add coprocessors.
         if (isMetaTable && !isUpgradeRequired()) {
           checkClientServerCompatibility(
             SchemaUtil.getPhysicalName(SYSTEM_CATALOG_NAME_BYTES, this.getProps()).getName());
@@ -2053,8 +2058,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
           return null; // Indicate that no metadata was changed
         }
 
-        // Do not call modifyTable for: SYSTEM tables or when CREATE IF NOT EXISTS was used.
-        if (tableType != PTableType.SYSTEM && !createIfNotExists) {
+        // Do not call modifyTable for SYSTEM tables
+        if (tableType != PTableType.SYSTEM) {
           modifyTable(physicalTableName, newDesc.build(), true);
         }
         return result;
