@@ -19,7 +19,9 @@ package org.apache.phoenix.replication.log;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileSystem;
@@ -81,11 +83,17 @@ public class LogFileWriter implements LogFile.Writer {
 
   @Override
   public boolean append(String tableName, long commitId, List<Cell> cells) throws IOException {
+    return append(tableName, commitId, cells, Collections.emptyMap());
+  }
+
+  @Override
+  public boolean append(String tableName, long commitId, List<Cell> cells,
+    Map<String, byte[]> attributes) throws IOException {
     if (isClosed()) {
       throw new IOException("Writer has been closed");
     }
-    return writer.append(
-      new LogFileRecord().setHBaseTableName(tableName).setCommitId(commitId).setCells(cells));
+    return writer.append(new LogFileRecord().setHBaseTableName(tableName).setCommitId(commitId)
+      .setCells(cells).setAttributes(attributes));
   }
 
   @Override

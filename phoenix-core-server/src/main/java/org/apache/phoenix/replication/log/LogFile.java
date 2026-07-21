@@ -379,6 +379,20 @@ public interface LogFile {
     boolean append(String tableName, long commitId, List<Cell> cells) throws IOException;
 
     /**
+     * Appends a batch of cells to the log file as a single record. The log record may be buffered
+     * internally. Mutation reconstruction (grouping by row+type) happens on the consumer side.
+     * @param tableName  The HBase table name
+     * @param commitId   The commit identifier
+     * @param cells      The flat ordered cell stream forming the record body.
+     * @param attributes Record-level attributes (envelope) that apply uniformly to every mutation
+     *                   reconstructed from {@code cells}.
+     * @return true if an implicit sync happened (block full), false if buffered only
+     * @throws IOException if an I/O error occurs during append.
+     */
+    boolean append(String tableName, long commitId, List<Cell> cells,
+      Map<String, byte[]> attributes) throws IOException;
+
+    /**
      * Flushes any buffered data to the underlying storage and ensures it is durable (e.g., by
      * calling hsync on the FSDataOutputStream). This guarantees that records appended before the
      * sync are persisted.

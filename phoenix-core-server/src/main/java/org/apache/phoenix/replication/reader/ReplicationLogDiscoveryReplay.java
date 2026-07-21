@@ -557,13 +557,13 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
    * consistency point in a standby cluster is defined as the timestamp such that all mutations
    * whose timestamp is less than this consistency point timestamp have been replayed.
    * <p>
-   * In SYNC state with files in progress, the minimum IN-PROGRESS timestamp is aligned down to
-   * the start time of the round it belongs to. Files within a round are moved to IN-PROGRESS in
-   * random order, so the minimum IN-PROGRESS timestamp may not be the oldest file of its round
-   * (an older sibling can still be waiting in the IN directory). Every file of a round has a
-   * timestamp greater than or equal to the round start, and earlier rounds are fully replayed
-   * first, so the round start is a safe exclusive upper bound that never advances past unreplayed
-   * files - without listing the IN directories.
+   * In SYNC state with files in progress, the minimum IN-PROGRESS timestamp is aligned down to the
+   * start time of the round it belongs to. Files within a round are moved to IN-PROGRESS in random
+   * order, so the minimum IN-PROGRESS timestamp may not be the oldest file of its round (an older
+   * sibling can still be waiting in the IN directory). Every file of a round has a timestamp
+   * greater than or equal to the round start, and earlier rounds are fully replayed first, so the
+   * round start is a safe exclusive upper bound that never advances past unreplayed files - without
+   * listing the IN directories.
    * @return The consistency point timestamp in milliseconds
    * @throws IOException if the consistency point cannot be determined based on current state
    */

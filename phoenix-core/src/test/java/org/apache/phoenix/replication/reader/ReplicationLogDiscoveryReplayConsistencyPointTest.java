@@ -37,9 +37,9 @@ import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
 
 /**
- * Unit tests for {@link ReplicationLogDiscoveryReplay#getConsistencyPoint()} focused on
- * round alignment of the minimum IN-PROGRESS timestamp (PHOENIX-7938). Runs entirely on the
- * local filesystem; no mini cluster required.
+ * Unit tests for {@link ReplicationLogDiscoveryReplay#getConsistencyPoint()} focused on round
+ * alignment of the minimum IN-PROGRESS timestamp (PHOENIX-7938). Runs entirely on the local
+ * filesystem; no mini cluster required.
  */
 public class ReplicationLogDiscoveryReplayConsistencyPointTest {
 
@@ -67,7 +67,8 @@ public class ReplicationLogDiscoveryReplayConsistencyPointTest {
       new Path(new Path(rootURI.getPath(), HA_GROUP_NAME), ReplicationLogReplay.IN_DIRECTORY_NAME);
     ReplicationShardDirectoryManager shardManager =
       new ReplicationShardDirectoryManager(conf, localFs, newFilesDirectory);
-    MetricsReplicationLogTracker metrics = new MetricsReplicationLogTrackerReplayImpl(HA_GROUP_NAME);
+    MetricsReplicationLogTracker metrics =
+      new MetricsReplicationLogTrackerReplayImpl(HA_GROUP_NAME);
     tracker = new TestableTracker(conf, HA_GROUP_NAME, shardManager, metrics);
     tracker.init();
     discovery = new ReplicationLogDiscoveryReplay(tracker);
@@ -127,7 +128,7 @@ public class ReplicationLogDiscoveryReplayConsistencyPointTest {
   public void testSyncStateMultipleRoundsUsesEarlierRoundStart() throws IOException {
     long earlierRoundStart = ROUND_START - ROUND_MILLIS;
     createInProgressFile(earlierRoundStart + 15000L); // round N-1 (retried file)
-    createInProgressFile(ROUND_START + 40000L);       // round N
+    createInProgressFile(ROUND_START + 40000L); // round N
     ReplicationRound roundN = new ReplicationRound(ROUND_START, ROUND_START + ROUND_MILLIS);
     discovery.setLastRoundInSync(roundN);
     discovery.setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);

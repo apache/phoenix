@@ -18,7 +18,6 @@
 package org.apache.phoenix.replication.log;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -89,15 +88,7 @@ public class LogFileRecord implements LogFile.Record {
 
   @Override
   public List<Mutation> getMutations() throws IOException {
-    List<Mutation> result = MutationCellGrouper.splitCellsIntoMutations(cells);
-    if (!attributes.isEmpty()) {
-      for (Mutation m : result) {
-        for (Map.Entry<String, byte[]> e : attributes.entrySet()) {
-          m.setAttribute(e.getKey(), e.getValue());
-        }
-      }
-    }
-    return result;
+    return MutationCellGrouper.reconstructMutations(cells, attributes);
   }
 
   @Override
@@ -112,12 +103,8 @@ public class LogFileRecord implements LogFile.Record {
 
   @Override
   public LogFile.Record setMutation(Mutation mutation) {
-    List<Cell> body = new ArrayList<>();
-    for (List<Cell> familyCells : mutation.getFamilyCellMap().values()) {
-      body.addAll(familyCells);
-    }
-    this.cells = body;
-    this.attributes = Collections.emptyMap();
+    this.cells = MutationCellGrouper.flattenCells(mutation);
+    this.attributes = MutationCellGrouper.extractReplicationAttributes(mutation);
     return this;
   }
 

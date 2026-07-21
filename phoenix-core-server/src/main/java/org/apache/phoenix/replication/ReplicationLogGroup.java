@@ -42,6 +42,8 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
@@ -62,6 +64,7 @@ import org.apache.hadoop.hbase.Abortable;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
@@ -71,6 +74,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFactoryBuilder;
 
 import org.apache.hbase.thirdparty.com.google.common.collect.ImmutableMap;
@@ -180,6 +184,28 @@ public class ReplicationLogGroup {
   public static final String REPLICATION_LOG_GROUP_SHUTDOWN_TIMEOUT_MS_KEY =
     "phoenix.replication.log.group.shutdown.timeout.ms";
   public static final long DEFAULT_REPLICATION_LOG_GROUP_SHUTDOWN_TIMEOUT_MS = 30_000L;
+
+  /**
+   * Batch-uniform mutation attribute keys that are carried as the envelope of a replication log
+   * record (and mirrored on the WAL key for the WAL-restore path). These attributes enable the
+   * standby cluster's IndexRegionObserver to generate index mutations from replicated data
+   * mutations.
+   * <p>
+   * {@code REPLICATED_MUTATION} (the generic "originated from replication" marker) and
+   * {@code PRE_IMAGE} (per-row primary-side pre-image bytes) are intentionally NOT in this list.
+   * Both are reader-synthesized: the standby stamps {@code REPLICATED_MUTATION} on every
+   * reconstructed mutation, and {@code PRE_IMAGE} on those whose row had a pre-image cell.
+   * <p>
+   * {@code INDEX_UUID} is also NOT in this list. It is not copied from the mutation: the active
+   * decides from its own resolved index maintainers whether the table is indexed and, only then,
+   * stamps an empty UUID onto the envelope (see {@code IndexRegionObserver}). Keying off the
+   * client-set attribute here would make the standby's index regeneration depend on client behavior
+   * rather than on whether the table actually has indexes.
+   */
+  public static final List<String> REPLICATION_ATTR_KEYS = Collections
+    .unmodifiableList(Arrays.asList(MutationState.MutationMetadataType.SCHEMA_NAME.toString(),
+      MutationState.MutationMetadataType.LOGICAL_TABLE_NAME.toString(),
+      MutationState.MutationMetadataType.TENANT_ID.toString()));
 
   public static final String STANDBY_DIR = "in";
   public static final String FALLBACK_DIR = "out";
@@ -331,18 +357,21 @@ public class ReplicationLogGroup {
   }
 
   /**
-   * Append payload carried through the ring buffer. Always carries a flat {@link List} of
-   * {@link Cell}s; the per-mutation public API extracts the cells before publishing.
+   * Disruptor payload for one append. Carries a flat cell stream plus the envelope attributes that
+   * apply uniformly to every reconstructed mutation.
    */
   protected static class Record {
     public final String tableName;
     public final long commitId;
     public final List<Cell> cells;
+    public final Map<String, byte[]> attributes;
 
-    public Record(String tableName, long commitId, List<Cell> cells) {
-      this.tableName = tableName;
+    public Record(String tableName, long commitId, List<Cell> cells,
+      Map<String, byte[]> attributes) {
+      this.tableName = Preconditions.checkNotNull(tableName, "tableName must not be null");
       this.commitId = commitId;
-      this.cells = cells;
+      this.cells = Preconditions.checkNotNull(cells, "cells must not be null");
+      this.attributes = Preconditions.checkNotNull(attributes, "attributes must not be null");
     }
   }
 
@@ -557,37 +586,40 @@ public class ReplicationLogGroup {
     if (LOG.isTraceEnabled()) {
       LOG.trace("Append: table={}, commitId={}, mutation={}", tableName, commitId, mutation);
     }
-    List<Cell> cells = new ArrayList<>();
-    for (List<Cell> familyCells : mutation.getFamilyCellMap().values()) {
-      cells.addAll(familyCells);
-    }
+    List<Cell> cells = MutationCellGrouper.flattenCells(mutation);
     if (cells.isEmpty()) {
       throw new IllegalArgumentException("Cannot append a mutation with no cells");
     }
-    publishDataEvent(new Record(tableName, commitId, cells));
+    publish(new Record(tableName, commitId, cells,
+      MutationCellGrouper.extractReplicationAttributes(mutation)));
   }
 
   /**
-   * Append a coalesced batch of cells as a single record on the log. The cells must already be
-   * grouped by row+type so consumers can reconstruct Put/Delete mutations on the row+type boundary
-   * (see {@link MutationCellGrouper}). Behaves identically to
-   * {@link #append(String, long, Mutation)} with respect to backpressure and fail-stop.
-   * @param tableName The HBase table name shared by every cell in {@code cells}.
-   * @param commitId  The commit identifier (e.g., SCN) for the batch.
-   * @param cells     The flat ordered cell stream for one batch on one table.
-   * @throws IOException If the writer is closed or the ring buffer is full.
+   * Append a batch of cells to the log as a single record. Like
+   * {@link #append(String, long, Mutation)}, this method is non-blocking and returns quickly unless
+   * the ring buffer is full; the actual write happens asynchronously and is durable only after a
+   * subsequent {@link #sync()}.
+   * @param tableName  The name of the HBase table the cells apply to.
+   * @param commitId   The commit identifier (e.g., SCN) associated with the batch.
+   * @param cells      The flat ordered cell stream forming the record body. Mutation reconstruction
+   *                   (grouping by row+type) is the consumer's responsibility.
+   * @param attributes Record-level attributes (envelope) that apply uniformly to every mutation
+   *                   reconstructed from {@code cells}.
+   * @throws IOException If the writer is closed or if the ring buffer is full.
    */
-  public void append(String tableName, long commitId, List<Cell> cells) throws IOException {
+  public void append(String tableName, long commitId, List<Cell> cells,
+    Map<String, byte[]> attributes) throws IOException {
     if (cells == null || cells.isEmpty()) {
       throw new IllegalArgumentException("Cannot append a record with no cells");
     }
     if (LOG.isTraceEnabled()) {
-      LOG.trace("Append: table={}, commitId={}, cells={}", tableName, commitId, cells.size());
+      LOG.trace("Append: table={}, commitId={}, cellCount={}, attrCount={}", tableName, commitId,
+        cells.size(), attributes.size());
     }
-    publishDataEvent(new Record(tableName, commitId, cells));
+    publish(new Record(tableName, commitId, cells, attributes));
   }
 
-  private void publishDataEvent(Record record) throws IOException {
+  private void publish(Record record) throws IOException {
     if (isClosed()) {
       throw new IOException("Closed");
     }
