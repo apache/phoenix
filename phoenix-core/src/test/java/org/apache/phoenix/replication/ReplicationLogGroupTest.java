@@ -507,13 +507,13 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
    * init() must still close the underlying writer even when the disruptor consumer thread is slow
    * to start. Without the startedLatch gate in close(), disruptor.shutdown()'s halt() raises an
    * alert before the consumer thread enters BatchEventProcessor.run(); run()'s opening clearAlert()
-   * then wipes that alert, the wait loop parks forever, and onShutdown (writer close) never runs.
+   * then wipes that alert, the wait loop spins forever, and onShutdown (writer close) never runs.
    * <p>
    * This mirrors the recreateLogGroup()/tearDown() path where a group with zero appends is closed
    * right after creation, so we intentionally do NOT append (a backlog would make shutdown() wait
    * for the consumer regardless and mask the race).
    */
-  @Test
+  @Test(timeout = 60000)
   public void testCloseImmediatelyAfterInitClosesWriterWhenConsumerStartsLate() throws Exception {
     // Delay the consumer thread's start by ~500ms so close()'s halt() lands in the window before
     // run()'s clearAlert(). The startedLatch gate in close() must wait this out.
