@@ -2558,7 +2558,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       // For views this will ensure that metadata already exists
       // For tables and indexes, this will create the metadata if it doesn't already exist
       ensureTableCreated(physicalTableNameBytes, null, tableType, tableProps, families, splits,
-        true, isNamespaceMapped, isDoNotUpgradePropSet, createIfNotExists);
+        true, isNamespaceMapped, isDoNotUpgradePropSet, createIfNotExists && !localIndexTable);
     }
     ImmutableBytesWritable ptr = new ImmutableBytesWritable();
     if (tableType == PTableType.INDEX) { // Index on view
