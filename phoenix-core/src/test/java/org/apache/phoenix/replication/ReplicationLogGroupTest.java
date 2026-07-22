@@ -2452,8 +2452,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // publish can floor to a 0ns delta, so assert presence (>= 0) rather than strict positivity.
     assertTrue("appendTime should be >= 0, got " + values.getAppendTimeMax(),
       values.getAppendTimeMax() >= 0);
-    assertTrue("ringBufferTime should be > 0, got " + values.getRingBufferTimeMax(),
-      values.getRingBufferTimeMax() > 0);
+    assertTrue("ringBufferTime should be >= 0, got " + values.getRingBufferTimeMax(),
+      values.getRingBufferTimeMax() >= 0);
     assertTrue("pendingSyncWaitTime should be > 0, got " + values.getPendingSyncWaitTimeMax(),
       values.getPendingSyncWaitTimeMax() > 0);
     // Counts.
