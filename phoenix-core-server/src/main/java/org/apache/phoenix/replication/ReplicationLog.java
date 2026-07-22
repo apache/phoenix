@@ -310,7 +310,7 @@ public class ReplicationLog {
     LOG.info("Replaying {} unsynced records into new writer {}", currentBatch.size(),
       currentWriter);
     for (Record r : currentBatch) {
-      currentWriter.append(r.tableName, r.commitId, r.cells);
+      currentWriter.append(r.tableName, r.commitId, r.cells, r.attributes);
     }
   }
 
@@ -350,7 +350,7 @@ public class ReplicationLog {
   protected void append(Record r) throws IOException {
     final boolean[] blockSynced = { false };
     apply(writer -> {
-      blockSynced[0] = writer.append(r.tableName, r.commitId, r.cells);
+      blockSynced[0] = writer.append(r.tableName, r.commitId, r.cells, r.attributes);
     });
     // Add to current batch only after we succeed at appending
     currentBatch.add(r);

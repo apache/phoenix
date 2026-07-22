@@ -795,6 +795,65 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
   }
 
   /**
+   * PHOENIX-7938: files within a round are moved to IN-PROGRESS in random order, so the minimum
+   * IN-PROGRESS timestamp may not be the oldest file of its round (an older sibling can still be
+   * waiting in the IN directory). The SYNC-state consistency point must therefore align the minimum
+   * IN-PROGRESS timestamp down to its round start rather than use it raw. Verified end-to-end
+   * against the real tracker and filesystem.
+   */
+  @Test
+  public void testGetConsistencyPoint_SyncState_AlignsInProgressMinToRoundStart()
+    throws IOException {
+    TestableReplicationLogTracker fileTracker =
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+
+    try {
+      long roundTimeMills =
+        fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds()
+          * 1000L;
+      long roundStart = 1704153600000L; // aligned to a round boundary (2024-01-02 00:00:00)
+      long inProgressFileTs = roundStart + 30000L; // 30s into the round, off the round boundary
+      ReplicationRound roundN = new ReplicationRound(roundStart, roundStart + roundTimeMills);
+
+      // Seed a single IN-PROGRESS file 30s into the round. getConsistencyPoint() reads only the
+      // IN-PROGRESS directory, so this is the minimum timestamp; the fix must align it down to the
+      // round start rather than expose it raw, because an older sibling from the same round could
+      // still be waiting in the IN directory (files are moved to IN-PROGRESS in random order).
+      Path inProgressDir = fileTracker.getInProgressDirPath();
+      rootFs.mkdirs(inProgressDir);
+      rootFs.create(new Path(inProgressDir, inProgressFileTs + "_rs-1_uuid.plog"), true).close();
+
+      long currentTime = roundStart + (2 * roundTimeMills);
+      EnvironmentEdge edge = () -> currentTime;
+      EnvironmentEdgeManager.injectEdge(edge);
+
+      try {
+        HAGroupStoreRecord mockRecord =
+          new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+            HAGroupStoreRecord.HAGroupState.STANDBY, roundStart,
+            HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+            CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+
+        TestableReplicationLogDiscoveryReplay discovery =
+          new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+        discovery.init();
+        discovery.setLastRoundProcessed(roundN);
+        discovery.setLastRoundInSync(roundN);
+        discovery
+          .setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC);
+
+        assertEquals(
+          "Consistency point must align to round start, not the raw min IN-PROGRESS timestamp",
+          roundStart, discovery.getConsistencyPoint());
+      } finally {
+        EnvironmentEdgeManager.reset();
+      }
+    } finally {
+      fileTracker.close();
+    }
+  }
+
+  /**
    * Tests replay in DEGRADED state processing multiple rounds. Validates that lastRoundProcessed
    * advances but lastRoundInSync is preserved.
    */

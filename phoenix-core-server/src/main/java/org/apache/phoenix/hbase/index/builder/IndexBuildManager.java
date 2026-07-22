@@ -33,6 +33,7 @@ import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.ReplayWrite;
 import org.apache.phoenix.hbase.index.covered.IndexMetaData;
 import org.apache.phoenix.hbase.index.covered.data.CachedLocalTable;
+import org.apache.phoenix.hbase.index.covered.data.LocalHBaseState;
 import org.apache.phoenix.hbase.index.table.HTableInterfaceReference;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
@@ -92,14 +93,28 @@ public class IndexBuildManager implements Stoppable {
     ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates,
     MiniBatchOperationInProgress<Mutation> miniBatchOp, Collection<? extends Mutation> mutations,
     IndexMetaData indexMetaData) throws Throwable {
-    // notify the delegate that we have started processing a batch
-    this.delegate.batchStarted(miniBatchOp, indexMetaData);
     CachedLocalTable cachedLocalTable = CachedLocalTable.build(mutations,
       (PhoenixIndexMetaData) indexMetaData, this.regionCoprocessorEnvironment.getRegion());
+    getIndexUpdates(indexUpdates, miniBatchOp, mutations, indexMetaData, cachedLocalTable);
+  }
+
+  /**
+   * Variant of
+   * {@link #getIndexUpdates(ListMultimap, MiniBatchOperationInProgress, Collection, IndexMetaData)}
+   * that uses a caller-supplied {@link LocalHBaseState} for prior-row-state lookups instead of
+   * building a region-scanning {@link CachedLocalTable}. Used on the standby replay path, where
+   * prior state comes from the per-batch pre-image rather than the (not-yet-written) region.
+   */
+  public void getIndexUpdates(
+    ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates,
+    MiniBatchOperationInProgress<Mutation> miniBatchOp, Collection<? extends Mutation> mutations,
+    IndexMetaData indexMetaData, LocalHBaseState localHBaseState) throws Throwable {
+    // notify the delegate that we have started processing a batch
+    this.delegate.batchStarted(miniBatchOp, indexMetaData);
     // Avoid the Object overhead of the executor when it's not actually parallelizing anything.
     for (Mutation m : mutations) {
       Collection<Pair<Mutation, byte[]>> updates =
-        delegate.getIndexUpdate(m, indexMetaData, cachedLocalTable);
+        delegate.getIndexUpdate(m, indexMetaData, localHBaseState);
       for (Pair<Mutation, byte[]> update : updates) {
         indexUpdates.put(new HTableInterfaceReference(new ImmutableBytesPtr(update.getSecond())),
           new Pair<>(update.getFirst(), m.getRow()));

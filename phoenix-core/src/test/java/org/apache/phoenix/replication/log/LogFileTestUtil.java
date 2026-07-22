@@ -30,7 +30,6 @@ import java.io.DataOutputStream;
 import java.io.EOFException;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.ArrayList;
 import java.util.List;
 import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FSDataOutputStreamBuilder;
@@ -44,6 +43,7 @@ import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.replication.MutationCellGrouper;
 
 public interface LogFileTestUtil {
 
@@ -51,11 +51,7 @@ public interface LogFileTestUtil {
    * Flatten a mutation's family cell map into the cell list that the writer ultimately receives.
    */
   static List<Cell> cellsOf(Mutation mutation) {
-    List<Cell> cells = new ArrayList<>();
-    for (List<Cell> familyCells : mutation.getFamilyCellMap().values()) {
-      cells.addAll(familyCells);
-    }
-    return cells;
+    return MutationCellGrouper.flattenCells(mutation);
   }
 
   static LogFile.Record newPutRecord(String table, long commitId, String rowKey, long ts,
