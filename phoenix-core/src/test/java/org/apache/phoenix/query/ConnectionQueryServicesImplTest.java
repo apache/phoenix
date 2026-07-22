@@ -73,6 +73,7 @@ import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -407,5 +408,58 @@ public class ConnectionQueryServicesImplTest {
     verify(mockAdmin, Mockito.times(1)).disableTable(TableName.valueOf("TEST_TABLE"));
     verify(mockAdmin, Mockito.times(1)).deleteTable(TableName.valueOf("TEST_TABLE"));
     verify(mockConn).getAdmin();
+  }
+
+  /**
+   * When a connection is closed concurrently with query compilation (e.g. connection pool teardown
+   * or cluster failover), the metadata cache is nulled out. getMetaDataCache() must surface the
+   * descriptive "connection closed" exception rather than returning null and letting callers hit a
+   * bare NPE.
+   */
+  @Test
+  public void testGetMetaDataCacheThrowsWhenClosed()
+    throws NoSuchFieldException, IllegalAccessException {
+    ConnectionQueryServicesImpl cqsi = newRealCqsi();
+    // Simulate the post-close() state where close() has set latestMetaData = null.
+    setLatestMetaData(cqsi, null);
+    try {
+      cqsi.getMetaDataCache();
+      fail("Expected IllegalStateException for a closed connection, but no exception was thrown");
+    } catch (IllegalStateException e) {
+      assertEquals("Connection to the cluster is closed", e.getMessage());
+    }
+  }
+
+  /**
+   * When the metadata cache is present (open connection), getMetaDataCache() returns it unchanged.
+   */
+  @Test
+  public void testGetMetaDataCacheReturnsCacheWhenOpen()
+    throws NoSuchFieldException, IllegalAccessException {
+    ConnectionQueryServicesImpl cqsi = newRealCqsi();
+    PMetaData metaData = Mockito.mock(PMetaData.class);
+    setLatestMetaData(cqsi, metaData);
+    assertSame(metaData, cqsi.getMetaDataCache());
+  }
+
+  /**
+   * Builds a real ConnectionQueryServicesImpl so that getMetaDataCache() and its private
+   * throwConnectionClosedIfNullMetaData() guard execute for real. A CALLS_REAL_METHODS mock cannot
+   * be used here because Mockito does not route the internal call to the private guard method.
+   */
+  private static ConnectionQueryServicesImpl newRealCqsi() {
+    QueryServices mockQueryServices = Mockito.mock(QueryServices.class);
+    ReadOnlyProps emptyProps = ReadOnlyProps.EMPTY_PROPS;
+    when(mockQueryServices.getProps()).thenReturn(emptyProps);
+    ConnectionInfo mockConnectionInfo = Mockito.mock(ConnectionInfo.class);
+    when(mockConnectionInfo.asProps()).thenReturn(emptyProps);
+    return new ConnectionQueryServicesImpl(mockQueryServices, mockConnectionInfo, new Properties());
+  }
+
+  private static void setLatestMetaData(ConnectionQueryServicesImpl cqsi, PMetaData value)
+    throws NoSuchFieldException, IllegalAccessException {
+    Field field = ConnectionQueryServicesImpl.class.getDeclaredField("latestMetaData");
+    field.setAccessible(true);
+    field.set(cqsi, value);
   }
 }
