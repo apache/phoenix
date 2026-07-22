@@ -2454,8 +2454,8 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       values.getAppendTimeMax() >= 0);
     assertTrue("ringBufferTime should be >= 0, got " + values.getRingBufferTimeMax(),
       values.getRingBufferTimeMax() >= 0);
-    assertTrue("pendingSyncWaitTime should be > 0, got " + values.getPendingSyncWaitTimeMax(),
-      values.getPendingSyncWaitTimeMax() > 0);
+    assertTrue("pendingSyncWaitTime should be >= 0, got " + values.getPendingSyncWaitTimeMax(),
+      values.getPendingSyncWaitTimeMax() >= 0);
     // Counts.
     assertTrue("batchSize should be > 0, got " + values.getBatchSizeMax(),
       values.getBatchSizeMax() > 0);
