@@ -244,8 +244,19 @@ public class ReplicationLog {
    * Submits a {@link LogRotationTask} to the executor. The CAS gate ensures only one rotation can
    * be queued or in flight at a time — if the flag is already set, a task is already pending or
    * running. Both scheduled ticks and on-demand size-triggered callers go through this method.
+   * <p>
+   * Suspends rotation during the in-sync cutover gate: while {@code failoverPending} is set we skip
+   * before the CAS so a tick never engages it. Minting a new file each round would keep dropping
+   * .plog files into the peer's shard directory and deadlock the standby's failover check; the
+   * current writer stays open so in-flight writes still land. Skipping ahead of the CAS (rather
+   * than inside {@link LogRotationTask#run()}) keeps the gate clear, so a later tick resumes
+   * rotation as soon as the flag clears on abort.
    */
   private void requestRotation() {
+    if (logGroup.isFailoverPending()) {
+      LOG.info("HAGroup {} rotation suspended: failover pending", logGroup);
+      return;
+    }
     if (rotationRequested.compareAndSet(false, true)) {
       try {
         rotationExecutor.execute(new LogRotationTask());
@@ -411,6 +422,12 @@ public class ReplicationLog {
 
   @VisibleForTesting
   protected void forceRotation() {
+    // Model the same suspension policy as a scheduled tick: rotation is a no-op while the group is
+    // in the in-sync cutover gate (see requestRotation()).
+    if (logGroup.isFailoverPending()) {
+      LOG.info("HAGroup {} rotation suspended: failover pending", logGroup);
+      return;
+    }
     new LogRotationTask().run();
   }
 

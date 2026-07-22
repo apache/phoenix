@@ -915,9 +915,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       Mutation m = miniBatchOp.getOperation(0);
       byte[] haGroupName = m.getAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
       if (haGroupName != null) {
-        ReplicationLogGroup logGroup = ReplicationLogGroup.get(env.getConfiguration(),
-          env.getServerName(), Bytes.toString(haGroupName), abortable);
-        return Optional.of(logGroup);
+        // A live client write carrying HA_GROUP_NAME reached this cluster: it must be the active
+        // side. get() returns empty when this cluster is not active — a stray/stale sync-path write
+        // to a demoted cluster. Reject it rather than committing locally unreplicated (split
+        // brain);
+        // the mutation-block gates in preBatchMutate only run when the group is present.
+        return Optional.of(ReplicationLogGroup
+          .get(env.getConfiguration(), env.getServerName(), Bytes.toString(haGroupName), abortable)
+          .orElseThrow(() -> new IOException(
+            String.format("HAGroup %s cannot accept a sync-path write: this cluster is not active",
+              Bytes.toString(haGroupName)))));
       }
     }
     return Optional.empty();
@@ -932,9 +939,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     Map<String, byte[]> walKeyAttrs) throws IOException {
     byte[] haGroupName = walKeyAttrs.get(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
     if (haGroupName != null) {
-      ReplicationLogGroup logGroup = ReplicationLogGroup.get(env.getConfiguration(),
-        env.getServerName(), Bytes.toString(haGroupName), abortable);
-      return Optional.of(logGroup);
+      // get() returns empty when this cluster is not active. On the replay path this means a
+      // demoted
+      // cluster is replaying its own formerly-ACTIVE edits after a crash: the peer is ACTIVE now,
+      // so
+      // this cluster must not start a replication writer or re-ship. Returning empty lets the
+      // caller
+      // skip the re-ship; HBase still replays the edits into the local region.
+      return ReplicationLogGroup.get(env.getConfiguration(), env.getServerName(),
+        Bytes.toString(haGroupName), abortable);
     }
     return Optional.empty();
   }

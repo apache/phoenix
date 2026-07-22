@@ -56,6 +56,17 @@ public class SyncModeImpl extends ReplicationModeImpl {
   @Override
   ReplicationMode onFailure(Throwable e) throws IOException {
     LOG.info("HAGroup {} mode={} got error", logGroup, this, e);
+    if (logGroup.isFailoverPending()) {
+      // During the in-sync cutover gate we cannot fall back to STORE_AND_FORWARD: that transition
+      // targets ACTIVE_NOT_IN_SYNC, which is not allowed from ACTIVE_IN_SYNC_TO_STANDBY, and the
+      // active has no self-abort lever. Fail-stop instead — the thrown exception propagates to the
+      // event handler, which fails the pending syncs so the blocked producer aborts the RS. This
+      // preserves the invariant that a locally-committed mutation is never silently lost.
+      String message = String
+        .format("HAGroup %s SYNC write failed during cutover; aborting region server", logGroup);
+      LOG.error(message, e);
+      throw ReplicationLogGroup.asIOException(message, e);
+    }
     return transitionToStoreAndForward();
   }
 
