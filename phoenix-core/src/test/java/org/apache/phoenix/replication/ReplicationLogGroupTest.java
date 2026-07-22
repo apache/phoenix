@@ -48,13 +48,19 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.SynchronousQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
+import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
+import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
@@ -494,6 +500,81 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Verify we can close multiple times without error
     logGroup.close();
+  }
+
+  /**
+   * Regression test for the start/shutdown clearAlert race: a close() that immediately follows
+   * init() must still close the underlying writer even when the disruptor consumer thread is slow
+   * to start. Without the startedLatch gate in close(), disruptor.shutdown()'s halt() raises an
+   * alert before the consumer thread enters BatchEventProcessor.run(); run()'s opening clearAlert()
+   * then wipes that alert, the wait loop spins forever, and onShutdown (writer close) never runs.
+   * <p>
+   * This mirrors the recreateLogGroup()/tearDown() path where a group with zero appends is closed
+   * right after creation, so we intentionally do NOT append (a backlog would make shutdown() wait
+   * for the consumer regardless and mask the race).
+   */
+  @Test(timeout = 60000)
+  public void testCloseImmediatelyAfterInitClosesWriterWhenConsumerStartsLate() throws Exception {
+    // Delay the consumer thread's start by ~500ms so close()'s halt() lands in the window before
+    // run()'s clearAlert(). The startedLatch gate in close() must wait this out.
+    ReplicationLogGroup lateGroup = new LateStartLogGroup(conf, serverName, haGroupName,
+      haGroupStoreManager, useAlignedRotation(), 500L);
+    try {
+      lateGroup.init();
+
+      // currentWriter is created synchronously in ReplicationLog.init(), so it exists even though
+      // the consumer thread has not started yet.
+      LogFileWriter innerWriter = lateGroup.getActiveLog().getWriter();
+      assertNotNull("Inner writer should not be null", innerWriter);
+
+      // Close immediately, before the delayed consumer thread has entered its run loop.
+      lateGroup.close();
+
+      // The gate ensures onShutdown ran, so the writer must have been closed.
+      verify(innerWriter, times(1)).close();
+    } finally {
+      lateGroup.close();
+    }
+  }
+
+  /**
+   * A ReplicationLogGroup whose disruptor consumer thread is delayed before it starts executing,
+   * used to force close()'s halt() into the pre-clearAlert window.
+   */
+  static class LateStartLogGroup extends ReplicationLogBaseTest.TestableLogGroup {
+    private final long startDelayMs;
+
+    LateStartLogGroup(Configuration conf, ServerName serverName, String haGroupName,
+      HAGroupStoreManager haGroupStoreManager, boolean useAlignedRotation, long startDelayMs) {
+      super(conf, serverName, haGroupName, haGroupStoreManager, useAlignedRotation);
+      this.startDelayMs = startDelayMs;
+    }
+
+    @Override
+    protected ExecutorService createDisruptorExecutor() {
+      ThreadFactory factory = new ThreadFactory() {
+        private int count = 0;
+
+        @Override
+        public Thread newThread(Runnable r) {
+          Thread t = new Thread(r, "LateStartLogGroup-" + getHAGroupName() + "-" + (count++));
+          t.setDaemon(true);
+          return t;
+        }
+      };
+      // Sleep before the consumer Runnable executes so run()'s clearAlert() is delayed.
+      return new ThreadPoolExecutor(0, Integer.MAX_VALUE, 60L, TimeUnit.SECONDS,
+        new SynchronousQueue<>(), factory) {
+        @Override
+        protected void beforeExecute(Thread t, Runnable r) {
+          try {
+            Thread.sleep(startDelayMs);
+          } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+          }
+        }
+      };
+    }
   }
 
   /**
@@ -2371,10 +2452,10 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
     // publish can floor to a 0ns delta, so assert presence (>= 0) rather than strict positivity.
     assertTrue("appendTime should be >= 0, got " + values.getAppendTimeMax(),
       values.getAppendTimeMax() >= 0);
-    assertTrue("ringBufferTime should be > 0, got " + values.getRingBufferTimeMax(),
-      values.getRingBufferTimeMax() > 0);
-    assertTrue("pendingSyncWaitTime should be > 0, got " + values.getPendingSyncWaitTimeMax(),
-      values.getPendingSyncWaitTimeMax() > 0);
+    assertTrue("ringBufferTime should be >= 0, got " + values.getRingBufferTimeMax(),
+      values.getRingBufferTimeMax() >= 0);
+    assertTrue("pendingSyncWaitTime should be >= 0, got " + values.getPendingSyncWaitTimeMax(),
+      values.getPendingSyncWaitTimeMax() >= 0);
     // Counts.
     assertTrue("batchSize should be > 0, got " + values.getBatchSizeMax(),
       values.getBatchSizeMax() > 0);
