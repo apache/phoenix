@@ -1020,7 +1020,7 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
 
     // Replay the replication log on cluster 2
     FileSystem fs = standByLogDir.getFileSystem(conf2);
-    List<Path> logFiles = findLogFiles(standByLogDir, fs);
+    List<Path> logFiles = CrossClusterReplicationTestUtil.findLogFiles(standByLogDir, fs);
     LOG.info("Found {} log files to replay", logFiles.size());
     assertTrue("Should have at least one log file", logFiles.size() > 0);
 

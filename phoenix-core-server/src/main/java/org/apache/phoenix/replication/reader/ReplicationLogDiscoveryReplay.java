@@ -157,10 +157,11 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
           // would otherwise flip SYNC -> SYNCED_RECOVERY and needlessly re-process the frontier
           // round. Symmetric with triggerFailoverListner below; contrast degradedListener above,
           // whose unconditional fail-closed set() is intentional.
-          replicationReplayState.compareAndSet(ReplicationReplayState.DEGRADED,
-            ReplicationReplayState.SYNCED_RECOVERY);
-          LOG.info("Cluster recovered detected for {}. replicationReplayState={}", haGroupName,
-            getReplicationReplayState());
+          boolean rewindScheduled = replicationReplayState
+            .compareAndSet(ReplicationReplayState.DEGRADED, ReplicationReplayState.SYNCED_RECOVERY);
+          LOG.info(
+            "Cluster recovered detected for {}. replicationReplayState={}, rewindScheduled={}",
+            haGroupName, getReplicationReplayState(), rewindScheduled);
         }
       };
 
@@ -173,15 +174,21 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
           // Direct DEGRADED_STANDBY -> STANDBY_TO_ACTIVE skips the STANDBY event that normally
           // drives recovery. If we are DEGRADED, schedule the rewind so replay() re-syncs from
           // lastRoundInSync before shouldTriggerFailover() (which gates on SYNC) can promote.
+          //
+          // Arm failoverPending BEFORE the state CAS. This ordering is a contract with the
+          // init-window reconcile in initializeLastRoundProcessed(): if this listener fires while
+          // init still holds NOT_INITIALIZED, the CAS below no-ops and only the arm survives, so
+          // arming first guarantees the reconcile sees the arm whenever it still sees DEGRADED.
+          //
           // compareAndSet, not set: a listener firing while already SYNC (healthy failover) or
           // SYNCED_RECOVERY (rewind already pending) must not clobber a good state.
-          replicationReplayState.compareAndSet(ReplicationReplayState.DEGRADED,
-            ReplicationReplayState.SYNCED_RECOVERY);
           failoverPending.set(true);
+          boolean rewindScheduled = replicationReplayState
+            .compareAndSet(ReplicationReplayState.DEGRADED, ReplicationReplayState.SYNCED_RECOVERY);
           LOG.info(
-            "Failover trigger detected for {}. replicationReplayState={}. "
+            "Failover trigger detected for {}. replicationReplayState={}, rewindScheduled={}. "
               + "Setting failover pending to {}",
-            haGroupName, getReplicationReplayState(), failoverPending.get());
+            haGroupName, getReplicationReplayState(), rewindScheduled, failoverPending.get());
         }
       };
 
@@ -315,6 +322,30 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     // to guard; this also matches triggerFailoverListner, which arms the same flag with set(true).
     if (HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE.equals(haGroupState)) {
       failoverPending.set(true);
+    }
+
+    // Reconcile the init-window race between the (possibly stale) record read above and the live
+    // LOCAL listeners subscribed in init(). A direct DEGRADED_STANDBY -> STANDBY_TO_ACTIVE flip can
+    // fire triggerFailoverListner while init still holds NOT_INITIALIZED: its CAS(DEGRADED,
+    // SYNCED_RECOVERY) no-ops and only failoverPending survives; then the DEGRADED_STANDBY branch's
+    // CAS(NOT_INITIALIZED, DEGRADED) lands, leaving state DEGRADED with a failover pending. Nothing
+    // re-fires (the record is already STANDBY_TO_ACTIVE; a direct failover never revisits STANDBY),
+    // so shouldTriggerFailover() -- gated on SYNC -- never promotes until an RS restart heals it.
+    // Finish the promotion the listener intended. No-op (no warn) on a normal STANDBY_TO_ACTIVE
+    // restart (state already SYNCED_RECOVERY or SYNC) and skipped for a legitimate DEGRADED standby
+    // (failoverPending false). triggerFailoverListner arms failoverPending before its CAS, so a
+    // still-DEGRADED state here guarantees the arm is visible, closing the window.
+    if (failoverPending.get()) {
+      if (
+        replicationReplayState.compareAndSet(ReplicationReplayState.DEGRADED,
+          ReplicationReplayState.SYNCED_RECOVERY)
+      ) {
+        LOG.warn(
+          "Reconciled init-window failover race for haGroup {}: state was DEGRADED with a pending "
+            + "failover (a DEGRADED_STANDBY -> STANDBY_TO_ACTIVE flip raced init); promoted to "
+            + "SYNCED_RECOVERY so replay can rewind from lastRoundInSync and then promote.",
+          haGroupName);
+      }
     }
   }
 
