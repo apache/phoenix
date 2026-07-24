@@ -434,9 +434,10 @@ public class QueryDatabaseMetaDataIT extends ParallelStatsDisabledIT {
         tables.add(rs.getString("TABLE_NAME"));
         assertEquals("SYSTEM", rs.getString("TABLE_SCHEM"));
       }
-      assertEquals(12, tables.size());
+      assertEquals(13, tables.size());
       assertTrue(tables.contains("CATALOG"));
       assertTrue(tables.contains("FUNCTION"));
+      assertTrue(tables.contains("HA_GROUP"));
 
       tables.clear();
       // Add a filter on the table name.
