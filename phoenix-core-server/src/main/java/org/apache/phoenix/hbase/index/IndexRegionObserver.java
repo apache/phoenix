@@ -120,8 +120,6 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.CompiledConditionalTTLExpression;
-import org.apache.phoenix.schema.CompiledTTLExpression;
-import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
@@ -1734,19 +1732,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * DUPLICATE KEY / {@code returnResult} / row-delete) paths alike. They are inert on the write
    * path (nothing reads a mutation's empty-column attribute), so they are left on the mutations,
    * not removed.</li>
-   * <li>The view's literal <b>{@code _TTL}</b> — the client threads it via the same {@code _TTL}
-   * mutation attribute the server otherwise treats as conditional TTL
-   * ({@code PhoenixIndexBuilder.hasConditionalTTL}). We make that attribute polymorphic: if the
-   * representative mutation's {@code _TTL} deserializes to a {@link LiteralTTLExpression} (a view's
-   * literal TTL), capture its bytes and remove {@code _TTL} from every mutation; if it is
-   * conditional (or absent), leave it untouched so the conditional-TTL path runs normally.</li>
+   * <li>The view's literal <b>{@code _LITERAL_TTL}</b> — the client threads it on its own
+   * attribute, distinct from {@code _TTL} (which on a mutation means conditional TTL). Capture the
+   * bytes as-is; there is nothing to disambiguate and nothing to strip, so the conditional-TTL
+   * consumers ({@code PhoenixIndexBuilder.hasConditionalTTL}, keyed on {@code _TTL}) are never
+   * tripped by a view's literal TTL.</li>
    * </ul>
-   * The {@code _TTL} removal must happen before {@link #identifyMutationTypes} so that
-   * {@code hasConditionalTTL(m)} returns false at every consumer (it sets
-   * {@code context.hasConditionalTTL}, which would otherwise reach the blind cast to
-   * {@code CompiledConditionalTTLExpression} in {@link #updateMutationsForConditionalTTL}). A table
-   * has exactly one TTL kind and a batch never mixes views, so the decision is uniform across the
-   * batch. HBase has no removeAttribute, so removal is {@code setAttribute(TTL, null)}.
    */
   private void extractLiteralTTLForInternalScan(MiniBatchOperationInProgress<Mutation> miniBatchOp,
     BatchMutateContext context) throws IOException {
@@ -1758,20 +1749,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       representative.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
     context.emptyCQForInternalScan =
       representative.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
-
-    byte[] ttlBytes = representative.getAttribute(BaseScannerRegionObserverConstants.TTL);
-    if (ttlBytes == null) {
-      return;
-    }
-    CompiledTTLExpression ttlExpr = TTLExpressionFactory.create(ttlBytes);
-    if (!(ttlExpr instanceof LiteralTTLExpression)) {
-      // Conditional TTL: leave the attribute in place for updateMutationsForConditionalTTL.
-      return;
-    }
-    context.literalTTLForInternalScan = ttlBytes;
-    for (int i = 0; i < miniBatchOp.size(); i++) {
-      miniBatchOp.getOperation(i).setAttribute(BaseScannerRegionObserverConstants.TTL, null);
-    }
+    context.literalTTLForInternalScan =
+      representative.getAttribute(BaseScannerRegionObserverConstants.LITERAL_TTL);
   }
 
   private void identifyMutationTypes(MiniBatchOperationInProgress<Mutation> miniBatchOp,
@@ -1897,13 +1876,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // synchronized(this). The snapshot is a superset of every later state (rowsToLock only
         // shrinks after lockRows), so shouldSleep stays conservative: at most an extra sleep, never
         // a missed one.
-        batchesWithLastTimestamp.add(new TreeSet<>(context.rowsToLock));
+        batchesWithLastTimestamp.add(new HashSet<>(context.rowsToLock));
         return ts;
       } else {
         if (!shouldSleep(context)) {
           // There is no need to sleep as the last batches with the same timestamp
           // do not have a common row this batch
-          batchesWithLastTimestamp.add(new TreeSet<>(context.rowsToLock));
+          batchesWithLastTimestamp.add(new HashSet<>(context.rowsToLock));
           return ts;
         }
       }
@@ -1922,7 +1901,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // We do not have to check again if we need to sleep again since we got the next
       // timestamp while holding the row locks. This mean there cannot be a new
       // mutation with the same row attempting get the same timestamp
-      batchesWithLastTimestamp.add(new TreeSet<>(context.rowsToLock));
+      batchesWithLastTimestamp.add(new HashSet<>(context.rowsToLock));
       return ts;
     }
   }

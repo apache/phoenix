@@ -1878,9 +1878,10 @@ public class ScanUtil {
    * it. We set no {@code _TTL} attribute (matching the read path for base tables).</li>
    * <li>For a <b>VIEW</b>, the view-level TTL is stored in SYSTEM.CATALOG and not on the shared CF
    * descriptor (which carries the base table's TTL), so the view's compiled literal expression must
-   * be threaded per-mutation as {@code _TTL}, but only when {@code serialize()} is non-null — the
-   * exact non-null filter the read path uses. {@code serialize()} returns null only for NONE, which
-   * correctly threads nothing (matching the read path).</li>
+   * be threaded per-mutation on the dedicated {@code _LITERAL_TTL} attribute (distinct from
+   * {@code _TTL}, which on a mutation means conditional TTL), but only when {@code serialize()} is
+   * non-null — the exact non-null filter the read path uses. {@code serialize()} returns null only
+   * for NONE, which correctly threads nothing (matching the read path).</li>
    * <li>For either type, {@code IS_STRICT_TTL=false} is set only when the table/view is non-strict,
    * so absence defaults to strict, matching the read-path convention and avoiding over-masking of a
    * non-strict table.</li>
@@ -1925,10 +1926,11 @@ public class ScanUtil {
       QueryServices.PHOENIX_VIEW_TTL_ENABLED,
       QueryServicesOptions.DEFAULT_PHOENIX_VIEW_TTL_ENABLED);
 
-    // The view's literal TTL is threaded as _TTL only for a view with view-TTL enabled, since it is
-    // not on the shared CF descriptor. A view with view-TTL disabled sets no _TTL on the read path
+    // The view's literal TTL is threaded on its own _LITERAL_TTL attribute (not _TTL, which on a
+    // mutation means conditional TTL) only for a view with view-TTL enabled, since it is not on the
+    // shared CF descriptor. A view with view-TTL disabled sets no TTL attribute on the read path
     // (it returns after only IS_STRICT_TTL), so neither do we; a base table's literal TTL is on the
-    // CF descriptor, so the server's TTLRegionScanner fallback derives it and we thread no _TTL.
+    // CF descriptor, so the server's TTLRegionScanner fallback derives it and we thread nothing.
     byte[] ttlForScan = null;
     if (isView && viewTTLEnabled) {
       // serialize() is non-null for FOREVER and finite literals and null only for NONE, the exact
@@ -1944,7 +1946,7 @@ public class ScanUtil {
       table.isStrictTTL() ? null : PBoolean.INSTANCE.toBytes(table.isStrictTTL());
     for (Mutation mutation : mutations) {
       if (ttlForScan != null) {
-        mutation.setAttribute(BaseScannerRegionObserverConstants.TTL, ttlForScan);
+        mutation.setAttribute(BaseScannerRegionObserverConstants.LITERAL_TTL, ttlForScan);
       }
       if (isStrictTTL != null) {
         mutation.setAttribute(BaseScannerRegionObserverConstants.IS_STRICT_TTL, isStrictTTL);

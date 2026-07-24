@@ -131,6 +131,12 @@ public class BaseScannerRegionObserverConstants {
   public static final String SKIP_REGION_BOUNDARY_CHECK = "_SKIP_REGION_BOUNDARY_CHECK";
   public static final String TX_SCN = "_TxScn";
   public static final String TTL = "_TTL";
+  // Literal TTL threaded per-mutation for the server-side internal current-row scan
+  // (IndexRegionObserver.getCurrentRowStates). Kept distinct from TTL (_TTL), which on a mutation
+  // means conditional TTL, so the server never has to disambiguate an overloaded attribute and an
+  // old RegionServer that predates this simply ignores the unknown attribute instead of
+  // mis-parsing it as a conditional expression.
+  public static final String LITERAL_TTL = "_LITERAL_TTL";
   public static final String IS_STRICT_TTL = "_IS_STRICT_TTL";
   public static final String SCAN_ACTUAL_START_ROW = "_ScanActualStartRow";
   public static final String REPLAY_WRITES = "_IGNORE_NEWER_MUTATIONS";
