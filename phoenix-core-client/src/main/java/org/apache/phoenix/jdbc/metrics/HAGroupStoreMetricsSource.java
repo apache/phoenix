@@ -90,7 +90,7 @@ public interface HAGroupStoreMetricsSource extends BaseSource {
     "Number of invalid HA group state transitions rejected";
   String SYSTEM_TABLE_SYNC_FAILED_COUNT = "haGroupStoreSystemTableSyncFailedCount";
   String SYSTEM_TABLE_SYNC_FAILED_COUNT_DESC =
-    "Number of failed SYSTEM.HA_GROUP synchronization writes";
+    "Number of failed SYSTEM.HA_GROUP synchronization attempts";
   String NOTIFICATION_LISTENER_ERROR_COUNT = "haGroupStoreNotificationListenerErrorCount";
   String NOTIFICATION_LISTENER_ERROR_COUNT_DESC = "Number of HA group notification listener errors";
 

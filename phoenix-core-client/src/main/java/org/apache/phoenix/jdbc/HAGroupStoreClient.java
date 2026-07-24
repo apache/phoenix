@@ -695,8 +695,21 @@ public class HAGroupStoreClient implements Closeable {
 
   // Update the system table on best effort basis for HA group
   // In case of failure, we will log the error and continue.
-  private void updateSystemTableHAGroupRecordSilently(String haGroupName,
-    SystemTableHAGroupRecord record) throws SQLException {
+  private boolean updateSystemTableHAGroupRecordSilently(String haGroupName,
+    SystemTableHAGroupRecord record) {
+    try {
+      updateSystemTableHAGroupRecord(haGroupName, record);
+      return true;
+    } catch (Exception e) {
+      metricsSource.incrementSystemTableSyncFailedCount();
+      LOGGER.error("Failed to update system table on best effort basis for HA group {}", haGroupName,
+        e);
+      return false;
+    }
+  }
+
+  private void updateSystemTableHAGroupRecord(String haGroupName, SystemTableHAGroupRecord record)
+    throws SQLException {
     StringBuilder updateQuery = new StringBuilder("UPSERT INTO " + SYSTEM_HA_GROUP_NAME + " (");
     StringBuilder valuesClause = new StringBuilder(" VALUES (");
     List<Object> parameters = new ArrayList<>();
@@ -803,11 +816,6 @@ public class HAGroupStoreClient implements Closeable {
 
       pstmt.executeUpdate();
       conn.commit();
-    } catch (Exception e) {
-      metricsSource.incrementSystemTableSyncFailedCount();
-      LOGGER.error(
-        "Failed to update system table on best" + "effort basis for HA group {}, error: {}",
-        haGroupName, e);
     }
   }
 
@@ -842,7 +850,8 @@ public class HAGroupStoreClient implements Closeable {
    * Syncs data from ZooKeeper (source of truth) to the system table. This method is called
    * periodically to ensure consistency.
    */
-  private void syncZKToSystemTable() {
+  @VisibleForTesting
+  void syncZKToSystemTable() {
     if (!isHealthy) {
       LOGGER.debug("HAGroupStoreClient is not healthy," + "skipping sync for HA group {}",
         haGroupName);
@@ -885,13 +894,15 @@ public class HAGroupStoreClient implements Closeable {
       }
 
       // Update system table with ZK data
-      updateSystemTableHAGroupRecordSilently(haGroupName, newSystemTableRecord);
-      LOGGER.info("Successfully synced ZK data to system table for HA group {}", haGroupName);
-    } catch (IOException | SQLException e) {
+      if (updateSystemTableHAGroupRecordSilently(haGroupName, newSystemTableRecord)) {
+        LOGGER.info("Successfully synced ZK data to system table for HA group {}", haGroupName);
+      }
+    } catch (Exception e) {
+      metricsSource.incrementSystemTableSyncFailedCount();
       long syncIntervalSeconds = conf.getLong(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS,
         DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS);
       LOGGER.error("Failed to sync ZK data to system table for HA group on best effort basis {},"
-        + "retrying in {} seconds", haGroupName, syncIntervalSeconds);
+        + "retrying in {} seconds", haGroupName, syncIntervalSeconds, e);
     }
   }
 
@@ -1157,7 +1168,8 @@ public class HAGroupStoreClient implements Closeable {
     instances.computeIfPresent(key, (k, v) -> v.isEmpty() ? null : v);
   }
 
-  private void shutdownSyncExecutor() {
+  @VisibleForTesting
+  void shutdownSyncExecutor() {
     if (syncExecutor != null) {
       MoreExecutors.shutdownAndAwaitTermination(syncExecutor, 5, TimeUnit.SECONDS);
       syncExecutor = null;

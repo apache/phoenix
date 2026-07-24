@@ -234,6 +234,7 @@ public class HAGroupStoreMetricsIT extends HABaseIT {
     HAGroupStoreClient client = localClient();
     awaitMetrics(values -> values.getCurrentLocalState()
         == HAGroupStoreRecord.HAGroupState.STANDBY.getMetricCode());
+    client.shutdownSyncExecutor();
     HAGroupStoreMetricValues before = metrics();
     Admin admin = CLUSTERS.getHBaseCluster1().getAdmin();
 
@@ -249,6 +250,25 @@ public class HAGroupStoreMetricsIT extends HABaseIT {
     } finally {
       admin.enableTable(PhoenixDatabaseMetaData.SYSTEM_HA_GROUP_HBASE_TABLE_NAME);
     }
+  }
+
+  @Test
+  public void testPeriodicSystemTableSyncFailureBeforeWriteMetric() throws Exception {
+    writeLocal(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+    HAGroupStoreClient client = localClient();
+    awaitMetrics(values -> values.getLocalCacheHealthStatus() == 0);
+    client.shutdownSyncExecutor();
+
+    HAGroupStoreRecord invalidPolicyRecord =
+      new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, group(),
+        HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, 0L, "INVALID_POLICY", peerZkUrl, masterUrl,
+        peerMasterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+    createOrUpdate(localAdmin, invalidPolicyRecord);
+    long before = metrics().getSystemTableSyncFailedCount();
+
+    client.syncZKToSystemTable();
+
+    assertEquals(before + 1, metrics().getSystemTableSyncFailedCount());
   }
 
   @Test
