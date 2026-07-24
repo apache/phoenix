@@ -20,13 +20,18 @@ package org.apache.phoenix.replication;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.spy;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Optional;
@@ -39,6 +44,8 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FSDataInputStream;
+import org.apache.hadoop.fs.FSDataOutputStream;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -46,6 +53,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode;
 import org.apache.phoenix.replication.log.LogFileTestUtil;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogForwarderSourceFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.junit.Assert;
 import org.junit.Before;
@@ -188,7 +196,9 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
     FileSystem peerFs = peerShardManager.getFileSystem();
     Set<String> peerNames = new HashSet<>();
     for (FileStatus s : peerFs.listStatus(peerShardDir)) {
-      peerNames.add(s.getPath().getName());
+      if (s.isFile()) {
+        peerNames.add(s.getPath().getName());
+      }
     }
     assertEquals("Both origin files should be forwarded to distinct destinations", 2,
       peerNames.size());
@@ -204,6 +214,187 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
     Optional<Path> inProgress = tracker.markInProgress(file);
     assertTrue("markInProgress should succeed", inProgress.isPresent());
     return inProgress.get();
+  }
+
+  /** Reads the full contents of a file into a byte array. */
+  private byte[] readAll(FileSystem fs, Path file) throws IOException {
+    try (FSDataInputStream in = fs.open(file)) {
+      ByteArrayOutputStream out = new ByteArrayOutputStream();
+      byte[] buf = new byte[4096];
+      int n;
+      while ((n = in.read(buf)) != -1) {
+        out.write(buf, 0, n);
+      }
+      return out.toByteArray();
+    }
+  }
+
+  /**
+   * Sets up a single in-progress source file on the local cluster and returns its in-progress path.
+   * The peer shard manager is created eagerly so its FileSystem can be spied by the caller.
+   */
+  private Path setUpSource(byte[] contents) throws IOException {
+    ReplicationLogTracker localTracker = logGroup.getLogForwarder().getReplicationLogTracker();
+    ReplicationShardDirectoryManager localShardManager = logGroup.getLocalShardManager();
+    long ts = EnvironmentEdgeManager.currentTimeMillis();
+    String origin = "10.244.1.10,16020,1784436416001";
+    Path shardDir = localShardManager.getShardDirectory(ts);
+    localFs.mkdirs(shardDir);
+    Path src = new Path(shardDir, ts + "_" + origin + ".plog");
+    try (FSDataOutputStream out = localFs.create(src, true)) {
+      out.write(contents);
+    }
+    Optional<Path> inProgress = localTracker.markInProgress(src);
+    assertTrue("markInProgress should succeed", inProgress.isPresent());
+    return inProgress.get();
+  }
+
+  /** The final .plog dst on the peer for the given local in-progress source file. */
+  private Path peerDstFor(Path inProgressSrc) throws IOException {
+    ReplicationLogTracker localTracker = logGroup.getLogForwarder().getReplicationLogTracker();
+    long ts = localTracker.getFileTimestamp(inProgressSrc);
+    String origin = localTracker.getServerName(inProgressSrc);
+    return logGroup.getOrCreatePeerShardManager().getWriterPath(ts, origin);
+  }
+
+  private Path stagingFor(Path dst) throws IOException {
+    return logGroup.getOrCreatePeerShardManager().getStagingPath(dst);
+  }
+
+  /**
+   * Installs a spy peer FileSystem so tests can intercept rename()/exists(). The peer shard manager
+   * (a spy) is returned by the spied logGroup, and its getFileSystem() returns the spy FS. Callers
+   * use it to stub rename/exists and to assert on peer-side state.
+   */
+  private FileSystem installPeerFsSpy() throws IOException {
+    ReplicationShardDirectoryManager spyPeer = spy(logGroup.getOrCreatePeerShardManager());
+    FileSystem peerFs = spy(spyPeer.getFileSystem());
+    doReturn(peerFs).when(spyPeer).getFileSystem();
+    doReturn(spyPeer).when(logGroup).getOrCreatePeerShardManager();
+    return peerFs;
+  }
+
+  /**
+   * Core regression guard for the cross-cluster lease race: while the forwarder is copying bytes,
+   * the file must exist only under the non-replay-eligible .staging subdirectory; the replay-
+   * eligible .plog appears in the shard directory only after the atomic rename. We intercept
+   * rename() and assert the invariant at the moment just before the final publish.
+   */
+  @Test
+  public void testForwardPublishesOnlyAfterRename() throws Exception {
+    byte[] contents = "some-log-bytes".getBytes();
+    Path src = setUpSource(contents);
+    Path dst = peerDstFor(src);
+    Path staging = stagingFor(dst);
+
+    ReplicationShardDirectoryManager peerShardManager = logGroup.getOrCreatePeerShardManager();
+    FileSystem peerFs = installPeerFsSpy();
+    ReplicationLogTracker peerTracker =
+      new ReplicationLogTracker(conf, haGroupName, peerShardManager,
+        MetricsReplicationLogForwarderSourceFactory.getInstanceForTracker(haGroupName));
+
+    final boolean[] invariantHeld = { false };
+    doAnswer(new Answer<Boolean>() {
+      @Override
+      public Boolean answer(InvocationOnMock invocation) throws Throwable {
+        // At this point the bytes are fully staged but not yet published.
+        assertTrue("staging file must exist before rename", peerFs.exists(staging));
+        assertFalse(".plog must NOT exist before rename", peerFs.exists(dst));
+        assertTrue("replay must see no eligible file while staging",
+          peerTracker.getNewFiles().isEmpty());
+        invariantHeld[0] = true;
+        return (Boolean) invocation.callRealMethod();
+      }
+    }).when(peerFs).rename(eq(staging), eq(dst));
+
+    logGroup.getLogForwarder().processFile(src);
+
+    assertTrue("rename interceptor should have run", invariantHeld[0]);
+    assertTrue(".plog must exist after rename", peerFs.exists(dst));
+    assertFalse("staging file must be gone after rename", peerFs.exists(staging));
+    assertArrayEquals("published content must match source", contents, readAll(peerFs, dst));
+  }
+
+  /**
+   * Retry after a crash between the rename and markCompleted (failure-mode row #5): the final .plog
+   * already exists and replay has not yet consumed it. processFile must treat this as
+   * already-delivered -- no throw, redundant staging dropped, dst untouched.
+   */
+  @Test
+  public void testForwardRetryOntoExistingDestinationSucceeds() throws Exception {
+    byte[] contents = "retry-onto-existing".getBytes();
+    Path src = setUpSource(contents);
+    Path dst = peerDstFor(src);
+    Path staging = stagingFor(dst);
+
+    // The local test FileSystem's rename overwrites dst and returns true (POSIX semantics), unlike
+    // HDFS which returns false when dst exists. Stub rename to return false so we exercise the
+    // production already-delivered branch.
+    FileSystem peerFs = installPeerFsSpy();
+    doReturn(false).when(peerFs).rename(eq(staging), eq(dst));
+
+    // Simulate a prior successful publish of this same logical file.
+    byte[] existing = "already-there".getBytes();
+    try (FSDataOutputStream out = peerFs.create(dst, true)) {
+      out.write(existing);
+    }
+
+    logGroup.getLogForwarder().processFile(src);
+
+    assertTrue("dst should still exist", peerFs.exists(dst));
+    assertFalse("staging file should be cleaned up", peerFs.exists(staging));
+    assertArrayEquals("dst must be left untouched (not overwritten)", existing,
+      readAll(peerFs, dst));
+  }
+
+  /**
+   * Orphan reclamation (failure-mode rows #2/#3): a stale staging file left by a crashed prior
+   * attempt is overwritten by the retry's copy (overwrite=true) and then published.
+   */
+  @Test
+  public void testForwardReclaimsOrphanStagingFile() throws Exception {
+    byte[] contents = "fresh-content".getBytes();
+    Path src = setUpSource(contents);
+    Path dst = peerDstFor(src);
+    Path staging = stagingFor(dst);
+
+    FileSystem peerFs = logGroup.getOrCreatePeerShardManager().getFileSystem();
+    // Pre-create a stale/garbage staging file.
+    try (FSDataOutputStream out = peerFs.create(staging, true)) {
+      out.write("stale-garbage-bytes".getBytes());
+    }
+
+    logGroup.getLogForwarder().processFile(src);
+
+    assertTrue("dst should be published", peerFs.exists(dst));
+    assertFalse("staging file should be gone", peerFs.exists(staging));
+    assertArrayEquals("dst content must be the fresh source content, not the orphan", contents,
+      readAll(peerFs, dst));
+  }
+
+  /**
+   * A genuine rename failure (rename returns false and dst does not exist) must throw and leave dst
+   * uncreated so the source is retried from out_progress. The partial staging file is left behind
+   * and reclaimed by the retry's overwrite=true copy.
+   */
+  @Test
+  public void testForwardRenameFailureLeavesSourceForRetry() throws Exception {
+    byte[] contents = "will-fail-rename".getBytes();
+    Path src = setUpSource(contents);
+    Path dst = peerDstFor(src);
+    Path staging = stagingFor(dst);
+
+    FileSystem peerFs = installPeerFsSpy();
+    doReturn(false).when(peerFs).rename(eq(staging), eq(dst));
+
+    try {
+      logGroup.getLogForwarder().processFile(src);
+      fail("processFile should have thrown on rename failure");
+    } catch (IOException expected) {
+      // expected
+    }
+
+    assertFalse("dst must not be created on failure", peerFs.exists(dst));
   }
 
   @Test

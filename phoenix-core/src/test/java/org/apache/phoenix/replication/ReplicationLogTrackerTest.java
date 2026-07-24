@@ -362,6 +362,49 @@ public class ReplicationLogTrackerTest {
   }
 
   @Test
+  public void testStagingFilesExcludedFromListings() throws IOException {
+    // A file staged under the shard's .staging subdirectory must be invisible to the shard-dir
+    // listings (getNewFilesForRound, getNewFiles). We assert two exclusions:
+    // 1. The .staging subdirectory (and the .plog file within it) is skipped -- non-recursive
+    // listStatus never descends into it.
+    // 2. A subdirectory whose name is itself a valid <ts>_<server>.plog is skipped by the
+    // FileStatus.isFile() gate. This is the case the gate uniquely catches: without it, the
+    // directory entry would pass isValidLogFile() and the timestamp parse and be listed.
+    tracker.init();
+
+    long roundStartTime = 1704153600000L;
+    long roundEndTime = roundStartTime + TimeUnit.MINUTES.toMillis(1);
+    ReplicationRound targetRound = new ReplicationRound(roundStartTime, roundEndTime);
+    ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
+    Path shardDirectory = shardManager.getShardDirectory(targetRound);
+    localFs.mkdirs(shardDirectory);
+
+    Path shardPublished = new Path(shardDirectory, "1704153600000_rs1.plog");
+    Path shardStaging =
+      shardManager.getStagingPath(new Path(shardDirectory, "1704153630000_rs2.plog"));
+    // A directory named exactly like a valid published log file -- only isFile() excludes it.
+    Path plogNamedDir = new Path(shardDirectory, "1704153640000_rs3.plog");
+    localFs.create(shardPublished, true).close();
+    localFs.create(shardStaging, true).close();
+    localFs.mkdirs(plogNamedDir);
+
+    assertListedNames("getNewFilesForRound", tracker.getNewFilesForRound(targetRound),
+      shardPublished, shardStaging, plogNamedDir);
+    assertListedNames("getNewFiles", tracker.getNewFiles(), shardPublished, shardStaging,
+      plogNamedDir);
+  }
+
+  /** Asserts a listing contains the published file's name but none of the excluded names. */
+  private void assertListedNames(String method, List<Path> result, Path published,
+    Path... excluded) {
+    Set<String> names = result.stream().map(Path::getName).collect(Collectors.toSet());
+    assertTrue(method + " must list the published .plog", names.contains(published.getName()));
+    for (Path ex : excluded) {
+      assertFalse(method + " must not list " + ex.getName(), names.contains(ex.getName()));
+    }
+  }
+
+  @Test
   public void testGetInProgressFiles() throws IOException {
     // Initialize tracker
     tracker.init();
