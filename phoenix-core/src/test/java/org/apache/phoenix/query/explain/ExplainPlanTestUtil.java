@@ -23,6 +23,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -193,10 +194,29 @@ public final class ExplainPlanTestUtil {
   /**
    * Begin assertions on the plan attributes of a resolved {@link QueryPlan}. The plan is expected
    * to have been produced by a compile that already had diagnostic recording enabled (e.g. via
-   * {@link #assertPlan(PhoenixPreparedStatement)} or via a direct {@code EXPLAIN} compile).
+   * {@link #assertPlan(PhoenixPreparedStatement)},
+   * {@link #getOptimizedQueryPlan(PreparedStatement)} or via a direct {@code EXPLAIN} compile).
    */
   public static ExplainPlanAssert assertPlan(QueryPlan queryPlan) throws SQLException {
     return assertPlan(queryPlan.getExplainPlan().getPlanStepsAsAttributes());
+  }
+
+  /**
+   * Diagnostic drop in replacement for
+   * {@link org.apache.phoenix.util.PhoenixRuntime#getOptimizedQueryPlan(PreparedStatement)}.
+   * Toggles {@code collectDiagnostics=true} on the underlying {@link PhoenixStatement}. Use this
+   * for tests whenever the plan is fed to {@code assertPlan(...)}.
+   */
+  public static QueryPlan getOptimizedQueryPlan(PreparedStatement statement) throws SQLException {
+    PhoenixPreparedStatement pstmt = statement.unwrap(PhoenixPreparedStatement.class);
+    PhoenixStatement underlying = pstmt.unwrap(PhoenixStatement.class);
+    boolean prev = underlying.isCollectDiagnostics();
+    underlying.setCollectDiagnostics(true);
+    try {
+      return pstmt.optimizeQuery();
+    } finally {
+      underlying.setCollectDiagnostics(prev);
+    }
   }
 
   /** Compile the mutation {@code query} on {@code conn} and begin assertions on its attributes. */

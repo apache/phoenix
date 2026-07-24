@@ -565,14 +565,16 @@ public class QueryOptimizer {
           ParseNodeRewriter.rewrite(indexSelect, indexExpressionRewriter);
         // Record which functional index expressions actually matched this query, so the
         // optimizer can label the chosen index's rule and distinguish functional index rejections
-        // that matched nothing.
-        if (indexExpressionRewriter.hasFunctionalColumns()) {
-          dataPlan.getContext().recordFunctionalIndex(index.getTableName().getString());
+        if (dataPlan.getContext().isCollectDiagnostics()) {
+          if (indexExpressionRewriter.hasFunctionalColumns()) {
+            dataPlan.getContext().recordFunctionalIndex(index.getTableName().getString());
+          }
+          dataPlan.getContext().recordAppliedIndexExpressionMatches(
+            index.getTableName().getString(),
+            indexExpressionRewriter.getAppliedFunctionalSubstitutions().values());
+          dataPlan.getContext().recordAppliedIndexExpressionPairs(index.getTableName().getString(),
+            indexExpressionRewriter.getAppliedFunctionalSubstitutions());
         }
-        dataPlan.getContext().recordAppliedIndexExpressionMatches(index.getTableName().getString(),
-          indexExpressionRewriter.getAppliedFunctionalSubstitutions().values());
-        dataPlan.getContext().recordAppliedIndexExpressionPairs(index.getTableName().getString(),
-          indexExpressionRewriter.getAppliedFunctionalSubstitutions());
         QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver,
           targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(),
           isProjected, true, dataPlans).withRewriteContext(dataPlan.getContext());
@@ -1191,16 +1193,18 @@ public class QueryOptimizer {
       indexSelect = ParseNodeRewriter.rewrite(indexSelect, indexExpressionRewriter);
       // Surface which functional index expressions actually matched so the optimizer can label
       // the chosen index's rule and distinguish functional index rejections that matched nothing.
-      if (indexExpressionRewriter.hasFunctionalColumns()) {
-        breadcrumbContext
-          .recordFunctionalIndex(indexTableRef.getTable().getTableName().getString());
+      if (breadcrumbContext.isCollectDiagnostics()) {
+        if (indexExpressionRewriter.hasFunctionalColumns()) {
+          breadcrumbContext
+            .recordFunctionalIndex(indexTableRef.getTable().getTableName().getString());
+        }
+        breadcrumbContext.recordAppliedIndexExpressionMatches(
+          indexTableRef.getTable().getTableName().getString(),
+          indexExpressionRewriter.getAppliedFunctionalSubstitutions().values());
+        breadcrumbContext.recordAppliedIndexExpressionPairs(
+          indexTableRef.getTable().getTableName().getString(),
+          indexExpressionRewriter.getAppliedFunctionalSubstitutions());
       }
-      breadcrumbContext.recordAppliedIndexExpressionMatches(
-        indexTableRef.getTable().getTableName().getString(),
-        indexExpressionRewriter.getAppliedFunctionalSubstitutions().values());
-      breadcrumbContext.recordAppliedIndexExpressionPairs(
-        indexTableRef.getTable().getTableName().getString(),
-        indexExpressionRewriter.getAppliedFunctionalSubstitutions());
     }
 
     return indexSelect;

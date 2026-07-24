@@ -246,18 +246,18 @@ public class StatementContext {
     this.subStatementContexts = Sets.newLinkedHashSet();
     this.appliedRewrites = new ArrayList<>();
     this.derivedTableFlattenCount = 0;
-    this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
-    this.appliedIndexExpressionPairs = Maps.newLinkedHashMap();
-    this.functionalIndexNames = Sets.newLinkedHashSet();
     this.partialIndexCheckedSet = Sets.newLinkedHashSet();
     this.serverParsedProjections = null;
     this.parentContext = null;
     this.collectDiagnostics = statement.isCollectDiagnostics();
-    // Diagnostic-only maps are lazily allocated when their first insert is gated by
+    // Diagnostic-only collections are lazily allocated on first record under
     // collectDiagnostics. Normal queries skip these allocations entirely.
     this.predicateOrigins = null;
     this.decorrelatedSubqueryAlias = null;
     this.ignoredHints = null;
+    this.appliedIndexExpressionMatches = null;
+    this.appliedIndexExpressionPairs = null;
+    this.functionalIndexNames = null;
   }
 
   /**
@@ -564,20 +564,11 @@ public class StatementContext {
     this.appliedRewrites =
       source.appliedRewrites == null ? new ArrayList<>() : new ArrayList<>(source.appliedRewrites);
     this.derivedTableFlattenCount = source.derivedTableFlattenCount;
-    this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
-    for (Map.Entry<String, List<String>> entry : source.appliedIndexExpressionMatches.entrySet()) {
-      this.appliedIndexExpressionMatches.put(entry.getKey(), new ArrayList<>(entry.getValue()));
-    }
-    this.appliedIndexExpressionPairs = Maps.newLinkedHashMap();
-    for (Map.Entry<String, Map<String, String>> entry : source.appliedIndexExpressionPairs
-      .entrySet()) {
-      this.appliedIndexExpressionPairs.put(entry.getKey(), new LinkedHashMap<>(entry.getValue()));
-    }
-    this.functionalIndexNames = Sets.newLinkedHashSet(source.functionalIndexNames);
     this.partialIndexCheckedSet = Sets.newLinkedHashSet(source.partialIndexCheckedSet);
     // serverParsedProjections is nullable and only ever replaced wholesale via its setter (never
     // mutated in place), so the reference can be carried over directly.
     this.serverParsedProjections = source.serverParsedProjections;
+    // Only copy if the source actually recorded anything. Keep null otherwise.
     if (source.predicateOrigins == null || source.predicateOrigins.isEmpty()) {
       this.predicateOrigins = null;
     } else {
@@ -596,6 +587,33 @@ public class StatementContext {
     } else {
       this.ignoredHints = new EnumMap<>(source.ignoredHints);
     }
+    if (
+      source.appliedIndexExpressionMatches == null || source.appliedIndexExpressionMatches.isEmpty()
+    ) {
+      this.appliedIndexExpressionMatches = null;
+    } else {
+      this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
+      for (Map.Entry<String, List<String>> entry : source.appliedIndexExpressionMatches
+        .entrySet()) {
+        this.appliedIndexExpressionMatches.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+      }
+    }
+    if (
+      source.appliedIndexExpressionPairs == null || source.appliedIndexExpressionPairs.isEmpty()
+    ) {
+      this.appliedIndexExpressionPairs = null;
+    } else {
+      this.appliedIndexExpressionPairs = Maps.newLinkedHashMap();
+      for (Map.Entry<String, Map<String, String>> entry : source.appliedIndexExpressionPairs
+        .entrySet()) {
+        this.appliedIndexExpressionPairs.put(entry.getKey(), new LinkedHashMap<>(entry.getValue()));
+      }
+    }
+    if (source.functionalIndexNames == null || source.functionalIndexNames.isEmpty()) {
+      this.functionalIndexNames = null;
+    } else {
+      this.functionalIndexNames = Sets.newLinkedHashSet(source.functionalIndexNames);
+    }
   }
 
   public void incrementDerivedTableFlattenCount() {
@@ -610,12 +628,16 @@ public class StatementContext {
    * Records the path expressions that actually substituted against this query for the given
    * functional index. Used by the optimizer to label the chosen index's rule as
    * {@code matches <expr>} and to distinguish functional index rejections that matched no query
-   * expression. Deduplicated per index, preserving first seen order.
+   * expression. Deduplicated per index, preserving first seen order. No-op when the context has
+   * diagnostic recording disabled.
    */
   public void recordAppliedIndexExpressionMatches(String indexName,
     Collection<String> expressions) {
-    if (expressions == null || expressions.isEmpty()) {
+    if (!collectDiagnostics || expressions == null || expressions.isEmpty()) {
       return;
+    }
+    if (appliedIndexExpressionMatches == null) {
+      appliedIndexExpressionMatches = Maps.newLinkedHashMap();
     }
     List<String> matches =
       appliedIndexExpressionMatches.computeIfAbsent(indexName, k -> new ArrayList<>());
@@ -631,6 +653,9 @@ public class StatementContext {
    * functional index, or an empty list if none were recorded.
    */
   public List<String> getAppliedIndexExpressionMatches(String indexName) {
+    if (appliedIndexExpressionMatches == null) {
+      return Collections.emptyList();
+    }
     List<String> matches = appliedIndexExpressionMatches.get(indexName);
     return matches == null ? Collections.emptyList() : matches;
   }
@@ -640,11 +665,14 @@ public class StatementContext {
    * actually fired against this query for the given functional index. Carries enough information
    * for the optimizer to emit one {@code REWRITE INDEX EXPRESSION <expr> AS <col>} breadcrumb per
    * applied substitution after the chosen plan is selected. Deduplicated per index, preserving
-   * first-seen insertion order.
+   * first-seen insertion order. No-op when the context has diagnostic recording disabled.
    */
   public void recordAppliedIndexExpressionPairs(String indexName, Map<String, String> pairs) {
-    if (pairs == null || pairs.isEmpty()) {
+    if (!collectDiagnostics || pairs == null || pairs.isEmpty()) {
       return;
+    }
+    if (appliedIndexExpressionPairs == null) {
+      appliedIndexExpressionPairs = Maps.newLinkedHashMap();
     }
     Map<String, String> existing =
       appliedIndexExpressionPairs.computeIfAbsent(indexName, k -> new LinkedHashMap<>());
@@ -658,18 +686,30 @@ public class StatementContext {
    * substituted against this query for the given functional index, or an empty map if none.
    */
   public Map<String, String> getAppliedIndexExpressionPairs(String indexName) {
+    if (appliedIndexExpressionPairs == null) {
+      return Collections.emptyMap();
+    }
     Map<String, String> pairs = appliedIndexExpressionPairs.get(indexName);
     return pairs == null ? Collections.emptyMap() : pairs;
   }
 
-  /** Marks the given index as a functional index. */
+  /**
+   * Marks the given index as a functional index. No-op when the context has diagnostic recording
+   * disabled.
+   */
   public void recordFunctionalIndex(String indexName) {
+    if (!collectDiagnostics) {
+      return;
+    }
+    if (functionalIndexNames == null) {
+      functionalIndexNames = Sets.newLinkedHashSet();
+    }
     functionalIndexNames.add(indexName);
   }
 
   /** Returns whether the given index was recorded as a functional index during rewriting. */
   public boolean isFunctionalIndex(String indexName) {
-    return functionalIndexNames.contains(indexName);
+    return functionalIndexNames != null && functionalIndexNames.contains(indexName);
   }
 
   /**
