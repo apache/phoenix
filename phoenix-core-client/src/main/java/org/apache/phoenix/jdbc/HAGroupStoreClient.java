@@ -78,6 +78,8 @@ import org.apache.phoenix.exception.StaleHAGroupStoreRecordVersionException;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
+import org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource;
+import org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSourceFactory;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.JDBCUtil;
@@ -118,6 +120,7 @@ public class HAGroupStoreClient implements Closeable {
     new ConcurrentHashMap<>();
   // HAGroupName for this instance
   private final String haGroupName;
+  private final HAGroupStoreMetricsSource metricsSource;
   // PathChildrenCache for current cluster and HAGroupName
   private PathChildrenCache pathChildrenCache = null;
   // Watches the peer cluster's HA record; owns the peer cache/admin, retry, and visibility.
@@ -278,6 +281,8 @@ public class HAGroupStoreClient implements Closeable {
     final String zkUrl) {
     this.conf = conf;
     this.haGroupName = haGroupName;
+    this.metricsSource = HAGroupStoreMetricsSourceFactory.getInstanceForHAGroup(haGroupName);
+    resetMetricGauges();
     this.zkUrl = zkUrl;
     this.waitTimeForSyncModeInMs = (long) Math.ceil(
       conf.getLong(ZK_SESSION_TIMEOUT, DEFAULT_ZK_SESSION_TIMEOUT) * ZK_SESSION_TIMEOUT_MULTIPLIER);
@@ -299,7 +304,10 @@ public class HAGroupStoreClient implements Closeable {
       initializeZNodeIfNeeded();
       if (this.pathChildrenCache != null) {
         this.isHealthy = true;
+        metricsSource.setLocalCacheHealthy(true);
         HAGroupStoreRecord local = getHAGroupStoreRecord();
+        metricsSource.setCurrentLocalState(
+          local != null ? local.getHAGroupState() : HAGroupStoreRecord.HAGroupState.UNKNOWN);
         this.lastConfiguredPeerZKUrl = local != null ? local.getPeerZKUrl() : null;
         peerWatcher.reconfigure(this.lastConfiguredPeerZKUrl);
       } else {
@@ -317,6 +325,7 @@ public class HAGroupStoreClient implements Closeable {
 
     } catch (Exception e) {
       this.isHealthy = false;
+      resetMetricGauges();
       close();
       LOGGER.error("Unexpected error occurred while initializing HAGroupStoreClient, "
         + "marking cache as unhealthy", e);
@@ -686,8 +695,21 @@ public class HAGroupStoreClient implements Closeable {
 
   // Update the system table on best effort basis for HA group
   // In case of failure, we will log the error and continue.
-  private void updateSystemTableHAGroupRecordSilently(String haGroupName,
-    SystemTableHAGroupRecord record) throws SQLException {
+  private boolean updateSystemTableHAGroupRecordSilently(String haGroupName,
+    SystemTableHAGroupRecord record) {
+    try {
+      updateSystemTableHAGroupRecord(haGroupName, record);
+      return true;
+    } catch (Exception e) {
+      metricsSource.incrementSystemTableSyncFailedCount();
+      LOGGER.error("Failed to update system table on best effort basis for HA group {}", haGroupName,
+        e);
+      return false;
+    }
+  }
+
+  private void updateSystemTableHAGroupRecord(String haGroupName, SystemTableHAGroupRecord record)
+    throws SQLException {
     StringBuilder updateQuery = new StringBuilder("UPSERT INTO " + SYSTEM_HA_GROUP_NAME + " (");
     StringBuilder valuesClause = new StringBuilder(" VALUES (");
     List<Object> parameters = new ArrayList<>();
@@ -794,10 +816,6 @@ public class HAGroupStoreClient implements Closeable {
 
       pstmt.executeUpdate();
       conn.commit();
-    } catch (Exception e) {
-      LOGGER.error(
-        "Failed to update system table on best" + "effort basis for HA group {}, error: {}",
-        haGroupName, e);
     }
   }
 
@@ -832,7 +850,8 @@ public class HAGroupStoreClient implements Closeable {
    * Syncs data from ZooKeeper (source of truth) to the system table. This method is called
    * periodically to ensure consistency.
    */
-  private void syncZKToSystemTable() {
+  @VisibleForTesting
+  void syncZKToSystemTable() {
     if (!isHealthy) {
       LOGGER.debug("HAGroupStoreClient is not healthy," + "skipping sync for HA group {}",
         haGroupName);
@@ -875,14 +894,24 @@ public class HAGroupStoreClient implements Closeable {
       }
 
       // Update system table with ZK data
-      updateSystemTableHAGroupRecordSilently(haGroupName, newSystemTableRecord);
-      LOGGER.info("Successfully synced ZK data to system table for HA group {}", haGroupName);
-    } catch (IOException | SQLException e) {
+      if (updateSystemTableHAGroupRecordSilently(haGroupName, newSystemTableRecord)) {
+        LOGGER.info("Successfully synced ZK data to system table for HA group {}", haGroupName);
+      }
+    } catch (Exception e) {
+      metricsSource.incrementSystemTableSyncFailedCount();
       long syncIntervalSeconds = conf.getLong(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS,
         DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS);
       LOGGER.error("Failed to sync ZK data to system table for HA group on best effort basis {},"
-        + "retrying in {} seconds", haGroupName, syncIntervalSeconds);
+        + "retrying in {} seconds", haGroupName, syncIntervalSeconds, e);
     }
+  }
+
+  private void resetMetricGauges() {
+    metricsSource.setLocalCacheHealthy(false);
+    metricsSource.setPeerVisible(false);
+    metricsSource.setDegradedStandbyActive(false);
+    metricsSource.setCurrentLocalState(HAGroupState.UNKNOWN);
+    metricsSource.setCurrentPeerState(HAGroupState.UNKNOWN);
   }
 
   /**
@@ -908,6 +937,9 @@ public class HAGroupStoreClient implements Closeable {
             // unreachable peer never blocks local event processing.
             String peerZKUrl = record.getPeerZKUrl();
             if (!Objects.equals(peerZKUrl, lastConfiguredPeerZKUrl)) {
+              // An in-flight callback from the prior peer can briefly overwrite UNKNOWN. The new
+              // watcher self-heals this best-effort gauge; exact generation fencing is unnecessary.
+              metricsSource.setCurrentPeerState(HAGroupState.UNKNOWN);
               lastConfiguredPeerZKUrl = peerZKUrl;
               peerWatcher.reconfigureAsync(peerZKUrl);
             }
@@ -916,12 +948,18 @@ public class HAGroupStoreClient implements Closeable {
           break;
         case CONNECTION_LOST:
         case CONNECTION_SUSPENDED:
+          boolean wasHealthy = isHealthy;
           isHealthy = false;
+          metricsSource.setLocalCacheHealthy(false);
+          if (wasHealthy) {
+            metricsSource.incrementLocalZkConnectionLostCount();
+          }
           LOGGER.warn("LOCAL HAGroupStoreClient cache connection lost/suspended for HA group {}",
             haGroupName);
           break;
         case CONNECTION_RECONNECTED:
           isHealthy = true;
+          metricsSource.setLocalCacheHealthy(true);
           LOGGER.info("LOCAL HAGroupStoreClient cache connection reconnected for HA group {}",
             haGroupName);
           break;
@@ -1007,6 +1045,7 @@ public class HAGroupStoreClient implements Closeable {
       HAGroupState fromState = lastKnownPeerState;
       HAGroupState toState = peerRecord.getHAGroupState();
       lastKnownPeerState = toState;
+      metricsSource.setCurrentPeerState(toState);
       LOGGER.info("Detected state transition for HA group {} from {} to {} on PEER cluster",
         haGroupName, fromState, toState);
       notifySubscribers(fromState, toState, stat != null ? stat.getMtime() : 0L, ClusterType.PEER,
@@ -1017,11 +1056,15 @@ public class HAGroupStoreClient implements Closeable {
 
     @Override
     public void onPeerVisible() {
+      metricsSource.setPeerVisible(true);
       clearLocalDegradedStandbyIfStillStandby();
     }
 
     @Override
     public void onPeerBlind() {
+      metricsSource.setPeerVisible(false);
+      metricsSource.setCurrentPeerState(HAGroupState.UNKNOWN);
+      metricsSource.incrementPeerBlindCount();
       // Peer just went blind while local is STANDBY (present re-checks): subscribers last saw the
       // raw STANDBY, so that is the prior effective state.
       presentLocalDegradedStandbyIfStandby(HAGroupState.STANDBY);
@@ -1060,6 +1103,8 @@ public class HAGroupStoreClient implements Closeable {
           return false;
         }
         localDegradedStandbyActive = true;
+        metricsSource.setDegradedStandbyActive(true);
+        metricsSource.incrementDegradedStandbyPresentedCount();
       }
       LOGGER.warn("Peer not visible for HA group {}; presenting local DEGRADED_STANDBY "
         + "(reason=peer-blind)", haGroupName);
@@ -1086,6 +1131,7 @@ public class HAGroupStoreClient implements Closeable {
         }
         local = readLocalRecordQuietly();
         localDegradedStandbyActive = false;
+        metricsSource.setDegradedStandbyActive(false);
         recover = local != null && local.getHAGroupState() == HAGroupState.STANDBY;
       }
       if (recover) {
@@ -1122,7 +1168,8 @@ public class HAGroupStoreClient implements Closeable {
     instances.computeIfPresent(key, (k, v) -> v.isEmpty() ? null : v);
   }
 
-  private void shutdownSyncExecutor() {
+  @VisibleForTesting
+  void shutdownSyncExecutor() {
     if (syncExecutor != null) {
       MoreExecutors.shutdownAndAwaitTermination(syncExecutor, 5, TimeUnit.SECONDS);
       syncExecutor = null;
@@ -1194,6 +1241,7 @@ public class HAGroupStoreClient implements Closeable {
         waitTime = waitTimeForSyncModeInMs;
       }
     } else {
+      metricsSource.incrementInvalidTransitionRejectedCount();
       throw new InvalidClusterRoleTransitionException(
         "Cannot transition from " + currentHAGroupState + " to " + newHAGroupState);
     }
@@ -1439,6 +1487,9 @@ public class HAGroupStoreClient implements Closeable {
     synchronized (localTransitionLock) {
       HAGroupState oldState = lastKnownLocalState;
       lastKnownLocalState = newState;
+      metricsSource.setCurrentLocalState(newState);
+      metricsSource
+        .setDegradedStandbyActive(localDegradedStandbyActive && newState == HAGroupState.STANDBY);
       // Fail closed for a final STANDBY while the peer is not visible. STANDBY_TO_ACTIVE and
       // ABORT_TO_STANDBY pass through because replay listens for those failover signals.
       if (newState == HAGroupState.STANDBY) {
@@ -1496,18 +1547,23 @@ public class HAGroupStoreClient implements Closeable {
 
     // Notify all listeners with error isolation
     if (!listenersToNotify.isEmpty()) {
-      LOGGER.info("Notifying {} listeners of state transitionfor HA group {} from {} to {} on {} "
+      LOGGER.info("Notifying {} listeners of state transition for HA group {} from {} to {} on {} "
         + "cluster", listenersToNotify.size(), haGroupName, fromState, toState, clusterType);
 
-      for (HAGroupStateListener listener : listenersToNotify) {
-        try {
-          listener.onStateChange(haGroupName, fromState, toState, modifiedTime, clusterType,
-            lastSyncStateTimeInMs);
-        } catch (Exception e) {
-          LOGGER.error("Error notifying listener of state transition for HA group {} from {} to "
-            + "{} on {} cluster", haGroupName, fromState, toState, clusterType, e);
-          // Continue notifying other listeners
+      long startTimeNs = System.nanoTime();
+      try {
+        for (HAGroupStateListener listener : listenersToNotify) {
+          try {
+            listener.onStateChange(haGroupName, fromState, toState, modifiedTime, clusterType,
+              lastSyncStateTimeInMs);
+          } catch (Exception e) {
+            metricsSource.incrementNotificationListenerErrorCount();
+            LOGGER.error("Error notifying listener of state transition for HA group {} from {} to "
+              + "{} on {} cluster", haGroupName, fromState, toState, clusterType, e);
+          }
         }
+      } finally {
+        metricsSource.updateSubscriberNotifyTime(System.nanoTime() - startTimeNs);
       }
     }
   }

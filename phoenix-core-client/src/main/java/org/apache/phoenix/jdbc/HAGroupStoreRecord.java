@@ -47,17 +47,21 @@ public class HAGroupStoreRecord {
 
   /**
    * Enum representing the HA group state with each state having a corresponding ClusterRole.
+   * <p>
+   * Metric codes are a stable external monitoring contract. They are independent of enum ordinal:
+   * never renumber or reuse an existing code, assign new states new codes, and keep code {@code 0}
+   * reserved for {@link #UNKNOWN}.
    */
   public enum HAGroupState {
-    ABORT_TO_ACTIVE_IN_SYNC,
-    ABORT_TO_ACTIVE_NOT_IN_SYNC,
-    ABORT_TO_STANDBY,
-    ACTIVE_IN_SYNC,
-    ACTIVE_NOT_IN_SYNC,
-    ACTIVE_NOT_IN_SYNC_TO_STANDBY,
-    ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER,
-    ACTIVE_IN_SYNC_TO_STANDBY,
-    ACTIVE_WITH_OFFLINE_PEER,
+    ABORT_TO_ACTIVE_IN_SYNC(1),
+    ABORT_TO_ACTIVE_NOT_IN_SYNC(2),
+    ABORT_TO_STANDBY(3),
+    ACTIVE_IN_SYNC(4),
+    ACTIVE_NOT_IN_SYNC(5),
+    ACTIVE_NOT_IN_SYNC_TO_STANDBY(6),
+    ACTIVE_NOT_IN_SYNC_WITH_OFFLINE_PEER(7),
+    ACTIVE_IN_SYNC_TO_STANDBY(8),
+    ACTIVE_WITH_OFFLINE_PEER(9),
     /**
      * Degraded standby. Used two ways: (1) a persisted state for a reader-degraded standby (see
      * {@link HAGroupStoreManager#setReaderToDegraded(String)}), governed by the allowedTransitions
@@ -66,13 +70,26 @@ public class HAGroupStoreRecord {
      * cannot see its peer - that overlay is never persisted to ZK and is cleared (not transitioned)
      * when the peer becomes visible again.
      */
-    DEGRADED_STANDBY,
-    OFFLINE,
-    STANDBY,
-    STANDBY_TO_ACTIVE,
-    UNKNOWN;
+    DEGRADED_STANDBY(10),
+    OFFLINE(11),
+    STANDBY(12),
+    STANDBY_TO_ACTIVE(13),
+    UNKNOWN(0);
 
     private Set<HAGroupState> allowedTransitions;
+    private final int metricCode;
+
+    HAGroupState(int metricCode) {
+      this.metricCode = metricCode;
+    }
+
+    /**
+     * Returns the stable, append-only code exported by HAGroupStore state gauges.
+     * @return non-ordinal monitoring code; {@code 0} is reserved for {@link #UNKNOWN}
+     */
+    public int getMetricCode() {
+      return metricCode;
+    }
 
     /**
      * Gets the corresponding ClusterRole for this HAGroupState.
