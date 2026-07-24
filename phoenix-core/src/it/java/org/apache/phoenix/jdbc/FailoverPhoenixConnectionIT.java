@@ -196,7 +196,10 @@ public class FailoverPhoenixConnectionIT extends HABaseIT {
       doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
     }
 
-    CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY);
+    // role2 = the SETTLED peer role: local ACTIVE_TO_STANDBY drives the peer
+    // STANDBY -> STANDBY_TO_ACTIVE, so the waitFor must expect the settled state.
+    CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY,
+      ClusterRole.STANDBY_TO_ACTIVE);
     CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.STANDBY);
 
     try {
@@ -565,7 +568,10 @@ public class FailoverPhoenixConnectionIT extends HABaseIT {
     Connection conn = createFailoverConnection();
     doTestBasicOperationsWithConnection(conn, tableName, haGroupName);
 
-    CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY);
+    // role2 = the SETTLED peer role: local ACTIVE_TO_STANDBY drives the peer
+    // STANDBY -> STANDBY_TO_ACTIVE, so the waitFor must expect the settled state.
+    CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY,
+      ClusterRole.STANDBY_TO_ACTIVE);
     CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.STANDBY);
 
     try {

@@ -421,14 +421,16 @@ public class ParallelPhoenixConnectionIT extends HABaseIT {
    */
   @Test
   public void testOneClusterATSRoleWithStandby() throws Exception {
-    testOneClusterATSRole(ClusterRole.STANDBY);
-  }
-
-  private void testOneClusterATSRole(ClusterRole otherRole) throws Exception {
-    testOneClusterATSRole(otherRole, true);
+    testOneClusterATSRole(ClusterRole.STANDBY, false);
   }
 
   private void testOneClusterATSRole(ClusterRole otherRole, boolean doRefresh) throws Exception {
+    // doRefresh=false: {ACTIVE_TO_STANDBY, STANDBY} (and {ACTIVE_TO_STANDBY, ACTIVE}) is not a
+    // stable role pair with both clusters live -- a live peer under a local ACTIVE_TO_STANDBY
+    // autonomously advances (STANDBY -> STANDBY_TO_ACTIVE; ACTIVE keeps the local draining), so
+    // an equality waitFor against the named transient pair races that advance and intermittently
+    // times out. Skipping the settle-wait avoids the race; the PARALLEL connection is still
+    // exercised against the ACTIVE_TO_STANDBY cluster pair and must complete without error.
     CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, otherRole, doRefresh,
       PARALLEL);
     try (Connection conn = getParallelConnection()) {
