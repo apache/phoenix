@@ -157,7 +157,8 @@ public class QueryOptimizer {
         && (select.getWhere() == null || !select.getWhere().hasSubquery())
     ) {
       return getApplicablePlansForSingleFlatQuery(dataPlan, statement, targetColumns,
-        parallelIteratorFactory, stopAtBestPlan, new DecisionState());
+        parallelIteratorFactory, stopAtBestPlan,
+        new DecisionState(dataPlan.getContext().isCollectDiagnostics()));
     }
 
     Map<TableRef, QueryPlan> dataPlans = null;
@@ -223,17 +224,19 @@ public class QueryOptimizer {
       WhereCompiler.contains(index.getIndexWhereExpression(dataPlan.getContext().getConnection()),
         WhereCompiler.transformDNF(select.getWhere(), context));
     StatementContext rootContext = dataPlan.getContext();
-    String tableName = dataPlan.getTableRef().getTable().getName().getString();
-    String indexName = index.getName().getString();
-    // Dedupe so the breadcrumb is recorded once per table and index pair even when the optimizer
-    // scores the same index across multiple candidate paths.
-    if (rootContext.markPartialIndexChecked(tableName, indexName)) {
-      // Name the index in the breadcrumb so multiple partial indexes stay distinct after the
-      // rewrite list is deduped by string. Otherwise they collapse into a single ambiguous line.
-      rootContext.addAppliedRewrite(usable
-        ? "PARTIAL INDEX " + indexName + " APPLICABLE"
-        : "PARTIAL INDEX " + indexName
-          + " NOT APPLICABLE -- index WHERE not implied by query WHERE");
+    if (rootContext.isCollectDiagnostics()) {
+      String tableName = dataPlan.getTableRef().getTable().getName().getString();
+      String indexName = index.getName().getString();
+      // Dedupe so the breadcrumb is recorded once per table and index pair even when the optimizer
+      // scores the same index across multiple candidate paths.
+      if (rootContext.markPartialIndexChecked(tableName, indexName)) {
+        // Name the index in the breadcrumb so multiple partial indexes stay distinct after the
+        // rewrite list is deduped by string. Otherwise they collapse into a single ambiguous line.
+        rootContext.addAppliedRewrite(usable
+          ? "PARTIAL INDEX " + indexName + " APPLICABLE"
+          : "PARTIAL INDEX " + indexName
+            + " NOT APPLICABLE -- index WHERE not implied by query WHERE");
+      }
     }
     return usable;
   }
@@ -404,8 +407,13 @@ public class QueryOptimizer {
    * Carry the rewrite breadcrumbs recorded on the data plan's context onto the candidate plans'
    * contexts. The partial index applicability decisions are recorded once per index on the shared
    * root context while scoring plans, so that all of them stay visible even though only one wins.
+   * No-op when diagnostic recording is disabled on the source context, so normal queries pay no
+   * cost.
    */
   private static void carryForwardRewrites(StatementContext from, List<QueryPlan> plans) {
+    if (!from.isCollectDiagnostics()) {
+      return;
+    }
     List<String> rewrites = from.getAppliedRewrites();
     Map<Hint, String> ignoredHints = from.getIgnoredHints();
     if (rewrites.isEmpty() && (ignoredHints == null || ignoredHints.isEmpty())) {
@@ -924,15 +932,28 @@ public class QueryOptimizer {
 
   /**
    * Accumulates the rejected index entries gathered while selecting an index for a single flat
-   * query. Rejections are deduplicated by index name.
+   * query. Rejections are deduplicated by index name. When diagnostic recording is disabled every
+   * {@code reject(...)} call is a no-op and the backing list is never allocated.
    */
   private static final class DecisionState {
-    private final List<RejectedIndexEntry> rejections = new ArrayList<>();
+    private final boolean collectDiagnostics;
+    private List<RejectedIndexEntry> rejections;
+
+    DecisionState(boolean collectDiagnostics) {
+      this.collectDiagnostics = collectDiagnostics;
+    }
 
     void reject(String name, String reason) {
-      for (RejectedIndexEntry existing : rejections) {
-        if (existing.getName().equals(name)) {
-          return;
+      if (!collectDiagnostics) {
+        return;
+      }
+      if (rejections == null) {
+        rejections = new ArrayList<>();
+      } else {
+        for (RejectedIndexEntry existing : rejections) {
+          if (existing.getName().equals(name)) {
+            return;
+          }
         }
       }
       rejections.add(new RejectedIndexEntry(name, reason));
@@ -949,6 +970,9 @@ public class QueryOptimizer {
     }
 
     void rejectAll(List<PTable> indexes, String reason) {
+      if (!collectDiagnostics) {
+        return;
+      }
       for (PTable index : indexes) {
         reject(index, reason);
       }
@@ -961,9 +985,13 @@ public class QueryOptimizer {
 
   /**
    * Records the optimizer's index selection rationale on the chosen plan and returns it so callers
-   * can use this inline at a {@code return} site.
+   * can use this inline at a {@code return} site. No-op (returns the winner unchanged) when the
+   * winner's context has diagnostic recording disabled.
    */
   private static QueryPlan recordDecision(QueryPlan winner, String rule, DecisionState state) {
+    if (!winner.getContext().isCollectDiagnostics()) {
+      return winner;
+    }
     // The rule names the selection reason (e.g. hint, more bound PK columns). When the winner is a
     // functional index that matched a query expression, the "matches <expr>" disclosure is
     // recorded separately so both the selection reason and the functional match are surfaced.

@@ -119,6 +119,9 @@ public class StatementContext {
   private Map<String, List<Expression>> serverParsedProjections;
   private StatementContext parentContext;
   private ExplainOptions explainOptions = ExplainOptions.DEFAULT;
+  // True when compile-time diagnostic recording is enabled for this context
+  private final boolean collectDiagnostics;
+  // Diagnostic-only maps, lazily allocated
   private Map<Expression, Set<String>> predicateOrigins;
   private Map<ParseNode, String> decorrelatedSubqueryAlias;
   private Map<Hint, String> ignoredHints;
@@ -177,6 +180,7 @@ public class StatementContext {
     this.hasRawRowSizeFunction = context.hasRawRowSizeFunction;
     this.parentContext = context.parentContext;
     this.explainOptions = context.explainOptions;
+    this.collectDiagnostics = context.collectDiagnostics;
     copyRewriteStateFrom(context);
   }
 
@@ -248,9 +252,12 @@ public class StatementContext {
     this.partialIndexCheckedSet = Sets.newLinkedHashSet();
     this.serverParsedProjections = null;
     this.parentContext = null;
-    this.predicateOrigins = new IdentityHashMap<>();
-    this.decorrelatedSubqueryAlias = new IdentityHashMap<>();
-    this.ignoredHints = new EnumMap<>(Hint.class);
+    this.collectDiagnostics = statement.isCollectDiagnostics();
+    // Diagnostic-only maps are lazily allocated when their first insert is gated by
+    // collectDiagnostics. Normal queries skip these allocations entirely.
+    this.predicateOrigins = null;
+    this.decorrelatedSubqueryAlias = null;
+    this.ignoredHints = null;
   }
 
   /**
@@ -521,9 +528,13 @@ public class StatementContext {
 
   /**
    * Records a top-of-plan rewrite breadcrumb (e.g. "STAR JOIN ON 2 RIGHT LEGS"). Breadcrumbs are
-   * diagnostic only and never affect the compiled plan.
+   * diagnostic only and never affect the compiled plan, so this is a no-op when diagnostic
+   * recording is disabled on this context. Normal queries pay no cost for breadcrumb bookkeeping.
    */
   public void addAppliedRewrite(String rewrite) {
+    if (!collectDiagnostics) {
+      return;
+    }
     appliedRewrites.add(rewrite);
   }
 
@@ -567,12 +578,24 @@ public class StatementContext {
     // serverParsedProjections is nullable and only ever replaced wholesale via its setter (never
     // mutated in place), so the reference can be carried over directly.
     this.serverParsedProjections = source.serverParsedProjections;
-    this.predicateOrigins = new IdentityHashMap<>();
-    for (Map.Entry<Expression, Set<String>> entry : source.predicateOrigins.entrySet()) {
-      this.predicateOrigins.put(entry.getKey(), new LinkedHashSet<>(entry.getValue()));
+    if (source.predicateOrigins == null || source.predicateOrigins.isEmpty()) {
+      this.predicateOrigins = null;
+    } else {
+      this.predicateOrigins = new IdentityHashMap<>();
+      for (Map.Entry<Expression, Set<String>> entry : source.predicateOrigins.entrySet()) {
+        this.predicateOrigins.put(entry.getKey(), new LinkedHashSet<>(entry.getValue()));
+      }
     }
-    this.decorrelatedSubqueryAlias = new IdentityHashMap<>(source.decorrelatedSubqueryAlias);
-    this.ignoredHints = new EnumMap<>(source.ignoredHints);
+    if (source.decorrelatedSubqueryAlias == null || source.decorrelatedSubqueryAlias.isEmpty()) {
+      this.decorrelatedSubqueryAlias = null;
+    } else {
+      this.decorrelatedSubqueryAlias = new IdentityHashMap<>(source.decorrelatedSubqueryAlias);
+    }
+    if (source.ignoredHints == null || source.ignoredHints.isEmpty()) {
+      this.ignoredHints = null;
+    } else {
+      this.ignoredHints = new EnumMap<>(source.ignoredHints);
+    }
   }
 
   public void incrementDerivedTableFlattenCount() {
@@ -695,6 +718,11 @@ public class StatementContext {
     return explainOptions != null && explainOptions.isVerbose();
   }
 
+  /** True when compile-time diagnostic recording is enabled for this context. */
+  public boolean isCollectDiagnostics() {
+    return collectDiagnostics;
+  }
+
   /**
    * Tag a predicate {@link Expression} with the given origin (e.g. {@code "WHERE"},
    * {@code "JOIN ON"}). Tags accumulate as a set so a predicate fused from multiple sources carries
@@ -702,19 +730,25 @@ public class StatementContext {
    * expressions during compilation. Diagnostic only; never affects the compiled plan.
    */
   public void tagPredicate(Expression expression, String origin) {
-    if (expression == null || origin == null) {
+    if (!collectDiagnostics || expression == null || origin == null) {
       return;
+    }
+    if (predicateOrigins == null) {
+      predicateOrigins = new IdentityHashMap<>();
     }
     predicateOrigins.computeIfAbsent(expression, k -> new LinkedHashSet<>()).add(origin);
   }
 
   /** Returns the predicate origin tags accumulated during compilation. Identity keyed. */
   public Map<Expression, Set<String>> getPredicateOrigins() {
-    return predicateOrigins;
+    return predicateOrigins == null ? Collections.emptyMap() : predicateOrigins;
   }
 
   /** Returns the origin tags recorded for {@code expression}, or an empty set if none. */
   public Set<String> getPredicateOrigins(Expression expression) {
+    if (predicateOrigins == null) {
+      return Collections.emptySet();
+    }
     Set<String> tags = predicateOrigins.get(expression);
     return tags == null ? Collections.emptySet() : tags;
   }
@@ -724,9 +758,13 @@ public class StatementContext {
    * the given temp alias.
    */
   public void putDecorrelatedSubqueryAlias(ParseNode joinConditionNode, String subqueryAlias) {
-    if (joinConditionNode != null && subqueryAlias != null) {
-      decorrelatedSubqueryAlias.put(joinConditionNode, subqueryAlias);
+    if (!collectDiagnostics || joinConditionNode == null || subqueryAlias == null) {
+      return;
     }
+    if (decorrelatedSubqueryAlias == null) {
+      decorrelatedSubqueryAlias = new IdentityHashMap<>();
+    }
+    decorrelatedSubqueryAlias.put(joinConditionNode, subqueryAlias);
   }
 
   /**
@@ -734,7 +772,9 @@ public class StatementContext {
    * {@code null} if the node is not a decorrelated predicate.
    */
   public String getDecorrelatedSubqueryAlias(ParseNode joinConditionNode) {
-    return decorrelatedSubqueryAlias.get(joinConditionNode);
+    return decorrelatedSubqueryAlias == null
+      ? null
+      : decorrelatedSubqueryAlias.get(joinConditionNode);
   }
 
   /**
@@ -743,15 +783,18 @@ public class StatementContext {
    * comment. The first reason recorded for a hint wins. Diagnostic only.
    */
   public void recordIgnoredHint(Hint hint, String reason) {
-    if (hint == null || reason == null) {
+    if (!collectDiagnostics || hint == null || reason == null) {
       return;
+    }
+    if (ignoredHints == null) {
+      ignoredHints = new EnumMap<>(Hint.class);
     }
     ignoredHints.putIfAbsent(hint, reason);
   }
 
   /** Returns the hints the planner intentionally ignored, mapped to the reason. */
   public Map<Hint, String> getIgnoredHints() {
-    return ignoredHints;
+    return ignoredHints == null ? Collections.emptyMap() : ignoredHints;
   }
 
   /** Returns true if this is the top-level (root) statement context, i.e. it has no parent. */

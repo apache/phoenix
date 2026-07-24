@@ -1204,16 +1204,19 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
 
   /**
    * When a top-level AND is only partially tagged, renderVerboseFilters collapses to a single
-   * combined line. That line must still union the origins recorded on the tagged conjunct(s) rather
+   * combined line. That line must still union the origins recorded on the tagged conjuncts rather
    * than reading only the parent expression. Normal WHERE/HAVING compilation always tags every
-   * conjunct, so this partial-tag state is reachable only when identity is lost during expression
-   * rewriting.
+   * conjunct, so this state is reachable only when identity is lost during expression rewriting.
    */
   @Test
   public void testVerboseCombinedFilterUnionsConjunctOrigins() throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps())) {
-      QueryPlan plan = conn.prepareStatement("SELECT * FROM atable")
-        .unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+      PhoenixPreparedStatement pstmt =
+        conn.prepareStatement("SELECT * FROM atable").unwrap(PhoenixPreparedStatement.class);
+      // Compile time diagnostic recording is normally only enabled for EXPLAIN, so enable it
+      // explicitly on this statement.
+      pstmt.unwrap(org.apache.phoenix.jdbc.PhoenixStatement.class).setCollectDiagnostics(true);
+      QueryPlan plan = pstmt.optimizeQuery();
       StatementContext context = plan.getContext();
       Expression tagged = LiteralExpression.newConstant(true);
       Expression untagged = LiteralExpression.newConstant(false);
@@ -1954,5 +1957,66 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     PName cName = PNameFactory.newName(name);
     return new PColumnImpl(cName, fName, PInteger.INSTANCE, null, null, false, 0, SortOrder.ASC, 0,
       null, false, "expression", false, false, name.getBytes(), 0L);
+  }
+
+  /**
+   * A plain {@code SELECT} compile (not routed through {@code EXPLAIN}) must record no compile time
+   * diagnostic state.
+   */
+  @Test
+  public void testPlainSelectRecordsNoDiagnostics() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String base = generateUniqueName();
+      String idx = base + "_IDX";
+      stmt
+        .execute("CREATE TABLE " + base + " (rowkey VARCHAR PRIMARY KEY, c1 VARCHAR, c2 VARCHAR)");
+      stmt.execute("CREATE LOCAL INDEX " + idx + " ON " + base + " (c1)");
+      String query =
+        "SELECT c1, max(rowkey), max(c2) FROM " + base + " WHERE rowkey <= 'z' GROUP BY c1";
+      // Plain compile (not through EXPLAIN) must skip all diagnostic recording.
+      QueryPlan plan =
+        conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class).optimizeQuery();
+      assertTrue("plain compile must not record predicate origins",
+        plan.getContext().getPredicateOrigins().isEmpty());
+      assertTrue("plain compile must not record ignored hints",
+        plan.getContext().getIgnoredHints().isEmpty());
+      assertTrue("plain compile must not accumulate rewrite breadcrumbs",
+        plan.getContext().getAppliedRewrites().isEmpty());
+      assertEquals("plain compile must not record an optimizer decision", null,
+        plan.getOptimizerDecision());
+      assertFalse("plain compile must have collectDiagnostics=false",
+        plan.getContext().isCollectDiagnostics());
+    }
+  }
+
+  /**
+   * The same query compiled with {@code collectDiagnostics=true} (matching what the EXPLAIN entry
+   * point does in production) must record full diagnostics. Paired with
+   * {@link #testPlainSelectRecordsNoDiagnostics()}.
+   */
+  @Test
+  public void testExplainSelectRecordsDiagnostics() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl(), defaultProps());
+      java.sql.Statement stmt = conn.createStatement()) {
+      String base = generateUniqueName();
+      String idx = base + "_IDX";
+      stmt
+        .execute("CREATE TABLE " + base + " (rowkey VARCHAR PRIMARY KEY, c1 VARCHAR, c2 VARCHAR)");
+      stmt.execute("CREATE LOCAL INDEX " + idx + " ON " + base + " (c1)");
+      String query =
+        "SELECT c1, max(rowkey), max(c2) FROM " + base + " WHERE rowkey <= 'z' GROUP BY c1";
+      // ExplainPlanTestUtil enables collectDiagnostics for the duration of the compile, so the
+      // optimizer records the winning index rule and every rejected candidate.
+      ExplainPlanTestUtil.assertPlan(conn, query).indexName(base)
+        .indexRule(OptimizerReasons.RULE_MORE_BOUND_PK_COLUMNS).indexRejectedCount(1)
+        .indexRejected(0, idx, OptimizerReasons.REASON_NO_PK_PREFIX_BOUND);
+
+      // And a query with a non-PK residual predicate surfaces the WHERE origin on the server
+      // filter under VERBOSE.
+      String filterQuery = "SELECT c1 FROM " + base + " WHERE c2 = 'x'";
+      ExplainPlanTestUtil.assertPlanWithVerbose(conn, filterQuery).serverFilterCount(1)
+        .serverFilterOrigin(0, "WHERE");
+    }
   }
 }
