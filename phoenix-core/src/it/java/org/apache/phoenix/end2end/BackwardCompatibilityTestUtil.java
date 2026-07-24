@@ -143,10 +143,10 @@ public final class BackwardCompatibilityTestUtil {
       if (hbaseProfileNode == null) {
         return clientVersionGroups;
       }
-      for (final JsonNode groupNode : hbaseProfileNode) {
+      for (final JsonNode clientVersionGroupNode : hbaseProfileNode) {
         List<MavenCoordinates> artifacts = new ArrayList<>();
-        for (final JsonNode clientVersion : groupNode) {
-          artifacts.add(mapper.treeToValue(clientVersion, MavenCoordinates.class));
+        for (final JsonNode artifactNode : clientVersionGroupNode) {
+          artifacts.add(mapper.treeToValue(artifactNode, MavenCoordinates.class));
         }
         if (!artifacts.isEmpty()) {
           clientVersionGroups.add(new ClientVersionGroup(artifacts.get(0), artifacts));
