@@ -1816,6 +1816,26 @@
                 </rules>
               </configuration>
             </execution>
+            <execution>
+              <id>banned-illegal-dependencies</id>
+              <goals>
+                <goal>enforce</goal>
+              </goals>
+              <phase>validate</phase>
+              <configuration>
+                <rules>
+                  <bannedDependencies>
+                    <message>HTrace is retired, use OpenTelemetry via PhoenixTracing</message>
+                    <!-- Direct declarations only. Hadoop 3.2.4, used by the hbase-2.5.0 profile,
+                         still pulls in htrace-core4 transitively and we cannot avoid that. -->
+                    <searchTransitive>false</searchTransitive>
+                    <excludes>
+                      <exclude>org.apache.htrace:*</exclude>
+                    </excludes>
+                  </bannedDependencies>
+                </rules>
+              </configuration>
+            </execution>
           </executions>
         </plugin>
       </plugins>
