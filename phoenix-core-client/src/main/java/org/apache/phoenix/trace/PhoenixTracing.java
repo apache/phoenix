@@ -90,8 +90,17 @@ public final class PhoenixTracing {
   }
 
   /**
-   * Check if the current span is recording. This can be used to avoid expensive attribute
-   * computation when tracing is not active.
+   * Whether a trace is already being recorded on this thread. Use it to skip work that exists only
+   * to populate a span, such as building attribute values.
+   * <p>
+   * This asks whether a trace is already running, not whether one ought to be started. Phoenix only
+   * ever adds child spans to a trace somebody else began, normally the OpenTelemetry Java Agent
+   * instrumenting the JDBC or servlet call above us. With no agent attached, or when the caller is
+   * not instrumented, this is always false and Phoenix creates no spans at all.
+   * <p>
+   * HTrace worked the other way round. Phoenix owned a sampler, configured through
+   * {@code phoenix.trace.frequency} and friends, and started its own root traces. Those properties
+   * are deprecated and no longer read. Sampling now belongs to the OpenTelemetry SDK.
    * @return {@code true} if the current span is recording, {@code false} if tracing is off or no
    *         SDK is configured.
    */
