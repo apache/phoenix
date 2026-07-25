@@ -58,6 +58,12 @@ public final class PhoenixTracing {
   /**
    * Create a {@link SpanKind#INTERNAL} span. This is the default for most Phoenix operations (query
    * compilation, mutation processing, index maintenance, etc.).
+   * <p>
+   * The span is parented to the current one where there is one, and is a root span otherwise.
+   * Server side it is always a child, because HBase makes an IPC span current around coprocessor
+   * execution. Client side Phoenix runs in the application's JVM, so it is the root unless the
+   * application is itself instrumented. That root is what gets trace context onto the RPC and links
+   * the query to the HBase side spans.
    */
   public static Span createSpan(String name) {
     return createSpan(name, SpanKind.INTERNAL);
@@ -90,8 +96,17 @@ public final class PhoenixTracing {
   }
 
   /**
-   * Check if the current span is recording. This can be used to avoid expensive attribute
-   * computation when tracing is not active.
+   * Whether a trace is already being recorded on this thread. Use it to skip work that exists only
+   * to populate a span, such as building attribute values.
+   * <p>
+   * This asks whether a trace is already running, not whether one ought to be started. It is a
+   * cheap guard for a few hot call sites, not a global policy: {@link #createSpan} always starts a
+   * span, so most call sites create one regardless of what this returns.
+   * <p>
+   * HTrace worked the other way round. Phoenix owned a sampler, configured through
+   * {@code phoenix.trace.frequency} and friends, and decided for itself when to start a trace.
+   * Those properties are deprecated and no longer read. Sampling now belongs to the OpenTelemetry
+   * SDK.
    * @return {@code true} if the current span is recording, {@code false} if tracing is off or no
    *         SDK is configured.
    */
