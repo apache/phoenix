@@ -19,7 +19,6 @@ package org.apache.phoenix.trace;
 
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.StatusCode;
-import io.opentelemetry.context.Scope;
 import java.sql.SQLException;
 import org.apache.phoenix.iterate.DelegateResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -28,36 +27,37 @@ import org.apache.phoenix.schema.tuple.Tuple;
 /**
  * A result iterator that manages an OpenTelemetry span lifecycle. The span is ended when the
  * iterator is closed. Events are added to the span as results are iterated.
+ * <p>
+ * The span is deliberately not made current.
+ * <p>
+ * makeCurrent() swaps this thread's Context and returns a Scope that has to restore it on the same
+ * thread, but an iterator is closed by whichever thread finishes with it.
+ * <p>
+ * Nothing is therefore parented to this span. Making it a parent again means attaching a Context
+ * around each next() call on the calling thread.
  */
 public class TracingIterator extends DelegateResultIterator {
 
   private final Span span;
-  private final Scope scope;
   private boolean started;
 
   /**
    * @param span     the OpenTelemetry span to manage
-   * @param scope    the scope that makes the span current
    * @param iterator delegate iterator
    */
-  public TracingIterator(Span span, Scope scope, ResultIterator iterator) {
+  public TracingIterator(Span span, ResultIterator iterator) {
     super(iterator);
     this.span = span;
-    this.scope = scope;
   }
 
   @Override
   public void close() throws SQLException {
     try {
+      super.close();
       span.setStatus(StatusCode.OK);
     } finally {
-      try {
-        scope.close();
-      } finally {
-        span.end();
-      }
+      span.end();
     }
-    super.close();
   }
 
   @Override
