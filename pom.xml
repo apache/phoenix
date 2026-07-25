@@ -1816,6 +1816,24 @@
                 </rules>
               </configuration>
             </execution>
+            <execution>
+              <id>banned-illegal-dependencies</id>
+              <goals>
+                <goal>enforce</goal>
+              </goals>
+              <phase>validate</phase>
+              <configuration>
+                <rules>
+                  <bannedDependencies>
+                    <message>HTrace is retired, use OpenTelemetry via PhoenixTracing</message>
+                    <searchTransitive>true</searchTransitive>
+                    <excludes>
+                      <exclude>org.apache.htrace:*</exclude>
+                    </excludes>
+                  </bannedDependencies>
+                </rules>
+              </configuration>
+            </execution>
           </executions>
         </plugin>
       </plugins>
