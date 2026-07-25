@@ -18,7 +18,6 @@
 package org.apache.phoenix.execute;
 
 import io.opentelemetry.api.trace.Span;
-import io.opentelemetry.context.Scope;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -368,8 +367,7 @@ public abstract class BaseQueryPlan implements QueryPlan {
     if (PhoenixTracing.isRecording()) {
       Span span = PhoenixTracing
         .createSpan("phoenix.query.execute." + context.getCurrentTable().getTable().getName());
-      Scope scope = span.makeCurrent();
-      return new TracingIterator(span, scope, iterator);
+      return new TracingIterator(span, iterator);
     }
     return iterator;
   }

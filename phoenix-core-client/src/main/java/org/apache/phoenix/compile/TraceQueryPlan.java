@@ -19,7 +19,6 @@ package org.apache.phoenix.compile;
 
 import io.opentelemetry.api.trace.Span;
 import io.opentelemetry.api.trace.SpanContext;
-import io.opentelemetry.context.Scope;
 import java.sql.ParameterMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -260,12 +259,18 @@ public class TraceQueryPlan implements QueryPlan {
       }
       Span traceSpan = conn.getTraceSpan();
       if (traceStatement.isTraceOn()) {
-        // TRACE ON: create a new span if one doesn't exist
+        // TRACE ON: create a new span if one doesn't exist.
+        //
+        // The span is deliberately not made current.
+        // makeCurrent() swaps this thread's Context and returns a Scope that has to restore it
+        // on the same thread, but a Connection is closed by an arbitrary thread
+        // (see PhoenixConnection.close)
+        //
+        // Nothing is therefore parented to this span. Making TRACE ON useful again means holding a
+        // Context on the connection and attaching it per statement on the executing thread.
         if (traceSpan == null) {
           traceSpan = PhoenixTracing.createSpan("phoenix.trace.session");
-          Scope scope = traceSpan.makeCurrent();
           conn.setTraceSpan(traceSpan);
-          conn.setTraceScope(scope);
         }
       } else {
         // TRACE OFF: close the existing span
@@ -309,12 +314,7 @@ public class TraceQueryPlan implements QueryPlan {
     }
 
     private void closeTrace(PhoenixConnection conn) {
-      Scope scope = conn.getTraceScope();
       Span span = conn.getTraceSpan();
-      if (scope != null) {
-        scope.close();
-        conn.setTraceScope(null);
-      }
       if (span != null) {
         span.end();
         conn.setTraceSpan(null);
