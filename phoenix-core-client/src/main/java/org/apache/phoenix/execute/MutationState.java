@@ -1487,12 +1487,9 @@ public class MutationState implements SQLCloseable {
           ex);
       }
       span.setStatus(StatusCode.OK);
-    } catch (Throwable t) {
-      PhoenixTracing.setError(span, t);
-      if (t instanceof SQLException) {
-        throw (SQLException) t;
-      }
-      throw new SQLException(t);
+    } catch (SQLException | RuntimeException | Error e) {
+      PhoenixTracing.setError(span, e);
+      throw e;
     } finally {
       span.end();
     }
@@ -1672,6 +1669,10 @@ public class MutationState implements SQLCloseable {
           }
           areAllBatchesSuccessful = true;
         } catch (RuntimeException e) {
+          // A RuntimeException here is a Phoenix bug, not a failed mutation. Rethrow it rather
+          // than wrapping it in a CommitException, which would report it as a server-side commit
+          // failure. Checked exceptions from hTable.batch() still fall through to the handler
+          // below. This is the pattern SpotBugs REC_CATCH_EXCEPTION asks for.
           throw e;
         } catch (Exception e) {
           long serverTimestamp = ClientUtil.parseServerTimestamp(e);
