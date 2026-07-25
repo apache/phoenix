@@ -424,10 +424,6 @@
         <version>${hadoop.version}</version>
         <exclusions>
           <exclusion>
-            <groupId>org.apache.htrace</groupId>
-            <artifactId>htrace-core4</artifactId>
-          </exclusion>
-          <exclusion>
             <groupId>log4j</groupId>
             <artifactId>log4j</artifactId>
           </exclusion>
@@ -460,10 +456,6 @@
         <version>${hadoop.version}</version>
         <type>test-jar</type>
         <exclusions>
-          <exclusion>
-            <groupId>org.apache.htrace</groupId>
-            <artifactId>htrace-core4</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>log4j</groupId>
             <artifactId>log4j</artifactId>
@@ -694,10 +686,6 @@
         <type>test-jar</type>
         <scope>test</scope>
         <exclusions>
-          <exclusion>
-            <groupId>org.apache.htrace</groupId>
-            <artifactId>htrace-core4</artifactId>
-          </exclusion>
           <exclusion>
             <groupId>log4j</groupId>
             <artifactId>log4j</artifactId>
