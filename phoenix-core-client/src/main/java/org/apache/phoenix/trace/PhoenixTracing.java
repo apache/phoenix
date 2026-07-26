@@ -34,9 +34,12 @@ import org.apache.phoenix.monitoring.TaskExecutionMetricsHolder;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
- * Central tracing facade for Apache Phoenix using OpenTelemetry, following the same pattern as
- * HBase's {@code TraceUtil} (HBASE-22120). All methods are no-ops with zero overhead when no
- * OpenTelemetry SDK is configured.
+ * Central tracing facade for Apache Phoenix using OpenTelemetry. All methods are no-ops with zero
+ * overhead when no OpenTelemetry SDK is configured.
+ * <p>
+ * Adapted from Apache HBase's {@code org.apache.hadoop.hbase.trace.TraceUtil} (HBASE-22120). The
+ * span helpers, the future and runnable wrappers, and the throwing functional interfaces are taken
+ * from it largely verbatim.
  * @see <a href="https://issues.apache.org/jira/browse/PHOENIX-5215">PHOENIX-5215</a>
  */
 public final class PhoenixTracing {
