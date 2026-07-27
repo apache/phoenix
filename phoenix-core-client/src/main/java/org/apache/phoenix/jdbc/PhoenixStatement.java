@@ -307,6 +307,10 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
   protected final Calendar localCalendar = Calendar.getInstance();
   private boolean validateLastDdlTimestamp;
   private long sqlQueryParsingTime = 0;
+  // Flipped on by ExecutableExplainStatement.compilePlan (and read by StatementContext) so that
+  // compile-time diagnostic recording only runs when we are actually producing an EXPLAIN.
+  // Normal queries pay no cost for these recording sites.
+  private boolean collectDiagnostics = false;
 
   public PhoenixStatement(PhoenixConnection connection) {
     this.connection = connection;
@@ -333,6 +337,18 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
 
   private long getSqlQueryParsingTime() {
     return this.sqlQueryParsingTime;
+  }
+
+  /**
+   * True when compile time diagnostic recording is enabled for this statement. Off by default.
+   * Normal queries pay no recording cost.
+   */
+  public boolean isCollectDiagnostics() {
+    return collectDiagnostics;
+  }
+
+  public void setCollectDiagnostics(boolean value) {
+    this.collectDiagnostics = value;
   }
 
   public PhoenixResultSet newResultSet(ResultIterator iterator, RowProjector projector,
@@ -974,28 +990,38 @@ public class PhoenixStatement implements PhoenixMonitoredStatement, SQLCloseable
     @Override
     public QueryPlan compilePlan(PhoenixStatement stmt, Sequence.ValueOp seqAction)
       throws SQLException {
-      CompilableStatement compilableStmt = getStatement();
-      StatementPlan compilePlan =
-        compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
-      // if client is validating timestamps, ensure its metadata cache is up to date.
-      if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(stmt.getConnection())) {
-        Set<TableRef> tableRefs = compilePlan.getSourceRefs();
-        for (TableRef tableRef : tableRefs) {
-          new MetaDataClient(stmt.getConnection()).updateCache(stmt.getConnection().getTenantId(),
-            tableRef.getTable().getSchemaName().getString(),
-            tableRef.getTable().getTableName().getString(), true);
+      // Enable diagnostic recording only around the inner compile/optimize so that
+      // EXPLAIN sees full origin tags, optimizer decisions, and rejected-index reasons.
+      // try/finally scopes the flag to this compile so nested compiles (e.g. a partial-index
+      // predicate check) do not leak the flag beyond the EXPLAIN.
+      final boolean prevCollectDiagnostics = stmt.isCollectDiagnostics();
+      stmt.setCollectDiagnostics(true);
+      final StatementPlan plan;
+      try {
+        CompilableStatement compilableStmt = getStatement();
+        StatementPlan compilePlan =
+          compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
+        // if client is validating timestamps, ensure its metadata cache is up to date.
+        if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(stmt.getConnection())) {
+          Set<TableRef> tableRefs = compilePlan.getSourceRefs();
+          for (TableRef tableRef : tableRefs) {
+            new MetaDataClient(stmt.getConnection()).updateCache(stmt.getConnection().getTenantId(),
+              tableRef.getTable().getSchemaName().getString(),
+              tableRef.getTable().getTableName().getString(), true);
+          }
+          compilePlan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
         }
-        compilePlan = compilableStmt.compilePlan(stmt, Sequence.ValueOp.VALIDATE_SEQUENCE);
+        // For a QueryPlan we need to get its optimized plan. For a MutationPlan its enclosed
+        // QueryPlan has already been optimized during compilation.
+        if (compilePlan instanceof QueryPlan) {
+          QueryPlan dataPlan = (QueryPlan) compilePlan;
+          compilePlan =
+            stmt.getConnection().getQueryServices().getOptimizer().optimize(stmt, dataPlan);
+        }
+        plan = compilePlan;
+      } finally {
+        stmt.setCollectDiagnostics(prevCollectDiagnostics);
       }
-      // For a QueryPlan, we need to get its optimized plan; for a MutationPlan, its enclosed
-      // QueryPlan
-      // has already been optimized during compilation.
-      if (compilePlan instanceof QueryPlan) {
-        QueryPlan dataPlan = (QueryPlan) compilePlan;
-        compilePlan =
-          stmt.getConnection().getQueryServices().getOptimizer().optimize(stmt, dataPlan);
-      }
-      final StatementPlan plan = compilePlan;
       // Propagate the parsed EXPLAIN options onto the resolved plan's context so the renderer has
       // access to the requested options.
       if (plan.getContext() != null) {

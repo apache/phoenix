@@ -265,10 +265,11 @@ public class WhereCompiler {
 
   /**
    * Tag the top-level conjuncts of the residual WHERE expression with their origin for VERBOSE
-   * predicate source attribution.
+   * predicate source attribution. No-op when the context has diagnostic recording disabled so
+   * normal queries skip the child iteration and per-conjunct tag calls entirely.
    */
   private static void tagWhereOrigins(StatementContext context, Expression expression) {
-    if (expression == null) {
+    if (expression == null || !context.isCollectDiagnostics()) {
       return;
     }
     if (expression instanceof AndExpression) {

@@ -2538,7 +2538,9 @@ public class PTableImpl implements PTable {
     plan.getContext().setResolver(FromCompiler.getResolver(plan.getTableRef()));
     indexWhereExpression = transformDNF(where, plan.getContext());
     // Tag the partial-index WHERE predicate with its origin for VERBOSE attribution.
-    plan.getContext().tagPredicate(indexWhereExpression, "INDEX WHERE");
+    if (plan.getContext().isCollectDiagnostics()) {
+      plan.getContext().tagPredicate(indexWhereExpression, "INDEX WHERE");
+    }
     indexWhereColumns =
       Sets.newHashSetWithExpectedSize(plan.getContext().getWhereConditionColumns().size());
     for (Pair<byte[], byte[]> column : plan.getContext().getWhereConditionColumns()) {

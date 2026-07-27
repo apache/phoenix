@@ -969,6 +969,8 @@ public class QueryOptimizerTest extends BaseConnectionlessQueryTest {
   public void testAdoptRewriteStateDoesNotBleedSourceMutations() throws Exception {
     Connection conn = DriverManager.getConnection(getUrl());
     PhoenixStatement stmt = conn.createStatement().unwrap(PhoenixStatement.class);
+    // Diagnostic recording is off by default. We need it for this test so enable it explicitly.
+    stmt.setCollectDiagnostics(true);
 
     StatementContext source = new StatementContext(stmt);
     source.addAppliedRewrite("X");

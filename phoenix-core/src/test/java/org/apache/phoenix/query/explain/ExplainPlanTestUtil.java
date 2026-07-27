@@ -23,6 +23,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Collections;
@@ -32,6 +33,7 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
+import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.optimize.RejectedIndexEntry;
 import org.apache.phoenix.parse.ExplainOptions;
@@ -48,12 +50,38 @@ public final class ExplainPlanTestUtil {
   private ExplainPlanTestUtil() {
   }
 
-  /** Optimize {@code query} and return its {@link ExplainPlan}. */
-  public static ExplainPlan getExplainPlan(Connection conn, String query) throws SQLException {
+  /**
+   * Compile {@code query} with compile-time diagnostic recording temporarily enabled on the
+   * underlying {@link PhoenixStatement} and return the resolved inner {@link QueryPlan}. This is
+   * what {@code ExecutableExplainStatement.compilePlan} does for a real {@code EXPLAIN} (flip
+   * {@code collectDiagnostics} on before compile, run compile+optimize, restore), without the
+   * EXPLAIN-result wrapping so tests can assert directly on the inner plan's attributes. The
+   * optional {@link ExplainOptions} are applied to the resolved context so {@code VERBOSE}- and
+   * {@code REGIONS}-gated rendering behave as they would under a real
+   * {@code EXPLAIN [(...)] query}.
+   */
+  private static QueryPlan compileWithDiagnostics(Connection conn, String query,
+    ExplainOptions options) throws SQLException {
     try (PhoenixPreparedStatement statement =
       conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)) {
-      return statement.optimizeQuery().getExplainPlan();
+      PhoenixStatement underlying = statement.unwrap(PhoenixStatement.class);
+      boolean prev = underlying.isCollectDiagnostics();
+      underlying.setCollectDiagnostics(true);
+      try {
+        QueryPlan plan = statement.optimizeQuery();
+        if (options != null && plan.getContext() != null) {
+          plan.getContext().setExplainOptions(options);
+        }
+        return plan;
+      } finally {
+        underlying.setCollectDiagnostics(prev);
+      }
     }
+  }
+
+  /** Optimize {@code query} and return its {@link ExplainPlan}. */
+  public static ExplainPlan getExplainPlan(Connection conn, String query) throws SQLException {
+    return compileWithDiagnostics(conn, query, ExplainOptions.DEFAULT).getExplainPlan();
   }
 
   /** Optimize {@code query} and return its structured {@link ExplainPlanAttributes}. */
@@ -69,12 +97,7 @@ public final class ExplainPlanTestUtil {
    */
   public static ExplainPlanAttributes getExplainAttributes(Connection conn, String query,
     ExplainOptions options) throws SQLException {
-    try (PhoenixPreparedStatement statement =
-      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)) {
-      QueryPlan plan = statement.optimizeQuery();
-      plan.getContext().setExplainOptions(options);
-      return plan.getExplainPlan().getPlanStepsAsAttributes();
-    }
+    return compileWithDiagnostics(conn, query, options).getExplainPlan().getPlanStepsAsAttributes();
   }
 
   /** Optimize {@code query} and return its plan-steps text. */
@@ -88,20 +111,26 @@ public final class ExplainPlanTestUtil {
    */
   public static List<String> getPlanSteps(Connection conn, String query, ExplainOptions options)
     throws SQLException {
-    try (PhoenixPreparedStatement statement =
-      conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)) {
-      QueryPlan plan = statement.optimizeQuery();
-      plan.getContext().setExplainOptions(options);
-      return plan.getExplainPlan().getPlanSteps();
-    }
+    return compileWithDiagnostics(conn, query, options).getExplainPlan().getPlanSteps();
   }
 
-  /** Compile a mutation (UPSERT/DELETE) and return its {@link ExplainPlan}. */
+  /**
+   * Compile a mutation (UPSERT/DELETE) and return its {@link ExplainPlan}. Mutations do not go
+   * through the {@code EXPLAIN} entry point, so {@code collectDiagnostics} is toggled on for the
+   * duration of the compile so the underlying scan compile records the same diagnostics.
+   */
   public static ExplainPlan getMutationExplainPlan(Connection conn, String query)
     throws SQLException {
     try (PhoenixPreparedStatement statement =
       conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)) {
-      return statement.compileMutation().getExplainPlan();
+      PhoenixStatement underlying = statement.unwrap(PhoenixStatement.class);
+      boolean prev = underlying.isCollectDiagnostics();
+      underlying.setCollectDiagnostics(true);
+      try {
+        return statement.compileMutation().getExplainPlan();
+      } finally {
+        underlying.setCollectDiagnostics(prev);
+      }
     }
   }
 
@@ -145,16 +174,49 @@ public final class ExplainPlanTestUtil {
 
   /**
    * Optimize an already-prepared and, if needed, parameter-bound {@link PhoenixPreparedStatement}
-   * and begin assertions on its plan attributes.
+   * and begin assertions on its plan attributes. The prepared statement is compiled directly
+   * (rather than routed through {@code EXPLAIN}) because callers may have bound parameters that
+   * cannot be replayed against a re-prepared EXPLAIN statement. {@code collectDiagnostics} is
+   * toggled on for the duration of the compile so diagnostics are recorded.
    */
   public static ExplainPlanAssert assertPlan(PhoenixPreparedStatement statement)
     throws SQLException {
-    return assertPlan(statement.optimizeQuery().getExplainPlan().getPlanStepsAsAttributes());
+    PhoenixStatement underlying = statement.unwrap(PhoenixStatement.class);
+    boolean prev = underlying.isCollectDiagnostics();
+    underlying.setCollectDiagnostics(true);
+    try {
+      return assertPlan(statement.optimizeQuery().getExplainPlan().getPlanStepsAsAttributes());
+    } finally {
+      underlying.setCollectDiagnostics(prev);
+    }
   }
 
-  /** Begin assertions on the plan attributes of a resolved {@link QueryPlan}. */
+  /**
+   * Begin assertions on the plan attributes of a resolved {@link QueryPlan}. The plan is expected
+   * to have been produced by a compile that already had diagnostic recording enabled (e.g. via
+   * {@link #assertPlan(PhoenixPreparedStatement)},
+   * {@link #getOptimizedQueryPlan(PreparedStatement)} or via a direct {@code EXPLAIN} compile).
+   */
   public static ExplainPlanAssert assertPlan(QueryPlan queryPlan) throws SQLException {
     return assertPlan(queryPlan.getExplainPlan().getPlanStepsAsAttributes());
+  }
+
+  /**
+   * Diagnostic drop in replacement for
+   * {@link org.apache.phoenix.util.PhoenixRuntime#getOptimizedQueryPlan(PreparedStatement)}.
+   * Toggles {@code collectDiagnostics=true} on the underlying {@link PhoenixStatement}. Use this
+   * for tests whenever the plan is fed to {@code assertPlan(...)}.
+   */
+  public static QueryPlan getOptimizedQueryPlan(PreparedStatement statement) throws SQLException {
+    PhoenixPreparedStatement pstmt = statement.unwrap(PhoenixPreparedStatement.class);
+    PhoenixStatement underlying = pstmt.unwrap(PhoenixStatement.class);
+    boolean prev = underlying.isCollectDiagnostics();
+    underlying.setCollectDiagnostics(true);
+    try {
+      return pstmt.optimizeQuery();
+    } finally {
+      underlying.setCollectDiagnostics(prev);
+    }
   }
 
   /** Compile the mutation {@code query} on {@code conn} and begin assertions on its attributes. */
@@ -164,12 +226,20 @@ public final class ExplainPlanTestUtil {
   }
 
   /**
-   * Compile an already-prepared and, if needed, parameter-bound mutation
+   * Compile an already prepared and, if needed, parameter bound mutation
    * {@link PhoenixPreparedStatement} and begin assertions on its attributes.
+   * {@code collectDiagnostics} is toggled on for the duration of the compile.
    */
   public static ExplainPlanAssert assertMutationPlan(PhoenixPreparedStatement statement)
     throws SQLException {
-    return assertPlan(statement.compileMutation().getExplainPlan().getPlanStepsAsAttributes());
+    PhoenixStatement underlying = statement.unwrap(PhoenixStatement.class);
+    boolean prev = underlying.isCollectDiagnostics();
+    underlying.setCollectDiagnostics(true);
+    try {
+      return assertPlan(statement.compileMutation().getExplainPlan().getPlanStepsAsAttributes());
+    } finally {
+      underlying.setCollectDiagnostics(prev);
+    }
   }
 
   /** Fluent assertions over {@link ExplainPlanAttributes}. */
