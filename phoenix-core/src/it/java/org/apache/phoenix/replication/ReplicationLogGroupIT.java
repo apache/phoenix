@@ -55,6 +55,7 @@ import org.apache.hadoop.hbase.util.JVMClusterUtil;
 import org.apache.hadoop.hbase.util.Threads;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.FailoverPhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.query.PhoenixTestBuilder;
@@ -1211,6 +1212,133 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
     if (firstError.get() != null) {
       throw new AssertionError("A concurrent upsert thread failed", firstError.get());
     }
+  }
+
+  /**
+   * A replication log group is a writer and must not outlive the active role. This drives a real
+   * LOCAL demotion (cluster 1 ACTIVE -> STANDBY, cluster 2 STANDBY -> ACTIVE) through the actual
+   * HAGroupStoreClient/ZooKeeper path -- the delivery that the unit tests mock out -- and asserts
+   * the writer created for the active role is torn down. A subsequent get() must fail fast against
+   * the now-STANDBY role rather than re-create a writer.
+   */
+  @Test
+  public void testWriterClosesOnDemotionToStandby() throws Exception {
+    final String tableName = "T_" + generateUniqueName();
+    String createTableDdl = String.format(
+      "create table if not exists %s (id integer not null primary key, val varchar)", tableName);
+
+    // Write on the active so the lazily-created writer is real and running.
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(createTableDdl);
+      conn.commit();
+      PreparedStatement stmt = conn.prepareStatement("upsert into " + tableName + " VALUES(?, ?)");
+      for (int i = 0; i < 10; i++) {
+        stmt.setInt(1, i);
+        stmt.setString(2, "v" + i);
+        stmt.executeUpdate();
+      }
+      conn.commit();
+    }
+    assertFalse("Writer should be open while the local cluster is active", logGroup.isClosed());
+
+    // Demote cluster 1 to STANDBY (cluster 2 becomes ACTIVE). The RS's HAGroupStoreClient observes
+    // the ZK role change and fires the LOCAL demotion listener registered by the log group.
+    ServerName sn =
+      CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0).getServerName();
+    CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.STANDBY,
+      ClusterRoleRecord.ClusterRole.ACTIVE);
+
+    // close() is handed to a daemon thread by the listener, so poll for completion.
+    long deadline = System.currentTimeMillis() + 30000;
+    while (!logGroup.isClosed() && System.currentTimeMillis() < deadline) {
+      Threads.sleep(200);
+    }
+    assertTrue("Writer must be closed after demotion to STANDBY", logGroup.isClosed());
+
+    // The role gate must now refuse to re-create a writer on the demoted (STANDBY) cluster: get()
+    // returns empty rather than caching a writer for a non-active role.
+    assertFalse("get() should return empty on a STANDBY cluster",
+      ReplicationLogGroup.get(conf1, sn, haGroupName).isPresent());
+  }
+
+  /**
+   * The graceful-failover deadlock fix: while the local cluster sits in the in-sync cutover gate
+   * (ACTIVE_IN_SYNC_TO_STANDBY), time-based log rotation must be suspended so no new .plog files
+   * are dropped into the peer's shard directory — otherwise the standby's failover-completion check
+   * (getNewFiles(...).isEmpty()) never holds and both clusters spin forever. This drives the real
+   * ZK role change through the RS's HAGroupStoreClient (the delivery the unit tests mock) and
+   * asserts: (1) entering the cutover gate suspends rotation — the peer .plog count is unchanged
+   * across several rounds while the writer stays open; (2) aborting back to ACTIVE_IN_SYNC resumes
+   * rotation — new files appear again.
+   */
+  @Test
+  public void testCutoverSuspendsAndResumesRotation() throws Exception {
+    final String tableName = "T_" + generateUniqueName();
+    String createTableDdl = String.format(
+      "create table if not exists %s (id integer not null primary key, val varchar)", tableName);
+
+    // Write on the active so a real SYNC-mode writer is open and dropping files into the peer dir.
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(createTableDdl);
+      conn.commit();
+      PreparedStatement stmt = conn.prepareStatement("upsert into " + tableName + " VALUES(?, ?)");
+      for (int i = 0; i < 10; i++) {
+        stmt.setInt(1, i);
+        stmt.setString(2, "v" + i);
+        stmt.executeUpdate();
+      }
+      conn.commit();
+    }
+    assertFalse("Writer should be open while the local cluster is active", logGroup.isClosed());
+
+    Path peerDir = logGroup.getOrCreatePeerShardManager().getRootDirectoryPath();
+    FileSystem peerFs = peerDir.getFileSystem(conf2);
+    long roundMs = TimeUnit.SECONDS.toMillis(5); // PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY
+
+    // Enter the in-sync cutover gate (cluster 1 ACTIVE_TO_STANDBY -> ACTIVE_IN_SYNC_TO_STANDBY).
+    CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE_TO_STANDBY,
+      ClusterRoleRecord.ClusterRole.STANDBY_TO_ACTIVE);
+
+    // The RS's HAGroupStoreClient observes the ZK role change and fires the LOCAL listener.
+    long deadline = System.currentTimeMillis() + 30000;
+    while (!logGroup.isFailoverPending() && System.currentTimeMillis() < deadline) {
+      Threads.sleep(200);
+    }
+    assertTrue("Cutover must set failover-pending", logGroup.isFailoverPending());
+    assertFalse("Group must stay open during cutover", logGroup.isClosed());
+
+    // Snapshot after suspension is active, then wait several rounds; the count must not grow. The
+    // base class disables the replay reader on both clusters (PHOENIX_REPLICATION_REPLAY_ENABLED =
+    // false); replay only runs via the explicit replayAndVerifyAcrossClusters helper, which this
+    // test never calls. So nothing consumes or deletes files from the peer dir — the count only
+    // ever grows via the active's rotation, making both assertions below deterministic.
+    int filesAtCutover = findLogFiles(peerDir, peerFs).size();
+    Threads.sleep(3 * roundMs);
+    assertEquals("Rotation must be suspended during cutover: no new peer .plog files",
+      filesAtCutover, findLogFiles(peerDir, peerFs).size());
+    assertFalse("Writer must stay open through the suspended window", logGroup.isClosed());
+
+    // Abort the failover back to ACTIVE_IN_SYNC; rotation must resume on the same live group.
+    CLUSTERS.transitClusterRole(haGroup, ClusterRoleRecord.ClusterRole.ACTIVE,
+      ClusterRoleRecord.ClusterRole.STANDBY);
+    deadline = System.currentTimeMillis() + 30000;
+    while (logGroup.isFailoverPending() && System.currentTimeMillis() < deadline) {
+      Threads.sleep(200);
+    }
+    assertFalse("Cutover abort must clear failover-pending", logGroup.isFailoverPending());
+
+    // With rotation resumed, subsequent rounds mint new files again.
+    deadline = System.currentTimeMillis() + 3 * roundMs + 10000;
+    while (
+      findLogFiles(peerDir, peerFs).size() <= filesAtCutover
+        && System.currentTimeMillis() < deadline
+    ) {
+      Threads.sleep(200);
+    }
+    assertTrue("Rotation must resume after the abort clears failover-pending",
+      findLogFiles(peerDir, peerFs).size() > filesAtCutover);
   }
 
   private PhoenixTestBuilder.SchemaBuilder createViewHierarchy() throws Exception {

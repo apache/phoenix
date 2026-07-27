@@ -136,6 +136,8 @@ import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
 import org.apache.phoenix.index.PhoenixIndexMetaDataBuilder;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
+import org.apache.phoenix.jdbc.HAGroupStoreRecord;
+import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -849,8 +851,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         throw new IOException(
           "HAGroupStoreManager is null " + "for current cluster, check configuration");
       }
-      // Extract HAGroupName from the mutations
-      Optional<ReplicationLogGroup> logGroup = getHAGroupFromBatch(c.getEnvironment(), miniBatchOp);
+      // Extract the HA group name the batch carries (if any). The mutation-block and staleness
+      // gates below key off this name, not off writer presence, so they apply on a standby or
+      // demoted cluster too — not only where this cluster is active.
+      Optional<String> haGroupName = getHAGroupNameFromBatch(miniBatchOp);
 
       // Path-coverage counter: increments whenever a mutation batch reaches preBatchMutate
       // without a resolvable HA group attribute, so the cluster-role-based mutation-block gate
@@ -859,10 +863,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // feature is disabled or no block window is active, there is no property to breach).
       // Tracked globally rather than per-table so operators can compare baseline vs.
       // post-deploy delta to spot new write paths that forgot to attach _HAGroupName.
-      // Intentionally scoped to !logGroup.isPresent() regardless of dataTableName —
+      // Intentionally scoped to !haGroupName.isPresent() regardless of dataTableName —
       // system-HA-group writes WITH a haGroup are an intended gate exemption (state writes
       // must proceed during a block window) and are not counted here.
-      if (!logGroup.isPresent()) {
+      if (shouldReplicate && !haGroupName.isPresent()) {
         try {
           MetricsHaBypassSourceFactory.getInstance().incrementBypassedMutationBlockCount();
         } catch (Throwable t) {
@@ -871,30 +875,34 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
 
       // We don't want to check for mutation blocking for the system ha group table
-      if (!dataTableName.equals(SYSTEM_HA_GROUP_NAME) && logGroup.isPresent()) {
-        // Check if mutation is blocked for the HA Group
-        String haGroupName = logGroup.get().getHAGroupName();
+      if (!dataTableName.equals(SYSTEM_HA_GROUP_NAME) && haGroupName.isPresent()) {
+        String name = haGroupName.get();
         // TODO: Below approach might be slow need to figure out faster way,
         // slower part is getting haGroupStoreClient We can also cache
         // roleRecord (I tried it and still it's slow due to haGroupStoreClient
         // initialization) and caching will give us old result in case one cluster
         // is unreachable instead of UNKNOWN.
 
-        boolean isHAGroupOnClientStale = haGroupStoreManager.isHAGroupOnClientStale(haGroupName);
-        if (StringUtils.isNotBlank(haGroupName) && isHAGroupOnClientStale) {
-          throw new StaleClusterRoleRecordException(String
-            .format("HAGroupStoreRecord is stale for haGroup %s on " + "client", haGroupName));
+        boolean isHAGroupOnClientStale = haGroupStoreManager.isHAGroupOnClientStale(name);
+        if (StringUtils.isNotBlank(name) && isHAGroupOnClientStale) {
+          throw new StaleClusterRoleRecordException(
+            String.format("HAGroupStoreRecord is stale for haGroup %s on " + "client", name));
         }
 
         // Check if mutation's haGroup is stale
-        if (
-          StringUtils.isNotBlank(haGroupName) && haGroupStoreManager.isMutationBlocked(haGroupName)
-        ) {
+        if (StringUtils.isNotBlank(name) && haGroupStoreManager.isMutationBlocked(name)) {
           throw new MutationBlockedIOException(
             "Blocking Mutation as Some CRRs " + "are in ACTIVE_TO_STANDBY state and "
               + "CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED is true");
         }
       }
+
+      // Resolve the replication writer for this batch (present only where this cluster is active
+      // for the HA group). This also enforces the split-brain guard for non-PARALLEL live writes
+      // to a non-active cluster.
+      Optional<ReplicationLogGroup> logGroup = haGroupName.isPresent()
+        ? getReplicationLogGroup(c.getEnvironment(), haGroupStoreManager, haGroupName.get())
+        : Optional.empty();
       preBatchMutateWithExceptions(c, miniBatchOp, logGroup);
       return;
     } catch (Throwable t) {
@@ -905,22 +913,69 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * Get the HA group associated with the batch. We assume that all the mutations in the batch will
-   * have the same HA group.
-   * @return HA group if present or empty if missing
+   * Resolve the replication writer for the named HA group. Returns the writer when this cluster is
+   * active for the group, empty when replication is disabled or a non-active PARALLEL cluster
+   * legitimately receives a double-write, and throws for a non-active non-PARALLEL (split-brain)
+   * live write.
+   * @return the HA group writer, or empty if none should be used
    */
-  private Optional<ReplicationLogGroup> getHAGroupFromBatch(RegionCoprocessorEnvironment env,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp) throws IOException {
+  private Optional<ReplicationLogGroup> getReplicationLogGroup(RegionCoprocessorEnvironment env,
+    HAGroupStoreManager haGroupStoreManager, String haGroup) throws IOException {
+    if (!shouldReplicate) {
+      return Optional.empty();
+    }
+    Optional<ReplicationLogGroup> logGroup = ReplicationLogGroup.get(env.getConfiguration(),
+      env.getServerName(), haGroup, haGroupStoreManager);
+    if (logGroup.isPresent()) {
+      return logGroup;
+    }
+    // get() returned empty: this cluster is not active for the HA group. Its meaning depends on
+    // the HA policy of the write that just arrived:
+    // - PARALLEL: the client deliberately double-writes to both clusters, so a live write on
+    // the standby is expected. Commit locally and skip re-ship (a non-active cluster has no
+    // writer) — the peer gets its copy from the client's other leg. Same as the replay path
+    // in getHAGroupFromWALKey.
+    // - FAILOVER: only the active cluster takes writes, so a live write here is a stray/stale
+    // sync-path write to a demoted cluster. Reject it rather than committing locally
+    // unreplicated (split brain).
+    if (isParallelPolicy(haGroupStoreManager, haGroup)) {
+      return Optional.empty();
+    }
+    throw new IOException(String
+      .format("HAGroup %s cannot accept a sync-path write: this cluster is not active", haGroup));
+  }
+
+  /**
+   * Extract the HA group name carried by the batch, if any. All mutations in a batch share the same
+   * HA group, so the first mutation's {@code _HAGroupName} attribute is authoritative. Pure
+   * extraction: no configuration, role, or policy lookups.
+   * @return the HA group name, or empty if the batch carries no HA group attribute
+   */
+  private Optional<String>
+    getHAGroupNameFromBatch(MiniBatchOperationInProgress<Mutation> miniBatchOp) {
     if (miniBatchOp.size() > 0) {
       Mutation m = miniBatchOp.getOperation(0);
       byte[] haGroupName = m.getAttribute(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
       if (haGroupName != null) {
-        ReplicationLogGroup logGroup = ReplicationLogGroup.get(env.getConfiguration(),
-          env.getServerName(), Bytes.toString(haGroupName), abortable);
-        return Optional.of(logGroup);
+        return Optional.of(Bytes.toString(haGroupName));
       }
     }
     return Optional.empty();
+  }
+
+  /**
+   * True when the HA group uses the PARALLEL policy, under which the client double-writes to both
+   * clusters. On a non-active cluster this distinguishes a legitimate PARALLEL standby write (which
+   * should commit locally and skip re-ship) from a stray FAILOVER write (split brain, to reject). A
+   * missing record is treated as not-PARALLEL so the caller keeps the conservative split-brain
+   * guard.
+   */
+  private boolean isParallelPolicy(HAGroupStoreManager haGroupStoreManager, String haGroupName)
+    throws IOException {
+    Optional<HAGroupStoreRecord> record =
+      haGroupStoreManager.getEffectiveHAGroupStoreRecord(haGroupName);
+    return record.isPresent()
+      && HighAvailabilityPolicy.PARALLEL.name().equalsIgnoreCase(record.get().getPolicy());
   }
 
   /**
@@ -932,9 +987,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     Map<String, byte[]> walKeyAttrs) throws IOException {
     byte[] haGroupName = walKeyAttrs.get(BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB);
     if (haGroupName != null) {
-      ReplicationLogGroup logGroup = ReplicationLogGroup.get(env.getConfiguration(),
-        env.getServerName(), Bytes.toString(haGroupName), abortable);
-      return Optional.of(logGroup);
+      // get() returns empty when this cluster is not active. On the replay path this means a
+      // demoted
+      // cluster is replaying its own formerly-ACTIVE edits after a crash: the peer is ACTIVE now,
+      // so
+      // this cluster must not start a replication writer or re-ship. Returning empty lets the
+      // caller
+      // skip the re-ship; HBase still replays the edits into the local region.
+      return ReplicationLogGroup.get(env.getConfiguration(), env.getServerName(),
+        Bytes.toString(haGroupName), abortable);
     }
     return Optional.empty();
   }

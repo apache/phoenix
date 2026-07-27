@@ -29,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.apache.hadoop.conf.Configuration;
@@ -51,6 +52,7 @@ import org.apache.phoenix.hbase.index.parallel.ThreadPoolManager;
 import org.apache.phoenix.hbase.index.parallel.WaitForCompletionTaskRunner;
 import org.apache.phoenix.jdbc.ClusterRoleRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
+import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -306,8 +308,6 @@ public class PhoenixRegionServerEndpoint extends
 
       // Phase 2: Prewarm individual HAGroupStoreClients with retry
       // and eagerly initialize ReplicationLogGroup instances
-      boolean shouldInitReplicationLogGroup = serverName != null && conf
-        .getBoolean(SYNCHRONOUS_REPLICATION_ENABLED, DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED);
       try {
         while (!pending.isEmpty()) {
           Iterator<String> iterator = pending.iterator();
@@ -315,7 +315,7 @@ public class PhoenixRegionServerEndpoint extends
             String haGroup = iterator.next();
             try {
               manager.getClusterRoleRecord(haGroup);
-              if (shouldInitReplicationLogGroup) {
+              if (shouldEagerlyInit(manager, haGroup)) {
                 try {
                   ReplicationLogGroup.get(conf, serverName, haGroup, abortable);
                   LOGGER.info("Eagerly initialized ReplicationLogGroup {} on server {}", haGroup,
@@ -324,6 +324,11 @@ public class PhoenixRegionServerEndpoint extends
                   LOGGER.warn("Failed to eagerly initialize ReplicationLogGroup for HA group: {}."
                     + " Will be lazily initialized on first mutation.", haGroup, e);
                 }
+              } else {
+                LOGGER.info(
+                  "Skipping eager ReplicationLogGroup init for HA group: {} on server {};"
+                    + " the writer will be created lazily if this cluster becomes active.",
+                  haGroup, serverName);
               }
               iterator.remove();
               LOGGER.info("Prewarmed HAGroupStoreClient: {} ({} remaining)", haGroup,
@@ -344,6 +349,35 @@ public class PhoenixRegionServerEndpoint extends
         Thread.currentThread().interrupt();
       }
     });
+  }
+
+  /**
+   * Eagerly initialize ReplicationLogGroup only on clusters whose local role is currently active
+   * (ACTIVE or ACTIVE_TO_STANDBY). On STANDBY/OFFLINE/UNKNOWN clusters the group will be created
+   * lazily on first mutation if the role transitions.
+   */
+  private boolean shouldEagerlyInit(HAGroupStoreManager manager, String haGroup) {
+    if (serverName == null) {
+      return false;
+    }
+    if (
+      !conf.getBoolean(SYNCHRONOUS_REPLICATION_ENABLED, DEFAULT_SYNCHRONOUS_REPLICATION_ENABLED)
+    ) {
+      return false;
+    }
+    try {
+      Optional<HAGroupStoreRecord> record = manager.getHAGroupStoreRecord(haGroup);
+      if (!record.isPresent()) {
+        LOGGER.warn("Skipping eager ReplicationLogGroup init for {}: no local HAGroupStoreRecord",
+          haGroup);
+        return false;
+      }
+      return record.get().getHAGroupState().getClusterRole().isActive();
+    } catch (Exception e) {
+      LOGGER.warn("Skipping eager ReplicationLogGroup init for {}: unable to read local role",
+        haGroup, e);
+      return false;
+    }
   }
 
 }

@@ -18,7 +18,6 @@
 package org.apache.phoenix.replication;
 
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
-import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC_AND_FORWARD;
 
 import java.io.IOException;
@@ -26,11 +25,6 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.fs.Path;
-import org.apache.phoenix.jdbc.ClusterType;
-import org.apache.phoenix.jdbc.HAGroupStateListener;
-import org.apache.phoenix.jdbc.HAGroupStoreManager;
-import org.apache.phoenix.jdbc.HAGroupStoreRecord;
-import org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogDiscovery;
 import org.apache.phoenix.replication.metrics.MetricsReplicationLogForwarderSourceFactory;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -97,42 +91,6 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
     // Initialize the discovery only. Forwarding begins only when we switch to the
     // STORE_AND_FORWARD mode or SYNC_AND_FORWARD mode.
     super.init();
-
-    // Set up a listener to the ACTIVE_NOT_IN_SYNC state. This is needed because whenever any
-    // RS switches to STORE_AND_FORWARD mode, other RS's in the cluster must move out of SYNC
-    // mode.
-    HAGroupStateListener activeNotInSync =
-      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
-        if (
-          clusterType == ClusterType.LOCAL
-            && HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC.equals(toState)
-        ) {
-          LOG.info("Received ACTIVE_NOT_IN_SYNC event for {}", logGroup);
-          // If the current mode is SYNC only then switch to SYNC_AND_FORWARD mode
-          checkAndSetModeAndNotify(SYNC, SYNC_AND_FORWARD);
-        }
-      };
-
-    // Set up a listener to the ACTIVE_IN_SYNC state. This is needed because when the RS
-    // switches back to SYNC mode, the other RS's in the cluster must move out of
-    // SYNC_AND_FORWARD mode to SYNC mode.
-    HAGroupStateListener activeInSync =
-      (groupName, fromState, toState, modifiedTime, clusterType, lastSyncStateTimeInMs) -> {
-        if (
-          clusterType == ClusterType.LOCAL
-            && HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC.equals(toState)
-        ) {
-          LOG.info("Received ACTIVE_IN_SYNC event for {}", logGroup);
-          // Set the current mode to SYNC
-          checkAndSetModeAndNotify(SYNC_AND_FORWARD, SYNC);
-        }
-      };
-
-    HAGroupStoreManager haGroupStoreManager = logGroup.getHAGroupStoreManager();
-    haGroupStoreManager.subscribeToTargetState(logGroup.getHAGroupName(),
-      HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, ClusterType.LOCAL, activeNotInSync);
-    haGroupStoreManager.subscribeToTargetState(logGroup.getHAGroupName(),
-      HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, ClusterType.LOCAL, activeInSync);
   }
 
   @Override
@@ -153,7 +111,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
         && isLogCopyThroughputAboveThreshold(srcStat.getLen(), copyTime)
     ) {
       // start recovery by switching to SYNC_AND_FORWARD
-      checkAndSetModeAndNotify(STORE_AND_FORWARD, SYNC_AND_FORWARD);
+      logGroup.checkAndSetModeAndNotify(STORE_AND_FORWARD, SYNC_AND_FORWARD);
     }
   }
 
@@ -170,7 +128,7 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
       LOG.info("Processed all the replication log files for {}", logGroup);
       // if this RS is still in STORE_AND_FORWARD mode like when it didn't process any file
       // move this RS to SYNC_AND_FORWARD
-      checkAndSetModeAndNotify(STORE_AND_FORWARD, SYNC_AND_FORWARD);
+      logGroup.checkAndSetModeAndNotify(STORE_AND_FORWARD, SYNC_AND_FORWARD);
 
       if (syncUpdateTS <= EnvironmentEdgeManager.currentTimeMillis()) {
         try {
@@ -210,22 +168,6 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
   @VisibleForTesting
   protected ReplicationLogTracker getReplicationLogTracker() {
     return replicationLogTracker;
-  }
-
-  /**
-   * Helper API to check and set the replication mode and then notify the disruptor
-   */
-  private boolean checkAndSetModeAndNotify(ReplicationMode expectedMode, ReplicationMode newMode) {
-    boolean ret = logGroup.checkAndSetMode(expectedMode, newMode);
-    if (ret) {
-      // replication mode switched, notify the event handler
-      try {
-        logGroup.sync();
-      } catch (IOException e) {
-        LOG.info("Failed to notify event handler for {}", logGroup, e);
-      }
-    }
-    return ret;
   }
 
   @Override

@@ -138,7 +138,8 @@ public abstract class ReplicationLogGroupBaseIT extends HABaseIT {
 
   private ReplicationLogGroup getReplicationLogGroup() throws IOException {
     HRegionServer rs = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
-    return ReplicationLogGroup.get(conf1, rs.getServerName(), haGroupName);
+    return ReplicationLogGroup.get(conf1, rs.getServerName(), haGroupName)
+      .orElseThrow(() -> new IOException("No active ReplicationLogGroup for " + haGroupName));
   }
 
   protected Map<String, List<Mutation>> groupLogsByTable() throws Exception {

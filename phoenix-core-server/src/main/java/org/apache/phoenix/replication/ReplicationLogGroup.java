@@ -66,6 +66,9 @@ import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.execute.MutationState;
+import org.apache.phoenix.jdbc.ClusterRoleRecord;
+import org.apache.phoenix.jdbc.ClusterType;
+import org.apache.phoenix.jdbc.HAGroupStateListener;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
@@ -234,8 +237,18 @@ public class ReplicationLogGroup {
   protected long syncTimeoutMs;
   protected long peerInitTimeoutMs;
   protected final AtomicBoolean closed = new AtomicBoolean(false);
+  // Set while the local cluster is in the in-sync cutover gate (ACTIVE_IN_SYNC_TO_STANDBY).
+  // Suspends
+  // log rotation (LogRotationTask.run() no-ops) so no new files are dropped into the peer's shard
+  // directory, and turns a SYNC-write failure into an RS abort instead of the illegal SYNC->SAF
+  // transition. Cleared when the state returns to ACTIVE_IN_SYNC (cutover abort).
+  private final AtomicBoolean failoverPending = new AtomicBoolean(false);
   protected final Abortable abortable;
   protected long shutdownTimeoutMs;
+  // Undo actions for every LOCAL state subscription registered in init(), run on close() to remove
+  // them. Registering the unsubscribe alongside the subscribe (see subscribeLocal) keeps the two in
+  // lockstep so a closed group leaks no ZK watchers.
+  private final List<Runnable> stateUnsubscribers = new ArrayList<>();
 
   /**
    * The replication mode determines how mutations are handled. Mode transitions occur automatically
@@ -383,44 +396,33 @@ public class ReplicationLogGroup {
   protected LogEventHandler eventHandler;
 
   /**
-   * Get or create a ReplicationLogGroup instance for the given HA Group.
+   * Get or create a ReplicationLogGroup instance for the given HA Group. Returns empty when this
+   * cluster is not active for the HA group (see {@link #getOrCreate}).
    * @param conf        Configuration object
    * @param serverName  The server name
    * @param haGroupName The HA Group name
-   * @return ReplicationLogGroup instance
+   * @return ReplicationLogGroup instance, or empty if this cluster is not active
    * @throws IOException if initialization fails
    */
-  public static ReplicationLogGroup get(Configuration conf, ServerName serverName,
+  public static Optional<ReplicationLogGroup> get(Configuration conf, ServerName serverName,
     String haGroupName) throws IOException {
     return get(conf, serverName, haGroupName, (Abortable) null);
   }
 
   /**
-   * Get or create a ReplicationLogGroup instance for the given HA Group.
+   * Get or create a ReplicationLogGroup instance for the given HA Group. Returns empty when this
+   * cluster is not active for the HA group (see {@link #getOrCreate}).
    * @param conf        Configuration object
    * @param serverName  The server name
    * @param haGroupName The HA Group name
    * @param abortable   Abortable to invoke on fatal errors (typically RegionServerServices)
-   * @return ReplicationLogGroup instance
+   * @return ReplicationLogGroup instance, or empty if this cluster is not active
    * @throws IOException if initialization fails
    */
-  public static ReplicationLogGroup get(Configuration conf, ServerName serverName,
+  public static Optional<ReplicationLogGroup> get(Configuration conf, ServerName serverName,
     String haGroupName, Abortable abortable) throws IOException {
-    try {
-      return INSTANCES.computeIfAbsent(instanceKey(serverName, haGroupName), k -> {
-        try {
-          ReplicationLogGroup group = new ReplicationLogGroup(conf, serverName, haGroupName,
-            HAGroupStoreManager.getInstance(conf), abortable);
-          group.init();
-          return group;
-        } catch (IOException e) {
-          LOG.error("Failed to create ReplicationLogGroup for HA Group: {}", haGroupName, e);
-          throw new UncheckedIOException(e);
-        }
-      });
-    } catch (UncheckedIOException e) {
-      throw e.getCause();
-    }
+    return getOrCreate(conf, serverName, haGroupName, HAGroupStoreManager.getInstance(conf),
+      abortable);
   }
 
   /**
@@ -429,23 +431,65 @@ public class ReplicationLogGroup {
    * @param serverName          The server name
    * @param haGroupName         The HA Group name
    * @param haGroupStoreManager HA Group Store Manager instance
-   * @return ReplicationLogGroup instance
+   * @return ReplicationLogGroup instance, or empty if this cluster is not active
    * @throws IOException if initialization fails
    */
-  public static ReplicationLogGroup get(Configuration conf, ServerName serverName,
+  public static Optional<ReplicationLogGroup> get(Configuration conf, ServerName serverName,
     String haGroupName, HAGroupStoreManager haGroupStoreManager) throws IOException {
+    return getOrCreate(conf, serverName, haGroupName, haGroupStoreManager, null);
+  }
+
+  /**
+   * Get an existing, or create and initialize a new, ReplicationLogGroup — but only when this
+   * cluster is active for the HA group. A replication log group is a WRITER; it must exist only
+   * where this cluster is the active side. When the local role is not active this returns
+   * {@link Optional#empty()} and does NOT cache, so a later call re-checks the (now-active) role
+   * once this cluster is promoted.
+   */
+  private static Optional<ReplicationLogGroup> getOrCreate(Configuration conf,
+    ServerName serverName, String haGroupName, HAGroupStoreManager haGroupStoreManager,
+    Abortable abortable) throws IOException {
     try {
-      return INSTANCES.computeIfAbsent(instanceKey(serverName, haGroupName), k -> {
-        try {
-          ReplicationLogGroup group =
-            new ReplicationLogGroup(conf, serverName, haGroupName, haGroupStoreManager);
-          group.init();
-          return group;
-        } catch (IOException e) {
-          LOG.error("Failed to create ReplicationLogGroup for HA Group: {}", haGroupName, e);
-          throw new UncheckedIOException(e);
-        }
-      });
+      ReplicationLogGroup group =
+        INSTANCES.computeIfAbsent(instanceKey(serverName, haGroupName), k -> {
+          try {
+            // Role check BEFORE constructing any writer resource. Only mutations carrying
+            // HA_GROUP_NAME reach get() (the standby replay-apply path does not annotate that
+            // attribute), via either the live write path or preWALRestore recovery. On a non-active
+            // role we must not start a writer: on the live path it would be a stray/split-brain
+            // sync-path write, and on the replay path it is a demoted cluster replaying its own
+            // formerly-ACTIVE edits after a crash while the peer is now ACTIVE. Returning null
+            // keeps
+            // computeIfAbsent from caching, so the first call after this cluster is promoted
+            // re-runs
+            // the check against the now-active role. The mutation-blocked role (ACTIVE_TO_STANDBY,
+            // the ACTIVE_IN_SYNC_TO_STANDBY cutover gate) is active and deliberately allowed: it is
+            // reached from preWALRestore recovery on an RS restart during cutover, and the writer
+            // starts in SYNC with rotation suspended via failoverPending (see init()).
+            Optional<HAGroupStoreRecord> haRecord =
+              haGroupStoreManager.getEffectiveHAGroupStoreRecord(haGroupName);
+            if (!haRecord.isPresent()) {
+              throw new UncheckedIOException(new IOException(
+                String.format("HAGroup %s got an empty group store record", haGroupName)));
+            }
+            ClusterRoleRecord.ClusterRole role = haRecord.get().getClusterRole();
+            if (!role.isActive()) {
+              LOG.info(
+                "Not creating a ReplicationLogGroup for HA Group {}: local role {} is not active"
+                  + " (state {})",
+                haGroupName, role, haRecord.get().getHAGroupState());
+              return null;
+            }
+            ReplicationLogGroup created = new ReplicationLogGroup(conf, serverName, haGroupName,
+              haGroupStoreManager, abortable, haRecord.get());
+            created.init();
+            return created;
+          } catch (IOException e) {
+            LOG.error("Failed to create ReplicationLogGroup for HA Group: {}", haGroupName, e);
+            throw new UncheckedIOException(e);
+          }
+        });
+      return Optional.ofNullable(group);
     } catch (UncheckedIOException e) {
       throw e.getCause();
     }
@@ -473,6 +517,22 @@ public class ReplicationLogGroup {
    */
   protected ReplicationLogGroup(Configuration conf, ServerName serverName, String haGroupName,
     HAGroupStoreManager haGroupStoreManager, Abortable abortable) {
+    this(conf, serverName, haGroupName, haGroupStoreManager, abortable, null);
+  }
+
+  /**
+   * Protected constructor for ReplicationLogGroup.
+   * @param conf                Configuration object
+   * @param serverName          The server name
+   * @param haGroupName         The HA Group name
+   * @param haGroupStoreManager HA Group Store Manager instance
+   * @param abortable           Abortable to invoke on fatal errors (may be null)
+   * @param haGroupStoreRecord  the effective record already read by the caller (may be null); when
+   *                            provided, init() uses it instead of re-reading the record
+   */
+  protected ReplicationLogGroup(Configuration conf, ServerName serverName, String haGroupName,
+    HAGroupStoreManager haGroupStoreManager, Abortable abortable,
+    HAGroupStoreRecord haGroupStoreRecord) {
     // conf object from coprocessor is instance of
     // org.apache.hadoop.hbase.coprocessor.ReadOnlyConfiguration and we need to modify it when
     // we send rpc to namenode so copying it
@@ -487,6 +547,7 @@ public class ReplicationLogGroup {
     this.haGroupName = haGroupName;
     this.haGroupStoreManager = haGroupStoreManager;
     this.abortable = abortable;
+    this.haGroupStoreRecord = haGroupStoreRecord;
     this.shutdownTimeoutMs = clonedConf.getLong(REPLICATION_LOG_GROUP_SHUTDOWN_TIMEOUT_MS_KEY,
       DEFAULT_REPLICATION_LOG_GROUP_SHUTDOWN_TIMEOUT_MS);
     this.metrics = createMetricsSource();
@@ -499,16 +560,23 @@ public class ReplicationLogGroup {
    */
   protected void init() throws IOException {
     LOG.info("Initializing ReplicationLogGroup {}", haGroupName);
-    Optional<HAGroupStoreRecord> haRecord =
-      haGroupStoreManager.getEffectiveHAGroupStoreRecord(haGroupName);
-    if (!haRecord.isPresent()) {
-      String message =
-        String.format("HAGroup %s got an empty group store record while initializing mode", this);
-      LOG.error(message);
-      throw new IOException(message);
+    // getOrCreate() reads the effective record for the role gate and seeds it via the constructor,
+    // so by the time init() runs the record is present and the local role is known active (possibly
+    // the ACTIVE_TO_STANDBY cutover gate, which starts in SYNC with rotation suspended — see
+    // below).
+    // The record may be null only when init() is invoked directly (tests); fall back to a read
+    // then.
+    if (haGroupStoreRecord == null) {
+      Optional<HAGroupStoreRecord> haRecord =
+        haGroupStoreManager.getEffectiveHAGroupStoreRecord(haGroupName);
+      if (!haRecord.isPresent()) {
+        String message =
+          String.format("HAGroup %s got an empty group store record while initializing mode", this);
+        LOG.error(message);
+        throw new IOException(message);
+      }
+      this.haGroupStoreRecord = haRecord.get();
     }
-    HAGroupStoreRecord record = haRecord.get();
-    this.haGroupStoreRecord = record;
     this.localShardManager = createLocalShardManager();
     this.peerInitTimeoutMs = conf.getLong(REPLICATION_LOG_PEER_INIT_TIMEOUT_MS_KEY,
       DEFAULT_REPLICATION_LOG_PEER_INIT_TIMEOUT_MS);
@@ -517,12 +585,112 @@ public class ReplicationLogGroup {
     this.logForwarder = new ReplicationLogDiscoveryForwarder(this);
     this.logForwarder.init();
     // Initialize the replication mode based on the HAGroupStore state
-    initializeReplicationMode(record);
+    initializeReplicationMode(haGroupStoreRecord);
     // Use the override value if provided in the config, else use a derived value
     this.syncTimeoutMs = conf.getLong(REPLICATION_LOG_SYNC_TIMEOUT_KEY, calculateSyncTimeout());
     // Initialize the disruptor so that we start processing events
     initializeDisruptor();
+    // Register all LOCAL state listeners that react to this cluster's role changes (demotion,
+    // cutover suspend/resume, and mode flips). init() itself fails fast on a non-active role, so a
+    // group only ever exists while active and these listeners drive it from there.
+    subscribeToStateChanges();
+    // Restart-in-cutover: when init() runs (via preWALRestore recovery) while the persisted state
+    // is already ACTIVE_IN_SYNC_TO_STANDBY, the cutover listener won't fire — the state was read,
+    // not transitioned into — so seed failoverPending here. This keeps rotation suspended from the
+    // start so the fresh writer does not re-arm the standby's failover deadlock.
+    if (haGroupStoreRecord.getHAGroupState().equals(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY)) {
+      setFailoverPending(true);
+    }
     LOG.info("HAGroup {} started with mode={}", this, mode);
+  }
+
+  /**
+   * Subscribe every LOCAL state listener that reacts to this cluster's role changes. Dispatch is
+   * already keyed on {@code (clusterType, targetState)} (see
+   * {@code HAGroupStoreClient#notifySubscribers}), so each action fires only for its exact target
+   * state on the local cluster — no in-listener guards needed.
+   * <ul>
+   * <li>{@code ACTIVE_IN_SYNC_TO_STANDBY} — the in-sync cutover gate (role ACTIVE_TO_STANDBY,
+   * mutations blocked). Do <b>not</b> close here: a batch that captured this group before the
+   * mutation block, committed locally, and reaches append/sync after a close would hit
+   * IOException("Closed") — a committed mutation the peer never receives. Instead set
+   * {@code failoverPending}, which suspends rotation (no new files into the peer's shard directory,
+   * so the standby's failover-completion check can proceed) while keeping the writer open so those
+   * in-flight writes land. The terminal {@code STANDBY} demotion performs the actual close.</li>
+   * <li>{@code STANDBY} and {@code DEGRADED_STANDBY} — the terminal demotion. When the peer is not
+   * visible a demotion to STANDBY surfaces as DEGRADED_STANDBY (peer-blind), so listening only for
+   * STANDBY would leave the writer alive through the degraded window. The listener contract forbids
+   * blocking on the cache-event thread, so the (blocking) {@link #close()} is handed off to a
+   * short-lived daemon thread.</li>
+   * <li>{@code ACTIVE_IN_SYNC} — a cutover abort (ACTIVE_IN_SYNC_TO_STANDBY →
+   * ABORT_TO_ACTIVE_IN_SYNC → ACTIVE_IN_SYNC) clears {@code failoverPending} to resume rotation on
+   * the same live group, and flips any RS still in SYNC_AND_FORWARD back to SYNC.</li>
+   * <li>{@code ACTIVE_NOT_IN_SYNC} — when any RS drops to STORE_AND_FORWARD the others must leave
+   * SYNC, so flip SYNC to SYNC_AND_FORWARD.</li>
+   * </ul>
+   * Idempotent: {@code close()} is CAS-guarded, and closing removes this instance from the cache so
+   * a later write re-runs {@link #init()} against the current role — which the tightened role gate
+   * rejects until this cluster returns to pure ACTIVE (promotion, or a cutover abort back to
+   * ACTIVE_IN_SYNC).
+   */
+  protected void subscribeToStateChanges() throws IOException {
+    subscribeLocal(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY, () -> {
+      LOG.info("HAGroup {} entered cutover gate; suspending rotation", this);
+      setFailoverPending(true);
+    });
+    Runnable closeOnDemotion = () -> {
+      LOG.info("HAGroup {} demoted; closing replication log writer", this);
+      Thread t = new Thread(this::close, "ReplicationLogGroup-demote-" + getHAGroupName());
+      t.setDaemon(true);
+      t.start();
+    };
+    subscribeLocal(HAGroupState.STANDBY, closeOnDemotion);
+    subscribeLocal(HAGroupState.DEGRADED_STANDBY, closeOnDemotion);
+    subscribeLocal(HAGroupState.ACTIVE_IN_SYNC, () -> {
+      LOG.info("HAGroup {} returned to ACTIVE_IN_SYNC; resuming rotation and SYNC mode", this);
+      // A cutover abort resumes rotation on this live group.
+      setFailoverPending(false);
+      // The group returned to in-sync: if this RS was recovering in SYNC_AND_FORWARD, drop the
+      // forward leg and go back to pure SYNC.
+      checkAndSetModeAndNotify(ReplicationMode.SYNC_AND_FORWARD, ReplicationMode.SYNC);
+    });
+    subscribeLocal(HAGroupState.ACTIVE_NOT_IN_SYNC, () -> {
+      LOG.info("HAGroup {} received ACTIVE_NOT_IN_SYNC", this);
+      // When any RS drops to STORE_AND_FORWARD, others must leave SYNC.
+      checkAndSetModeAndNotify(ReplicationMode.SYNC, ReplicationMode.SYNC_AND_FORWARD);
+    });
+  }
+
+  /**
+   * Subscribe {@code action} to a LOCAL transition into {@code targetState} and record the matching
+   * unsubscribe so {@link #close()} removes it. Keeping the subscribe and its undo in one call
+   * prevents the two sets from drifting apart. The action runs on the cache-event thread, so it
+   * must be fast and non-blocking (hand off blocking work to a separate thread).
+   */
+  private void subscribeLocal(HAGroupState targetState, Runnable action) throws IOException {
+    HAGroupStateListener listener = (groupName, fromState, toState, modifiedTime, clusterType,
+      lastSyncStateTimeInMs) -> action.run();
+    haGroupStoreManager.subscribeToTargetState(haGroupName, targetState, ClusterType.LOCAL,
+      listener);
+    stateUnsubscribers.add(() -> haGroupStoreManager.unsubscribeFromTargetState(haGroupName,
+      targetState, ClusterType.LOCAL, listener));
+  }
+
+  /**
+   * Conditionally switch replication mode and, if it changed, notify the event handler with a sync
+   * so the disruptor picks up the new mode.
+   */
+  protected boolean checkAndSetModeAndNotify(ReplicationMode expectedMode,
+    ReplicationMode newMode) {
+    boolean switched = checkAndSetMode(expectedMode, newMode);
+    if (switched) {
+      try {
+        sync();
+      } catch (IOException e) {
+        LOG.info("Failed to notify event handler for {}", this, e);
+      }
+    }
+    return switched;
   }
 
   /**
@@ -539,12 +707,19 @@ public class ReplicationLogGroup {
   }
 
   /**
-   * Initialize the replication mode based on the HAGroupStore state
+   * Initialize the replication mode based on the HAGroupStore state. {@link #init()} fails fast on
+   * a non-active role, so this is only reached for active states: ACTIVE_IN_SYNC and the
+   * ACTIVE_IN_SYNC_TO_STANDBY cutover gate both start SYNC (the gate is reached via preWALRestore
+   * recovery on a restart-in-cutover); every other active state (ACTIVE_NOT_IN_SYNC,
+   * ACTIVE_WITH_OFFLINE_PEER, ACTIVE_NOT_IN_SYNC_TO_STANDBY, ...) starts STORE_AND_FORWARD.
    */
   protected void initializeReplicationMode(HAGroupStoreRecord record) throws IOException {
     HAGroupState haGroupState = record.getHAGroupState();
     LOG.info("HAGroup {} initializing mode from state {}", this, haGroupState);
-    if (haGroupState.equals(HAGroupState.ACTIVE_IN_SYNC)) {
+    if (
+      haGroupState.equals(HAGroupState.ACTIVE_IN_SYNC)
+        || haGroupState.equals(HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY)
+    ) {
       setMode(SYNC);
     } else {
       setMode(STORE_AND_FORWARD);
@@ -751,6 +926,20 @@ public class ReplicationLogGroup {
   }
 
   /**
+   * Set or clear the failover-pending flag. Set on entry to the in-sync cutover gate
+   * (ACTIVE_IN_SYNC_TO_STANDBY); cleared when the state returns to ACTIVE_IN_SYNC (cutover abort).
+   * While set, log rotation is suspended and a SYNC-write failure aborts the RS.
+   */
+  public void setFailoverPending(boolean pending) {
+    failoverPending.set(pending);
+  }
+
+  /** Returns true while the local cluster is in the in-sync cutover gate. */
+  public boolean isFailoverPending() {
+    return failoverPending.get();
+  }
+
+  /**
    * Close the ReplicationLogGroup. Drains pending events from the Disruptor with a bounded timeout
    * (which triggers onShutdown → modeImpl.onExit → ReplicationLog.close), then cleans up all
    * resources. When the event handler has a fatal exception the drain completes instantly because
@@ -776,6 +965,10 @@ public class ReplicationLogGroup {
         + "proceeding with shutdown without the start gate", this, e);
       Thread.currentThread().interrupt();
     }
+    // Remove every LOCAL state subscription registered in subscribeToStateChanges().
+    stateUnsubscribers.forEach(Runnable::run);
+    stateUnsubscribers.clear();
+
     try {
       disruptor.shutdown(shutdownTimeoutMs, TimeUnit.MILLISECONDS);
     } catch (com.lmax.disruptor.TimeoutException e) {
