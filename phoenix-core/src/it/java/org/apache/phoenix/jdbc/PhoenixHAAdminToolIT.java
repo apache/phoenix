@@ -34,6 +34,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ZK_URL_2;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_ARGUMENT_ERROR;
 import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_SUCCESS;
+import static org.apache.phoenix.jdbc.PhoenixHAAdminTool.RET_VALIDATION_ERROR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_ZK;
 import static org.junit.Assert.assertEquals;
@@ -984,10 +985,7 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     }
   }
 
-  /**
-   * Test that the create command is idempotent: if the HA group already exists in SYSTEM.HA_GROUP,
-   * it returns success without modifying the existing row.
-   */
+  /** Existing HA groups are rejected without modifying the stored row. */
   @Test(timeout = 180000)
   public void testCreateCommandAlreadyExists() throws Exception {
     // haGroupName is pre-inserted by @Before
@@ -995,6 +993,7 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     assertNotNull("Record should exist before create command", originalRecord);
 
     System.setOut(new PrintStream(STDOUT_CAPTURE));
+    System.setErr(new PrintStream(STDOUT_CAPTURE));
 
     // Run create with different values - these should NOT overwrite the existing row
     int ret = ToolRunner.run(adminTool,
@@ -1003,14 +1002,13 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
         CLUSTERS.getMasterAddress2(), "-cr2", "ACTIVE", "-hdfs1", CLUSTERS.getHdfsUrl1(), "-hdfs2",
         CLUSTERS.getHdfsUrl2() });
 
-    assertEquals("create command should return success even when group already exists", RET_SUCCESS,
-      ret);
+    assertEquals("create command should reject an existing group", RET_VALIDATION_ERROR, ret);
 
     String output = STDOUT_CAPTURE.toString();
     LOG.info("Got stdout from create (existing group): \n++++++++\n{}++++++++\n", output);
 
-    assertTrue("Output should indicate group already exists and was skipped",
-      output.contains("already exists") && output.contains("Skipping"));
+    assertTrue("Output should direct the operator to inspect and update the existing group",
+      output.contains("already exists") && output.contains("get") && output.contains("update"));
 
     // Verify the system table row was NOT modified
     SystemTableRecord afterRecord = querySystemTable(haGroupName, CLUSTERS.getZkUrl1());
@@ -1023,6 +1021,37 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
       afterRecord.clusterUrl1);
     assertEquals("Cluster URL 2 should remain unchanged", originalRecord.clusterUrl2,
       afterRecord.clusterUrl2);
+  }
+
+  @Test(timeout = 180000)
+  public void testPolicyIsValidatedBeforeDryRunOrWrite() throws Exception {
+    SystemTableRecord originalRecord = querySystemTable(haGroupName, CLUSTERS.getZkUrl1());
+    new HAGroupStoreManager(CLUSTERS.getHBaseCluster1().getConfiguration())
+      .getHAGroupStoreRecord(haGroupName);
+    assertEquals(RET_ARGUMENT_ERROR, ToolRunner.run(adminTool,
+      new String[] { "update", "-g", haGroupName, "-p", "BOGUS", "-av", "-d" }));
+
+    String newGroup = haGroupName + "_new";
+    assertEquals(RET_ARGUMENT_ERROR,
+      ToolRunner.run(adminTool,
+        new String[] { "create", "-g", newGroup, "-p", "BOGUS", "-zk1", CLUSTERS.getZkUrl1(), "-c1",
+          CLUSTERS.getMasterAddress1(), "-cr1", "ACTIVE", "-zk2", CLUSTERS.getZkUrl2(), "-c2",
+          CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1", CLUSTERS.getHdfsUrl1(),
+          "-hdfs2", CLUSTERS.getHdfsUrl2(), "-d" }));
+
+    assertEquals(originalRecord.version,
+      querySystemTable(haGroupName, CLUSTERS.getZkUrl1()).version);
+    assertTrue(querySystemTable(newGroup, CLUSTERS.getZkUrl1()) == null);
+
+    STDOUT_CAPTURE.reset();
+    System.setOut(new PrintStream(STDOUT_CAPTURE));
+    assertEquals(RET_SUCCESS,
+      ToolRunner.run(adminTool,
+        new String[] { "create", "-g", newGroup, "-p", "failover", "-zk1", CLUSTERS.getZkUrl1(),
+          "-c1", CLUSTERS.getMasterAddress1(), "-cr1", "ACTIVE", "-zk2", CLUSTERS.getZkUrl2(),
+          "-c2", CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1", CLUSTERS.getHdfsUrl1(),
+          "-hdfs2", CLUSTERS.getHdfsUrl2(), "-d" }));
+    assertTrue(STDOUT_CAPTURE.toString().contains("FAILOVER"));
   }
 
   /**
@@ -1129,16 +1158,18 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
     new HAGroupStoreManager(CLUSTERS.getHBaseCluster1().getConfiguration())
       .getHAGroupStoreRecord(haGroupName);
 
-    System.setOut(new PrintStream(STDOUT_CAPTURE));
+    System.setErr(new PrintStream(STDOUT_CAPTURE));
     int ret = ToolRunner.run(adminTool,
       new String[] { "update", "-g", haGroupName, "-pz", MALFORMED_URL, "-av" });
     assertEquals("Malformed peer ZK URL should be rejected", RET_ARGUMENT_ERROR, ret);
+    assertTrue(STDOUT_CAPTURE.toString().contains("--force cannot bypass"));
 
     STDOUT_CAPTURE.reset();
     int forcedRet = ToolRunner.run(adminTool,
       new String[] { "update", "-g", haGroupName, "-pz", MALFORMED_URL, "-av", "-F" });
     assertEquals("Malformed peer ZK URL should be rejected even with --force", RET_ARGUMENT_ERROR,
       forcedRet);
+    assertTrue(STDOUT_CAPTURE.toString().contains("--force cannot bypass"));
   }
 
   /**
@@ -1147,7 +1178,7 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
   @Test(timeout = 180000)
   public void testCreateRejectsMalformedUrl() throws Exception {
     String createGroup = "testCreateBadUrl_" + System.currentTimeMillis();
-    System.setOut(new PrintStream(STDOUT_CAPTURE));
+    System.setErr(new PrintStream(STDOUT_CAPTURE));
 
     int ret = ToolRunner.run(adminTool,
       new String[] { "create", "-g", createGroup, "-p", "FAILOVER", "-zk1", CLUSTERS.getZkUrl1(),
@@ -1155,6 +1186,7 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
         CLUSTERS.getMasterAddress2(), "-cr2", "STANDBY", "-hdfs1", CLUSTERS.getHdfsUrl1(), "-hdfs2",
         CLUSTERS.getHdfsUrl2() });
     assertEquals("Malformed cluster-url-1 should be rejected on create", RET_ARGUMENT_ERROR, ret);
+    assertTrue(STDOUT_CAPTURE.toString().contains("pass --force"));
 
     assertTrue("No row should be created for a rejected create",
       querySystemTable(createGroup, CLUSTERS.getZkUrl1()) == null);
@@ -1166,7 +1198,7 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
   @Test(timeout = 180000)
   public void testCreateRejectsMalformedZkUrlEvenWhenForced() throws Exception {
     String createGroup = "testCreateBadZkUrl_" + System.currentTimeMillis();
-    System.setOut(new PrintStream(STDOUT_CAPTURE));
+    System.setErr(new PrintStream(STDOUT_CAPTURE));
 
     int ret = ToolRunner.run(adminTool,
       new String[] { "create", "-g", createGroup, "-p", "FAILOVER", "-zk1", MALFORMED_URL, "-c1",
@@ -1175,6 +1207,7 @@ public class PhoenixHAAdminToolIT extends HABaseIT {
         CLUSTERS.getHdfsUrl2(), "-F" });
     assertEquals("Malformed zk-url-1 should be rejected even with --force", RET_ARGUMENT_ERROR,
       ret);
+    assertTrue(STDOUT_CAPTURE.toString().contains("--force cannot bypass"));
 
     assertTrue("No row should be created for a rejected create",
       querySystemTable(createGroup, CLUSTERS.getZkUrl1()) == null);

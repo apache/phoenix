@@ -18,11 +18,14 @@
 package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_PEER_CACHE_RETRY_INTERVAL_SECONDS;
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.zookeeper.data.Stat;
 import org.junit.Test;
@@ -191,5 +194,47 @@ public class PeerClusterWatcherTest {
     } finally {
       watcher.close();
     }
+  }
+
+  @Test
+  public void testRecreatedPeerZnodeVersionZeroIsDeliveredOnce() throws Exception {
+    Configuration conf = new Configuration();
+    conf.setLong(HA_GROUP_STORE_PEER_CACHE_RETRY_INTERVAL_SECONDS, 0L);
+    AtomicInteger deliveries = new AtomicInteger();
+    PeerClusterWatcher watcher =
+      new PeerClusterWatcher(conf, "g", "ns", new PeerClusterWatcher.PeerStateListener() {
+        @Override
+        public void onPeerStateChanged(HAGroupStoreRecord peerRecord, Stat stat) {
+          deliveries.incrementAndGet();
+        }
+
+        @Override
+        public void onPeerVisible() {
+        }
+
+        @Override
+        public void onPeerBlind() {
+        }
+      });
+    try {
+      watcher.deliver(recordAndStat(10L, 3), false);
+      watcher.deliver(recordAndStat(20L, 0), false);
+      watcher.deliver(recordAndStat(20L, 0), false);
+      watcher.deliver(recordAndStat(20L, 1), false);
+      watcher.deliver(recordAndStat(5L, 0), false);
+      assertEquals("new znode incarnations and newer versions should be delivered exactly once", 4,
+        deliveries.get());
+    } finally {
+      watcher.close();
+    }
+  }
+
+  private static Pair<HAGroupStoreRecord, Stat> recordAndStat(long czxid, int version) {
+    HAGroupStoreRecord record = new HAGroupStoreRecord("v1.0", "g",
+      HAGroupStoreRecord.HAGroupState.STANDBY, 0L, "FAILOVER", null, null, null, null, null, 1L);
+    Stat stat = new Stat();
+    stat.setCzxid(czxid);
+    stat.setVersion(version);
+    return Pair.of(record, stat);
   }
 }

@@ -102,6 +102,7 @@ final class PeerClusterWatcher implements Closeable {
   private String peerZkUrl; // desired peer; blank = none
   private PhoenixHAAdmin admin;
   private PathChildrenCache cache;
+  private long lastDeliveredCzxid = -1L;
   private int lastDeliveredVersion = -1;
   private long peerCacheRetryAttempts = 0L;
   private volatile boolean watcherClosed = false;
@@ -342,25 +343,28 @@ final class PeerClusterWatcher implements Closeable {
     // no-ops if empty.
     Pair<HAGroupStoreRecord, Stat> snapshot;
     synchronized (stateLock) {
-      lastDeliveredVersion = -1; // bypass the de-dup check so the forced redelivery is not skipped
       snapshot = HAGroupStoreCacheUtil.recordAndStatAt(cache, toPath(haGroupName));
     }
     setVisible();
     deliver(snapshot, true);
   }
 
-  private void deliver(Pair<HAGroupStoreRecord, Stat> recordAndStat, boolean forced) {
+  @VisibleForTesting
+  void deliver(Pair<HAGroupStoreRecord, Stat> recordAndStat, boolean forced) {
     HAGroupStoreRecord record = recordAndStat.getLeft();
     if (record == null || !Objects.equals(record.getHaGroupName(), haGroupName)) {
       return;
     }
     Stat stat = recordAndStat.getRight();
     synchronized (stateLock) {
-      int version = stat != null ? stat.getVersion() : -1;
-      if (!forced && version <= lastDeliveredVersion) {
+      if (
+        !forced
+          && !HAGroupStoreCacheUtil.isNewerRevision(stat, lastDeliveredCzxid, lastDeliveredVersion)
+      ) {
         return; // duplicate or stale peer event
       }
-      lastDeliveredVersion = version;
+      lastDeliveredCzxid = stat.getCzxid();
+      lastDeliveredVersion = stat.getVersion();
     }
     listener.onPeerStateChanged(record, stat);
   }
@@ -407,6 +411,7 @@ final class PeerClusterWatcher implements Closeable {
       cache = null;
       a = admin;
       admin = null;
+      lastDeliveredCzxid = -1L;
       lastDeliveredVersion = -1;
     }
     closeCacheQuietly(c);

@@ -23,7 +23,6 @@ import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_SYNC_INTERVAL_SECONDS;
 import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -148,11 +147,11 @@ public class HAGroupStoreMetricsIT extends HABaseIT {
   @Test
   public void testLateInitializationFailureResetsGauges() throws Exception {
     writeLocal(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
-    Configuration invalidConf =
-      new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
+    Configuration invalidConf = new Configuration(CLUSTERS.getHBaseCluster1().getConfiguration());
     invalidConf.setLong(HA_GROUP_STORE_SYNC_INTERVAL_SECONDS, 0L);
 
-    assertNull(HAGroupStoreClient.getInstanceForZkUrl(invalidConf, group(), zkUrl));
+    HAGroupStoreClient failed = new HAGroupStoreClient(invalidConf, null, group(), zkUrl);
+    assertThrows(IOException.class, failed::getHAGroupStoreRecord);
 
     HAGroupStoreMetricValues values = metrics();
     assertEquals(1L, values.getLocalCacheHealthStatus());

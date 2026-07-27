@@ -56,6 +56,11 @@ final class HAGroupStoreCacheUtil {
     return cache == null ? Pair.of(null, null) : recordAndStat(cache.getCurrentData(path));
   }
 
+  /** A different creation zxid is a new znode incarnation; versions order updates within it. */
+  static boolean isNewerRevision(Stat candidate, long lastCzxid, int lastVersion) {
+    return candidate.getCzxid() != lastCzxid || candidate.getVersion() > lastVersion;
+  }
+
   /**
    * Build and start a cache, waiting up to {@code timeoutMs} for the initial load. The supplied
    * {@code listener} receives every cache event; this method releases its initial-load latch on the
