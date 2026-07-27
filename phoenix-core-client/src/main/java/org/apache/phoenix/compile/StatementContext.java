@@ -119,6 +119,9 @@ public class StatementContext {
   private Map<String, List<Expression>> serverParsedProjections;
   private StatementContext parentContext;
   private ExplainOptions explainOptions = ExplainOptions.DEFAULT;
+  // True when compile-time diagnostic recording is enabled for this context
+  private final boolean collectDiagnostics;
+  // Diagnostic-only maps, lazily allocated
   private Map<Expression, Set<String>> predicateOrigins;
   private Map<ParseNode, String> decorrelatedSubqueryAlias;
   private Map<Hint, String> ignoredHints;
@@ -177,6 +180,7 @@ public class StatementContext {
     this.hasRawRowSizeFunction = context.hasRawRowSizeFunction;
     this.parentContext = context.parentContext;
     this.explainOptions = context.explainOptions;
+    this.collectDiagnostics = context.collectDiagnostics;
     copyRewriteStateFrom(context);
   }
 
@@ -242,15 +246,18 @@ public class StatementContext {
     this.subStatementContexts = Sets.newLinkedHashSet();
     this.appliedRewrites = new ArrayList<>();
     this.derivedTableFlattenCount = 0;
-    this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
-    this.appliedIndexExpressionPairs = Maps.newLinkedHashMap();
-    this.functionalIndexNames = Sets.newLinkedHashSet();
     this.partialIndexCheckedSet = Sets.newLinkedHashSet();
     this.serverParsedProjections = null;
     this.parentContext = null;
-    this.predicateOrigins = new IdentityHashMap<>();
-    this.decorrelatedSubqueryAlias = new IdentityHashMap<>();
-    this.ignoredHints = new EnumMap<>(Hint.class);
+    this.collectDiagnostics = statement.isCollectDiagnostics();
+    // Diagnostic-only collections are lazily allocated on first record under
+    // collectDiagnostics. Normal queries skip these allocations entirely.
+    this.predicateOrigins = null;
+    this.decorrelatedSubqueryAlias = null;
+    this.ignoredHints = null;
+    this.appliedIndexExpressionMatches = null;
+    this.appliedIndexExpressionPairs = null;
+    this.functionalIndexNames = null;
   }
 
   /**
@@ -521,9 +528,13 @@ public class StatementContext {
 
   /**
    * Records a top-of-plan rewrite breadcrumb (e.g. "STAR JOIN ON 2 RIGHT LEGS"). Breadcrumbs are
-   * diagnostic only and never affect the compiled plan.
+   * diagnostic only and never affect the compiled plan, so this is a no-op when diagnostic
+   * recording is disabled on this context. Normal queries pay no cost for breadcrumb bookkeeping.
    */
   public void addAppliedRewrite(String rewrite) {
+    if (!collectDiagnostics) {
+      return;
+    }
     appliedRewrites.add(rewrite);
   }
 
@@ -553,26 +564,56 @@ public class StatementContext {
     this.appliedRewrites =
       source.appliedRewrites == null ? new ArrayList<>() : new ArrayList<>(source.appliedRewrites);
     this.derivedTableFlattenCount = source.derivedTableFlattenCount;
-    this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
-    for (Map.Entry<String, List<String>> entry : source.appliedIndexExpressionMatches.entrySet()) {
-      this.appliedIndexExpressionMatches.put(entry.getKey(), new ArrayList<>(entry.getValue()));
-    }
-    this.appliedIndexExpressionPairs = Maps.newLinkedHashMap();
-    for (Map.Entry<String, Map<String, String>> entry : source.appliedIndexExpressionPairs
-      .entrySet()) {
-      this.appliedIndexExpressionPairs.put(entry.getKey(), new LinkedHashMap<>(entry.getValue()));
-    }
-    this.functionalIndexNames = Sets.newLinkedHashSet(source.functionalIndexNames);
     this.partialIndexCheckedSet = Sets.newLinkedHashSet(source.partialIndexCheckedSet);
     // serverParsedProjections is nullable and only ever replaced wholesale via its setter (never
     // mutated in place), so the reference can be carried over directly.
     this.serverParsedProjections = source.serverParsedProjections;
-    this.predicateOrigins = new IdentityHashMap<>();
-    for (Map.Entry<Expression, Set<String>> entry : source.predicateOrigins.entrySet()) {
-      this.predicateOrigins.put(entry.getKey(), new LinkedHashSet<>(entry.getValue()));
+    // Only copy if the source actually recorded anything. Keep null otherwise.
+    if (source.predicateOrigins == null || source.predicateOrigins.isEmpty()) {
+      this.predicateOrigins = null;
+    } else {
+      this.predicateOrigins = new IdentityHashMap<>();
+      for (Map.Entry<Expression, Set<String>> entry : source.predicateOrigins.entrySet()) {
+        this.predicateOrigins.put(entry.getKey(), new LinkedHashSet<>(entry.getValue()));
+      }
     }
-    this.decorrelatedSubqueryAlias = new IdentityHashMap<>(source.decorrelatedSubqueryAlias);
-    this.ignoredHints = new EnumMap<>(source.ignoredHints);
+    if (source.decorrelatedSubqueryAlias == null || source.decorrelatedSubqueryAlias.isEmpty()) {
+      this.decorrelatedSubqueryAlias = null;
+    } else {
+      this.decorrelatedSubqueryAlias = new IdentityHashMap<>(source.decorrelatedSubqueryAlias);
+    }
+    if (source.ignoredHints == null || source.ignoredHints.isEmpty()) {
+      this.ignoredHints = null;
+    } else {
+      this.ignoredHints = new EnumMap<>(source.ignoredHints);
+    }
+    if (
+      source.appliedIndexExpressionMatches == null || source.appliedIndexExpressionMatches.isEmpty()
+    ) {
+      this.appliedIndexExpressionMatches = null;
+    } else {
+      this.appliedIndexExpressionMatches = Maps.newLinkedHashMap();
+      for (Map.Entry<String, List<String>> entry : source.appliedIndexExpressionMatches
+        .entrySet()) {
+        this.appliedIndexExpressionMatches.put(entry.getKey(), new ArrayList<>(entry.getValue()));
+      }
+    }
+    if (
+      source.appliedIndexExpressionPairs == null || source.appliedIndexExpressionPairs.isEmpty()
+    ) {
+      this.appliedIndexExpressionPairs = null;
+    } else {
+      this.appliedIndexExpressionPairs = Maps.newLinkedHashMap();
+      for (Map.Entry<String, Map<String, String>> entry : source.appliedIndexExpressionPairs
+        .entrySet()) {
+        this.appliedIndexExpressionPairs.put(entry.getKey(), new LinkedHashMap<>(entry.getValue()));
+      }
+    }
+    if (source.functionalIndexNames == null || source.functionalIndexNames.isEmpty()) {
+      this.functionalIndexNames = null;
+    } else {
+      this.functionalIndexNames = Sets.newLinkedHashSet(source.functionalIndexNames);
+    }
   }
 
   public void incrementDerivedTableFlattenCount() {
@@ -587,12 +628,16 @@ public class StatementContext {
    * Records the path expressions that actually substituted against this query for the given
    * functional index. Used by the optimizer to label the chosen index's rule as
    * {@code matches <expr>} and to distinguish functional index rejections that matched no query
-   * expression. Deduplicated per index, preserving first seen order.
+   * expression. Deduplicated per index, preserving first seen order. No-op when the context has
+   * diagnostic recording disabled.
    */
   public void recordAppliedIndexExpressionMatches(String indexName,
     Collection<String> expressions) {
-    if (expressions == null || expressions.isEmpty()) {
+    if (!collectDiagnostics || expressions == null || expressions.isEmpty()) {
       return;
+    }
+    if (appliedIndexExpressionMatches == null) {
+      appliedIndexExpressionMatches = Maps.newLinkedHashMap();
     }
     List<String> matches =
       appliedIndexExpressionMatches.computeIfAbsent(indexName, k -> new ArrayList<>());
@@ -608,6 +653,9 @@ public class StatementContext {
    * functional index, or an empty list if none were recorded.
    */
   public List<String> getAppliedIndexExpressionMatches(String indexName) {
+    if (appliedIndexExpressionMatches == null) {
+      return Collections.emptyList();
+    }
     List<String> matches = appliedIndexExpressionMatches.get(indexName);
     return matches == null ? Collections.emptyList() : matches;
   }
@@ -617,11 +665,14 @@ public class StatementContext {
    * actually fired against this query for the given functional index. Carries enough information
    * for the optimizer to emit one {@code REWRITE INDEX EXPRESSION <expr> AS <col>} breadcrumb per
    * applied substitution after the chosen plan is selected. Deduplicated per index, preserving
-   * first-seen insertion order.
+   * first-seen insertion order. No-op when the context has diagnostic recording disabled.
    */
   public void recordAppliedIndexExpressionPairs(String indexName, Map<String, String> pairs) {
-    if (pairs == null || pairs.isEmpty()) {
+    if (!collectDiagnostics || pairs == null || pairs.isEmpty()) {
       return;
+    }
+    if (appliedIndexExpressionPairs == null) {
+      appliedIndexExpressionPairs = Maps.newLinkedHashMap();
     }
     Map<String, String> existing =
       appliedIndexExpressionPairs.computeIfAbsent(indexName, k -> new LinkedHashMap<>());
@@ -635,18 +686,30 @@ public class StatementContext {
    * substituted against this query for the given functional index, or an empty map if none.
    */
   public Map<String, String> getAppliedIndexExpressionPairs(String indexName) {
+    if (appliedIndexExpressionPairs == null) {
+      return Collections.emptyMap();
+    }
     Map<String, String> pairs = appliedIndexExpressionPairs.get(indexName);
     return pairs == null ? Collections.emptyMap() : pairs;
   }
 
-  /** Marks the given index as a functional index. */
+  /**
+   * Marks the given index as a functional index. No-op when the context has diagnostic recording
+   * disabled.
+   */
   public void recordFunctionalIndex(String indexName) {
+    if (!collectDiagnostics) {
+      return;
+    }
+    if (functionalIndexNames == null) {
+      functionalIndexNames = Sets.newLinkedHashSet();
+    }
     functionalIndexNames.add(indexName);
   }
 
   /** Returns whether the given index was recorded as a functional index during rewriting. */
   public boolean isFunctionalIndex(String indexName) {
-    return functionalIndexNames.contains(indexName);
+    return functionalIndexNames != null && functionalIndexNames.contains(indexName);
   }
 
   /**
@@ -695,6 +758,11 @@ public class StatementContext {
     return explainOptions != null && explainOptions.isVerbose();
   }
 
+  /** True when compile-time diagnostic recording is enabled for this context. */
+  public boolean isCollectDiagnostics() {
+    return collectDiagnostics;
+  }
+
   /**
    * Tag a predicate {@link Expression} with the given origin (e.g. {@code "WHERE"},
    * {@code "JOIN ON"}). Tags accumulate as a set so a predicate fused from multiple sources carries
@@ -702,19 +770,25 @@ public class StatementContext {
    * expressions during compilation. Diagnostic only; never affects the compiled plan.
    */
   public void tagPredicate(Expression expression, String origin) {
-    if (expression == null || origin == null) {
+    if (!collectDiagnostics || expression == null || origin == null) {
       return;
+    }
+    if (predicateOrigins == null) {
+      predicateOrigins = new IdentityHashMap<>();
     }
     predicateOrigins.computeIfAbsent(expression, k -> new LinkedHashSet<>()).add(origin);
   }
 
   /** Returns the predicate origin tags accumulated during compilation. Identity keyed. */
   public Map<Expression, Set<String>> getPredicateOrigins() {
-    return predicateOrigins;
+    return predicateOrigins == null ? Collections.emptyMap() : predicateOrigins;
   }
 
   /** Returns the origin tags recorded for {@code expression}, or an empty set if none. */
   public Set<String> getPredicateOrigins(Expression expression) {
+    if (predicateOrigins == null) {
+      return Collections.emptySet();
+    }
     Set<String> tags = predicateOrigins.get(expression);
     return tags == null ? Collections.emptySet() : tags;
   }
@@ -724,9 +798,13 @@ public class StatementContext {
    * the given temp alias.
    */
   public void putDecorrelatedSubqueryAlias(ParseNode joinConditionNode, String subqueryAlias) {
-    if (joinConditionNode != null && subqueryAlias != null) {
-      decorrelatedSubqueryAlias.put(joinConditionNode, subqueryAlias);
+    if (!collectDiagnostics || joinConditionNode == null || subqueryAlias == null) {
+      return;
     }
+    if (decorrelatedSubqueryAlias == null) {
+      decorrelatedSubqueryAlias = new IdentityHashMap<>();
+    }
+    decorrelatedSubqueryAlias.put(joinConditionNode, subqueryAlias);
   }
 
   /**
@@ -734,7 +812,9 @@ public class StatementContext {
    * {@code null} if the node is not a decorrelated predicate.
    */
   public String getDecorrelatedSubqueryAlias(ParseNode joinConditionNode) {
-    return decorrelatedSubqueryAlias.get(joinConditionNode);
+    return decorrelatedSubqueryAlias == null
+      ? null
+      : decorrelatedSubqueryAlias.get(joinConditionNode);
   }
 
   /**
@@ -743,15 +823,18 @@ public class StatementContext {
    * comment. The first reason recorded for a hint wins. Diagnostic only.
    */
   public void recordIgnoredHint(Hint hint, String reason) {
-    if (hint == null || reason == null) {
+    if (!collectDiagnostics || hint == null || reason == null) {
       return;
+    }
+    if (ignoredHints == null) {
+      ignoredHints = new EnumMap<>(Hint.class);
     }
     ignoredHints.putIfAbsent(hint, reason);
   }
 
   /** Returns the hints the planner intentionally ignored, mapped to the reason. */
   public Map<Hint, String> getIgnoredHints() {
-    return ignoredHints;
+    return ignoredHints == null ? Collections.emptyMap() : ignoredHints;
   }
 
   /** Returns true if this is the top-level (root) statement context, i.e. it has no parent. */

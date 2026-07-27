@@ -65,12 +65,14 @@ public class HavingCompiler {
         .buildException();
     }
     // Tag the residual HAVING predicate(s) with their origin for VERBOSE attribution.
-    if (expression instanceof org.apache.phoenix.expression.AndExpression) {
-      for (Expression child : expression.getChildren()) {
-        context.tagPredicate(child, "HAVING");
+    if (context.isCollectDiagnostics()) {
+      if (expression instanceof org.apache.phoenix.expression.AndExpression) {
+        for (Expression child : expression.getChildren()) {
+          context.tagPredicate(child, "HAVING");
+        }
+      } else {
+        context.tagPredicate(expression, "HAVING");
       }
-    } else {
-      context.tagPredicate(expression, "HAVING");
     }
     return expression;
   }

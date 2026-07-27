@@ -20,6 +20,7 @@ package org.apache.phoenix.end2end;
 import static java.util.Collections.singletonList;
 import static org.apache.phoenix.query.QueryServices.USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP;
 import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.getOptimizedQueryPlan;
 import static org.apache.phoenix.util.PhoenixRuntime.TENANT_ID_ATTRIB;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -1024,14 +1025,14 @@ public class InListIT extends ParallelStatsDisabledIT {
 
         try (PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM "
           + tenantView + " WHERE (ID1, ID2) " + "IN (('005xx000001Sv6o', '000000000000500'))")) {
-          assertPlan(PhoenixRuntime.getOptimizedQueryPlan(preparedStmt))
+          assertPlan(getOptimizedQueryPlan(preparedStmt))
             .scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
             .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
         }
 
         try (PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM "
           + tenantView + " WHERE (ID2, ID1) " + "IN (('000000000000500', '005xx000001Sv6o'))")) {
-          assertPlan(PhoenixRuntime.getOptimizedQueryPlan(preparedStmt))
+          assertPlan(getOptimizedQueryPlan(preparedStmt))
             .scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
             .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
         }
@@ -1067,7 +1068,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         try (PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM "
           + tenantView + " WHERE (ID1, ID2) " + "IN (('005xx000001Sv6o', '000000000000500'),"
           + "('bar', '000000000000400')," + "('foo', '000000000000300'))")) {
-          assertPlan(PhoenixRuntime.getOptimizedQueryPlan(preparedStmt))
+          assertPlan(getOptimizedQueryPlan(preparedStmt))
             .scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
             .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
         }
@@ -1075,7 +1076,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         try (PreparedStatement preparedStmt =
           viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID2, ID1) IN "
             + "(('bar', '005xx000001Sv6o')," + "('foo', '005xx000001Sv6o'))")) {
-          assertPlan(PhoenixRuntime.getOptimizedQueryPlan(preparedStmt))
+          assertPlan(getOptimizedQueryPlan(preparedStmt))
             .scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
             .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
         }
@@ -1115,7 +1116,7 @@ public class InListIT extends ParallelStatsDisabledIT {
           viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID1, ID2) IN "
             + "(('005xx000001Sv6o', '000000000000500')," + "('005xx000001Sv6o', '000000000000400'),"
             + "('005xx000001Sv6o', '000000000000300'))")) {
-          assertPlan(PhoenixRuntime.getOptimizedQueryPlan(preparedStmt))
+          assertPlan(getOptimizedQueryPlan(preparedStmt))
             .scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
             .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
         }
@@ -1123,7 +1124,7 @@ public class InListIT extends ParallelStatsDisabledIT {
         try (PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM "
           + tenantView + " WHERE (ID2, ID1) IN " + "(('000000000000400', '005xx000001Sv6o'),"
           + "('000000000000300', '005xx000001Sv6o'))")) {
-          assertPlan(PhoenixRuntime.getOptimizedQueryPlan(preparedStmt))
+          assertPlan(getOptimizedQueryPlan(preparedStmt))
             .scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
             .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
         }
@@ -1164,14 +1165,14 @@ public class InListIT extends ParallelStatsDisabledIT {
       PreparedStatement preparedStmt =
         viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID1, ID2) IN "
           + "(('005xx000001Sv6o', '000000000000500')," + "('005xx000001Sv6o', '000000000000400'))");
-      QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      QueryPlan queryPlan = getOptimizedQueryPlan(preparedStmt);
       assertEquals(numberOfRowsToScan, queryPlan.getEstimatedRowsToScan());
       assertPlan(queryPlan).scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
         .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
 
       viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID1, ID2) IN "
         + "(('005xx000001Sv6o', '000000000000500')," + "('005xx000001Sv6o', '000000000000400'))");
-      queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      queryPlan = getOptimizedQueryPlan(preparedStmt);
       assertEquals(numberOfRowsToScan, queryPlan.getEstimatedRowsToScan());
       assertPlan(queryPlan).scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
         .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
@@ -1182,25 +1183,25 @@ public class InListIT extends ParallelStatsDisabledIT {
     try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
       PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView
         + " WHERE (ID1) IN " + "(('005xx000001Sv6o')," + "('005xx000001Sv6o'))");
-      QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      QueryPlan queryPlan = getOptimizedQueryPlan(preparedStmt);
       assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID1) IN "
         + "(('005xx000001Sv6o')," + "('005xx000001Sv6o'))");
-      queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      queryPlan = getOptimizedQueryPlan(preparedStmt);
       assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView + " WHERE (ID2) IN "
         + "(('000000000000500')," + "('000000000000400'))");
-      queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      queryPlan = getOptimizedQueryPlan(preparedStmt);
       assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID2) IN "
         + "(('000000000000500')," + "('000000000000400'))");
-      queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      queryPlan = getOptimizedQueryPlan(preparedStmt);
       assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
     }
@@ -1210,25 +1211,25 @@ public class InListIT extends ParallelStatsDisabledIT {
     try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
       PreparedStatement preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView
         + " WHERE (ID1, ID3) IN " + "(('005xx000001Sv6o', 1)," + "('005xx000001Sv6o', 2))");
-      QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      QueryPlan queryPlan = getOptimizedQueryPlan(preparedStmt);
       assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID1, ID3) IN "
         + "(('005xx000001Sv6o', 1)," + "('005xx000001Sv6o', 2))");
-      queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      queryPlan = getOptimizedQueryPlan(preparedStmt);
       assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       preparedStmt = viewConn.prepareStatement("SELECT * FROM " + tenantView
         + " WHERE (ID2, ID3) IN " + "(('000000000000500', 1)," + "('000000000000400', 2))");
-      queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      queryPlan = getOptimizedQueryPlan(preparedStmt);
       assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       viewConn.prepareStatement("DELETE FROM " + tenantView + " WHERE (ID2, ID3) IN "
         + "(('000000000000500', 1)," + "('000000000000400', 2))");
-      queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      queryPlan = getOptimizedQueryPlan(preparedStmt);
       assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
     }
@@ -1239,13 +1240,13 @@ public class InListIT extends ParallelStatsDisabledIT {
     try (Connection viewConn = DriverManager.getConnection(TENANT_SPECIFIC_URL1)) {
       PreparedStatement preparedStmt = viewConn.prepareStatement(
         "SELECT * FROM " + tenantView + " WHERE (ID3, ID4) IN " + "((1, 1)," + "(2, 2))");
-      QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      QueryPlan queryPlan = getOptimizedQueryPlan(preparedStmt);
       assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
 
       viewConn.prepareStatement(
         "DELETE FROM " + tenantView + " WHERE (ID3, ID4) IN " + "((1, 1)," + "(2, 2))");
-      queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      queryPlan = getOptimizedQueryPlan(preparedStmt);
       assertPlan(queryPlan).iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN")
         .indexRule(OptimizerReasons.RULE_DATA_TABLE).indexRejectedNone();
     }
@@ -1747,21 +1748,21 @@ public class InListIT extends ParallelStatsDisabledIT {
         // TESTING for optimized scan
         PreparedStatement preparedStmt = conn.prepareStatement(
           "SELECT * FROM " + view + " WHERE (ID1, ID2) IN " + "((1, 1)," + "(2, 2))");
-        QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+        QueryPlan queryPlan = getOptimizedQueryPlan(preparedStmt);
         assertEquals(new Long(2), queryPlan.getEstimatedRowsToScan());
         assertPlan(queryPlan).scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
           .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
 
         preparedStmt =
           conn.prepareStatement("SELECT * FROM " + view + " WHERE (ID2, ID1) IN ((1, 1),(2, 2))");
-        queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+        queryPlan = getOptimizedQueryPlan(preparedStmt);
         assertEquals(new Long(2), queryPlan.getEstimatedRowsToScan());
         assertPlan(queryPlan).scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
           .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
 
         preparedStmt =
           conn.prepareStatement("SELECT * FROM " + view + " WHERE (ID2, ID1) IN ((1, 1),(2, 2))");
-        queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+        queryPlan = getOptimizedQueryPlan(preparedStmt);
         assertEquals(new Long(2), queryPlan.getEstimatedRowsToScan());
         assertPlan(queryPlan).scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
           .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
@@ -1809,20 +1810,20 @@ public class InListIT extends ParallelStatsDisabledIT {
         // TESTING for optimized scan
         PreparedStatement preparedStmt = conn.prepareStatement(
           "SELECT * FROM " + view + " WHERE (ID4, ID2) IN " + "((1, 1)," + "(2, 2))");
-        QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+        QueryPlan queryPlan = getOptimizedQueryPlan(preparedStmt);
         assertPlan(queryPlan).scanType("RANGE SCAN").indexRule(OptimizerReasons.RULE_ONLY_CANDIDATE)
           .indexRejectedCount(1);
 
         preparedStmt = conn.prepareStatement(
           "SELECT ID1,ID5 FROM " + view + " WHERE (ID1, ID2) IN " + "((1, 1),(2, 2))");
-        queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+        queryPlan = getOptimizedQueryPlan(preparedStmt);
         assertEquals(new Long(2), queryPlan.getEstimatedRowsToScan());
         assertPlan(queryPlan).scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
           .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
 
         preparedStmt =
           conn.prepareStatement("SELECT * FROM " + view + " WHERE (ID2, ID1) IN ((1, 1),(2, 2))");
-        queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+        queryPlan = getOptimizedQueryPlan(preparedStmt);
         assertEquals(new Long(2), queryPlan.getEstimatedRowsToScan());
         assertPlan(queryPlan).scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
           .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
@@ -1862,7 +1863,7 @@ public class InListIT extends ParallelStatsDisabledIT {
 
       PreparedStatement preparedStmt = conn.prepareStatement(
         "SELECT VAL2 FROM " + fullTableName + " WHERE (ID2, ID1) IN ((1, 1),(2, 2))");
-      QueryPlan queryPlan = PhoenixRuntime.getOptimizedQueryPlan(preparedStmt);
+      QueryPlan queryPlan = getOptimizedQueryPlan(preparedStmt);
       queryPlan.getTableRef().getTable().getType();
       assertPlan(queryPlan).scanTypeStartsWith(ExplainTable.POINT_LOOKUP_ON_STRING)
         .indexRule(OptimizerReasons.RULE_POINT_LOOKUP).indexRejectedNone();
