@@ -181,7 +181,9 @@ public class RVCOffsetCompiler {
     }
 
     // Tag the RVC offset predicate with its origin for VERBOSE attribution.
-    context.tagPredicate(whereExpression, "RVC OFFSET");
+    if (context.isCollectDiagnostics()) {
+      context.tagPredicate(whereExpression, "RVC OFFSET");
+    }
 
     Expression expression;
     try {
