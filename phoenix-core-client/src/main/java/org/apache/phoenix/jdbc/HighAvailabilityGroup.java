@@ -979,8 +979,17 @@ public class HighAvailabilityGroup {
   }
 
   /**
-   * Method to get ClusterRoleRecord from RegionServer Endpoints from either of the clusters.
-   * @return ClusterRoleRecord from the first available cluster
+   * Method to get ClusterRoleRecord from RegionServer Endpoints of both clusters.
+   * <p>
+   * CRR version propagation across the RegionServers of the two clusters is not synchronized, so at
+   * startup or during an in-flight admin/failover transition one endpoint can momentarily serve a
+   * lower admin version (or an UNKNOWN role) than its peer. To avoid the client adopting a staler
+   * or less usable record than one a peer already advertises, this always fetches the CRR from
+   * <em>both</em> endpoints and reconciles them via {@link #reconcileClusterRoleRecords}. If the
+   * peer (cluster 2) endpoint is unreachable, cluster 1's record is used as-is. The reconciliation
+   * subsumes the previous UNKNOWN-only handling. CRR is fetched only on connect/refresh (and cached
+   * in {@link #roleRecord}), not per query, so the extra endpoint RPC is not on a hot path.
+   * @return the reconciled ClusterRoleRecord
    * @throws SQLException if there is an error getting the ClusterRoleRecord
    */
   private ClusterRoleRecord getClusterRoleRecordFromEndpoint() throws SQLException {
@@ -992,31 +1001,22 @@ public class HighAvailabilityGroup {
       // Get the CRR via RSEndpoint for cluster 1
       ClusterRoleRecord roleRecord = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
         info.getUrl2(), info.getUrl1(), info.getName(), this, pollerInterval, properties);
-      // If we have unknown role for any cluster then try getting CRR from cluster 2 endpoint and if
-      // we get unknown role from there as well then CRR with higher adminVersion wins.
-      if (roleRecord.hasUnknownRole()) {
-        ClusterRoleRecord roleRecordFromPR;
-        try {
-          roleRecordFromPR = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
-            info.getUrl2(), info.getUrl2(), info.getName(), this, pollerInterval, properties);
-        } catch (Exception e) {
-          // As we were able to get CRR from cluster 1 but cluster 2 threw exception then just
-          // return
-          // CRR from cluster 1 and consume this exception
-          LOG.warn("Role Record from cluster {} has Unknown Role but cluster {} threw exception, "
-            + "returning {} as CRR", info.getUrl1(), info.getUrl2(), roleRecord.toPrettyString());
-          return roleRecord;
-        }
-        if (roleRecordFromPR.hasUnknownRole()) {
-          return roleRecord.getVersion() > roleRecordFromPR.getVersion()
-            ? roleRecord
-            : roleRecordFromPR;
-        } else {
-          return roleRecordFromPR;
-        }
-      } else {
+      // Always consult cluster 2 as well and keep the more authoritative record (see method
+      // javadoc): a non-UNKNOWN record is preferred over an UNKNOWN one, and among records in the
+      // same category the higher admin version wins. If cluster 2 is unreachable, fall back to the
+      // cluster 1 record we already have and consume the exception.
+      ClusterRoleRecord roleRecordFromPR;
+      try {
+        roleRecordFromPR = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
+          info.getUrl2(), info.getUrl2(), info.getName(), this, pollerInterval, properties);
+      } catch (Exception e) {
+        LOG.warn(
+          "Fetched CRR {} from cluster {} but cluster {} endpoint threw an exception; "
+            + "returning cluster {} CRR without peer reconciliation",
+          roleRecord.toPrettyString(), info.getUrl1(), info.getUrl2(), info.getUrl1(), e);
         return roleRecord;
       }
+      return reconcileClusterRoleRecords(roleRecord, roleRecordFromPR);
     } catch (Exception e) {
       // If we get CRR Not Found on cluster 1, we should still try cluster 2, maybe
       // haGroupStoreClient
@@ -1239,5 +1239,42 @@ public class HighAvailabilityGroup {
     ClusterRoleRecord newRecord) {
     return transitionSucceeded && !oldRecord.getActiveUrl().equals(newRecord.getActiveUrl())
       && newRecord.getActiveUrl().isPresent();
+  }
+
+  /**
+   * Reconcile the two ClusterRoleRecords fetched from the cluster 1 and cluster 2 RegionServer
+   * endpoints and return the more authoritative one. CRR version propagation across RegionServers
+   * is not synchronized, so the two endpoints may disagree during startup or an in-flight
+   * transition; picking the more authoritative record prevents the client from adopting a staler or
+   * less usable view than one a peer already advertises. The order of preference is:
+   * <ol>
+   * <li>A record without an UNKNOWN role beats a record with an UNKNOWN role. An UNKNOWN role means
+   * that endpoint could not resolve the cluster roles (e.g. a ZooKeeper problem) and is not usable
+   * for routing, so it must never win merely on version.</li>
+   * <li>Among records in the same UNKNOWN category, the higher admin {@code version} wins (the
+   * admin version only advances on an operator-driven CRR change, so higher is strictly
+   * fresher).</li>
+   * <li>On a tie (same category and version) the peer ({@code recordFromCluster2}) record is
+   * returned; both are equivalent for routing so the choice is arbitrary.</li>
+   * </ol>
+   * This subsumes the previous UNKNOWN-only handling and is a strict superset of it: when cluster 1
+   * is non-UNKNOWN and equal-or-newer it is still returned, and the UNKNOWN/UNKNOWN case still
+   * resolves to the higher version. Pure function of its inputs (no global state, no clock) so it
+   * is straightforward to unit-test. Package-private rather than private so
+   * {@code HighAvailabilityGroupTest} can call it directly. Neither argument may be {@code null}.
+   * @param recordFromCluster1 CRR fetched from the cluster 1 endpoint ({@code info.getUrl1()})
+   * @param recordFromCluster2 CRR fetched from the cluster 2 endpoint ({@code info.getUrl2()})
+   * @return the more authoritative of the two records
+   */
+  static ClusterRoleRecord reconcileClusterRoleRecords(ClusterRoleRecord recordFromCluster1,
+    ClusterRoleRecord recordFromCluster2) {
+    // Prefer a usable (non-UNKNOWN) record over an UNKNOWN one regardless of version.
+    if (recordFromCluster1.hasUnknownRole() != recordFromCluster2.hasUnknownRole()) {
+      return recordFromCluster1.hasUnknownRole() ? recordFromCluster2 : recordFromCluster1;
+    }
+    // Same category: keep the higher admin version. Ties fall through to the peer record.
+    return recordFromCluster1.getVersion() > recordFromCluster2.getVersion()
+      ? recordFromCluster1
+      : recordFromCluster2;
   }
 }
