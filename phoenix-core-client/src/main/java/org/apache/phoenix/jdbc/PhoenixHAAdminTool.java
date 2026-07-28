@@ -42,6 +42,7 @@ import java.text.SimpleDateFormat;
 import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -176,6 +177,13 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       printUsage();
       return RET_ARGUMENT_ERROR;
     }
+    if (
+      args.length == 1
+        && ("help".equalsIgnoreCase(args[0]) || "-h".equals(args[0]) || "--help".equals(args[0]))
+    ) {
+      printUsage();
+      return RET_SUCCESS;
+    }
 
     String command = args[0].toLowerCase();
     String[] commandArgs = Arrays.copyOfRange(args, 1, args.length);
@@ -211,7 +219,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
         // Required: --ha-group
         return executeGetClusterRoleRecord(commandArgs);
       case CMD_CREATE:
-        // Creates a new HA group entry in SYSTEM.HA_GROUP (idempotent)
+        // Creates a new HA group entry in SYSTEM.HA_GROUP
         // Required: --ha-group, --policy, --zk-url-1, --cluster-url-1, --cluster-role-1,
         // --zk-url-2, --cluster-url-2, --cluster-role-2
         // Optional: --hdfs-url-1, --hdfs-url-2, --admin-version, --dry-run
@@ -300,7 +308,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       }
 
       // Parse configuration fields
-      String policy = cmdLine.getOptionValue(POLICY_OPT.getOpt());
+      String policy = parsePolicy(cmdLine.getOptionValue(POLICY_OPT.getOpt()));
       String state = cmdLine.getOptionValue(STATE_OPT.getOpt());
       String clusterUrl = cmdLine.getOptionValue(CLUSTER_URL_OPT.getOpt());
       String peerClusterUrl = cmdLine.getOptionValue(PEER_CLUSTER_URL_OPT.getOpt());
@@ -326,7 +334,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
           && peerZkUrl == null && protocolVersion == null && lastSyncTimeStr == null
           && hdfsUrl == null && peerHdfsUrl == null
       ) {
-        throw new IllegalArgumentException("Must specify at least one field to update");
+        throw new IllegalArgumentException("Must specify at least one configuration field in "
+          + "addition to --admin-version/--auto-increment-version");
       }
 
       // Validate URLs against the registry type the read path normalizes them with (ZK quorum vs
@@ -541,7 +550,10 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     if (invalid.length() == 0) {
       return;
     }
-    if (force) {
+    if (registryType == ClusterRoleRecord.RegistryType.ZK) {
+      throw new IllegalArgumentException("Malformed ZooKeeper URL(s): " + invalid
+        + ". ZooKeeper URLs are identity keys and must be valid; --force cannot bypass this validation.");
+    } else if (force) {
       LOG.warn("Storing malformed URL(s) due to --force: {}", invalid);
     } else {
       throw new IllegalArgumentException(
@@ -676,8 +688,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
         // Poll for state transitions
         System.out
           .println("\n[Step 4] Monitoring state transitions (timeout: " + timeoutSeconds + "s)...");
-        boolean transitionComplete =
-          pollForStateTransition(manager, haGroupName, finalExpectedState, timeoutSeconds);
+        boolean transitionComplete = pollForStateTransition(manager, haGroupName, timeoutSeconds);
 
         if (transitionComplete) {
           System.out.println("\n✓ Failover completed successfully");
@@ -689,8 +700,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
           return RET_SUCCESS;
         } else {
           System.err.println("\n⚠ Failover transition incomplete");
-          System.err.println("  The failover was initiated but did not complete within "
-            + timeoutSeconds + " seconds.");
+          System.err.println("  The local failover may have completed, but the cluster pair did "
+            + "not converge within " + timeoutSeconds + " seconds.");
           printFailoverRecoveryGuidance(haGroupName);
           return RET_UPDATE_ERROR;
         }
@@ -736,8 +747,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
    * </li>
    * <li>Poll for completion via pollForStateTransition():
    * <ul>
-   * <li>Polls every 2 seconds, waiting for STANDBY state</li>
-   * <li>Returns true if reached within timeout, false otherwise</li>
+   * <li>Polls every 2 seconds for local STANDBY and a stable ACTIVE peer</li>
+   * <li>Returns true if the pair converges within timeout, false otherwise</li>
    * </ul>
    * </li>
    * <li>Return RET_SUCCESS if completed, RET_UPDATE_ERROR if timeout</li>
@@ -809,8 +820,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
         // Poll for state transitions
         System.out
           .println("\n[Step 4] Monitoring state transitions (timeout: " + timeoutSeconds + "s)...");
-        boolean transitionComplete =
-          pollForStateTransition(manager, haGroupName, HAGroupState.STANDBY, timeoutSeconds);
+        boolean transitionComplete = pollForStateTransition(manager, haGroupName, timeoutSeconds);
 
         if (transitionComplete) {
           System.out.println("\n✓ Failover abort completed successfully");
@@ -822,9 +832,10 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
           return RET_SUCCESS;
         } else {
           System.err.println("\n⚠ Abort transition incomplete");
-          System.err.println("  The abort was initiated but did not complete within "
-            + timeoutSeconds + " seconds.");
-          printFailoverRecoveryGuidance(haGroupName);
+          System.err.println("  The local abort may have completed, but the cluster pair did not "
+            + "converge within " + timeoutSeconds + " seconds.");
+          System.err.println("  Inspect the pair with get-cluster-role-record -g " + haGroupName
+            + " before retrying or forcing state.");
           return RET_UPDATE_ERROR;
         }
       }
@@ -899,10 +910,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
   }
 
   /**
-   * Creates a new HA group entry in SYSTEM.HA_GROUP. Idempotent: if the group already exists,
-   * prints a skip message and returns success without modifying the existing row. The ZK znode is
-   * initialized automatically on first access by HAGroupStoreClient. Run the same command on both
-   * clusters.
+   * Creates a new HA group entry in SYSTEM.HA_GROUP. Existing groups are rejected and must be
+   * inspected with get and changed through update where supported.
    */
   private int executeCreate(String[] args) throws Exception {
     try {
@@ -914,7 +923,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       }
 
       String haGroupName = getRequiredOption(cmdLine, HA_GROUP_OPT, "HA group name");
-      String policy = getRequiredOption(cmdLine, POLICY_OPT, "policy");
+      String policy = parsePolicy(getRequiredOption(cmdLine, POLICY_OPT, "policy"));
       String zkUrl1 = getRequiredOption(cmdLine, ZK_URL_1_OPT, "ZK URL for cluster 1");
       String clusterUrl1 =
         getRequiredOption(cmdLine, CLUSTER_URL_1_OPT, "cluster URL for cluster 1");
@@ -950,9 +959,9 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       String localZkUrl = getLocalZkUrl(getConf());
 
       if (haGroupExistsInSystemTable(haGroupName, localZkUrl)) {
-        System.out.println("HA group '" + haGroupName
-          + "' already exists in SYSTEM.HA_GROUP. Skipping creation. Use update command to modify it.");
-        return RET_SUCCESS;
+        System.err.println("HA group '" + haGroupName
+          + "' already exists in SYSTEM.HA_GROUP. Use get to inspect it and update for supported changes.");
+        return RET_VALIDATION_ERROR;
       }
 
       System.out.println("\n=== HA Group to Create ===\n");
@@ -1132,21 +1141,21 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
   }
 
   /**
-   * Poll for state transition completion with timeout
+   * Poll for stable local STANDBY and peer ACTIVE convergence with timeout.
    * @param manager        HAGroupStoreManager instance
    * @param haGroupName    HA group name
-   * @param finalState     Expected final state
    * @param timeoutSeconds Timeout in seconds
    * @return true if transition completed, false if timed out
    */
   private boolean pollForStateTransition(HAGroupStoreManager manager, String haGroupName,
-    HAGroupState finalState, int timeoutSeconds) {
+    int timeoutSeconds) {
 
     long startTime = System.currentTimeMillis();
     long timeoutMillis = timeoutSeconds * 1000L;
     long pollIntervalMillis = 2000; // Poll every 2 seconds
 
     HAGroupState lastSeenState = null;
+    HAGroupState lastSeenPeerState = null;
     int dots = 0;
 
     try {
@@ -1162,13 +1171,14 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
           HAGroupState currentState = recordOpt.get().getHAGroupState();
 
           // Print state change
-          if (lastSeenState != currentState) {
+          if (lastSeenState != currentState || lastSeenPeerState != peerState) {
             if (lastSeenState != null) {
               System.out.println(); // New line after dots
             }
             System.out.println("  Current State: " + currentState);
             System.out.println("  Peer State: " + peerState);
             lastSeenState = currentState;
+            lastSeenPeerState = peerState;
             dots = 0;
           } else {
             // Print progress dots
@@ -1180,8 +1190,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
             }
           }
 
-          // Check if we reached the final state
-          if (currentState == finalState) {
+          if (isStableFailoverPair(currentState, peerState)) {
             if (dots > 0) {
               System.out.println(); // New line after dots
             }
@@ -1200,7 +1209,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       }
       System.err.println("  ✗ Timeout after " + timeoutSeconds + " seconds");
       if (lastSeenState != null) {
-        System.err.println("  Last seen state: " + lastSeenState);
+        System.err.println("  Last seen local state: " + lastSeenState);
+        System.err.println("  Last seen peer state: " + lastSeenPeerState);
       }
       return false;
 
@@ -1211,6 +1221,12 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
       System.err.println("  ✗ Error during polling: " + e.getMessage());
       return false;
     }
+  }
+
+  @VisibleForTesting
+  static boolean isStableFailoverPair(HAGroupState localState, HAGroupState peerState) {
+    return localState == HAGroupState.STANDBY
+      && (peerState == HAGroupState.ACTIVE_IN_SYNC || peerState == HAGroupState.ACTIVE_NOT_IN_SYNC);
   }
 
   /**
@@ -1668,6 +1684,19 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     }
   }
 
+  private static String parsePolicy(String policy) {
+    if (policy == null) {
+      return null;
+    }
+    try {
+      return HighAvailabilityPolicy.valueOf(policy.toUpperCase(Locale.ROOT)).name();
+    } catch (IllegalArgumentException e) {
+      throw new IllegalArgumentException("Invalid HA policy: " + policy + "\nSupported policies: "
+        + Arrays.stream(HighAvailabilityPolicy.values()).map(Enum::name)
+          .collect(Collectors.joining(", ")));
+    }
+  }
+
   /**
    * Parse long from string
    */
@@ -1694,8 +1723,7 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     System.out.println("Usage: phoenix-consistentha-admin-tool <command> [options]");
     System.out.println();
     System.out.println("Commands:");
-    System.out
-      .println("  create                  Create a new HA group in SYSTEM.HA_GROUP (idempotent)");
+    System.out.println("  create                  Create a new HA group in SYSTEM.HA_GROUP");
     System.out.println("  update                  Update HA group configuration");
     System.out.println("  get                     Show HA group configuration");
     System.out.println("  list                    List all HA groups");
@@ -1730,9 +1758,8 @@ public class PhoenixHAAdminTool extends Configured implements Tool {
     System.out.println();
     System.out.println("Description:");
     System.out.println("  Creates a new HA group entry in SYSTEM.HA_GROUP. The ZK znode is");
-    System.out.println("  initialized automatically on first access. This command is idempotent:");
-    System.out.println("  running it again on an existing HA group prints a skip message and");
-    System.out.println("  returns success. Run the same command on both clusters.");
+    System.out.println("  initialized automatically on first access. Existing names are rejected;");
+    System.out.println("  use get to inspect them and update for supported changes.");
     System.out.println();
     System.out.println("REQUIRED:");
     System.out.println("  -g,    --ha-group <name>         HA group name");

@@ -575,8 +575,12 @@ public class HAGroupStoreManager {
    * @throws IOException when HAGroupStoreClient is not initialized
    */
   private HAGroupStoreClient getHAGroupStoreClient(final String haGroupName) throws IOException {
-    HAGroupStoreClient haGroupStoreClient =
-      HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    HAGroupStoreClient haGroupStoreClient;
+    try {
+      haGroupStoreClient = HAGroupStoreClient.getInstanceForZkUrl(conf, haGroupName, zkUrl);
+    } catch (IllegalArgumentException e) {
+      throw new IOException("Invalid HAGroupStoreClient configuration: " + e.getMessage(), e);
+    }
     if (haGroupStoreClient == null) {
       throw new IOException("HAGroupStoreClient is not initialized for HA group: " + haGroupName);
     }

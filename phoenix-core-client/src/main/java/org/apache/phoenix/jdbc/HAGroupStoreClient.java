@@ -141,6 +141,9 @@ public class HAGroupStoreClient implements Closeable {
   private final long rotationTimeMs;
   // State tracking for transition detection
   private volatile HAGroupState lastKnownLocalState;
+  // ZooKeeper revision of the last local state processed.
+  private long lastDeliveredLocalCzxid = -1L;
+  private int lastDeliveredLocalVersion = -1;
   // Last peer state delivered to subscribers; used only to populate the "from" state in PEER
   // notifications. Written from the peer watcher's single delivery thread.
   private volatile HAGroupState lastKnownPeerState;
@@ -173,8 +176,9 @@ public class HAGroupStoreClient implements Closeable {
   }
 
   /**
-   * Creates/gets an instance of HAGroupStoreClient. Can return null instance if unable to
-   * initialize.
+   * Creates/gets an instance of HAGroupStoreClient. Can return null if initial construction fails.
+   * A registered instance remains cached while temporarily unhealthy and fails operations closed
+   * until Curator reconnects; explicit {@link #close()} removes it.
    * @param conf        configuration
    * @param haGroupName name of the HA group. Only specified HA group is tracked.
    * @param zkUrl       zkUrl to use for the client. Prefer providing this parameter to avoid the
@@ -184,17 +188,16 @@ public class HAGroupStoreClient implements Closeable {
   public static HAGroupStoreClient getInstanceForZkUrl(Configuration conf, String haGroupName,
     String zkUrl) {
     Preconditions.checkNotNull(haGroupName, "haGroupName cannot be null");
+    validateConfiguration(conf);
     String localZkUrl = Objects.toString(zkUrl, getLocalZkUrl(conf));
     Preconditions.checkNotNull(localZkUrl, "zkUrl cannot be null");
     HAGroupStoreClient result =
       instances.getOrDefault(localZkUrl, new ConcurrentHashMap<>()).getOrDefault(haGroupName, null);
-    if (result == null || !result.isHealthy) {
-      HAGroupStoreClient replaced = null;
+    if (result == null) {
       synchronized (HAGroupStoreClient.class) {
         result = instances.getOrDefault(localZkUrl, new ConcurrentHashMap<>())
           .getOrDefault(haGroupName, null);
-        if (result == null || !result.isHealthy) {
-          HAGroupStoreClient stale = result;
+        if (result == null) {
           result = new HAGroupStoreClient(conf, null, haGroupName, zkUrl);
           if (!result.isHealthy) {
             result.close();
@@ -209,18 +212,27 @@ public class HAGroupStoreClient implements Closeable {
               v.put(haGroupName, created);
               return v;
             });
-            replaced = stale;
           }
         }
       }
-      // Reclaim the replaced unhealthy client's threads and caches. Outside the monitor because
-      // close() can block; safe because deregisterFromInstances() is value-based and will not
-      // remove the replacement we just registered.
-      if (replaced != null) {
-        replaced.close();
-      }
     }
     return result;
+  }
+
+  @VisibleForTesting
+  static void validateConfiguration(Configuration conf) {
+    requirePositive(conf, PHOENIX_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS,
+      DEFAULT_HA_GROUP_STORE_CLIENT_INITIALIZATION_TIMEOUT_MS);
+    requirePositive(conf, HA_GROUP_STORE_SYNC_INTERVAL_SECONDS,
+      DEFAULT_HA_GROUP_STORE_SYNC_INTERVAL_SECONDS);
+  }
+
+  private static void requirePositive(Configuration conf, String key, long defaultValue) {
+    long value = conf.getLong(key, defaultValue);
+    if (value <= 0) {
+      throw new IllegalArgumentException(
+        key + " must be greater than 0; configured value=" + value);
+    }
   }
 
   /**
@@ -702,8 +714,8 @@ public class HAGroupStoreClient implements Closeable {
       return true;
     } catch (Exception e) {
       metricsSource.incrementSystemTableSyncFailedCount();
-      LOGGER.error("Failed to update system table on best effort basis for HA group {}", haGroupName,
-        e);
+      LOGGER.error("Failed to update system table on best effort basis for HA group {}",
+        haGroupName, e);
       return false;
     }
   }
@@ -1149,11 +1161,10 @@ public class HAGroupStoreClient implements Closeable {
   }
 
   /**
-   * Remove this instance from the static {@link #instances} map. Idempotent. Uses value-based
-   * remove so that, if a concurrent {@link #getInstanceForZkUrl} has already swapped in a fresh
-   * replacement, the replacement is preserved. The outer-CHM {@code computeIfPresent} below pairs
-   * with the {@code compute} in {@link #getInstanceForZkUrl} to serialize bucket creation/removal
-   * on the same key.
+   * Remove this instance from the static {@link #instances} map. Idempotent. Value-based removal
+   * preserves a fresh instance created concurrently after this one was deregistered. The outer-CHM
+   * {@code computeIfPresent} below pairs with the {@code compute} in {@link #getInstanceForZkUrl}
+   * to serialize bucket creation/removal on the same key.
    */
   private void deregisterFromInstances() {
     final String key = (this.zkUrl != null) ? this.zkUrl : getLocalZkUrl(this.conf);
@@ -1485,6 +1496,16 @@ public class HAGroupStoreClient implements Closeable {
   private void handleLocalStateChange(HAGroupStoreRecord newRecord, Stat newStat) {
     HAGroupState newState = newRecord.getHAGroupState();
     synchronized (localTransitionLock) {
+      if (
+        !HAGroupStoreCacheUtil.isNewerRevision(newStat, lastDeliveredLocalCzxid,
+          lastDeliveredLocalVersion)
+      ) {
+        return;
+      }
+      boolean recreated =
+        lastDeliveredLocalCzxid >= 0 && newStat.getCzxid() != lastDeliveredLocalCzxid;
+      lastDeliveredLocalCzxid = newStat.getCzxid();
+      lastDeliveredLocalVersion = newStat.getVersion();
       HAGroupState oldState = lastKnownLocalState;
       lastKnownLocalState = newState;
       metricsSource.setCurrentLocalState(newState);
@@ -1509,7 +1530,7 @@ public class HAGroupStoreClient implements Closeable {
           return;
         }
       }
-      if (oldState == null || !oldState.equals(newState)) {
+      if (recreated || oldState == null || !oldState.equals(newState)) {
         // from = the effective state subscribers last saw, derived from the prior raw state and the
         // overlay flag (unchanged on this path) -- not the bare raw oldState. This is what makes a
         // failover while degraded read DEGRADED_STANDBY -> STANDBY_TO_ACTIVE.

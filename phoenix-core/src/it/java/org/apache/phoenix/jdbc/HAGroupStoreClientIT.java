@@ -32,6 +32,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -557,6 +558,10 @@ public class HAGroupStoreClientIT extends HABaseIT {
     createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record);
     HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient
       .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
+    AtomicInteger deliveries = new AtomicInteger();
+    haGroupStoreClient.subscribeToTargetState(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC,
+      ClusterType.LOCAL,
+      (group, from, to, mtime, clusterType, lastSync) -> deliveries.incrementAndGet());
 
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
     HAGroupStoreRecord currentRecord = haGroupStoreClient.getHAGroupStoreRecord();
@@ -573,10 +578,14 @@ public class HAGroupStoreClientIT extends HABaseIT {
     Field isHealthyField = HAGroupStoreClient.class.getDeclaredField("isHealthy");
     isHealthyField.setAccessible(true);
     assertFalse((boolean) isHealthyField.get(haGroupStoreClient));
+    HAGroupStoreClient duringOutage = HAGroupStoreClient
+      .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
 
     // Start ZK on the same port to simulate CONNECTION_RECONNECTED event
     CLUSTERS.getHBaseCluster1().startMiniZKCluster(1, Integer.parseInt(
       CLUSTERS.getHBaseCluster1().getConfiguration().get("hbase.zookeeper.property.clientPort")));
+    assertSame("factory must retain the subscribed client while local ZK is unavailable",
+      haGroupStoreClient, duringOutage);
 
     Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
     // Check that HAGroupStoreClient instance is back to healthy and provides correct response
@@ -585,6 +594,39 @@ public class HAGroupStoreClientIT extends HABaseIT {
       && currentRecord.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC;
     // Check that the HAGroupStoreClient instance is healthy via reflection
     assertTrue((boolean) isHealthyField.get(haGroupStoreClient));
+    record = record.withHAGroupState(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC);
+    createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record);
+    long deadline = System.currentTimeMillis() + ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS * 3;
+    while (deliveries.get() < 1 && System.currentTimeMillis() < deadline) {
+      Thread.sleep(100);
+    }
+    assertEquals("listener registered before the outage must survive reconnect", 1,
+      deliveries.get());
+  }
+
+  @Test
+  public void testRecreatedLocalZnodeRedeliversSameAbortState() throws Exception {
+    String haGroupName = testName.getMethodName();
+    HAGroupStoreRecord record = new HAGroupStoreRecord("v1.0", haGroupName,
+      HAGroupStoreRecord.HAGroupState.ABORT_TO_ACTIVE_IN_SYNC, 0L,
+      HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.masterUrl,
+      this.peerMasterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+    createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record);
+    HAGroupStoreClient client = HAGroupStoreClient
+      .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
+    AtomicInteger deliveries = new AtomicInteger();
+    client.subscribeToTargetState(HAGroupStoreRecord.HAGroupState.ABORT_TO_ACTIVE_IN_SYNC,
+      ClusterType.LOCAL,
+      (group, from, to, mtime, clusterType, lastSync) -> deliveries.incrementAndGet());
+
+    createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, record);
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+    assertEquals("same znode incarnation should not redeliver the same state", 0, deliveries.get());
+
+    haAdmin.deleteHAGroupStoreRecordInZooKeeper(haGroupName);
+    haAdmin.createHAGroupStoreRecordInZooKeeper(record);
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+    assertEquals("recreated znode should redeliver the same abort state once", 1, deliveries.get());
   }
 
   /**
