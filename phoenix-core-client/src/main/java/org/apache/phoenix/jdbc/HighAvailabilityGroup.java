@@ -1106,6 +1106,22 @@ public class HighAvailabilityGroup {
         return true;
       }
 
+      // Do not roll back to a lower-version record. CRR propagation across a cluster's
+      // RegionServers is eventually consistent, so a lagging endpoint can momentarily serve an
+      // older admin version than the one already applied on this client. Since the endpoint is
+      // picked at (effectively) random on each fetch, adopting such a record would revert the
+      // client to a stale cluster-role view. The apply-or-reject decision is factored into the
+      // package-private static {@link #shouldApplyRefreshedRecord} so it can be unit-tested
+      // directly without driving a full mini-cluster refresh.
+      if (!shouldApplyRefreshedRecord(roleRecord, newRoleRecord)) {
+        LOG.warn(
+          "Fetched role record {} is older (V{}) than the current record (V{}) for HA group {};"
+            + " keeping the current record and not rolling back",
+          newRoleRecord, newRoleRecord.getVersion(), roleRecord.getVersion(), info);
+        lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
+        return true;
+      }
+
       final ClusterRoleRecord oldRecord = roleRecord;
       state = State.IN_TRANSITION;
       LOG.info("HA group {} is in {} to set V{} record", info, state, newRoleRecord.getVersion());
@@ -1276,5 +1292,33 @@ public class HighAvailabilityGroup {
     return recordFromCluster1.getVersion() > recordFromCluster2.getVersion()
       ? recordFromCluster1
       : recordFromCluster2;
+  }
+
+  /**
+   * Decides whether a freshly fetched {@link ClusterRoleRecord} should replace the currently
+   * applied one on the refresh path. Returns {@code false} only when the current record is strictly
+   * newer (higher admin {@code version}) than the fetched one, i.e. the fetch would roll the client
+   * back to a stale view. This guards against eventual-consistency lag: CRR propagation across a
+   * cluster's RegionServers is not synchronized, so a lagging endpoint (the client picks one at
+   * effectively random per fetch) can momentarily serve an older admin version than the client has
+   * already applied.
+   * <p>
+   * An <em>equal</em> version returns {@code true} (apply) by design. The admin {@code version}
+   * only advances on an operator-driven CRR change; an autonomous state-machine transition changes
+   * the cluster roles while keeping the same admin version, so a same-version record with different
+   * roles is a legitimate update that must still take effect. Only a strictly lower version is
+   * rejected — equivalently, this returns {@code !current.isNewerThan(fetched)}.
+   * <p>
+   * Callers guarantee {@code current} and {@code fetched} are non-null and share the same HA group
+   * info (checked upstream), and that they are not {@code equals()} (the no-op case is handled
+   * before this). Pure function of its inputs (no global state, no clock) so the guard is
+   * unit-testable without driving a full mini-cluster refresh. Package-private rather than private
+   * so {@code HighAvailabilityGroupTest} can call it directly.
+   * @param current the currently applied {@link ClusterRoleRecord} (must be non-null)
+   * @param fetched the candidate record freshly fetched from the endpoints
+   * @return {@code true} to apply {@code fetched}; {@code false} to keep {@code current}
+   */
+  static boolean shouldApplyRefreshedRecord(ClusterRoleRecord current, ClusterRoleRecord fetched) {
+    return !current.isNewerThan(fetched);
   }
 }

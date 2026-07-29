@@ -234,4 +234,47 @@ public class HighAvailabilityGroupTest {
     assertTrue("Among two UNKNOWN records the higher version wins",
       unknownV12 == HighAvailabilityGroup.reconcileClusterRoleRecords(unknownV11, unknownV12));
   }
+
+  /**
+   * Verifies the refresh-path apply/reject decision performed by
+   * {@link HighAvailabilityGroup#shouldApplyRefreshedRecord} — exercised directly via the
+   * package-private helper rather than by driving a full mini-cluster refresh. CRR propagation
+   * across a cluster's RegionServers is eventually consistent and the client picks an endpoint at
+   * effectively random per fetch, so a lagging endpoint can momentarily return a lower admin
+   * version than the client has already applied; the client must not roll back to it. This pins
+   * down: (a) a strictly lower-version record is rejected (the regression guard for the
+   * stale-revert bug); (b) a strictly higher-version record is applied; and — the subtle case — (c)
+   * a SAME-version record with different roles is applied, because an autonomous state-machine
+   * transition changes roles while keeping the same admin version (only an operator/admin action
+   * bumps the version), so a strict {@code >} guard here would wrongly strand failover.
+   */
+  @Test
+  public void testShouldApplyRefreshedRecord() {
+    String haGroupName = "testShouldApplyRefreshedRecord";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+
+    ClusterRoleRecord v9 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER, url1,
+      ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 9L);
+    ClusterRoleRecord v10 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.STANDBY, url2, ClusterRole.ACTIVE, 10L);
+    // Same version as v10 but different roles — models an autonomous state-machine transition,
+    // which changes roles while keeping the admin version unchanged.
+    ClusterRoleRecord v10RolesChanged = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.STANDBY, url2, ClusterRole.STANDBY, 10L);
+
+    // (a) Current is newer (v10) than the fetched record (v9): reject, do not roll back. This is
+    // the core fix — a lagging endpoint serving v9 must not override the applied v10.
+    assertFalse("Must not roll back from the applied v10 to a stale fetched v9",
+      HighAvailabilityGroup.shouldApplyRefreshedRecord(v10, v9));
+
+    // (b) Fetched record is newer (v10) than the current (v9): apply it.
+    assertTrue("Must apply a strictly newer fetched record",
+      HighAvailabilityGroup.shouldApplyRefreshedRecord(v9, v10));
+
+    // (c) SAME version, different roles (autonomous transition): must still apply. A strict '>'
+    // guard would reject this and strand the client on a stale role view — regression guard.
+    assertTrue("Must apply a same-version record with changed roles (autonomous transition)",
+      HighAvailabilityGroup.shouldApplyRefreshedRecord(v10, v10RolesChanged));
+  }
 }
