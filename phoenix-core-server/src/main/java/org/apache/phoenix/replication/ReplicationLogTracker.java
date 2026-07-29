@@ -368,16 +368,13 @@ public class ReplicationLogTracker {
         // Format: <ts>_<server>_<UUID>_<renameTs>.plog → extract prefix (first 2 parts)
         String[] parts = fileName.split("_");
         String prefix = parts[0] + "_" + parts[1];
-        newFileName = prefix + "_" + UUID.randomUUID() + "_" + EnvironmentEdgeManager.currentTime()
-          + ReplicationShardDirectoryManager.LOG_FILE_EXTENSION;
+        newFileName = buildInProgressFileName(prefix);
         targetDirectory = file.getParent();
       } else {
         // File is not in in-progress directory, add UUID + rename timestamp and move to
         // IN_PROGRESS directory
         String baseName = fileName.substring(0, fileName.lastIndexOf("."));
-        newFileName =
-          baseName + "_" + UUID.randomUUID() + "_" + EnvironmentEdgeManager.currentTime()
-            + ReplicationShardDirectoryManager.LOG_FILE_EXTENSION;
+        newFileName = buildInProgressFileName(baseName);
         targetDirectory = getInProgressDirPath();
       }
 
@@ -398,6 +395,18 @@ public class ReplicationLogTracker {
       long endTime = EnvironmentEdgeManager.currentTime();
       getMetrics().updateMarkFileInProgressTime(endTime - startTime);
     }
+  }
+
+  /**
+   * Builds an in-progress log file name from the given prefix by appending a fresh UUID, the
+   * current rename timestamp, and the log file extension. Format:
+   * {@code <prefix>_<UUID>_<renameTs>.plog}.
+   * @param prefix - the leading portion of the file name (e.g. {@code <ts>_<server>}).
+   * @return the in-progress file name
+   */
+  private String buildInProgressFileName(String prefix) {
+    return prefix + "_" + UUID.randomUUID() + "_" + EnvironmentEdgeManager.currentTime()
+      + ReplicationShardDirectoryManager.LOG_FILE_EXTENSION;
   }
 
   /**
