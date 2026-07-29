@@ -98,8 +98,12 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
     FileSystem srcFS = replicationLogTracker.getFileSystem();
     FileStatus srcStat = srcFS.getFileStatus(src);
     long ts = replicationLogTracker.getFileTimestamp(srcStat.getPath());
+    // Preserve the origin writer identity so the forwarded file is byte-identical to what the
+    // origin RS would have written natively. Re-deriving the name from (ts, forwardingServer) can
+    // collapse two distinct source files sharing a timestamp onto one dst, wedging SYNC re-entry.
+    String originServerName = replicationLogTracker.getServerName(srcStat.getPath());
     ReplicationShardDirectoryManager remoteShardManager = logGroup.getOrCreatePeerShardManager();
-    Path dst = remoteShardManager.getWriterPath(ts, logGroup.getServerName().getServerName());
+    Path dst = remoteShardManager.getWriterPath(ts, originServerName);
     long startTime = EnvironmentEdgeManager.currentTimeMillis();
     FileUtil.copy(srcFS, srcStat, remoteShardManager.getFileSystem(), dst, false, false, conf);
     // successfully copied the file

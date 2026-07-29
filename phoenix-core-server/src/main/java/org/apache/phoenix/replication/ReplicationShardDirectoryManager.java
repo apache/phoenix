@@ -64,11 +64,14 @@ public class ReplicationShardDirectoryManager {
    */
   public static final String SHARD_DIR_FORMAT = "%03d";
 
+  /** File extension for replication log files. */
+  public static final String LOG_FILE_EXTENSION = ".plog";
+
   /**
    * Format string for log file names. <timestamp>_<servername>.plog Example
    * 1762470665995_localhost,54575,1762470584502.plog
    */
-  public static final String FILE_NAME_FORMAT = "%d_%s.plog";
+  public static final String FILE_NAME_FORMAT = "%d_%s" + LOG_FILE_EXTENSION;
 
   /**
    * Configuration key for the duration of each replication round in seconds.

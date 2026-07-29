@@ -28,6 +28,9 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 
 import java.io.IOException;
+import java.util.HashSet;
+import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -36,6 +39,9 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord.HAGroupState;
 import org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode;
@@ -147,6 +153,57 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
     } finally {
       executor.shutdownNow();
     }
+  }
+
+  /**
+   * Two source files that share a timestamp but originate from different RegionServers must forward
+   * to two distinct destinations on the peer. The forwarder keys the dst on the origin writer
+   * identity; keying it on the forwarding RS instead would collapse both onto one dst and reject
+   * the second with a PathExistsException, wedging SYNC re-entry.
+   */
+  @Test
+  public void testForwardPreservesOriginServerIdentity() throws Exception {
+    ReplicationLogDiscoveryForwarder forwarder = logGroup.getLogForwarder();
+    ReplicationLogTracker localTracker = forwarder.getReplicationLogTracker();
+    ReplicationShardDirectoryManager localShardManager = logGroup.getLocalShardManager();
+    ReplicationShardDirectoryManager peerShardManager = logGroup.getOrCreatePeerShardManager();
+
+    // Same timestamp, different origin servers -- the collision scenario
+    long ts = EnvironmentEdgeManager.currentTimeMillis();
+    String originA = "10.244.1.10,16020,1784436416001";
+    String originB = "10.244.2.10,16020,1784436416002";
+
+    Path shardDir = localShardManager.getShardDirectory(ts);
+    localFs.mkdirs(shardDir);
+    Path srcA =
+      markInProgressSource(localTracker, new Path(shardDir, ts + "_" + originA + ".plog"));
+    Path srcB =
+      markInProgressSource(localTracker, new Path(shardDir, ts + "_" + originB + ".plog"));
+
+    forwarder.processFile(srcA);
+    forwarder.processFile(srcB);
+
+    // Both files must land on the peer under their own origin identity -- no collision.
+    Path peerShardDir = peerShardManager.getShardDirectory(ts);
+    FileSystem peerFs = peerShardManager.getFileSystem();
+    Set<String> peerNames = new HashSet<>();
+    for (FileStatus s : peerFs.listStatus(peerShardDir)) {
+      peerNames.add(s.getPath().getName());
+    }
+    assertEquals("Both origin files should be forwarded to distinct destinations", 2,
+      peerNames.size());
+    assertTrue("Peer should contain the file from originA",
+      peerNames.contains(ts + "_" + originA + ".plog"));
+    assertTrue("Peer should contain the file from originB",
+      peerNames.contains(ts + "_" + originB + ".plog"));
+  }
+
+  /** Creates an empty source file and moves it to the in-progress dir, as the forwarder expects. */
+  private Path markInProgressSource(ReplicationLogTracker tracker, Path file) throws IOException {
+    localFs.create(file, true).close();
+    Optional<Path> inProgress = tracker.markInProgress(file);
+    assertTrue("markInProgress should succeed", inProgress.isPresent());
+    return inProgress.get();
   }
 
   @Test

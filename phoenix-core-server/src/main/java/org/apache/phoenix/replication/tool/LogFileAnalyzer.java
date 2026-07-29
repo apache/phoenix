@@ -30,6 +30,7 @@ import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.replication.ReplicationShardDirectoryManager;
 import org.apache.phoenix.replication.log.LogFile;
 import org.apache.phoenix.replication.log.LogFile.Record;
 import org.apache.phoenix.replication.log.LogFileReader;
@@ -205,7 +206,7 @@ public class LogFileAnalyzer extends Configured implements Tool {
       Path path = status.getPath();
       if (status.isDirectory()) {
         findLogFiles(path, files);
-      } else if (path.getName().endsWith(".plog")) {
+      } else if (path.getName().endsWith(ReplicationShardDirectoryManager.LOG_FILE_EXTENSION)) {
         files.add(path);
       }
     }
