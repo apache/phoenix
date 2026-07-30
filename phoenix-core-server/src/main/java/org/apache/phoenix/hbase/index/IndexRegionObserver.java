@@ -1252,10 +1252,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // for bloom filters scan should be a get
         scan.withStartRow(key.getLowerRange(), true);
         scan.withStopRow(key.getLowerRange(), true);
-        // Anchor TTLRegionScanner's masking clock at batchTimestamp: the
-        // half-open [0, batchTimestamp) range makes getTimeRange().getMax() == batchTimestamp, so
-        // the read trims expired cells as of exactly the timestamp the index is built at.
-        scan.setTimeRange(0, batchTimestamp);
+        // Anchor TTLRegionScanner's masking clock at batchTimestamp. The range upper bound is
+        // batchTimestamp + 1 (not batchTimestamp) because HBase scan time ranges are half-open
+        // [min, max): a bound of batchTimestamp would exclude any committed cell sitting at exactly
+        // batchTimestamp. That collision cannot happen in production (getBatchTimestamp forces a
+        // distinct timestamp for same-row batches), but a frozen test clock can produce it, and the
+        // read must see those cells to build a correct current-row state. The masking clock is then
+        // batchTimestamp + 1, trimming expired cells as of the timestamp the index is built at.
+        scan.setTimeRange(0, batchTimestamp + 1);
         ServerScanUtil.setInternalScanAttributes(c.getEnvironment().getConfiguration(), scan,
           emptyCF, emptyCQ, literalTTLForScan, isStrictTTL);
         readDataTableRows(c, context, scan);
@@ -1266,10 +1270,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       scanRanges.initializeScan(scan);
       SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
       scan.setFilter(skipScanFilter);
-      // Anchor TTLRegionScanner's masking clock at batchTimestamp: the
-      // half-open [0, batchTimestamp) range makes getTimeRange().getMax() == batchTimestamp, so
-      // the read trims expired cells as of exactly the timestamp the index is built at.
-      scan.setTimeRange(0, batchTimestamp);
+      // Anchor TTLRegionScanner's masking clock at batchTimestamp. The range upper bound is
+      // batchTimestamp + 1 (not batchTimestamp) because HBase scan time ranges are half-open
+      // [min, max): a bound of batchTimestamp would exclude any committed cell sitting at exactly
+      // batchTimestamp. That collision cannot happen in production (getBatchTimestamp forces a
+      // distinct timestamp for same-row batches), but a frozen test clock can produce it, and the
+      // read must see those cells to build a correct current-row state. The masking clock is then
+      // batchTimestamp + 1, trimming expired cells as of the timestamp the index is built at.
+      scan.setTimeRange(0, batchTimestamp + 1);
       ServerScanUtil.setInternalScanAttributes(c.getEnvironment().getConfiguration(), scan, emptyCF,
         emptyCQ, literalTTLForScan, isStrictTTL);
       readDataTableRows(c, context, scan);
