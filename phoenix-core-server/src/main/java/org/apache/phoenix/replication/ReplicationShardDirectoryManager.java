@@ -68,6 +68,16 @@ public class ReplicationShardDirectoryManager {
   public static final String LOG_FILE_EXTENSION = ".plog";
 
   /**
+   * Name of the staging subdirectory created inside each shard directory. The forwarder copies an
+   * in-flight forwarded log file into &lt;shard&gt;/.staging/&lt;ts&gt;_&lt;server&gt;.plog and
+   * then atomically renames it up to &lt;shard&gt;/&lt;ts&gt;_&lt;server&gt;.plog once fully
+   * written. Because every replay/tracker listing gates on
+   * {@link org.apache.hadoop.fs.FileStatus#isFile()}, this subdirectory (and any mid-copy file
+   * within it) is invisible to replay.
+   */
+  public static final String STAGING_SUB_DIRECTORY_NAME = ".staging";
+
+  /**
    * Format string for log file names. <timestamp>_<servername>.plog Example
    * 1762470665995_localhost,54575,1762470584502.plog
    */
@@ -177,6 +187,23 @@ public class ReplicationShardDirectoryManager {
       throw exception[0];
     }
     return new Path(shardPath, String.format(FILE_NAME_FORMAT, timestamp, serverName));
+  }
+
+  /**
+   * Returns the staging path for a fully-resolved final writer path: {@code
+   * <shard>/.staging/<file-name>}. A file staged here keeps its real {@code .plog} name but is
+   * invisible to replay because it lives under a subdirectory that every replay/tracker listing
+   * skips via {@code FileStatus.isFile()}. The forwarder copies bytes here and then atomically
+   * renames up to {@code finalPath} (same shard directory, same FileSystem) to publish. The staging
+   * directory is created implicitly by the copy ({@code create()} makes parent dirs), so this is a
+   * pure path computation with no namenode round trip.
+   * @param finalPath the final replay-eligible path (as returned by
+   *                  {@link #getWriterPath(long, String)})
+   * @return the staging path {@code <shard>/.staging/<file-name>}
+   */
+  public Path getStagingPath(Path finalPath) {
+    Path stagingDir = new Path(finalPath.getParent(), STAGING_SUB_DIRECTORY_NAME);
+    return new Path(stagingDir, finalPath.getName());
   }
 
   /**

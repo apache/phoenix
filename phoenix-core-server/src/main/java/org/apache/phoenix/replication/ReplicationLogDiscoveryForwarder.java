@@ -103,10 +103,45 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
     // collapse two distinct source files sharing a timestamp onto one dst, wedging SYNC re-entry.
     String originServerName = replicationLogTracker.getServerName(srcStat.getPath());
     ReplicationShardDirectoryManager remoteShardManager = logGroup.getOrCreatePeerShardManager();
+    FileSystem dstFS = remoteShardManager.getFileSystem();
     Path dst = remoteShardManager.getWriterPath(ts, originServerName);
+    // Stage inside the shard's .staging subdirectory so replay never picks up a half-written file
+    // and force-recovers the lease: every listing skips subdirectories via FileStatus.isFile().
+    // Publish atomically via a same-shard rename up to dst once the bytes are fully written.
+    Path staging = remoteShardManager.getStagingPath(dst);
     long startTime = EnvironmentEdgeManager.currentTimeMillis();
-    FileUtil.copy(srcFS, srcStat, remoteShardManager.getFileSystem(), dst, false, false, conf);
-    // successfully copied the file
+    // overwrite=true reclaims any orphan staging file left by a prior crashed attempt of this same
+    // logical file (dst is keyed on the stable (ts, originServerName)). A copy failure, or a failed
+    // rename when dst is absent, propagates: the source stays in out_progress and is retried, and
+    // that retry re-copies with overwrite=true, reclaiming any partial staging file left behind.
+    FileUtil.copy(srcFS, srcStat, dstFS, staging, false, true, conf);
+    if (!dstFS.rename(staging, dst)) {
+      // rename returned false. If dst already exists, a prior attempt of this logical file
+      // published
+      // it and replay has not yet consumed it (the retry raced ahead of replay). This is not
+      // exactly-once dedup: if replay already deleted dst, exists is false and we throw so the
+      // source is retried, re-publishing dst (at-least-once; safe because replay is idempotent).
+      if (dstFS.exists(dst)) {
+        LOG.info("Destination {} already present (retry raced ahead of replay) for src={}", dst,
+          src);
+        // The publish is already complete, so cleaning up the redundant staging file is best
+        // effort: this path returns normally and the source is then marked completed, so there is
+        // no later retry to reclaim it via overwrite=true. A failure here only leaks a staging
+        // file (invisible to replay); it must never demote an already-delivered publish.
+        try {
+          if (!dstFS.delete(staging, false)) {
+            LOG.warn("Could not delete redundant staging file {} (dst {} already published for "
+              + "src={}); it is orphaned and will not be reclaimed", staging, dst, src);
+          }
+        } catch (IOException e) {
+          LOG.warn("Best-effort cleanup of staging file {} failed after dst {} was published "
+            + "for src={}", staging, dst, src, e);
+        }
+      } else {
+        throw new IOException("Failed to rename staging file " + staging + " to " + dst);
+      }
+    }
+    // successfully copied and published the file
     long endTime = EnvironmentEdgeManager.currentTimeMillis();
     long copyTime = endTime - startTime;
     LOG.info("Copying file src={} dst={} size={} took {}ms", src, dst, srcStat.getLen(), copyTime);

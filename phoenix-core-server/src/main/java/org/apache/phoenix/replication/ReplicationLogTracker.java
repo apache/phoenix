@@ -415,8 +415,7 @@ public class ReplicationLogTracker {
    * @return true if file format is correct, else false
    */
   protected boolean isValidLogFile(Path file) {
-    final String fileName = file.getName();
-    return fileName.endsWith(ReplicationShardDirectoryManager.LOG_FILE_EXTENSION);
+    return file.getName().endsWith(ReplicationShardDirectoryManager.LOG_FILE_EXTENSION);
   }
 
   /**
