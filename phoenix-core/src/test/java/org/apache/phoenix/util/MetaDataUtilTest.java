@@ -293,6 +293,41 @@ public class MetaDataUtilTest {
     assertEquals(expectedPhoenixVersion, phoenixVersion);
   }
 
+  /**
+   * The client's upgrade gate throws UpgradeRequiredException whenever the server's SYSTEM.CATALOG
+   * timestamp is below {@link MetaDataProtocol#MIN_SYSTEM_TABLE_TIMESTAMP}, and the server reports
+   * that timestamp as SYSTEM.CATALOG's own header timestamp (see MetaDataEndpointImpl#getVersion).
+   * SYSTEM.CATALOG's header only advances to a given timestamp when a genuinely new column is added
+   * to SYSTEM.CATALOG at that timestamp during upgrade. The last such column-add in
+   * ConnectionQueryServicesImpl#upgradeSystemCatalogIfRequired lands at
+   * {@link MetaDataProtocol#MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0}. If the gate threshold is bumped past
+   * that (for instance to accommodate a column added only to a non-CATALOG system table), a real
+   * in-place upgrade would leave SYSTEM.CATALOG below the threshold and every client would throw
+   * UpgradeRequiredException forever. This invariant guards that: a new MIN timestamp must be
+   * accompanied by a SYSTEM.CATALOG column-add at that timestamp, and this constant updated to
+   * match.
+   */
+  @Test
+  public void testMinSystemTableTimestampIsSystemCatalogReachable() {
+    assertEquals(
+      "MIN_SYSTEM_TABLE_TIMESTAMP must equal the highest timestamp at which a SYSTEM.CATALOG column"
+        + " is added during upgrade; otherwise clients throw UpgradeRequiredException perpetually"
+        + " after an in-place upgrade. If you bump the min system-table timestamp, add a"
+        + " SYSTEM.CATALOG column-add at the new timestamp in upgradeSystemCatalogIfRequired and"
+        + " update this assertion.",
+      MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0,
+      MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
+    // Concrete tripwire on the absolute offset. The assertion above is satisfied by the constant
+    // definition itself, so it cannot catch a bump that forgets the paired SYSTEM.CATALOG
+    // column-add. Pin the exact offset so any future change to MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0
+    // fails here and forces the author to add a SYSTEM.CATALOG column-add at the new timestamp
+    // (see UPGRADE_TS_ANCHOR_5_4_0 in upgradeSystemCatalogIfRequired) and update this offset.
+    assertEquals(
+      "MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 changed. Add a SYSTEM.CATALOG column-add at the new"
+        + " timestamp during upgrade before updating this offset.",
+      MetaDataProtocol.MIN_TABLE_TIMESTAMP + 46, MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0);
+  }
+
   private Put generateOriginalPut() {
     String version = VersionInfo.getVersion();
     KeyValueBuilder builder = KeyValueBuilder.get(version);

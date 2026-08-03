@@ -45,11 +45,14 @@ public class SystemTransformRecord {
   private final byte[] oldMetadata;
   private final String newMetadata;
   private final String transformFunction;
+  private final Long pendingPartialPassUntilTs;
+  private final Long cutoverTs;
 
   public SystemTransformRecord(PTable.TransformType transformType, String schemaName,
     String logicalTableName, String tenantId, String newPhysicalTableName, String logicalParentName,
     String transformStatus, String transformJobId, Integer transformRetryCount, Timestamp startTs,
-    Timestamp lastStateTs, byte[] oldMetadata, String newMetadata, String transformFunction) {
+    Timestamp lastStateTs, byte[] oldMetadata, String newMetadata, String transformFunction,
+    Long pendingPartialPassUntilTs, Long cutoverTs) {
     this.transformType = transformType;
     this.schemaName = schemaName;
     this.tenantId = tenantId;
@@ -64,6 +67,8 @@ public class SystemTransformRecord {
     this.oldMetadata = oldMetadata;
     this.newMetadata = newMetadata;
     this.transformFunction = transformFunction;
+    this.pendingPartialPassUntilTs = pendingPartialPassUntilTs;
+    this.cutoverTs = cutoverTs;
   }
 
   public String getString() {
@@ -130,10 +135,20 @@ public class SystemTransformRecord {
     return transformFunction;
   }
 
+  public Long getPendingPartialPassUntilTs() {
+    return pendingPartialPassUntilTs;
+  }
+
+  public Long getCutoverTs() {
+    return cutoverTs;
+  }
+
   public boolean isActive() {
     return (transformStatus.equals(PTable.TransformStatus.STARTED.name())
       || transformStatus.equals(PTable.TransformStatus.CREATED.name())
-      || transformStatus.equals(PTable.TransformStatus.PENDING_CUTOVER.name()));
+      || transformStatus.equals(PTable.TransformStatus.PENDING_CUTOVER.name())
+      || transformStatus.equals(PTable.TransformStatus.PENDING_PARTIAL_PASS.name())
+      || transformStatus.equals(PTable.TransformStatus.PARTIAL_PASS_RUNNING.name()));
   }
 
   @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
@@ -154,6 +169,8 @@ public class SystemTransformRecord {
     private byte[] oldMetadata;
     private String newMetadata;
     private String transformFunction;
+    private Long pendingPartialPassUntilTs;
+    private Long cutoverTs;
 
     public SystemTransformBuilder() {
 
@@ -174,6 +191,8 @@ public class SystemTransformRecord {
       this.setOldMetadata(systemTransformRecord.getOldMetadata());
       this.setNewMetadata(systemTransformRecord.getNewMetadata());
       this.setTransformFunction(systemTransformRecord.getTransformFunction());
+      this.setPendingPartialPassUntilTs(systemTransformRecord.getPendingPartialPassUntilTs());
+      this.setCutoverTs(systemTransformRecord.getCutoverTs());
     }
 
     public SystemTransformBuilder setTransformType(PTable.TransformType transformType) {
@@ -246,6 +265,16 @@ public class SystemTransformRecord {
       return this;
     }
 
+    public SystemTransformBuilder setPendingPartialPassUntilTs(Long pendingPartialPassUntilTs) {
+      this.pendingPartialPassUntilTs = pendingPartialPassUntilTs;
+      return this;
+    }
+
+    public SystemTransformBuilder setCutoverTs(Long cutoverTs) {
+      this.cutoverTs = cutoverTs;
+      return this;
+    }
+
     public SystemTransformRecord build() {
       Timestamp lastTs = lastStateTs;
       if (
@@ -256,7 +285,8 @@ public class SystemTransformRecord {
       }
       return new SystemTransformRecord(transformType, schemaName, logicalTableName, tenantId,
         newPhysicalTableName, logicalParentName, transformStatus, transformJobId,
-        transformRetryCount, startTs, lastTs, oldMetadata, newMetadata, transformFunction);
+        transformRetryCount, startTs, lastTs, oldMetadata, newMetadata, transformFunction,
+        pendingPartialPassUntilTs, cutoverTs);
     }
 
     public static SystemTransformRecord build(ResultSet resultSet) throws SQLException {
@@ -276,6 +306,10 @@ public class SystemTransformRecord {
       builder.setOldMetadata(resultSet.getBytes(col++));
       builder.setNewMetadata(resultSet.getString(col++));
       builder.setTransformFunction(resultSet.getString(col++));
+      long pendingPartialPassUntilTs = resultSet.getLong(col++);
+      builder.setPendingPartialPassUntilTs(resultSet.wasNull() ? null : pendingPartialPassUntilTs);
+      long cutoverTs = resultSet.getLong(col++);
+      builder.setCutoverTs(resultSet.wasNull() ? null : cutoverTs);
 
       return builder.build();
     }
