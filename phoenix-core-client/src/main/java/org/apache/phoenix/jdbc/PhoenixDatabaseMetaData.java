@@ -236,6 +236,9 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final String OLD_METADATA = "OLD_METADATA";
   public static final String NEW_METADATA = "NEW_METADATA";
   public static final String TRANSFORM_FUNCTION = "TRANSFORM_FUNCTION";
+  // Epoch-millis (BIGINT, nullable) marking the earliest time the transform monitor may leave the
+  // PENDING_PARTIAL_PASS wait window. Compared against EnvironmentEdgeManager.currentTimeMillis().
+  public static final String PENDING_PARTIAL_PASS_UNTIL_TS = "PENDING_PARTIAL_PASS_UNTIL_TS";
   public static final String TRANSFORM_TABLE_TTL = "7776000"; // 90 days
 
   public static final int TTL_FOR_MUTEX = 15 * 60; // 15min

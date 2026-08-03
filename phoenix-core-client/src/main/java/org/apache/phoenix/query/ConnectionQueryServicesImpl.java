@@ -5301,8 +5301,18 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     Map<String, String> systemTableToSnapshotMap) throws SQLException {
     try (Statement statement = metaConnection.createStatement()) {
       statement.executeUpdate(getTransformDDL());
-    } catch (TableAlreadyExistsException ignored) {
-
+    } catch (NewerTableAlreadyExistsException ignored) {
+    } catch (TableAlreadyExistsException e) {
+      // This is the first-ever column add to SYSTEM.TRANSFORM, so take a snapshot before altering.
+      takeSnapshotOfSysTable(systemTableToSnapshotMap, e);
+      long currentServerSideTableTimeStamp = e.getTable().getTimeStamp();
+      if (currentServerSideTableTimeStamp < MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0) {
+        metaConnection =
+          addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_TRANSFORM_NAME,
+            MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0,
+            PhoenixDatabaseMetaData.PENDING_PARTIAL_PASS_UNTIL_TS + " "
+              + PLong.INSTANCE.getSqlTypeName());
+      }
     }
     return metaConnection;
   }

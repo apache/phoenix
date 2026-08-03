@@ -131,6 +131,59 @@ public class Transform extends TransformClient {
   }
 
   /**
+   * Tears down the base-table TRANSFORMING_NEW_TABLE link that drives dual-write to the new
+   * physical table, mirroring the base-table link installed in TransformClient.addTransform. The
+   * DELETE is left uncommitted so the caller can batch it with the base-table pointer swap into a
+   * single commit, letting one client cache-invalidation cycle propagate both the pointer swap and
+   * the dual-write shutoff for the base table.
+   * <p>
+   * Child-view links are torn down separately by the caller ({@link #doCutover}), one per view,
+   * folded into the same {@code MUTATE_BATCH_SIZE}-bounded loop that swaps the view rows. A base
+   * table can have millions of views, so deleting every view link into a single commit would build
+   * an unbounded mutation set (risking client-side OOM and an oversized commit); batching per view
+   * keeps each commit bounded while still pairing each view's link teardown with its own swap in
+   * one cache-invalidation cycle. Currently invoked only by doCutover.
+   */
+  public static void disableDualWrite(PhoenixConnection connection,
+    SystemTransformRecord systemTransformRecord) throws SQLException {
+    String tenantId = systemTransformRecord.getTenantId();
+    String schema = systemTransformRecord.getSchemaName();
+    String tableName = systemTransformRecord.getLogicalTableName();
+    // The link row uses the full new physical table name as its COLUMN_FAMILY, matching the value
+    // bound when the link was installed.
+    String newPhysicalName = systemTransformRecord.getNewPhysicalTableName();
+    deleteTransformingNewTableLink(connection, tenantId, schema, tableName, newPhysicalName);
+  }
+
+  /**
+   * Deletes a single TRANSFORMING_NEW_TABLE link row. The DELETE is left uncommitted so the caller
+   * can batch it with related mutations. The COLUMN_FAMILY match uses the full new physical table
+   * name, matching the value bound when the link was installed in TransformClient.addTransform.
+   * NULL tenant/schema are matched with IS NULL to mirror the install's NULL handling.
+   */
+  private static void deleteTransformingNewTableLink(PhoenixConnection connection, String tenantId,
+    String schema, String tableName, String newPhysicalName) throws SQLException {
+    String deleteLink = "DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME + " WHERE "
+      + PhoenixDatabaseMetaData.TENANT_ID + (tenantId == null ? " IS NULL" : " = ?") + " AND "
+      + PhoenixDatabaseMetaData.TABLE_SCHEM + (schema == null ? " IS NULL" : " = ?") + " AND "
+      + PhoenixDatabaseMetaData.TABLE_NAME + " = ? AND " + PhoenixDatabaseMetaData.COLUMN_FAMILY
+      + " = ? AND " + PhoenixDatabaseMetaData.LINK_TYPE + " = ?";
+    try (PreparedStatement stmt = connection.prepareStatement(deleteLink)) {
+      int param = 0;
+      if (tenantId != null) {
+        stmt.setString(++param, tenantId);
+      }
+      if (schema != null) {
+        stmt.setString(++param, schema);
+      }
+      stmt.setString(++param, tableName);
+      stmt.setString(++param, newPhysicalName);
+      stmt.setByte(++param, PTable.LinkType.TRANSFORMING_NEW_TABLE.getSerializedValue());
+      stmt.execute();
+    }
+  }
+
+  /**
    * Disable caching re-design if you use Online Data Format Change since the cutover logic is
    * currently incompatible and clients may not learn about the physical table change. See
    * https://issues.apache.org/jira/browse/PHOENIX-6883 and
@@ -211,6 +264,13 @@ public class Transform extends TransformClient {
             columnMap);
         }
       }
+      // Tear down the base-table dual-write link in the same commit as the base-table pointer swap
+      // so a single client cache-invalidation cycle propagates both the physical table pointer
+      // change and the dual-write shutoff. Per-view link teardown is folded into the batched view
+      // loop below (a base table can have millions of views, so deleting every view link here would
+      // build an unbounded commit).
+      String newPhysicalName = systemTransformRecord.getNewPhysicalTableName();
+      disableDualWrite(connection.unwrap(PhoenixConnection.class), systemTransformRecord);
       connection.commit();
 
       // We can have millions of views. We need to send it in batches
@@ -240,6 +300,19 @@ public class Transform extends TransformClient {
           }
           stmt.execute();
         }
+        // Tear down this view's TRANSFORMING_NEW_TABLE link in the same batch as its pointer swap.
+        // addTransform installs a link on every child-view row; doGetTable attaches the
+        // transforming
+        // new table per-row from link presence (not gated by isActive), so a surviving view link
+        // would keep dual-write alive for view-routed writes after cutover.
+        String viewTenantId = view.getTenantId() == null || view.getTenantId().length == 0
+          ? null
+          : Bytes.toString(view.getTenantId());
+        String viewSchema = view.getSchemaName() == null || view.getSchemaName().length == 0
+          ? null
+          : Bytes.toString(view.getSchemaName());
+        deleteTransformingNewTableLink(connection.unwrap(PhoenixConnection.class), viewTenantId,
+          viewSchema, Bytes.toString(view.getTableName()), newPhysicalName);
         viewsToUpdateCache.add(view);
         batchSize++;
         if (batchSize >= maxBatchSize) {
@@ -358,10 +431,18 @@ public class Transform extends TransformClient {
 
   public static void updateTransformRecord(PhoenixConnection connection,
     SystemTransformRecord transformRecord, PTable.TransformStatus newStatus) throws SQLException {
+    updateTransformRecord(connection, transformRecord, newStatus,
+      transformRecord.getPendingPartialPassUntilTs());
+  }
+
+  public static void updateTransformRecord(PhoenixConnection connection,
+    SystemTransformRecord transformRecord, PTable.TransformStatus newStatus,
+    Long pendingPartialPassUntilTs) throws SQLException {
     SystemTransformRecord.SystemTransformBuilder builder =
       new SystemTransformRecord.SystemTransformBuilder(transformRecord);
     builder.setTransformStatus(newStatus.name());
     builder.setLastStateTs(new Timestamp(EnvironmentEdgeManager.currentTimeMillis()));
+    builder.setPendingPartialPassUntilTs(pendingPartialPassUntilTs);
     if (newStatus == PTable.TransformStatus.STARTED) {
       builder.setTransformRetryCount(transformRecord.getTransformRetryCount() + 1);
     }

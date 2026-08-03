@@ -293,6 +293,32 @@ public class MetaDataUtilTest {
     assertEquals(expectedPhoenixVersion, phoenixVersion);
   }
 
+  /**
+   * The client's upgrade gate throws UpgradeRequiredException whenever the server's SYSTEM.CATALOG
+   * timestamp is below {@link MetaDataProtocol#MIN_SYSTEM_TABLE_TIMESTAMP}, and the server reports
+   * that timestamp as SYSTEM.CATALOG's own header timestamp (see MetaDataEndpointImpl#getVersion).
+   * SYSTEM.CATALOG's header only advances to a given timestamp when a genuinely new column is added
+   * to SYSTEM.CATALOG at that timestamp during upgrade. The last such column-add in
+   * ConnectionQueryServicesImpl#upgradeSystemCatalogIfRequired lands at
+   * {@link MetaDataProtocol#MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0}. If the gate threshold is bumped past
+   * that (for instance to accommodate a column added only to a non-CATALOG system table), a real
+   * in-place upgrade would leave SYSTEM.CATALOG below the threshold and every client would throw
+   * UpgradeRequiredException forever. This invariant guards that: a new MIN timestamp must be
+   * accompanied by a SYSTEM.CATALOG column-add at that timestamp, and this constant updated to
+   * match.
+   */
+  @Test
+  public void testMinSystemTableTimestampIsSystemCatalogReachable() {
+    assertEquals(
+      "MIN_SYSTEM_TABLE_TIMESTAMP must equal the highest timestamp at which a SYSTEM.CATALOG column"
+        + " is added during upgrade; otherwise clients throw UpgradeRequiredException perpetually"
+        + " after an in-place upgrade. If you bump the min system-table timestamp, add a"
+        + " SYSTEM.CATALOG column-add at the new timestamp in upgradeSystemCatalogIfRequired and"
+        + " update this assertion.",
+      MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0,
+      MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP);
+  }
+
   private Put generateOriginalPut() {
     String version = VersionInfo.getVersion();
     KeyValueBuilder builder = KeyValueBuilder.get(version);
