@@ -423,9 +423,16 @@ public class HighAvailabilityTestingUtility {
      * Update HAGroup's clusterRoleRecord info to new roles (Update HAGroupStoreRecord and SYSTEM
      * Tables) and then do the refresh of the clusterRoleRecord in HAGroup based on the param
      * provided.
+     * <p>
+     * Pass the role each cluster SETTLES at, not a transient pre-advance role: local
+     * ACTIVE_TO_STANDBY drives the peer's listener to advance a STANDBY peer to STANDBY_TO_ACTIVE,
+     * so naming the pre-advance role makes the equality wait race the autonomous transition. Naming
+     * the settled role makes that target a fixed point the peer will not advance past, so the
+     * equality wait converges deterministically within the settle window rather than racing the
+     * listener.
      * @param haGroup the HA group name
-     * @param role1   cluster role for the first cluster in the group
-     * @param role2   cluster role for the second cluster in the group
+     * @param role1   settled cluster role for the first cluster in the group
+     * @param role2   settled cluster role for the second cluster in the group
      */
     public void transitClusterRole(HighAvailabilityGroup haGroup, ClusterRole role1,
       ClusterRole role2, boolean doRefreshHAGroup, HighAvailabilityPolicy policy) throws Exception {
@@ -487,6 +494,9 @@ public class HighAvailabilityTestingUtility {
 
     public void transitClusterRoleWithCluster1Down(HighAvailabilityGroup haGroup, ClusterRole role1,
       ClusterRole role2) throws Exception {
+      // Immune to the peer-advance race: the down cluster is client-invalidated (role
+      // UNKNOWN), so no live peer listener can advance the survivor past the expected
+      // record; no settled-role naming needed.
       String haGroupName = haGroup.getGroupInfo().getName();
       final Pair<HAGroupStoreRecord, Stat> currentRecord2 =
         haAdmin2.getHAGroupStoreRecordInZooKeeper(haGroupName);
@@ -519,6 +529,9 @@ public class HighAvailabilityTestingUtility {
 
     public void transitClusterRoleWithCluster2Down(HighAvailabilityGroup haGroup, ClusterRole role1,
       ClusterRole role2) throws Exception {
+      // Immune to the peer-advance race: the down cluster is client-invalidated (role
+      // UNKNOWN), so no live peer listener can advance the survivor past the expected
+      // record; no settled-role naming needed.
       String haGroupName = haGroup.getGroupInfo().getName();
       final Pair<HAGroupStoreRecord, Stat> currentRecord1 =
         haAdmin1.getHAGroupStoreRecordInZooKeeper(haGroupName);
@@ -550,6 +563,9 @@ public class HighAvailabilityTestingUtility {
 
     public void refreshClusterRoleRecordAfterClusterRestart(HighAvailabilityGroup haGroup,
       ClusterRole role1, ClusterRole role2, int clusterIndex) throws Exception {
+      // Both clusters live, so this shares transitClusterRole's peer-advance exposure: a
+      // transitional role pair must name the SETTLED peer role. Current callers pass steady
+      // pairs, so they are safe.
       String haGroupName = haGroup.getGroupInfo().getName();
       // TODO:- Inducing version change, but how would we know that a URL is changed
       // as we don't store url in ZNodes so it doesn't increase version for that change

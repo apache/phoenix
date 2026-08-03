@@ -133,7 +133,10 @@ public class HAGroupMetricsIT extends HABaseIT {
     try (Connection conn = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties)) {
       conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (2, 2)");
       conn.commit();
-      CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY);
+      // role2 = the SETTLED peer role: local ACTIVE_TO_STANDBY drives the peer
+      // STANDBY -> STANDBY_TO_ACTIVE, so the waitFor must expect the settled state.
+      CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY,
+        ClusterRole.STANDBY_TO_ACTIVE);
       // doRefreshHAGroup=false: keep haGroup's CRR snapshot stale on purpose so that
       // the next mutation drives StaleClusterRoleRecordException through wrapActionDuringFailover,
       // exercising the GLOBAL_HA_STALE_CRR_DETECTED_COUNT increment path.
@@ -250,7 +253,10 @@ public class HAGroupMetricsIT extends HABaseIT {
     long beforeTicks = GLOBAL_HA_POLLER_TICK_COUNT.getMetric().getValue();
     long beforeFailures = GLOBAL_HA_POLLER_TICK_FAILURES.getMetric().getValue();
 
-    CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY, ClusterRole.STANDBY);
+    // role2 = the SETTLED peer role: local ACTIVE_TO_STANDBY drives the peer
+    // STANDBY -> STANDBY_TO_ACTIVE, so the waitFor must expect the settled state.
+    CLUSTERS.transitClusterRole(haGroup, ClusterRole.ACTIVE_TO_STANDBY,
+      ClusterRole.STANDBY_TO_ACTIVE);
     CLUSTERS.transitClusterRole(haGroup, ClusterRole.STANDBY, ClusterRole.STANDBY);
 
     // Allow at least 2 poller ticks at default interval to land.
