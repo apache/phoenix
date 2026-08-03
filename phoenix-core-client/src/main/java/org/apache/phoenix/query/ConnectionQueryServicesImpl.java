@@ -4801,22 +4801,22 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     }
     if (currentServerSideTableTimeStamp < MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0) {
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 9,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 10,
         PhoenixDatabaseMetaData.PHYSICAL_TABLE_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 8,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 9,
         PhoenixDatabaseMetaData.SCHEMA_VERSION + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 7,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 8,
         PhoenixDatabaseMetaData.EXTERNAL_SCHEMA_ID + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 6,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 7,
         PhoenixDatabaseMetaData.STREAMING_TOPIC_NAME + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 5,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 6,
         PhoenixDatabaseMetaData.INDEX_WHERE + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 4,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 5,
         PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE + " " + PVarchar.INSTANCE.getSqlTypeName());
 
       /**
@@ -4824,16 +4824,23 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
        * PHOENIX_TTL Column. See PHOENIX-7023
        */
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 3,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 4,
         PhoenixDatabaseMetaData.TTL + " " + PVarchar.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 2,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 3,
         PhoenixDatabaseMetaData.ROW_KEY_MATCHER + " " + PVarbinary.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 1,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 2,
         PhoenixDatabaseMetaData.IS_STRICT_TTL + " " + PBoolean.INSTANCE.getSqlTypeName());
       metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
-        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0, PhoenixDatabaseMetaData.INDEX_CONSISTENCY + " CHAR(1)");
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 - 1,
+        PhoenixDatabaseMetaData.INDEX_CONSISTENCY + " CHAR(1)");
+      // No-op catalog schema-version anchor: advances the SYSTEM.CATALOG header timestamp to the
+      // new MIN so in-place SNAPSHOT clusters re-enter the upgrade path and pick up the new
+      // SYSTEM.TRANSFORM columns. Never populated or read.
+      metaConnection = addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_CATALOG,
+        MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0,
+        PhoenixDatabaseMetaData.UPGRADE_TS_ANCHOR_5_4_0 + " CHAR(1)");
 
       // move TTL values stored in descriptor to SYSCAT TTL column.
       moveTTLFromHBaseLevelTTLToPhoenixLevelTTL(metaConnection);
@@ -5301,8 +5308,20 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     Map<String, String> systemTableToSnapshotMap) throws SQLException {
     try (Statement statement = metaConnection.createStatement()) {
       statement.executeUpdate(getTransformDDL());
-    } catch (TableAlreadyExistsException ignored) {
-
+    } catch (NewerTableAlreadyExistsException ignored) {
+    } catch (TableAlreadyExistsException e) {
+      // This is the first-ever column add to SYSTEM.TRANSFORM, so take a snapshot before altering.
+      takeSnapshotOfSysTable(systemTableToSnapshotMap, e);
+      // addColumnsIfNotExists is idempotent, so call it unconditionally rather than gating on the
+      // table timestamp. A gate keyed on MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 is unreachable on
+      // SNAPSHOT clusters whose SYSTEM.TRANSFORM header already reached that timestamp without the
+      // columns, and would strand transform reads on a missing-column error.
+      metaConnection =
+        addColumnsIfNotExists(metaConnection, PhoenixDatabaseMetaData.SYSTEM_TRANSFORM_NAME,
+          MetaDataProtocol.MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0,
+          PhoenixDatabaseMetaData.PENDING_PARTIAL_PASS_UNTIL_TS + " "
+            + PLong.INSTANCE.getSqlTypeName() + ", " + PhoenixDatabaseMetaData.CUTOVER_TS + " "
+            + PLong.INSTANCE.getSqlTypeName());
     }
     return metaConnection;
   }
