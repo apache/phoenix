@@ -99,6 +99,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_END_TIME
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_START_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_START_TIME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PENDING_PARTIAL_PASS_UNTIL_TS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
@@ -566,10 +567,10 @@ public interface QueryConstants {
       TRANSFORM_STATUS + " VARCHAR NULL," + TRANSFORM_JOB_ID + " VARCHAR NULL,"
       + TRANSFORM_RETRY_COUNT + " INTEGER NULL," + TRANSFORM_START_TS + " TIMESTAMP NULL,"
       + TRANSFORM_LAST_STATE_TS + " TIMESTAMP NULL," + OLD_METADATA + " VARBINARY NULL,\n"
-      + NEW_METADATA + " VARCHAR NULL,\n" + TRANSFORM_FUNCTION + " VARCHAR NULL\n" + "CONSTRAINT "
-      + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + TABLE_SCHEM + ","
-      + LOGICAL_TABLE_NAME + "))\n" + HConstants.VERSIONS + "=%s,\n"
-      + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n"
+      + NEW_METADATA + " VARCHAR NULL,\n" + TRANSFORM_FUNCTION + " VARCHAR NULL,\n"
+      + PENDING_PARTIAL_PASS_UNTIL_TS + " BIGINT NULL\n" + "CONSTRAINT " + SYSTEM_TABLE_PK_NAME
+      + " PRIMARY KEY (" + TENANT_ID + "," + TABLE_SCHEM + "," + LOGICAL_TABLE_NAME + "))\n"
+      + HConstants.VERSIONS + "=%s,\n" + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n"
       + ColumnFamilyDescriptorBuilder.TTL + "=" + TRANSFORM_TABLE_TTL + ",\n" + // 90 days
       TableDescriptorBuilder.SPLIT_POLICY + "='" + SYSTEM_TASK_SPLIT_POLICY_CLASSNAME + "',\n"
       + TRANSACTIONAL + "=" + Boolean.FALSE + ",\n" + STORE_NULLS + "=" + Boolean.TRUE;
