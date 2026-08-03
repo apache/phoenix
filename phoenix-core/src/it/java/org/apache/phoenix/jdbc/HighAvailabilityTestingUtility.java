@@ -426,7 +426,10 @@ public class HighAvailabilityTestingUtility {
      * <p>
      * Pass the role each cluster SETTLES at, not a transient pre-advance role: local
      * ACTIVE_TO_STANDBY drives the peer's listener to advance a STANDBY peer to STANDBY_TO_ACTIVE,
-     * so naming the pre-advance role makes the equality wait race the autonomous transition.
+     * so naming the pre-advance role makes the equality wait race the autonomous transition. Naming
+     * the settled role makes that target a fixed point the peer will not advance past, so the
+     * equality wait converges deterministically within the settle window rather than racing the
+     * listener.
      * @param haGroup the HA group name
      * @param role1   settled cluster role for the first cluster in the group
      * @param role2   settled cluster role for the second cluster in the group
