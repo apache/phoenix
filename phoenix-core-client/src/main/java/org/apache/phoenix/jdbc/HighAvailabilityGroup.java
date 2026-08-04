@@ -979,16 +979,10 @@ public class HighAvailabilityGroup {
   }
 
   /**
-   * Method to get ClusterRoleRecord from RegionServer Endpoints of both clusters.
-   * <p>
-   * CRR version propagation across the RegionServers of the two clusters is not synchronized, so at
-   * startup or during an in-flight admin/failover transition one endpoint can momentarily serve a
-   * lower admin version (or an UNKNOWN role) than its peer. To avoid the client adopting a staler
-   * or less usable record than one a peer already advertises, this always fetches the CRR from
-   * <em>both</em> endpoints and reconciles them via {@link #reconcileClusterRoleRecords}. If the
-   * peer (cluster 2) endpoint is unreachable, cluster 1's record is used as-is. The reconciliation
-   * subsumes the previous UNKNOWN-only handling. CRR is fetched only on connect/refresh (and cached
-   * in {@link #roleRecord}), not per query, so the extra endpoint RPC is not on a hot path.
+   * Fetches the CRR from both cluster endpoints and returns the more authoritative one (see
+   * {@link #reconcileClusterRoleRecords}). Consulting both avoids adopting a staler view when one
+   * endpoint momentarily lags its peer. If the peer (cluster 2) is unreachable, cluster 1's record
+   * is used as-is.
    * @return the reconciled ClusterRoleRecord
    * @throws SQLException if there is an error getting the ClusterRoleRecord
    */
@@ -1001,10 +995,7 @@ public class HighAvailabilityGroup {
       // Get the CRR via RSEndpoint for cluster 1
       ClusterRoleRecord roleRecord = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
         info.getUrl2(), info.getUrl1(), info.getName(), this, pollerInterval, properties);
-      // Always consult cluster 2 as well and keep the more authoritative record (see method
-      // javadoc): a non-UNKNOWN record is preferred over an UNKNOWN one, and among records in the
-      // same category the higher admin version wins. If cluster 2 is unreachable, fall back to the
-      // cluster 1 record we already have and consume the exception.
+      // Reconcile with cluster 2; if it is unreachable, keep cluster 1's record.
       ClusterRoleRecord roleRecordFromPR;
       try {
         roleRecordFromPR = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
@@ -1106,13 +1097,7 @@ public class HighAvailabilityGroup {
         return true;
       }
 
-      // Do not roll back to a lower-version record. CRR propagation across a cluster's
-      // RegionServers is eventually consistent, so a lagging endpoint can momentarily serve an
-      // older admin version than the one already applied on this client. Since the endpoint is
-      // picked at (effectively) random on each fetch, adopting such a record would revert the
-      // client to a stale cluster-role view. The apply-or-reject decision is factored into the
-      // package-private static {@link #shouldApplyRefreshedRecord} so it can be unit-tested
-      // directly without driving a full mini-cluster refresh.
+      // A lagging endpoint can serve an older admin version; do not roll back to it.
       if (!shouldApplyRefreshedRecord(roleRecord, newRoleRecord)) {
         LOG.warn(
           "Fetched role record {} is older (V{}) than the current record (V{}) for HA group {};"
@@ -1258,26 +1243,11 @@ public class HighAvailabilityGroup {
   }
 
   /**
-   * Reconcile the two ClusterRoleRecords fetched from the cluster 1 and cluster 2 RegionServer
-   * endpoints and return the more authoritative one. CRR version propagation across RegionServers
-   * is not synchronized, so the two endpoints may disagree during startup or an in-flight
-   * transition; picking the more authoritative record prevents the client from adopting a staler or
-   * less usable view than one a peer already advertises. The order of preference is:
-   * <ol>
-   * <li>A record without an UNKNOWN role beats a record with an UNKNOWN role. An UNKNOWN role means
-   * that endpoint could not resolve the cluster roles (e.g. a ZooKeeper problem) and is not usable
-   * for routing, so it must never win merely on version.</li>
-   * <li>Among records in the same UNKNOWN category, the higher admin {@code version} wins (the
-   * admin version only advances on an operator-driven CRR change, so higher is strictly
-   * fresher).</li>
-   * <li>On a tie (same category and version) the peer ({@code recordFromCluster2}) record is
-   * returned; both are equivalent for routing so the choice is arbitrary.</li>
-   * </ol>
-   * This subsumes the previous UNKNOWN-only handling and is a strict superset of it: when cluster 1
-   * is non-UNKNOWN and equal-or-newer it is still returned, and the UNKNOWN/UNKNOWN case still
-   * resolves to the higher version. Pure function of its inputs (no global state, no clock) so it
-   * is straightforward to unit-test. Package-private rather than private so
-   * {@code HighAvailabilityGroupTest} can call it directly. Neither argument may be {@code null}.
+   * Returns the more authoritative of the two records fetched from the cluster 1 and cluster 2
+   * endpoints. Preference: a non-UNKNOWN record beats an UNKNOWN one (an UNKNOWN role can't resolve
+   * cluster roles and isn't usable for routing, so it never wins on version alone); otherwise the
+   * higher admin {@code version} wins; a tie returns the peer ({@code recordFromCluster2}).
+   * Package-private for direct unit testing. Neither argument may be {@code null}.
    * @param recordFromCluster1 CRR fetched from the cluster 1 endpoint ({@code info.getUrl1()})
    * @param recordFromCluster2 CRR fetched from the cluster 2 endpoint ({@code info.getUrl2()})
    * @return the more authoritative of the two records
@@ -1295,25 +1265,12 @@ public class HighAvailabilityGroup {
   }
 
   /**
-   * Decides whether a freshly fetched {@link ClusterRoleRecord} should replace the currently
-   * applied one on the refresh path. Returns {@code false} only when the current record is strictly
-   * newer (higher admin {@code version}) than the fetched one, i.e. the fetch would roll the client
-   * back to a stale view. This guards against eventual-consistency lag: CRR propagation across a
-   * cluster's RegionServers is not synchronized, so a lagging endpoint (the client picks one at
-   * effectively random per fetch) can momentarily serve an older admin version than the client has
-   * already applied.
-   * <p>
-   * An <em>equal</em> version returns {@code true} (apply) by design. The admin {@code version}
-   * only advances on an operator-driven CRR change; an autonomous state-machine transition changes
-   * the cluster roles while keeping the same admin version, so a same-version record with different
-   * roles is a legitimate update that must still take effect. Only a strictly lower version is
-   * rejected — equivalently, this returns {@code !current.isNewerThan(fetched)}.
-   * <p>
-   * Callers guarantee {@code current} and {@code fetched} are non-null and share the same HA group
-   * info (checked upstream), and that they are not {@code equals()} (the no-op case is handled
-   * before this). Pure function of its inputs (no global state, no clock) so the guard is
-   * unit-testable without driving a full mini-cluster refresh. Package-private rather than private
-   * so {@code HighAvailabilityGroupTest} can call it directly.
+   * Whether a freshly fetched record should replace the applied one on the refresh path. Rejects
+   * only a strictly lower version (a rollback to a stale view from a lagging endpoint). An
+   * <em>equal</em> version is still applied by design: an autonomous transition changes roles while
+   * keeping the same admin version, so a same-version record with changed roles is a legitimate
+   * update. Equivalent to {@code !current.isNewerThan(fetched)}. Package-private for direct unit
+   * testing.
    * @param current the currently applied {@link ClusterRoleRecord} (must be non-null)
    * @param fetched the candidate record freshly fetched from the endpoints
    * @return {@code true} to apply {@code fetched}; {@code false} to keep {@code current}
