@@ -41,6 +41,7 @@ import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
+import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryCompiler;
 import org.apache.phoenix.compile.QueryPlan;
@@ -56,6 +57,7 @@ import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.PhoenixQueues;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -98,6 +100,7 @@ public class SortMergeJoinPlan implements QueryPlan {
    * {@link JoinType#Left}.
    */
   private final JoinType joinType;
+  private JoinCompiler.Strategy strategy = JoinCompiler.Strategy.SORT_MERGE;
   private final QueryPlan lhsPlan;
   private final QueryPlan rhsPlan;
   private final List<Expression> lhsKeyExpressions;
@@ -188,14 +191,15 @@ public class SortMergeJoinPlan implements QueryPlan {
   @Override
   public ExplainPlan getExplainPlan() throws SQLException {
     List<String> steps = Lists.newArrayList();
-    steps.add("SORT-MERGE-JOIN (" + joinType.toString().toUpperCase() + ") TABLES");
+    steps
+      .add("SORT-MERGE-JOIN (" + joinType.toString().toUpperCase() + ") TABLES  /* SORT_MERGE */");
+    // Carry the requested EXPLAIN options down to both join halves so every participating scan
+    // renders the same disclosures (e.g. VERBOSE predicate-origin attribution) as the driver scan.
+    lhsPlan.getContext().setExplainOptions(getContext().getExplainOptions());
+    rhsPlan.getContext().setExplainOptions(getContext().getExplainOptions());
     ExplainPlan lhsExplainPlan = lhsPlan.getExplainPlan();
     List<String> lhsPlanSteps = lhsExplainPlan.getPlanSteps();
     ExplainPlanAttributes lhsPlanAttributes = lhsExplainPlan.getPlanStepsAsAttributes();
-    ExplainPlanAttributesBuilder lhsPlanBuilder =
-      new ExplainPlanAttributesBuilder(lhsPlanAttributes);
-    lhsPlanBuilder
-      .setAbstractExplainPlan("SORT-MERGE-JOIN (" + joinType.toString().toUpperCase() + ")");
 
     for (String step : lhsPlanSteps) {
       steps.add("    " + step);
@@ -205,15 +209,24 @@ public class SortMergeJoinPlan implements QueryPlan {
     ExplainPlan rhsExplainPlan = rhsPlan.getExplainPlan();
     List<String> rhsPlanSteps = rhsExplainPlan.getPlanSteps();
     ExplainPlanAttributes rhsPlanAttributes = rhsExplainPlan.getPlanStepsAsAttributes();
-    ExplainPlanAttributesBuilder rhsPlanBuilder =
-      new ExplainPlanAttributesBuilder(rhsPlanAttributes);
-
-    lhsPlanBuilder.setRhsJoinQueryExplainPlan(rhsPlanBuilder.build());
 
     for (String step : rhsPlanSteps) {
       steps.add("    " + step);
     }
-    return new ExplainPlan(steps, lhsPlanBuilder.build());
+
+    // Build a synthetic root that holds the join operator and its two operands as separate
+    // child plans so nested sort-merge-joins can be represented.
+    ExplainPlanAttributesBuilder rootBuilder = new ExplainPlanAttributesBuilder();
+    rootBuilder
+      .setAbstractExplainPlan("SORT-MERGE-JOIN (" + joinType.toString().toUpperCase() + ")");
+    rootBuilder.setSortMergeSkipMerge(rhsSchema.getFieldCount() == 0);
+    rootBuilder.setLhsJoinQueryExplainPlan(lhsPlanAttributes);
+    rootBuilder.setRhsJoinQueryExplainPlan(rhsPlanAttributes);
+    if (getContext().isRoot()) {
+      ExplainTable.populateTopOfPlanAttributes(rootBuilder, getContext(), getTableRef());
+      ExplainTable.populateTopOfPlanEstimates(rootBuilder, this);
+    }
+    return new ExplainPlan(steps, rootBuilder.build());
   }
 
   @Override
@@ -300,6 +313,14 @@ public class SortMergeJoinPlan implements QueryPlan {
 
   public JoinType getJoinType() {
     return joinType;
+  }
+
+  public JoinCompiler.Strategy getStrategy() {
+    return strategy;
+  }
+
+  public void setStrategy(JoinCompiler.Strategy strategy) {
+    this.strategy = strategy;
   }
 
   private static SQLException closeIterators(ResultIterator lhsIterator,

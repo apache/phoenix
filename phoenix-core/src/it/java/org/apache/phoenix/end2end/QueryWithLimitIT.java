@@ -18,6 +18,7 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.query.QueryServicesOptions.UNLIMITED_QUEUE_SIZE;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -31,9 +32,6 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.Properties;
 import java.util.concurrent.RejectedExecutionException;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -91,15 +89,8 @@ public class QueryWithLimitIT extends BaseTest {
       assertEquals(0, rs.getInt(1));
       assertFalse(rs.next());
 
-      ExplainPlan plan = conn.prepareStatement(query).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("SERIAL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(tableName, explainPlanAttributes.getTableName());
-      assertEquals("SERVER FILTER BY FIRST KEY ONLY", explainPlanAttributes.getServerWhereFilter());
-      assertEquals(1, explainPlanAttributes.getServerRowLimit().intValue());
-      assertEquals(1, explainPlanAttributes.getClientRowLimit().intValue());
+      assertPlan(conn, query).iteratorType("SERIAL 1-WAY").scanType("FULL SCAN").table(tableName)
+        .serverFirstKeyOnlyProjection(true).serverRowLimit(1L).clientRowLimit(1);
     } finally {
       conn.close();
     }
