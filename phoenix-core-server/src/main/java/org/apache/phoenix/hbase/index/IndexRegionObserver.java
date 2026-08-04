@@ -141,7 +141,6 @@ import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MutationUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
-import org.apache.phoenix.util.ScanUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ServerIndexUtil;
 import org.apache.phoenix.util.ServerUtil.ConnectionType;
@@ -394,6 +393,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // attribute these are left on the mutations (they are inert on the write path).
     private byte[] emptyCFForInternalScan;
     private byte[] emptyCQForInternalScan;
+    // Whether the table/view uses strict TTL, captured (via isStrictTTLEnabled) alongside the other
+    // internal-scan attributes so getCurrentRowStates masks exactly like a client read: a
+    // non-strict
+    // table is never masked. Defaults to strict, matching isStrictTTLEnabled's default.
+    private boolean isStrictTTLForInternalScan = PTable.DEFAULT_IS_STRICT_TTL;
 
     public BatchMutateContext() {
       this.clientVersion = 0;
@@ -1182,17 +1186,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * logically-expired-but-physically-present cells. The empty-column CF/CQ that enable masking are
    * the bytes the client threaded on the mutation
    * ({@link org.apache.phoenix.util.ScanUtil#annotateMutationWithLiteralTTL}) and captured into the
-   * batch context — the single source for every path that reaches here, index or no-index alike;
-   * {@code literalTTLForScan} carries a view's literal TTL (null for base tables, which use the
-   * CF-descriptor fallback), and {@code isStrictTTL} avoids over-masking a non-strict table.
-   * Masking is a strict no-op when Phoenix compaction is disabled. The internal scan is also given
-   * the client read path's server-paging setup (a {@code SERVER_PAGE_SIZE_MS} attribute and a
-   * {@code PagingFilter} wrap), so it is bounded by the server page budget just like a client scan;
-   * {@code readDataTableRows} skips the dummy results that paging can emit.
+   * batch context — the single source for every path that reaches here, index or no-index alike.
+   * Also captured into the context (see {@link #extractLiteralTTLForInternalScan}):
+   * {@code literalTTLForInternalScan} carries a view's literal TTL (null for base tables, which use
+   * the CF-descriptor fallback), and {@code isStrictTTLForInternalScan} avoids over-masking a
+   * non-strict table. Masking is a strict no-op when Phoenix compaction is disabled. Unlike a
+   * client read the scan is not paged: it is region-local (off the RPC path), so it holds no
+   * handler thread and there is nothing for paging to protect.
    */
   private void getCurrentRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
-    BatchMutateContext context, byte[] literalTTLForScan, boolean isStrictTTL, long batchTimestamp)
-    throws IOException {
+    BatchMutateContext context, long batchTimestamp) throws IOException {
     Set<KeyRange> keys = new HashSet<KeyRange>(context.rowsToLock.size());
     for (ImmutableBytesPtr rowKeyPtr : context.rowsToLock) {
       PendingRow pendingRow = new PendingRow(rowKeyPtr, context);
@@ -1243,6 +1246,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
     byte[] emptyCF = context.emptyCFForInternalScan;
     byte[] emptyCQ = context.emptyCQForInternalScan;
+    byte[] literalTTLForScan = context.literalTTLForInternalScan;
+    boolean isStrictTTL = context.isStrictTTLForInternalScan;
 
     if (this.useBloomFilter) {
       for (KeyRange key : keys) {
@@ -1260,8 +1265,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // read must see those cells to build a correct current-row state. The masking clock is then
         // batchTimestamp + 1, trimming expired cells as of the timestamp the index is built at.
         scan.setTimeRange(0, batchTimestamp + 1);
-        ServerScanUtil.setInternalScanAttributes(c.getEnvironment().getConfiguration(), scan,
-          emptyCF, emptyCQ, literalTTLForScan, isStrictTTL);
+        ServerScanUtil.setInternalScanAttributes(scan, emptyCF, emptyCQ, literalTTLForScan,
+          isStrictTTL);
         readDataTableRows(c, context, scan);
       }
     } else {
@@ -1278,8 +1283,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // read must see those cells to build a correct current-row state. The masking clock is then
       // batchTimestamp + 1, trimming expired cells as of the timestamp the index is built at.
       scan.setTimeRange(0, batchTimestamp + 1);
-      ServerScanUtil.setInternalScanAttributes(c.getEnvironment().getConfiguration(), scan, emptyCF,
-        emptyCQ, literalTTLForScan, isStrictTTL);
+      ServerScanUtil.setInternalScanAttributes(scan, emptyCF, emptyCQ, literalTTLForScan,
+        isStrictTTL);
       readDataTableRows(c, context, scan);
     }
   }
@@ -1296,13 +1301,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         List<Cell> cells = new ArrayList<Cell>();
         more = scanner.next(cells);
         if (cells.isEmpty()) {
-          continue;
-        }
-        // With server paging wired in (ServerScanUtil.setInternalScanAttributes),
-        // PagingRegionScanner
-        // returns a dummy result when a page is paged out; skip it and let the loop resume rather
-        // than build a Put from the dummy cell.
-        if (ScanUtil.isDummy(cells)) {
           continue;
         }
         byte[] rowKey = CellUtil.cloneRow(cells.get(0));
@@ -1759,6 +1757,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       representative.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
     context.literalTTLForInternalScan =
       representative.getAttribute(BaseScannerRegionObserverConstants.LITERAL_TTL);
+    context.isStrictTTLForInternalScan = isStrictTTLEnabled(miniBatchOp);
   }
 
   private void identifyMutationTypes(MiniBatchOperationInProgress<Mutation> miniBatchOp,
@@ -1967,8 +1966,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           || !context.immutableRows && context.hasUncoveredIndex
             && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp)
       ) {
-        getCurrentRowStates(c, context, context.literalTTLForInternalScan,
-          isStrictTTLEnabled(miniBatchOp), batchTimestamp);
+        getCurrentRowStates(c, context, batchTimestamp);
       }
       onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
     }

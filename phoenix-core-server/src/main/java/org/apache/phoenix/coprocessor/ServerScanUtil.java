@@ -18,19 +18,12 @@
 package org.apache.phoenix.coprocessor;
 
 import java.io.IOException;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
 import org.apache.hadoop.hbase.regionserver.Region;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
-import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
-import org.apache.phoenix.filter.PagingFilter;
-import org.apache.phoenix.query.QueryServices;
-import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PBoolean;
-import org.apache.phoenix.util.ScanUtil;
 
 /**
  * Utilities for internal server-side region scans that must honor Phoenix TTL exactly like a client
@@ -38,9 +31,14 @@ import org.apache.phoenix.util.ScanUtil;
  * ({@link org.apache.phoenix.util.ScanUtil#setScanAttributesForPhoenixTTL}) and the coprocessor
  * hook {@code BaseScannerRegionObserver.postScannerOpen} wraps the scan in a
  * {@link TTLRegionScanner}. Internal scans opened directly via {@code region.getScanner(scan)}
- * bypass that hook, so they set no attributes and are never TTL-masked. These helpers reproduce
- * both steps for server-side callers (e.g. {@code IndexRegionObserver} current-row reads) so an
- * internal scan masks identically to a client scan.
+ * bypass that hook, so they set no attributes and are never TTL-masked. These helpers reproduce the
+ * TTL-masking step for server-side callers (e.g. {@code IndexRegionObserver} current-row reads) so
+ * an internal scan masks identically to a client scan.
+ * <p>
+ * Note: server paging is intentionally <b>not</b> reproduced here. Paging exists to bound the work
+ * a single RPC handler thread does before yielding; these internal scans are region-local (opened
+ * directly on the {@link Region}, not through the RPC scan path), so they consume no handler thread
+ * and there is nothing for paging to protect.
  */
 public class ServerScanUtil {
 
@@ -48,8 +46,8 @@ public class ServerScanUtil {
   }
 
   /**
-   * Sets the Phoenix TTL and paging scan attributes on an internal data-table scan so it behaves
-   * exactly like a client read.
+   * Sets the Phoenix TTL scan attributes on an internal data-table scan so it masks exactly like a
+   * client read.
    * <p>
    * TTL masking attributes ({@link TTLRegionScanner} reads these):
    * <ul>
@@ -64,8 +62,8 @@ public class ServerScanUtil {
    * {@link TTLRegionScanner}'s CF-descriptor fallback derives it.</li>
    * </ul>
    */
-  public static void setInternalScanAttributes(Configuration conf, Scan scan, byte[] emptyCF,
-    byte[] emptyCQ, byte[] literalTTLForScan, boolean isStrictTTL) {
+  public static void setInternalScanAttributes(Scan scan, byte[] emptyCF, byte[] emptyCQ,
+    byte[] literalTTLForScan, boolean isStrictTTL) {
     scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME, emptyCF);
     scan.setAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME, emptyCQ);
     if (!isStrictTTL) {
@@ -78,57 +76,21 @@ public class ServerScanUtil {
       // Only views carry a literal TTL here; a base table relies on the CF-descriptor fallback.
       scan.setAttribute(BaseScannerRegionObserverConstants.TTL, literalTTLForScan);
     }
-    setInternalScanAttributesForPaging(conf, scan);
   }
 
   /**
-   * Reproduces the client read path's server-paging setup for an internal scan. On the client the
-   * {@code SERVER_PAGE_SIZE_MS} attribute is set by
-   * {@code ScanUtil.setScanAttributeForPaging(Scan, PhoenixConnection)} and the scan filter is
-   * later wrapped in a {@link PagingFilter} by {@code BaseScannerRegionObserver.preScannerOpen}.
-   * Internal scans opened directly via {@code region.getScanner(scan)} bypass both, so this method
-   * performs both steps up-front. The region-server {@link Configuration} is the source of the
-   * paging props here, standing in for the client's {@code PhoenixConnection} props.
+   * Opens a region scanner wrapped in a {@link TTLRegionScanner} exactly as
+   * {@code BaseScannerRegionObserver.postScannerOpen} wraps a client scan, so TTL masking is
+   * applied. This is always safe: {@link TTLRegionScanner#isMaskingEnabled} no-ops the masking when
+   * Phoenix compaction is disabled, the empty-column attributes are absent, the TTL is FOREVER, or
+   * the scan is non-strict — so wrapping a non-TTL scan changes no behavior.
    * <p>
-   * Ordering matters: {@code PagingRegionScanner}'s constructor reads the {@link PagingFilter} and
-   * the page size off the scan, so this must run before
-   * {@link #openRegionScanner(RegionCoprocessorEnvironment, Region, Scan)} builds the scanner.
-   */
-  public static void setInternalScanAttributesForPaging(Configuration conf, Scan scan) {
-    if (
-      !conf.getBoolean(QueryServices.PHOENIX_SERVER_PAGING_ENABLED_ATTRIB,
-        QueryServicesOptions.DEFAULT_PHOENIX_SERVER_PAGING_ENABLED)
-    ) {
-      return;
-    }
-    long pageSizeMs = conf.getInt(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, -1);
-    if (pageSizeMs == -1) {
-      // Use half of the HBase RPC timeout value as the server page size, mirroring the client
-      // ScanUtil.setScanAttributeForPaging fallback.
-      pageSizeMs =
-        (long) (conf.getLong(HConstants.HBASE_RPC_TIMEOUT_KEY, HConstants.DEFAULT_HBASE_RPC_TIMEOUT)
-          * 0.5);
-    }
-    scan.setAttribute(BaseScannerRegionObserverConstants.SERVER_PAGE_SIZE_MS,
-      Bytes.toBytes(Long.valueOf(pageSizeMs)));
-    // Wrap the scan filter in a PagingFilter as the top-level filter, matching
-    // BaseScannerRegionObserver.preScannerOpen. PagingRegionScanner then detects when PagingFilter
-    // has paged the scan out and returns a dummy result; readDataTableRows skips those dummies.
-    if (!(scan.getFilter() instanceof PagingFilter)) {
-      scan.setFilter(new PagingFilter(scan.getFilter(), ScanUtil.getPageSizeMsForFilter(scan)));
-    }
-  }
-
-  /**
-   * Opens a region scanner wrapped exactly as {@code BaseScannerRegionObserver.postScannerOpen}
-   * wraps a client scan, so TTL masking is applied. This is always safe:
-   * {@link TTLRegionScanner#isMaskingEnabled} no-ops the masking when Phoenix compaction is
-   * disabled, the empty-column attributes are absent, the TTL is FOREVER, or the scan is non-strict
-   * — so wrapping a non-TTL scan changes no behavior.
+   * Unlike the client read path this does not wrap in a {@code PagingRegionScanner}: the scan is
+   * region-local (opened directly on the {@link Region}, off the RPC path), so it holds no handler
+   * thread and has nothing for paging to protect.
    */
   public static RegionScanner openRegionScanner(RegionCoprocessorEnvironment env, Region region,
     Scan scan) throws IOException {
-    return new TTLRegionScanner(env, scan,
-      new PagingRegionScanner(region, region.getScanner(scan), scan));
+    return new TTLRegionScanner(env, scan, region.getScanner(scan));
   }
 }
