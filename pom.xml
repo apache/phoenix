@@ -1636,6 +1636,7 @@
               </goals>
               <configuration>
                 <reuseForks>false</reuseForks>
+                <forkedProcessTimeoutInSeconds>1800</forkedProcessTimeoutInSeconds>
                 <skip>${skipNeedsOwnMiniClusterTests}</skip>
                 <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
               </configuration>
@@ -1868,6 +1869,8 @@
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+          <forkedProcessTimeoutInSeconds>1800</forkedProcessTimeoutInSeconds>
+          <forkedProcessExitTimeoutInSeconds>180</forkedProcessExitTimeoutInSeconds>
           <shutdown>exit</shutdown>
           <trimStackTrace>false</trimStackTrace>
           <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
