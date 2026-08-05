@@ -1685,7 +1685,12 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   }
 
   public Delete buildRowDeleteMutation(byte[] indexRowKey, DeleteType deleteType, long ts) {
-    byte[] emptyCF = emptyKeyValueCFPtr.copyBytesIfNecessary();
+    // Use the accessors rather than the fields directly. TransformMaintainer shadows
+    // emptyKeyValueCFPtr and coveredColumnsMap with its own fields and overrides
+    // getEmptyKeyValueFamily()/getCoveredColumnsMap(), so reading the fields here would
+    // dereference the never initialized IndexMaintainer copies and NPE.
+    byte[] emptyCF = getEmptyKeyValueFamily().copyBytesIfNecessary();
+    Map<ColumnReference, ColumnReference> coveredColumnsMap = getCoveredColumnsMap();
     Delete delete = new Delete(indexRowKey);
 
     for (ColumnReference ref : getCoveredColumns()) {
@@ -1737,6 +1742,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       return buildRowDeleteMutation(indexRowKey, deleteType, ts);
     }
     Delete delete = null;
+    Map<ColumnReference, ColumnReference> coveredColumnsMap = getCoveredColumnsMap();
     Set<ColumnReference> dataTableColRefs = coveredColumnsMap.keySet();
     // Delete columns for missing key values
     for (Cell kv : pendingUpdates) {
@@ -1768,6 +1774,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
   public Set<ColumnReference> getCoveredColumns() {
     return coveredColumnsMap.keySet();
+  }
+
+  /**
+   * Returns the map from data table column references to their counterparts in the maintained
+   * table. TransformMaintainer shadows {@link #coveredColumnsMap} with its own field, so callers in
+   * code paths shared with TransformMaintainer must use this accessor rather than reading the field
+   * directly to avoid dereferencing the uninitialized copy.
+   */
+  protected Map<ColumnReference, ColumnReference> getCoveredColumnsMap() {
+    return coveredColumnsMap;
   }
 
   public Set<ColumnReference> getAllColumns() {

@@ -4923,9 +4923,9 @@ public class MetaDataClient {
           /**
            * To check if TTL is defined at any of the child below we are checking it at
            * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#mutateColumn(List, ColumnMutator, int, PTable, PTable, boolean)}
-           * level where in function
-           * {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl# validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[], byte[], List, int)}
-           * we are already traversing through allDescendantViews.
+           * level where in function {@link org.apache.phoenix.coprocessor.MetaDataEndpointImpl#
+           * validateIfMutationAllowedOnParent(PTable, List, PTableType, long, byte[], byte[],
+           * byte[], List, int)} we are already traversing through allDescendantViews.
            */
         }
 
@@ -4946,6 +4946,22 @@ public class MetaDataClient {
           if (table.isTransactional()) {
             throw new SQLExceptionInfo.Builder(CANNOT_TRANSFORM_TRANSACTIONAL_TABLE)
               .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+          }
+          // SINGLE_CELL_ARRAY_WITH_OFFSETS is only valid for immutable tables. Rather than
+          // silently downgrading the requested storage scheme to ONE_CELL_PER_COLUMN, reject the
+          // transform unless the table is already immutable or is being made immutable in this
+          // same ALTER TABLE statement.
+          boolean willBeImmutableForScheme =
+            Boolean.TRUE.equals(metaPropertiesEvaluated.getIsImmutableRows())
+              || (metaPropertiesEvaluated.getIsImmutableRows() == null && table.isImmutableRows());
+          if (
+            table.getType() == TABLE
+              && metaProperties.getImmutableStorageSchemeProp() == SINGLE_CELL_ARRAY_WITH_OFFSETS
+              && !willBeImmutableForScheme
+          ) {
+            throw new SQLExceptionInfo.Builder(
+              SQLExceptionCode.CANNOT_TRANSFORM_MUTABLE_TABLE_TO_SCAWO).setSchemaName(schemaName)
+                .setTableName(tableName).build().buildException();
           }
         }
 
