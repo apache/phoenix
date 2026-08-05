@@ -85,12 +85,39 @@ public class ServerScanUtil {
    * Phoenix compaction is disabled, the empty-column attributes are absent, the TTL is FOREVER, or
    * the scan is non-strict — so wrapping a non-TTL scan changes no behavior.
    * <p>
-   * Unlike the client read path this does not wrap in a {@code PagingRegionScanner}: the scan is
-   * region-local (opened directly on the {@link Region}, off the RPC path), so it holds no handler
-   * thread and has nothing for paging to protect.
+   * The raw HBase {@link RegionScanner} is wrapped in a {@link NonPagingRegionScanner} rather than
+   * passed to {@link TTLRegionScanner} directly: {@link TTLRegionScanner} requires its delegate to
+   * be a {@link DelegateRegionScanner} — its gap-analysis and re-scan paths cast the delegate and
+   * call {@code getNewRegionScanner} — so a raw HBase scanner would fail those casts. On the client
+   * read path {@code PagingRegionScanner} fills this role; here we use a non-paging equivalent
+   * because the scan is region-local (opened directly on the {@link Region}, off the RPC path), so
+   * it holds no handler thread and has nothing for paging to protect.
    */
   public static RegionScanner openRegionScanner(RegionCoprocessorEnvironment env, Region region,
     Scan scan) throws IOException {
-    return new TTLRegionScanner(env, scan, region.getScanner(scan));
+    return new TTLRegionScanner(env, scan,
+      new NonPagingRegionScanner(region, region.getScanner(scan)));
+  }
+
+  /**
+   * A minimal {@link DelegateRegionScanner} over a raw HBase {@link RegionScanner} that can re-open
+   * a fresh scanner from the {@link Region} via {@link #getNewRegionScanner(Scan)} but adds no
+   * paging. {@link TTLRegionScanner} needs a {@link DelegateRegionScanner} delegate (it casts and
+   * calls {@code getNewRegionScanner} during gap analysis and re-scans); this fills that role for
+   * internal region-local scans without reproducing the paging machinery that
+   * {@code PagingRegionScanner} adds for the RPC read path.
+   */
+  private static final class NonPagingRegionScanner extends DelegateRegionScanner {
+    private final Region region;
+
+    private NonPagingRegionScanner(Region region, RegionScanner scanner) {
+      super(scanner);
+      this.region = region;
+    }
+
+    @Override
+    public RegionScanner getNewRegionScanner(Scan scan) throws IOException {
+      return new NonPagingRegionScanner(region, region.getScanner(scan));
+    }
   }
 }

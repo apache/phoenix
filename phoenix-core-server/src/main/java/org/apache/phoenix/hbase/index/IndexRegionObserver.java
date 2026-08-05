@@ -697,7 +697,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       Mutation m = miniBatchOp.getOperation(i);
       if (
         this.builder.isAtomicOp(m) || context.returnResult || this.builder.isEnabled(m)
-          || (this.builder.hasConditionalTTL(m) && isStrictTTLEnabled(miniBatchOp))
+          || (this.builder.hasConditionalTTL(m) && context.isStrictTTLForInternalScan)
       ) {
         ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
         context.rowsToLock.add(row);
@@ -794,7 +794,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private void updateMutationsForConditionalTTL(MiniBatchOperationInProgress<Mutation> miniBatchOp,
     BatchMutateContext context) throws IOException {
     // If TTL is not strict, skip conditional TTL processing
-    if (!isStrictTTLEnabled(miniBatchOp)) {
+    if (!context.isStrictTTLForInternalScan) {
       return;
     }
     // mapping from row key to indices in mini batch
@@ -1774,7 +1774,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           context.returnOldRow = true;
         }
       }
-      if (this.builder.hasConditionalTTL(m) && isStrictTTLEnabled(miniBatchOp)) {
+      if (this.builder.hasConditionalTTL(m) && context.isStrictTTLForInternalScan) {
         context.hasConditionalTTL = true;
       }
       if (this.builder.isAtomicOp(m) || this.builder.returnResult(m)) {
@@ -1999,7 +1999,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
     // Update the timestamps of the data table mutations to prevent overlapping timestamps
     // (which prevents index inconsistencies as this case is not handled).
-    setTimestamps(miniBatchOp, builder, batchTimestamp, isStrictTTLEnabled(miniBatchOp));
+    setTimestamps(miniBatchOp, builder, batchTimestamp, context.isStrictTTLForInternalScan);
     if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
       // Prepare next data rows states for pending mutations (for global indexes)
       prepareDataRowStates(c, miniBatchOp, context, batchTimestamp);
