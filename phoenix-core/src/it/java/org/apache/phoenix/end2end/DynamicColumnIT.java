@@ -273,4 +273,138 @@ public class DynamicColumnIT extends ParallelStatsDisabledIT {
     }
   }
 
+  /**
+   * Test that multiple dynamic columns in a WHERE clause work correctly on a table
+   * with column encoding enabled (the default). Regression test for PHOENIX-5236.
+   */
+  @Test
+  public void testMultipleDynamicColumnsInWhere() throws Exception {
+    String tableName = generateUniqueName();
+    String ddl = "create table " + tableName
+      + " (id VARCHAR PRIMARY KEY, name VARCHAR)";
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(ddl);
+
+      // Upsert rows with dynamic columns
+      String dml = "UPSERT INTO " + tableName
+        + "(id, name, city VARCHAR, department VARCHAR, age INTEGER)"
+        + " VALUES (?, ?, ?, ?, ?)";
+      try (PreparedStatement stmt = conn.prepareStatement(dml)) {
+        stmt.setString(1, "1");
+        stmt.setString(2, "John");
+        stmt.setString(3, "Chennai");
+        stmt.setString(4, "Engineering");
+        stmt.setInt(5, 30);
+        stmt.executeUpdate();
+
+        stmt.setString(1, "2");
+        stmt.setString(2, "Jane");
+        stmt.setString(3, "Mumbai");
+        stmt.setString(4, "Marketing");
+        stmt.setInt(5, 28);
+        stmt.executeUpdate();
+
+        stmt.setString(1, "3");
+        stmt.setString(2, "Bob");
+        stmt.setString(3, "Chennai");
+        stmt.setString(4, "Marketing");
+        stmt.setInt(5, 35);
+        stmt.executeUpdate();
+
+        conn.commit();
+      }
+
+      // Single dynamic column in WHERE - baseline
+      String query = "SELECT id, name FROM " + tableName
+        + " (city VARCHAR) WHERE city = ?";
+      try (PreparedStatement stmt = conn.prepareStatement(query)) {
+        stmt.setString(1, "Chennai");
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("1", rs.getString(1));
+        assertEquals("John", rs.getString(2));
+        assertTrue(rs.next());
+        assertEquals("3", rs.getString(1));
+        assertEquals("Bob", rs.getString(2));
+        assertFalse(rs.next());
+      }
+
+      // Multiple dynamic columns in WHERE - PHOENIX-5236 bug
+      query = "SELECT id, name FROM " + tableName
+        + " (city VARCHAR, department VARCHAR, age INTEGER)"
+        + " WHERE city = ? AND department = ?";
+      try (PreparedStatement stmt = conn.prepareStatement(query)) {
+        stmt.setString(1, "Chennai");
+        stmt.setString(2, "Engineering");
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("1", rs.getString(1));
+        assertEquals("John", rs.getString(2));
+        assertFalse(rs.next());
+      }
+
+      // Dynamic columns compared to each other
+      query = "SELECT id, name FROM " + tableName
+        + " (city VARCHAR, department VARCHAR)"
+        + " WHERE city = department";
+      try (PreparedStatement stmt = conn.prepareStatement(query)) {
+        ResultSet rs = stmt.executeQuery();
+        assertFalse(rs.next());
+      }
+
+      // 3 dynamic columns in WHERE
+      query = "SELECT id, name FROM " + tableName
+        + " (city VARCHAR, department VARCHAR, age INTEGER)"
+        + " WHERE city = ? AND department = ? AND age > ?";
+      try (PreparedStatement stmt = conn.prepareStatement(query)) {
+        stmt.setString(1, "Chennai");
+        stmt.setString(2, "Engineering");
+        stmt.setInt(3, 25);
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("1", rs.getString(1));
+        assertEquals("John", rs.getString(2));
+        assertFalse(rs.next());
+      }
+
+      // 1 schema column + 2 dynamic columns in WHERE (mixed)
+      query = "SELECT id FROM " + tableName
+        + " (city VARCHAR, department VARCHAR)"
+        + " WHERE name = ? AND city = ? AND department = ?";
+      try (PreparedStatement stmt = conn.prepareStatement(query)) {
+        stmt.setString(1, "John");
+        stmt.setString(2, "Chennai");
+        stmt.setString(3, "Engineering");
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("1", rs.getString(1));
+        assertFalse(rs.next());
+      }
+
+      // 2 dynamic + 1 schema column in WHERE (mixed, different order)
+      query = "SELECT id FROM " + tableName
+        + " (city VARCHAR, age INTEGER)"
+        + " WHERE city = ? AND age > ? AND name = ?";
+      try (PreparedStatement stmt = conn.prepareStatement(query)) {
+        stmt.setString(1, "Chennai");
+        stmt.setInt(2, 30);
+        stmt.setString(3, "Bob");
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("3", rs.getString(1));
+        assertFalse(rs.next());
+      }
+
+      // No dynamic columns in WHERE (schema-only, baseline - no regression)
+      query = "SELECT id FROM " + tableName + " WHERE name = ?";
+      try (PreparedStatement stmt = conn.prepareStatement(query)) {
+        stmt.setString(1, "Jane");
+        ResultSet rs = stmt.executeQuery();
+        assertTrue(rs.next());
+        assertEquals("2", rs.getString(1));
+        assertFalse(rs.next());
+      }
+    }
+  }
+
 }
