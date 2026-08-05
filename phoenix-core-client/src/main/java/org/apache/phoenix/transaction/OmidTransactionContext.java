@@ -17,7 +17,7 @@
  */
 package org.apache.phoenix.transaction;
 
-import com.google.protobuf.InvalidProtocolBufferException;
+import org.apache.phoenix.thirdparty.com.google.protobuf.InvalidProtocolBufferException;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.HashSet;
