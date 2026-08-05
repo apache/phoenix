@@ -169,6 +169,7 @@ import org.apache.phoenix.util.ServerUtil.ConnectionFactory;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.ClassRule;
 import org.junit.rules.TemporaryFolder;
+import org.junit.rules.Timeout;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -198,6 +199,9 @@ public abstract class BaseTest {
   private static final Logger LOGGER = LoggerFactory.getLogger(BaseTest.class);
   @ClassRule
   public static TemporaryFolder tmpFolder = new TemporaryFolder();
+  @ClassRule
+  public static Timeout CLASS_TIMEOUT =
+    Timeout.builder().withTimeout(20, TimeUnit.MINUTES).withLookingForStuckThread(true).build();
   private static final int dropTableTimeout = 120; // 2 mins should be long enough.
   private static final ThreadFactory factory = new ThreadFactoryBuilder().setDaemon(true)
     .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();
@@ -446,9 +450,28 @@ public abstract class BaseTest {
 
   protected static synchronized void setUpTestDriver(ReadOnlyProps serverProps,
     ReadOnlyProps clientProps) throws Exception {
+    assertSharedMiniClusterHealthy();
     if (driver == null) {
       String url = checkClusterInitialized(serverProps);
       driver = initAndRegisterTestDriver(url, clientProps);
+    }
+  }
+
+  private static void assertSharedMiniClusterHealthy() {
+    if (
+      !clusterInitialized || utility == null
+        || isDistributedClusterModeEnabled(utility.getConfiguration())
+    ) {
+      return;
+    }
+    MiniHBaseCluster cluster = utility.getHBaseCluster();
+    HMaster master = cluster == null ? null : cluster.getMaster();
+    if (
+      master == null || !master.isActiveMaster() || !master.isInitialized() || master.isAborted()
+        || master.isStopped()
+    ) {
+      throw new IllegalStateException("Shared in-JVM minicluster is unhealthy (master not up); "
+        + "failing fast so subsequent tests on this fork do not hang.");
     }
   }
 
