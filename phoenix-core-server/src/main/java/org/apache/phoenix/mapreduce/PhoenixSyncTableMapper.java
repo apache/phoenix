@@ -41,12 +41,14 @@ import org.apache.hadoop.mapreduce.Mapper;
 import org.apache.hadoop.mapreduce.lib.db.DBInputFormat;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer.ChunkRepairRequest;
+import org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer.ChunkRepairResult;
+import org.apache.phoenix.mapreduce.PhoenixSyncTableChunkRepairer.DriftCounters;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.MetaDataUtil;
-import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.SHA256DigestUtil;
 import org.apache.phoenix.util.ScanUtil;
 import org.slf4j.Logger;
@@ -65,10 +67,24 @@ public class PhoenixSyncTableMapper
   public enum SyncCounters {
     MAPPERS_VERIFIED,
     MAPPERS_MISMATCHED,
+    MAPPERS_REPAIRED,
+    MAPPERS_UNREPAIRABLE,
+    MAPPERS_REPAIR_FAILED,
     CHUNKS_VERIFIED,
     CHUNKS_MISMATCHED,
+    CHUNKS_REPAIRED,
+    CHUNKS_UNREPAIRABLE,
+    CHUNKS_REPAIR_FAILED,
+    CHECKPOINT_WRITE_FAILED,
     SOURCE_ROWS_PROCESSED,
-    TARGET_ROWS_PROCESSED
+    TARGET_ROWS_PROCESSED,
+    ROWS_MISSING_ON_TARGET,
+    ROWS_EXTRA_ON_TARGET,
+    ROWS_DIFFERENT_ON_TARGET,
+    ROWS_CANNOT_REPAIR,
+    CELLS_MISSING_ON_TARGET,
+    CELLS_EXTRA_ON_TARGET,
+    CELLS_DIFFERENT_ON_TARGET
   }
 
   private String tableName;
@@ -87,7 +103,9 @@ public class PhoenixSyncTableMapper
   private PTable pTable;
   private byte[] physicalTableName;
   private List<KeyRange> regionKeyRanges;
+  private int currentRangeIndex;
   private PhoenixSyncTableOutputRepository syncTableOutputRepository;
+  private PhoenixSyncTableChunkRepairer chunkRepairer;
 
   @Override
   protected void setup(Context context) throws InterruptedException {
@@ -103,6 +121,7 @@ public class PhoenixSyncTableMapper
       chunkSizeBytes = PhoenixSyncTableTool.getPhoenixSyncTableChunkSizeBytes(conf);
       isRawScan = PhoenixSyncTableTool.getPhoenixSyncTableRawScan(conf);
       isReadAllVersions = PhoenixSyncTableTool.getPhoenixSyncTableReadAllVersions(conf);
+      int repairBatchSize = PhoenixSyncTableTool.getPhoenixSyncTableRepairBatchSize(conf);
       extractRegionBoundariesFromSplit(context);
       sourceConnection = ConnectionUtil.getInputConnection(conf);
       pTable = sourceConnection.unwrap(PhoenixConnection.class).getTable(tableName);
@@ -110,6 +129,9 @@ public class PhoenixSyncTableMapper
       connectToTargetCluster();
       globalConnection = createGlobalConnection(conf);
       syncTableOutputRepository = new PhoenixSyncTableOutputRepository(globalConnection);
+      chunkRepairer = new PhoenixSyncTableChunkRepairer(sourceConnection, targetConnection, pTable,
+        physicalTableName, tableName, fromTime, toTime, isRawScan, isReadAllVersions,
+        repairBatchSize);
     } catch (Exception e) {
       tryClosingResources();
       throw new RuntimeException(
@@ -119,11 +141,14 @@ public class PhoenixSyncTableMapper
 
   /**
    * Extracts region key ranges from the PhoenixInputSplit. Handles both single-region splits and
-   * coalesced splits with multiple regions.
+   * coalesced splits with multiple regions. The mapper processes one region per {@code map()} call,
+   * driven by {@link PhoenixNoOpPerRangeRecordReader} which emits one record per region so YARN
+   * gets per-region progress visibility.
    */
   private void extractRegionBoundariesFromSplit(Context context) {
     PhoenixInputSplit split = (PhoenixInputSplit) context.getInputSplit();
     regionKeyRanges = split.getKeyRanges();
+    currentRangeIndex = 0;
 
     if (regionKeyRanges == null || regionKeyRanges.isEmpty()) {
       throw new IllegalStateException(String.format(
@@ -153,30 +178,36 @@ public class PhoenixSyncTableMapper
   private Connection createGlobalConnection(Configuration conf) throws SQLException {
     Configuration globalConf = new Configuration(conf);
     globalConf.unset(PhoenixConfigurationUtil.MAPREDUCE_TENANT_ID);
-    globalConf.unset(PhoenixRuntime.CURRENT_SCN_ATTRIB);
     return ConnectionUtil.getInputConnection(globalConf);
   }
 
   /**
-   * Processes mapper region(s) by comparing chunks between source and target clusters. For
-   * coalesced splits, processes each region sequentially. Gets already processed chunks from
-   * checkpoint table, resumes from check pointed progress and records final status for chunks &
-   * mapper (VERIFIED/MISMATCHED).
+   * Processes one mapper region per call by comparing chunks between source and target clusters.
+   * The {@link PhoenixNoOpPerRangeRecordReader} emits one record per region in the split, so for a
+   * coalesced split with N regions this method runs N times - giving YARN per-region progress
+   * visibility instead of jumping from 0% to 100% only when the whole split completes. Gets already
+   * processed chunks from checkpoint table, resumes from check pointed progress and records final
+   * status for chunks & mapper (VERIFIED/MISMATCHED).
    */
   @Override
   protected void map(NullWritable key, DBInputFormat.NullDBWritable value, Context context)
     throws IOException, InterruptedException {
+    LOGGER.info("Mapper being called");
     context.getCounter(PhoenixJobCounters.INPUT_RECORDS).increment(1);
+    if (currentRangeIndex >= regionKeyRanges.size()) {
+      throw new IllegalStateException(
+        String.format("map() called %d times but split for table %s only has %d regions",
+          currentRangeIndex + 1, tableName, regionKeyRanges.size()));
+    }
     try {
-      // Process each region in the split (one or multiple for coalesced splits)
-      for (KeyRange keyRange : regionKeyRanges) {
-        byte[] regionStart = keyRange.getLowerRange();
-        byte[] regionEnd = keyRange.getUpperRange();
-        LOGGER.info("Processing region [{}, {}) from split for table {}",
-          Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd), tableName);
-        processRegion(regionStart, regionEnd, context);
-      }
-    } catch (SQLException e) {
+      KeyRange keyRange = regionKeyRanges.get(currentRangeIndex++);
+      byte[] regionStart = keyRange.getLowerRange();
+      byte[] regionEnd = keyRange.getUpperRange();
+      LOGGER.info("Processing region {}/{} [{}, {}) from split for table {}", currentRangeIndex,
+        regionKeyRanges.size(), Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd),
+        tableName);
+      processRegion(regionStart, regionEnd, context);
+    } catch (SQLException | IOException e) {
       tryClosingResources();
       throw new RuntimeException("Error processing PhoenixSyncTableMapper", e);
     }
@@ -196,7 +227,7 @@ public class PhoenixSyncTableMapper
     // Get processed chunks for this specific region
     List<PhoenixSyncTableCheckpointOutputRow> processedChunks =
       syncTableOutputRepository.getProcessedChunks(tableName, targetZkQuorum, fromTime, toTime,
-        tenantId, regionStart, regionEnd);
+        tenantId, regionStart, regionEnd, isDryRun);
 
     // Calculate unprocessed ranges within this region
     List<KeyRange> unprocessedRanges =
@@ -205,8 +236,18 @@ public class PhoenixSyncTableMapper
     // Track counters before processing this region
     long verifiedBefore = context.getCounter(SyncCounters.CHUNKS_VERIFIED).getValue();
     long mismatchedBefore = context.getCounter(SyncCounters.CHUNKS_MISMATCHED).getValue();
+    long unrepairableBefore = context.getCounter(SyncCounters.CHUNKS_UNREPAIRABLE).getValue();
+    long repairFailedBefore = context.getCounter(SyncCounters.CHUNKS_REPAIR_FAILED).getValue();
     long sourceRowsBefore = context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).getValue();
     long targetRowsBefore = context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).getValue();
+    long rowsMissingBefore = context.getCounter(SyncCounters.ROWS_MISSING_ON_TARGET).getValue();
+    long rowsExtraBefore = context.getCounter(SyncCounters.ROWS_EXTRA_ON_TARGET).getValue();
+    long rowsDifferentBefore = context.getCounter(SyncCounters.ROWS_DIFFERENT_ON_TARGET).getValue();
+    long rowsCannotRepairBefore = context.getCounter(SyncCounters.ROWS_CANNOT_REPAIR).getValue();
+    long cellsMissingBefore = context.getCounter(SyncCounters.CELLS_MISSING_ON_TARGET).getValue();
+    long cellsExtraBefore = context.getCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).getValue();
+    long cellsDifferentBefore =
+      context.getCounter(SyncCounters.CELLS_DIFFERENT_ON_TARGET).getValue();
 
     // Process all unprocessed ranges in this region
     boolean isStartKeyInclusive = shouldStartKeyBeInclusive(regionStart, processedChunks);
@@ -221,17 +262,37 @@ public class PhoenixSyncTableMapper
       context.getCounter(SyncCounters.CHUNKS_VERIFIED).getValue() - verifiedBefore;
     long mismatchedChunks =
       context.getCounter(SyncCounters.CHUNKS_MISMATCHED).getValue() - mismatchedBefore;
+    long unrepairableChunks =
+      context.getCounter(SyncCounters.CHUNKS_UNREPAIRABLE).getValue() - unrepairableBefore;
+    long repairFailedChunks =
+      context.getCounter(SyncCounters.CHUNKS_REPAIR_FAILED).getValue() - repairFailedBefore;
     long sourceRowsProcessed =
       context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).getValue() - sourceRowsBefore;
     long targetRowsProcessed =
       context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).getValue() - targetRowsBefore;
+    long rowsMissingOnTarget =
+      context.getCounter(SyncCounters.ROWS_MISSING_ON_TARGET).getValue() - rowsMissingBefore;
+    long rowsExtraOnTarget =
+      context.getCounter(SyncCounters.ROWS_EXTRA_ON_TARGET).getValue() - rowsExtraBefore;
+    long rowsDifferentOnTarget =
+      context.getCounter(SyncCounters.ROWS_DIFFERENT_ON_TARGET).getValue() - rowsDifferentBefore;
+    long rowsCannotRepair =
+      context.getCounter(SyncCounters.ROWS_CANNOT_REPAIR).getValue() - rowsCannotRepairBefore;
+    long cellsMissingOnTarget =
+      context.getCounter(SyncCounters.CELLS_MISSING_ON_TARGET).getValue() - cellsMissingBefore;
+    long cellsExtraOnTarget =
+      context.getCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).getValue() - cellsExtraBefore;
+    long cellsDifferentOnTarget =
+      context.getCounter(SyncCounters.CELLS_DIFFERENT_ON_TARGET).getValue() - cellsDifferentBefore;
 
     Timestamp regionEndTime = new Timestamp(System.currentTimeMillis());
-    String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
-      .formatMapper(verifiedChunks, mismatchedChunks, sourceRowsProcessed, targetRowsProcessed);
+    String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter.formatMapper(
+      verifiedChunks, mismatchedChunks, sourceRowsProcessed, targetRowsProcessed,
+      rowsMissingOnTarget, rowsExtraOnTarget, rowsDifferentOnTarget, rowsCannotRepair,
+      cellsMissingOnTarget, cellsExtraOnTarget, cellsDifferentOnTarget);
     if (sourceRowsProcessed > 0) {
       recordRegionCompletion(regionStart, regionEnd, regionStartTime, regionEndTime, verifiedChunks,
-        mismatchedChunks, counters, context);
+        mismatchedChunks, unrepairableChunks, repairFailedChunks, counters, context);
     } else {
       LOGGER.info(
         "No rows pending to process. All region boundaries are covered for startKey:{}, endKey: {}",
@@ -242,39 +303,76 @@ public class PhoenixSyncTableMapper
   /**
    * Records region completion by updating counters, recording checkpoint, and logging result.
    * Consolidates all region completion logic to eliminate duplication.
-   * @param regionStart      Region start key
-   * @param regionEnd        Region end key
-   * @param regionStartTime  Region processing start time
-   * @param regionEndTime    Region processing end time
-   * @param verifiedChunks   Number of verified chunks
-   * @param mismatchedChunks Number of mismatched chunks
-   * @param counters         Formatted counter string
-   * @param context          Mapper context
+   * @param regionStart        Region start key
+   * @param regionEnd          Region end key
+   * @param regionStartTime    Region processing start time
+   * @param regionEndTime      Region processing end time
+   * @param verifiedChunks     Number of verified chunks
+   * @param mismatchedChunks   Number of mismatched chunks
+   * @param unrepairableChunks Number of chunks where any row landed in ROWS_CANNOT_REPAIR; if > 0
+   *                           (and no repair-failed chunks) the region rolls up to UNREPAIRABLE,
+   *                           signalling operator intervention is needed
+   * @param repairFailedChunks Number of chunks whose repair threw an IOException; if > 0 the region
+   *                           rolls up to REPAIR_FAILED (highest precedence)
+   * @param counters           Formatted counter string
+   * @param context            Mapper context
    */
   private void recordRegionCompletion(byte[] regionStart, byte[] regionEnd,
     Timestamp regionStartTime, Timestamp regionEndTime, long verifiedChunks, long mismatchedChunks,
-    String counters, Context context) throws SQLException {
+    long unrepairableChunks, long repairFailedChunks, String counters, Context context)
+    throws SQLException {
 
-    boolean isVerified = mismatchedChunks == 0;
-    PhoenixSyncTableCheckpointOutputRow.Status status = isVerified
-      ? PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED
-      : PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED;
+    // Region rolls up its child chunks' outcomes into one of five statuses, in precedence
+    // order (most-severe wins):
+    // REPAIR_FAILED — at least one chunk threw during merge-scan or flush.
+    // UNREPAIRABLE — repair completed but at least one chunk has rows that cannot be
+    // repaired (target tombstones shadow source Puts, or target row is
+    // entirely tombstones). Operator action (typically major compaction
+    // on target) needed before a re-run can converge.
+    // MISMATCHED — drift was detected but repair was not attempted (dry-run mode).
+    // REPAIRED — drift was detected and every chunk's repair fully succeeded.
+    // VERIFIED — every chunk matched; no drift in this region.
+    // The resume filter on re-invocation skips VERIFIED and REPAIRED — UNREPAIRABLE,
+    // MISMATCHED, and REPAIR_FAILED chunks are re-entered as gaps and re-attempted.
+    PhoenixSyncTableCheckpointOutputRow.Status status;
+    SyncCounters mapperCounter;
+    if (mismatchedChunks == 0) {
+      status = PhoenixSyncTableCheckpointOutputRow.Status.VERIFIED;
+      mapperCounter = SyncCounters.MAPPERS_VERIFIED;
+    } else if (isDryRun) {
+      status = PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED;
+      mapperCounter = SyncCounters.MAPPERS_MISMATCHED;
+    } else if (repairFailedChunks > 0) {
+      status = PhoenixSyncTableCheckpointOutputRow.Status.REPAIR_FAILED;
+      mapperCounter = SyncCounters.MAPPERS_REPAIR_FAILED;
+    } else if (unrepairableChunks > 0) {
+      status = PhoenixSyncTableCheckpointOutputRow.Status.UNREPAIRABLE;
+      mapperCounter = SyncCounters.MAPPERS_UNREPAIRABLE;
+    } else {
+      status = PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED;
+      mapperCounter = SyncCounters.MAPPERS_REPAIRED;
+    }
 
-    context.getCounter(isVerified ? SyncCounters.MAPPERS_VERIFIED : SyncCounters.MAPPERS_MISMATCHED)
-      .increment(1);
+    context.getCounter(mapperCounter).increment(1);
 
     recordRegionCheckpoint(regionStart, regionEnd, status, regionStartTime, regionEndTime,
       counters);
 
     String logMessage = String.format(
-      "PhoenixSyncTable region [%s, %s) completed with %s: %d verified chunks, %d mismatched chunks",
+      "PhoenixSyncTable region [%s, %s) completed with %s: %d verified, %d mismatched, "
+        + "%d unrepairable, %d repair-failed",
       Bytes.toStringBinary(regionStart), Bytes.toStringBinary(regionEnd),
-      isVerified ? "verified" : "mismatch", verifiedChunks, mismatchedChunks);
+      status.name().toLowerCase(), verifiedChunks, mismatchedChunks, unrepairableChunks,
+      repairFailedChunks);
 
-    if (isVerified) {
-      LOGGER.info(logMessage);
-    } else {
+    if (
+      status == PhoenixSyncTableCheckpointOutputRow.Status.MISMATCHED
+        || status == PhoenixSyncTableCheckpointOutputRow.Status.UNREPAIRABLE
+        || status == PhoenixSyncTableCheckpointOutputRow.Status.REPAIR_FAILED
+    ) {
       LOGGER.warn(logMessage);
+    } else {
+      LOGGER.info(logMessage);
     }
   }
 
@@ -354,10 +452,14 @@ public class PhoenixSyncTableMapper
         if (nextSourceChunk == null) {
           isLastChunkOfRegion = true;
         }
-        ChunkInfo targetChunk = getTargetChunkWithSourceBoundary(targetConnection,
-          previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey,
-          isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey, isTargetStartKeyInclusive,
-          !isLastChunkOfRegion);
+        // Target scan boundary: covers extra-on-target rows that fall before the first
+        // source chunk, between consecutive source chunks, or after the last. Both verify
+        // and repair use the same range so repair sees the same cells the verifier hashed.
+        byte[] targetStart = previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey;
+        byte[] targetEnd = isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey;
+        boolean targetEndInclusive = !isLastChunkOfRegion;
+        ChunkInfo targetChunk = getTargetChunkWithSourceBoundary(targetConnection, targetStart,
+          targetEnd, isTargetStartKeyInclusive, targetEndInclusive);
         context.getCounter(SyncCounters.SOURCE_ROWS_PROCESSED).increment(sourceChunk.rowCount);
         context.getCounter(SyncCounters.TARGET_ROWS_PROCESSED).increment(targetChunk.rowCount);
         boolean matched = MessageDigest.isEqual(sourceChunk.hash, targetChunk.hash);
@@ -367,22 +469,42 @@ public class PhoenixSyncTableMapper
               + "isTargetEndKeyInclusive: {}, isFirstChunkOfRegion: {}, isLastChunkOfRegion: {}."
               + "Chunk comparison source {}, {}. Key range passed to target chunk: {}, {}."
               + "target chunk returned {}, {}: source={} rows, target={} rows, matched={}",
-            isSourceStartKeyInclusive, isTargetStartKeyInclusive, !isLastChunkOfRegion,
+            isSourceStartKeyInclusive, isTargetStartKeyInclusive, targetEndInclusive,
             previousSourceChunk == null, isLastChunkOfRegion,
             Bytes.toStringBinary(sourceChunk.startKey), Bytes.toStringBinary(sourceChunk.endKey),
-            Bytes.toStringBinary(
-              previousSourceChunk == null ? rangeStart : previousSourceChunk.endKey),
-            Bytes.toStringBinary(isLastChunkOfRegion ? rangeEnd : sourceChunk.endKey),
+            Bytes.toStringBinary(targetStart), Bytes.toStringBinary(targetEnd),
             Bytes.toStringBinary(targetChunk.startKey), Bytes.toStringBinary(targetChunk.endKey),
             sourceChunk.rowCount, targetChunk.rowCount, matched);
         }
         sourceChunk.executionEndTime = new Timestamp(System.currentTimeMillis());
-        String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
-          .formatChunk(sourceChunk.rowCount, targetChunk.rowCount);
         if (matched) {
+          String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter
+            .formatChunk(sourceChunk.rowCount, targetChunk.rowCount, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
           handleVerifiedChunk(sourceChunk, context, counters);
         } else {
-          handleMismatchedChunk(sourceChunk, context, counters);
+          ChunkRepairRequest request =
+            new ChunkRepairRequest(sourceChunk.startKey, sourceChunk.endKey, targetStart, targetEnd,
+              isTargetStartKeyInclusive, targetEndInclusive, sourceChunk.rowCount,
+              targetChunk.rowCount, sourceChunk.executionStartTime, isDryRun);
+          ChunkRepairResult result = chunkRepairer.repair(request, context::progress);
+          if (isDryRun) {
+            // Dry-run: write CHUNK/MISMATCHED with real row-level drift in COUNTERS so the
+            // checkpoint audit row matches the job counters. No CHUNK/REPAIRED row and no
+            // target mutations.
+            DriftCounters drift = result.drift;
+            context.getCounter(SyncCounters.ROWS_MISSING_ON_TARGET)
+              .increment(drift.rowsMissingOnTarget);
+            context.getCounter(SyncCounters.ROWS_EXTRA_ON_TARGET)
+              .increment(drift.rowsExtraOnTarget);
+            context.getCounter(SyncCounters.ROWS_DIFFERENT_ON_TARGET)
+              .increment(drift.rowsDifferentOnTarget);
+            String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter.formatChunk(
+              sourceChunk.rowCount, targetChunk.rowCount, drift.rowsMissingOnTarget,
+              drift.rowsExtraOnTarget, drift.rowsDifferentOnTarget, 0L, 0L, 0L, 0L);
+            handleMismatchedChunk(sourceChunk, context, counters);
+          } else {
+            recordRepairOutcome(sourceChunk, request, result, context);
+          }
         }
         previousSourceChunk = sourceChunk;
         sourceChunk = nextSourceChunk;
@@ -556,8 +678,10 @@ public class PhoenixSyncTableMapper
   }
 
   /**
-   * Creates an HBase scan for a chunk range. Can be configured to use raw scan mode and read all
-   * cell versions based on command-line options.
+   * Creates an HBase scan for a chunk range. Honors the user's {@code --raw-scan} and
+   * {@code --read-all-versions} flags. For target-side scans, sets caching/limit to 1 to enable
+   * sequential partial-digest retrieval — each target chunk's digest feeds into the next until
+   * scanning completes.
    */
   private Scan createChunkScan(byte[] startKey, byte[] endKey, boolean isStartKeyInclusive,
     boolean isEndKeyInclusive, boolean isTargetScan) throws IOException {
@@ -570,9 +694,6 @@ public class PhoenixSyncTableMapper
     }
     scan.setCacheBlocks(false);
     scan.setTimeRange(fromTime, toTime);
-    // Set limit and caching to 1 for sequential partial digest retrieval from target.
-    // Enables digest continuation: each target chunk's digest feeds into the next until scanning
-    // completes
     if (isTargetScan) {
       scan.setLimit(1);
       scan.setCaching(1);
@@ -691,7 +812,94 @@ public class PhoenixSyncTableMapper
     return Bytes.compareTo(processedChunks.get(0).getStartRowKey(), mapperRegionStart) > 0;
   }
 
-  @Override
+  /**
+   * Translates a {@link ChunkRepairResult} into MapReduce side effects: bumps the cell/row drift
+   * counters, builds the chunk-level checkpoint row (REPAIRED / UNREPAIRABLE / REPAIR_FAILED), and
+   * writes it via {@link #writeChunkCheckpoint} so the outcome counter is bumped only on a
+   * successful checkpoint write (audit row and counter stay consistent).
+   * <p>
+   * {@code CHUNKS_MISMATCHED} is bumped here too: it tracks every chunk where source and target
+   * hashes differed — the drift-detected signal — regardless of whether repair ran. Without this,
+   * repair-mode {@link #recordRegionCompletion} would see {@code mismatchedChunks
+   * == 0} for fully-repaired regions and roll them up as VERIFIED instead of REPAIRED.
+   */
+  private void recordRepairOutcome(ChunkInfo sourceChunk, ChunkRepairRequest request,
+    ChunkRepairResult result, Context context) {
+    context.getCounter(SyncCounters.CHUNKS_MISMATCHED).increment(1);
+    DriftCounters drift = result.drift;
+    context.getCounter(SyncCounters.ROWS_MISSING_ON_TARGET).increment(drift.rowsMissingOnTarget);
+    context.getCounter(SyncCounters.ROWS_EXTRA_ON_TARGET).increment(drift.rowsExtraOnTarget);
+    context.getCounter(SyncCounters.ROWS_CANNOT_REPAIR).increment(drift.rowsCannotRepair);
+    context.getCounter(SyncCounters.CELLS_MISSING_ON_TARGET).increment(drift.cellsMissingOnTarget);
+    context.getCounter(SyncCounters.CELLS_EXTRA_ON_TARGET).increment(drift.cellsExtraOnTarget);
+    context.getCounter(SyncCounters.CELLS_DIFFERENT_ON_TARGET)
+      .increment(drift.cellsDifferentOnTarget);
+
+    String counters = PhoenixSyncTableCheckpointOutputRow.CounterFormatter.formatChunk(
+      request.verifySourceRows, request.verifyTargetRows, drift.rowsMissingOnTarget,
+      drift.rowsExtraOnTarget, drift.rowsDifferentOnTarget, drift.rowsCannotRepair,
+      drift.cellsMissingOnTarget, drift.cellsExtraOnTarget, drift.cellsDifferentOnTarget);
+
+    PhoenixSyncTableCheckpointOutputRow.Status status;
+    SyncCounters outcomeCounter;
+    switch (result.status) {
+      case REPAIRED:
+        status = PhoenixSyncTableCheckpointOutputRow.Status.REPAIRED;
+        outcomeCounter = SyncCounters.CHUNKS_REPAIRED;
+        break;
+      case UNREPAIRABLE:
+        status = PhoenixSyncTableCheckpointOutputRow.Status.UNREPAIRABLE;
+        outcomeCounter = SyncCounters.CHUNKS_UNREPAIRABLE;
+        break;
+      case REPAIR_FAILED:
+        status = PhoenixSyncTableCheckpointOutputRow.Status.REPAIR_FAILED;
+        outcomeCounter = SyncCounters.CHUNKS_REPAIR_FAILED;
+        break;
+      default:
+        throw new IllegalStateException("Unexpected repair status: " + result.status);
+    }
+
+    writeChunkCheckpoint(new PhoenixSyncTableCheckpointOutputRow.Builder().setTableName(tableName)
+      .setTargetCluster(targetZkQuorum).setType(PhoenixSyncTableCheckpointOutputRow.Type.CHUNK)
+      .setFromTime(fromTime).setToTime(toTime).setTenantId(tenantId).setIsDryRun(isDryRun)
+      .setStartRowKey(sourceChunk.startKey).setEndRowKey(sourceChunk.endKey).setStatus(status)
+      .setExecutionStartTime(request.verifyStartTime).setExecutionEndTime(result.endTime)
+      .setCounters(counters).build(), outcomeCounter, context);
+  }
+
+  /**
+   * Writes a chunk-level checkpoint row and bumps the matching outcome counter. The outcome counter
+   * is bumped only after a successful checkpoint write, so on-disk audit and in-memory counters
+   * stay in sync.
+   * <p>
+   * If the checkpoint write throws {@link SQLException}, the failure is logged and the
+   * {@link SyncCounters#CHECKPOINT_WRITE_FAILED} counter is bumped, but the exception is NOT
+   * propagated. Reasons:
+   * <ul>
+   * <li>Target's data was already mutated during the merge — failing the mapper task wouldn't roll
+   * that back, and would trigger a MapReduce retry that re-verifies against already-mutated target
+   * state (audit trail loss).</li>
+   * <li>Other chunks in this mapper still deserve a chance to be processed.</li>
+   * <li>The {@code CHECKPOINT_WRITE_FAILED} counter surfaces the audit-row gap to operators and
+   * drives a non-zero exit at job end.</li>
+   * </ul>
+   */
+  private void writeChunkCheckpoint(PhoenixSyncTableCheckpointOutputRow row,
+    SyncCounters outcomeCounter, Context context) {
+    try {
+      syncTableOutputRepository.checkpointSyncTableResult(row);
+      context.getCounter(outcomeCounter).increment(1);
+    } catch (SQLException e) {
+      LOGGER.error(
+        "Failed to write {} checkpoint for chunk source=[{}, {}] on table {}: target data "
+          + "was mutated during the merge, but no checkpoint row will exist for this chunk. "
+          + "CHECKPOINT_WRITE_FAILED counter is incremented; mapper continues.",
+        row.getStatus(), Bytes.toStringBinary(row.getStartRowKey()),
+        Bytes.toStringBinary(row.getEndRowKey()), tableName, e);
+      context.getCounter(SyncCounters.CHECKPOINT_WRITE_FAILED).increment(1);
+    }
+  }
+
   protected void cleanup(Context context) throws IOException, InterruptedException {
     tryClosingResources();
     super.cleanup(context);
