@@ -85,6 +85,7 @@ import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
+import org.apache.phoenix.coprocessor.ServerScanUtil;
 import org.apache.phoenix.coprocessor.generated.IndexMutationsProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
@@ -380,6 +381,23 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private boolean returnOldRow;
     private boolean hasConditionalTTL; // table has Conditional TTL
     private boolean immutableRows;
+    // For a VIEW carrying a view-level literal TTL, the serialized compiled literal TTL threaded
+    // by the client via the _TTL mutation attribute. Captured (and the attribute removed) early so
+    // the internal current-row scan masks with the view's TTL. Null for base tables (their literal
+    // TTL is on the CF descriptor) and for conditional TTL (left on the mutation for its own path).
+    private byte[] literalTTLForInternalScan;
+    // The empty-column CF/CQ threaded by the client (ScanUtil.annotateMutationWithLiteralTTL) for
+    // any table/view with an effective literal TTL — the single source that lets the internal
+    // current-row scan mask, for the secondary-index and no-index (atomic / ON DUPLICATE KEY /
+    // returnResult / row-delete) paths alike. Null when no literal TTL applies. Unlike the _TTL
+    // attribute these are left on the mutations (they are inert on the write path).
+    private byte[] emptyCFForInternalScan;
+    private byte[] emptyCQForInternalScan;
+    // Whether the table/view uses strict TTL, captured (via isStrictTTLEnabled) alongside the other
+    // internal-scan attributes so getCurrentRowStates masks exactly like a client read: a
+    // non-strict
+    // table is never masked. Defaults to strict, matching isStrictTTLEnabled's default.
+    private boolean isStrictTTLForInternalScan = PTable.DEFAULT_IS_STRICT_TTL;
 
     public BatchMutateContext() {
       this.clientVersion = 0;
@@ -679,7 +697,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       Mutation m = miniBatchOp.getOperation(i);
       if (
         this.builder.isAtomicOp(m) || context.returnResult || this.builder.isEnabled(m)
-          || (this.builder.hasConditionalTTL(m) && isStrictTTLEnabled(miniBatchOp))
+          || (this.builder.hasConditionalTTL(m) && context.isStrictTTLForInternalScan)
       ) {
         ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
         context.rowsToLock.add(row);
@@ -776,7 +794,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   private void updateMutationsForConditionalTTL(MiniBatchOperationInProgress<Mutation> miniBatchOp,
     BatchMutateContext context) throws IOException {
     // If TTL is not strict, skip conditional TTL processing
-    if (!isStrictTTLEnabled(miniBatchOp)) {
+    if (!context.isStrictTTLForInternalScan) {
       return;
     }
     // mapping from row key to indices in mini batch
@@ -1161,9 +1179,23 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   /**
    * Retrieve the data row state either from memory or disk. The rows are locked by the caller.
+   * <p>
+   * The disk read is opened through {@link ServerScanUtil} so it is TTL-masked exactly like a
+   * client read: the internal scan otherwise bypasses the {@code postScannerOpen} coprocessor hook
+   * (the only place a scan is wrapped in {@code TTLRegionScanner}) and would rebuild the index from
+   * logically-expired-but-physically-present cells. The empty-column CF/CQ that enable masking are
+   * the bytes the client threaded on the mutation
+   * ({@link org.apache.phoenix.util.ScanUtil#annotateMutationWithLiteralTTL}) and captured into the
+   * batch context — the single source for every path that reaches here, index or no-index alike.
+   * Also captured into the context (see {@link #extractLiteralTTLForInternalScan}):
+   * {@code literalTTLForInternalScan} carries a view's literal TTL (null for base tables, which use
+   * the CF-descriptor fallback), and {@code isStrictTTLForInternalScan} avoids over-masking a
+   * non-strict table. Masking is a strict no-op when Phoenix compaction is disabled. Unlike a
+   * client read the scan is not paged: it is region-local (off the RPC path), so it holds no
+   * handler thread and there is nothing for paging to protect.
    */
   private void getCurrentRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
-    BatchMutateContext context) throws IOException {
+    BatchMutateContext context, long batchTimestamp) throws IOException {
     Set<KeyRange> keys = new HashSet<KeyRange>(context.rowsToLock.size());
     for (ImmutableBytesPtr rowKeyPtr : context.rowsToLock) {
       PendingRow pendingRow = new PendingRow(rowKeyPtr, context);
@@ -1212,6 +1244,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return;
     }
 
+    byte[] emptyCF = context.emptyCFForInternalScan;
+    byte[] emptyCQ = context.emptyCQForInternalScan;
+    byte[] literalTTLForScan = context.literalTTLForInternalScan;
+    boolean isStrictTTL = context.isStrictTTLForInternalScan;
+
     if (this.useBloomFilter) {
       for (KeyRange key : keys) {
         // Scan.java usage alters scan instances, safer to create scan instance per usage
@@ -1220,6 +1257,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // for bloom filters scan should be a get
         scan.withStartRow(key.getLowerRange(), true);
         scan.withStopRow(key.getLowerRange(), true);
+        // Anchor TTLRegionScanner's masking clock at batchTimestamp. The range upper bound is
+        // batchTimestamp + 1 (not batchTimestamp) because HBase scan time ranges are half-open
+        // [min, max): a bound of batchTimestamp would exclude any committed cell sitting at exactly
+        // batchTimestamp. That collision cannot happen in production (getBatchTimestamp forces a
+        // distinct timestamp for same-row batches), but a frozen test clock can produce it, and the
+        // read must see those cells to build a correct current-row state. The masking clock is then
+        // batchTimestamp + 1, trimming expired cells as of the timestamp the index is built at.
+        scan.setTimeRange(0, batchTimestamp + 1);
+        ServerScanUtil.setInternalScanAttributes(scan, emptyCF, emptyCQ, literalTTLForScan,
+          isStrictTTL);
         readDataTableRows(c, context, scan);
       }
     } else {
@@ -1228,13 +1275,27 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       scanRanges.initializeScan(scan);
       SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
       scan.setFilter(skipScanFilter);
+      // Anchor TTLRegionScanner's masking clock at batchTimestamp. The range upper bound is
+      // batchTimestamp + 1 (not batchTimestamp) because HBase scan time ranges are half-open
+      // [min, max): a bound of batchTimestamp would exclude any committed cell sitting at exactly
+      // batchTimestamp. That collision cannot happen in production (getBatchTimestamp forces a
+      // distinct timestamp for same-row batches), but a frozen test clock can produce it, and the
+      // read must see those cells to build a correct current-row state. The masking clock is then
+      // batchTimestamp + 1, trimming expired cells as of the timestamp the index is built at.
+      scan.setTimeRange(0, batchTimestamp + 1);
+      ServerScanUtil.setInternalScanAttributes(scan, emptyCF, emptyCQ, literalTTLForScan,
+        isStrictTTL);
       readDataTableRows(c, context, scan);
     }
   }
 
   private void readDataTableRows(ObserverContext<RegionCoprocessorEnvironment> c,
     BatchMutateContext context, Scan scan) throws IOException {
-    try (RegionScanner scanner = c.getEnvironment().getRegion().getScanner(scan)) {
+    // Open through ServerScanUtil so the scan is wrapped in TTLRegionScanner (mirroring
+    // postScannerOpen) and masks TTL-expired rows exactly like a client read. Masking no-ops when
+    // Phoenix compaction is off or the empty-column attributes are absent.
+    try (RegionScanner scanner =
+      ServerScanUtil.openRegionScanner(c.getEnvironment(), c.getEnvironment().getRegion(), scan)) {
       boolean more = true;
       while (more) {
         List<Cell> cells = new ArrayList<Cell>();
@@ -1664,6 +1725,41 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
   }
 
+  /**
+   * Captures the literal-TTL internal-scan attributes the client threads
+   * ({@link org.apache.phoenix.util.ScanUtil#annotateMutationWithLiteralTTL}) off the
+   * representative mutation so the internal current-row scan can mask exactly like a client read.
+   * <p>
+   * Two things are captured:
+   * <ul>
+   * <li>The <b>empty-column CF/CQ</b> — threaded whenever an effective (non-NONE) literal TTL
+   * applies, for both base tables and views. They are the single source that lets
+   * {@code setInternalScanAttributes} mask, for the secondary-index and no-index (atomic / ON
+   * DUPLICATE KEY / {@code returnResult} / row-delete) paths alike. They are inert on the write
+   * path (nothing reads a mutation's empty-column attribute), so they are left on the mutations,
+   * not removed.</li>
+   * <li>The view's literal <b>{@code _LITERAL_TTL}</b> — the client threads it on its own
+   * attribute, distinct from {@code _TTL} (which on a mutation means conditional TTL). Capture the
+   * bytes as-is; there is nothing to disambiguate and nothing to strip, so the conditional-TTL
+   * consumers ({@code PhoenixIndexBuilder.hasConditionalTTL}, keyed on {@code _TTL}) are never
+   * tripped by a view's literal TTL.</li>
+   * </ul>
+   */
+  private void extractLiteralTTLForInternalScan(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+    BatchMutateContext context) throws IOException {
+    if (miniBatchOp.size() == 0) {
+      return;
+    }
+    Mutation representative = miniBatchOp.getOperation(0);
+    context.emptyCFForInternalScan =
+      representative.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
+    context.emptyCQForInternalScan =
+      representative.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
+    context.literalTTLForInternalScan =
+      representative.getAttribute(BaseScannerRegionObserverConstants.LITERAL_TTL);
+    context.isStrictTTLForInternalScan = isStrictTTLEnabled(miniBatchOp);
+  }
+
   private void identifyMutationTypes(MiniBatchOperationInProgress<Mutation> miniBatchOp,
     BatchMutateContext context) throws IOException {
     for (int i = 0; i < miniBatchOp.size(); i++) {
@@ -1678,7 +1774,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           context.returnOldRow = true;
         }
       }
-      if (this.builder.hasConditionalTTL(m) && isStrictTTLEnabled(miniBatchOp)) {
+      if (this.builder.hasConditionalTTL(m) && context.isStrictTTLForInternalScan) {
         context.hasConditionalTTL = true;
       }
       if (this.builder.isAtomicOp(m) || this.builder.returnResult(m)) {
@@ -1781,13 +1877,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // The timestamp for this batch will be different from the last batch processed.
         lastTimestamp = ts;
         batchesWithLastTimestamp.clear();
-        batchesWithLastTimestamp.add(context.rowsToLock);
+        // Register a snapshot, not the live rowsToLock: this now runs before
+        // releaseLocksForOnDupIgnoreMutations may structurally mutate rowsToLock (remove) outside
+        // synchronized(this), which would corrupt a concurrent shouldSleep iteration under
+        // synchronized(this). The snapshot is a superset of every later state (rowsToLock only
+        // shrinks after lockRows), so shouldSleep stays conservative: at most an extra sleep, never
+        // a missed one.
+        batchesWithLastTimestamp.add(new HashSet<>(context.rowsToLock));
         return ts;
       } else {
         if (!shouldSleep(context)) {
           // There is no need to sleep as the last batches with the same timestamp
           // do not have a common row this batch
-          batchesWithLastTimestamp.add(context.rowsToLock);
+          batchesWithLastTimestamp.add(new HashSet<>(context.rowsToLock));
           return ts;
         }
       }
@@ -1806,7 +1908,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // We do not have to check again if we need to sleep again since we got the next
       // timestamp while holding the row locks. This mean there cannot be a new
       // mutation with the same row attempting get the same timestamp
-      batchesWithLastTimestamp.add(context.rowsToLock);
+      batchesWithLastTimestamp.add(new HashSet<>(context.rowsToLock));
       return ts;
     }
   }
@@ -1817,6 +1919,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     BatchMutateContext context = new BatchMutateContext(indexMetaData.getClientVersion());
     setBatchMutateContext(c, context);
     identifyIndexMaintainerTypes(indexMetaData, context);
+    extractLiteralTTLForInternalScan(miniBatchOp, context);
     identifyMutationTypes(miniBatchOp, context);
     context.populateOriginalMutations(miniBatchOp);
 
@@ -1838,6 +1941,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     context.currentPhase = BatchMutatePhase.PRE;
     long onDupCheckTime = 0;
 
+    // Compute the batch timestamp now, while holding the row locks and before the current-row read,
+    // so the internal current-row scan can anchor its TTL masking clock at exactly the timestamp
+    // the
+    // index is built at (see getCurrentRowStates). getBatchTimestamp only needs the locked rows,
+    // which are already populated, and the "got the next timestamp while holding the row locks"
+    // invariant still holds since the locks are held through the rest of this method.
+    TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
+    long batchTimestamp = getBatchTimestamp(context, table);
+
     if (
       context.hasAtomic || context.returnResult || context.hasGlobalIndex
         || context.hasUncoveredIndex || context.hasTransform || context.hasConditionalTTL
@@ -1854,7 +1966,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           || !context.immutableRows && context.hasUncoveredIndex
             && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp)
       ) {
-        getCurrentRowStates(c, context);
+        getCurrentRowStates(c, context, batchTimestamp);
       }
       onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
     }
@@ -1885,11 +1997,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
     }
 
-    TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-    long batchTimestamp = getBatchTimestamp(context, table);
     // Update the timestamps of the data table mutations to prevent overlapping timestamps
     // (which prevents index inconsistencies as this case is not handled).
-    setTimestamps(miniBatchOp, builder, batchTimestamp, isStrictTTLEnabled(miniBatchOp));
+    setTimestamps(miniBatchOp, builder, batchTimestamp, context.isStrictTTLForInternalScan);
     if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
       // Prepare next data rows states for pending mutations (for global indexes)
       prepareDataRowStates(c, miniBatchOp, context, batchTimestamp);
@@ -2448,7 +2558,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         delete.add(cell);
       }
     }
-
     if (!put.isEmpty() || !delete.isEmpty()) {
       PTable table = operations.get(0).getFirst();
       addEmptyKVCellToPut(put, tuple, table);
