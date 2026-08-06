@@ -925,7 +925,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return Optional.empty();
     }
     Optional<ReplicationLogGroup> logGroup = ReplicationLogGroup.get(env.getConfiguration(),
-      env.getServerName(), haGroup, haGroupStoreManager);
+      env.getServerName(), haGroup, haGroupStoreManager, abortable);
     if (logGroup.isPresent()) {
       return logGroup;
     }

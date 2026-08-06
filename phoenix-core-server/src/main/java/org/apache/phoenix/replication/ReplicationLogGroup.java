@@ -440,6 +440,24 @@ public class ReplicationLogGroup {
   }
 
   /**
+   * Get or create a ReplicationLogGroup instance for the given HA Group. Returns empty when this
+   * cluster is not active for the HA group (see {@link #getOrCreate}). Used by callers that already
+   * hold the store manager and want fatal errors to abort via the supplied {@link Abortable}.
+   * @param conf                Configuration object
+   * @param serverName          The server name
+   * @param haGroupName         The HA Group name
+   * @param haGroupStoreManager HA Group Store Manager instance
+   * @param abortable           Abortable to invoke on fatal errors (typically RegionServerServices)
+   * @return ReplicationLogGroup instance, or empty if this cluster is not active
+   * @throws IOException if initialization fails
+   */
+  public static Optional<ReplicationLogGroup> get(Configuration conf, ServerName serverName,
+    String haGroupName, HAGroupStoreManager haGroupStoreManager, Abortable abortable)
+    throws IOException {
+    return getOrCreate(conf, serverName, haGroupName, haGroupStoreManager, abortable);
+  }
+
+  /**
    * Get an existing, or create and initialize a new, ReplicationLogGroup — but only when this
    * cluster is active for the HA group. A replication log group is a WRITER; it must exist only
    * where this cluster is the active side. When the local role is not active this returns
