@@ -979,8 +979,11 @@ public class HighAvailabilityGroup {
   }
 
   /**
-   * Method to get ClusterRoleRecord from RegionServer Endpoints from either of the clusters.
-   * @return ClusterRoleRecord from the first available cluster
+   * Fetches the CRR from both cluster endpoints and returns the more authoritative one (see
+   * {@link #reconcileClusterRoleRecords}). Consulting both avoids adopting a staler view when one
+   * endpoint momentarily lags its peer. If the peer (cluster 2) is unreachable, cluster 1's record
+   * is used as-is.
+   * @return the reconciled ClusterRoleRecord
    * @throws SQLException if there is an error getting the ClusterRoleRecord
    */
   private ClusterRoleRecord getClusterRoleRecordFromEndpoint() throws SQLException {
@@ -992,31 +995,19 @@ public class HighAvailabilityGroup {
       // Get the CRR via RSEndpoint for cluster 1
       ClusterRoleRecord roleRecord = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
         info.getUrl2(), info.getUrl1(), info.getName(), this, pollerInterval, properties);
-      // If we have unknown role for any cluster then try getting CRR from cluster 2 endpoint and if
-      // we get unknown role from there as well then CRR with higher adminVersion wins.
-      if (roleRecord.hasUnknownRole()) {
-        ClusterRoleRecord roleRecordFromPR;
-        try {
-          roleRecordFromPR = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
-            info.getUrl2(), info.getUrl2(), info.getName(), this, pollerInterval, properties);
-        } catch (Exception e) {
-          // As we were able to get CRR from cluster 1 but cluster 2 threw exception then just
-          // return
-          // CRR from cluster 1 and consume this exception
-          LOG.warn("Role Record from cluster {} has Unknown Role but cluster {} threw exception, "
-            + "returning {} as CRR", info.getUrl1(), info.getUrl2(), roleRecord.toPrettyString());
-          return roleRecord;
-        }
-        if (roleRecordFromPR.hasUnknownRole()) {
-          return roleRecord.getVersion() > roleRecordFromPR.getVersion()
-            ? roleRecord
-            : roleRecordFromPR;
-        } else {
-          return roleRecordFromPR;
-        }
-      } else {
+      // Reconcile with cluster 2; if it is unreachable, keep cluster 1's record.
+      ClusterRoleRecord roleRecordFromPR;
+      try {
+        roleRecordFromPR = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
+          info.getUrl2(), info.getUrl2(), info.getName(), this, pollerInterval, properties);
+      } catch (Exception e) {
+        LOG.warn(
+          "Fetched CRR {} from cluster {} but cluster {} endpoint threw an exception; "
+            + "returning cluster {} CRR without peer reconciliation",
+          roleRecord.toPrettyString(), info.getUrl1(), info.getUrl2(), info.getUrl1(), e);
         return roleRecord;
       }
+      return reconcileClusterRoleRecords(roleRecord, roleRecordFromPR);
     } catch (Exception e) {
       // If we get CRR Not Found on cluster 1, we should still try cluster 2, maybe
       // haGroupStoreClient
@@ -1102,6 +1093,16 @@ public class HighAvailabilityGroup {
       if (roleRecord.equals(newRoleRecord)) {
         LOG.debug("New Role Record is same as current RoleRecord, no need to refresh {}",
           roleRecord.toString());
+        lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
+        return true;
+      }
+
+      // A lagging endpoint can serve an older admin version; do not roll back to it.
+      if (!shouldApplyRefreshedRecord(roleRecord, newRoleRecord)) {
+        LOG.warn(
+          "Fetched role record {} is older (V{}) than the current record (V{}) for HA group {};"
+            + " keeping the current record and not rolling back",
+          newRoleRecord, newRoleRecord.getVersion(), roleRecord.getVersion(), info);
         lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
         return true;
       }
@@ -1239,5 +1240,42 @@ public class HighAvailabilityGroup {
     ClusterRoleRecord newRecord) {
     return transitionSucceeded && !oldRecord.getActiveUrl().equals(newRecord.getActiveUrl())
       && newRecord.getActiveUrl().isPresent();
+  }
+
+  /**
+   * Returns the more authoritative of the two records fetched from the cluster 1 and cluster 2
+   * endpoints. Preference: a non-UNKNOWN record beats an UNKNOWN one (an UNKNOWN role can't resolve
+   * cluster roles and isn't usable for routing, so it never wins on version alone); otherwise the
+   * higher admin {@code version} wins; a tie returns the peer ({@code recordFromCluster2}).
+   * Package-private for direct unit testing. Neither argument may be {@code null}.
+   * @param recordFromCluster1 CRR fetched from the cluster 1 endpoint ({@code info.getUrl1()})
+   * @param recordFromCluster2 CRR fetched from the cluster 2 endpoint ({@code info.getUrl2()})
+   * @return the more authoritative of the two records
+   */
+  static ClusterRoleRecord reconcileClusterRoleRecords(ClusterRoleRecord recordFromCluster1,
+    ClusterRoleRecord recordFromCluster2) {
+    // Prefer a usable (non-UNKNOWN) record over an UNKNOWN one regardless of version.
+    if (recordFromCluster1.hasUnknownRole() != recordFromCluster2.hasUnknownRole()) {
+      return recordFromCluster1.hasUnknownRole() ? recordFromCluster2 : recordFromCluster1;
+    }
+    // Same category: keep the higher admin version. Ties fall through to the peer record.
+    return recordFromCluster1.getVersion() > recordFromCluster2.getVersion()
+      ? recordFromCluster1
+      : recordFromCluster2;
+  }
+
+  /**
+   * Whether a freshly fetched record should replace the applied one on the refresh path. Rejects
+   * only a strictly lower version (a rollback to a stale view from a lagging endpoint). An
+   * <em>equal</em> version is still applied by design: an autonomous transition changes roles while
+   * keeping the same admin version, so a same-version record with changed roles is a legitimate
+   * update. Equivalent to {@code !current.isNewerThan(fetched)}. Package-private for direct unit
+   * testing.
+   * @param current the currently applied {@link ClusterRoleRecord} (must be non-null)
+   * @param fetched the candidate record freshly fetched from the endpoints
+   * @return {@code true} to apply {@code fetched}; {@code false} to keep {@code current}
+   */
+  static boolean shouldApplyRefreshedRecord(ClusterRoleRecord current, ClusterRoleRecord fetched) {
+    return !current.isNewerThan(fetched);
   }
 }

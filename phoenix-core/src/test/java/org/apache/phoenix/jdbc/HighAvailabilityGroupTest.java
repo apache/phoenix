@@ -185,4 +185,62 @@ public class HighAvailabilityGroupTest {
         + "should count as a failover",
       HighAvailabilityGroup.shouldCountFailover(true, bothStandby, aStandbyBActive));
   }
+
+  /** Reconciliation prefers non-UNKNOWN over UNKNOWN, then higher version; order-independent. */
+  @Test
+  public void testReconcileClusterRoleRecords() {
+    String haGroupName = "testReconcileClusterRoleRecords";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+
+    ClusterRoleRecord v9 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER, url1,
+      ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 9L);
+    ClusterRoleRecord v10 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.STANDBY, url2, ClusterRole.ACTIVE, 10L);
+    ClusterRoleRecord unknownV11 = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.UNKNOWN, url2, ClusterRole.STANDBY, 11L);
+    ClusterRoleRecord unknownV12 = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.UNKNOWN, url2, ClusterRole.UNKNOWN, 12L);
+
+    // Both usable: higher version wins (the stale-revert regression guard), either order.
+    assertTrue("Higher version must win when cluster 1 lags the peer",
+      v10 == HighAvailabilityGroup.reconcileClusterRoleRecords(v9, v10));
+    assertTrue("Higher version must win regardless of argument order",
+      v10 == HighAvailabilityGroup.reconcileClusterRoleRecords(v10, v9));
+
+    // Non-UNKNOWN beats UNKNOWN even at a lower version, either order.
+    assertTrue("Non-UNKNOWN must beat UNKNOWN even with a lower version (cluster 1 usable)",
+      v9 == HighAvailabilityGroup.reconcileClusterRoleRecords(v9, unknownV11));
+    assertTrue("Non-UNKNOWN must beat UNKNOWN even with a lower version (cluster 2 usable)",
+      v9 == HighAvailabilityGroup.reconcileClusterRoleRecords(unknownV11, v9));
+
+    // UNKNOWN vs UNKNOWN: higher version wins.
+    assertTrue("Among two UNKNOWN records the higher version wins",
+      unknownV12 == HighAvailabilityGroup.reconcileClusterRoleRecords(unknownV11, unknownV12));
+  }
+
+  /** Refresh guard rejects a lower version but applies a same-version role change. */
+  @Test
+  public void testShouldApplyRefreshedRecord() {
+    String haGroupName = "testShouldApplyRefreshedRecord";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+
+    ClusterRoleRecord v9 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER, url1,
+      ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 9L);
+    ClusterRoleRecord v10 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.STANDBY, url2, ClusterRole.ACTIVE, 10L);
+    // Same version as v10 but different roles — models an autonomous transition (roles change,
+    // admin version does not).
+    ClusterRoleRecord v10RolesChanged = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.STANDBY, url2, ClusterRole.STANDBY, 10L);
+
+    assertFalse("Must not roll back from the applied v10 to a stale fetched v9",
+      HighAvailabilityGroup.shouldApplyRefreshedRecord(v10, v9));
+    assertTrue("Must apply a strictly newer fetched record",
+      HighAvailabilityGroup.shouldApplyRefreshedRecord(v9, v10));
+    // A strict '>' guard would wrongly reject this same-version role change.
+    assertTrue("Must apply a same-version record with changed roles (autonomous transition)",
+      HighAvailabilityGroup.shouldApplyRefreshedRecord(v10, v10RolesChanged));
+  }
 }
