@@ -165,6 +165,7 @@ import org.apache.hadoop.hbase.NamespaceNotFoundException;
 import org.apache.hadoop.hbase.ServerName;
 import org.apache.hadoop.hbase.TableExistsException;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.TableNotDisabledException;
 import org.apache.hadoop.hbase.TableNotEnabledException;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Append;
@@ -2016,6 +2017,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
           }
         }
 
+        // The physical HBase table may have been left disabled by a previous failed drop
+        // (or manual admin action) while its Phoenix metadata was removed. Re-enable it so
+        // downstream steps (modifyTable, post-DDL SYSTEM.CATALOG RPC, and the client's
+        // subsequent scans) see a usable table.
+        if (
+          tableType != PTableType.SYSTEM
+            && admin.isTableDisabled(TableName.valueOf(physicalTableName))
+        ) {
+          LOGGER.info("Re-enabling disabled HBase table {} during CREATE TABLE",
+            Bytes.toString(physicalTableName));
+          enableTable(admin, TableName.valueOf(physicalTableName));
+        }
+
         if (!modifyExistingMetaData) {
           return existingDesc; // Caller already knows that no metadata was changed
         }
@@ -2456,6 +2470,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       admin.disableTable(tableName);
     } catch (TableNotEnabledException e) {
       LOGGER.info("Table already disabled, continuing with next steps", e);
+    }
+  }
+
+  private void enableTable(Admin admin, TableName tableName) throws IOException {
+    try {
+      admin.enableTable(tableName);
+    } catch (TableNotDisabledException e) {
+      LOGGER.info("Table already enabled, continuing with next steps", e);
     }
   }
 
