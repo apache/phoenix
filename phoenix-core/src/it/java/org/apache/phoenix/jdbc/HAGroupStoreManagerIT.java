@@ -18,11 +18,15 @@
 package org.apache.phoenix.jdbc;
 
 import static org.apache.hadoop.hbase.HConstants.ZK_SESSION_TIMEOUT;
+import static org.apache.hadoop.test.GenericTestUtils.waitFor;
 import static org.apache.phoenix.jdbc.HAGroupStoreClient.ZK_CONSISTENT_HA_GROUP_RECORD_NAMESPACE;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.getLocalZkUrl;
 import static org.apache.phoenix.jdbc.PhoenixHAAdmin.toPath;
 import static org.apache.phoenix.query.QueryServices.CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED;
+import static org.apache.phoenix.query.QueryServices.HA_GROUP_STORE_CLIENT_PREWARM_ENABLED;
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.DEFAULT_REPLICATION_ROUND_DURATION_SECONDS;
+import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
+import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -30,6 +34,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.IOException;
 import java.lang.reflect.Field;
 import java.util.List;
 import java.util.Optional;
@@ -38,8 +43,10 @@ import java.util.stream.Collectors;
 import org.apache.commons.lang3.tuple.Pair;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.regionserver.HRegionServer;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.exception.InvalidClusterRoleTransitionException;
+import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.reader.ReplicationLogReplay;
 import org.apache.phoenix.util.HAGroupStoreTestUtil;
 import org.apache.zookeeper.data.Stat;
@@ -61,6 +68,9 @@ public class HAGroupStoreManagerIT extends HABaseIT {
 
   private PhoenixHAAdmin haAdmin;
   private static final Long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 2000L;
+  private static final int HA_STATE_POLL_INTERVAL_MS = 100;
+  private static final int HA_STATE_TRANSITION_TIMEOUT_MS = 120000;
+  private static final int TEST_REPLICATION_ROUND_DURATION_SECONDS = 2;
   private String zkUrl;
   private String peerZKUrl;
 
@@ -70,6 +80,12 @@ public class HAGroupStoreManagerIT extends HABaseIT {
     conf1.setLong(ZK_SESSION_TIMEOUT, 30 * 1000);
     conf2.setBoolean(CLUSTER_ROLE_BASED_MUTATION_BLOCK_ENABLED, true);
     conf2.setLong(ZK_SESSION_TIMEOUT, 30 * 1000);
+    // Both mini-clusters run in one JVM. Keep background initialization from claiming shared
+    // replay and log-group singletons before each test binds them to the intended cluster.
+    conf1.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, false);
+    conf2.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, false);
+    conf1.setBoolean(HA_GROUP_STORE_CLIENT_PREWARM_ENABLED, false);
+    conf2.setBoolean(HA_GROUP_STORE_CLIENT_PREWARM_ENABLED, false);
     CLUSTERS.start();
   }
 
@@ -620,6 +636,106 @@ public class HAGroupStoreManagerIT extends HABaseIT {
       // Expected behavior
       assertTrue("Exception should mention the invalid transition",
         e.getMessage().contains("ACTIVE_IN_SYNC") && e.getMessage().contains("STANDBY"));
+    }
+  }
+
+  private static void waitForHAGroupState(HAGroupStoreManager manager, String haGroupName,
+    HAGroupStoreRecord.HAGroupState expectedState) throws Exception {
+    waitFor(() -> {
+      try {
+        Optional<HAGroupStoreRecord> record = manager.getHAGroupStoreRecord(haGroupName);
+        return record.isPresent() && record.get().getHAGroupState() == expectedState;
+      } catch (IOException e) {
+        return false;
+      }
+    }, HA_STATE_POLL_INTERVAL_MS, HA_STATE_TRANSITION_TIMEOUT_MS);
+  }
+
+  private static void waitForEffectiveHAGroupState(HAGroupStoreManager manager, String haGroupName,
+    HAGroupStoreRecord.HAGroupState expectedState) throws Exception {
+    waitFor(() -> {
+      try {
+        Optional<HAGroupStoreRecord> record = manager.getEffectiveHAGroupStoreRecord(haGroupName);
+        return record.isPresent() && record.get().getHAGroupState() == expectedState;
+      } catch (IOException e) {
+        return false;
+      }
+    }, HA_STATE_POLL_INTERVAL_MS, HA_STATE_TRANSITION_TIMEOUT_MS);
+  }
+
+  @Test(timeout = 240000)
+  public void testE2EFailoverFromActiveNotInSyncWithAutomaticStateTransitions() throws Exception {
+    String haGroupName = testName.getMethodName();
+    Configuration cluster1Conf = CLUSTERS.getHBaseCluster1().getConfiguration();
+    Configuration cluster2Conf = CLUSTERS.getHBaseCluster2().getConfiguration();
+    String zkUrl1 = getLocalZkUrl(cluster1Conf);
+    String zkUrl2 = getLocalZkUrl(cluster2Conf);
+
+    cluster1Conf.setLong(ZK_SESSION_TIMEOUT, 10 * 1000);
+    cluster2Conf.setLong(ZK_SESSION_TIMEOUT, 10 * 1000);
+    cluster1Conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY,
+      TEST_REPLICATION_ROUND_DURATION_SECONDS);
+    cluster2Conf.setInt(PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY,
+      TEST_REPLICATION_ROUND_DURATION_SECONDS);
+
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
+      CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, null,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+    HAGroupStoreTestUtil.upsertHAGroupRecordInSystemTable(haGroupName, zkUrl1, zkUrl2,
+      CLUSTERS.getMasterAddress1(), CLUSTERS.getMasterAddress2(),
+      ClusterRoleRecord.ClusterRole.ACTIVE, ClusterRoleRecord.ClusterRole.STANDBY, zkUrl2,
+      CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2());
+
+    HAGroupStoreManager cluster1HAManager = HAGroupStoreManager.getInstance(cluster1Conf);
+    HAGroupStoreManager cluster2HAManager = HAGroupStoreManager.getInstance(cluster2Conf);
+    ReplicationLogGroup replicationLogGroup = null;
+    ReplicationLogReplay replicationLogReplay = null;
+    try {
+      cluster1HAManager.getHAGroupStoreRecord(haGroupName);
+      cluster2HAManager.getHAGroupStoreRecord(haGroupName);
+      waitForEffectiveHAGroupState(cluster1HAManager, haGroupName,
+        HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+      waitForEffectiveHAGroupState(cluster2HAManager, haGroupName,
+        HAGroupStoreRecord.HAGroupState.STANDBY);
+
+      HRegionServer regionServer = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
+      replicationLogGroup = ReplicationLogGroup.get(cluster1Conf, regionServer.getServerName(),
+        haGroupName, cluster1HAManager);
+      replicationLogReplay = ReplicationLogReplay.get(cluster2Conf, haGroupName);
+      replicationLogReplay.startReplay();
+
+      assertEquals(0L, cluster1HAManager.setHAGroupStatusToStoreAndForward(haGroupName));
+      waitForHAGroupState(cluster1HAManager, haGroupName,
+        HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC);
+      waitForHAGroupState(cluster2HAManager, haGroupName,
+        HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
+
+      assertEquals(0L, cluster1HAManager.initiateFailoverOnActiveCluster(haGroupName));
+      waitForHAGroupState(cluster1HAManager, haGroupName,
+        HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC_TO_STANDBY);
+      waitForHAGroupState(cluster2HAManager, haGroupName,
+        HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE);
+      replicationLogGroup.close();
+      replicationLogGroup = null;
+
+      waitForHAGroupState(cluster2HAManager, haGroupName,
+        HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC);
+      waitForHAGroupState(cluster1HAManager, haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY);
+
+      ClusterRoleRecord cluster1Role = cluster1HAManager.getClusterRoleRecord(haGroupName);
+      ClusterRoleRecord cluster2Role = cluster2HAManager.getClusterRoleRecord(haGroupName);
+      assertEquals(ClusterRoleRecord.ClusterRole.STANDBY,
+        cluster1Role.getRole(CLUSTERS.getMasterAddress1()));
+      assertEquals(ClusterRoleRecord.ClusterRole.ACTIVE,
+        cluster2Role.getRole(CLUSTERS.getMasterAddress2()));
+    } finally {
+      if (replicationLogReplay != null) {
+        replicationLogReplay.close();
+      }
+      if (replicationLogGroup != null) {
+        replicationLogGroup.close();
+      }
     }
   }
 

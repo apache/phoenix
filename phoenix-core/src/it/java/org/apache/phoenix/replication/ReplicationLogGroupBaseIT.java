@@ -28,12 +28,10 @@ import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.DriverManager;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +39,6 @@ import java.util.Properties;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
-import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.Cell;
@@ -269,7 +266,7 @@ public abstract class ReplicationLogGroupBaseIT extends HABaseIT {
 
     // Replay replication log on cluster 2
     FileSystem fs = standByLogDir.getFileSystem(conf2);
-    List<Path> logFiles = findLogFiles(standByLogDir, fs);
+    List<Path> logFiles = CrossClusterReplicationTestUtil.findLogFiles(standByLogDir, fs);
     assertTrue("Should have at least one log file", !logFiles.isEmpty());
     ReplicationLogProcessor processor = ReplicationLogProcessor.get(conf2, haGroupName);
     try {
@@ -359,70 +356,14 @@ public abstract class ReplicationLogGroupBaseIT extends HABaseIT {
     return patchVersion >= 9;
   }
 
-  protected List<Path> findLogFiles(Path dir, FileSystem fs) throws IOException {
-    List<Path> files = new ArrayList<>();
-    findLogFilesRecursive(dir, fs, files);
-    return files;
-  }
-
-  private void findLogFilesRecursive(Path dir, FileSystem fs, List<Path> files) throws IOException {
-    if (!fs.exists(dir)) {
-      return;
-    }
-    for (FileStatus status : fs.listStatus(dir)) {
-      if (status.isDirectory()) {
-        findLogFilesRecursive(status.getPath(), fs, files);
-      } else if (status.getPath().getName().endsWith(".plog")) {
-        files.add(status.getPath());
-      }
-    }
-  }
-
   /**
    * Compares an HBase table between the two clusters using {@link Result#compareResults}. Scans
-   * both tables with all versions and asserts that every row matches at the cell level.
+   * both tables with all versions and asserts that every row matches at the cell level. Delegates
+   * to the shared {@link CrossClusterReplicationTestUtil#assertTablesEqualAcrossClusters} with this
+   * IT's two cluster configurations.
    */
   protected void assertTablesEqualAcrossClusters(String hbaseTableName) throws Exception {
-    TableName tn = TableName.valueOf(hbaseTableName);
-    try (
-      org.apache.hadoop.hbase.client.Connection hconn1 = ConnectionFactory.createConnection(conf1);
-      org.apache.hadoop.hbase.client.Connection hconn2 = ConnectionFactory.createConnection(conf2);
-      Table table1 = hconn1.getTable(tn); Table table2 = hconn2.getTable(tn)) {
-
-      Scan scan = new Scan();
-      scan.readAllVersions();
-
-      try (ResultScanner scanner1 = table1.getScanner(scan);
-        ResultScanner scanner2 = table2.getScanner(scan)) {
-        int rowCount = 0;
-        while (true) {
-          Result r1 = scanner1.next();
-          Result r2 = scanner2.next();
-          if (r1 == null && r2 == null) {
-            break;
-          }
-          assertNotNull(
-            String.format("Table %s: cluster 2 has fewer rows at row %d", hbaseTableName, rowCount),
-            r2);
-          assertNotNull(
-            String.format("Table %s: cluster 1 has fewer rows at row %d", hbaseTableName, rowCount),
-            r1);
-          try {
-            Result.compareResults(r1, r2, true);
-          } catch (Exception e) {
-            LOG.error("Table {} row {} mismatch. Dumping both tables:", hbaseTableName, rowCount);
-            LOG.error("--- Cluster 1 ---");
-            TestUtil.dumpTable(table1);
-            LOG.error("--- Cluster 2 ---");
-            TestUtil.dumpTable(table2);
-            fail(String.format("Table %s row %d mismatch: %s", hbaseTableName, rowCount,
-              e.getMessage()));
-          }
-          rowCount++;
-        }
-        LOG.info("Table {} matches across clusters: {} rows verified", hbaseTableName, rowCount);
-      }
-    }
+    CrossClusterReplicationTestUtil.assertTablesEqualAcrossClusters(conf1, conf2, hbaseTableName);
   }
 
   /**

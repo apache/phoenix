@@ -351,6 +351,32 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
   }
 
   @Test
+  public void testInitializeLastRoundProcessed_DegradedStateWithZeroLastSyncTime()
+    throws IOException {
+    long newFileTimestamp = 1704240060000L;
+    long lastSyncStateTime = 0L; // never synced / unset - must NOT rewind to the epoch
+    long currentTime = 1704240900000L;
+    long roundTimeMills = 60000L; // 1 minute
+
+    // lastRoundProcessed uses the minimum of new files and current time (the file frontier).
+    long expectedEndTime =
+      (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+    ReplicationRound expectedLastRoundProcessed =
+      new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+
+    // The zero-lastSyncStateTimeInMs guard is shared by the DEGRADED_STANDBY and STANDBY_TO_ACTIVE
+    // init paths. On the DEGRADED path too, lastRoundInSync must collapse onto the file frontier
+    // (== lastRoundProcessed) instead of ReplicationRound(0, 0), which would rewind all the way to
+    // the epoch and drive the consistency point to 0 (retain-everything).
+    ReplicationRound expectedLastRoundInSync = expectedLastRoundProcessed;
+
+    testInitializeLastRoundProcessedHelper(currentTime, lastSyncStateTime, newFileTimestamp, null,
+      HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, expectedLastRoundProcessed,
+      expectedLastRoundInSync, ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
+      false);
+  }
+
+  @Test
   public void testInitializeLastRoundProcessed_SyncStateWithInProgressFiles() throws IOException {
     long currentTime = 1704412800000L;
     long inProgressTimestamp = 1704412680000L; // 2 min before current time
@@ -440,8 +466,10 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
   }
 
   /**
-   * Tests initializeLastRoundProcessed in STANDBY_TO_ACTIVE state. Validates that failoverPending
-   * is set to true when HA group state is STANDBY_TO_ACTIVE.
+   * Tests initializeLastRoundProcessed in STANDBY_TO_ACTIVE state with no files. lastRoundInSync
+   * collapses onto lastRoundProcessed (nothing to rewind), so the replay initializes directly to
+   * SYNC (not SYNCED_RECOVERY) and promotion is not delayed by a round window. failoverPending is
+   * still armed because the HA group state is STANDBY_TO_ACTIVE.
    */
   @Test
   public void testInitializeLastRoundProcessed_StandbyToActiveState() throws IOException {
@@ -462,6 +490,217 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
     testInitializeLastRoundProcessedHelper(currentTime, null, null, null,
       HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, expectedLastRoundProcessed,
       expectedLastRoundInSync, ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC, true);
+  }
+
+  @Test
+  public void testInitializeLastRoundProcessed_StandbyToActiveStateWithLastSyncStateAsMin()
+    throws IOException {
+    long newFileTimestamp = 1704240060000L;
+    long lastSyncStateTime = 1704240030000L;
+    long currentTime = 1704240900000L;
+    long roundTimeMills = 60000L; // 1 minute
+
+    // lastRoundProcessed uses the minimum of new files and current time (the file frontier).
+    long expectedEndTime =
+      (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+    ReplicationRound expectedLastRoundProcessed =
+      new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+
+    // lastRoundInSync uses the minimum of lastSyncStateTime and file timestamps, so on restart into
+    // STANDBY_TO_ACTIVE it stays one round BEHIND lastRoundProcessed (not collapsed onto it) - this
+    // is the rewind target that guarantees zero RPO after a direct DEGRADED_STANDBY transition.
+    long expectedSyncEndTime =
+      (lastSyncStateTime / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+    ReplicationRound expectedLastRoundInSync =
+      new ReplicationRound(expectedSyncEndTime - roundTimeMills, expectedSyncEndTime);
+
+    testInitializeLastRoundProcessedHelper(currentTime, lastSyncStateTime, newFileTimestamp, null,
+      HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, expectedLastRoundProcessed,
+      expectedLastRoundInSync, ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY,
+      true);
+  }
+
+  @Test
+  public void testInitializeLastRoundProcessed_StandbyToActiveStateWithZeroLastSyncTime()
+    throws IOException {
+    long newFileTimestamp = 1704240060000L;
+    long lastSyncStateTime = 0L; // never synced / unset - must NOT rewind to the epoch
+    long currentTime = 1704240900000L;
+    long roundTimeMills = 60000L; // 1 minute
+
+    // lastRoundProcessed uses the minimum of new files and current time (the file frontier).
+    long expectedEndTime =
+      (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+    ReplicationRound expectedLastRoundProcessed =
+      new ReplicationRound(expectedEndTime - roundTimeMills, expectedEndTime);
+
+    // With lastSyncStateTimeInMs == 0 (unset), lastRoundInSync must collapse onto the file frontier
+    // (== lastRoundProcessed) instead of ReplicationRound(0, 0), which would rewind all the way to
+    // the epoch and drive the consistency point to 0 (retain-everything). Because the two rounds
+    // are then equal (nothing to rewind), the replay initializes directly to SYNC rather than
+    // SYNCED_RECOVERY, so promotion is not delayed by a round window.
+    ReplicationRound expectedLastRoundInSync = expectedLastRoundProcessed;
+
+    testInitializeLastRoundProcessedHelper(currentTime, lastSyncStateTime, newFileTimestamp, null,
+      HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, expectedLastRoundProcessed,
+      expectedLastRoundInSync, ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC, true);
+  }
+
+  /**
+   * PHOENIX-7920 restart into STANDBY_TO_ACTIVE with nothing left to replay: a fresh replay that
+   * reads a persisted STANDBY_TO_ACTIVE record (an RS bounced mid-failover after the data was
+   * already replayed) must promote on the FIRST replay() tick. With no files, lastRoundInSync
+   * collapses onto lastRoundProcessed, so init picks SYNC (not SYNCED_RECOVERY), failoverPending is
+   * armed, and shouldTriggerFailover() passes immediately. Regression guard for the init-branch
+   * latency fix: on the earlier unconditional-SYNCED_RECOVERY init, the SYNC state gate would block
+   * promotion until a round became time-eligible (~one round window later), so triggerFailover
+   * would not fire on this first tick.
+   */
+  @Test
+  public void testReplay_RestartIntoStandbyToActive_NothingToReplay_PromotesOnFirstTick()
+    throws IOException {
+    long currentTime = 1704153600000L;
+
+    TestableReplicationLogTracker fileTracker =
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+    fileTracker.init();
+    try {
+      // Persisted STANDBY_TO_ACTIVE with no in / in-progress files: models an RS that restarted
+      // after a direct DEGRADED_STANDBY -> STANDBY_TO_ACTIVE transition once the data had already
+      // been replayed.
+      HAGroupStoreRecord record =
+        new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+          HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE, currentTime,
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+
+      EnvironmentEdge edge = () -> currentTime;
+      EnvironmentEdgeManager.injectEdge(edge);
+      try {
+        TestableReplicationLogDiscoveryReplay discovery =
+          new TestableReplicationLogDiscoveryReplay(fileTracker, record);
+        // init() subscribes the LOCAL listeners (none fire here: this group's LOCAL state is
+        // ACTIVE,
+        // not one of the subscribed failover/degrade targets, and the record is never transitioned
+        // in this test), runs initializeLastRoundProcessed() over the injected STANDBY_TO_ACTIVE
+        // record, and wires up the metrics source that replay() needs.
+        discovery.init();
+
+        // Nothing to rewind -> init directly to SYNC with failoverPending armed.
+        assertEquals("no-rewind restart into STANDBY_TO_ACTIVE must init to SYNC",
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+          discovery.getReplicationReplayState());
+        assertTrue("failoverPending must be armed on a STANDBY_TO_ACTIVE restart",
+          discovery.getFailoverPending());
+
+        // First replay() tick must promote (shouldTriggerFailover passes since state is SYNC).
+        discovery.replay();
+        assertEquals("promotion must fire on the first replay tick", 1,
+          discovery.getTriggerFailoverCallCount());
+      } finally {
+        EnvironmentEdgeManager.reset();
+      }
+    } finally {
+      fileTracker.close();
+    }
+  }
+
+  /**
+   * PHOENIX-7920 init-window race regression: a direct DEGRADED_STANDBY -&gt; STANDBY_TO_ACTIVE
+   * flip can fire triggerFailoverListner while initializeLastRoundProcessed() still holds
+   * NOT_INITIALIZED -- its compareAndSet(DEGRADED, SYNCED_RECOVERY) no-ops there and only
+   * failoverPending survives. The DEGRADED_STANDBY branch's compareAndSet(NOT_INITIALIZED,
+   * DEGRADED) then lands, leaving state DEGRADED with a failover pending; nothing re-fires (the
+   * record is already STANDBY_TO_ACTIVE and a direct failover never revisits STANDBY), so
+   * shouldTriggerFailover() -- gated on SYNC -- would never promote and the failover would stay
+   * silently stuck until an RS restart. The init-window reconcile must finish the promotion the
+   * listener intended: observe the pending failover from DEGRADED and CAS to SYNCED_RECOVERY.
+   * <p>
+   * Reproduced deterministically (no ZooKeeper, no real listeners): the overridden
+   * getHAGroupRecord() arms failoverPending -- the surviving effect of the listener firing at
+   * NOT_INITIALIZED -- as it returns the stale DEGRADED_STANDBY record, landing the arm before the
+   * DEGRADED-branch CAS exactly as the real interleaving does. Before the reconcile was added this
+   * test fails: state stays DEGRADED with a pending failover that never promotes.
+   */
+  @Test
+  public void testReplay_InitWindowRace_DegradedFlipToStandbyToActive_Reconciles()
+    throws IOException {
+    // Same file/sync-point layout as
+    // testInitializeLastRoundProcessed_DegradedStateWithLastSyncStateAsMin:
+    // a new file at the frontier with lastSyncStateTime one round earlier, so lastRoundInSync
+    // initializes one round BEHIND lastRoundProcessed -- genuine rewind work that SYNCED_RECOVERY
+    // must cover (the round forwarded-but-not-synced while degraded).
+    long newFileTimestamp = 1704240060000L;
+    long lastSyncStateTime = 1704240030000L;
+    long currentTime = 1704240900000L;
+    long roundTimeMills = 60000L; // 1 minute
+
+    long expectedProcEndTime =
+      (newFileTimestamp / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+    ReplicationRound expectedLastRoundProcessed =
+      new ReplicationRound(expectedProcEndTime - roundTimeMills, expectedProcEndTime);
+    long expectedSyncEndTime =
+      (lastSyncStateTime / TimeUnit.MINUTES.toMillis(1)) * TimeUnit.MINUTES.toMillis(1);
+    ReplicationRound expectedLastRoundInSync =
+      new ReplicationRound(expectedSyncEndTime - roundTimeMills, expectedSyncEndTime);
+
+    TestableReplicationLogTracker fileTracker =
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+    fileTracker.init();
+    try {
+      // New file at the frontier so lastRoundProcessed lands on it.
+      ReplicationRound newFileRound =
+        new ReplicationRound(newFileTimestamp - roundTimeMills, newFileTimestamp);
+      Path shardPath = fileTracker.getReplicationShardDirectoryManager()
+        .getShardDirectory(newFileRound.getStartTime());
+      rootFs.mkdirs(shardPath);
+      Path newFile = new Path(shardPath, newFileTimestamp + "_rs-1.plog");
+      rootFs.create(newFile, true).close();
+
+      // Stale DEGRADED_STANDBY record (recordTime carries lastSyncStateTime, the last good sync
+      // point) -- what getHAGroupRecord() reads before the LOCAL record flips to STANDBY_TO_ACTIVE.
+      HAGroupStoreRecord degradedRecord =
+        new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+          HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, lastSyncStateTime,
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+
+      EnvironmentEdge edge = () -> currentTime;
+      EnvironmentEdgeManager.injectEdge(edge);
+      try {
+        TestableReplicationLogDiscoveryReplay discovery =
+          new TestableReplicationLogDiscoveryReplay(fileTracker, degradedRecord) {
+            @Override
+            protected HAGroupStoreRecord getHAGroupRecord() throws IOException {
+              // Arm failoverPending as the stale record is read: the surviving effect of
+              // triggerFailoverListner firing at NOT_INITIALIZED (its CAS no-ops there). This
+              // lands the arm before the DEGRADED-branch CAS, as the real interleaving does.
+              setFailoverPending(true);
+              return super.getHAGroupRecord();
+            }
+          };
+
+        discovery.initializeLastRoundProcessed();
+
+        // The reconcile must finish the promotion: DEGRADED + pending failover -> SYNCED_RECOVERY.
+        assertEquals(
+          "init-window race must reconcile DEGRADED + pending failover to SYNCED_RECOVERY",
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY,
+          discovery.getReplicationReplayState());
+        assertTrue("failoverPending must remain armed through the reconcile",
+          discovery.getFailoverPending());
+        // Rewind target preserved: lastRoundInSync stays one round behind lastRoundProcessed, so
+        // SYNCED_RECOVERY has genuine work (re-sync the forwarded-but-unsynced round).
+        assertEquals("lastRoundProcessed must land on the file frontier",
+          expectedLastRoundProcessed, discovery.getLastRoundProcessed());
+        assertEquals("lastRoundInSync must stay one round behind (the rewind target)",
+          expectedLastRoundInSync, discovery.getLastRoundInSync());
+      } finally {
+        EnvironmentEdgeManager.reset();
+      }
+    } finally {
+      fileTracker.close();
+    }
   }
 
   /**
@@ -1319,6 +1558,277 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
     }
   }
 
+  /**
+   * PHOENIX-7920: drives the real LOCAL listeners through the DIRECT transition DEGRADED_STANDBY
+   * -&gt; STANDBY_TO_ACTIVE (skipping STANDBY) via ZooKeeper, asserting that triggerFailoverListner
+   * promotes the replay state DEGRADED -&gt; SYNCED_RECOVERY (so replay() will rewind) in addition
+   * to arming failoverPending. Before the fix the state stayed DEGRADED and failover was blocked
+   * forever.
+   */
+  @Test
+  public void testReplay_RuntimeListeners_DirectDegradedToStandbyToActive() throws Exception {
+    PhoenixHAAdmin haAdmin = CLUSTERS.getHaAdmin1();
+    // Base state: local STANDBY, written before init() so the discovery's client picks it up.
+    writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY);
+
+    TestableReplicationLogTracker fileTracker =
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+    fileTracker.init();
+    try {
+      // Null injected record: read the real effective record and subscribe the real LOCAL
+      // listeners to HAGroupStoreManager.
+      TestableReplicationLogDiscoveryReplay discovery =
+        new TestableReplicationLogDiscoveryReplay(fileTracker, null);
+      discovery.init();
+      // Let the initial STANDBY load settle so it cannot race the degrade below.
+      Thread.sleep(5000L);
+
+      // degrade: LOCAL -> DEGRADED_STANDBY must drive the degradedListener to DEGRADED.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
+      awaitCondition(
+        () -> discovery.getReplicationReplayState()
+            == ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
+        "degradedListener should drive replay state to DEGRADED");
+
+      // direct failover: LOCAL -> STANDBY_TO_ACTIVE (no STANDBY hop) must both arm failoverPending
+      // AND move DEGRADED -> SYNCED_RECOVERY so a rewind is scheduled.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE);
+      awaitCondition(
+        () -> discovery.getReplicationReplayState()
+            == ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY,
+        "direct DEGRADED_STANDBY -> STANDBY_TO_ACTIVE must move replay state to SYNCED_RECOVERY");
+      assertTrue("failoverPending must be set after STANDBY_TO_ACTIVE",
+        discovery.getFailoverPending());
+    } finally {
+      fileTracker.close();
+      haAdmin.getCurator().delete().quietly().forPath(toPath(haGroupName));
+    }
+  }
+
+  /**
+   * PHOENIX-7920: the healthy failover path STANDBY -&gt; STANDBY_TO_ACTIVE (no prior degrade) must
+   * NOT change the replay state. init from STANDBY leaves state SYNC, and the trigger listener's
+   * compareAndSet(DEGRADED, SYNCED_RECOVERY) is a no-op from SYNC, arming only failoverPending.
+   * This guards against a naive unconditional set(SYNCED_RECOVERY) that would force a needless
+   * rewind on every healthy failover.
+   */
+  @Test
+  public void testReplay_RuntimeListeners_HealthyStandbyToActiveKeepsSync() throws Exception {
+    PhoenixHAAdmin haAdmin = CLUSTERS.getHaAdmin1();
+    writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY);
+
+    TestableReplicationLogTracker fileTracker =
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+    fileTracker.init();
+    try {
+      TestableReplicationLogDiscoveryReplay discovery =
+        new TestableReplicationLogDiscoveryReplay(fileTracker, null);
+      discovery.init();
+      // Let the initial STANDBY load settle so init has resolved to SYNC before we proceed.
+      Thread.sleep(5000L);
+      assertEquals("init from STANDBY should leave replay state SYNC",
+        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+        discovery.getReplicationReplayState());
+
+      // healthy failover: LOCAL -> STANDBY_TO_ACTIVE from SYNC must arm failoverPending without
+      // changing the replay state. triggerFailoverListner arms failoverPending first, then does
+      // compareAndSet(DEGRADED, SYNCED_RECOVERY) -- a no-op from SYNC. So the state stays SYNC
+      // before, during, and after the callback no matter where the CAS lands relative to our
+      // read; the "state unchanged" assertion below is order-independent, not a race on a sleep.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE);
+      awaitCondition(discovery::getFailoverPending,
+        "triggerFailoverListner should set failoverPending");
+      // The CAS is a no-op from SYNC, so the state must be SYNC here (not SYNCED_RECOVERY). A
+      // (wrong) unconditional set(SYNCED_RECOVERY) would already be visible alongside
+      // failoverPending.
+      assertEquals("STANDBY_TO_ACTIVE from SYNC must not change replay state",
+        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+        discovery.getReplicationReplayState());
+      // Settle briefly and re-check both invariants to catch a late or redelivered event wrongly
+      // flipping the state or clearing the pending flag.
+      Thread.sleep(500L);
+      assertTrue("failoverPending must remain armed after settling",
+        discovery.getFailoverPending());
+      assertEquals("replay state must remain SYNC after settling",
+        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+        discovery.getReplicationReplayState());
+    } finally {
+      fileTracker.close();
+      haAdmin.getCurator().delete().quietly().forPath(toPath(haGroupName));
+    }
+  }
+
+  /**
+   * PHOENIX-7920 (C2 regression guard): recoveryListener uses compareAndSet(DEGRADED,
+   * SYNCED_RECOVERY), NOT an unconditional set(). This drives the two behaviours that distinguish
+   * the CAS from a naive set through the real LOCAL listeners over ZooKeeper.
+   * <p>
+   * Phase 1 (must NOT over-fire): a LOCAL -&gt; STANDBY event that arrives while the replay state
+   * is already SYNC must leave it SYNC. STANDBY is reached without ever passing through
+   * DEGRADED_STANDBY, via an aborted-failover round trip (STANDBY -&gt; STANDBY_TO_ACTIVE -&gt;
+   * ABORT_TO_STANDBY -&gt; STANDBY). recoveryListener has no observable side effect from SYNC, so
+   * determinism is manufactured in two steps: first we wait for the client cache to surface STANDBY
+   * (proving that event was delivered, not coalesced into the next write); then a trailing
+   * STANDBY_TO_ACTIVE acts as a barrier - its failoverPending write runs on the same single
+   * cache-dispatcher thread strictly after the STANDBY event's recoveryListener callback, so once
+   * we observe failoverPending that callback has already completed. Its compareAndSet(DEGRADED,
+   * SYNCED_RECOVERY) is a no-op from SYNC (and from SYNCED_RECOVERY), so it does not disturb
+   * whatever recoveryListener left. With a wrong unconditional set() the state would read
+   * SYNCED_RECOVERY here.
+   * <p>
+   * Phase 2 (must still fire from DEGRADED): DEGRADED_STANDBY -&gt; STANDBY must reach
+   * SYNCED_RECOVERY, proving the CAS still schedules the rewind on a genuine recovery.
+   */
+  @Test
+  public void testReplay_RuntimeListeners_SpuriousStandbyKeepsSyncButDegradedRecovers()
+    throws Exception {
+    PhoenixHAAdmin haAdmin = CLUSTERS.getHaAdmin1();
+    // Base state: local STANDBY, written before init() so the discovery's client picks it up.
+    writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY);
+
+    TestableReplicationLogTracker fileTracker =
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+    fileTracker.init();
+    try {
+      TestableReplicationLogDiscoveryReplay discovery =
+        new TestableReplicationLogDiscoveryReplay(fileTracker, null);
+      discovery.init();
+      // Let the initial STANDBY load settle so init has resolved to SYNC before we proceed.
+      Thread.sleep(5000L);
+      assertEquals("init from STANDBY should leave replay state SYNC",
+        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+        discovery.getReplicationReplayState());
+
+      // ---- Phase 1: spurious LOCAL -> STANDBY while SYNC must keep SYNC ----
+      // Aborted-failover round trip that never touches DEGRADED_STANDBY. Each step before the
+      // spurious STANDBY is gated on its own observable effect so the cache cannot coalesce events.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE);
+      awaitCondition(discovery::getFailoverPending,
+        "triggerFailoverListner should set failoverPending");
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY);
+      awaitCondition(() -> !discovery.getFailoverPending(),
+        "abortFailoverListner should clear failoverPending");
+
+      // The spurious event. Confirm the client cache actually surfaced STANDBY (so it was not
+      // coalesced into the barrier write below) before proceeding.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY);
+      awaitCondition(() -> effectiveLocalStateIs(HAGroupStoreRecord.HAGroupState.STANDBY),
+        "client cache should surface the spurious LOCAL STANDBY");
+
+      // Barrier: a trailing STANDBY_TO_ACTIVE. Observing its failoverPending guarantees the STANDBY
+      // event's recoveryListener callback (dispatched earlier on the same thread) has completed.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE);
+      awaitCondition(discovery::getFailoverPending,
+        "trailing STANDBY_TO_ACTIVE should re-arm failoverPending (recovery-callback barrier)");
+      assertEquals(
+        "spurious LOCAL -> STANDBY while SYNC must not flip replay state to SYNCED_RECOVERY",
+        ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+        discovery.getReplicationReplayState());
+
+      // ---- Phase 2: genuine DEGRADED_STANDBY -> STANDBY must reach SYNCED_RECOVERY ----
+      // Return to a plain STANDBY, then degrade, then recover. Each hop is gated on its effect.
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.ABORT_TO_STANDBY);
+      awaitCondition(() -> !discovery.getFailoverPending(),
+        "abortFailoverListner should clear failoverPending again");
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY);
+      awaitCondition(() -> effectiveLocalStateIs(HAGroupStoreRecord.HAGroupState.STANDBY),
+        "client cache should surface STANDBY before degrade");
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY);
+      awaitCondition(
+        () -> discovery.getReplicationReplayState()
+            == ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED,
+        "degradedListener should drive replay state to DEGRADED");
+      writeLocalRecord(haAdmin, HAGroupStoreRecord.HAGroupState.STANDBY);
+      awaitCondition(
+        () -> discovery.getReplicationReplayState()
+            == ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY,
+        "recoveryListener CAS must drive DEGRADED -> SYNCED_RECOVERY on a genuine recovery");
+    } finally {
+      fileTracker.close();
+      haAdmin.getCurator().delete().quietly().forPath(toPath(haGroupName));
+    }
+  }
+
+  /**
+   * PHOENIX-7920 direct-path outcome: with a failover pending during degradation, once the rewind
+   * (SYNCED_RECOVERY) completes and replay returns to SYNC with everything caught up, failover is
+   * triggered exactly once. Complements testReplay_StateTransition_DegradedToAbortToRecover (the
+   * aborted case, where triggerFailover must NOT fire) and testReplay_StateTransition_
+   * DegradedToSyncedRecovery (rewind with no pending failover, where it also must NOT fire).
+   */
+  @Test
+  public void testReplay_DirectFailover_RewindsThenTriggersFailoverOnce() throws IOException {
+    TestableReplicationLogTracker fileTracker =
+      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
+
+    try {
+      long initialEndTime = 1704585600000L; // 2024-01-07 00:00:00
+      long roundTimeMills =
+        fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds()
+          * 1000L;
+      long bufferMillis = (long) (roundTimeMills * 0.15);
+
+      // DEGRADED record (peer-blind degraded standby).
+      HAGroupStoreRecord mockRecord =
+        new HAGroupStoreRecord(HAGroupStoreRecord.DEFAULT_PROTOCOL_VERSION, haGroupName,
+          HAGroupStoreRecord.HAGroupState.DEGRADED_STANDBY, initialEndTime,
+          HighAvailabilityPolicy.FAILOVER.toString(), peerZkUrl, CLUSTERS.getMasterAddress1(),
+          CLUSTERS.getMasterAddress2(), CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+
+      // Allow processing up to 5 rounds.
+      long currentTime = initialEndTime + (5 * roundTimeMills) + bufferMillis;
+      EnvironmentEdge edge = () -> currentTime;
+      EnvironmentEdgeManager.injectEdge(edge);
+
+      try {
+        TestableReplicationLogDiscoveryReplay discovery =
+          new TestableReplicationLogDiscoveryReplay(fileTracker, mockRecord);
+        discovery.init();
+
+        // Large rewind span: lastRoundProcessed is well ahead of the frozen lastRoundInSync.
+        ReplicationRound lastInSyncRound =
+          new ReplicationRound(initialEndTime - roundTimeMills, initialEndTime);
+        discovery.setLastRoundProcessed(new ReplicationRound(initialEndTime + roundTimeMills,
+          initialEndTime + (2 * roundTimeMills)));
+        discovery.setLastRoundInSync(lastInSyncRound);
+        discovery
+          .setReplicationReplayState(ReplicationLogDiscoveryReplay.ReplicationReplayState.DEGRADED);
+        // Failover requested during degradation, then the direct transition schedules the rewind
+        // (SYNCED_RECOVERY) after round 2. failoverPending is never cleared - it must survive.
+        discovery.setFailoverPending(true);
+        discovery.setStateChangeAfterRounds(2,
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNCED_RECOVERY);
+
+        discovery.replay();
+
+        // 2 rounds in DEGRADED, rewind to lastRoundInSync, then 5 rounds re-replayed in SYNC.
+        assertEquals("processRound should be called 7 times", 7,
+          discovery.getProcessRoundCallCount());
+
+        // Recovery completed: back to SYNC, both pointers caught up to the final round.
+        assertEquals("State should be SYNC after recovery",
+          ReplicationLogDiscoveryReplay.ReplicationReplayState.SYNC,
+          discovery.getReplicationReplayState());
+        ReplicationRound expectedFinalRound = new ReplicationRound(
+          initialEndTime + (4 * roundTimeMills), initialEndTime + (5 * roundTimeMills));
+        assertEquals("Last round processed should be the final round", expectedFinalRound,
+          discovery.getLastRoundProcessed());
+        assertEquals("Last round in sync should match last round processed after recovery",
+          expectedFinalRound, discovery.getLastRoundInSync());
+
+        // The pending failover survived the rewind and fired exactly once, from SYNC.
+        assertEquals("Failover should be triggered exactly once after rewind completes", 1,
+          discovery.getTriggerFailoverCallCount());
+        assertFalse("failoverPending should be cleared after failover is triggered",
+          discovery.getFailoverPending());
+      } finally {
+        EnvironmentEdgeManager.reset();
+      }
+    } finally {
+      fileTracker.close();
+    }
+  }
+
   /** Write (create, or version-checked update) the LOCAL HA record for this group on ZooKeeper. */
   private void writeLocalRecord(PhoenixHAAdmin haAdmin, HAGroupStoreRecord.HAGroupState state)
     throws Exception {
@@ -1334,6 +1844,17 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
         haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
       haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, record,
         current.getRight().getVersion());
+    }
+  }
+
+  /** True if the discovery's LOCAL client cache currently surfaces {@code state} as effective. */
+  private boolean effectiveLocalStateIs(HAGroupStoreRecord.HAGroupState state) {
+    try {
+      Optional<HAGroupStoreRecord> rec =
+        HAGroupStoreManager.getInstance(conf1).getEffectiveHAGroupStoreRecord(haGroupName);
+      return rec.isPresent() && rec.get().getHAGroupState() == state;
+    } catch (IOException e) {
+      return false;
     }
   }
 
