@@ -127,7 +127,7 @@ public class StoreAndForwardFailoverIT extends HABaseIT {
     // The live Cluster1 writer (RS0). Same singleton the RS write path uses, so flipping its mode
     // affects real writes. Cluster1 is ACTIVE_IN_SYNC => this starts in SYNC mode.
     HRegionServer rs = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
-    logGroup = ReplicationLogGroup.get(conf1, rs.getServerName(), haGroupName);
+    logGroup = ReplicationLogGroup.get(conf1, rs.getServerName(), haGroupName).get();
 
     // Replicated table (REPLICATION_SCOPE=1 + LOCAL INDEX) on BOTH clusters.
     tableName = "T_" + generateUniqueName();

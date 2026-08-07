@@ -701,7 +701,7 @@ public class HAGroupStoreManagerIT extends HABaseIT {
 
       HRegionServer regionServer = CLUSTERS.getHBaseCluster1().getHBaseCluster().getRegionServer(0);
       replicationLogGroup = ReplicationLogGroup.get(cluster1Conf, regionServer.getServerName(),
-        haGroupName, cluster1HAManager);
+        haGroupName, cluster1HAManager).get();
       replicationLogReplay = ReplicationLogReplay.get(cluster2Conf, haGroupName);
       replicationLogReplay.startReplay();
 

@@ -21,6 +21,7 @@ import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_C
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME;
 import static org.apache.phoenix.query.BaseTest.generateUniqueName;
+import static org.apache.phoenix.replication.CrossClusterReplicationTestUtil.findLogFiles;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -1021,7 +1022,7 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
 
     // Replay the replication log on cluster 2
     FileSystem fs = standByLogDir.getFileSystem(conf2);
-    List<Path> logFiles = CrossClusterReplicationTestUtil.findLogFiles(standByLogDir, fs);
+    List<Path> logFiles = findLogFiles(standByLogDir, fs);
     LOG.info("Found {} log files to replay", logFiles.size());
     assertTrue("Should have at least one log file", logFiles.size() > 0);
 
