@@ -73,7 +73,12 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
   }
 
   public ReplicationLogDiscoveryForwarder(ReplicationLogGroup logGroup) {
-    super(createLogTracker(logGroup));
+    this(logGroup, createLogTracker(logGroup));
+  }
+
+  @VisibleForTesting
+  ReplicationLogDiscoveryForwarder(ReplicationLogGroup logGroup, ReplicationLogTracker tracker) {
+    super(tracker);
     this.logGroup = logGroup;
     this.copyThroughputThresholdBytesPerMs = conf.getDouble(
       REPLICATION_LOG_COPY_THROUGHPUT_BYTES_PER_MS_KEY, DEFAULT_LOG_COPY_THROUGHPUT_BYTES_PER_MS);
@@ -156,32 +161,42 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
 
   @Override
   protected void processNoMoreRoundsLeft() throws IOException {
-    // check if we are caught up so that we can transition to SYNC state
-    // we are caught up when there are no files currently in the out progress directory
-    // and no new files exist for ongoing round
-    if (
-      replicationLogTracker.getInProgressFiles().isEmpty()
-        && replicationLogTracker.getNewFilesForRound(replicationLogTracker
-          .getReplicationShardDirectoryManager().getNextRound(getLastRoundProcessed())).isEmpty()
-    ) {
-      LOG.info("Processed all the replication log files for {}", logGroup);
-      // if this RS is still in STORE_AND_FORWARD mode like when it didn't process any file
-      // move this RS to SYNC_AND_FORWARD
-      logGroup.checkAndSetModeAndNotify(STORE_AND_FORWARD, SYNC_AND_FORWARD);
+    // A non-empty in-progress directory means this RS has claimed-but-stuck files, so its forward
+    // path to the peer is unhealthy: neither promote its own mode nor claim the group is in sync.
+    if (!replicationLogTracker.getInProgressFiles().isEmpty()) {
+      LOG.info("In-progress directory not empty for {}, skipping mode promotion and sync claim",
+        logGroup);
+      return;
+    }
 
-      if (syncUpdateTS <= EnvironmentEdgeManager.currentTimeMillis()) {
-        try {
-          long waitTime = logGroup.setHAGroupStatusToSync();
-          if (waitTime != 0) {
-            syncUpdateTS = EnvironmentEdgeManager.currentTimeMillis() + waitTime;
-            LOG.info("HAGroup {} will try to update HA state to sync at {}", logGroup,
-              syncUpdateTS);
-          } else {
-            LOG.info("HAGroup {} updated HA state to SYNC", logGroup);
-          }
-        } catch (Exception e) {
-          LOG.info("Could not update status to sync for {}", logGroup, e);
+    // No stuck files, so promote this RS's own mode on that signal alone. Gating on the next
+    // round's
+    // shard would pin an idle RS forever: it is a shared directory holding every co-active RS's
+    // live
+    // rotation writer. The flip is self-validating — SyncAndForwardModeImpl.onEnter must reach the
+    // peer, so a bad promotion bounces back to STORE_AND_FORWARD.
+    logGroup.checkAndSetModeAndNotify(STORE_AND_FORWARD, SYNC_AND_FORWARD);
+
+    // The shared in-sync claim additionally requires no new files for the ongoing round.
+    if (
+      !replicationLogTracker.getNewFilesForRound(replicationLogTracker
+        .getReplicationShardDirectoryManager().getNextRound(getLastRoundProcessed())).isEmpty()
+    ) {
+      LOG.info("New files present for the next round for {}, skipping sync claim", logGroup);
+      return;
+    }
+    LOG.info("Processed all the replication log files for {}", logGroup);
+    if (syncUpdateTS <= EnvironmentEdgeManager.currentTimeMillis()) {
+      try {
+        long waitTime = logGroup.setHAGroupStatusToSync();
+        if (waitTime != 0) {
+          syncUpdateTS = EnvironmentEdgeManager.currentTimeMillis() + waitTime;
+          LOG.info("HAGroup {} will try to update HA state to sync at {}", logGroup, syncUpdateTS);
+        } else {
+          LOG.info("HAGroup {} updated HA state to SYNC", logGroup);
         }
+      } catch (Exception e) {
+        LOG.info("Could not update status to sync for {}", logGroup, e);
       }
     }
   }
