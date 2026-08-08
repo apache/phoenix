@@ -57,6 +57,12 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
   public static final String REPLICATION_FORWARDER_IN_PROGRESS_PROCESSING_PROBABILITY_KEY =
     "phoenix.replication.forwarder.in.progress.processing.probability";
 
+  /**
+   * Default probability (in percentage) for processing files from the out-progress directory.
+   * Higher than the base default so a file left behind by a peer's failed claim is retried sooner.
+   */
+  public static final double DEFAULT_FORWARDER_IN_PROGRESS_PROCESSING_PROBABILITY = 20.0;
+
   private final ReplicationLogGroup logGroup;
   private final double copyThroughputThresholdBytesPerMs;
   // the timestamp (in future) at which we will attempt to set the HAGroup state to SYNC
@@ -233,6 +239,6 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
   @Override
   public double getInProgressDirectoryProcessProbability() {
     return getConf().getDouble(REPLICATION_FORWARDER_IN_PROGRESS_PROCESSING_PROBABILITY_KEY,
-      super.getInProgressDirectoryProcessProbability());
+      DEFAULT_FORWARDER_IN_PROGRESS_PROCESSING_PROBABILITY);
   }
 }
