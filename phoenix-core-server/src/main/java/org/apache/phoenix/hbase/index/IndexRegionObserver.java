@@ -120,6 +120,7 @@ import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.CompiledConditionalTTLExpression;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
@@ -1738,12 +1739,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * DUPLICATE KEY / {@code returnResult} / row-delete) paths alike. They are inert on the write
    * path (nothing reads a mutation's empty-column attribute), so they are left on the mutations,
    * not removed.</li>
-   * <li>The view's literal <b>{@code _LITERAL_TTL}</b> — the client threads it on its own
-   * attribute, distinct from {@code _TTL} (which on a mutation means conditional TTL). Capture the
-   * bytes as-is; there is nothing to disambiguate and nothing to strip, so the conditional-TTL
-   * consumers ({@code PhoenixIndexBuilder.hasConditionalTTL}, keyed on {@code _TTL}) are never
-   * tripped by a view's literal TTL.</li>
+   * <li>The view's literal <b>{@code _TTL}</b> — the client threads it via the same {@code _TTL}
+   * mutation attribute the server otherwise treats as conditional TTL
+   * ({@code PhoenixIndexBuilder.hasConditionalTTL}), reusing the single attribute for both TTL
+   * kinds exactly as the scan path does. We make that attribute polymorphic: if the representative
+   * mutation's {@code _TTL} deserializes to a {@link LiteralTTLExpression} (a view's literal TTL),
+   * capture its bytes and remove {@code _TTL} from every mutation; if it is conditional (or
+   * absent), leave it untouched so the conditional-TTL path runs normally.</li>
    * </ul>
+   * The {@code _TTL} removal must happen before {@link #identifyMutationTypes} so that
+   * {@code hasConditionalTTL(m)} returns false at every consumer (it sets
+   * {@code context.hasConditionalTTL}, which would otherwise reach the blind cast to
+   * {@code CompiledConditionalTTLExpression} in {@link #updateMutationsForConditionalTTL}). A table
+   * has exactly one TTL kind and a batch never mixes views, so the decision is uniform across the
+   * batch. HBase has no removeAttribute, so removal is {@code setAttribute(TTL, null)}.
    */
   private void extractLiteralTTLForInternalScan(MiniBatchOperationInProgress<Mutation> miniBatchOp,
     BatchMutateContext context) throws IOException {
@@ -1755,9 +1764,25 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       representative.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
     context.emptyCQForInternalScan =
       representative.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
-    context.literalTTLForInternalScan =
-      representative.getAttribute(BaseScannerRegionObserverConstants.LITERAL_TTL);
     context.isStrictTTLForInternalScan = isStrictTTLEnabled(miniBatchOp);
+
+    byte[] ttlBytes = representative.getAttribute(BaseScannerRegionObserverConstants.TTL);
+    if (ttlBytes == null) {
+      return;
+    }
+    // Disambiguate literal vs conditional by the proto discriminator alone (hasLiteral()), the same
+    // field TTLExpressionFactory.createFromProto keys on, without materializing the compiled
+    // conditional Expression tree just to test its type. This keeps the conditional path's cost
+    // unchanged: a conditional _TTL is left in place and only updateMutationsForConditionalTTL
+    // deserializes it (per expiring row, as before).
+    if (!PTableProtos.TTLExpression.parseFrom(ttlBytes).hasLiteral()) {
+      // Conditional TTL: leave the attribute in place for updateMutationsForConditionalTTL.
+      return;
+    }
+    context.literalTTLForInternalScan = ttlBytes;
+    for (int i = 0; i < miniBatchOp.size(); i++) {
+      miniBatchOp.getOperation(i).setAttribute(BaseScannerRegionObserverConstants.TTL, null);
+    }
   }
 
   private void identifyMutationTypes(MiniBatchOperationInProgress<Mutation> miniBatchOp,
