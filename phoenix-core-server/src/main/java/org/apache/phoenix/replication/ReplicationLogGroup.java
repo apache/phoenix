@@ -218,8 +218,29 @@ public class ReplicationLogGroup {
   protected static final ConcurrentHashMap<String, ReplicationLogGroup> INSTANCES =
     new ConcurrentHashMap<>();
 
+  /**
+   * Canonical, DNS-independent identity of a RegionServer within this JVM's {@link #INSTANCES}
+   * cache. Uses {@code (port, startcode)} and deliberately EXCLUDES the hostname.
+   * <p>
+   * The same physical RS can be observed under two {@link ServerName} spellings that differ only in
+   * host — e.g. a declared FQDN (from {@code hbase.unsafe.regionserver.hostname}) versus the pod IP
+   * the master hands back at reportForDuty when reverse-DNS is enabled. Different coprocessor
+   * environments then surface different spellings for the same server (prewarm
+   * {@code PhoenixRegionServerEndpoint} vs write-path {@code IndexRegionObserver}). Keying on
+   * {@code serverName.getServerName()} (host-inclusive) split one logical group into two
+   * independent instances, each with its own Disruptor and sequence counter.
+   * <p>
+   * {@code (port, startcode)} is a safe discriminator: two distinct live RegionServers can never
+   * share a port on the same host at the same time, so in the mini-cluster ITs that run several
+   * RegionServers in one JVM they remain distinct (each binds its own ephemeral port), while the
+   * single-RS production/kind case collapses the FQDN/IP spellings to one entry.
+   */
+  private static String serverIdentity(ServerName serverName) {
+    return serverName.getPort() + "," + serverName.getStartcode();
+  }
+
   private static String instanceKey(ServerName serverName, String haGroupName) {
-    return serverName.getServerName() + "|" + haGroupName;
+    return serverIdentity(serverName) + "|" + haGroupName;
   }
 
   protected final Configuration conf;
@@ -1008,8 +1029,12 @@ public class ReplicationLogGroup {
     LOG.info("Closing all ReplicationLogGroup instances for server {}, total count={}", serverName,
       INSTANCES.size());
     List<ReplicationLogGroup> groups = new ArrayList<>(INSTANCES.values());
+    String identity = serverIdentity(serverName);
     for (ReplicationLogGroup group : groups) {
-      if (group.serverName.equals(serverName)) {
+      // Match on the canonical (port, startcode) identity, not the host-inclusive ServerName, so a
+      // caller passing one host spelling still purges a group cached under the other (see
+      // serverIdentity).
+      if (serverIdentity(group.serverName).equals(identity)) {
         try {
           group.close();
         } catch (Exception e) {

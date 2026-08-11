@@ -1349,6 +1349,43 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
+   * The instance cache is keyed on (port, startcode), NOT the host-inclusive ServerName string. The
+   * same physical RegionServer can be observed under two ServerName spellings that differ only in
+   * host — e.g. a declared FQDN vs the pod IP the master hands back at reportForDuty — from
+   * different coprocessor environments. Both must resolve to ONE ReplicationLogGroup; a
+   * host-inclusive key split it into two independent instances (two Disruptors / sequence
+   * counters).
+   */
+  @Test
+  public void testCachingIsHostSpellingIndependent() throws Exception {
+    final String haGroupId = "testHAGroupHostSpelling";
+    // Two spellings of the SAME physical server: same port + startcode, host differs (FQDN vs IP).
+    ServerName asFqdn = ServerName.valueOf("rs-0.rs.ns.svc.cluster.local", serverName.getPort(),
+      serverName.getStartcode());
+    ServerName asIp =
+      ServerName.valueOf("10.244.1.25", serverName.getPort(), serverName.getStartcode());
+
+    ReplicationLogGroup viaFqdn =
+      ReplicationLogGroup.get(conf, asFqdn, haGroupId, haGroupStoreManager).get();
+    ReplicationLogGroup viaIp =
+      ReplicationLogGroup.get(conf, asIp, haGroupId, haGroupStoreManager).get();
+
+    assertSame("Two host spellings of the same (port, startcode) must share one instance", viaFqdn,
+      viaIp);
+
+    // A genuinely different server (distinct port — two live RS can never share a port on a host,
+    // e.g. mini-cluster ITs) must still get its own instance.
+    ServerName otherServer =
+      ServerName.valueOf(asIp.getHostname(), serverName.getPort() + 1, serverName.getStartcode());
+    ReplicationLogGroup viaOther =
+      ReplicationLogGroup.get(conf, otherServer, haGroupId, haGroupStoreManager).get();
+    assertNotEquals("A distinct port must yield a distinct instance", viaFqdn, viaOther);
+
+    viaFqdn.close();
+    viaOther.close();
+  }
+
+  /**
    * Tests that close() removes the instance from the cache. Verifies that after closing, a new call
    * to get() creates a new instance.
    */
