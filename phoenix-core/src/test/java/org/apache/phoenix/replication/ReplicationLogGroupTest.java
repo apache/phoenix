@@ -802,6 +802,47 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
+   * S17b: when a sync fails AND rotation cannot stage a fresh writer (the same fault also blocks
+   * createNewWriter()), apply() must not spend its second attempt re-syncing the fenced writer. It
+   * surfaces the failure after attempt 1, and the mode still flips to STORE_AND_FORWARD. This is
+   * the companion to {@link #testSwitchToStoreAndForwardOnSyncFailure()} (where rotation DOES stage
+   * a writer, so the retry runs on it): here rotation is dead, so there is no second sync.
+   */
+  @Test
+  public void testNoSameWriterRetryWhenRotationCannotStageWriter() throws Exception {
+    final String tableName = "TBLSAFR";
+    final long commitId = 1L;
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
+
+    // The peer DN is dead: the current writer fails on sync, and rotation cannot mint a fresh
+    // writer either (createNewWriter()'s header sync would also hang) -- so no pendingWriter is
+    // ever staged.
+    doThrow(new IOException("Simulated sync failure")).when(initialWriter).sync();
+    doThrow(new IOException("Simulated rotation failure")).when(activeLog).createNewWriter();
+
+    logGroup.append(tableName, commitId, put);
+    logGroup.sync();
+
+    // Only ONE sync on the fenced writer: apply() saw no staged writer and surfaced the failure
+    // instead of burning attempt 2 on the same writer.
+    verify(initialWriter, times(1)).sync();
+    assertEquals(STORE_AND_FORWARD, logGroup.getMode());
+
+    // RPO survival: the unsynced record must land on the SAF-mode writer. A downgrade that dropped
+    // currentBatch would still pass the mode + sync-count assertions above but silently lose the
+    // record -- the exact false-success this scenario guards against. Mirrors the append-path
+    // assertion in testBlockFullAppendFailureRecoveredViaReplayFailedEvent().
+    LogFileWriter safWriter = logGroup.getActiveLog().getWriter();
+    assertNotEquals("SAF writer must be a different instance than the fenced SYNC writer",
+      initialWriter, safWriter);
+    verify(safWriter, times(1)).append(eq(tableName), eq(commitId), any(List.class), any());
+  }
+
+  /**
    * Tests the behavior when we fail to update the HAGroup store status when we switch to the
    * STORE_AND_FORWARD mode and abort
    */
@@ -1750,6 +1791,73 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
+   * PHOENIX-7984 the apply() retry re-drives rotation on every spin, so a FIRST rotation attempt
+   * that fails to stage a writer is retried within the {@code retryDelayMs} budget instead of
+   * giving up. This is the missed-retry / swallowed-request defect the addendum fixed: a single
+   * request-then-wait (the pre-fix shape) gives up after one failed rotation and downgrades SYNC to
+   * STORE_AND_FORWARD prematurely, even though a fresh writer was moments away.
+   * <p>
+   * We fail the write once on the initial writer, then make the first rotation's createNewWriter()
+   * throw and the second succeed. Reverting awaitStagedWriter() to a single
+   * requestRotation()+wait() would time out after the first (failed) rotation, surface the original
+   * failure, and flip to SAF -- so this test fails on the pre-addendum shape while passing on the
+   * re-drive loop.
+   * <p>
+   * Determinism: the rotation executor is single-threaded, so the failing rotation runs to
+   * completion (clearing the CAS gate and notifying) before the re-driven one is scheduled; the
+   * guarded wait on {@code rotationSignal} guarantees the retry observes the staged writer with no
+   * lost wakeup. {@code retryDelayMs} is raised well above two local-FS rotations so the budget
+   * cannot expire mid-sequence, and the scheduled tick stays at the 60s default so it never fires.
+   */
+  @Test
+  public void testRetryReDrivesRotationAfterFirstRotationFails() throws Exception {
+    final String tableName = "TBLRDRAFRF";
+    final Mutation put = LogFileTestUtil.newPut("row", 1, 1);
+    final long commitId = 1L;
+
+    // Give the bounded wait plenty of room for two sequential rotations (fail then succeed) so the
+    // outcome turns on the re-drive, not on the timeout racing local-FS latency.
+    conf.setLong(ReplicationLogGroup.REPLICATION_LOG_RETRY_DELAY_MS_KEY, 5000L);
+    recreateLogGroup();
+
+    ReplicationLog activeLog = logGroup.getActiveLog();
+    LogFileWriter initialWriter = activeLog.getWriter();
+    assertNotNull("Initial writer should not be null", initialWriter);
+
+    // Attempt 1 fails on the initial writer, forcing the retry into awaitStagedWriter().
+    doThrow(new IOException("Simulated broken stream")).when(initialWriter).append(anyString(),
+      anyLong(), any(List.class), any());
+
+    // First rotation fails to mint a writer; second succeeds. Only the re-drive loop issues that
+    // second request. One failure is well under maxRotationRetries (5), so the log is not closed.
+    final AtomicInteger rotationAttempts = new AtomicInteger(0);
+    doAnswer(invocation -> {
+      if (rotationAttempts.incrementAndGet() == 1) {
+        throw new IOException("Simulated first rotation failure");
+      }
+      return invocation.callRealMethod();
+    }).when(activeLog).createNewWriter();
+
+    logGroup.append(tableName, commitId, put);
+    logGroup.sync();
+
+    // The re-drive scheduled a second rotation that staged a fresh writer, and the retry landed on
+    // it: mode stayed SYNC (no premature downgrade) and the record is on the new writer.
+    assertEquals("Retry must recover on the re-driven writer, not downgrade to SAF", SYNC,
+      logGroup.getMode());
+    LogFileWriter newWriter = activeLog.getWriter();
+    assertNotEquals("Should be using a fresh writer after the re-driven rotation", initialWriter,
+      newWriter);
+    assertTrue("Both rotation attempts must have run (first failed, second staged)",
+      rotationAttempts.get() >= 2);
+    verify(initialWriter, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)), any());
+    verify(newWriter, times(1)).append(eq(tableName), eq(commitId),
+      eq(LogFileTestUtil.cellsOf(put)), any());
+    verify(newWriter, times(1)).sync();
+  }
+
+  /**
    * Tests that an on-demand size rotation mid-interval does not suppress the next scheduled tick.
    * After size rotation creates a writer early, the scheduled tick still fires and creates another.
    */
@@ -2108,6 +2216,83 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
       .filter(inv -> inv.getMethod().getName().equals("append")).mapToInt(inv -> 1).sum();
     assertTrue("Replay should be bounded by last partial block, not all records. Got: "
       + newWriterAppendCount, newWriterAppendCount < id);
+  }
+
+  /**
+   * S17b (append path): a record whose block-full sync fails is recovered via
+   * {@code replayFailedEvent}, NOT {@code replayBatch}. When {@link LogFileWriter#append} fills a
+   * block it syncs internally; if that durability barrier fails the append throws. Because
+   * {@link ReplicationLog#append} only adds the record to {@code currentBatch} AFTER the append
+   * returns, the failing record R is never in the batch -- so {@code replayBatch(currentBatch)}
+   * cannot bring it back. Recovery comes solely from {@code LogEventHandler.replayFailedEvent},
+   * which re-appends the failing DATA event's own record onto the fresh SAF-mode writer.
+   * <p>
+   * This exercises the real block-full path (tiny block size, as in
+   * {@link #testBlockFullSyncOnAppendReducesReplayOnRotation()}): failure is injected at a genuine
+   * block-full boundary (the append that reports a block sync), and rotation is blocked so the SYNC
+   * writer cannot be rescued -- forcing the SYNC->SAF transition. We assert that R was absent from
+   * the SYNC log's {@code currentBatch} at the moment of failure, yet still lands on the SAF
+   * writer.
+   */
+  @Test
+  public void testBlockFullAppendFailureRecoveredViaReplayFailedEvent() throws Exception {
+    final String tableName = "TBLBFAF";
+    // Tiny blocks so appends fill a block quickly and trigger the block-full internal sync.
+    conf.setLong(LogFileWriterContext.LOGFILE_BLOCK_SIZE, 200L);
+    recreateLogGroup();
+
+    ReplicationLog syncLog = logGroup.getActiveLog();
+    LogFileWriter syncWriter = syncLog.getWriter();
+    assertNotNull("Initial writer should not be null", syncWriter);
+
+    // R = the commitId of the record whose block-full sync fails. Captured at the failure point.
+    final AtomicLong failedCommitId = new AtomicLong(-1);
+    // Snapshot of the SYNC log's currentBatch commitIds at the failure moment (before R is added).
+    final List<Long> batchAtFailure = Collections.synchronizedList(new ArrayList<>());
+
+    // Delegate to the real append until one crosses a block boundary (returns true = block synced);
+    // at that genuine boundary, simulate the peer-DN sync failure by throwing. R never reaches
+    // currentBatch because ReplicationLog.append() adds it only after append() returns.
+    doAnswer(invocation -> {
+      boolean blockSynced = (boolean) invocation.callRealMethod();
+      if (blockSynced && failedCommitId.get() < 0) {
+        long commitId = invocation.getArgument(1);
+        failedCommitId.set(commitId);
+        for (ReplicationLogGroup.Record r : syncLog.getCurrentBatch()) {
+          batchAtFailure.add(r.commitId);
+        }
+        throw new IOException("Simulated block-full sync failure against dead peer DataNode");
+      }
+      return blockSynced;
+    }).when(syncWriter).append(anyString(), anyLong(), any(List.class), any());
+
+    // Rotation cannot rescue the retry (createNewWriter's header sync would also hang) -> SAF.
+    doThrow(new IOException("Simulated rotation failure")).when(syncLog).createNewWriter();
+
+    // Append until the block-full boundary fires the failure and flips the mode to SAF.
+    long id = 1;
+    while (logGroup.getMode() == SYNC && id <= 50) {
+      logGroup.append(tableName, id, LogFileTestUtil.newPut("row_" + id, id, 2));
+      id++;
+    }
+    logGroup.sync();
+
+    assertEquals("Block-full sync failure must switch to STORE_AND_FORWARD", STORE_AND_FORWARD,
+      logGroup.getMode());
+    long r = failedCommitId.get();
+    assertTrue("Test must have hit a real block-full boundary to inject the failure", r > 0);
+
+    // The interesting property: R was NOT in currentBatch at failure, so replayBatch could not have
+    // recovered it -- only replayFailedEvent can.
+    assertFalse(
+      "Failing record R must be absent from currentBatch (added only after append succeeds)",
+      batchAtFailure.contains(r));
+
+    // Yet R still reaches the SAF-mode writer, proving replayFailedEvent re-appended it.
+    LogFileWriter safWriter = logGroup.getActiveLog().getWriter();
+    assertNotEquals("SAF writer must be a different instance than the fenced SYNC writer",
+      syncWriter, safWriter);
+    verify(safWriter, times(1)).append(eq(tableName), eq(r), any(List.class), any());
   }
 
   /**

@@ -22,7 +22,6 @@ import java.io.InterruptedIOException;
 import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -78,9 +77,10 @@ public class ReplicationLog {
   protected final AtomicLong rotationFailures = new AtomicLong(0);
   // Staged writer created by the background LogRotationTask, drained by checkAndReplaceWriter().
   private final AtomicReference<LogFileWriter> pendingWriter = new AtomicReference<>();
-  // Latch set by apply() on the retry path before calling requestRotation(); counted down by
-  // LogRotationTask in a finally block so apply() can wait (with timeout) for a fresh writer.
-  private volatile CountDownLatch rotationStagedLatch;
+  // Monitor the apply() retry path waits on for a fresh writer to be staged. LogRotationTask
+  // notifies it in a finally block on every completion (success or failure) so a waiter is never
+  // stranded. The waited-on condition is pendingWriter itself, so a spurious notify is harmless.
+  private final Object rotationSignal = new Object();
   private final AtomicBoolean closed = new AtomicBoolean(false);
   // Single gate for rotation submission. Set by requestRotation()'s CAS before queuing a task,
   // cleared in LogRotationTask's finally. Both scheduled ticks and on-demand callers go through
@@ -251,11 +251,14 @@ public class ReplicationLog {
    * current writer stays open so in-flight writes still land. Skipping ahead of the CAS (rather
    * than inside {@link LogRotationTask#run()}) keeps the gate clear, so a later tick resumes
    * rotation as soon as the flag clears on abort.
+   * @return {@code true} if a rotation is now queued or already in flight (worth waiting for);
+   *         {@code false} if rotation is suppressed this call (failover pending, or the executor is
+   *         shutting down) so no task will run.
    */
-  private void requestRotation() {
+  private boolean requestRotation() {
     if (logGroup.isFailoverPending()) {
       LOG.info("HAGroup {} rotation suspended: failover pending", logGroup);
-      return;
+      return false;
     }
     if (rotationRequested.compareAndSet(false, true)) {
       try {
@@ -263,7 +266,45 @@ public class ReplicationLog {
       } catch (java.util.concurrent.RejectedExecutionException e) {
         LOG.info("Rotation executor shut down, skipping rotation", e);
         rotationRequested.set(false);
+        return false;
       }
+    }
+    return true;
+  }
+
+  /**
+   * Requests rotation and waits, bounded by {@code retryDelayMs}, for {@link LogRotationTask} to
+   * stage a fresh writer in {@code pendingWriter}. Called only from {@link #apply}'s retry path so
+   * a failed write is retried on a brand-new writer (new HDFS pipeline), never the fenced one.
+   * <p>
+   * Each spin re-issues {@link #requestRotation()} before waiting: a request coalesced away while a
+   * soon-to-complete rotation held the CAS gate is reissued once the gate clears, so a fresh task
+   * actually gets scheduled. The waited-on condition is {@code pendingWriter} itself, so a spurious
+   * or unrelated notify just re-checks and loops. Exits early if rotation is permanently suppressed
+   * (nothing will ever stage) or the log closes.
+   * @return the staged writer, or {@code null} if none was staged before the deadline / close /
+   *         permanent suppression. The caller drains it via {@link #checkAndReplaceWriter}.
+   */
+  private LogFileWriter awaitStagedWriter() throws InterruptedIOException {
+    final long deadlineNs = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(retryDelayMs);
+    synchronized (rotationSignal) {
+      LogFileWriter staged;
+      while ((staged = pendingWriter.get()) == null && !isClosed()) {
+        long remainingMs = TimeUnit.NANOSECONDS.toMillis(deadlineNs - System.nanoTime());
+        if (remainingMs <= 0) {
+          break;
+        }
+        if (!requestRotation()) {
+          break;
+        }
+        try {
+          rotationSignal.wait(remainingMs);
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw new InterruptedIOException("Interrupted while awaiting a fresh writer");
+        }
+      }
+      return staged;
     }
   }
 
@@ -339,20 +380,28 @@ public class ReplicationLog {
         action.action(currentWriter);
         break;
       } catch (IOException e) {
-        LOG.debug("Attempt {}/{} failed", attempt, maxAttempts, e);
+        // Exhausted: propagate without logging here. The caller (LogEventHandler#onEvent) logs the
+        // failure with cause and drives the SYNC->SAF transition, so re-logging would duplicate it.
         if (attempt == maxAttempts) {
           throw e;
         }
-        // Each retry runs on a fresh writer. Stage a latch, request rotation, and wait briefly
-        // for the LogRotationTask to count the latch down after staging a new pendingWriter.
-        CountDownLatch latch = new CountDownLatch(1);
-        rotationStagedLatch = latch;
-        requestRotation();
-        try {
-          latch.await(retryDelayMs, TimeUnit.MILLISECONDS);
-        } catch (InterruptedException ie) {
-          Thread.currentThread().interrupt();
-          throw new InterruptedIOException("Interrupted during retry delay");
+        // A retry is only useful on a FRESH writer. The current writer is fenced by this failure
+        // (see LogFileWriter) and, like an HDFS stream that failed a sync, cannot be re-driven --
+        // retrying on it would just re-throw. So request rotation and wait briefly for the
+        // LogRotationTask to stage a new pendingWriter (created off this thread so a slow standby
+        // FS cannot stall event processing beyond the bounded wait).
+        // WARN with cause: if the retry below succeeds nothing propagates, so this is the only
+        // record of the transient failure and must carry the stack.
+        LOG.warn("Write attempt {}/{} failed on writer {}; requesting rotation to retry on a fresh"
+          + " writer", attempt, maxAttempts, currentWriter, e);
+        if (awaitStagedWriter() == null) {
+          // No fresh writer staged, so there is nothing new to retry on. Surface the original
+          // failure rather than burning the next attempt on the fenced writer. Message-only: the
+          // cause was logged with its stack just above, and LogRotationTask logs any
+          // createNewWriter() failure with its stack separately.
+          LOG.warn("No fresh writer staged within {}ms; surfacing original failure rather than"
+            + " retrying fenced writer {}", retryDelayMs, currentWriter);
+          throw e;
         }
       }
     }
@@ -477,10 +526,13 @@ public class ReplicationLog {
         logGroup.getMetrics().updateRotationTime(System.nanoTime() - startNs);
         // Clear last so requestRotation()'s CAS suppresses duplicates throughout this run.
         rotationRequested.set(false);
-        CountDownLatch latch = rotationStagedLatch;
-        if (latch != null) {
-          latch.countDown();
-          rotationStagedLatch = null;
+        // Wake any apply() retry waiting for a fresh writer. Fires on both success and failure so a
+        // waiter is never stranded: on failure it wakes, sees pendingWriter still null with the
+        // gate
+        // cleared, and either re-drives or times out. Notify after clearing the gate so a woken
+        // waiter's requestRotation() re-drive is not suppressed by this run's own flag.
+        synchronized (rotationSignal) {
+          rotationSignal.notifyAll();
         }
         if (staged) {
           // Wake an idle consumer so it drains pendingWriter before the reader's round buffer
