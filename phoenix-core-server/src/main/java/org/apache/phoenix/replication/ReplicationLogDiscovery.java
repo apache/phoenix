@@ -22,10 +22,12 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import javax.annotation.concurrent.GuardedBy;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
@@ -99,9 +101,32 @@ public abstract class ReplicationLogDiscovery {
 
   public static final int DEFAULT_IN_PROGRESS_FILE_MIN_AGE_SECONDS = 60;
 
+  /**
+   * Configuration key for the epsilon margin (milliseconds) added to the aligned scheduler wake
+   * instant. The replay scheduler fires on a {@code System.nanoTime()} grid while the round
+   * eligibility gate reads the wall clock ({@code EnvironmentEdgeManager.currentTime()}). Aligning
+   * exactly to the eligibility instant lets a few ms of nanoTime-vs-wall-clock skew tip a wake-up
+   * just below the boundary, which costs a full poll cycle. Waking epsilon after the eligibility
+   * instant absorbs that skew.
+   */
+  public static final String REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY =
+    "phoenix.replication.discovery.aligned.delay.epsilon.millis";
+
+  /**
+   * Default epsilon margin in milliseconds. 500ms comfortably exceeds the small (single- to
+   * low-tens-of-milliseconds) nanoTime-vs-wall-clock skew this margin absorbs, yet stays under 1%
+   * of a 60s round, so best-case first-pickup latency is essentially unchanged. The margin is
+   * absolute (it offsets clock skew, which does not scale with round duration), so for atypically
+   * short custom round durations operators may lower it via
+   * {@link #REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY} to keep epsilon a small fraction of the
+   * round.
+   */
+  public static final long DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS = 500L;
+
   protected final Configuration conf;
   protected final String haGroupName;
   protected final ReplicationLogTracker replicationLogTracker;
+  @GuardedBy("this")
   protected ScheduledExecutorService scheduler;
   protected volatile boolean isRunning = false;
   protected volatile ReplicationRound lastRoundProcessed;
@@ -132,9 +157,10 @@ public abstract class ReplicationLogDiscovery {
   }
 
   /**
-   * Starts the replication log discovery service by initializing the scheduler and scheduling
-   * periodic replay operations. Creates a thread pool with configured thread count and schedules
-   * replay tasks at fixed intervals.
+   * Starts the replication log discovery service. Creates a scheduler with the configured thread
+   * count and launches a self-rescheduling one-shot replay chain (see
+   * {@link #scheduleNextReplay()}) that re-anchors each replay to the aligned round-eligibility
+   * grid every cycle, rather than firing at a fixed period.
    * @throws IOException if there's an error during initialization
    */
   public void start() throws IOException {
@@ -143,22 +169,26 @@ public abstract class ReplicationLogDiscovery {
         LOG.warn("ReplicationLogDiscovery is already running for haGroup: {}", haGroupName);
         return;
       }
-      // Initialize and schedule the executors
-      scheduler = Executors.newScheduledThreadPool(getExecutorThreadCount(),
-        new ThreadFactoryBuilder().setNameFormat(getExecutorThreadNameFormat()).build());
-      long initialDelayMs = computeAlignedInitialDelay();
-      long replayIntervalMs = getReplayIntervalMillis();
-      LOG.info("Scheduling replay for haGroup: {} with initialDelay={}ms, interval={}ms",
-        haGroupName, initialDelayMs, replayIntervalMs);
-      scheduler.scheduleAtFixedRate(() -> {
-        try {
-          replay();
-        } catch (Exception e) {
-          LOG.error("Error during replay", e);
-        }
-      }, initialDelayMs, replayIntervalMs, TimeUnit.MILLISECONDS);
-
+      // Single-shot rescheduling chain (see scheduleNextReplay). Discard any queued
+      // (not-yet-started) delayed task on shutdown so stop() is deterministic and no replay
+      // fires after we intend to stop.
+      ScheduledThreadPoolExecutor executor =
+        new ScheduledThreadPoolExecutor(getExecutorThreadCount(),
+          new ThreadFactoryBuilder().setNameFormat(getExecutorThreadNameFormat()).build());
+      executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+      scheduler = executor;
       isRunning = true;
+      try {
+        scheduleNextReplay();
+      } catch (RuntimeException | Error e) {
+        // Scheduling the first cycle failed (e.g. a bad epsilon config value). Roll back so we
+        // don't leave a live idle executor with isRunning==true (which reports healthy while
+        // nothing polls) and so a later start() can retry cleanly.
+        isRunning = false;
+        scheduler = null;
+        executor.shutdownNow();
+        throw e;
+      }
       LOG.info("ReplicationLogDiscovery started for haGroup: {}", haGroupName);
     }
   }
@@ -194,6 +224,61 @@ public abstract class ReplicationLogDiscovery {
     }
 
     LOG.info("ReplicationLogDiscovery stopped for haGroup: {}", haGroupName);
+  }
+
+  /**
+   * Schedules the next replay as a single-shot task whose delay is recomputed each cycle via
+   * {@link #computeAlignedInitialDelay()}. Recomputing every cycle re-pins each wake-up to the
+   * wall-clock round-eligibility grid, correcting scheduler/wall-clock drift instead of letting a
+   * one-time misalignment persist for the life of the process (which fixed-rate scheduling does).
+   * All region servers still converge on the same grid, preserving PHOENIX-7813's shared wake-up.
+   */
+  @GuardedBy("this")
+  protected void scheduleNextReplay() {
+    long delayMs = computeAlignedInitialDelay();
+    // Bind this cycle to the current scheduler generation. A stop()->start() restart
+    // swaps in a new scheduler; a cycle launched on the old one must reschedule onto
+    // that same (now shut-down) scheduler, not the new one.
+    ScheduledExecutorService owner = scheduler;
+    LOG.info("Scheduling next replay for haGroup: {} in {}ms", haGroupName, delayMs);
+    owner.schedule(() -> runReplayCycle(owner), delayMs, TimeUnit.MILLISECONDS);
+  }
+
+  /**
+   * Runs one replay pass and, unless the service has been stopped, schedules the next aligned pass.
+   * Exceptions from {@link #replay()} are swallowed so a single failure does not break the chain.
+   * The reschedule is guarded by the same lock stop() uses; if stop() shut the scheduler down
+   * first, {@link #isRunning} is false and we do not reschedule (and a concurrent shutdown that
+   * rejects the submission is caught and treated as "stop the chain").
+   * @param owner the scheduler this cycle was launched on. If a stop()->start() restart has since
+   *              swapped in a new scheduler, {@code owner} no longer equals {@link #scheduler} and
+   *              this stale cycle must not reschedule onto the new generation (which would create a
+   *              second concurrent chain and double the effective poll rate).
+   */
+  protected void runReplayCycle(ScheduledExecutorService owner) {
+    try {
+      replay();
+    } catch (Throwable t) {
+      LOG.error("Error during replay for haGroup: {}", haGroupName, t);
+    } finally {
+      synchronized (this) {
+        if (isRunning && owner == scheduler) {
+          try {
+            scheduleNextReplay();
+          } catch (RejectedExecutionException ree) {
+            // benign: stop() shut the scheduler down between the guard check and submit
+            LOG.debug("Scheduler shutting down, skipping reschedule for haGroup: {}", haGroupName);
+          } catch (Throwable t) {
+            // Any other failure (e.g. a bad epsilon config value making
+            // computeAlignedInitialDelay throw) would otherwise be swallowed by the executor
+            // into the discarded Future and silently wedge the polling chain with
+            // isRunning==true -- the exact silent-stop this class is meant to prevent.
+            LOG.error("Failed to schedule next replay for haGroup: {}; replay polling has stopped",
+              haGroupName, t);
+          }
+        }
+      }
+    }
   }
 
   /**
@@ -485,15 +570,6 @@ public abstract class ReplicationLogDiscovery {
   }
 
   /**
-   * Returns the replay interval in milliseconds. Subclasses can override this method to provide
-   * custom intervals. Defaults to the round duration.
-   * @return The replay interval in milliseconds.
-   */
-  public long getReplayIntervalMillis() {
-    return roundTimeMills;
-  }
-
-  /**
    * Returns the shutdown timeout in seconds. Subclasses can override this method to provide custom
    * timeout values.
    * @return The shutdown timeout in seconds (default: 30 seconds).
@@ -524,13 +600,17 @@ public abstract class ReplicationLogDiscovery {
    * Computes initial delay to align the scheduler to round-eligible boundaries so all RS wake up at
    * the same wall-clock moment. A round becomes eligible when currentTime >= roundEndTime +
    * bufferMillis, and rounds repeat every roundTimeMills. This gives a universal grid of eligible
-   * ticks at bufferMillis, bufferMillis + roundTimeMills, bufferMillis + 2*roundTimeMills, etc.
-   * from epoch. All RS compute the same grid regardless of when start() is called.
+   * ticks at bufferMillis + epsilon, bufferMillis + epsilon + roundTimeMills, bufferMillis +
+   * epsilon + 2*roundTimeMills, etc. from epoch. All RS compute the same grid regardless of when
+   * start() is called.
    * @return the initial delay in milliseconds until the next round-eligible tick
    */
   protected long computeAlignedInitialDelay() {
     long now = EnvironmentEdgeManager.currentTime();
-    long elapsed = (now - bufferMillis) % roundTimeMills;
+    // Anchor epsilon past the eligibility instant (bufferMillis past a round line) so that a
+    // scheduler firing slightly early (nanoTime skew) still clears the wall-clock gate.
+    long anchor = bufferMillis + getAlignedDelayEpsilonMillis();
+    long elapsed = Math.floorMod(now - anchor, roundTimeMills);
     return (elapsed == 0) ? 0 : roundTimeMills - elapsed;
   }
 
@@ -542,6 +622,16 @@ public abstract class ReplicationLogDiscovery {
   public int getInProgressFileMinAgeSeconds() {
     return conf.getInt(REPLICATION_IN_PROGRESS_FILE_MIN_AGE_SECONDS_KEY,
       DEFAULT_IN_PROGRESS_FILE_MIN_AGE_SECONDS);
+  }
+
+  /**
+   * Returns the epsilon margin (milliseconds) added to the aligned scheduler wake instant.
+   * @return the epsilon margin in milliseconds (default
+   *         {@link #DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS}).
+   */
+  public long getAlignedDelayEpsilonMillis() {
+    return conf.getLong(REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY,
+      DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS);
   }
 
   public ReplicationLogTracker getReplicationLogFileTracker() {

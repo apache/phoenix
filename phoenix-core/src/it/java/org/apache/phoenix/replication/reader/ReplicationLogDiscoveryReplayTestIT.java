@@ -117,35 +117,6 @@ public class ReplicationLogDiscoveryReplayTestIT extends HABaseIT {
   }
 
   /**
-   * Tests that replay interval always matches the configured round duration.
-   */
-  @Test
-  public void testGetReplayIntervalMillis() throws IOException {
-    // Test with default round duration
-    TestableReplicationLogTracker fileTracker =
-      createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
-    ReplicationLogDiscoveryReplay discovery = new ReplicationLogDiscoveryReplay(fileTracker);
-    long expectedRoundMillis =
-      fileTracker.getReplicationShardDirectoryManager().getReplicationRoundDurationSeconds()
-        * 1000L;
-    assertEquals("Replay interval should match round duration", expectedRoundMillis,
-      discovery.getReplayIntervalMillis());
-
-    // Test with custom round duration
-    conf1.setInt(ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY,
-      120);
-    try {
-      TestableReplicationLogTracker fileTracker2 =
-        createReplicationLogTracker(conf1, haGroupName, rootFs, rootUri);
-      ReplicationLogDiscoveryReplay discovery2 = new ReplicationLogDiscoveryReplay(fileTracker2);
-      assertEquals("Replay interval should match custom round duration", 120_000L,
-        discovery2.getReplayIntervalMillis());
-    } finally {
-      conf1.unset(ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY);
-    }
-  }
-
-  /**
    * Tests the shutdown timeout configuration with default and custom values.
    */
   @Test
