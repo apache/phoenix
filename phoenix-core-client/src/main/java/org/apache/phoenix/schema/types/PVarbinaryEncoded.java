@@ -185,4 +185,9 @@ public class PVarbinaryEncoded extends PVarbinary {
     return equalsAny(targetType, this, PBinary.INSTANCE, PVarbinary.INSTANCE);
   }
 
+  @Override
+  public boolean isBytesComparableWith(PDataType otherType) {
+    return this.equals(otherType);
+  }
+
 }

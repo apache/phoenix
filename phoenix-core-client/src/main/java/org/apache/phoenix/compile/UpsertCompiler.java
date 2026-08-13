@@ -112,6 +112,7 @@ import org.apache.phoenix.schema.types.PSmallint;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedLong;
 import org.apache.phoenix.schema.types.PVarbinary;
+import org.apache.phoenix.schema.types.PVarbinaryEncoded;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ExpressionUtil;
 import org.apache.phoenix.util.IndexUtil;
@@ -271,9 +272,16 @@ public class UpsertCompiler {
             throw new DataExceedsCapacityException(column.getDataType(), column.getMaxLength(),
               column.getScale(), column.getName().getString());
           }
-          column.getDataType().coerceBytes(ptr, value, column.getDataType(), precision, scale,
-            SortOrder.getDefault(), column.getMaxLength(), column.getScale(), column.getSortOrder(),
-            table.rowKeyOrderOptimizable());
+          if (column.getDataType() == PVarbinaryEncoded.INSTANCE) {
+            // ptr holds the decoded value, because that is what the result set hands back for
+            // VARBINARY_ENCODED. coerceBytes() cannot restore the encoding here: it treats all
+            // binary types as byte comparable and so leaves ptr untouched (PHOENIX-7982).
+            ptr.set(column.getDataType().toBytes(value, column.getSortOrder()));
+          } else {
+            column.getDataType().coerceBytes(ptr, value, column.getDataType(), precision, scale,
+              SortOrder.getDefault(), column.getMaxLength(), column.getScale(),
+              column.getSortOrder(), table.rowKeyOrderOptimizable());
+          }
           values[j] = ByteUtil.copyKeyBytesIfNecessary(ptr);
         }
         setValues(values, pkSlotIndexes, columnIndexes, table, mutation, statement,
