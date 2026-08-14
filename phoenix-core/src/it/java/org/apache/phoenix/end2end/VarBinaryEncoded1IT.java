@@ -2398,6 +2398,100 @@ public class VarBinaryEncoded1IT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  public void testUpsertSelectVarBinaryEncodedSameTableOnClient() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    final String tableName = generateUniqueName();
+
+    byte[] pk1 = new byte[] { 1, 0, 2 };
+    byte[] col1 = new byte[] { 0, -1, 5 };
+    byte[] pk2 = new byte[] { 0, 0, 3, 0 };
+    byte[] col2 = new byte[] { 40, 50 };
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.setAutoCommit(false);
+      createTable(conn, tableName, tableDDLOptions);
+
+      upsertEncodedRow(conn, tableName, pk1, col1, isBindStatement);
+      upsertEncodedRow(conn, tableName, pk2, col2, isBindStatement);
+      conn.commit();
+
+      byte[][] row2 = new byte[][] { pk2, col2 };
+      byte[][] row1 = new byte[][] { pk1, col1 };
+      assertRowsAndRowKeys(conn, tableName, row2, row1);
+
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " (PK1, COL1) SELECT PK1, COL1 FROM " + tableName);
+      conn.commit();
+
+      assertRowsAndRowKeys(conn, tableName, row2, row1);
+    }
+  }
+
+  @Test
+  public void testUpsertSelectBinaryIntoVarBinaryEncoded() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    final String sourceTable = generateUniqueName();
+    final String targetTable = generateUniqueName();
+
+    byte[] pk = new byte[] { 1, 2, 3 };
+    byte[] col = new byte[] { 0, -1, 5 };
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement()
+        .execute("CREATE TABLE " + sourceTable + " (PK1 BINARY(3) NOT NULL, COL1 BINARY(3)"
+          + " CONSTRAINT pk PRIMARY KEY(PK1)) " + tableDDLOptions);
+      createTable(conn, targetTable, tableDDLOptions);
+
+      try (PreparedStatement preparedStatement =
+        conn.prepareStatement("UPSERT INTO " + sourceTable + " (PK1, COL1) VALUES (?, ?)")) {
+        preparedStatement.setBytes(1, pk);
+        preparedStatement.setBytes(2, col);
+        preparedStatement.executeUpdate();
+      }
+      conn.commit();
+
+      conn.createStatement().execute(
+        "UPSERT INTO " + targetTable + " (PK1, COL1) SELECT PK1, COL1 FROM " + sourceTable);
+      conn.commit();
+
+      assertRowsAndRowKeys(conn, sourceTable, new byte[][] { pk, col });
+      assertRowsAndRowKeys(conn, targetTable, new byte[][] { pk, col });
+    }
+  }
+
+  @Test
+  public void testUpsertSelectVarBinaryEncodedIntoBinary() throws Exception {
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+    final String sourceTable = generateUniqueName();
+    final String targetTable = generateUniqueName();
+
+    byte[] pk = new byte[] { 1, 2, 3 };
+    byte[] col = new byte[] { 0, -1, 5 };
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      createTable(conn, sourceTable, tableDDLOptions);
+      conn.createStatement()
+        .execute("CREATE TABLE " + targetTable + " (PK1 BINARY(3) NOT NULL, COL1 BINARY(3)"
+          + " CONSTRAINT pk PRIMARY KEY(PK1)) " + tableDDLOptions);
+
+      upsertEncodedRow(conn, sourceTable, pk, col, isBindStatement);
+      conn.commit();
+
+      conn.createStatement().execute(
+        "UPSERT INTO " + targetTable + " (PK1, COL1) SELECT PK1, COL1 FROM " + sourceTable);
+      conn.commit();
+
+      try (ResultSet resultSet =
+        conn.createStatement().executeQuery("SELECT PK1, COL1 FROM " + targetTable)) {
+        Assert.assertTrue(resultSet.next());
+        Assert.assertArrayEquals(pk, resultSet.getBytes(1));
+        Assert.assertArrayEquals(col, resultSet.getBytes(2));
+        Assert.assertFalse(resultSet.next());
+      }
+    }
+  }
+
+  @Test
   public void testUpsertSelectVarBinaryEncodedMultiColumnPk() throws Exception {
     Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
     final String sourceTable = generateUniqueName();

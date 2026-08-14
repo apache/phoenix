@@ -116,11 +116,6 @@ public class PVarbinary extends PBinaryBase {
   }
 
   @Override
-  public boolean isBytesComparableWith(PDataType otherType) {
-    return super.isBytesComparableWith(otherType) && otherType != PVarbinaryEncoded.INSTANCE;
-  }
-
-  @Override
   public int compareTo(Object lhs, Object rhs, PDataType rhsType) {
     if (lhs == null && rhs == null) {
       return 0;
@@ -129,7 +124,7 @@ public class PVarbinary extends PBinaryBase {
     } else if (rhs == null) {
       return 1;
     }
-    if (equalsAny(rhsType, this, PBinary.INSTANCE)) {
+    if (equalsAny(rhsType, this, PBinary.INSTANCE, PVarbinaryEncoded.INSTANCE)) {
       return Bytes.compareTo((byte[]) lhs, (byte[]) rhs);
     } else {
       byte[] rhsBytes = rhsType.toBytes(rhs);
