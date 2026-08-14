@@ -1,0 +1,76 @@
+  Primary goal: establish a clean pre-v2 baseline
+
+  The previous perf run had three problems that this one needs to solve:
+
+  1. WAL collision corruption. appendTime/syncTime mixed with HBase WAL. Now fixed via phoenixWAL prefix.
+  2. Mixed-unit metrics. ms vs ns confusion. Now fixed via name suffixes.
+  3. No clean ringBufferTime for SYNCs specifically. Ring buffer histogram blended data + sync events. Now fixed by recording only on SYNC events.
+
+  With those fixed, the next perf run gives us the first trustworthy production decomposition of phoenixWALSyncTime.
+
+  Specific things to look for
+
+  1. Verify the decomposition equation closes in production
+
+  phoenixWALSyncTime ≈ phoenixWALSyncRingBufferTime
+                     + phoenixWALPendingSyncWaitTime
+                     + phoenixWALFsSyncTime
+
+  Pull p50, p99, max for each. Sum the components. Confirm syncTime ≈ component sum at each percentile (within reasonable truncation tolerance). If the equation closes, the residual gap question is
+  resolved — there's no hidden component.
+
+  2. Localize where the time goes at production load
+
+  For each busy RS:
+  - What fraction of phoenixWALSyncTime p50 is ringBufferTime?
+  - What fraction is fsSyncTime?
+  - What fraction is pendingSyncWaitTime?
+
+  Knowing this tells you whether v2 will help a lot (if ringBufferTime is dominant) or only a little (if fsSyncTime dominates).
+
+  Prediction: ringBufferTime should be the largest component on busy RSes, modest on quiet RSes. fsSyncTime should track HBase WAL syncTime closely (apples-to-apples HDFS comparison).
+
+  3. Apples-to-apples HDFS comparison
+
+  Now that we have phoenixWALFsSyncTimeMs cleanly named and unit-aligned with HBase WAL syncTime, compare them on the same RS:
+
+  phoenixWALFsSyncTime p50 vs HBase WAL syncTime p50
+
+  If they're within ~10-20% of each other → HDFS layer is fine, the gap is consumer-side.
+  If phoenixWALFsSyncTime is significantly larger → there's an HDFS-layer issue worth investigating.
+
+  This is the question the original perf run was meant to answer; now we can answer it cleanly.
+
+  4. Characterize the load regime
+
+  Look at:
+  - phoenixWALPendingSyncCount p99 and max — is coalescing engaging at any RS?
+  - phoenixWALBatchSize p99 — is the consumer ever in catch-up mode?
+  - Caller-sync rate per RS (deltas of phoenixWALSyncTime.count) — how much load are busy RSes seeing?
+
+  This determines what regime we're in and how to interpret the simulator predictions.
+
+  5. Cross-validate against the simulator findings
+
+  The simulator says: at light-to-moderate load (pc=10), Model B will deliver ~2-3× syncTime improvement. If the production baseline shows phoenixWALSyncTime dominated by phoenixWALSyncRingBufferTime,
+  that prediction will hold. If syncTime is mostly fsSyncTime, the prediction will be smaller.
+
+  What I would NOT make a goal
+
+  - Not "see whether v2 helps." v2 isn't deployed in this run. This is the baseline.
+  - Not "compare against the previous corrupted run." Different metric scopes; treat this as the first measurement.
+  - Not "stress test." Production load is the regime that matters; saturation is the simulator's job.
+
+  Concrete deliverables from the run
+
+  When you analyze the data, produce:
+
+  1. Per-RS decomposition table — for the 5 busiest RSes, p50/p99/max of all four time components, plus the sum-vs-syncTime check.
+  2. Phoenix vs WAL HDFS-layer comparison — phoenixWALFsSyncTime p50 vs walSyncTime p50 on the same RS, same window.
+  3. Load-regime characterization — pendingSyncCount distribution, batchSize distribution, caller-sync rate per RS.
+  4. One-line conclusion — "the residual gap is X% ringBuffer, Y% fsync, Z% pendingSyncWait" → "v2 will reduce X% (the ringBuffer portion) by ~5×, leaving Y+Z%."
+
+  That last item is the prediction we'd validate against in the post-v2 run. Pre-v2 establishes the baseline; post-v2 verifies the prediction. Two runs together close the analysis loop.
+
+  2. Counter-delta capture. For the load-regime characterization, you need start-of-window and end-of-window counter values (phoenixWALSyncTime.count, phoenixWALAppendTime.count). Make sure your data
+  extraction takes deltas, not single-point reads.

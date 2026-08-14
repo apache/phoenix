@@ -1,0 +1,4 @@
+testAllWrappedConnectionsClosedAfterStandbyAndZKDownAsync – org.apache.phoenix.jdbc.FailoverPhoenixConnection2IT
+testFailoverConnectionExplicitlyTimeout – org.apache.phoenix.jdbc.FailoverPhoenixConnectionIT
+testConnectionCreationFailsIfNoActiveCluster – org.apache.phoenix.jdbc.FailoverPhoenixConnectionIT
+org.apache.phoenix.end2end.QueryDatabaseMetaDataIT.testShowTables

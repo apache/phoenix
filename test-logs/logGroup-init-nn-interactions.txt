@@ -1,0 +1,447 @@
+2026-05-04T16:07:16,125 INFO  [main] replication.ReplicationLogGroup(413): Initializing ReplicationLogGroup testAppendAndSyncNoIndex
+2026-05-04T16:07:16,125 DEBUG [main] jdbc.HAGroupStoreManager(591): Failover management already configured for HA group: testAppendAndSyncNoIndex
+2026-05-04T16:07:16,125 DEBUG [main] jdbc.HAGroupStoreClient(950): Built LOCAL cluster record: HAGroupStoreRecord{protocolVersion='1.0', haGroupName='testAppendAndSyncNoIndex', haGroupState=ACTIVE_IN_SYNC, lastSyncStateTimeInMs=0, policy='FAILOVER', peerZKUrl='127.0.0.1\:56322::/hbase', clusterUrl='10.18.8.173\:54233', peerClusterUrl='10.18.8.173\:58813', adminCRRVersion=1, hdfsUrl='hdfs://localhost:53206/phoenixHA', peerHdfsUrl='hdfs://localhost:58441/phoenixHA'}
+2026-05-04T16:07:16,125 INFO  [main] replication.ReplicationLogGroup(749): HAGroup testAppendAndSyncNoIndex initialized filesystem at hdfs://localhost:58441/phoenixHA
+2026-05-04T16:07:16,125 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:58441: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/in"}
+2026-05-04T16:07:16,126 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,126 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:58441: getFileInfo {}
+2026-05-04T16:07:16,126 INFO  [main] replication.ReplicationLogGroup(753): HAGroup testAppendAndSyncNoIndex creating root directory at /phoenixHA/testAppendAndSyncNoIndex/in
+2026-05-04T16:07:16,126 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:58441: mkdirs {src: "/phoenixHA/testAppendAndSyncNoIndex/in" masked { perm: 493 } createParent: true unmasked { perm: 511 }}
+2026-05-04T16:07:16,126 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: mkdirs took 0ms
+2026-05-04T16:07:16,126 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:58441: mkdirs {result: true}
+2026-05-04T16:07:16,126 INFO  [main] replication.ReplicationLogGroup(749): HAGroup testAppendAndSyncNoIndex initialized filesystem at hdfs://localhost:53206/phoenixHA
+2026-05-04T16:07:16,126 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out"}
+2026-05-04T16:07:16,127 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,127 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,127 INFO  [main] replication.ReplicationLogGroup(753): HAGroup testAppendAndSyncNoIndex creating root directory at /phoenixHA/testAppendAndSyncNoIndex/out
+2026-05-04T16:07:16,127 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: mkdirs {src: "/phoenixHA/testAppendAndSyncNoIndex/out" masked { perm: 493 } createParent: true unmasked { perm: 511 }}
+2026-05-04T16:07:16,127 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: mkdirs took 0ms
+2026-05-04T16:07:16,127 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: mkdirs {result: true}
+2026-05-04T16:07:16,129 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out_progress"}
+2026-05-04T16:07:16,129 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,129 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,129 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /phoenixHA/testAppendAndSyncNoIndex/out_progress
+2026-05-04T16:07:16,129 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: mkdirs {src: "/phoenixHA/testAppendAndSyncNoIndex/out_progress" masked { perm: 493 } createParent: true unmasked { perm: 511 }}
+2026-05-04T16:07:16,129 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: mkdirs took 0ms
+2026-05-04T16:07:16,129 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: mkdirs {result: true}
+2026-05-04T16:07:16,129 INFO  [main] replication.ReplicationLogDiscovery(127): Initializing ReplicationLogDiscovery for haGroup: testAppendAndSyncNoIndex
+2026-05-04T16:07:16,129 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out_progress"}
+2026-05-04T16:07:16,130 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,130 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {fs { fileType: IS_DIR path: "" length: 0 permission { perm: 493 } owner: "tkhurana" group: "supergroup" modification_time: 1777936036129 access_time: 0 block_replication: 0 blocksize: 0 fileId: 16702 childrenNum: 0 storagePolicy: 0 flags: 0 }}
+2026-05-04T16:07:16,130 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getListing {src: "/phoenixHA/testAppendAndSyncNoIndex/out_progress" startAfter: "" needLocation: false}
+2026-05-04T16:07:16,130 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getListing took 0ms
+2026-05-04T16:07:16,130 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getListing {dirList { remainingEntries: 0 }}
+2026-05-04T16:07:16,130 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/000"}
+2026-05-04T16:07:16,131 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,131 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,131 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/001"}
+2026-05-04T16:07:16,131 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,131 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,131 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/002"}
+2026-05-04T16:07:16,131 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,131 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,131 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/003"}
+2026-05-04T16:07:16,131 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,131 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,131 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/004"}
+2026-05-04T16:07:16,132 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,132 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,132 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/005"}
+2026-05-04T16:07:16,132 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,132 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,132 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/006"}
+2026-05-04T16:07:16,132 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,132 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,132 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/007"}
+2026-05-04T16:07:16,132 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,132 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,132 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/008"}
+2026-05-04T16:07:16,133 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,133 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,133 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/009"}
+2026-05-04T16:07:16,133 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,133 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,133 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/010"}
+2026-05-04T16:07:16,133 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,133 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,133 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/011"}
+2026-05-04T16:07:16,133 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,133 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,134 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/012"}
+2026-05-04T16:07:16,134 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,134 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,134 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/013"}
+2026-05-04T16:07:16,134 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,134 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,134 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/014"}
+2026-05-04T16:07:16,134 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,134 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,134 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/015"}
+2026-05-04T16:07:16,134 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,134 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,134 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/016"}
+2026-05-04T16:07:16,135 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,135 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,135 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/017"}
+2026-05-04T16:07:16,135 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,135 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,135 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/018"}
+2026-05-04T16:07:16,135 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,135 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,135 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/019"}
+2026-05-04T16:07:16,135 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,135 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,135 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/020"}
+2026-05-04T16:07:16,136 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,136 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,136 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/021"}
+2026-05-04T16:07:16,136 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,136 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,136 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/022"}
+2026-05-04T16:07:16,136 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,136 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,136 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/023"}
+2026-05-04T16:07:16,136 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,136 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,136 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/024"}
+2026-05-04T16:07:16,137 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,137 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,137 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/025"}
+2026-05-04T16:07:16,137 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,137 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,137 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/026"}
+2026-05-04T16:07:16,137 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,137 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,137 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/027"}
+2026-05-04T16:07:16,137 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,137 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,138 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/028"}
+2026-05-04T16:07:16,138 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,138 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,138 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/029"}
+2026-05-04T16:07:16,138 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,138 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,138 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/030"}
+2026-05-04T16:07:16,138 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,138 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,138 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/031"}
+2026-05-04T16:07:16,138 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,138 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,139 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/032"}
+2026-05-04T16:07:16,139 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,139 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,139 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/033"}
+2026-05-04T16:07:16,139 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,139 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,139 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/034"}
+2026-05-04T16:07:16,139 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,139 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,139 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/035"}
+2026-05-04T16:07:16,139 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,139 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,139 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/036"}
+2026-05-04T16:07:16,140 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,140 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,140 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/037"}
+2026-05-04T16:07:16,140 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,140 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,140 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/038"}
+2026-05-04T16:07:16,140 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,140 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,140 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/039"}
+2026-05-04T16:07:16,140 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,140 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,140 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/040"}
+2026-05-04T16:07:16,141 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,141 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,141 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/041"}
+2026-05-04T16:07:16,141 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,141 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,141 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/042"}
+2026-05-04T16:07:16,141 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,141 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,141 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/043"}
+2026-05-04T16:07:16,141 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,141 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,141 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/044"}
+2026-05-04T16:07:16,142 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,142 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,142 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/045"}
+2026-05-04T16:07:16,142 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,142 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,142 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/046"}
+2026-05-04T16:07:16,142 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,142 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,142 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/047"}
+2026-05-04T16:07:16,142 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,142 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,142 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/048"}
+2026-05-04T16:07:16,143 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,143 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,143 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/049"}
+2026-05-04T16:07:16,143 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,143 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,143 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/050"}
+2026-05-04T16:07:16,143 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,143 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,143 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/051"}
+2026-05-04T16:07:16,143 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,144 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,144 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/052"}
+2026-05-04T16:07:16,144 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,144 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,144 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/053"}
+2026-05-04T16:07:16,144 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,144 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,144 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/054"}
+2026-05-04T16:07:16,144 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,144 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,144 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/055"}
+2026-05-04T16:07:16,145 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,145 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,145 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/056"}
+2026-05-04T16:07:16,145 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,145 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,145 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/057"}
+2026-05-04T16:07:16,145 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,145 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,145 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/058"}
+2026-05-04T16:07:16,145 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,145 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,145 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/059"}
+2026-05-04T16:07:16,146 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,146 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,146 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/060"}
+2026-05-04T16:07:16,146 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,146 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,146 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/061"}
+2026-05-04T16:07:16,146 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,146 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,146 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/062"}
+2026-05-04T16:07:16,147 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,147 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,147 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/063"}
+2026-05-04T16:07:16,147 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,147 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,147 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/064"}
+2026-05-04T16:07:16,147 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,147 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,147 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/065"}
+2026-05-04T16:07:16,147 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,147 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,148 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/066"}
+2026-05-04T16:07:16,148 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,148 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,148 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/067"}
+2026-05-04T16:07:16,148 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,148 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,148 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/068"}
+2026-05-04T16:07:16,148 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,148 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,148 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/069"}
+2026-05-04T16:07:16,149 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,149 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,149 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/070"}
+2026-05-04T16:07:16,149 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,149 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,149 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/071"}
+2026-05-04T16:07:16,149 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,149 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,149 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/072"}
+2026-05-04T16:07:16,149 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,149 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,149 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/073"}
+2026-05-04T16:07:16,150 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,150 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,150 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/074"}
+2026-05-04T16:07:16,150 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,150 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,150 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/075"}
+2026-05-04T16:07:16,150 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,150 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,150 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/076"}
+2026-05-04T16:07:16,150 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,150 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,150 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/077"}
+2026-05-04T16:07:16,151 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,151 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,151 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/078"}
+2026-05-04T16:07:16,151 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,151 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,151 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/079"}
+2026-05-04T16:07:16,151 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,151 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,151 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/080"}
+2026-05-04T16:07:16,151 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,151 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,151 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/081"}
+2026-05-04T16:07:16,152 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,152 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,152 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/082"}
+2026-05-04T16:07:16,152 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,152 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,152 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/083"}
+2026-05-04T16:07:16,152 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,152 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,152 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/084"}
+2026-05-04T16:07:16,152 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,152 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,152 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/085"}
+2026-05-04T16:07:16,153 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,153 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,153 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/086"}
+2026-05-04T16:07:16,153 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,153 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,153 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/087"}
+2026-05-04T16:07:16,153 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,153 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,153 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/088"}
+2026-05-04T16:07:16,153 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,153 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,153 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/089"}
+2026-05-04T16:07:16,153 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,153 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,154 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/090"}
+2026-05-04T16:07:16,154 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,154 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,154 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/091"}
+2026-05-04T16:07:16,154 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,154 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,154 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/092"}
+2026-05-04T16:07:16,154 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,154 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,154 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/093"}
+2026-05-04T16:07:16,154 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,154 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,154 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/094"}
+2026-05-04T16:07:16,155 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,155 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,155 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/095"}
+2026-05-04T16:07:16,155 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,155 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,155 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/096"}
+2026-05-04T16:07:16,155 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,155 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,155 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/097"}
+2026-05-04T16:07:16,155 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,155 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,155 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/098"}
+2026-05-04T16:07:16,156 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,156 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,156 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/099"}
+2026-05-04T16:07:16,156 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,156 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,156 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/100"}
+2026-05-04T16:07:16,156 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,156 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,156 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/101"}
+2026-05-04T16:07:16,156 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,156 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,156 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/102"}
+2026-05-04T16:07:16,156 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,156 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,157 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/103"}
+2026-05-04T16:07:16,157 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,157 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,157 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/104"}
+2026-05-04T16:07:16,157 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,157 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,157 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/105"}
+2026-05-04T16:07:16,157 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,157 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,157 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/106"}
+2026-05-04T16:07:16,157 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,157 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,158 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/107"}
+2026-05-04T16:07:16,158 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,158 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,158 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/108"}
+2026-05-04T16:07:16,158 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,158 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,158 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/109"}
+2026-05-04T16:07:16,158 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,158 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,158 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/110"}
+2026-05-04T16:07:16,159 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,159 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,159 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/111"}
+2026-05-04T16:07:16,159 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,159 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,159 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/112"}
+2026-05-04T16:07:16,159 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,159 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,159 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/113"}
+2026-05-04T16:07:16,160 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,160 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,160 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/114"}
+2026-05-04T16:07:16,160 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,160 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,160 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/115"}
+2026-05-04T16:07:16,160 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,160 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,160 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/116"}
+2026-05-04T16:07:16,160 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,160 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,160 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/117"}
+2026-05-04T16:07:16,161 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,161 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,161 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/118"}
+2026-05-04T16:07:16,161 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,161 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,161 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/119"}
+2026-05-04T16:07:16,161 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,161 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,161 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/120"}
+2026-05-04T16:07:16,161 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,161 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,162 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/121"}
+2026-05-04T16:07:16,162 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,162 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,162 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/122"}
+2026-05-04T16:07:16,162 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,162 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,162 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/123"}
+2026-05-04T16:07:16,162 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,162 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,162 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/124"}
+2026-05-04T16:07:16,163 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 1ms
+2026-05-04T16:07:16,163 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,163 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/125"}
+2026-05-04T16:07:16,163 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,163 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,163 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/126"}
+2026-05-04T16:07:16,163 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,163 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,163 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:53206: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/out/shard/127"}
+2026-05-04T16:07:16,163 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,163 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:53206: getFileInfo {}
+2026-05-04T16:07:16,164 INFO  [main] replication.ReplicationLogDiscovery(416): Initializing lastRoundProcessed for haGroup: testAppendAndSyncNoIndex from current time 1777936036163
+2026-05-04T16:07:16,165 DEBUG [main] jdbc.HAGroupStoreManager(591): Failover management already configured for HA group: testAppendAndSyncNoIndex
+2026-05-04T16:07:16,165 INFO  [main] jdbc.HAGroupStoreClient(1062): Subscribed listener to target state ACTIVE_NOT_IN_SYNC for HA group testAppendAndSyncNoIndex on LOCAL cluster
+2026-05-04T16:07:16,165 DEBUG [main] jdbc.HAGroupStoreManager(519): Delegated subscription to target state ACTIVE_NOT_IN_SYNC for HA group testAppendAndSyncNoIndex on LOCAL cluster to client
+2026-05-04T16:07:16,165 DEBUG [main] jdbc.HAGroupStoreManager(591): Failover management already configured for HA group: testAppendAndSyncNoIndex
+2026-05-04T16:07:16,165 INFO  [main] jdbc.HAGroupStoreClient(1062): Subscribed listener to target state ACTIVE_IN_SYNC for HA group testAppendAndSyncNoIndex on LOCAL cluster
+2026-05-04T16:07:16,165 DEBUG [main] jdbc.HAGroupStoreManager(519): Delegated subscription to target state ACTIVE_IN_SYNC for HA group testAppendAndSyncNoIndex on LOCAL cluster to client
+2026-05-04T16:07:16,165 INFO  [main] replication.ReplicationLogGroup(456): HAGroup testAppendAndSyncNoIndex initializing mode from state ACTIVE_IN_SYNC
+2026-05-04T16:07:16,165 INFO  [main] replication.ReplicationLogGroup(675): HAGroup testAppendAndSyncNoIndex switched from INIT to SYNC
+2026-05-04T16:07:16,172 INFO  [main] replication.SyncModeImpl(44): HAGroup testAppendAndSyncNoIndex entered mode SYNC
+2026-05-04T16:07:16,173 WARN  [main] replication.ReplicationLog(114): Configured rotation size 268435456 exceeds HDFS block size 134217728; clamping to 134217728
+2026-05-04T16:07:16,173 INFO  [main] replication.ReplicationLog(118): Effective rotation size: 127506841 bytes (configured=268435456, blockSize=134217728, pct=0.95)
+2026-05-04T16:07:16,173 INFO  [main] replication.ReplicationLog(174): Started rotation executor with initial delay 3827ms and interval 20000ms
+2026-05-04T16:07:16,174 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:58441: getFileInfo {src: "/phoenixHA/testAppendAndSyncNoIndex/in/shard/065"}
+2026-05-04T16:07:16,174 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: getFileInfo took 0ms
+2026-05-04T16:07:16,174 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:58441: getFileInfo {}
+2026-05-04T16:07:16,174 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:58441: mkdirs {src: "/phoenixHA/testAppendAndSyncNoIndex/in/shard/065" masked { perm: 493 } createParent: true unmasked { perm: 511 }}
+2026-05-04T16:07:16,174 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: mkdirs took 0ms
+2026-05-04T16:07:16,174 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:58441: mkdirs {result: true}
+2026-05-04T16:07:16,178 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:58441: create {src: "/phoenixHA/testAppendAndSyncNoIndex/in/shard/065/1777936036173_10.18.8.173,54717,1777935997999.plog" masked { perm: 420 } clientName: "DFSClient_NONMAPREDUCE_-856141163_1" createFlag: 3 createParent: true replication: 1 blockSize: 134217728 cryptoProtocolVersion: ENCRYPTION_ZONES unmasked { perm: 438 }}
+2026-05-04T16:07:16,178 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: create took 0ms
+2026-05-04T16:07:16,179 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:58441: create {fs { fileType: IS_FILE path: "" length: 0 permission { perm: 420 } owner: "tkhurana" group: "supergroup" modification_time: 1777936036178 access_time: 1777936036178 block_replication: 1 blocksize: 134217728 fileId: 16701 childrenNum: 0 storagePolicy: 0 flags: 0 }}
+2026-05-04T16:07:16,180 TRACE [Thread-930] ipc.ProtobufRpcEngine2$Invoker(249): 2399: Call -> localhost/127.0.0.1:58441: addBlock {src: "/phoenixHA/testAppendAndSyncNoIndex/in/shard/065/1777936036173_10.18.8.173,54717,1777935997999.plog" clientName: "DFSClient_NONMAPREDUCE_-856141163_1" fileId: 16701}
+2026-05-04T16:07:16,181 DEBUG [Thread-930] ipc.ProtobufRpcEngine2$Invoker(281): Call: addBlock took 1ms
+2026-05-04T16:07:16,181 TRACE [Thread-930] ipc.ProtobufRpcEngine2$Invoker(324): 2399: Response <- localhost/127.0.0.1:58441: addBlock {block { b { poolId: "BP-366283498-10.18.8.173-1777936005556" blockId: 1073741892 generationStamp: 1068 numBytes: 0 } offset: 0 locs { id { ipAddr: "127.0.0.1" hostName: "127.0.0.1" datanodeUuid: "2799d60d-f9b0-420c-99a1-e6ed1e88a019" xferPort: 58484 infoPort: 58527 ipcPort: 58528 infoSecurePort: 0 } capacity: 1989325168640 dfsUsed: 25397 remaining: 1593027307184 blockPoolUsed: 25397 lastUpdate: 1777936033206 xceiverCount: 8 location: "/default-rack" nonDfsUsed: 395895774411 adminState: NORMAL cacheCapacity: 0 cacheUsed: 0 lastUpdateMonotonic: 328501761 lastBlockReportTime: 1777936006196 lastBlockReportMonotonic: 328474741 numBlocks: 0 } corrupt: false blockToken { identifier: "" password: "" kind: "" service: "" } isCached: false storageTypes: DISK storageIDs: "DS-936ae061-42be-4a86-b958-8525aeb7dc23" }}
+2026-05-04T16:07:16,183 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(249): 1: Call -> localhost/127.0.0.1:58441: fsync {src: "/phoenixHA/testAppendAndSyncNoIndex/in/shard/065/1777936036173_10.18.8.173,54717,1777935997999.plog" client: "DFSClient_NONMAPREDUCE_-856141163_1" lastBlockLength: 6 fileId: 16701}
+2026-05-04T16:07:16,184 DEBUG [main] ipc.ProtobufRpcEngine2$Invoker(281): Call: fsync took 1ms
+2026-05-04T16:07:16,184 TRACE [main] ipc.ProtobufRpcEngine2$Invoker(324): 1: Response <- localhost/127.0.0.1:58441: fsync {}
+2026-05-04T16:07:16,184 DEBUG [main] log.LogFileWriter(72): Initialized LogFileWriter for path /phoenixHA/testAppendAndSyncNoIndex/in/shard/065/1777936036173_10.18.8.173,54717,1777935997999.plog
+2026-05-04T16:07:16,185 INFO  [main] replication.ReplicationLogGroup(435): HAGroup testAppendAndSyncNoIndex started with mode=SYNC

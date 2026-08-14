@@ -1,0 +1,326 @@
+"_raw","_time",account,cell,environment,eventtype,exceptionName,"falcon_instance","functional_domain",host,index,"k8s_cluster","k8s_container_name","k8s_namespace","k8s_pod_name",linecount,logCategory,logLevel,logMessage,logTimeStamp,region,"service_group","service_name",source,sourcetype,"splunk_federated_provider","splunk_server","splunk_server_group",substrate,threadName,zone
+"2026-05-16 06:20:21,621 INFO  [Async disk worker #1488 for volume /mnt/disk4/hdfs] impl.FsDatasetAsyncDiskService - Deleted BP-1677850344-10.113.99.159-1770278148914 blk_1076104144_2389180 URI file:/mnt/disk4/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/finalized/subdir4/subdir11/blk_1076104144","2026-05-16T06:20:21.621+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-113-69-4.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2a-1",1,"impl.FsDatasetAsyncDiskService",INFO,"Deleted BP-1677850344-10.113.99.159-1770278148914 blk_1076104144_2389180 URI file:/mnt/disk4/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/finalized/subdir4/subdir11/blk_1076104144","2026-05-16 06:20:21,621","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2a-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s2-esvc2-indexer-14",,aws,"Async disk worker #1488 for volume /mnt/disk4/hdfs","us-west-2a"
+"2026-05-16 06:20:21,620 INFO  [Command processor] impl.FsDatasetAsyncDiskService - Scheduling blk_1076104144_2389180 replica FinalizedReplica, blk_1076104144_2389180, FINALIZED
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk4/hdfs
+  getBlockURI()     = file:/mnt/disk4/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/finalized/subdir4/subdir11/blk_1076104144 for deletion","2026-05-16T06:20:21.620+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-113-69-4.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2a-1",6,"impl.FsDatasetAsyncDiskService",INFO,"Scheduling blk_1076104144_2389180 replica FinalizedReplica, blk_1076104144_2389180, FINALIZED
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk4/hdfs
+  getBlockURI()     = file:/mnt/disk4/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/finalized/subdir4/subdir11/blk_1076104144 for deletion","2026-05-16 06:20:21,620","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2a-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s2-esvc2-indexer-14",,aws,"Command processor","us-west-2a"
+"2026-05-16 06:20:20,411 INFO  [Async disk worker #1425 for volume /mnt/disk0/hdfs] impl.FsDatasetAsyncDiskService - Deleted BP-1677850344-10.113.99.159-1770278148914 blk_1076104144_2389180 URI file:/mnt/disk0/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/finalized/subdir4/subdir11/blk_1076104144","2026-05-16T06:20:20.411+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-114-207-175.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2b-1",1,"impl.FsDatasetAsyncDiskService",INFO,"Deleted BP-1677850344-10.113.99.159-1770278148914 blk_1076104144_2389180 URI file:/mnt/disk0/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/finalized/subdir4/subdir11/blk_1076104144","2026-05-16 06:20:20,411","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2b-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-15",,aws,"Async disk worker #1425 for volume /mnt/disk0/hdfs","us-west-2b"
+"2026-05-16 06:20:20,410 INFO  [Command processor] impl.FsDatasetAsyncDiskService - Scheduling blk_1076104144_2389180 replica FinalizedReplica, blk_1076104144_2389180, FINALIZED
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk0/hdfs
+  getBlockURI()     = file:/mnt/disk0/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/finalized/subdir4/subdir11/blk_1076104144 for deletion","2026-05-16T06:20:20.410+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-114-207-175.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2b-1",6,"impl.FsDatasetAsyncDiskService",INFO,"Scheduling blk_1076104144_2389180 replica FinalizedReplica, blk_1076104144_2389180, FINALIZED
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk0/hdfs
+  getBlockURI()     = file:/mnt/disk0/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/finalized/subdir4/subdir11/blk_1076104144 for deletion","2026-05-16 06:20:20,410","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2b-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-15",,aws,"Command processor","us-west-2b"
+"2026-05-16 06:20:17,855 INFO  [Async disk worker #1414 for volume /mnt/disk3/hdfs] impl.FsDatasetAsyncDiskService - Deleted BP-1677850344-10.113.99.159-1770278148914 blk_1076104144_2389180 URI file:/mnt/disk3/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/finalized/subdir4/subdir11/blk_1076104144","2026-05-16T06:20:17.857+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",1,"impl.FsDatasetAsyncDiskService",INFO,"Deleted BP-1677850344-10.113.99.159-1770278148914 blk_1076104144_2389180 URI file:/mnt/disk3/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/finalized/subdir4/subdir11/blk_1076104144","2026-05-16 06:20:17,855","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-1",,aws,"Async disk worker #1414 for volume /mnt/disk3/hdfs","us-west-2c"
+"2026-05-16 06:20:17,854 INFO  [Command processor] impl.FsDatasetAsyncDiskService - Scheduling blk_1076104144_2389180 replica FinalizedReplica, blk_1076104144_2389180, FINALIZED
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk3/hdfs
+  getBlockURI()     = file:/mnt/disk3/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/finalized/subdir4/subdir11/blk_1076104144 for deletion","2026-05-16T06:20:17.854+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",6,"impl.FsDatasetAsyncDiskService",INFO,"Scheduling blk_1076104144_2389180 replica FinalizedReplica, blk_1076104144_2389180, FINALIZED
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk3/hdfs
+  getBlockURI()     = file:/mnt/disk3/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/finalized/subdir4/subdir11/blk_1076104144 for deletion","2026-05-16 06:20:17,854","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-1",,aws,"Command processor","us-west-2c"
+"2026-05-16 06:20:11,932 INFO  [IPC Server handler 4 on default port 50020] impl.FsDatasetImpl - updateReplica: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, recoveryId=2389180, length=5151092, replica=ReplicaUnderRecovery, blk_1076104144_2388651, RUR
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk0/hdfs
+  getBlockURI()     = file:/mnt/disk0/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  recoveryId=2389180
+  original=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk0/hdfs
+  getBlockURI()     = file:/mnt/disk0/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16T06:20:14.411+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-114-207-175.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2b-1",15,"impl.FsDatasetImpl",INFO,"updateReplica: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, recoveryId=2389180, length=5151092, replica=ReplicaUnderRecovery, blk_1076104144_2388651, RUR
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk0/hdfs
+  getBlockURI()     = file:/mnt/disk0/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  recoveryId=2389180
+  original=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk0/hdfs
+  getBlockURI()     = file:/mnt/disk0/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16 06:20:11,932","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2b-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s2-esvc2-indexer-8",,aws,"IPC Server handler 4 on default port 50020","us-west-2b"
+"2026-05-16 06:20:11,934 INFO  [IPC Server handler 7 on default port 50020] impl.FsDatasetImpl - updateReplica: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, recoveryId=2389180, length=5151092, replica=ReplicaUnderRecovery, blk_1076104144_2388651, RUR
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk4/hdfs
+  getBlockURI()     = file:/mnt/disk4/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  recoveryId=2389180
+  original=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk4/hdfs
+  getBlockURI()     = file:/mnt/disk4/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16T06:20:13.607+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-113-69-4.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2a-1",15,"impl.FsDatasetImpl",INFO,"updateReplica: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, recoveryId=2389180, length=5151092, replica=ReplicaUnderRecovery, blk_1076104144_2388651, RUR
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk4/hdfs
+  getBlockURI()     = file:/mnt/disk4/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  recoveryId=2389180
+  original=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk4/hdfs
+  getBlockURI()     = file:/mnt/disk4/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16 06:20:11,934","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2a-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-5",,aws,"IPC Server handler 7 on default port 50020","us-west-2a"
+"2026-05-16 06:20:11,936 INFO  [dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d] impl.FsDatasetImpl - updateReplica: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW], recoveryId=2389180, length=5151092, replica=ReplicaUnderRecovery, blk_1076104144_2388651, RUR
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk3/hdfs
+  getBlockURI()     = file:/mnt/disk3/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  recoveryId=2389180
+  original=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk3/hdfs
+  getBlockURI()     = file:/mnt/disk3/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16T06:20:11.940+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",15,"impl.FsDatasetImpl",INFO,"updateReplica: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW], recoveryId=2389180, length=5151092, replica=ReplicaUnderRecovery, blk_1076104144_2388651, RUR
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk3/hdfs
+  getBlockURI()     = file:/mnt/disk3/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  recoveryId=2389180
+  original=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk3/hdfs
+  getBlockURI()     = file:/mnt/disk3/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16 06:20:11,936","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-4",,aws,"dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d","us-west-2c"
+"2026-05-16 06:20:11,931 INFO  [dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d] datanode.DataNode - BlockRecoveryWorker: block=BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651 (length=6), bestState=RBW, newBlock=BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2389180 (length=5151092), participatingList=[block:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW] node:DatanodeInfoWithStorage[10.114.205.27:50010,null,null], block:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW] node:DatanodeInfoWithStorage[10.113.65.7:50010,null,null], block:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW] node:DatanodeInfoWithStorage[10.118.180.181:50010,null,null]]","2026-05-16T06:20:11.936+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",1,"datanode.DataNode",INFO,"BlockRecoveryWorker: block=BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651 (length=6), bestState=RBW, newBlock=BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2389180 (length=5151092), participatingList=[block:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW] node:DatanodeInfoWithStorage[10.114.205.27:50010,null,null], block:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW] node:DatanodeInfoWithStorage[10.113.65.7:50010,null,null], block:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW] node:DatanodeInfoWithStorage[10.118.180.181:50010,null,null]]","2026-05-16 06:20:11,931","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-4",,aws,"dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d","us-west-2c"
+"2026-05-16 06:20:11,930 INFO  [IPC Server handler 6 on default port 50020] impl.FsDatasetImpl - initReplicaRecovery: changing replica state for blk_1076104144_2388651 from RBW to RUR","2026-05-16T06:20:11.935+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-113-69-4.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2a-1",1,"impl.FsDatasetImpl",INFO,"initReplicaRecovery: changing replica state for blk_1076104144_2388651 from RBW to RUR","2026-05-16 06:20:11,930","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2a-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-5",,aws,"IPC Server handler 6 on default port 50020","us-west-2a"
+"2026-05-16 06:20:11,908 INFO  [IPC Server handler 0 on default port 50020] impl.FsDatasetImpl - initReplicaRecovery: changing replica state for blk_1076104144_2388651 from RBW to RUR","2026-05-16T06:20:11.932+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-114-207-175.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2b-1",1,"impl.FsDatasetImpl",INFO,"initReplicaRecovery: changing replica state for blk_1076104144_2388651 from RBW to RUR","2026-05-16 06:20:11,908","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2b-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s2-esvc2-indexer-8",,aws,"IPC Server handler 0 on default port 50020","us-west-2b"
+"2026-05-16 06:20:11,931 INFO  [dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d] datanode.DataNode - BlockRecoveryWorker: block=BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651 (length=6), isTruncateRecovery=false, syncList=[block:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW] node:DatanodeInfoWithStorage[10.114.205.27:50010,null,null], block:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW] node:DatanodeInfoWithStorage[10.113.65.7:50010,null,null], block:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW] node:DatanodeInfoWithStorage[10.118.180.181:50010,null,null]]","2026-05-16T06:20:11.931+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",1,"datanode.DataNode",INFO,"BlockRecoveryWorker: block=BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651 (length=6), isTruncateRecovery=false, syncList=[block:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW] node:DatanodeInfoWithStorage[10.114.205.27:50010,null,null], block:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW] node:DatanodeInfoWithStorage[10.113.65.7:50010,null,null], block:blk_1076104144_2388651[numBytes=5151092,originalReplicaState=RBW] node:DatanodeInfoWithStorage[10.118.180.181:50010,null,null]]","2026-05-16 06:20:11,931","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-4",,aws,"dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d","us-west-2c"
+"2026-05-16 06:20:11,931 INFO  [dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d] impl.FsDatasetImpl - initReplicaRecovery: changing replica state for blk_1076104144_2388651 from RBW to RUR","2026-05-16T06:20:11.931+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",1,"impl.FsDatasetImpl",INFO,"initReplicaRecovery: changing replica state for blk_1076104144_2388651 from RBW to RUR","2026-05-16 06:20:11,931","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-4",,aws,"dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d","us-west-2c"
+"2026-05-16 06:20:11,931 INFO  [dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d] impl.FsDatasetImpl - initReplicaRecovery: blk_1076104144_2388651, recoveryId=2389180, replica=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk3/hdfs
+  getBlockURI()     = file:/mnt/disk3/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16T06:20:11.931+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",8,"impl.FsDatasetImpl",INFO,"initReplicaRecovery: blk_1076104144_2388651, recoveryId=2389180, replica=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk3/hdfs
+  getBlockURI()     = file:/mnt/disk3/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16 06:20:11,931","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-4",,aws,"dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d","us-west-2c"
+"2026-05-16 06:20:11,931 INFO  [dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d] impl.FsDatasetImpl - initReplicaRecovery: blk_1076104144_2388651, recoveryId=2389180, replica=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk3/hdfs
+  getBlockURI()     = file:/mnt/disk3/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16T06:20:11.931+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",8,"impl.FsDatasetImpl",INFO,"initReplicaRecovery: blk_1076104144_2388651, recoveryId=2389180, replica=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk3/hdfs
+  getBlockURI()     = file:/mnt/disk3/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16 06:20:11,931","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-4",,aws,"dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d","us-west-2c"
+"2026-05-16 06:20:11,930 INFO  [IPC Server handler 6 on default port 50020] impl.FsDatasetImpl - initReplicaRecovery: blk_1076104144_2388651, recoveryId=2389180, replica=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk4/hdfs
+  getBlockURI()     = file:/mnt/disk4/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16T06:20:11.930+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-113-69-4.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2a-1",8,"impl.FsDatasetImpl",INFO,"initReplicaRecovery: blk_1076104144_2388651, recoveryId=2389180, replica=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk4/hdfs
+  getBlockURI()     = file:/mnt/disk4/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16 06:20:11,930","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2a-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-5",,aws,"IPC Server handler 6 on default port 50020","us-west-2a"
+"2026-05-16 06:20:11,930 INFO  [IPC Server handler 6 on default port 50020] impl.FsDatasetImpl - initReplicaRecovery: blk_1076104144_2388651, recoveryId=2389180, replica=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk4/hdfs
+  getBlockURI()     = file:/mnt/disk4/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16T06:20:11.930+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-113-69-4.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2a-1",8,"impl.FsDatasetImpl",INFO,"initReplicaRecovery: blk_1076104144_2388651, recoveryId=2389180, replica=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk4/hdfs
+  getBlockURI()     = file:/mnt/disk4/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16 06:20:11,930","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2a-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-5",,aws,"IPC Server handler 6 on default port 50020","us-west-2a"
+"2026-05-16 06:20:11,916 ERROR [0.113.99.159-1770278148914:blk_1076104144_2388651]] datanode.DataNode - dn-us-west-2a-1.datanode-us-west-2a.hbase.dev-phoenix-hbase5b.hbase.core002.dev1-uswest2.aws.sfdc.is:50010:DataXceiver error processing WRITE_BLOCK operation  src: /10.114.205.27:34468 dst: /10.113.65.7:50010
+java.io.IOException: Premature EOF from inputStream
+	at org.apache.hadoop.io.IOUtils.readFully(IOUtils.java:217)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.doReadFully(PacketReceiver.java:211)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.doRead(PacketReceiver.java:134)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.receiveNextPacket(PacketReceiver.java:109)
+	at org.apache.hadoop.hdfs.server.datanode.BlockReceiver.receivePacket(BlockReceiver.java:550)
+	at org.apache.hadoop.hdfs.server.datanode.BlockReceiver.receiveBlock(BlockReceiver.java:993)
+	at org.apache.hadoop.hdfs.server.datanode.DataXceiver.writeBlock(DataXceiver.java:920)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.Receiver.opWriteBlock(Receiver.java:176)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.Receiver.processOp(Receiver.java:110)
+	at org.apache.hadoop.hdfs.server.datanode.DataXceiver.run(DataXceiver.java:302)
+	at java.lang.Thread.run(Thread.java:750)","2026-05-16T06:20:11.930+0000",711420977738,unknown,dev1,,"java.io.IOException","dev1-uswest2",core002,"ip-10-113-69-4.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2a-1",13,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2a-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-5",,aws,,"us-west-2a"
+"2026-05-16 06:20:11,918 ERROR [0.113.99.159-1770278148914:blk_1076104144_2388651]] datanode.DataNode - dn-us-west-2c-3.datanode-us-west-2c.hbase.dev-phoenix-hbase5b.hbase.core002.dev1-uswest2.aws.sfdc.is:50010:DataXceiver error processing WRITE_BLOCK operation  src: /10.113.65.7:34472 dst: /10.118.180.181:50010
+java.io.IOException: Premature EOF from inputStream
+	at org.apache.hadoop.io.IOUtils.readFully(IOUtils.java:217)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.doReadFully(PacketReceiver.java:211)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.doRead(PacketReceiver.java:134)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.receiveNextPacket(PacketReceiver.java:109)
+	at org.apache.hadoop.hdfs.server.datanode.BlockReceiver.receivePacket(BlockReceiver.java:550)
+	at org.apache.hadoop.hdfs.server.datanode.BlockReceiver.receiveBlock(BlockReceiver.java:993)
+	at org.apache.hadoop.hdfs.server.datanode.DataXceiver.writeBlock(DataXceiver.java:920)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.Receiver.opWriteBlock(Receiver.java:176)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.Receiver.processOp(Receiver.java:110)
+	at org.apache.hadoop.hdfs.server.datanode.DataXceiver.run(DataXceiver.java:302)
+	at java.lang.Thread.run(Thread.java:750)","2026-05-16T06:20:11.928+0000",711420977738,unknown,dev1,,"java.io.IOException","dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",13,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-4",,aws,,"us-west-2c"
+"2026-05-16 06:20:11,918 INFO  [0.113.99.159-1770278148914:blk_1076104144_2388651]] datanode.DataNode - opWriteBlock BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651 received exception java.io.IOException: Premature EOF from inputStream","2026-05-16T06:20:11.919+0000",711420977738,unknown,dev1,,"java.io.IOException","dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",1,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-4",,aws,,"us-west-2c"
+"2026-05-16 06:20:11,918 INFO  [8914:blk_1076104144_2388651, type=LAST_IN_PIPELINE] datanode.DataNode - PacketResponder: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, type=LAST_IN_PIPELINE terminating","2026-05-16T06:20:11.918+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",1,"datanode.DataNode",INFO,"PacketResponder: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, type=LAST_IN_PIPELINE terminating","2026-05-16 06:20:11,918","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-4",,aws,"8914:blk_1076104144_2388651, type=LAST_IN_PIPELINE","us-west-2c"
+"2026-05-16 06:20:11,918 INFO  [8914:blk_1076104144_2388651, type=LAST_IN_PIPELINE] datanode.DataNode - PacketResponder: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, type=LAST_IN_PIPELINE: Thread is interrupted.","2026-05-16T06:20:11.918+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",1,"datanode.DataNode",INFO,"PacketResponder: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, type=LAST_IN_PIPELINE: Thread is interrupted.","2026-05-16 06:20:11,918","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-4",,aws,"8914:blk_1076104144_2388651, type=LAST_IN_PIPELINE","us-west-2c"
+"2026-05-16 06:20:11,916 INFO  [0.113.99.159-1770278148914:blk_1076104144_2388651]] datanode.DataNode - Exception for BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651
+java.io.IOException: Premature EOF from inputStream
+	at org.apache.hadoop.io.IOUtils.readFully(IOUtils.java:217)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.doReadFully(PacketReceiver.java:211)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.doRead(PacketReceiver.java:134)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.receiveNextPacket(PacketReceiver.java:109)
+	at org.apache.hadoop.hdfs.server.datanode.BlockReceiver.receivePacket(BlockReceiver.java:550)
+	at org.apache.hadoop.hdfs.server.datanode.BlockReceiver.receiveBlock(BlockReceiver.java:993)
+	at org.apache.hadoop.hdfs.server.datanode.DataXceiver.writeBlock(DataXceiver.java:920)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.Receiver.opWriteBlock(Receiver.java:176)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.Receiver.processOp(Receiver.java:110)
+	at org.apache.hadoop.hdfs.server.datanode.DataXceiver.run(DataXceiver.java:302)
+	at java.lang.Thread.run(Thread.java:750)","2026-05-16T06:20:11.918+0000",711420977738,unknown,dev1,,"java.io.IOException","dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",13,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-4",,aws,,"us-west-2c"
+"2026-05-16 06:20:11,892 INFO  [dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d] datanode.DataNode - BlockRecoveryWorker: NameNode at nn-2.namenode.hbase.dev-phoenix-hbase5b.hbase.core002.dev1-uswest2.aws.sfdc.is/10.118.181.179:9000 calls recoverBlock(BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, targets=[DatanodeInfoWithStorage[10.114.205.27:50010,null,null], DatanodeInfoWithStorage[10.113.65.7:50010,null,null], DatanodeInfoWithStorage[10.118.180.181:50010,null,null]], newGenerationStamp=2389180, newBlock=null, isStriped=false)","2026-05-16T06:20:11.918+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",1,"datanode.DataNode",INFO,"BlockRecoveryWorker: NameNode at nn-2.namenode.hbase.dev-phoenix-hbase5b.hbase.core002.dev1-uswest2.aws.sfdc.is/10.118.181.179:9000 calls recoverBlock(BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, targets=[DatanodeInfoWithStorage[10.114.205.27:50010,null,null], DatanodeInfoWithStorage[10.113.65.7:50010,null,null], DatanodeInfoWithStorage[10.118.180.181:50010,null,null]], newGenerationStamp=2389180, newBlock=null, isStriped=false)","2026-05-16 06:20:11,892","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-4",,aws,"dfs.server.datanode.BlockRecoveryWorker$1@7e0b651d","us-west-2c"
+"2026-05-16 06:20:11,916 INFO  [0.113.99.159-1770278148914:blk_1076104144_2388651]] datanode.DataNode - opWriteBlock BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651 received exception java.io.IOException: Premature EOF from inputStream","2026-05-16T06:20:11.916+0000",711420977738,unknown,dev1,,"java.io.IOException","dev1-uswest2",core002,"ip-10-113-69-4.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2a-1",1,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2a-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-5",,aws,,"us-west-2a"
+"2026-05-16 06:20:11,916 INFO  [_IN_PIPELINE, downstreams=1:[10.118.180.181:50010]] datanode.DataNode - PacketResponder: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, type=HAS_DOWNSTREAM_IN_PIPELINE, downstreams=1:[10.118.180.181:50010] terminating","2026-05-16T06:20:11.916+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-113-69-4.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2a-1",1,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2a-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-5",,aws,,"us-west-2a"
+"2026-05-16 06:20:11,916 INFO  [_IN_PIPELINE, downstreams=1:[10.118.180.181:50010]] datanode.DataNode - PacketResponder: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, type=HAS_DOWNSTREAM_IN_PIPELINE, downstreams=1:[10.118.180.181:50010]: Thread is interrupted.","2026-05-16T06:20:11.916+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-113-69-4.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2a-1",1,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2a-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-5",,aws,,"us-west-2a"
+"2026-05-16 06:20:11,908 INFO  [0.113.99.159-1770278148914:blk_1076104144_2388651]] datanode.DataNode - Exception for BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651
+java.io.IOException: Premature EOF from inputStream
+	at org.apache.hadoop.io.IOUtils.readFully(IOUtils.java:217)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.doReadFully(PacketReceiver.java:211)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.doRead(PacketReceiver.java:134)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.receiveNextPacket(PacketReceiver.java:109)
+	at org.apache.hadoop.hdfs.server.datanode.BlockReceiver.receivePacket(BlockReceiver.java:550)
+	at org.apache.hadoop.hdfs.server.datanode.BlockReceiver.receiveBlock(BlockReceiver.java:993)
+	at org.apache.hadoop.hdfs.server.datanode.DataXceiver.writeBlock(DataXceiver.java:920)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.Receiver.opWriteBlock(Receiver.java:176)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.Receiver.processOp(Receiver.java:110)
+	at org.apache.hadoop.hdfs.server.datanode.DataXceiver.run(DataXceiver.java:302)
+	at java.lang.Thread.run(Thread.java:750)","2026-05-16T06:20:11.916+0000",711420977738,unknown,dev1,,"java.io.IOException","dev1-uswest2",core002,"ip-10-113-69-4.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2a-1",13,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2a-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s3-esvc2-indexer-5",,aws,,"us-west-2a"
+"2026-05-16 06:20:11,908 INFO  [IPC Server handler 0 on default port 50020] impl.FsDatasetImpl - initReplicaRecovery: blk_1076104144_2388651, recoveryId=2389180, replica=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk0/hdfs
+  getBlockURI()     = file:/mnt/disk0/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16T06:20:11.908+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-114-207-175.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2b-1",8,"impl.FsDatasetImpl",INFO,"initReplicaRecovery: blk_1076104144_2388651, recoveryId=2389180, replica=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk0/hdfs
+  getBlockURI()     = file:/mnt/disk0/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16 06:20:11,908","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2b-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s2-esvc2-indexer-8",,aws,"IPC Server handler 0 on default port 50020","us-west-2b"
+"2026-05-16 06:20:11,908 ERROR [0.113.99.159-1770278148914:blk_1076104144_2388651]] datanode.DataNode - dn-us-west-2b-1.datanode-us-west-2b.hbase.dev-phoenix-hbase5b.hbase.core002.dev1-uswest2.aws.sfdc.is:50010:DataXceiver error processing WRITE_BLOCK operation  src: /10.113.64.236:55224 dst: /10.114.205.27:50010
+java.io.InterruptedIOException: Interrupted while waiting for IO on channel java.nio.channels.SocketChannel[connected local=/10.114.205.27:50010 remote=/10.113.64.236:55224]. Total timeout mills is 15000, 11896 millis timeout left.
+	at org.apache.hadoop.net.SocketIOWithTimeout$SelectorPool.select(SocketIOWithTimeout.java:350)
+	at org.apache.hadoop.net.SocketIOWithTimeout.doIO(SocketIOWithTimeout.java:156)
+	at org.apache.hadoop.net.SocketInputStream.read(SocketInputStream.java:161)
+	at org.apache.hadoop.crypto.CryptoInputStream.read(CryptoInputStream.java:204)
+	at java.io.BufferedInputStream.fill(BufferedInputStream.java:246)
+	at java.io.BufferedInputStream.read1(BufferedInputStream.java:286)
+	at java.io.BufferedInputStream.read(BufferedInputStream.java:345)
+	at java.io.DataInputStream.read(DataInputStream.java:149)
+	at org.apache.hadoop.io.IOUtils.readFully(IOUtils.java:215)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.doReadFully(PacketReceiver.java:211)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.doRead(PacketReceiver.java:134)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.receiveNextPacket(PacketReceiver.java:109)
+	at org.apache.hadoop.hdfs.server.datanode.BlockReceiver.receivePacket(BlockReceiver.java:550)
+	at org.apache.hadoop.hdfs.server.datanode.BlockReceiver.receiveBlock(BlockReceiver.java:993)
+	at org.apache.hadoop.hdfs.server.datanode.DataXceiver.writeBlock(DataXceiver.java:920)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.Receiver.opWriteBlock(Receiver.java:176)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.Receiver.processOp(Receiver.java:110)
+	at org.apache.hadoop.hdfs.server.datanode.DataXceiver.run(DataXceiver.java:302)
+	at java.lang.Thread.run(Thread.java:750)","2026-05-16T06:20:11.908+0000",711420977738,unknown,dev1,,"java.io.InterruptedIOException","dev1-uswest2",core002,"ip-10-114-207-175.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2b-1",21,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2b-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s2-esvc2-indexer-8",,aws,,"us-west-2b"
+"2026-05-16 06:20:11,908 INFO  [0.113.99.159-1770278148914:blk_1076104144_2388651]] datanode.DataNode - opWriteBlock BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651 received exception java.io.InterruptedIOException: Interrupted while waiting for IO on channel java.nio.channels.SocketChannel[connected local=/10.114.205.27:50010 remote=/10.113.64.236:55224]. Total timeout mills is 15000, 11896 millis timeout left.","2026-05-16T06:20:11.908+0000",711420977738,unknown,dev1,,"java.io.InterruptedIOException","dev1-uswest2",core002,"ip-10-114-207-175.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2b-1",1,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2b-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s2-esvc2-indexer-8",,aws,,"us-west-2b"
+"2026-05-16 06:20:11,908 INFO  [treams=2:[10.113.65.7:50010, 10.118.180.181:50010]] datanode.DataNode - PacketResponder: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, type=HAS_DOWNSTREAM_IN_PIPELINE, downstreams=2:[10.113.65.7:50010, 10.118.180.181:50010] terminating","2026-05-16T06:20:11.908+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-114-207-175.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2b-1",1,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2b-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s2-esvc2-indexer-8",,aws,,"us-west-2b"
+"2026-05-16 06:20:11,908 INFO  [treams=2:[10.113.65.7:50010, 10.118.180.181:50010]] datanode.DataNode - PacketResponder: BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651, type=HAS_DOWNSTREAM_IN_PIPELINE, downstreams=2:[10.113.65.7:50010, 10.118.180.181:50010]: Thread is interrupted.","2026-05-16T06:20:11.908+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-114-207-175.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2b-1",1,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2b-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s2-esvc2-indexer-8",,aws,,"us-west-2b"
+"2026-05-16 06:20:11,907 INFO  [0.113.99.159-1770278148914:blk_1076104144_2388651]] datanode.DataNode - Exception for BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651
+java.io.InterruptedIOException: Interrupted while waiting for IO on channel java.nio.channels.SocketChannel[connected local=/10.114.205.27:50010 remote=/10.113.64.236:55224]. Total timeout mills is 15000, 11896 millis timeout left.
+	at org.apache.hadoop.net.SocketIOWithTimeout$SelectorPool.select(SocketIOWithTimeout.java:350)
+	at org.apache.hadoop.net.SocketIOWithTimeout.doIO(SocketIOWithTimeout.java:156)
+	at org.apache.hadoop.net.SocketInputStream.read(SocketInputStream.java:161)
+	at org.apache.hadoop.crypto.CryptoInputStream.read(CryptoInputStream.java:204)
+	at java.io.BufferedInputStream.fill(BufferedInputStream.java:246)
+	at java.io.BufferedInputStream.read1(BufferedInputStream.java:286)
+	at java.io.BufferedInputStream.read(BufferedInputStream.java:345)
+	at java.io.DataInputStream.read(DataInputStream.java:149)
+	at org.apache.hadoop.io.IOUtils.readFully(IOUtils.java:215)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.doReadFully(PacketReceiver.java:211)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.doRead(PacketReceiver.java:134)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.PacketReceiver.receiveNextPacket(PacketReceiver.java:109)
+	at org.apache.hadoop.hdfs.server.datanode.BlockReceiver.receivePacket(BlockReceiver.java:550)
+	at org.apache.hadoop.hdfs.server.datanode.BlockReceiver.receiveBlock(BlockReceiver.java:993)
+	at org.apache.hadoop.hdfs.server.datanode.DataXceiver.writeBlock(DataXceiver.java:920)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.Receiver.opWriteBlock(Receiver.java:176)
+	at org.apache.hadoop.hdfs.protocol.datatransfer.Receiver.processOp(Receiver.java:110)
+	at org.apache.hadoop.hdfs.server.datanode.DataXceiver.run(DataXceiver.java:302)
+	at java.lang.Thread.run(Thread.java:750)","2026-05-16T06:20:11.908+0000",711420977738,unknown,dev1,,"java.io.InterruptedIOException","dev1-uswest2",core002,"ip-10-114-207-175.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2b-1",21,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2b-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s2-esvc2-indexer-8",,aws,,"us-west-2b"
+"2026-05-16 06:20:11,906 INFO  [IPC Server handler 0 on default port 50020] impl.FsDatasetImpl - initReplicaRecovery: blk_1076104144_2388651, recoveryId=2389180, replica=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk0/hdfs
+  getBlockURI()     = file:/mnt/disk0/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16T06:20:11.908+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-114-207-175.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2b-1",8,"impl.FsDatasetImpl",INFO,"initReplicaRecovery: blk_1076104144_2388651, recoveryId=2389180, replica=ReplicaBeingWritten, blk_1076104144_2388651, RBW
+  getNumBytes()     = 5151092
+  getBytesOnDisk()  = 5151092
+  getVisibleLength()= 5151092
+  getVolume()       = /mnt/disk0/hdfs
+  getBlockURI()     = file:/mnt/disk0/hdfs/current/BP-1677850344-10.113.99.159-1770278148914/current/rbw/blk_1076104144
+  bytesAcked=5151092
+  bytesOnDisk=5151092","2026-05-16 06:20:11,906","us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2b-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s2-esvc2-indexer-8",,aws,"IPC Server handler 0 on default port 50020","us-west-2b"
+"2026-05-16 06:19:00,099 INFO  [0.113.99.159-1770278148914:blk_1076104144_2388651]] datanode.DataNode - Receiving BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651 src: /10.113.65.7:34472 dest: /10.118.180.181:50010","2026-05-16T06:19:00.105+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-118-178-50.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2c-3",1,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2c-3.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh1","splunk-i1-s2-esvc2-indexer-5",,aws,,"us-west-2c"
+"2026-05-16 06:19:00,096 INFO  [0.113.99.159-1770278148914:blk_1076104144_2388651]] datanode.DataNode - Receiving BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651 src: /10.114.205.27:34468 dest: /10.113.65.7:50010","2026-05-16T06:19:00.099+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-113-69-4.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2a-1",1,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2a-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh2","splunk-i2-s1-esvc2-indexer-12",,aws,,"us-west-2a"
+"2026-05-16 06:19:00,094 INFO  [0.113.99.159-1770278148914:blk_1076104144_2388651]] datanode.DataNode - Receiving BP-1677850344-10.113.99.159-1770278148914:blk_1076104144_2388651 src: /10.113.64.236:55224 dest: /10.114.205.27:50010","2026-05-16T06:19:00.096+0000",711420977738,unknown,dev1,,,"dev1-uswest2",core002,"ip-10-114-207-175.us-west-2.compute.internal",distapps,"dev-phoenix-hbase5b","rsyslog-sidecar",hbase,"dn-us-west-2b-1",1,,,,,"us-west-2",hbase,hbase,"/logs/hadoop-sfdc-datanode-dn-us-west-2b-1.log",hbaseHadoopDataNodeLog,"esvc2-preprod-sh3","splunk-i3-s2-esvc2-indexer-13",,aws,,"us-west-2b"

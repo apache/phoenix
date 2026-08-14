@@ -202,7 +202,10 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
           LOG.info("HAGroup {} updated HA state to SYNC", logGroup);
         }
       } catch (Exception e) {
-        LOG.info("Could not update status to sync for {}", logGroup, e);
+        // Convergent races now reconcile to a no-op success (PHOENIX-7990), so a throw here is a
+        // genuine anomaly -- e.g. retry-exhausted CAS contention or a truly invalid transition.
+        // Log at WARN so persistent failure to claim SYNC after processing every file is visible.
+        LOG.warn("Could not update status to sync for {}", logGroup, e);
       }
     }
   }

@@ -1,0 +1,530 @@
+[INFO] Scanning for projects...
+[WARNING] 
+[WARNING] Some problems were encountered while building the effective model for org.apache.phoenix:phoenix-client-embedded-hbase-2.5:jar:5.4.0-SNAPSHOT
+[WARNING] 'artifactId' contains an expression but should be a constant. @ org.apache.phoenix:phoenix-client-embedded-${hbase.suffix}:5.4.0-SNAPSHOT, /Users/tkhurana/soma/root/phoenix/phoenix-client-parent/phoenix-client-embedded/pom.xml, line 26, column 15
+[WARNING] 
+[WARNING] Some problems were encountered while building the effective model for org.apache.phoenix:phoenix-client-lite-hbase-2.5:jar:5.4.0-SNAPSHOT
+[WARNING] 'artifactId' contains an expression but should be a constant. @ org.apache.phoenix:phoenix-client-lite-${hbase.suffix}:5.4.0-SNAPSHOT, /Users/tkhurana/soma/root/phoenix/phoenix-client-parent/phoenix-client-lite/pom.xml, line 26, column 15
+[WARNING] 
+[WARNING] Some problems were encountered while building the effective model for org.apache.phoenix:phoenix-server-hbase-2.5:jar:5.4.0-SNAPSHOT
+[WARNING] 'artifactId' contains an expression but should be a constant. @ org.apache.phoenix:phoenix-server-${hbase.suffix}:5.4.0-SNAPSHOT, /Users/tkhurana/soma/root/phoenix/phoenix-server/pom.xml, line 27, column 15
+[WARNING] 
+[WARNING] It is highly recommended to fix these problems because they threaten the stability of your build.
+[WARNING] 
+[WARNING] For this reason, future Maven versions might no longer support building such malformed projects.
+[WARNING] 
+[INFO] ------------------------------------------------------------------------
+[INFO] Detecting the operating system and CPU architecture
+[INFO] ------------------------------------------------------------------------
+[INFO] os.detected.name: osx
+[INFO] os.detected.arch: aarch_64
+[INFO] os.detected.bitness: 64
+[INFO] os.detected.version: 26.5
+[INFO] os.detected.version.major: 26
+[INFO] os.detected.version.minor: 5
+[INFO] os.detected.classifier: osx-aarch_64
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Build Order:
+[INFO] 
+[INFO] Apache Phoenix                                                     [pom]
+[INFO] Phoenix Hbase 2.5.4 compatibility                                  [jar]
+[INFO] Phoenix Core Client                                                [jar]
+[INFO] Phoenix Core Server                                                [jar]
+[INFO] Phoenix Core                                                       [jar]
+[INFO] 
+[INFO] ---------------------< org.apache.phoenix:phoenix >---------------------
+[INFO] Building Apache Phoenix 5.4.0-SNAPSHOT                             [1/5]
+[INFO]   from pom.xml
+[INFO] --------------------------------[ pom ]---------------------------------
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (enforce-maven-version) @ phoenix ---
+[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireMavenVersion passed
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (enforce-java-version) @ phoenix ---
+[INFO] Rule 0: org.apache.maven.enforcer.rules.version.RequireJavaVersion passed
+[INFO] 
+[INFO] --- checkstyle:3.3.1:check (validate) @ phoenix ---
+[INFO] 
+[INFO] --- jacoco:0.8.11:prepare-agent (prepare-agent) @ phoenix ---
+[INFO] jacocoArgLine set to -javaagent:/Users/tkhurana/.m2/repository/org/jacoco/org.jacoco.agent/0.8.11/org.jacoco.agent-0.8.11-runtime.jar=destfile=/Users/tkhurana/soma/root/phoenix/target/jacoco.exec
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (banned-illegal-imports) @ phoenix ---
+[INFO] Rule 0: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 1: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 2: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 3: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 4: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 5: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] 
+[INFO] --- remote-resources:3.1.0:process (process-resource-bundles) @ phoenix ---
+[INFO] Preparing remote bundle org.apache.apache.resources:apache-jar-resource-bundle:1.5
+[INFO] Copying 3 resources from 1 bundle.
+[INFO] 
+[INFO] --- source:3.3.0:jar-no-fork (attach-sources) @ phoenix ---
+[INFO] 
+[INFO] --- jar:3.3.0:test-jar (default) @ phoenix ---
+[WARNING] JAR will be empty - no content was marked for inclusion!
+[INFO] 
+[INFO] --- site:3.21.0:attach-descriptor (attach-descriptor) @ phoenix ---
+[INFO] No site descriptor found: nothing to attach.
+[INFO] 
+[INFO] --- jacoco:0.8.11:report (report) @ phoenix ---
+[INFO] Skipping JaCoCo execution due to missing execution data file.
+[INFO] 
+[INFO] --- jacoco:0.8.11:check (check) @ phoenix ---
+[INFO] Skipping JaCoCo execution due to missing execution data file:/Users/tkhurana/soma/root/phoenix/target/jacoco.exec
+[INFO] 
+[INFO] -----------< org.apache.phoenix:phoenix-hbase-compat-2.5.4 >------------
+[INFO] Building Phoenix Hbase 2.5.4 compatibility 5.4.0-SNAPSHOT          [2/5]
+[INFO]   from phoenix-hbase-compat-2.5.4/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (enforce-maven-version) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (enforce-java-version) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] 
+[INFO] --- checkstyle:3.3.1:check (validate) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] 
+[INFO] --- jacoco:0.8.11:prepare-agent (prepare-agent) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] jacocoArgLine set to -javaagent:/Users/tkhurana/.m2/repository/org/jacoco/org.jacoco.agent/0.8.11/org.jacoco.agent-0.8.11-runtime.jar=destfile=/Users/tkhurana/soma/root/phoenix/phoenix-hbase-compat-2.5.4/target/jacoco.exec
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (banned-illegal-imports) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] Rule 0: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 1: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 2: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 3: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 4: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 5: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] 
+[INFO] --- remote-resources:3.1.0:process (process-resource-bundles) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] Preparing remote bundle org.apache.apache.resources:apache-jar-resource-bundle:1.5
+[INFO] Copying 3 resources from 1 bundle.
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] skip non existing resourceDirectory /Users/tkhurana/soma/root/phoenix/phoenix-hbase-compat-2.5.4/src/main/resources
+[INFO] Copying 3 resources from target/maven-shared-archive-resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] Nothing to compile - all classes are up to date
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] skip non existing resourceDirectory /Users/tkhurana/soma/root/phoenix/phoenix-hbase-compat-2.5.4/src/test/resources
+[INFO] Copying 3 resources from target/maven-shared-archive-resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- surefire:3.2.2:test (default-test) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] 
+[INFO] --- source:3.3.0:jar-no-fork (attach-sources) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] 
+[INFO] --- jar:3.3.0:test-jar (default) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] 
+[INFO] --- jar:3.3.0:jar (default-jar) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] 
+[INFO] --- site:3.21.0:attach-descriptor (attach-descriptor) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] Skipping because packaging 'jar' is not pom.
+[INFO] 
+[INFO] --- jacoco:0.8.11:report (report) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] Skipping JaCoCo execution due to missing execution data file.
+[INFO] 
+[INFO] --- jacoco:0.8.11:check (check) @ phoenix-hbase-compat-2.5.4 ---
+[INFO] Skipping JaCoCo execution due to missing execution data file:/Users/tkhurana/soma/root/phoenix/phoenix-hbase-compat-2.5.4/target/jacoco.exec
+[INFO] 
+[INFO] ---------------< org.apache.phoenix:phoenix-core-client >---------------
+[INFO] Building Phoenix Core Client 5.4.0-SNAPSHOT                        [3/5]
+[INFO]   from phoenix-core-client/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (enforce-maven-version) @ phoenix-core-client ---
+[INFO] Rule 1: org.apache.maven.enforcer.rules.EvaluateBeanshell passed
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (enforce-java-version) @ phoenix-core-client ---
+[INFO] Rule 1: org.apache.maven.enforcer.rules.EvaluateBeanshell passed
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (check-hbase-compatibility) @ phoenix-core-client ---
+[INFO] Rule 0: org.apache.maven.enforcer.rules.EvaluateBeanshell passed
+[INFO] 
+[INFO] --- checkstyle:3.3.1:check (validate) @ phoenix-core-client ---
+[INFO] 
+[INFO] --- build-helper:3.5.0:add-test-source (add-test-source) @ phoenix-core-client ---
+[INFO] Test Source directory: /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/it/java added.
+[INFO] 
+[INFO] --- build-helper:3.5.0:add-test-resource (add-test-resource) @ phoenix-core-client ---
+[INFO] 
+[INFO] --- jacoco:0.8.11:prepare-agent (prepare-agent) @ phoenix-core-client ---
+[INFO] jacocoArgLine set to -javaagent:/Users/tkhurana/.m2/repository/org/jacoco/org.jacoco.agent/0.8.11/org.jacoco.agent-0.8.11-runtime.jar=destfile=/Users/tkhurana/soma/root/phoenix/phoenix-core-client/target/jacoco.exec
+[INFO] 
+[INFO] --- build-helper:3.5.0:add-source (add-source) @ phoenix-core-client ---
+[INFO] Source directory: /Users/tkhurana/soma/root/phoenix/phoenix-core-client/target/generated-sources/antlr3 added.
+[INFO] Source directory: /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/main/antlr3 added.
+[INFO] 
+[INFO] --- antlr3:3.5.2:antlr (default) @ phoenix-core-client ---
+[INFO] ANTLR: Processing source directory /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/main/antlr3
+ANTLR Parser Generator  Version 3.5.2
+Grammar /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/main/antlr3/PhoenixBsonExpression.g is up to date - build skipped
+Grammar /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/main/antlr3/PhoenixSQL.g is up to date - build skipped
+[INFO] 
+[INFO] --- dependency:3.6.1:build-classpath (create-phoenix-generated-classpath) @ phoenix-core-client ---
+[INFO] Skipped writing classpath file '/Users/tkhurana/soma/root/phoenix/phoenix-core-client/target/cached_classpath.txt'.  No changes found.
+[INFO] 
+[INFO] --- protobuf:0.6.1:compile (compile-protoc) @ phoenix-core-client ---
+[INFO] Skipping compilation because target directory newer than sources.
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (banned-illegal-imports) @ phoenix-core-client ---
+[INFO] Rule 0: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 1: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 2: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 3: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 4: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 5: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 6: org.apache.maven.enforcer.rules.EvaluateBeanshell passed
+[INFO] 
+[INFO] --- dependency:3.6.1:copy (copy-for-sqlline) @ phoenix-core-client ---
+[INFO] Configured Artifact: org.slf4j:jcl-over-slf4j:?:jar
+[INFO] Configured Artifact: org.slf4j:jul-to-slf4j:?:jar
+[INFO] Configured Artifact: org.apache.logging.log4j:log4j-api:?:jar
+[INFO] Configured Artifact: org.apache.logging.log4j:log4j-core:?:jar
+[INFO] Configured Artifact: org.apache.logging.log4j:log4j-slf4j-impl:?:jar
+[INFO] Configured Artifact: org.apache.logging.log4j:log4j-1.2-api:?:jar
+[INFO] Configured Artifact: sqlline:sqlline:jar-with-dependencies:?:jar
+[INFO] org.slf4j:jcl-over-slf4j:1.7.36:jar already exists in /Users/tkhurana/soma/root/phoenix/phoenix-core-client/../lib
+[INFO] org.slf4j:jul-to-slf4j:1.7.36:jar already exists in /Users/tkhurana/soma/root/phoenix/phoenix-core-client/../lib
+[INFO] org.apache.logging.log4j:log4j-api:2.25.3:jar already exists in /Users/tkhurana/soma/root/phoenix/phoenix-core-client/../lib
+[INFO] org.apache.logging.log4j:log4j-core:2.25.3:jar already exists in /Users/tkhurana/soma/root/phoenix/phoenix-core-client/../lib
+[INFO] org.apache.logging.log4j:log4j-slf4j-impl:2.25.3:jar already exists in /Users/tkhurana/soma/root/phoenix/phoenix-core-client/../lib
+[INFO] org.apache.logging.log4j:log4j-1.2-api:2.25.3:jar already exists in /Users/tkhurana/soma/root/phoenix/phoenix-core-client/../lib
+[INFO] sqlline:sqlline:jar-with-dependencies:1.9.0:jar already exists in /Users/tkhurana/soma/root/phoenix/phoenix-core-client/../lib
+[INFO] 
+[INFO] --- remote-resources:3.1.0:process (process-resource-bundles) @ phoenix-core-client ---
+[INFO] Preparing remote bundle org.apache.apache.resources:apache-jar-resource-bundle:1.5
+[INFO] Copying 3 resources from 1 bundle.
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ phoenix-core-client ---
+[INFO] Copying 4 resources from src/main/resources to target/classes
+[INFO] Copying 13 resources from src/main/protobuf to target/classes
+[INFO] Copying 3 resources from target/maven-shared-archive-resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ phoenix-core-client ---
+[INFO] Changes detected - recompiling the module! :source
+[INFO] Compiling 1246 source files with javac [debug target 1.8] to target/classes
+[WARNING] /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/main/java/org/apache/phoenix/execute/DescVarLengthFastByteComparisons.java:[24,16] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/main/java/org/apache/phoenix/execute/DescVarLengthFastByteComparisons.java:[123,20] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/main/java/org/apache/phoenix/execute/DescVarLengthFastByteComparisons.java:[129,22] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[WARNING] /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/main/java/org/apache/phoenix/execute/DescVarLengthFastByteComparisons.java:[133,25] sun.misc.Unsafe is internal proprietary API and may be removed in a future release
+[INFO] /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/main/java/org/apache/phoenix/util/PhoenixRuntime.java: Some input files use or override a deprecated API.
+[INFO] /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/main/java/org/apache/phoenix/util/PhoenixRuntime.java: Recompile with -Xlint:deprecation for details.
+[INFO] /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/main/java/org/apache/phoenix/util/ByteUtil.java: Some input files use unchecked or unsafe operations.
+[INFO] /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/main/java/org/apache/phoenix/util/ByteUtil.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- dependency:3.6.1:build-classpath (create-mrapp-generated-classpath) @ phoenix-core-client ---
+[INFO] Skipped writing classpath file '/Users/tkhurana/soma/root/phoenix/phoenix-core-client/target/classes/mrapp-generated-classpath'.  No changes found.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ phoenix-core-client ---
+[INFO] skip non existing resourceDirectory /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/test/resources
+[INFO] skip non existing resourceDirectory /Users/tkhurana/soma/root/phoenix/phoenix-core-client/src/it/resources
+[INFO] Copying 3 resources from target/maven-shared-archive-resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ phoenix-core-client ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- surefire:3.2.2:test (default-test) @ phoenix-core-client ---
+[INFO] 
+[INFO] --- source:3.3.0:jar-no-fork (attach-sources) @ phoenix-core-client ---
+[INFO] 
+[INFO] --- jar:3.3.0:test-jar (default) @ phoenix-core-client ---
+[INFO] 
+[INFO] --- jar:3.3.0:jar (default-jar) @ phoenix-core-client ---
+[INFO] Building jar: /Users/tkhurana/soma/root/phoenix/phoenix-core-client/target/phoenix-core-client-5.4.0-SNAPSHOT.jar
+[INFO] 
+[INFO] --- site:3.21.0:attach-descriptor (attach-descriptor) @ phoenix-core-client ---
+[INFO] Skipping because packaging 'jar' is not pom.
+[INFO] 
+[INFO] --- jacoco:0.8.11:report (report) @ phoenix-core-client ---
+[INFO] Skipping JaCoCo execution due to missing execution data file.
+[INFO] 
+[INFO] --- dependency:3.6.1:analyze-only (enforce-dependencies) @ phoenix-core-client ---
+[INFO] No dependency problems found
+[INFO] 
+[INFO] --- jacoco:0.8.11:check (check) @ phoenix-core-client ---
+[INFO] Skipping JaCoCo execution due to missing execution data file:/Users/tkhurana/soma/root/phoenix/phoenix-core-client/target/jacoco.exec
+[INFO] 
+[INFO] ---------------< org.apache.phoenix:phoenix-core-server >---------------
+[INFO] Building Phoenix Core Server 5.4.0-SNAPSHOT                        [4/5]
+[INFO]   from phoenix-core-server/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (enforce-maven-version) @ phoenix-core-server ---
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (enforce-java-version) @ phoenix-core-server ---
+[INFO] 
+[INFO] --- checkstyle:3.3.1:check (validate) @ phoenix-core-server ---
+[INFO] 
+[INFO] --- build-helper:3.5.0:add-test-source (add-test-source) @ phoenix-core-server ---
+[INFO] Test Source directory: /Users/tkhurana/soma/root/phoenix/phoenix-core-server/src/it/java added.
+[INFO] 
+[INFO] --- build-helper:3.5.0:add-test-resource (add-test-resource) @ phoenix-core-server ---
+[INFO] 
+[INFO] --- jacoco:0.8.11:prepare-agent (prepare-agent) @ phoenix-core-server ---
+[INFO] jacocoArgLine set to -javaagent:/Users/tkhurana/.m2/repository/org/jacoco/org.jacoco.agent/0.8.11/org.jacoco.agent-0.8.11-runtime.jar=destfile=/Users/tkhurana/soma/root/phoenix/phoenix-core-server/target/jacoco.exec
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (banned-illegal-imports) @ phoenix-core-server ---
+[INFO] Rule 0: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 1: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 2: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 3: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 4: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 5: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] 
+[INFO] --- remote-resources:3.1.0:process (process-resource-bundles) @ phoenix-core-server ---
+[INFO] Preparing remote bundle org.apache.apache.resources:apache-jar-resource-bundle:1.5
+[INFO] Copying 3 resources from 1 bundle.
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ phoenix-core-server ---
+[INFO] skip non existing resourceDirectory /Users/tkhurana/soma/root/phoenix/phoenix-core-server/src/main/resources
+[INFO] Copying 3 resources from target/maven-shared-archive-resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ phoenix-core-server ---
+[INFO] Changes detected - recompiling the module! :dependency
+[INFO] Compiling 266 source files with javac [debug target 1.8] to target/classes
+[INFO] /Users/tkhurana/soma/root/phoenix/phoenix-core-server/src/main/java/org/apache/phoenix/mapreduce/transform/TransformTool.java: Some input files use or override a deprecated API.
+[INFO] /Users/tkhurana/soma/root/phoenix/phoenix-core-server/src/main/java/org/apache/phoenix/mapreduce/transform/TransformTool.java: Recompile with -Xlint:deprecation for details.
+[INFO] /Users/tkhurana/soma/root/phoenix/phoenix-core-server/src/main/java/org/apache/phoenix/coprocessor/GlobalIndexRegionScanner.java: Some input files use unchecked or unsafe operations.
+[INFO] /Users/tkhurana/soma/root/phoenix/phoenix-core-server/src/main/java/org/apache/phoenix/coprocessor/GlobalIndexRegionScanner.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- dependency:3.6.1:build-classpath (create-mrapp-generated-classpath) @ phoenix-core-server ---
+[INFO] Skipped writing classpath file '/Users/tkhurana/soma/root/phoenix/phoenix-core-server/target/classes/mrapp-generated-classpath'.  No changes found.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ phoenix-core-server ---
+[INFO] skip non existing resourceDirectory /Users/tkhurana/soma/root/phoenix/phoenix-core-server/src/test/resources
+[INFO] skip non existing resourceDirectory /Users/tkhurana/soma/root/phoenix/phoenix-core-server/src/it/resources
+[INFO] Copying 3 resources from target/maven-shared-archive-resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ phoenix-core-server ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- surefire:3.2.2:test (default-test) @ phoenix-core-server ---
+[INFO] 
+[INFO] --- source:3.3.0:jar-no-fork (attach-sources) @ phoenix-core-server ---
+[INFO] 
+[INFO] --- jar:3.3.0:test-jar (default) @ phoenix-core-server ---
+[INFO] 
+[INFO] --- jar:3.3.0:jar (default-jar) @ phoenix-core-server ---
+[INFO] Building jar: /Users/tkhurana/soma/root/phoenix/phoenix-core-server/target/phoenix-core-server-5.4.0-SNAPSHOT.jar
+[INFO] 
+[INFO] --- site:3.21.0:attach-descriptor (attach-descriptor) @ phoenix-core-server ---
+[INFO] Skipping because packaging 'jar' is not pom.
+[INFO] 
+[INFO] --- jacoco:0.8.11:report (report) @ phoenix-core-server ---
+[INFO] Skipping JaCoCo execution due to missing execution data file.
+[INFO] 
+[INFO] --- jacoco:0.8.11:check (check) @ phoenix-core-server ---
+[INFO] Skipping JaCoCo execution due to missing execution data file:/Users/tkhurana/soma/root/phoenix/phoenix-core-server/target/jacoco.exec
+[INFO] 
+[INFO] --- dependency:3.6.1:analyze-only (enforce-dependencies) @ phoenix-core-server ---
+[INFO] No dependency problems found
+[INFO] 
+[INFO] ------------------< org.apache.phoenix:phoenix-core >-------------------
+[INFO] Building Phoenix Core 5.4.0-SNAPSHOT                               [5/5]
+[INFO]   from phoenix-core/pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (enforce-maven-version) @ phoenix-core ---
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (enforce-java-version) @ phoenix-core ---
+[INFO] 
+[INFO] --- checkstyle:3.3.1:check (validate) @ phoenix-core ---
+[INFO] 
+[INFO] --- build-helper:3.5.0:add-test-source (add-test-source) @ phoenix-core ---
+[INFO] Test Source directory: /Users/tkhurana/soma/root/phoenix/phoenix-core/src/it/java added.
+[INFO] 
+[INFO] --- build-helper:3.5.0:add-test-resource (add-test-resource) @ phoenix-core ---
+[INFO] 
+[INFO] --- jacoco:0.8.11:prepare-agent (prepare-agent) @ phoenix-core ---
+[INFO] jacocoArgLine set to -javaagent:/Users/tkhurana/.m2/repository/org/jacoco/org.jacoco.agent/0.8.11/org.jacoco.agent-0.8.11-runtime.jar=destfile=/Users/tkhurana/soma/root/phoenix/phoenix-core/target/jacoco.exec
+[INFO] 
+[INFO] --- dependency:3.6.1:build-classpath (create-phoenix-generated-classpath) @ phoenix-core ---
+[INFO] Skipped writing classpath file '/Users/tkhurana/soma/root/phoenix/phoenix-core/target/cached_classpath.txt'.  No changes found.
+[INFO] 
+[INFO] --- enforcer:3.4.1:enforce (banned-illegal-imports) @ phoenix-core ---
+[INFO] Rule 0: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 1: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 2: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 3: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 4: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] Rule 5: org.apache.maven.plugins.enforcer.RestrictImports passed
+[INFO] 
+[INFO] --- remote-resources:3.1.0:process (process-resource-bundles) @ phoenix-core ---
+[INFO] Preparing remote bundle org.apache.apache.resources:apache-jar-resource-bundle:1.5
+[INFO] Copying 3 resources from 1 bundle.
+[INFO] 
+[INFO] --- resources:3.3.1:resources (default-resources) @ phoenix-core ---
+[INFO] skip non existing resourceDirectory /Users/tkhurana/soma/root/phoenix/phoenix-core/src/main/resources
+[INFO] Copying 3 resources from target/maven-shared-archive-resources to target/classes
+[INFO] 
+[INFO] --- compiler:3.11.0:compile (default-compile) @ phoenix-core ---
+[INFO] No sources to compile
+[INFO] 
+[INFO] --- dependency:3.6.1:build-classpath (create-mrapp-generated-classpath) @ phoenix-core ---
+[INFO] Skipped writing classpath file '/Users/tkhurana/soma/root/phoenix/phoenix-core/target/classes/mrapp-generated-classpath'.  No changes found.
+[INFO] 
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ phoenix-core ---
+[INFO] Copying 12 resources from src/test/resources to target/test-classes
+[INFO] Copying 72 resources from src/it/resources to target/test-classes
+[INFO] Copying 3 resources from target/maven-shared-archive-resources to target/test-classes
+[INFO] 
+[INFO] --- compiler:3.11.0:testCompile (default-testCompile) @ phoenix-core ---
+[INFO] Changes detected - recompiling the module! :dependency
+[INFO] Compiling 922 source files with javac [debug target 1.8] to target/test-classes
+[INFO] /Users/tkhurana/soma/root/phoenix/phoenix-core/src/it/java/org/apache/phoenix/jdbc/ParallelPhoenixNullComparingResultSetIT.java: Some input files use or override a deprecated API.
+[INFO] /Users/tkhurana/soma/root/phoenix/phoenix-core/src/it/java/org/apache/phoenix/jdbc/ParallelPhoenixNullComparingResultSetIT.java: Recompile with -Xlint:deprecation for details.
+[INFO] /Users/tkhurana/soma/root/phoenix/phoenix-core/src/test/java/org/apache/phoenix/query/BaseTest.java: Some input files use unchecked or unsafe operations.
+[INFO] /Users/tkhurana/soma/root/phoenix/phoenix-core/src/test/java/org/apache/phoenix/query/BaseTest.java: Recompile with -Xlint:unchecked for details.
+[INFO] 
+[INFO] --- surefire:3.2.2:test (default-test) @ phoenix-core ---
+[INFO] 
+[INFO] --- source:3.3.0:jar-no-fork (attach-sources) @ phoenix-core ---
+[INFO] 
+[INFO] --- jar:3.3.0:test-jar (default) @ phoenix-core ---
+[INFO] Building jar: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/phoenix-core-5.4.0-SNAPSHOT-tests.jar
+[INFO] 
+[INFO] --- jar:3.3.0:jar (default-jar) @ phoenix-core ---
+[INFO] 
+[INFO] --- site:3.21.0:attach-descriptor (attach-descriptor) @ phoenix-core ---
+[INFO] Skipping because packaging 'jar' is not pom.
+[INFO] 
+[INFO] --- failsafe:3.2.2:integration-test (ParallelStatsEnabledTest) @ phoenix-core ---
+[WARNING]  Parameter 'failIfNoSpecifiedTestsDeprecated' (user property 'it.failIfNoSpecifiedTests') is deprecated: Since 3.0.0-M8, use "failsafe.failIfNoSpecifiedTests" instead.
+[INFO] Using auto detected provider org.apache.maven.surefire.junitcore.JUnitCoreProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- failsafe:3.2.2:integration-test (ParallelStatsDisabledTest) @ phoenix-core ---
+[WARNING]  Parameter 'failIfNoSpecifiedTestsDeprecated' (user property 'it.failIfNoSpecifiedTests') is deprecated: Since 3.0.0-M8, use "failsafe.failIfNoSpecifiedTests" instead.
+[INFO] Using auto detected provider org.apache.maven.surefire.junitcore.JUnitCoreProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] 
+[INFO] Results:
+[INFO] 
+[INFO] Tests run: 0, Failures: 0, Errors: 0, Skipped: 0
+[INFO] 
+[INFO] 
+[INFO] --- failsafe:3.2.2:integration-test (NeedTheirOwnClusterTests) @ phoenix-core ---
+[WARNING]  Parameter 'failIfNoSpecifiedTestsDeprecated' (user property 'it.failIfNoSpecifiedTests') is deprecated: Since 3.0.0-M8, use "failsafe.failIfNoSpecifiedTests" instead.
+[INFO] Using auto detected provider org.apache.maven.surefire.junitcore.JUnitCoreProvider
+[INFO] 
+[INFO] -------------------------------------------------------
+[INFO]  T E S T S
+[INFO] -------------------------------------------------------
+[INFO] Running org.apache.phoenix.end2end.PhoenixRegionServerEndpointWithConsistentFailoverIT
+[INFO] Running org.apache.phoenix.jdbc.HAGroupStateSubscriptionIT
+[INFO] Running org.apache.phoenix.jdbc.FailoverPhoenixConnection2IT
+[INFO] Running org.apache.phoenix.jdbc.HAGroupStoreClientIT
+[INFO] Running org.apache.phoenix.end2end.index.IndexRegionObserverMutationBlockingIT
+[INFO] Running org.apache.phoenix.jdbc.FailoverPhoenixConnectionIT
+[INFO] Running org.apache.phoenix.jdbc.HAGroupStoreManagerIT
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 56.21 s -- in org.apache.phoenix.jdbc.HAGroupStateSubscriptionIT
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 68.14 s -- in org.apache.phoenix.end2end.PhoenixRegionServerEndpointWithConsistentFailoverIT
+[INFO] Running org.apache.phoenix.jdbc.HighAvailabilityGroup2IT
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 89.28 s -- in org.apache.phoenix.end2end.index.IndexRegionObserverMutationBlockingIT
+[INFO] Running org.apache.phoenix.jdbc.HighAvailabilityGroupIT
+[INFO] Running org.apache.phoenix.jdbc.ParallelPhoenixConnectionFallbackIT
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 8.285 s -- in org.apache.phoenix.jdbc.ParallelPhoenixConnectionFallbackIT
+[INFO] Running org.apache.phoenix.jdbc.ParallelPhoenixConnectionIT
+[INFO] Tests run: 17, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 256.5 s -- in org.apache.phoenix.jdbc.HAGroupStoreManagerIT
+[INFO] Tests run: 41, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 305.9 s -- in org.apache.phoenix.jdbc.HAGroupStoreClientIT
+[INFO] Running org.apache.phoenix.jdbc.ParallelPhoenixConnectionWorkflowIT
+[INFO] Running org.apache.phoenix.jdbc.PhoenixHAAdminIT
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.184 s -- in org.apache.phoenix.jdbc.PhoenixHAAdminIT
+[INFO] Tests run: 12, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 249.9 s -- in org.apache.phoenix.jdbc.HighAvailabilityGroupIT
+[INFO] Running org.apache.phoenix.jdbc.PhoenixHAAdminToolIT
+[INFO] Running org.apache.phoenix.replication.ReplicationLogGroupIT
+[INFO] Tests run: 18, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 99.54 s -- in org.apache.phoenix.jdbc.ParallelPhoenixConnectionWorkflowIT
+[INFO] Tests run: 11, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 68.79 s -- in org.apache.phoenix.jdbc.PhoenixHAAdminToolIT
+[INFO] Running org.apache.phoenix.replication.reader.ReplicationLogDiscoveryReplayTestIT
+[INFO] Tests run: 36, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 17.06 s -- in org.apache.phoenix.replication.reader.ReplicationLogDiscoveryReplayTestIT
+[INFO] Running org.apache.phoenix.replication.reader.ReplicationLogReplayServiceTestIT
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 16.50 s -- in org.apache.phoenix.replication.reader.ReplicationLogReplayServiceTestIT
+[INFO] Tests run: 10, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 409.6 s -- in org.apache.phoenix.jdbc.HighAvailabilityGroup2IT
+[INFO] Running org.apache.phoenix.replication.reader.ReplicationLogReplayTestIT
+[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 16.25 s -- in org.apache.phoenix.replication.reader.ReplicationLogReplayTestIT
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 132.6 s -- in org.apache.phoenix.replication.ReplicationLogGroupIT
+[INFO] Tests run: 23, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 619.4 s -- in org.apache.phoenix.jdbc.FailoverPhoenixConnectionIT
+[WARNING] Tests run: 19, Failures: 0, Errors: 0, Skipped: 2, Time elapsed: 428.2 s -- in org.apache.phoenix.jdbc.ParallelPhoenixConnectionIT
+[ERROR] Tests run: 13, Failures: 1, Errors: 0, Skipped: 1, Time elapsed: 895.1 s <<< FAILURE! -- in org.apache.phoenix.jdbc.FailoverPhoenixConnection2IT
+[ERROR] org.apache.phoenix.jdbc.FailoverPhoenixConnection2IT.testAllWrappedConnectionsClosedAfterStandbyAndZKDownAsync -- Time elapsed: 98.58 s <<< FAILURE!
+java.lang.AssertionError: Found one connection to cluster1 but it is not closed
+	at org.junit.Assert.fail(Assert.java:89)
+	at org.apache.phoenix.jdbc.FailoverPhoenixConnection2IT.lambda$testAllWrappedConnectionsClosedAfterStandbyAndZKDownAsync$7(FailoverPhoenixConnection2IT.java:399)
+	at org.apache.hadoop.test.GenericTestUtils.waitFor(GenericTestUtils.java:390)
+	at org.apache.hadoop.test.GenericTestUtils.waitFor(GenericTestUtils.java:362)
+	at org.apache.phoenix.jdbc.FailoverPhoenixConnection2IT.testAllWrappedConnectionsClosedAfterStandbyAndZKDownAsync(FailoverPhoenixConnection2IT.java:390)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.FailOnTimeout$CallableStatement.call(FailOnTimeout.java:288)
+	at org.junit.internal.runners.statements.FailOnTimeout$CallableStatement.call(FailOnTimeout.java:282)
+	at java.util.concurrent.FutureTask.run(FutureTask.java:266)
+	at java.lang.Thread.run(Thread.java:750)
+
+[INFO] 
+[INFO] Results:
+[INFO] 
+[ERROR] Failures: 
+[ERROR]   FailoverPhoenixConnection2IT.testAllWrappedConnectionsClosedAfterStandbyAndZKDownAsync:390->lambda$testAllWrappedConnectionsClosedAfterStandbyAndZKDownAsync$7:399 Found one connection to cluster1 but it is not closed
+[INFO] 
+[ERROR] Tests run: 238, Failures: 1, Errors: 0, Skipped: 3
+[INFO] 
+[INFO] 
+[INFO] --- jacoco:0.8.11:report (report) @ phoenix-core ---
+[INFO] Loading execution data file /Users/tkhurana/soma/root/phoenix/phoenix-core/target/jacoco.exec
+[INFO] Analyzed bundle 'Phoenix Core' with 0 classes
+[INFO] 
+[INFO] --- dependency:3.6.1:analyze-only (enforce-dependencies) @ phoenix-core ---
+[INFO] No dependency problems found
+[INFO] 
+[INFO] --- failsafe:3.2.2:verify (ParallelStatsEnabledTest) @ phoenix-core ---
+[WARNING]  Parameter 'encoding' (user property 'encoding') is deprecated: since of 2.20.1
+[INFO] ------------------------------------------------------------------------
+[INFO] Reactor Summary for Apache Phoenix 5.4.0-SNAPSHOT:
+[INFO] 
+[INFO] Apache Phoenix ..................................... SUCCESS [  0.878 s]
+[INFO] Phoenix Hbase 2.5.4 compatibility .................. SUCCESS [  0.311 s]
+[INFO] Phoenix Core Client ................................ SUCCESS [  5.407 s]
+[INFO] Phoenix Core Server ................................ SUCCESS [  1.296 s]
+[INFO] Phoenix Core ....................................... FAILURE [15:31 min]
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD FAILURE
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  15:40 min
+[INFO] Finished at: 2026-06-05T15:16:54-07:00
+[INFO] ------------------------------------------------------------------------
+[ERROR] Failed to execute goal org.apache.maven.plugins:maven-failsafe-plugin:3.2.2:verify (ParallelStatsEnabledTest) on project phoenix-core: There are test failures.
+[ERROR] 
+[ERROR] Please refer to /Users/tkhurana/soma/root/phoenix/phoenix-core/target/failsafe-reports for the individual test results.
+[ERROR] Please refer to dump files (if any exist) [date].dump, [date]-jvmRun[N].dump and [date].dumpstream.
+[ERROR] -> [Help 1]
+[ERROR] 
+[ERROR] To see the full stack trace of the errors, re-run Maven with the -e switch.
+[ERROR] Re-run Maven using the -X switch to enable full debug logging.
+[ERROR] 
+[ERROR] For more information about the errors and possible solutions, please read the following articles:
+[ERROR] [Help 1] http://cwiki.apache.org/confluence/display/MAVEN/MojoFailureException
+[ERROR] 
+[ERROR] After correcting the problems, you can resume the build with the command
+[ERROR]   mvn <args> -rf :phoenix-core

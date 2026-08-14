@@ -23,8 +23,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * Factory for process-lifetime HAGroupStore metric sources.
  * <p>
  * Creates one source lazily per HA group and intentionally retains it for the JVM lifetime so
- * cumulative counters survive client replacement. HA-group names are expected to be a small,
- * stable set within a process.
+ * cumulative counters survive client replacement. HA-group names are expected to be a small, stable
+ * set within a process.
  */
 public final class HAGroupStoreMetricsSourceFactory {
 

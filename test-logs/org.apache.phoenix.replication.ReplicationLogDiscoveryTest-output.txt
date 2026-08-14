@@ -1,0 +1,959 @@
+2026-05-05T13:10:57,991 WARN  [main] impl.MetricsSystemImpl(151): Phoenix metrics system already initialized!
+2026-05-05T13:10:58,225 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:10:58,375 INFO  [main] replication.ReplicationLogDiscovery(415): Initializing lastRoundProcessed for haGroup: testGroup from current time 1704758400000
+2026-05-05T13:10:58,375 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:10:58,387 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:10:58,464 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153600000 current=1704153601000
+2026-05-05T13:10:58,466 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153600000 current=1704153668999
+2026-05-05T13:10:58,467 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153600000 current=1704153669000
+2026-05-05T13:10:58,467 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153600000 current=1704153669001
+2026-05-05T13:10:58,469 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153600000 current=1704153807000
+2026-05-05T13:10:58,470 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153600000 current=1704153664500
+2026-05-05T13:10:58,470 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:10:58,478 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:10:59,029 INFO  [main] replication.ReplicationLogDiscovery(260): Starting to process round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:10:59,030 INFO  [main] replication.ReplicationLogDiscovery(290): Starting new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:10:59,030 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:10:59,032 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 5
+2026-05-05T13:10:59,032 INFO  [main] replication.ReplicationLogDiscovery(294): Number of new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} is 3
+2026-05-05T13:10:59,033 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153600000_rs-0.plog -> 1704153600000_rs-0_8389d768-8708-4ec9-bb9f-ef3e261bbe86_1778011859032.plog
+2026-05-05T13:10:59,034 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153600000_rs-0_8389d768-8708-4ec9-bb9f-ef3e261bbe86_1778011859032.plog
+2026-05-05T13:10:59,034 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:10:59,034 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 4
+2026-05-05T13:10:59,035 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153601234_rs-1.plog -> 1704153601234_rs-1_50cbc123-6b45-49be-99b6-48b8cd879450_1778011859034.plog
+2026-05-05T13:10:59,035 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153601234_rs-1_50cbc123-6b45-49be-99b6-48b8cd879450_1778011859034.plog
+2026-05-05T13:10:59,035 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:10:59,035 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 3
+2026-05-05T13:10:59,036 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153602468_rs-2.plog -> 1704153602468_rs-2_9bbd7dad-725c-4184-9aa4-96058c9d0909_1778011859036.plog
+2026-05-05T13:10:59,036 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153602468_rs-2_9bbd7dad-725c-4184-9aa4-96058c9d0909_1778011859036.plog
+2026-05-05T13:10:59,036 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:10:59,037 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 2
+2026-05-05T13:10:59,037 INFO  [main] replication.ReplicationLogDiscovery(300): Finished new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} in 7ms for haGroup: testGroup
+2026-05-05T13:10:59,037 INFO  [main] replication.ReplicationLogDiscovery(312): Starting in_progress directory processing for haGroup: testGroup
+2026-05-05T13:10:59,038 DEBUG [main] replication.ReplicationLogTracker(235): Found 4 in-progress files renamed before timestamp 1778011859037
+2026-05-05T13:10:59,038 INFO  [main] replication.ReplicationLogDiscovery(322): Number of in_progress files with renameTimestampThreshold 1778011859037 is 4 for haGroup: testGroup
+2026-05-05T13:10:59,039 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153604000.plog -> 1704153604000_rs-0_7d3ac0cb-36b5-4b07-863b-1797f54263bf_1778011859038.plog
+2026-05-05T13:10:59,039 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-0_7d3ac0cb-36b5-4b07-863b-1797f54263bf_1778011859038.plog
+2026-05-05T13:10:59,039 DEBUG [main] replication.ReplicationLogTracker(235): Found 3 in-progress files renamed before timestamp 1778011859039
+2026-05-05T13:10:59,040 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153662000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153662000.plog -> 1704153662000_rs-1_e48f3edb-9e93-47a6-8fe5-415a20160b71_1778011859040.plog
+2026-05-05T13:10:59,041 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153662000_rs-1_e48f3edb-9e93-47a6-8fe5-415a20160b71_1778011859040.plog
+2026-05-05T13:10:59,041 DEBUG [main] replication.ReplicationLogTracker(235): Found 2 in-progress files renamed before timestamp 1778011859041
+2026-05-05T13:10:59,042 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153662000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153662000.plog -> 1704153662000_rs-0_7348a1c2-8daa-4f6e-8fad-4410aa528ad6_1778011859042.plog
+2026-05-05T13:10:59,042 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153662000_rs-0_7348a1c2-8daa-4f6e-8fad-4410aa528ad6_1778011859042.plog
+2026-05-05T13:10:59,043 DEBUG [main] replication.ReplicationLogTracker(235): Found 1 in-progress files renamed before timestamp 1778011859042
+2026-05-05T13:10:59,043 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog -> 1704153604000_rs-1_c7b8af0b-3b6e-4618-8490-3fdf6a39f9cc_1778011859043.plog
+2026-05-05T13:10:59,043 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-1_c7b8af0b-3b6e-4618-8490-3fdf6a39f9cc_1778011859043.plog
+2026-05-05T13:10:59,044 DEBUG [main] replication.ReplicationLogTracker(235): Found 0 in-progress files renamed before timestamp 1778011859044
+2026-05-05T13:10:59,044 INFO  [main] replication.ReplicationLogDiscovery(344): Finished in-progress files processing in 7ms for haGroup: testGroup
+2026-05-05T13:10:59,044 INFO  [main] replication.ReplicationLogDiscovery(270): Finished processing round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:10:59,054 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:10:59,064 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:10:59,430 INFO  [main] replication.ReplicationLogDiscovery(290): Starting new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:10:59,430 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:10:59,430 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 5
+2026-05-05T13:10:59,430 INFO  [main] replication.ReplicationLogDiscovery(294): Number of new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} is 3
+2026-05-05T13:10:59,431 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153601234_rs-1.plog -> 1704153601234_rs-1_30272748-ddb5-42c8-b2ed-bb400245084f_1778011859430.plog
+2026-05-05T13:10:59,431 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153601234_rs-1_30272748-ddb5-42c8-b2ed-bb400245084f_1778011859430.plog
+2026-05-05T13:10:59,431 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:10:59,431 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 4
+2026-05-05T13:10:59,432 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153602468_rs-2.plog -> 1704153602468_rs-2_d4489d99-44be-4e12-8292-388008ed2f2c_1778011859431.plog
+2026-05-05T13:10:59,432 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153602468_rs-2_d4489d99-44be-4e12-8292-388008ed2f2c_1778011859431.plog
+2026-05-05T13:10:59,432 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:10:59,432 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 3
+2026-05-05T13:10:59,433 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153600000_rs-0.plog -> 1704153600000_rs-0_5dc03174-cc43-48e0-aa73-6f828e86c1fc_1778011859432.plog
+2026-05-05T13:10:59,433 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153600000_rs-0_5dc03174-cc43-48e0-aa73-6f828e86c1fc_1778011859432.plog
+2026-05-05T13:10:59,433 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:10:59,433 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 2
+2026-05-05T13:10:59,433 INFO  [main] replication.ReplicationLogDiscovery(300): Finished new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} in 3ms for haGroup: testGroup
+2026-05-05T13:10:59,435 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:10:59,444 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:10:59,482 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:10:59,489 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:10:59,557 INFO  [main] replication.ReplicationLogDiscovery(396): Initializing lastRoundProcessed for haGroup: testGroup from in_progress files with minimum timestamp as 1704326400000
+2026-05-05T13:10:59,557 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:10:59,564 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:10:59,629 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:10:59,637 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:10:59,687 INFO  [main] replication.ReplicationLogDiscovery(406): Initializing lastRoundProcessed for haGroup: testGroup from infiles with minimum timestamp as 1704585600000
+2026-05-05T13:10:59,687 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:10:59,693 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:10:59,950 INFO  [main] replication.ReplicationLogDiscovery(312): Starting in_progress directory processing for haGroup: testGroup
+2026-05-05T13:10:59,951 DEBUG [main] replication.ReplicationLogTracker(235): Found 7 in-progress files renamed before timestamp 1704153800001
+2026-05-05T13:10:59,951 INFO  [main] replication.ReplicationLogDiscovery(322): Number of in_progress files with renameTimestampThreshold 1704153800001 is 7 for haGroup: testGroup
+2026-05-05T13:10:59,951 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog -> 1704153604000_rs-1_ea4de18a-f325-4a06-921d-4190555fa81d_1704153800003.plog
+2026-05-05T13:10:59,952 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-1_ea4de18a-f325-4a06-921d-4190555fa81d_1704153800003.plog
+2026-05-05T13:10:59,952 DEBUG [main] replication.ReplicationLogTracker(235): Found 6 in-progress files renamed before timestamp 1704153800007
+2026-05-05T13:10:59,953 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153726000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog -> 1704153726000_rs-1_96ca1b4e-802e-4b60-a23c-09aee87395bd_1704153800009.plog
+2026-05-05T13:10:59,953 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153726000_rs-1_96ca1b4e-802e-4b60-a23c-09aee87395bd_1704153800009.plog
+2026-05-05T13:10:59,953 DEBUG [main] replication.ReplicationLogTracker(235): Found 5 in-progress files renamed before timestamp 1704153800013
+2026-05-05T13:10:59,954 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153662000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153604000.plog -> 1704153662000_rs-0_0b32ade3-d45c-4cda-89bf-1de561ca0424_1704153800015.plog
+2026-05-05T13:10:59,954 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153662000_rs-0_0b32ade3-d45c-4cda-89bf-1de561ca0424_1704153800015.plog
+2026-05-05T13:10:59,954 DEBUG [main] replication.ReplicationLogTracker(235): Found 4 in-progress files renamed before timestamp 1704153800019
+2026-05-05T13:10:59,955 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153604000.plog -> 1704153604000_rs-0_546c6495-bdf5-49cc-aae1-f2b279a1ae20_1704153800021.plog
+2026-05-05T13:10:59,955 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-0_546c6495-bdf5-49cc-aae1-f2b279a1ae20_1704153800021.plog
+2026-05-05T13:10:59,955 DEBUG [main] replication.ReplicationLogTracker(235): Found 3 in-progress files renamed before timestamp 1704153800025
+2026-05-05T13:10:59,956 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153662000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog -> 1704153662000_rs-1_75f28898-b0c6-4398-a64f-4c705494fdc7_1704153800027.plog
+2026-05-05T13:10:59,956 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153662000_rs-1_75f28898-b0c6-4398-a64f-4c705494fdc7_1704153800027.plog
+2026-05-05T13:10:59,956 DEBUG [main] replication.ReplicationLogTracker(235): Found 2 in-progress files renamed before timestamp 1704153800031
+2026-05-05T13:10:59,956 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-2_12345678-1234-1234-1234-123456789abc2_1704153604000.plog -> 1704153604000_rs-2_34f82696-3e18-4044-afe7-c119045dd9ac_1704153800033.plog
+2026-05-05T13:10:59,957 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-2_34f82696-3e18-4044-afe7-c119045dd9ac_1704153800033.plog
+2026-05-05T13:10:59,957 DEBUG [main] replication.ReplicationLogTracker(235): Found 1 in-progress files renamed before timestamp 1704153800037
+2026-05-05T13:10:59,957 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153726000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153604000.plog -> 1704153726000_rs-0_eb3a22e5-d006-4c14-860b-2d4cf9c44323_1704153800039.plog
+2026-05-05T13:10:59,958 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153726000_rs-0_eb3a22e5-d006-4c14-860b-2d4cf9c44323_1704153800039.plog
+2026-05-05T13:10:59,958 DEBUG [main] replication.ReplicationLogTracker(235): Found 0 in-progress files renamed before timestamp 1704153800043
+2026-05-05T13:10:59,958 INFO  [main] replication.ReplicationLogDiscovery(344): Finished in-progress files processing in 44ms for haGroup: testGroup
+2026-05-05T13:10:59,960 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:10:59,967 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:00,000 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:00,006 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:00,042 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:00,053 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:00,247 INFO  [main] replication.ReplicationLogDiscovery(290): Starting new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:00,247 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:00,247 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 5
+2026-05-05T13:11:00,248 INFO  [main] replication.ReplicationLogDiscovery(294): Number of new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} is 5
+2026-05-05T13:11:00,248 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153600000_rs-0.plog -> 1704153600000_rs-0_4a6221e4-e6d8-438e-8c69-bc648926c37f_1778011860248.plog
+2026-05-05T13:11:00,248 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000/1704153600000_rs-0.plog
+java.io.IOException: Processing failed for file: 1704153600000_rs-0.plog
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processNewFilesForRound(ReplicationLogDiscovery.java:296)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessNewFilesForRoundWithAllFailures(ReplicationLogDiscoveryTest.java:882)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:00,249 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:00,249 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 4
+2026-05-05T13:11:00,250 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153603702_rs-3.plog -> 1704153603702_rs-3_12581209-60db-463b-86ce-df377b9c184d_1778011860249.plog
+2026-05-05T13:11:00,250 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000/1704153603702_rs-3.plog
+java.io.IOException: Processing failed for file: 1704153603702_rs-3.plog
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processNewFilesForRound(ReplicationLogDiscovery.java:296)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessNewFilesForRoundWithAllFailures(ReplicationLogDiscoveryTest.java:882)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:00,250 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:00,250 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 3
+2026-05-05T13:11:00,250 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153601234_rs-1.plog -> 1704153601234_rs-1_a08ea133-9fa9-4b23-adac-0b461127ea80_1778011860250.plog
+2026-05-05T13:11:00,250 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000/1704153601234_rs-1.plog
+java.io.IOException: Processing failed for file: 1704153601234_rs-1.plog
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processNewFilesForRound(ReplicationLogDiscovery.java:296)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessNewFilesForRoundWithAllFailures(ReplicationLogDiscoveryTest.java:882)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:00,251 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:00,251 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 2
+2026-05-05T13:11:00,251 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153602468_rs-2.plog -> 1704153602468_rs-2_3b31cb2a-38bd-4f39-be83-e2f2a899cc72_1778011860251.plog
+2026-05-05T13:11:00,251 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000/1704153602468_rs-2.plog
+java.io.IOException: Processing failed for file: 1704153602468_rs-2.plog
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processNewFilesForRound(ReplicationLogDiscovery.java:296)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessNewFilesForRoundWithAllFailures(ReplicationLogDiscoveryTest.java:882)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:00,251 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:00,251 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 1
+2026-05-05T13:11:00,252 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604936_rs-4.plog -> 1704153604936_rs-4_85b882cd-76af-4505-8350-15fb859d47b7_1778011860252.plog
+2026-05-05T13:11:00,252 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000/1704153604936_rs-4.plog
+java.io.IOException: Processing failed for file: 1704153604936_rs-4.plog
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processNewFilesForRound(ReplicationLogDiscovery.java:296)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessNewFilesForRoundWithAllFailures(ReplicationLogDiscoveryTest.java:882)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:00,252 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:00,252 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 0
+2026-05-05T13:11:00,252 INFO  [main] replication.ReplicationLogDiscovery(300): Finished new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} in 5ms for haGroup: testGroup
+2026-05-05T13:11:00,254 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:00,261 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:00,285 INFO  [main] replication.ReplicationLogDiscovery(396): Initializing lastRoundProcessed for haGroup: testGroup from in_progress files with minimum timestamp as 1704153600000
+2026-05-05T13:11:00,285 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:00,292 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:00,836 INFO  [main] replication.ReplicationLogDiscovery(260): Starting to process round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:00,836 INFO  [main] replication.ReplicationLogDiscovery(290): Starting new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:00,836 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:00,837 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 5
+2026-05-05T13:11:00,837 INFO  [main] replication.ReplicationLogDiscovery(294): Number of new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} is 3
+2026-05-05T13:11:00,837 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153601234_rs-1.plog -> 1704153601234_rs-1_1a9588ee-48fb-484c-87a1-a28cf1783ec0_1778011860837.plog
+2026-05-05T13:11:00,838 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153601234_rs-1_1a9588ee-48fb-484c-87a1-a28cf1783ec0_1778011860837.plog
+2026-05-05T13:11:00,838 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:00,838 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 4
+2026-05-05T13:11:00,838 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153602468_rs-2.plog -> 1704153602468_rs-2_874c3663-5983-46e8-961d-6d58d390768e_1778011860838.plog
+2026-05-05T13:11:00,838 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153602468_rs-2_874c3663-5983-46e8-961d-6d58d390768e_1778011860838.plog
+2026-05-05T13:11:00,839 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:00,839 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 3
+2026-05-05T13:11:00,839 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153600000_rs-0.plog -> 1704153600000_rs-0_581618c7-d6b7-4422-b8ae-2cab6b6f03b1_1778011860839.plog
+2026-05-05T13:11:00,839 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153600000_rs-0_581618c7-d6b7-4422-b8ae-2cab6b6f03b1_1778011860839.plog
+2026-05-05T13:11:00,839 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:00,840 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 2
+2026-05-05T13:11:00,840 INFO  [main] replication.ReplicationLogDiscovery(300): Finished new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} in 4ms for haGroup: testGroup
+2026-05-05T13:11:00,840 INFO  [main] replication.ReplicationLogDiscovery(270): Finished processing round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:00,841 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:00,849 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:01,057 INFO  [main] replication.ReplicationLogDiscovery(312): Starting in_progress directory processing for haGroup: testGroup
+2026-05-05T13:11:01,057 DEBUG [main] replication.ReplicationLogTracker(235): Found 5 in-progress files renamed before timestamp 1778011861057
+2026-05-05T13:11:01,058 INFO  [main] replication.ReplicationLogDiscovery(322): Number of in_progress files with renameTimestampThreshold 1778011861057 is 5 for haGroup: testGroup
+2026-05-05T13:11:01,058 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153604000.plog -> 1704153604000_rs-0_75471dba-6693-4a0d-8298-c9525d329e8e_1778011861058.plog
+2026-05-05T13:11:01,059 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-0_75471dba-6693-4a0d-8298-c9525d329e8e_1778011861058.plog
+2026-05-05T13:11:01,059 DEBUG [main] replication.ReplicationLogTracker(235): Found 4 in-progress files renamed before timestamp 1778011861059
+2026-05-05T13:11:01,060 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-2_12345678-1234-1234-1234-123456789abc2_1704153604000.plog -> 1704153604000_rs-2_6a59149b-7ab3-4567-953d-2ade437e1dbf_1778011861059.plog
+2026-05-05T13:11:01,060 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-2_6a59149b-7ab3-4567-953d-2ade437e1dbf_1778011861059.plog
+2026-05-05T13:11:01,060 DEBUG [main] replication.ReplicationLogTracker(235): Found 3 in-progress files renamed before timestamp 1778011861060
+2026-05-05T13:11:01,060 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153662000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153662000.plog -> 1704153662000_rs-0_b2064b0d-91ca-4337-b76a-93454383d5f5_1778011861060.plog
+2026-05-05T13:11:01,061 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153662000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153662000.plog
+java.io.IOException: Processing failed for file 3
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processInProgressDirectory(ReplicationLogDiscovery.java:326)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessInProgressDirectoryWithIntermittentFailure(ReplicationLogDiscoveryTest.java:1086)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:01,061 DEBUG [main] replication.ReplicationLogTracker(235): Found 3 in-progress files renamed before timestamp 1778011861061
+2026-05-05T13:11:01,061 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153662000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153662000.plog -> 1704153662000_rs-1_cbd06eed-00dc-4e2b-95e2-b6397fa72a52_1778011861061.plog
+2026-05-05T13:11:01,062 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153662000_rs-1_cbd06eed-00dc-4e2b-95e2-b6397fa72a52_1778011861061.plog
+2026-05-05T13:11:01,062 DEBUG [main] replication.ReplicationLogTracker(235): Found 2 in-progress files renamed before timestamp 1778011861062
+2026-05-05T13:11:01,062 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153662000_rs-0_b2064b0d-91ca-4337-b76a-93454383d5f5_1778011861060.plog -> 1704153662000_rs-0_404a2c38-a05c-4faa-b00a-7bb2be1a06f4_1778011861062.plog
+2026-05-05T13:11:01,062 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153662000_rs-0_404a2c38-a05c-4faa-b00a-7bb2be1a06f4_1778011861062.plog
+2026-05-05T13:11:01,062 DEBUG [main] replication.ReplicationLogTracker(235): Found 1 in-progress files renamed before timestamp 1778011861062
+2026-05-05T13:11:01,063 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog -> 1704153604000_rs-1_e88506e5-643f-4852-9db6-dd6367b51b7e_1778011861063.plog
+2026-05-05T13:11:01,063 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog
+java.io.IOException: Processing failed for file 1
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processInProgressDirectory(ReplicationLogDiscovery.java:326)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessInProgressDirectoryWithIntermittentFailure(ReplicationLogDiscoveryTest.java:1086)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:01,063 DEBUG [main] replication.ReplicationLogTracker(235): Found 0 in-progress files renamed before timestamp 1778011861063
+2026-05-05T13:11:01,063 INFO  [main] replication.ReplicationLogDiscovery(344): Finished in-progress files processing in 6ms for haGroup: testGroup
+2026-05-05T13:11:01,070 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:01,080 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:01,120 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:01,126 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:01,218 INFO  [main] replication.ReplicationLogDiscovery(312): Starting in_progress directory processing for haGroup: testGroup
+2026-05-05T13:11:01,218 DEBUG [main] replication.ReplicationLogTracker(235): Found 3 in-progress files renamed before timestamp 1704153800001
+2026-05-05T13:11:01,218 INFO  [main] replication.ReplicationLogDiscovery(322): Number of in_progress files with renameTimestampThreshold 1704153800001 is 3 for haGroup: testGroup
+2026-05-05T13:11:01,219 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153604000.plog -> 1704153604000_rs-0_2d30f6ee-86bb-4b46-90de-3c38abfc3d28_1704153800003.plog
+2026-05-05T13:11:01,219 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-0_2d30f6ee-86bb-4b46-90de-3c38abfc3d28_1704153800003.plog
+2026-05-05T13:11:01,219 DEBUG [main] replication.ReplicationLogTracker(235): Found 2 in-progress files renamed before timestamp 1704153800007
+2026-05-05T13:11:01,219 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-2_12345678-1234-1234-1234-123456789abc2_1704153604000.plog -> 1704153604000_rs-2_353cff87-59fb-47d8-a72a-2fa857722566_1704153800009.plog
+2026-05-05T13:11:01,220 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-2_353cff87-59fb-47d8-a72a-2fa857722566_1704153800009.plog
+2026-05-05T13:11:01,220 DEBUG [main] replication.ReplicationLogTracker(235): Found 1 in-progress files renamed before timestamp 1704153800013
+2026-05-05T13:11:01,220 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog -> 1704153604000_rs-1_bf0e157d-8459-4d71-b7a7-284b4edd55d7_1704153800015.plog
+2026-05-05T13:11:01,220 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog
+java.io.IOException: Transient failure for file 1
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processInProgressDirectory(ReplicationLogDiscovery.java:326)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessInProgressDirectoryFailedFilesSucceedOnNextRound(ReplicationLogDiscoveryTest.java:1283)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:01,220 WARN  [main] replication.ReplicationLogDiscovery(331): File file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog (prefix: 1704153604000_rs-1) has failed 1 time(s), reached max retries (1). Skipping for the rest of this round for haGroup: testGroup
+2026-05-05T13:11:01,221 DEBUG [main] replication.ReplicationLogTracker(235): Found 1 in-progress files renamed before timestamp 1704153800017
+2026-05-05T13:11:01,221 INFO  [main] replication.ReplicationLogDiscovery(344): Finished in-progress files processing in 18ms for haGroup: testGroup
+2026-05-05T13:11:01,226 INFO  [main] replication.ReplicationLogDiscovery(312): Starting in_progress directory processing for haGroup: testGroup
+2026-05-05T13:11:01,226 DEBUG [main] replication.ReplicationLogTracker(235): Found 1 in-progress files renamed before timestamp 1704153800020
+2026-05-05T13:11:01,226 INFO  [main] replication.ReplicationLogDiscovery(322): Number of in_progress files with renameTimestampThreshold 1704153800020 is 1 for haGroup: testGroup
+2026-05-05T13:11:01,227 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-1_bf0e157d-8459-4d71-b7a7-284b4edd55d7_1704153800015.plog -> 1704153604000_rs-1_fa2b1184-0af3-49de-9064-cfa014a6be84_1704153800022.plog
+2026-05-05T13:11:01,227 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-1_fa2b1184-0af3-49de-9064-cfa014a6be84_1704153800022.plog
+2026-05-05T13:11:01,227 DEBUG [main] replication.ReplicationLogTracker(235): Found 0 in-progress files renamed before timestamp 1704153800026
+2026-05-05T13:11:01,227 INFO  [main] replication.ReplicationLogDiscovery(344): Finished in-progress files processing in 8ms for haGroup: testGroup
+2026-05-05T13:11:01,233 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:01,240 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:01,299 INFO  [main] replication.ReplicationLogDiscovery(396): Initializing lastRoundProcessed for haGroup: testGroup from in_progress files with minimum timestamp as 1704240000000
+2026-05-05T13:11:01,299 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:01,305 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:01,352 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:01,360 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:01,399 INFO  [main] replication.ReplicationLogDiscovery(150): Scheduling replay for haGroup: testGroup with initialDelay=7601ms, interval=60000ms
+2026-05-05T13:11:01,400 INFO  [main] replication.ReplicationLogDiscovery(161): ReplicationLogDiscovery started for haGroup: testGroup
+2026-05-05T13:11:01,400 WARN  [main] replication.ReplicationLogDiscovery(142): ReplicationLogDiscovery is already running for haGroup: testGroup
+2026-05-05T13:11:01,401 INFO  [main] replication.ReplicationLogDiscovery(195): ReplicationLogDiscovery stopped for haGroup: testGroup
+2026-05-05T13:11:01,401 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:01,408 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:01,523 INFO  [main] replication.ReplicationLogDiscovery(312): Starting in_progress directory processing for haGroup: testGroup
+2026-05-05T13:11:01,524 DEBUG [main] replication.ReplicationLogTracker(235): Found 3 in-progress files renamed before timestamp 1778011861524
+2026-05-05T13:11:01,524 INFO  [main] replication.ReplicationLogDiscovery(322): Number of in_progress files with renameTimestampThreshold 1778011861524 is 3 for haGroup: testGroup
+2026-05-05T13:11:01,524 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-2_12345678-1234-1234-1234-123456789abc2_1704153604000.plog -> 1704153604000_rs-2_4d39e164-09e3-4eea-a048-779426d33b3a_1778011861524.plog
+2026-05-05T13:11:01,525 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-2_4d39e164-09e3-4eea-a048-779426d33b3a_1778011861524.plog
+2026-05-05T13:11:01,525 DEBUG [main] replication.ReplicationLogTracker(235): Found 2 in-progress files renamed before timestamp 1778011861525
+2026-05-05T13:11:01,525 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog -> 1704153604000_rs-1_570fa319-1697-4949-b969-0c6e9f8273cc_1778011861525.plog
+2026-05-05T13:11:01,525 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog
+java.io.IOException: Persistent failure for file 1
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processInProgressDirectory(ReplicationLogDiscovery.java:326)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessInProgressDirectorySkipsFailedFiles(ReplicationLogDiscoveryTest.java:1167)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:01,525 WARN  [main] replication.ReplicationLogDiscovery(331): File file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog (prefix: 1704153604000_rs-1) has failed 1 time(s), reached max retries (1). Skipping for the rest of this round for haGroup: testGroup
+2026-05-05T13:11:01,526 DEBUG [main] replication.ReplicationLogTracker(235): Found 1 in-progress files renamed before timestamp 1778011861525
+2026-05-05T13:11:01,526 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153604000.plog -> 1704153604000_rs-0_d949e412-29c4-4e91-8f4a-890e5158e7d1_1778011861526.plog
+2026-05-05T13:11:01,527 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-0_d949e412-29c4-4e91-8f4a-890e5158e7d1_1778011861526.plog
+2026-05-05T13:11:01,527 DEBUG [main] replication.ReplicationLogTracker(235): Found 1 in-progress files renamed before timestamp 1778011861527
+2026-05-05T13:11:01,527 INFO  [main] replication.ReplicationLogDiscovery(344): Finished in-progress files processing in 3ms for haGroup: testGroup
+2026-05-05T13:11:01,528 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:01,535 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:01,585 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:01,593 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:01,658 INFO  [main] replication.ReplicationLogDiscovery(396): Initializing lastRoundProcessed for haGroup: testGroup from in_progress files with minimum timestamp as 1704067200000
+2026-05-05T13:11:01,659 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:01,667 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:01,715 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:01,722 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:02,049 INFO  [main] replication.ReplicationLogDiscovery(290): Starting new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:02,049 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:02,049 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 5
+2026-05-05T13:11:02,049 INFO  [main] replication.ReplicationLogDiscovery(294): Number of new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} is 5
+2026-05-05T13:11:02,050 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153601234_rs-1.plog -> 1704153601234_rs-1_4620c133-a95b-4083-9ad9-441470ff5424_1778011862050.plog
+2026-05-05T13:11:02,050 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000/1704153601234_rs-1.plog
+java.io.IOException: Processing failed for file 1
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processNewFilesForRound(ReplicationLogDiscovery.java:296)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessNewFilesForRoundWithPartialFailure(ReplicationLogDiscoveryTest.java:796)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:02,050 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:02,050 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 4
+2026-05-05T13:11:02,051 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153603702_rs-3.plog -> 1704153603702_rs-3_45715944-19a6-4571-b94d-51150ddcd4e9_1778011862050.plog
+2026-05-05T13:11:02,051 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000/1704153603702_rs-3.plog
+java.io.IOException: Processing failed for file 3
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processNewFilesForRound(ReplicationLogDiscovery.java:296)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessNewFilesForRoundWithPartialFailure(ReplicationLogDiscoveryTest.java:796)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:02,051 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:02,051 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 3
+2026-05-05T13:11:02,051 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153600000_rs-0.plog -> 1704153600000_rs-0_b00c0c27-407b-495f-bec0-4fe3db712129_1778011862051.plog
+2026-05-05T13:11:02,051 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153600000_rs-0_b00c0c27-407b-495f-bec0-4fe3db712129_1778011862051.plog
+2026-05-05T13:11:02,052 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:02,052 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 2
+2026-05-05T13:11:02,052 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604936_rs-4.plog -> 1704153604936_rs-4_5e5e9408-3e3f-43c0-915b-cd1b7cbb06e8_1778011862052.plog
+2026-05-05T13:11:02,052 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604936_rs-4_5e5e9408-3e3f-43c0-915b-cd1b7cbb06e8_1778011862052.plog
+2026-05-05T13:11:02,052 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:02,052 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 1
+2026-05-05T13:11:02,053 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153602468_rs-2.plog -> 1704153602468_rs-2_8862e3b4-27c8-446e-989e-8622e5208c0c_1778011862052.plog
+2026-05-05T13:11:02,053 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153602468_rs-2_8862e3b4-27c8-446e-989e-8622e5208c0c_1778011862052.plog
+2026-05-05T13:11:02,053 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:02,053 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 0
+2026-05-05T13:11:02,053 INFO  [main] replication.ReplicationLogDiscovery(300): Finished new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} in 4ms for haGroup: testGroup
+2026-05-05T13:11:02,055 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:02,062 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:02,138 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:02,145 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:02,172 INFO  [main] replication.ReplicationLogDiscovery(396): Initializing lastRoundProcessed for haGroup: testGroup from in_progress files with minimum timestamp as 1704499200000
+2026-05-05T13:11:02,172 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:02,179 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:02,205 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:02,212 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:02,275 INFO  [main] replication.ReplicationLogDiscovery(406): Initializing lastRoundProcessed for haGroup: testGroup from infiles with minimum timestamp as 1704672000000
+2026-05-05T13:11:02,275 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:02,287 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:02,339 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153600000 current=1704153601000
+2026-05-05T13:11:02,340 INFO  [main] replication.ReplicationLogDiscovery(209): replay round=false
+2026-05-05T13:11:02,341 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153600000 current=1704153669000
+2026-05-05T13:11:02,341 INFO  [main] replication.ReplicationLogDiscovery(209): replay round=true
+2026-05-05T13:11:02,341 INFO  [main] replication.ReplicationLogDiscovery(260): Starting to process round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:02,341 INFO  [main] replication.ReplicationLogDiscovery(290): Starting new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:02,342 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:02,342 INFO  [main] replication.ReplicationLogDiscovery(294): Number of new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} is 0
+2026-05-05T13:11:02,342 INFO  [main] replication.ReplicationLogDiscovery(300): Finished new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} in 0ms for haGroup: testGroup
+2026-05-05T13:11:02,342 INFO  [main] replication.ReplicationLogDiscovery(270): Finished processing round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:02,342 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153660000 current=1704153669000
+2026-05-05T13:11:02,343 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153600000 current=1704153807000
+2026-05-05T13:11:02,343 INFO  [main] replication.ReplicationLogDiscovery(209): replay round=true
+2026-05-05T13:11:02,343 INFO  [main] replication.ReplicationLogDiscovery(260): Starting to process round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:02,343 INFO  [main] replication.ReplicationLogDiscovery(290): Starting new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:02,343 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:02,343 INFO  [main] replication.ReplicationLogDiscovery(294): Number of new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} is 0
+2026-05-05T13:11:02,343 INFO  [main] replication.ReplicationLogDiscovery(300): Finished new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} in 0ms for haGroup: testGroup
+2026-05-05T13:11:02,344 INFO  [main] replication.ReplicationLogDiscovery(270): Finished processing round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:02,344 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153660000 current=1704153807000
+2026-05-05T13:11:02,344 INFO  [main] replication.ReplicationLogDiscovery(260): Starting to process round: ReplicationRound{startTime=1704153660000, endTime=1704153720000} for haGroup: testGroup
+2026-05-05T13:11:02,344 INFO  [main] replication.ReplicationLogDiscovery(290): Starting new files processing for round: ReplicationRound{startTime=1704153660000, endTime=1704153720000} for haGroup: testGroup
+2026-05-05T13:11:02,344 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153660000, endTime=1704153720000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/001
+2026-05-05T13:11:02,344 INFO  [main] replication.ReplicationLogDiscovery(294): Number of new files for round ReplicationRound{startTime=1704153660000, endTime=1704153720000} is 0
+2026-05-05T13:11:02,344 INFO  [main] replication.ReplicationLogDiscovery(300): Finished new files processing for round: ReplicationRound{startTime=1704153660000, endTime=1704153720000} in 0ms for haGroup: testGroup
+2026-05-05T13:11:02,345 INFO  [main] replication.ReplicationLogDiscovery(270): Finished processing round: ReplicationRound{startTime=1704153660000, endTime=1704153720000} for haGroup: testGroup
+2026-05-05T13:11:02,345 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153720000 current=1704153807000
+2026-05-05T13:11:02,345 INFO  [main] replication.ReplicationLogDiscovery(260): Starting to process round: ReplicationRound{startTime=1704153720000, endTime=1704153780000} for haGroup: testGroup
+2026-05-05T13:11:02,345 INFO  [main] replication.ReplicationLogDiscovery(290): Starting new files processing for round: ReplicationRound{startTime=1704153720000, endTime=1704153780000} for haGroup: testGroup
+2026-05-05T13:11:02,345 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153720000, endTime=1704153780000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/002
+2026-05-05T13:11:02,345 INFO  [main] replication.ReplicationLogDiscovery(294): Number of new files for round ReplicationRound{startTime=1704153720000, endTime=1704153780000} is 0
+2026-05-05T13:11:02,345 INFO  [main] replication.ReplicationLogDiscovery(300): Finished new files processing for round: ReplicationRound{startTime=1704153720000, endTime=1704153780000} in 0ms for haGroup: testGroup
+2026-05-05T13:11:02,345 INFO  [main] replication.ReplicationLogDiscovery(270): Finished processing round: ReplicationRound{startTime=1704153720000, endTime=1704153780000} for haGroup: testGroup
+2026-05-05T13:11:02,346 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153780000 current=1704153807000
+2026-05-05T13:11:02,552 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153600000 current=1704153807000
+2026-05-05T13:11:02,552 INFO  [main] replication.ReplicationLogDiscovery(209): replay round=true
+2026-05-05T13:11:02,552 INFO  [main] replication.ReplicationLogDiscovery(260): Starting to process round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:02,552 INFO  [main] replication.ReplicationLogDiscovery(290): Starting new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:02,553 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:02,553 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 2
+2026-05-05T13:11:02,553 INFO  [main] replication.ReplicationLogDiscovery(294): Number of new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} is 2
+2026-05-05T13:11:02,553 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153600000_rs-0.plog -> 1704153600000_rs-0_2b4557fc-6188-4ba2-bcf2-7ecbfbd0a70e_1704153807000.plog
+2026-05-05T13:11:02,554 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153600000_rs-0_2b4557fc-6188-4ba2-bcf2-7ecbfbd0a70e_1704153807000.plog
+2026-05-05T13:11:02,554 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:02,554 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 1
+2026-05-05T13:11:02,554 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153601234_rs-1.plog -> 1704153601234_rs-1_e873cd8f-d2e6-4758-aeb5-35e9b8f34d40_1704153807000.plog
+2026-05-05T13:11:02,554 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153601234_rs-1_e873cd8f-d2e6-4758-aeb5-35e9b8f34d40_1704153807000.plog
+2026-05-05T13:11:02,554 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153600000, endTime=1704153660000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/000
+2026-05-05T13:11:02,555 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 0
+2026-05-05T13:11:02,555 INFO  [main] replication.ReplicationLogDiscovery(300): Finished new files processing for round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} in 0ms for haGroup: testGroup
+2026-05-05T13:11:02,555 INFO  [main] replication.ReplicationLogDiscovery(270): Finished processing round: ReplicationRound{startTime=1704153600000, endTime=1704153660000} for haGroup: testGroup
+2026-05-05T13:11:02,555 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153660000 current=1704153807000
+2026-05-05T13:11:02,555 ERROR [main] replication.ReplicationLogDiscovery(215): Failed processing replication round ReplicationRound{startTime=1704153660000, endTime=1704153720000} for haGroup testGroup. Will retryin next scheduled run.
+java.io.IOException: Simulated failure on round 2
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.replay(ReplicationLogDiscovery.java:213)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testReplay(ReplicationLogDiscoveryTest.java:2152)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:02,555 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153660000 current=1704153807000
+2026-05-05T13:11:02,555 INFO  [main] replication.ReplicationLogDiscovery(209): replay round=true
+2026-05-05T13:11:02,555 INFO  [main] replication.ReplicationLogDiscovery(260): Starting to process round: ReplicationRound{startTime=1704153660000, endTime=1704153720000} for haGroup: testGroup
+2026-05-05T13:11:02,555 INFO  [main] replication.ReplicationLogDiscovery(290): Starting new files processing for round: ReplicationRound{startTime=1704153660000, endTime=1704153720000} for haGroup: testGroup
+2026-05-05T13:11:02,555 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153660000, endTime=1704153720000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/001
+2026-05-05T13:11:02,556 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 2
+2026-05-05T13:11:02,556 INFO  [main] replication.ReplicationLogDiscovery(294): Number of new files for round ReplicationRound{startTime=1704153660000, endTime=1704153720000} is 2
+2026-05-05T13:11:02,556 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153661234_rs-1.plog -> 1704153661234_rs-1_f4e0cf24-4bca-4c6a-a674-fd9016cc0a9d_1704153807000.plog
+2026-05-05T13:11:02,557 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153661234_rs-1_f4e0cf24-4bca-4c6a-a674-fd9016cc0a9d_1704153807000.plog
+2026-05-05T13:11:02,558 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153660000, endTime=1704153720000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/001
+2026-05-05T13:11:02,558 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 1
+2026-05-05T13:11:02,558 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153660000_rs-0.plog -> 1704153660000_rs-0_de9dd6c6-f1c5-4c77-b5a6-f2366418f666_1704153807000.plog
+2026-05-05T13:11:02,559 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153660000_rs-0_de9dd6c6-f1c5-4c77-b5a6-f2366418f666_1704153807000.plog
+2026-05-05T13:11:02,559 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153660000, endTime=1704153720000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/001
+2026-05-05T13:11:02,560 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 0
+2026-05-05T13:11:02,560 INFO  [main] replication.ReplicationLogDiscovery(300): Finished new files processing for round: ReplicationRound{startTime=1704153660000, endTime=1704153720000} in 0ms for haGroup: testGroup
+2026-05-05T13:11:02,560 INFO  [main] replication.ReplicationLogDiscovery(270): Finished processing round: ReplicationRound{startTime=1704153660000, endTime=1704153720000} for haGroup: testGroup
+2026-05-05T13:11:02,560 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153720000 current=1704153807000
+2026-05-05T13:11:02,560 INFO  [main] replication.ReplicationLogDiscovery(260): Starting to process round: ReplicationRound{startTime=1704153720000, endTime=1704153780000} for haGroup: testGroup
+2026-05-05T13:11:02,560 INFO  [main] replication.ReplicationLogDiscovery(290): Starting new files processing for round: ReplicationRound{startTime=1704153720000, endTime=1704153780000} for haGroup: testGroup
+2026-05-05T13:11:02,560 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153720000, endTime=1704153780000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/002
+2026-05-05T13:11:02,560 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 2
+2026-05-05T13:11:02,560 INFO  [main] replication.ReplicationLogDiscovery(294): Number of new files for round ReplicationRound{startTime=1704153720000, endTime=1704153780000} is 2
+2026-05-05T13:11:02,561 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153720000_rs-0.plog -> 1704153720000_rs-0_d767df52-a70a-4e64-ac5e-60a352436e3f_1704153807000.plog
+2026-05-05T13:11:02,561 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153720000_rs-0_d767df52-a70a-4e64-ac5e-60a352436e3f_1704153807000.plog
+2026-05-05T13:11:02,561 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153720000, endTime=1704153780000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/002
+2026-05-05T13:11:02,561 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 1
+2026-05-05T13:11:02,561 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153721234_rs-1.plog -> 1704153721234_rs-1_ca99f179-7ef2-456b-9f07-90113d36b813_1704153807000.plog
+2026-05-05T13:11:02,562 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153721234_rs-1_ca99f179-7ef2-456b-9f07-90113d36b813_1704153807000.plog
+2026-05-05T13:11:02,562 INFO  [main] replication.ReplicationLogTracker(120): Getting new files for round ReplicationRound{startTime=1704153720000, endTime=1704153780000} from shard /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in/shard/002
+2026-05-05T13:11:02,562 INFO  [main] replication.ReplicationLogTracker(127): Number of new files found 0
+2026-05-05T13:11:02,562 INFO  [main] replication.ReplicationLogDiscovery(300): Finished new files processing for round: ReplicationRound{startTime=1704153720000, endTime=1704153780000} in 0ms for haGroup: testGroup
+2026-05-05T13:11:02,562 INFO  [main] replication.ReplicationLogDiscovery(270): Finished processing round: ReplicationRound{startTime=1704153720000, endTime=1704153780000} for haGroup: testGroup
+2026-05-05T13:11:02,562 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153780000 current=1704153807000
+2026-05-05T13:11:02,562 INFO  [main] replication.ReplicationLogDiscovery(243): last=1704153600000 current=1704153668999
+2026-05-05T13:11:02,562 INFO  [main] replication.ReplicationLogDiscovery(209): replay round=false
+2026-05-05T13:11:02,562 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:02,569 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:02,607 INFO  [main] replication.ReplicationLogDiscovery(396): Initializing lastRoundProcessed for haGroup: testGroup from in_progress files with minimum timestamp as 1704412800000
+2026-05-05T13:11:02,607 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:02,615 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:02,725 INFO  [main] replication.ReplicationLogDiscovery(312): Starting in_progress directory processing for haGroup: testGroup
+2026-05-05T13:11:02,725 DEBUG [main] replication.ReplicationLogTracker(235): Found 3 in-progress files renamed before timestamp 1778011862725
+2026-05-05T13:11:02,725 INFO  [main] replication.ReplicationLogDiscovery(322): Number of in_progress files with renameTimestampThreshold 1778011862725 is 3 for haGroup: testGroup
+2026-05-05T13:11:02,725 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-2_12345678-1234-1234-1234-123456789abc2_1704153604000.plog -> 1704153604000_rs-2_f6fe5221-16d8-46dc-9a4e-2effb047c044_1778011862725.plog
+2026-05-05T13:11:02,726 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-2_12345678-1234-1234-1234-123456789abc2_1704153604000.plog
+java.io.IOException: Persistent failure
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processInProgressDirectory(ReplicationLogDiscovery.java:326)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessInProgressDirectoryAllFilesFail(ReplicationLogDiscoveryTest.java:1217)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:02,726 WARN  [main] replication.ReplicationLogDiscovery(331): File file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-2_12345678-1234-1234-1234-123456789abc2_1704153604000.plog (prefix: 1704153604000_rs-2) has failed 1 time(s), reached max retries (1). Skipping for the rest of this round for haGroup: testGroup
+2026-05-05T13:11:02,726 DEBUG [main] replication.ReplicationLogTracker(235): Found 3 in-progress files renamed before timestamp 1778011862726
+2026-05-05T13:11:02,726 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog -> 1704153604000_rs-1_d6230dbe-fecc-4db1-b0bf-5f284f3fef6c_1778011862726.plog
+2026-05-05T13:11:02,726 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog
+java.io.IOException: Persistent failure
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processInProgressDirectory(ReplicationLogDiscovery.java:326)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessInProgressDirectoryAllFilesFail(ReplicationLogDiscoveryTest.java:1217)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:02,726 WARN  [main] replication.ReplicationLogDiscovery(331): File file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-1_12345678-1234-1234-1234-123456789abc1_1704153604000.plog (prefix: 1704153604000_rs-1) has failed 1 time(s), reached max retries (1). Skipping for the rest of this round for haGroup: testGroup
+2026-05-05T13:11:02,727 DEBUG [main] replication.ReplicationLogTracker(235): Found 2 in-progress files renamed before timestamp 1778011862726
+2026-05-05T13:11:02,727 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153604000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153604000.plog -> 1704153604000_rs-0_8048524d-5703-43b6-bb4b-72c8ecd17b30_1778011862727.plog
+2026-05-05T13:11:02,727 ERROR [main] replication.ReplicationLogDiscovery(366): Failed to process the file file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153604000.plog
+java.io.IOException: Persistent failure
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processOneRandomFile(ReplicationLogDiscovery.java:362)
+	at org.apache.phoenix.replication.ReplicationLogDiscovery.processInProgressDirectory(ReplicationLogDiscovery.java:326)
+	at org.apache.phoenix.replication.ReplicationLogDiscoveryTest.testProcessInProgressDirectoryAllFilesFail(ReplicationLogDiscoveryTest.java:1217)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:316)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:240)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:214)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:155)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:385)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:162)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:507)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:495)
+2026-05-05T13:11:02,727 WARN  [main] replication.ReplicationLogDiscovery(331): File file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153604000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153604000.plog (prefix: 1704153604000_rs-0) has failed 1 time(s), reached max retries (1). Skipping for the rest of this round for haGroup: testGroup
+2026-05-05T13:11:02,728 DEBUG [main] replication.ReplicationLogTracker(235): Found 2 in-progress files renamed before timestamp 1778011862727
+2026-05-05T13:11:02,728 INFO  [main] replication.ReplicationLogDiscovery(344): Finished in-progress files processing in 3ms for haGroup: testGroup
+2026-05-05T13:11:02,729 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:02,737 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:04,050 INFO  [main] replication.ReplicationLogDiscoveryTest(643): ShouldProcessInProgressDirectory test results:
+2026-05-05T13:11:04,050 INFO  [main] replication.ReplicationLogDiscoveryTest(644): Total tests: 100000
+2026-05-05T13:11:04,050 INFO  [main] replication.ReplicationLogDiscoveryTest(645): True count: 4950
+2026-05-05T13:11:04,050 INFO  [main] replication.ReplicationLogDiscoveryTest(646): Actual probability: 4.95%
+2026-05-05T13:11:04,050 INFO  [main] replication.ReplicationLogDiscoveryTest(647): Expected probability: 5.0%
+2026-05-05T13:11:04,050 INFO  [main] replication.ReplicationLogDiscoveryTest(648): Variance: 0.04999999999999982%
+2026-05-05T13:11:04,050 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:04,057 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:04,194 INFO  [main] replication.ReplicationLogDiscovery(312): Starting in_progress directory processing for haGroup: testGroup
+2026-05-05T13:11:04,194 DEBUG [main] replication.ReplicationLogTracker(235): Found 0 in-progress files renamed before timestamp 1704153600000
+2026-05-05T13:11:04,194 INFO  [main] replication.ReplicationLogDiscovery(322): Number of in_progress files with renameTimestampThreshold 1704153600000 is 0 for haGroup: testGroup
+2026-05-05T13:11:04,194 INFO  [main] replication.ReplicationLogDiscovery(344): Finished in-progress files processing in 0ms for haGroup: testGroup
+2026-05-05T13:11:04,195 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:04,202 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:04,302 INFO  [main] replication.ReplicationLogDiscovery(312): Starting in_progress directory processing for haGroup: testGroup
+2026-05-05T13:11:04,303 DEBUG [main] replication.ReplicationLogTracker(235): Found 2 in-progress files renamed before timestamp 1704153600000
+2026-05-05T13:11:04,303 INFO  [main] replication.ReplicationLogDiscovery(322): Number of in_progress files with renameTimestampThreshold 1704153600000 is 2 for haGroup: testGroup
+2026-05-05T13:11:04,303 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153500000_rs-0_12345678-1234-1234-1234-123456789abc0_1704153540000.plog -> 1704153500000_rs-0_e5918cf1-1743-475e-9ba1-5fbdbe6b9f2a_1704153660000.plog
+2026-05-05T13:11:04,304 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153500000_rs-0_e5918cf1-1743-475e-9ba1-5fbdbe6b9f2a_1704153660000.plog
+2026-05-05T13:11:04,304 DEBUG [main] replication.ReplicationLogTracker(235): Found 1 in-progress files renamed before timestamp 1704153600000
+2026-05-05T13:11:04,304 DEBUG [main] replication.ReplicationLogTracker(385): Successfully marked file as in progress: 1704153500001_rs-0_12345678-1234-1234-1234-123456789abc0_1704153590000.plog -> 1704153500001_rs-0_f33a94ff-35c3-4d79-b592-8aceb52226cd_1704153660000.plog
+2026-05-05T13:11:04,304 INFO  [main] replication.ReplicationLogTracker(283): Successfully deleted completed file: file:/Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress/1704153500001_rs-0_f33a94ff-35c3-4d79-b592-8aceb52226cd_1704153660000.plog
+2026-05-05T13:11:04,305 DEBUG [main] replication.ReplicationLogTracker(235): Found 0 in-progress files renamed before timestamp 1704153600000
+2026-05-05T13:11:04,305 INFO  [main] replication.ReplicationLogDiscovery(344): Finished in-progress files processing in 0ms for haGroup: testGroup
+2026-05-05T13:11:04,306 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup
+2026-05-05T13:11:04,313 INFO  [main] replication.ReplicationLogTracker(514): Creating directory /Users/tkhurana/soma/root/phoenix/phoenix-core/target/junit1795638062113196242/testGroup/in_progress
+2026-05-05T13:11:04,341 WARN  [main] replication.ReplicationLogDiscovery(175): ReplicationLogDiscovery is not running for haGroup: testGroup

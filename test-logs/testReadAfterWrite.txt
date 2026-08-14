@@ -1,0 +1,69 @@
+2026-06-08 23:51:39,230 INFO  ReplicationLogGroup - Initializing ReplicationLogGroup testReadAfterWrite
+2026-06-08 23:51:39,231 INFO  ReplicationLogGroup - HAGroup testReadAfterWrite initialized filesystem at /cix/src/phoenix-core/target/junit4452179085512165610
+2026-06-08 23:51:39,231 INFO  ReplicationLogGroup - HAGroup testReadAfterWrite creating root directory at /cix/src/phoenix-core/target/junit4452179085512165610/testReadAfterWrite/out
+2026-06-08 23:51:39,235 INFO  ReplicationLogTracker - Creating directory /cix/src/phoenix-core/target/junit4452179085512165610/testReadAfterWrite/out_progress
+2026-06-08 23:51:39,237 INFO  ReplicationLogDiscovery - Initializing ReplicationLogDiscovery for haGroup: testReadAfterWrite
+2026-06-08 23:51:39,238 INFO  ReplicationLogDiscovery - Initializing lastRoundProcessed for haGroup: testReadAfterWrite from current time 1780987899238
+2026-06-08 23:51:39,239 INFO  ReplicationLogGroup - HAGroup testReadAfterWrite initializing mode from state ACTIVE_IN_SYNC
+2026-06-08 23:51:39,239 INFO  ReplicationLogGroup - HAGroup testReadAfterWrite switched from INIT to SYNC
+2026-06-08 23:51:39,239 INFO  SyncModeImpl - HAGroup testReadAfterWrite entered mode SYNC
+2026-06-08 23:51:39,239 INFO  ReplicationLogGroup - HAGroup testReadAfterWrite initialized filesystem at /cix/src/phoenix-core/target/junit5053407045157992081
+2026-06-08 23:51:39,240 INFO  ReplicationLogGroup - HAGroup testReadAfterWrite creating root directory at /cix/src/phoenix-core/target/junit5053407045157992081/testReadAfterWrite/in
+2026-06-08 23:51:39,245 INFO  ReplicationLog - Started rotation executor with initial delay 60000ms and interval 60000ms
+2026-06-08 23:51:39,253 INFO  ReplicationLog - Created new writer: LogFileWriter [formatWriter=LogFileFormatWriter [writerContext=LogFileWriterContext [path=/cix/src/phoenix-core/target/junit5053407045157992081/testReadAfterWrite/in/shard/027/1780987899245_test,60010,1780987899218.plog, compression=NONE, codec=org.apache.phoenix.replication.log.LogFileCodec@5462998c, maxBlockSize=1048576, fsBlockSize=268435456, useHsync=false], recordCount=0, blockCount=0, blocksStartOffset=6], closed=false, generation=1]
+2026-06-08 23:51:39,253 INFO  ReplicationLogBaseTest - createNewWriter called, generation=1
+2026-06-08 23:51:39,254 INFO  ReplicationLogGroup - HAGroup testReadAfterWrite started with mode=SYNC
+2026-06-08 23:51:39,264 INFO  ReplicationLog - Created new writer: LogFileWriter [formatWriter=LogFileFormatWriter [writerContext=LogFileWriterContext [path=/cix/src/phoenix-core/target/junit5053407045157992081/testReadAfterWrite/in/shard/027/1780987899260_test,60010,1780987899218.plog, compression=NONE, codec=org.apache.phoenix.replication.log.LogFileCodec@49a9766b, maxBlockSize=1048576, fsBlockSize=268435456, useHsync=false], recordCount=0, blockCount=0, blocksStartOffset=6], closed=false, generation=2]
+2026-06-08 23:51:39,264 INFO  ReplicationLogBaseTest - createNewWriter called, generation=2
+2026-06-08 23:51:39,265 INFO  ReplicationLog - Swapped writer from LogFileWriter [formatWriter=LogFileFormatWriter [writerContext=LogFileWriterContext [path=/cix/src/phoenix-core/target/junit5053407045157992081/testReadAfterWrite/in/shard/027/1780987899245_test,60010,1780987899218.plog, compression=NONE, codec=org.apache.phoenix.replication.log.LogFileCodec@5462998c, maxBlockSize=1048576, fsBlockSize=268435456, useHsync=false], recordCount=100, blockCount=1, blocksStartOffset=6], closed=false, generation=1] to LogFileWriter [formatWriter=LogFileFormatWriter [writerContext=LogFileWriterContext [path=/cix/src/phoenix-core/target/junit5053407045157992081/testReadAfterWrite/in/shard/027/1780987899260_test,60010,1780987899218.plog, compression=NONE, codec=org.apache.phoenix.replication.log.LogFileCodec@49a9766b, maxBlockSize=1048576, fsBlockSize=268435456, useHsync=false], recordCount=0, blockCount=0, blocksStartOffset=6], closed=false, generation=2], asyncClose=true
+2026-06-08 23:51:39,265 WARN  FSInputChecker - Problem opening checksum file: /cix/src/phoenix-core/target/junit5053407045157992081/testReadAfterWrite/in/shard/027/1780987899245_test,60010,1780987899218.plog.  Ignoring exception:
+java.io.EOFException
+	at java.io.DataInputStream.readFully(DataInputStream.java:197)
+	at java.io.DataInputStream.readFully(DataInputStream.java:169)
+	at org.apache.hadoop.fs.ChecksumFileSystem$ChecksumFSInputChecker.<init>(ChecksumFileSystem.java:197)
+	at org.apache.hadoop.fs.ChecksumFileSystem.open(ChecksumFileSystem.java:581)
+	at org.apache.hadoop.fs.FileSystem.open(FileSystem.java:997)
+	at org.apache.phoenix.replication.log.LogFileReader.init(LogFileReader.java:49)
+	at org.apache.phoenix.replication.ReplicationLogGroupTest.testReadAfterWrite(ReplicationLogGroupTest.java:814)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:59)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:56)
+	at org.junit.internal.runners.statements.InvokeMetho[118;1:3ud.evaluate(InvokeMethod.java:17)
+	at org.junit.internal.runners.statements.RunBefores.evaluate(RunBefores.java:26)
+	at org.junit.internal.runners.statements.RunAfters.evaluate(RunAfters.java:27)
+	at org.junit.rules.TestWatcher$1.evaluate(TestWatcher.java:61)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.BlockJUnit4ClassRunner$1.evaluate(BlockJUnit4ClassRunner.java:100)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:366)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:103)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:63)
+	at org.junit.runners.ParentRunner$4.run(ParentRunner.java:331)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:79)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:329)
+	at org.junit.runners.ParentRunner.access$100(ParentRunner.java:66)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:293)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.ExternalResource$1.evaluate(ExternalResource.java:54)
+	at org.junit.rules.RunRules.evaluate(RunRules.java:20)
+	at org.junit.runners.ParentRunner$3.evaluate(ParentRunner.java:306)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:413)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.execute(JUnit4Provider.java:377)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeWithRerun(JUnit4Provider.java:284)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.executeTestSet(JUnit4Provider.java:248)
+	at org.apache.maven.surefire.junit4.JUnit4Provider.invoke(JUnit4Provider.java:167)
+	at org.apache.maven.surefire.booter.ForkedBooter.runSuitesInProcess(ForkedBooter.java:456)
+	at org.apache.maven.surefire.booter.ForkedBooter.execute(ForkedBooter.java:169)
+	at org.apache.maven.surefire.booter.ForkedBooter.run(ForkedBooter.java:595)
+	at org.apache.maven.surefire.booter.ForkedBooter.main(ForkedBooter.java:581)
+2026-06-08 23:51:39,265 INFO  ReplicationLog - Closing writer: LogFileWriter [formatWriter=LogFileFormatWriter [writerContext=LogFileWriterContext [path=/cix/src/phoenix-core/target/junit5053407045157992081/testReadAfterWrite/in/shard/027/1780987899245_test,60010,1780987899218.plog, compression=NONE, codec=org.apache.phoenix.replication.log.LogFileCodec@5462998c, maxBlockSize=1048576, fsBlockSize=268435456, useHsync=false], recordCount=100, blockCount=1, blocksStartOffset=6], closed=false, generation=1]
+2026-06-08 23:51:39,266 INFO  ReplicationLogGroup - Closing HAGroup testReadAfterWrite
+2026-06-08 23:51:39,266 INFO  ReplicationLogGroup - HAGroup testReadAfterWrite shutting down event handler graceful=true
+2026-06-08 23:51:39,266 INFO  SyncModeImpl - HAGroup testReadAfterWrite exiting mode SYNC graceful=true
+2026-06-08 23:51:39,266 INFO  ReplicationLog - Closing writer: LogFileWriter [formatWriter=LogFileFormatWriter [writerContext=LogFileWriterContext [path=/cix/src/phoenix-core/target/junit5053407045157992081/testReadAfterWrite/in/shard/027/1780987899260_test,60010,1780987899218.plog, compression=NONE, codec=org.apache.phoenix.replication.log.LogFileCodec@49a9766b, maxBlockSize=1048576, fsBlockSize=268435456, useHsync=false], recordCount=0, blockCount=0, blocksStartOffset=6], closed=false, generation=2]
+2026-06-08 23:51:39,266 INFO  ReplicationLogGroup - HAGroup testReadAfterWrite shutdown disruptor executor service
+2026-06-08 23:51:39,266 WARN  ReplicationLogDiscovery - ReplicationLogDiscovery is not running for haGroup: testReadAfterWrite
+2026-06-08 23:51:39,266 INFO  ReplicationLogGroup - HAGroup testReadAfterWrite closed
