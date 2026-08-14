@@ -280,8 +280,10 @@ public class ReplicationLog {
    * Each spin re-issues {@link #requestRotation()} before waiting: a request coalesced away while a
    * soon-to-complete rotation held the CAS gate is reissued once the gate clears, so a fresh task
    * actually gets scheduled. The waited-on condition is {@code pendingWriter} itself, so a spurious
-   * or unrelated notify just re-checks and loops. Exits early if rotation is permanently suppressed
-   * (nothing will ever stage) or the log closes.
+   * or unrelated notify just re-checks and loops. Exits immediately when rotation is permanently
+   * suppressed (nothing will ever stage). A close is observed on the next wakeup rather than
+   * promptly — {@link #close} does not notify {@code rotationSignal} — but the wait is bounded by
+   * {@code retryDelayMs}, so a waiter unwinds within that budget regardless.
    * @return the staged writer, or {@code null} if none was staged before the deadline / close /
    *         permanent suppression. The caller drains it via {@link #checkAndReplaceWriter}.
    */
@@ -394,7 +396,17 @@ public class ReplicationLog {
         // record of the transient failure and must carry the stack.
         LOG.warn("Write attempt {}/{} failed on writer {}; requesting rotation to retry on a fresh"
           + " writer", attempt, maxAttempts, currentWriter, e);
-        if (awaitStagedWriter() == null) {
+        LogFileWriter staged;
+        try {
+          staged = awaitStagedWriter();
+        } catch (InterruptedIOException iioe) {
+          // Preserve the original write failure as the cause: the interrupt is only the proximate
+          // reason the wait unwound, but e (e.g. the peer-DataNode sync failure) is what a caller
+          // or crash report needs to see. InterruptedIOException takes no cause constructor arg.
+          iioe.initCause(e);
+          throw iioe;
+        }
+        if (staged == null) {
           // No fresh writer staged, so there is nothing new to retry on. Surface the original
           // failure rather than burning the next attempt on the fenced writer. Message-only: the
           // cause was logged with its stack just above, and LogRotationTask logs any

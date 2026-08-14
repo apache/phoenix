@@ -237,6 +237,58 @@ public class LogFileWriterSyncTest {
     verify(internalOutput, never()).hsync();
   }
 
+  /**
+   * S17b guard, append path: the fence must also latch when the failure originates in
+   * {@code append()} (a block-full internal sync against a dead peer DataNode), not just in an
+   * explicit {@code sync()}. Once fenced this way, a subsequent {@code sync()} must throw and must
+   * NOT re-enter the underlying stream. This is the companion to
+   * {@link #testWriterFencedAfterSyncFailure()}: {@code fault} is set in both {@code append()}'s
+   * and {@code sync()}'s catch blocks, and this test guards the append-triggered latch so a
+   * refactor that fences only in {@code sync()} would fail here rather than silently reopening the
+   * append path to a false-success retry.
+   */
+  @Test
+  public void testWriterFencedAfterAppendFailure() throws IOException {
+    // Tiny block so a single append fills the block and triggers the internal sync -> hsync.
+    SyncableDataOutput blockOutput = spy(new LogFileTestUtil.SyncableByteArrayOutputStream());
+    FileSystem blockMockFs = mock(FileSystem.class);
+    LogFileTestUtil.stubCreateFile(blockMockFs,
+      new FSDataOutputStream((OutputStream) blockOutput, new FileSystem.Statistics("hdfs"), 0));
+    when(blockOutput.getPos()).thenReturn(100L);
+    LogFileWriterContext blockContext =
+      new LogFileWriterContext(conf).setFileSystem(blockMockFs).setMaxBlockSize(1L);
+    LogFileWriter blockWriter = new LogFileWriter();
+    blockWriter.init(blockContext);
+    clearInvocations(blockOutput);
+
+    try {
+      // The block-full internal sync fails at the durability barrier (dead peer DataNode).
+      doThrow(new IOException("simulated peer DataNode pipeline failure")).when(blockOutput)
+        .hsync();
+      Mutation m1 = LogFileTestUtil.newPut("row1", 1L, 1);
+      try {
+        blockWriter.append("TBL", 1L, LogFileTestUtil.cellsOf(m1));
+        fail("Expected block-full append() to propagate the hsync failure");
+      } catch (IOException expected) {
+        // The S17b starting condition, triggered from the append path.
+      }
+
+      // Even if the underlying stream would now succeed, the fenced writer must refuse to re-drive
+      // it on a subsequent sync(): no false success, and no hsync on the torn-down stream.
+      doNothing().when(blockOutput).hsync();
+      clearInvocations(blockOutput);
+      try {
+        blockWriter.sync();
+        fail("sync() on a writer fenced by an append failure must throw, not false-succeed (S17b)");
+      } catch (IOException expected) {
+        // Correct: failure surfaced, record stays a replay candidate.
+      }
+      verify(blockOutput, never()).hsync();
+    } finally {
+      blockWriter.close();
+    }
+  }
+
   /** A fenced writer also refuses further appends, so no record silently accumulates on it. */
   @Test
   public void testWriterFencedRejectsAppendAfterSyncFailure() throws IOException {
