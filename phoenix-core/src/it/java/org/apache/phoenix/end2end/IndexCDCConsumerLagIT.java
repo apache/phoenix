@@ -58,7 +58,6 @@ public class IndexCDCConsumerLagIT extends ParallelStatsDisabledIT {
   private static final int TIMESTAMP_BUFFER_MS = 2_000;
   private static final int POLL_INTERVAL_MS = 500;
   private static final int LAG_SAMPLE_INTERVAL_MS = 500;
-  // Small retry pause so empty-poll backoff doesn't dominate idle behavior.
   private static final int RETRY_PAUSE_MS = 100;
   // Budget for the consumer to start up and emit its first lag sample. Generous because the
   // consumer waits up to INDEX_CDC_CONSUMER_STARTUP_DELAY_MS (default 10s) and then performs

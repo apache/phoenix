@@ -115,6 +115,13 @@ public class IndexCDCConsumer implements Runnable {
   private static final long DEFAULT_POLL_INTERVAL_MS = 500;
 
   /**
+   * The interval in milliseconds between polls when the previous poll found no new events.
+   */
+  public static final String INDEX_CDC_CONSUMER_IDLE_POLL_INTERVAL_MS =
+    "phoenix.index.cdc.consumer.idle.poll.interval.ms";
+  private static final long DEFAULT_IDLE_POLL_INTERVAL_MS = 4000;
+
+  /**
    * The time buffer in milliseconds subtracted from current time when querying CDC mutations to
    * help avoid reading mutations that are too recent.
    */
@@ -157,6 +164,7 @@ public class IndexCDCConsumer implements Runnable {
   private final long startupDelayMs;
   private final int batchSize;
   private final long pollIntervalMs;
+  private final long idlePollIntervalMs;
   private final long timestampBufferMs;
   private final int maxDataVisibilityRetries;
   private final long parentProgressPauseMs;
@@ -237,6 +245,10 @@ public class IndexCDCConsumer implements Runnable {
     this.batchSize = baseBatchSize + jitter;
     this.pollIntervalMs =
       config.getLong(INDEX_CDC_CONSUMER_POLL_INTERVAL_MS, DEFAULT_POLL_INTERVAL_MS);
+    long baseIdlePollInterval =
+      config.getLong(INDEX_CDC_CONSUMER_IDLE_POLL_INTERVAL_MS, DEFAULT_IDLE_POLL_INTERVAL_MS);
+    this.idlePollIntervalMs =
+      baseIdlePollInterval + ThreadLocalRandom.current().nextLong(baseIdlePollInterval / 5 + 1);
     this.timestampBufferMs =
       config.getLong(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, DEFAULT_TIMESTAMP_BUFFER_MS);
     this.maxDataVisibilityRetries = config.getInt(INDEX_CDC_CONSUMER_MAX_DATA_VISIBILITY_RETRIES,
@@ -449,11 +461,11 @@ public class IndexCDCConsumer implements Runnable {
       lagEmissionEnabled = true;
       LOG.info(
         "IndexCDCConsumer started for table {} region {}"
-          + " [batchSize: {}, pollIntervalMs: {}, timestampBufferMs: {}, startupDelayMs: {},"
-          + " pause: {}, maxDataVisibilityRetries: {}, parentProgressPauseMs: {},"
-          + " serializeCDCMutations: {}]",
-        dataTableName, encodedRegionName, batchSize, pollIntervalMs, timestampBufferMs,
-        startupDelayMs, pause, maxDataVisibilityRetries, parentProgressPauseMs,
+          + " [batchSize: {}, pollIntervalMs: {}, idlePollIntervalMs: {}, timestampBufferMs: {},"
+          + " startupDelayMs: {}, pause: {}, maxDataVisibilityRetries: {},"
+          + " parentProgressPauseMs: {}, serializeCDCMutations: {}]",
+        dataTableName, encodedRegionName, batchSize, pollIntervalMs, idlePollIntervalMs,
+        timestampBufferMs, startupDelayMs, pause, maxDataVisibilityRetries, parentProgressPauseMs,
         serializeCDCMutations);
       if (!waitForCDCStreamEntry()) {
         LOG.error(
@@ -502,10 +514,10 @@ public class IndexCDCConsumer implements Runnable {
               lastProcessedTimestamp = processCDCBatchGenerated(encodedRegionName,
                 encodedRegionName, lastProcessedTimestamp, false);
             }
+            retryCount = 0;
             if (lastProcessedTimestamp == previousTimestamp) {
-              sleepWithLagSampling(ConnectionUtils.getPauseTime(pause, ++retryCount));
+              sleepWithLagSampling(idlePollIntervalMs);
             } else {
-              retryCount = 0;
               sleepWithLagSampling(pollIntervalMs);
             }
           } catch (Exception e) {
