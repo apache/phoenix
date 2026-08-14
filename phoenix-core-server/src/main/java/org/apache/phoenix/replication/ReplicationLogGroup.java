@@ -243,6 +243,17 @@ public class ReplicationLogGroup {
     return serverIdentity(serverName) + "|" + haGroupName;
   }
 
+  /**
+   * Register a pre-built (typically subclassed/spied) group in the instance cache under its own
+   * identity, so a subsequent {@link #get} for the same (server, HA group) returns it and
+   * {@link #close()} removes it via the normal path. Test-only seam that avoids exposing the cache
+   * map or its key scheme.
+   */
+  @VisibleForTesting
+  static void cacheForTesting(ReplicationLogGroup group) {
+    INSTANCES.put(instanceKey(group.serverName, group.haGroupName), group);
+  }
+
   protected final Configuration conf;
   protected final ServerName serverName;
   protected final String haGroupName;
@@ -995,15 +1006,16 @@ public class ReplicationLogGroup {
    * Close the ReplicationLogGroup. Drains pending events from the Disruptor with a bounded timeout
    * (which triggers onShutdown → modeImpl.onExit → ReplicationLog.close), then cleans up all
    * resources. When the event handler has a fatal exception the drain completes instantly because
-   * each event hits the short-circuit path. The instance is removed from the INSTANCES cache and
-   * subsequent append()/sync() calls throw IOException.
+   * each event hits the short-circuit path. The closed flag is set immediately so append()/sync()
+   * calls throw IOException, but the instance is removed from the INSTANCES cache only after
+   * teardown completes, so a concurrent get() during the drain cannot resurrect a second live
+   * instance.
    */
   public void close() {
     if (!closed.compareAndSet(false, true)) {
       return;
     }
     LOG.info("Closing HAGroup {}", this);
-    INSTANCES.remove(instanceKey(serverName, haGroupName));
     // Wait for the consumer thread to enter its run loop before shutting down. Otherwise a close()
     // that races init() can halt() before the consumer starts; run()'s opening clearAlert() then
     // wipes the alert and onShutdown (writer close) never runs.
@@ -1017,20 +1029,31 @@ public class ReplicationLogGroup {
         + "proceeding with shutdown without the start gate", this, e);
       Thread.currentThread().interrupt();
     }
-    // Remove every LOCAL state subscription registered in subscribeToStateChanges().
-    stateUnsubscribers.forEach(Runnable::run);
-    stateUnsubscribers.clear();
-
     try {
-      disruptor.shutdown(shutdownTimeoutMs, TimeUnit.MILLISECONDS);
-    } catch (com.lmax.disruptor.TimeoutException e) {
-      LOG.warn("HAGroup {} shutdown timed out after {}ms, halting", this, shutdownTimeoutMs);
-      disruptor.halt();
+      // Remove every LOCAL state subscription registered in subscribeToStateChanges().
+      stateUnsubscribers.forEach(Runnable::run);
+      stateUnsubscribers.clear();
+
+      try {
+        disruptor.shutdown(shutdownTimeoutMs, TimeUnit.MILLISECONDS);
+      } catch (com.lmax.disruptor.TimeoutException e) {
+        LOG.warn("HAGroup {} shutdown timed out after {}ms, halting", this, shutdownTimeoutMs);
+        disruptor.halt();
+      }
+      shutdownDisruptorExecutor();
+      logForwarder.stop();
+      logForwarder.close();
+      metrics.close();
+    } finally {
+      // Remove from the cache only after teardown, so a concurrent get() during the (potentially
+      // multi-second) drain finds this still-closing instance -- whose append()/sync() fail fast on
+      // the closed flag -- instead of a cache miss that would mint a second live instance for the
+      // same group, producing a double-writer against the same shard. In a finally so a teardown
+      // step that throws can never strand a closed instance: on an active->standby->active cycle
+      // without a JVM restart, get() would otherwise return the dead instance forever. Value-
+      // specific remove so a later instance created for this key is never clobbered.
+      INSTANCES.remove(instanceKey(serverName, haGroupName), this);
     }
-    shutdownDisruptorExecutor();
-    logForwarder.stop();
-    logForwarder.close();
-    metrics.close();
     LOG.info("HAGroup {} closed", this);
   }
 
