@@ -1744,13 +1744,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * <li>The <b>empty-column CF/CQ</b> — threaded whenever an effective (non-NONE) literal TTL
    * applies, for both base tables and views. They are inert on the write path, so they are left on
    * the mutations.</li>
-   * <li>The <b>{@code _TTL}</b> — deserialized once into {@code context.ttlExpressionForBatch}.
-   * If it is a {@link LiteralTTLExpression} its raw bytes are also stored in
+   * <li>The <b>{@code _TTL}</b> — deserialized once into {@code context.ttlExpressionForBatch}. If
+   * it is a {@link LiteralTTLExpression} its raw bytes are also stored in
    * {@code context.literalTTLForInternalScan} for the internal scan masking path.</li>
    * </ul>
-   * Must run before {@link #identifyMutationTypes} so that {@code context.hasConditionalTTL} is
-   * set correctly. A table has exactly one TTL kind and a batch never mixes views, so the
-   * deserialized expression is uniform across the batch.
+   * Must run before {@link #identifyMutationTypes} so that {@code context.hasConditionalTTL} is set
+   * correctly. A table has exactly one TTL kind and a batch never mixes views, so the deserialized
+   * expression is uniform across the batch.
    */
   private void extractTTLKindForInternalScan(MiniBatchOperationInProgress<Mutation> miniBatchOp,
     BatchMutateContext context) throws IOException {
