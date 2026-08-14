@@ -30,9 +30,9 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.NavigableMap;
+import java.util.NavigableSet;
 import java.util.Set;
-import java.util.TreeMap;
+import java.util.TreeSet;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellComparator;
 import org.apache.hadoop.hbase.CellUtil;
@@ -536,18 +536,24 @@ public final class PhoenixSyncTableChunkRepairer {
     }
     byte[] family = CellUtil.cloneFamily(cell);
     byte[] qualifier = CellUtil.cloneQualifier(cell);
-    long ts = cell.getTimestamp();
+    long targetTs = cell.getTimestamp();
     Long sourceMaxTs = sourceMaxTsByColumn.get(new ColumnKey(family, qualifier));
+    Delete delete = rowRepairBuffer.delete();
+
+    // Case 1: source has no cell at this column — wipe target's column at ts <= targetTs.
     if (sourceMaxTs == null) {
-      rowRepairBuffer.delete().addColumns(family, qualifier, ts);
-    } else if (sourceMaxTs >= ts) {
-      rowRepairBuffer.delete().addColumn(family, qualifier, ts);
-    } else {
-      rowRepairBuffer.delete().addColumn(family, qualifier, ts);
+      delete.addColumns(family, qualifier, targetTs);
+      return true;
+    }
+    // Cases 2 & 3: shadow the visible target cell at targetTs.
+    delete.addColumn(family, qualifier, targetTs);
+    // Case 3 addendum: source's max ts is below target's, so any max-versions-hidden target
+    // Puts in (sourceMaxTs, targetTs) would resurface above the mirror — point-Delete them.
+    if (sourceMaxTs < targetTs) {
       Set<Long> hiddenTs = rowRepairBuffer.targetRowRecord(targetHTable)
-        .targetPutTimestampsBetween(family, qualifier, sourceMaxTs, ts);
+        .targetPutTimestampsBetween(family, qualifier, sourceMaxTs, targetTs);
       for (Long hidden : hiddenTs) {
-        rowRepairBuffer.delete().addColumn(family, qualifier, hidden);
+        delete.addColumn(family, qualifier, hidden);
       }
     }
     return true;
@@ -757,7 +763,7 @@ public final class PhoenixSyncTableChunkRepairer {
     private final Map<ByteBuffer, Long> deleteFamilyUpperBound = new HashMap<>();
     private final Map<ByteBuffer, Set<Long>> deleteFamilyVersionTs = new HashMap<>();
     /** Per-column ts-ordered set of target's Put timestamps. */
-    private final Map<ColumnKey, NavigableMap<Long, Boolean>> targetPutTs = new HashMap<>();
+    private final Map<ColumnKey, NavigableSet<Long>> targetPutTs = new HashMap<>();
 
     /**
      * Builds a {@link TargetRowRecord} from a single-row HBase scan.
@@ -802,8 +808,8 @@ public final class PhoenixSyncTableChunkRepairer {
       if (CellUtil.isDelete(cell)) {
         recordTombstone(cell);
       } else {
-        targetPutTs.computeIfAbsent(ColumnKey.of(cell), k -> new TreeMap<>())
-          .put(cell.getTimestamp(), Boolean.TRUE);
+        targetPutTs.computeIfAbsent(ColumnKey.of(cell), k -> new TreeSet<>())
+          .add(cell.getTimestamp());
       }
     }
 
@@ -867,11 +873,11 @@ public final class PhoenixSyncTableChunkRepairer {
      */
     Set<Long> targetPutTimestampsBetween(byte[] family, byte[] qualifier, long lowerExclusive,
       long upperExclusive) {
-      NavigableMap<Long, Boolean> putTimestamps = targetPutTs.get(new ColumnKey(family, qualifier));
+      NavigableSet<Long> putTimestamps = targetPutTs.get(new ColumnKey(family, qualifier));
       if (putTimestamps == null) {
         return Collections.emptySet();
       }
-      return putTimestamps.subMap(lowerExclusive, false, upperExclusive, false).keySet();
+      return putTimestamps.subSet(lowerExclusive, false, upperExclusive, false);
     }
   }
 
