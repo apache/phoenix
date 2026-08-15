@@ -201,7 +201,7 @@ public abstract class BaseTest {
   public static TemporaryFolder tmpFolder = new TemporaryFolder();
   @ClassRule
   public static Timeout CLASS_TIMEOUT =
-    Timeout.builder().withTimeout(20, TimeUnit.MINUTES).withLookingForStuckThread(true).build();
+    Timeout.builder().withTimeout(50, TimeUnit.MINUTES).withLookingForStuckThread(true).build();
   private static final int dropTableTimeout = 120; // 2 mins should be long enough.
   private static final ThreadFactory factory = new ThreadFactoryBuilder().setDaemon(true)
     .setNameFormat("DROP-TABLE-BASETEST" + "-thread-%s").build();

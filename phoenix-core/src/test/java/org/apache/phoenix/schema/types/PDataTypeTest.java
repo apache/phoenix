@@ -18,6 +18,7 @@
 package org.apache.phoenix.schema.types;
 
 import static org.apache.phoenix.query.QueryConstants.MILLIS_IN_DAY;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -1996,6 +1997,37 @@ public class PDataTypeTest {
   @Test
   public void testFromSqlTypeName() {
     assertEquals(PVarchar.INSTANCE, PDataType.fromSqlTypeName("varchar"));
+  }
+
+  @Test
+  public void testVarbinaryEncodedIsNotInterchangeableWithPlainBinary() {
+    byte[] value = new byte[] { 0, -1, 5 };
+    assertFalse(Arrays.equals(value, PVarbinaryEncoded.INSTANCE.toBytes(value)));
+
+    assertFalse(PVarbinary.INSTANCE.isBytesComparableWith(PVarbinaryEncoded.INSTANCE));
+    assertFalse(PBinary.INSTANCE.isBytesComparableWith(PVarbinaryEncoded.INSTANCE));
+    assertFalse(PVarbinaryEncoded.INSTANCE.isBytesComparableWith(PVarbinary.INSTANCE));
+    assertFalse(PVarbinaryEncoded.INSTANCE.isBytesComparableWith(PBinary.INSTANCE));
+    assertTrue(PVarbinary.INSTANCE.isBytesComparableWith(PBinary.INSTANCE));
+    assertTrue(PBinary.INSTANCE.isBytesComparableWith(PVarbinary.INSTANCE));
+    assertTrue(PVarbinaryEncoded.INSTANCE.isBytesComparableWith(PVarbinaryEncoded.INSTANCE));
+
+    assertArrayEquals(value,
+      (byte[]) PVarbinary.INSTANCE.toObject(value, PVarbinaryEncoded.INSTANCE));
+    assertArrayEquals(value, (byte[]) PBinary.INSTANCE.toObject(value, PVarbinaryEncoded.INSTANCE));
+
+    for (PDataType<?> target : new PDataType<?>[] { PVarbinary.INSTANCE, PBinary.INSTANCE }) {
+      ImmutableBytesWritable ptr =
+        new ImmutableBytesWritable(PVarbinaryEncoded.INSTANCE.toBytes(value));
+      target.coerceBytes(ptr, null, PVarbinaryEncoded.INSTANCE, null, null, SortOrder.ASC, null,
+        null, SortOrder.ASC);
+      assertArrayEquals("coercing VARBINARY_ENCODED to " + target, value, ptr.copyBytes());
+    }
+
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable(PVarbinary.INSTANCE.toBytes(value));
+    PVarbinaryEncoded.INSTANCE.coerceBytes(ptr, null, PVarbinary.INSTANCE, null, null,
+      SortOrder.ASC, null, null, SortOrder.ASC);
+    assertArrayEquals(PVarbinaryEncoded.INSTANCE.toBytes(value), ptr.copyBytes());
   }
 
 }
