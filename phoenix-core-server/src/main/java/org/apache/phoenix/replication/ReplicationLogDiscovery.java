@@ -27,6 +27,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import javax.annotation.concurrent.GuardedBy;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
@@ -133,6 +134,21 @@ public abstract class ReplicationLogDiscovery {
   protected MetricsReplicationLogDiscovery metrics;
   protected long roundTimeMills;
   protected long bufferMillis;
+  /**
+   * Wall-clock instant (ms) of the round-eligibility grid point the most recently scheduled cycle
+   * targets, or {@link Long#MIN_VALUE} before the first schedule of the current generation. Used by
+   * {@link #scheduleNextReplay()} to guarantee each reschedule advances to a grid point strictly
+   * after the previous one, so a wake landing exactly on (delay 0) or slightly before (nanoTime
+   * skew) the boundary it just processed does not re-select the same grid point and run a redundant
+   * cycle. Reset in {@link #start()} so a restarted generation re-anchors from scratch.
+   */
+  @GuardedBy("this")
+  protected long lastAlignedTargetMillis = Long.MIN_VALUE;
+  /**
+   * One-shot guard so a misconfigured {@link #REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY} logs its
+   * fall-back WARN once rather than every scheduling cycle (the epsilon is read live per cycle).
+   */
+  private final AtomicBoolean warnedInvalidEpsilon = new AtomicBoolean(false);
 
   public ReplicationLogDiscovery(final ReplicationLogTracker replicationLogTracker) {
     this.replicationLogTracker = replicationLogTracker;
@@ -178,6 +194,9 @@ public abstract class ReplicationLogDiscovery {
       executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
       scheduler = executor;
       isRunning = true;
+      // Re-anchor the aligned-target guard so this fresh generation schedules from the next grid
+      // point rather than being constrained by a target left over from a previous start()/stop().
+      lastAlignedTargetMillis = Long.MIN_VALUE;
       try {
         scheduleNextReplay();
       } catch (RuntimeException | Error e) {
@@ -235,18 +254,33 @@ public abstract class ReplicationLogDiscovery {
    */
   @GuardedBy("this")
   protected void scheduleNextReplay() {
-    long delayMs = computeAlignedInitialDelay();
+    long now = EnvironmentEdgeManager.currentTime();
+    long delayMs = computeAlignedInitialDelay(now);
+    // Guarantee the next fire targets a grid point strictly after the one the previous cycle
+    // targeted. A wake landing exactly on (delayMs == 0) or slightly before (nanoTime skew, small
+    // positive delay) the boundary we just processed would otherwise re-select the same grid point
+    // and run a redundant cycle before the clock advances past it; bump one full round in that
+    // case. targetMillis is derived from the same clock read as delayMs, so the two never skew.
+    long targetMillis = now + delayMs;
+    if (targetMillis <= lastAlignedTargetMillis) {
+      delayMs += roundTimeMills;
+      targetMillis += roundTimeMills;
+    }
+    lastAlignedTargetMillis = targetMillis;
     // Bind this cycle to the current scheduler generation. A stop()->start() restart
     // swaps in a new scheduler; a cycle launched on the old one must reschedule onto
     // that same (now shut-down) scheduler, not the new one.
     ScheduledExecutorService owner = scheduler;
-    LOG.info("Scheduling next replay for haGroup: {} in {}ms", haGroupName, delayMs);
+    LOG.debug("Scheduling next replay for haGroup: {} in {}ms", haGroupName, delayMs);
     owner.schedule(() -> runReplayCycle(owner), delayMs, TimeUnit.MILLISECONDS);
   }
 
   /**
    * Runs one replay pass and, unless the service has been stopped, schedules the next aligned pass.
-   * Exceptions from {@link #replay()} are swallowed so a single failure does not break the chain.
+   * A recoverable {@link Exception} from {@link #replay()} is logged and the chain continues, so a
+   * single failed round does not break it. A fatal {@link Error} (OOM, stack overflow, linkage) is
+   * logged, tears the chain down (marking the service not-running so the supervisor can rebuild it),
+   * and is rethrown -- never rescheduled onto a potentially corrupted JVM.
    * The reschedule is guarded by the same lock stop() uses; if stop() shut the scheduler down
    * first, {@link #isRunning} is false and we do not reschedule (and a concurrent shutdown that
    * rejects the submission is caught and treated as "stop the chain").
@@ -258,24 +292,49 @@ public abstract class ReplicationLogDiscovery {
   protected void runReplayCycle(ScheduledExecutorService owner) {
     try {
       replay();
-    } catch (Throwable t) {
-      LOG.error("Error during replay for haGroup: {}", haGroupName, t);
-    } finally {
+    } catch (Exception e) {
+      // Recoverable failure: log and fall through to reschedule so a single failed round does not
+      // break the self-rescheduling chain.
+      LOG.error("Error during replay for haGroup: {}", haGroupName, e);
+    } catch (Error e) {
+      // Fatal JVM condition (OutOfMemoryError, StackOverflowError, linkage failure). Do not swallow
+      // it and do not reschedule another replay on a potentially corrupted JVM. Log it first --
+      // otherwise the executor's discarded Future would hide it entirely -- then tear the chain
+      // down exactly as a broken reschedule does below (mark the service not-running and shut this
+      // executor down so the ReplicationLogReplayService supervisor can rebuild a fresh one) and
+      // rethrow. Guarded on owner == scheduler so a stale cycle does not tear down a newer
+      // generation's scheduler.
+      LOG.error("Fatal error during replay for haGroup: {}; replay polling stopped, will be "
+        + "restarted by the replay service supervisor", haGroupName, e);
       synchronized (this) {
-        if (isRunning && owner == scheduler) {
-          try {
-            scheduleNextReplay();
-          } catch (RejectedExecutionException ree) {
-            // benign: stop() shut the scheduler down between the guard check and submit
-            LOG.debug("Scheduler shutting down, skipping reschedule for haGroup: {}", haGroupName);
-          } catch (Throwable t) {
-            // Any other failure (e.g. a bad epsilon config value making
-            // computeAlignedInitialDelay throw) would otherwise be swallowed by the executor
-            // into the discarded Future and silently wedge the polling chain with
-            // isRunning==true -- the exact silent-stop this class is meant to prevent.
-            LOG.error("Failed to schedule next replay for haGroup: {}; replay polling has stopped",
-              haGroupName, t);
-          }
+        if (owner == scheduler) {
+          isRunning = false;
+          owner.shutdown();
+        }
+      }
+      throw e;
+    }
+    // Reached only on normal completion or a caught (recoverable) Exception -- never after a fatal
+    // Error, which propagates out above without rescheduling.
+    synchronized (this) {
+      if (isRunning && owner == scheduler) {
+        try {
+          scheduleNextReplay();
+        } catch (RejectedExecutionException ree) {
+          // benign: stop() shut the scheduler down between the guard check and submit
+          LOG.debug("Scheduler shutting down, skipping reschedule for haGroup: {}", haGroupName);
+        } catch (Throwable t) {
+          // scheduleNextReplay() failed unexpectedly (something other than the benign
+          // RejectedExecutionException handled above). The poll chain is already broken, so mark
+          // the service not-running and shut down this now-idle executor. The
+          // ReplicationLogReplayService supervisor re-invokes start() on its fixed-rate cadence
+          // and, seeing isRunning==false, rebuilds a fresh executor -- self-healing instead of
+          // silently wedging with isRunning==true (which would keep isRunning() reporting healthy
+          // while nothing polls, and make every later start() no-op as "already running").
+          LOG.error("Failed to schedule next replay for haGroup: {}; replay polling stopped, "
+            + "will be restarted by the replay service supervisor", haGroupName, t);
+          isRunning = false;
+          owner.shutdown();
         }
       }
     }
@@ -606,7 +665,17 @@ public abstract class ReplicationLogDiscovery {
    * @return the initial delay in milliseconds until the next round-eligible tick
    */
   protected long computeAlignedInitialDelay() {
-    long now = EnvironmentEdgeManager.currentTime();
+    return computeAlignedInitialDelay(EnvironmentEdgeManager.currentTime());
+  }
+
+  /**
+   * Overload of {@link #computeAlignedInitialDelay()} that aligns against a caller-supplied
+   * {@code now}, so a caller can derive both the delay and the absolute target grid instant
+   * ({@code now + delay}) from a single clock read without the two skewing across reads.
+   * @param now the reference wall-clock instant in milliseconds
+   * @return the delay in milliseconds until the next round-eligible tick at or after {@code now}
+   */
+  protected long computeAlignedInitialDelay(long now) {
     // Anchor epsilon past the eligibility instant (bufferMillis past a round line) so that a
     // scheduler firing slightly early (nanoTime skew) still clears the wall-clock gate.
     long anchor = bufferMillis + getAlignedDelayEpsilonMillis();
@@ -625,13 +694,41 @@ public abstract class ReplicationLogDiscovery {
   }
 
   /**
-   * Returns the epsilon margin (milliseconds) added to the aligned scheduler wake instant.
-   * @return the epsilon margin in milliseconds (default
-   *         {@link #DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS}).
+   * Returns the epsilon margin (milliseconds) added to the aligned scheduler wake instant. Guards
+   * against a misconfigured value: a non-numeric string, a negative value (which would move wakes
+   * <em>before</em> eligibility and reintroduce missed rounds), or a value {@code >= roundTimeMills}
+   * (which wraps through {@link Math#floorMod} and no longer represents the documented "epsilon
+   * after the boundary") all fall back to {@link #DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS} with a
+   * one-shot WARN. Riding over the misconfiguration keeps replay polling on a safe default rather
+   * than wedging the group, while the WARN makes the bad config visible.
+   * @return the epsilon margin in milliseconds, always within {@code [0, roundTimeMills)}.
    */
   public long getAlignedDelayEpsilonMillis() {
-    return conf.getLong(REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY,
-      DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS);
+    long epsilon;
+    try {
+      epsilon = conf.getLong(REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY,
+        DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS);
+    } catch (NumberFormatException e) {
+      // Hadoop's getLong throws (rather than returning the default) when the key is present but
+      // not parseable as a number.
+      warnInvalidEpsilon("non-numeric value \""
+        + conf.get(REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY) + "\"");
+      return DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS;
+    }
+    if (epsilon < 0 || epsilon >= roundTimeMills) {
+      warnInvalidEpsilon(epsilon + "ms");
+      return DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS;
+    }
+    return epsilon;
+  }
+
+  private void warnInvalidEpsilon(String badValueDescription) {
+    if (warnedInvalidEpsilon.compareAndSet(false, true)) {
+      LOG.warn(
+        "Invalid {} ({}) for haGroup: {}; must be within [0, {}). Falling back to default {}ms.",
+        REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY, badValueDescription, haGroupName,
+        roundTimeMills, DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS);
+    }
   }
 
   public ReplicationLogTracker getReplicationLogFileTracker() {

@@ -23,6 +23,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.*;
 
 import java.io.IOException;
@@ -216,36 +217,55 @@ public class ReplicationLogDiscoveryTest {
   }
 
   @Test
-  public void testRunReplayCycleReschedulesAfterReplayThrowsError() throws IOException {
+  public void testRunReplayCyclePropagatesErrorAndStopsChain() throws IOException {
+    // setUp() stubs isRunning() to always return true; read the real field for this lifecycle test.
+    Mockito.doCallRealMethod().when(discovery).isRunning();
     ScheduledExecutorService owner = mock(ScheduledExecutorService.class);
     discovery.setScheduler(owner);
     discovery.setRunning(true);
-    // An Error (OOME/StackOverflow/linkage) from replay() must be caught and logged, not slip
-    // past catch (Exception) and vanish into the executor's discarded Future.
-    doThrow(new Error("boom")).when(discovery).replay();
+    // A fatal Error (OOME/StackOverflow/linkage) from replay() must NOT be swallowed and must NOT
+    // reschedule another replay on a possibly-corrupted JVM. It is logged and rethrown, and the
+    // chain is torn down (isRunning=false + executor shutdown) so the supervisor rebuilds it.
+    Error boom = new Error("boom");
+    doThrow(boom).when(discovery).replay();
     doNothing().when(discovery).scheduleNextReplay();
 
-    discovery.runReplayCycle(owner); // must not propagate the Error
+    try {
+      discovery.runReplayCycle(owner);
+      fail("fatal Error from replay() must propagate out of runReplayCycle");
+    } catch (Error e) {
+      assertSame(boom, e);
+    }
 
     verify(discovery, times(1)).replay();
-    verify(discovery, times(1)).scheduleNextReplay();
+    verify(discovery, never()).scheduleNextReplay();
+    assertFalse("fatal Error must mark the service not-running for supervisor restart",
+      discovery.isRunning());
+    verify(owner, times(1)).shutdown();
   }
 
   @Test
   public void testRunReplayCycleDoesNotPropagateWhenRescheduleThrows() throws IOException {
+    // setUp() stubs isRunning() to always return true; read the real field for this lifecycle test.
+    Mockito.doCallRealMethod().when(discovery).isRunning();
     ScheduledExecutorService owner = mock(ScheduledExecutorService.class);
     discovery.setScheduler(owner);
     discovery.setRunning(true);
     doNothing().when(discovery).replay();
-    // A bad epsilon config value makes the reschedule path (computeAlignedInitialDelay ->
-    // getLong) throw NumberFormatException. It must be caught, not swallowed by the executor
-    // into the discarded Future, which would silently wedge the chain with isRunning==true.
+    // An unexpected failure in the reschedule path (e.g. computeAlignedInitialDelay -> getLong
+    // throwing NumberFormatException) must be caught, not swallowed by the executor into the
+    // discarded Future. The chain is already broken, so runReplayCycle marks the service
+    // not-running and shuts this executor down, letting the ReplicationLogReplayService supervisor
+    // restart it on its next tick -- instead of silently wedging with isRunning==true.
     doThrow(new NumberFormatException("bad epsilon")).when(discovery).scheduleNextReplay();
 
     discovery.runReplayCycle(owner); // must not propagate the reschedule failure
 
     verify(discovery, times(1)).replay();
     verify(discovery, times(1)).scheduleNextReplay();
+    assertFalse("reschedule failure must mark the service not-running for supervisor restart",
+      discovery.isRunning());
+    verify(owner, times(1)).shutdown();
   }
 
   @Test
@@ -267,7 +287,7 @@ public class ReplicationLogDiscoveryTest {
   public void testStaleCycleDoesNotRescheduleAfterRealRestart() throws IOException {
     // Real start()/stop()/start() establishes the generation state (not hand-set fields).
     // Far-future aligned delay => the auto-scheduled cycle never fires during the test.
-    doReturn(TimeUnit.HOURS.toMillis(1)).when(discovery).computeAlignedInitialDelay();
+    doReturn(TimeUnit.HOURS.toMillis(1)).when(discovery).computeAlignedInitialDelay(anyLong());
     doNothing().when(discovery).replay();
 
     discovery.start(); // gen-1
@@ -292,12 +312,42 @@ public class ReplicationLogDiscoveryTest {
     ScheduledExecutorService mockScheduler = mock(ScheduledExecutorService.class);
     discovery.setScheduler(mockScheduler);
     long knownDelay = 1_234L;
-    doReturn(knownDelay).when(discovery).computeAlignedInitialDelay();
+    doReturn(knownDelay).when(discovery).computeAlignedInitialDelay(anyLong());
 
     discovery.scheduleNextReplay();
 
     verify(mockScheduler, times(1)).schedule(any(Runnable.class), eq(knownDelay),
       eq(TimeUnit.MILLISECONDS));
+  }
+
+  @Test
+  public void testScheduleNextReplayAdvancesPastLastTargetedGrid() {
+    // A wake that lands exactly on the boundary it just processed (aligned delay == 0) must not
+    // re-select the same grid point: the next reschedule at that same instant advances a full
+    // round instead of scheduling 0 again (which would run a redundant, no-op cycle immediately).
+    ScheduledExecutorService mockScheduler = mock(ScheduledExecutorService.class);
+    discovery.setScheduler(mockScheduler);
+    long roundTimeMs = discovery.roundTimeMills;
+    // Pin wall-clock exactly on an epsilon-shifted grid tick so computeAlignedInitialDelay == 0.
+    long onTick = 5 * roundTimeMs + discovery.bufferMillis + discovery.getAlignedDelayEpsilonMillis();
+    AtomicLong mockTime = new AtomicLong(onTick);
+    EnvironmentEdgeManager.injectEdge(new EnvironmentEdge() {
+      @Override
+      public long currentTime() {
+        return mockTime.get();
+      }
+    });
+    try {
+      discovery.scheduleNextReplay(); // on tick -> delay 0, targets grid point `onTick`
+      discovery.scheduleNextReplay(); // same instant -> must bump one full round, not schedule 0
+
+      verify(mockScheduler, times(1)).schedule(any(Runnable.class), eq(0L),
+        eq(TimeUnit.MILLISECONDS));
+      verify(mockScheduler, times(1)).schedule(any(Runnable.class), eq(roundTimeMs),
+        eq(TimeUnit.MILLISECONDS));
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
   }
 
   @Test
@@ -491,6 +541,41 @@ public class ReplicationLogDiscoveryTest {
     assertEquals("Epsilon should be read from config", 1_500L,
       discovery.getAlignedDelayEpsilonMillis());
     conf.unset(ReplicationLogDiscovery.REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY);
+  }
+
+  @Test
+  public void testAlignedDelayEpsilonInvalidFallsBackToDefault() {
+    long roundTimeMs = discovery.roundTimeMills;
+    String key = ReplicationLogDiscovery.REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY;
+    long defaultEpsilon = ReplicationLogDiscovery.DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS;
+
+    // Valid boundary values pass through unchanged.
+    conf.setLong(key, 0L);
+    assertEquals("0 is in range and must pass through", 0L,
+      discovery.getAlignedDelayEpsilonMillis());
+    conf.setLong(key, roundTimeMs - 1);
+    assertEquals("roundTimeMills - 1 is in range and must pass through", roundTimeMs - 1,
+      discovery.getAlignedDelayEpsilonMillis());
+
+    // Negative would move wakes before eligibility -> clamp to default.
+    conf.setLong(key, -1L);
+    assertEquals("negative epsilon must fall back to default", defaultEpsilon,
+      discovery.getAlignedDelayEpsilonMillis());
+
+    // >= roundTimeMills wraps through floorMod -> clamp to default (boundary and beyond).
+    conf.setLong(key, roundTimeMs);
+    assertEquals("epsilon == roundTimeMills must fall back to default", defaultEpsilon,
+      discovery.getAlignedDelayEpsilonMillis());
+    conf.setLong(key, roundTimeMs + 5_000L);
+    assertEquals("epsilon > roundTimeMills must fall back to default", defaultEpsilon,
+      discovery.getAlignedDelayEpsilonMillis());
+
+    // Non-numeric value: Hadoop's getLong throws NumberFormatException -> clamp to default.
+    conf.set(key, "not-a-number");
+    assertEquals("non-numeric epsilon must fall back to default", defaultEpsilon,
+      discovery.getAlignedDelayEpsilonMillis());
+
+    conf.unset(key);
   }
 
   @Test
