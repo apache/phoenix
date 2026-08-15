@@ -383,6 +383,14 @@ abstract public class BaseScannerRegionObserver implements RegionObserver {
     options.setTTL(HConstants.FOREVER);
     options.setMaxVersions(Integer.MAX_VALUE);
     options.setMinVersions(Integer.MAX_VALUE);
+    // Prevent HBase from purging orphaned delete markers (those without corresponding
+    // puts) during compaction. Without this, DropDeletesCompactionScanQueryMatcher drops
+    // delete markers whose timestamp < earliestPutTs, before Phoenix CompactionScanner
+    // can see them. Once delivered to CompactionScanner, orphaned markers within the
+    // max-lookback window are retained by getLastRowVersionInMaxLookbackWindow (which
+    // unconditionally retains all cells with timestamp > maxLookbackWindowStart), and
+    // markers outside max-lookback are purged — same lifecycle as normal deleted rows.
+    options.setTimeToPurgeDeletes(Long.MAX_VALUE);
   }
 
   @Override

@@ -139,14 +139,18 @@ public final class BackwardCompatibilityTestUtil {
       BackwardCompatibilityIT.class.getClassLoader().getResourceAsStream(COMPATIBLE_CLIENTS_JSON)) {
       assertNotNull(inputStream);
       JsonNode jsonNode = mapper.readTree(inputStream);
-      JsonNode HBaseProfile = jsonNode.get(hbaseProfile);
-      List<MavenCoordinates> artifacts = new ArrayList<>();
-      for (final JsonNode clientVersion : HBaseProfile) {
-        artifacts.add(mapper.treeToValue(clientVersion, MavenCoordinates.class));
+      JsonNode hbaseProfileNode = jsonNode.get(hbaseProfile);
+      if (hbaseProfileNode == null) {
+        return clientVersionGroups;
       }
-      if (!artifacts.isEmpty()) {
-        MavenCoordinates primary = artifacts.get(0);
-        clientVersionGroups.add(new ClientVersionGroup(primary, artifacts));
+      for (final JsonNode clientVersionGroupNode : hbaseProfileNode) {
+        List<MavenCoordinates> artifacts = new ArrayList<>();
+        for (final JsonNode artifactNode : clientVersionGroupNode) {
+          artifacts.add(mapper.treeToValue(artifactNode, MavenCoordinates.class));
+        }
+        if (!artifacts.isEmpty()) {
+          clientVersionGroups.add(new ClientVersionGroup(artifacts.get(0), artifacts));
+        }
       }
     }
     return clientVersionGroups;

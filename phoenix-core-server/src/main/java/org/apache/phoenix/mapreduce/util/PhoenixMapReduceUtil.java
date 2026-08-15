@@ -17,14 +17,26 @@
  */
 package org.apache.phoenix.mapreduce.util;
 
+import com.fasterxml.jackson.annotation.JsonAutoDetect;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.spi.json.JsonProvider;
+import com.lmax.disruptor.EventFactory;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import org.antlr.runtime.CharStream;
+import org.apache.commons.csv.CSVFormat;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hbase.mapreduce.TableMapReduceUtil;
+import org.apache.hadoop.hbase.metrics.Gauge;
+import org.apache.hadoop.hbase.metrics.impl.MetricRegistriesImpl;
 import org.apache.hadoop.mapreduce.InputFormat;
 import org.apache.hadoop.mapreduce.Job;
 import org.apache.hadoop.mapreduce.lib.db.DBWritable;
+import org.apache.htrace.SpanReceiver;
+import org.apache.phoenix.compat.hbase.CompatUtil;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.PhoenixInputFormat;
 import org.apache.phoenix.mapreduce.PhoenixOutputFormat;
@@ -32,16 +44,65 @@ import org.apache.phoenix.mapreduce.util.PhoenixConfigurationUtil.SchemaType;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.joda.time.Chronology;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Utility class for setting Configuration parameters for the Map Reduce job
  */
 public final class PhoenixMapReduceUtil {
 
+  private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixMapReduceUtil.class);
+
   public static final String INVALID_TIME_RANGE_EXCEPTION_MESSAGE = "Invalid time range for table";
 
   private PhoenixMapReduceUtil() {
 
+  }
+
+  /**
+   * Add Phoenix and its dependency jars to the job configuration so they are shipped to YARN
+   * containers via the distributed cache. Analogous to HBase's
+   * {@link TableMapReduceUtil#addHBaseDependencyJars(Configuration)}.
+   * <p>
+   * Callers should still invoke {@link TableMapReduceUtil#addDependencyJars(Job)} for HBase's own
+   * jars before calling this method.
+   */
+  public static void addPhoenixDependencyJars(Configuration conf) throws IOException {
+    TableMapReduceUtil.addDependencyJarsForClasses(conf,
+      // phoenix-core-client
+      PhoenixConnection.class,
+      // phoenix-hbase-compat
+      CompatUtil.class,
+      // phoenix-shaded-guava
+      org.apache.phoenix.thirdparty.com.google.common.collect.Lists.class,
+      // phoenix-shaded-commons-cli
+      org.apache.phoenix.thirdparty.org.apache.commons.cli.Options.class,
+      // joda-time
+      Chronology.class,
+      // antlr-runtime
+      CharStream.class,
+      // htrace-core
+      SpanReceiver.class,
+      // hbase-metrics-api (Gauge)
+      Gauge.class,
+      // hbase-metrics (MetricRegistriesImpl)
+      MetricRegistriesImpl.class,
+      // disruptor
+      EventFactory.class,
+      // jackson-core
+      TypeReference.class,
+      // jackson-databind
+      ObjectMapper.class,
+      // jackson-annotations
+      JsonAutoDetect.class,
+      // commons-csv
+      CSVFormat.class,
+      // json-path
+      JsonProvider.class,
+      // bson
+      org.bson.io.BsonInput.class);
   }
 
   /**

@@ -44,7 +44,7 @@ public class ConcurrentMutationsIT extends ParallelStatsDisabledIT {
 
   private static class MyClock extends EnvironmentEdge {
     public volatile long time;
-    boolean shouldAdvance = true;
+    volatile boolean shouldAdvance = true;
 
     public MyClock(long time) {
       this.time = time;

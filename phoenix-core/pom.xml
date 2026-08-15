@@ -88,6 +88,11 @@
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
+      <artifactId>hbase-hadoop-compat</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.hbase</groupId>
       <artifactId>hbase-metrics-api</artifactId>
       <scope>test</scope>
     </dependency>
@@ -407,7 +412,6 @@
     <dependency>
       <groupId>org.bouncycastle</groupId>
       <artifactId>bcprov-jdk18on</artifactId>
-      <version>1.79</version>
       <scope>test</scope>
     </dependency>
     <!-- logging end -->
@@ -482,6 +486,10 @@
                  compile time to emit BenchmarkList / JMH runner classes, so static import
                  analysis doesn't see it. -->
             <ignoredUnusedDeclaredDependency>org.openjdk.jmh:jmh-generator-annprocess</ignoredUnusedDeclaredDependency>
+            <!-- bcprov is declared as bcprov-jdk18on but on some HBase profiles (e.g. 2.6.0)
+                 HBase transitively pulls the older bcprov-jdk15on, so jdk18on is reported as
+                 unused-declared. Ignore it here (this child list overrides the parent's). -->
+            <ignoredUnusedDeclaredDependency>org.bouncycastle:bcprov-jdk18on</ignoredUnusedDeclaredDependency>
           </ignoredUnusedDeclaredDependencies>
           <ignoredNonTestScopedDependencies>
             <ignoredNonTestScopedDependency>org.apache.phoenix:phoenix-core-client</ignoredNonTestScopedDependency>

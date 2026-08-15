@@ -332,8 +332,12 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
       for (int j = 0; j < nRows; ++j) {
         if (rand.nextInt(nRows) % 2 == 0) {
           boolean isDelete;
-          if (i > nBatches / 2 && !gotDelete) {
-            // Force a delete if there was none so far.
+          // Only force a delete on rows that have already been upserted in this run; deleting a
+          // never-inserted row produces a no-op tombstone on the data table while CDC still
+          // surfaces a later upsert for the same key, deterministically tripping the
+          // delete-vs-upsert assertion in verifyChangesViaSCN. If no candidate exists yet, defer
+          // the forced delete to a later batch (the loop will reconsider on the next iteration).
+          if (i > nBatches / 2 && !gotDelete && mutatedRows.contains(rows.get(j))) {
             isDelete = true;
           } else {
             isDelete = mutatedRows.contains(rows.get(j)) && rand.nextInt(5) == 0;
@@ -396,15 +400,25 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     String datatableName, String tid, List<Set<ChangeRow>> batches, String cdcName)
     throws Exception {
     EnvironmentEdgeManager.injectEdge(injectEdge);
+    long latestChangeTS = injectEdge.currentTime();
     try (Connection conn = committer.getConnection(tid)) {
       for (Set<ChangeRow> batch : batches) {
         for (ChangeRow changeRow : batch) {
           addChange(conn, tableName, changeRow);
+          if (changeRow.changeTS > latestChangeTS) {
+            latestChangeTS = changeRow.changeTS;
+          }
         }
         committer.commit(conn);
       }
     }
-    committer.reset();
+    // Keep the manual edge installed for the remainder of the test so
+    // EnvironmentEdgeManager.currentTimeMillis() does not silently revert
+    // to the wall clock and trip QueryCompiler.verifySCN against the
+    // configured max-lookback age. Pin to the latest changeTS so SCN-bounded
+    // reads of the just-applied mutations remain in-window. Per-test
+    // cleanup is the responsibility of the suite's @After hook.
+    injectEdge.setValue(latestChangeTS);
 
     // For debug: uncomment to see the exact HBase cells.
     dumpCells(schemaName, tableName, datatableName, cdcName);
@@ -614,6 +628,149 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     return changes;
   }
 
+  protected List<ChangeRow> generateChangesForPrePostImage(long startTS, String[] tenantids,
+    String tableName, CommitAdapter committer) throws Exception {
+    List<ChangeRow> changes = new ArrayList<>();
+    EnvironmentEdgeManager.injectEdge(injectEdge);
+    injectEdge.setValue(startTS);
+    committer.init();
+    Map<String, Object> rowid1 = new HashMap() {
+      {
+        put("K", 1);
+      }
+    };
+    Map<String, Object> rowid2 = new HashMap() {
+      {
+        put("K", 2);
+      }
+    };
+    long ts = startTS;
+    for (String tid : tenantids) {
+      try (Connection conn = committer.getConnection(tid)) {
+        // Initial inserts for two rows at the same timestamp (one batch, multiple data rows).
+        changes.add(
+          addChange(conn, tableName, new ChangeRow(tid, ts, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 1L);
+              put("V2", 10L);
+              put("V3", 1000L);
+              put("B.VB", 100L);
+            }
+          })));
+        changes.add(
+          addChange(conn, tableName, new ChangeRow(tid, ts, rowid2, new TreeMap<String, Object>() {
+            {
+              put("V1", 200L);
+              put("V2", 2000L);
+            }
+          })));
+        committer.commit(conn);
+
+        // Partial update: only V1 changes, so V2/V3/B.VB pre-images come from the prior version.
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 2L);
+            }
+          })));
+        committer.commit(conn);
+
+        // V3 and B.VB remain untouched here, so they stay sparse relative to the V1/V2 churn.
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 3L);
+              put("V2", 20L);
+            }
+          })));
+        committer.commit(conn);
+
+        // Column-level null -> DeleteColumn marker on V2.
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V2", null);
+            }
+          })));
+        committer.commit(conn);
+
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 4L);
+              put("B.VB", 400L);
+            }
+          })));
+        committer.commit(conn);
+
+        // Full-row delete -> DeleteFamily marker.
+        changes.add(addChange(conn, tableName, new ChangeRow(tid, ts += 100, rowid1, null)));
+        committer.commit(conn);
+
+        // Re-insert after delete: PRE image must be empty (bounded by the delete family marker).
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 5L);
+              put("V2", 50L);
+            }
+          })));
+        committer.commit(conn);
+
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("B.VB", 500L);
+            }
+          })));
+        committer.commit(conn);
+
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 6L);
+              put("V2", 60L);
+              put("V3", 6000L);
+              put("B.VB", 600L);
+            }
+          })));
+        committer.commit(conn);
+
+        // Second row mutated again so the scan batch keeps covering multiple data rows.
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid2, new TreeMap<String, Object>() {
+            {
+              put("V1", 201L);
+            }
+          })));
+        committer.commit(conn);
+
+        // Consecutive full-row deletes: CDC collapses these into a single delete event.
+        changes.add(addChange(conn, tableName, new ChangeRow(tid, ts += 100, rowid1, null)));
+        committer.commit(conn);
+        changes.add(addChange(conn, tableName, new ChangeRow(tid, ts += 100, rowid1, null)));
+        committer.commit(conn);
+
+        // Re-insert a single column after the deletes.
+        changes.add(addChange(conn, tableName,
+          new ChangeRow(tid, ts += 100, rowid1, new TreeMap<String, Object>() {
+            {
+              put("V1", 7L);
+            }
+          })));
+        committer.commit(conn);
+      }
+      ts += 100;
+    }
+    committer.reset();
+    for (int i = 0; i < changes.size(); ++i) {
+      LOGGER.debug("----- generated change: " + i + " tenantId:" + changes.get(i).tenantId
+        + " changeTS: " + changes.get(i).changeTS + " pks: " + changes.get(i).pks + " change: "
+        + changes.get(i).change);
+    }
+    return changes;
+  }
+
   protected void verifyChangesViaSCN(String tenantId, Connection conn, String cdcFullName,
     Map<String, String> pkColumns, String dataTableName, Map<String, String> dataColumns,
     List<ChangeRow> changes, long startTS, long endTS) throws Exception {
@@ -682,14 +839,19 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
       if (!changeRow.getChangeType().equals(cdcObj.get(CDC_EVENT_TYPE))) {
         assertEquals(changeDesc, changeRow.getChangeType(), cdcObj.get(CDC_EVENT_TYPE));
       }
-      if (
-        cdcObj.containsKey(CDC_PRE_IMAGE) && !((Map) cdcObj.get(CDC_PRE_IMAGE)).isEmpty()
-          && changeScopes.contains(PTable.CDCChangeScope.PRE)
-      ) {
-        Map<String, Object> preImage = getRowImage(changeDesc, tenantId, dataTableName, dataColumns,
-          changeRow, changeRow.changeTS);
-        assertEquals(changeDesc, preImage,
-          fillInNulls((Map<String, Object>) cdcObj.get(CDC_PRE_IMAGE), dataColumns.keySet()));
+      if (changeScopes.contains(PTable.CDCChangeScope.PRE)) {
+        Map<String, Object> cdcPreImage = (Map<String, Object>) cdcObj.get(CDC_PRE_IMAGE);
+        Map<String, Object> expectedPreImage = getRowImage(changeDesc, tenantId, dataTableName,
+          dataColumns, changeRow, changeRow.changeTS, false);
+        if (expectedPreImage == null) {
+          // No live row state immediately before the change (first insert, or re-insert after a
+          // delete): the pre-image must be empty or absent.
+          assertTrue(changeDesc + " expected empty pre-image but got: " + cdcPreImage,
+            cdcPreImage == null || cdcPreImage.isEmpty());
+        } else {
+          assertEquals(changeDesc, expectedPreImage,
+            fillInNulls(cdcPreImage, dataColumns.keySet()));
+        }
       }
       if (changeScopes.contains(PTable.CDCChangeScope.CHANGE)) {
         assertEquals(changeDesc,
@@ -716,6 +878,19 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
   protected Map<String, Object> getRowImage(String changeDesc, String tenantId,
     String dataTableName, Map<String, String> dataColumns, ChangeRow changeRow, long scnTimestamp)
     throws Exception {
+    return getRowImage(changeDesc, tenantId, dataTableName, dataColumns, changeRow, scnTimestamp,
+      true);
+  }
+
+  /**
+   * Reads the row image (all data columns, nulls included) as of {@code scnTimestamp}. When
+   * {@code mustExist} is true, the row is asserted to exist. When false, a missing row returns
+   * {@code null} so callers can distinguish "no live row state at this SCN" from "row present (with
+   * possibly null column values)" - used to assert expected-empty vs expected-nonempty pre-images.
+   */
+  protected Map<String, Object> getRowImage(String changeDesc, String tenantId,
+    String dataTableName, Map<String, String> dataColumns, ChangeRow changeRow, long scnTimestamp,
+    boolean mustExist) throws Exception {
     Map<String, Object> image = new HashMap<>();
     Properties props = new Properties();
     props.setProperty(PhoenixRuntime.CURRENT_SCN_ATTRIB, Long.toString(scnTimestamp));
@@ -734,7 +909,12 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
       }
       // Create projection without namespace.
       ResultSet rs = stmt.executeQuery();
-      assertTrue(changeDesc, rs.next());
+      if (!rs.next()) {
+        if (mustExist) {
+          fail(changeDesc + " expected data table row to exist at SCN " + scnTimestamp);
+        }
+        return null;
+      }
       for (String colName : projections.keySet()) {
         PDataType dt = PDataType.fromSqlTypeName(dataColumns.get(colName));
         image.put(colName, getJsonEncodedValue(rs.getObject(projections.get(colName)), dt));
@@ -950,6 +1130,13 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
       EnvironmentEdgeManager.injectEdge(injectEdge);
     }
 
+    /**
+     * Uninstall the manual time edge. Callers should NOT invoke this from inside test bodies that
+     * still need to issue SCN-bounded reads of the just-applied mutations: doing so reverts
+     * {@link EnvironmentEdgeManager#currentTimeMillis()} to the wall clock and may push the SCN
+     * outside the configured max-lookback window. Per-test cleanup belongs in an {@code @After}
+     * hook instead (see {@code CDCQueryIT#afterTest}).
+     */
     public void reset() {
       EnvironmentEdgeManager.reset();
     }

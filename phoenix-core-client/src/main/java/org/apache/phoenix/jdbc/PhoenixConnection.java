@@ -640,7 +640,13 @@ public class PhoenixConnection
         throw new TableNotFoundException(fullTableName);
       }
     } catch (TableNotFoundException e) {
-      table = getTableNoCache(pTenantId, fullTableName, timestamp);
+      // timestamp is @Nullable Long; avoid a Long -> long auto-unboxing NPE when the caller
+      // asked for the latest table (null timestamp) and the cache missed.
+      if (timestamp == null) {
+        table = getTableNoCache(pTenantId, fullTableName);
+      } else {
+        table = getTableNoCache(pTenantId, fullTableName, timestamp);
+      }
     }
     return table;
   }

@@ -70,6 +70,7 @@ import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -143,6 +144,14 @@ public class CDCQueryIT extends CDCBaseIT {
     EnvironmentEdgeManager.reset();
     injectEdge = new ManualEnvironmentEdge();
     injectEdge.setValue(EnvironmentEdgeManager.currentTimeMillis());
+  }
+
+  @After
+  public void afterTest() {
+    // CDCBaseIT.applyMutations intentionally leaves the manual edge installed so
+    // SCN-bounded reads in the test body remain inside the max-lookback window.
+    // Restore the real clock here so per-test isolation is preserved.
+    EnvironmentEdgeManager.reset();
   }
 
   private void cdcIndexShouldNotBeUsedForDataTableQueries(Connection conn, String dataTableName,
@@ -337,7 +346,6 @@ public class CDCQueryIT extends CDCBaseIT {
 
     String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
     try (Connection conn = newConnection(tenantId)) {
-      // For debug: uncomment to see the exact results logged to console.
       dumpCDCResults(conn, cdcName, new TreeMap<String, String>() {
         {
           put("K", "INTEGER");
@@ -434,6 +442,85 @@ public class CDCQueryIT extends CDCBaseIT {
     }
   }
 
+  /**
+   * Exercises CDC PRE/POST image reconstruction over a row with a deep stack of cell versions
+   * interleaved with column-level nulls, full-row deletes, consecutive deletes and re-inserts. This
+   * specifically stresses the server-side version pruning applied to the data table scan: the PRE
+   * and POST images are recomputed independently via SCN queries on the data table and compared
+   * against the CDC output, so any over-pruning of needed versions surfaces as a mismatch.
+   */
+  @Test
+  public void testSelectCDCPreAndPostImageWithVersionPruning() throws Exception {
+    String cdcName, cdc_sql;
+    String schemaName = getSchemaName();
+    String tableName = getTableOrViewName(schemaName);
+    String datatableName = tableName;
+    try (Connection conn = newConnection()) {
+      createTable(conn,
+        "CREATE TABLE  " + tableName + " (" + (multitenant ? "TENANT_ID CHAR(5) NOT NULL, " : "")
+          + "k INTEGER NOT NULL, v1 INTEGER, v2 INTEGER, v3 INTEGER, B.vb INTEGER, "
+          + "CONSTRAINT PK PRIMARY KEY " + (multitenant ? "(TENANT_ID, k) " : "(k)") + ")",
+        encodingScheme, multitenant, tableSaltBuckets, false, null);
+      if (forView) {
+        String viewName = getTableOrViewName(schemaName);
+        createTable(conn, "CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName,
+          encodingScheme);
+        tableName = viewName;
+      }
+      cdcName = getCDCName();
+      cdc_sql = "CREATE CDC " + cdcName + " ON " + tableName;
+      createCDC(conn, cdc_sql, encodingScheme);
+    }
+
+    String tenantId = multitenant ? "1000" : null;
+    String[] tenantids = { tenantId };
+    if (multitenant) {
+      tenantids = new String[] { tenantId, "2000" };
+    }
+
+    long startTS = System.currentTimeMillis();
+    List<ChangeRow> changes =
+      generateChangesForPrePostImage(startTS, tenantids, tableName, COMMIT_SUCCESS);
+    long currentTime = System.currentTimeMillis();
+    long endTS = changes.get(changes.size() - 1).getTimestamp() + 1;
+    if (endTS > currentTime) {
+      Thread.sleep(endTS - currentTime);
+    }
+
+    Map<String, String> dataColumns = new TreeMap<String, String>() {
+      {
+        put("V1", "INTEGER");
+        put("V2", "INTEGER");
+        put("V3", "INTEGER");
+        put("B.VB", "INTEGER");
+      }
+    };
+    String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
+    try (Connection conn = newConnection(tenantId)) {
+      dumpCDCResults(conn, cdcName, new TreeMap<String, String>() {
+        {
+          put("K", "INTEGER");
+        }
+      }, addPartitionInList(conn, cdcFullName,
+        "SELECT /*+ CDC_INCLUDE(PRE, POST) */ PHOENIX_ROW_TIMESTAMP(), K," + "\"CDC JSON\" FROM "
+          + cdcFullName));
+
+      // Verify PRE and POST images are correctly reconstructed from the version-pruned data scan.
+      verifyChangesViaSCN(tenantId,
+        getCDCQueryPreparedStatement(conn, cdcFullName,
+          "SELECT /*+ CDC_INCLUDE(PRE, POST) */ * FROM " + cdcFullName, startTS, endTS)
+            .executeQuery(),
+        datatableName, dataColumns, changes, PRE_POST_IMG);
+
+      // Cross-check CHANGE, PRE and POST images together.
+      verifyChangesViaSCN(tenantId,
+        getCDCQueryPreparedStatement(conn, cdcFullName,
+          "SELECT /*+ CDC_INCLUDE(CHANGE, PRE, POST) */ * FROM " + cdcFullName, startTS, endTS)
+            .executeQuery(),
+        datatableName, dataColumns, changes, ALL_IMG);
+    }
+  }
+
   @Test
   public void testSelectGeneric() throws Exception {
     String cdcName, cdc_sql;
@@ -494,7 +581,6 @@ public class CDCQueryIT extends CDCBaseIT {
 
     String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
     try (Connection conn = newConnection(tenantId)) {
-      // For debug: uncomment to see the exact results logged to console.
       dumpCDCResults(conn, cdcName, pkColumns, addPartitionInList(conn, cdcFullName,
         "SELECT /*+ CDC_INCLUDE(PRE, CHANGE) */ * FROM " + cdcFullName));
 
@@ -598,7 +684,6 @@ public class CDCQueryIT extends CDCBaseIT {
     };
 
     try (Connection conn = newConnection(tenantId)) {
-      // For debug: uncomment to see the exact results logged to console.
       dumpCDCResults(conn, cdcName, new TreeMap<String, String>() {
         {
           put("K", "INTEGER");
@@ -681,7 +766,6 @@ public class CDCQueryIT extends CDCBaseIT {
 
     String cdcFullName = SchemaUtil.getTableName(schemaName, cdcName);
     try (Connection conn = newConnection(tenantId)) {
-      // For debug: uncomment to see the exact results logged to console.
       dumpCDCResults(conn, cdcName, pkColumns,
         "SELECT /*+ CDC_INCLUDE(PRE, CHANGE) */ * FROM " + cdcFullName);
 
@@ -703,7 +787,7 @@ public class CDCQueryIT extends CDCBaseIT {
         }
       }
       Random rand = new Random();
-      int randMinTSpos = rand.nextInt(lastDeletionTSpos - 1);
+      int randMinTSpos = rand.nextInt(Math.max(1, lastDeletionTSpos - 1));
       int randMaxTSpos =
         randMinTSpos + 1 + rand.nextInt(uniqueTimestamps.size() - (randMinTSpos + 1));
       verifyChangesViaSCN(tenantId, conn, cdcFullName, pkColumns, datatableName, dataColumns,

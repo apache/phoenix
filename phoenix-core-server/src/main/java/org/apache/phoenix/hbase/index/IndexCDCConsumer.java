@@ -112,7 +112,14 @@ public class IndexCDCConsumer implements Runnable {
    */
   public static final String INDEX_CDC_CONSUMER_POLL_INTERVAL_MS =
     "phoenix.index.cdc.consumer.poll.interval.ms";
-  private static final long DEFAULT_POLL_INTERVAL_MS = 1000;
+  private static final long DEFAULT_POLL_INTERVAL_MS = 500;
+
+  /**
+   * The interval in milliseconds between polls when the previous poll found no new events.
+   */
+  public static final String INDEX_CDC_CONSUMER_IDLE_POLL_INTERVAL_MS =
+    "phoenix.index.cdc.consumer.idle.poll.interval.ms";
+  private static final long DEFAULT_IDLE_POLL_INTERVAL_MS = 4000;
 
   /**
    * The time buffer in milliseconds subtracted from current time when querying CDC mutations to
@@ -130,15 +137,24 @@ public class IndexCDCConsumer implements Runnable {
    */
   public static final String INDEX_CDC_CONSUMER_MAX_DATA_VISIBILITY_RETRIES =
     "phoenix.index.cdc.consumer.max.data.visibility.retries";
-  private static final int DEFAULT_MAX_DATA_VISIBILITY_RETRIES = 10;
+  private static final int DEFAULT_MAX_DATA_VISIBILITY_RETRIES = 15;
 
   public static final String INDEX_CDC_CONSUMER_RETRY_PAUSE_MS =
     "phoenix.index.cdc.consumer.retry.pause.ms";
-  private static final long DEFAULT_RETRY_PAUSE_MS = 2000;
+  private static final long DEFAULT_RETRY_PAUSE_MS = 200;
 
   public static final String INDEX_CDC_CONSUMER_PARENT_PROGRESS_PAUSE_MS =
     "phoenix.index.cdc.consumer.parent.progress.pause.ms";
   private static final long DEFAULT_PARENT_PROGRESS_PAUSE_MS = 15000;
+
+  /**
+   * Interval between {@code cdcIndexUpdateLag} samples emitted while the consumer is sleeping (idle
+   * poll, backoff, parent-progress wait, etc.). Clamped to at least 50ms.
+   */
+  public static final String INDEX_CDC_CONSUMER_LAG_SAMPLE_INTERVAL_MS =
+    "phoenix.index.cdc.consumer.lag.sample.interval.ms";
+  private static final long DEFAULT_LAG_SAMPLE_INTERVAL_MS = 5000L;
+  private static final long MIN_LAG_SAMPLE_INTERVAL_MS = 50L;
 
   private final RegionCoprocessorEnvironment env;
   private final String dataTableName;
@@ -148,12 +164,19 @@ public class IndexCDCConsumer implements Runnable {
   private final long startupDelayMs;
   private final int batchSize;
   private final long pollIntervalMs;
+  private final long idlePollIntervalMs;
   private final long timestampBufferMs;
   private final int maxDataVisibilityRetries;
   private final long parentProgressPauseMs;
   private final Configuration config;
   private final boolean serializeCDCMutations;
   private final MetricsIndexCDCConsumerSource metricSource;
+  private final long lagSampleIntervalMs;
+  private final IndexCDCConsumerProgress progress;
+  // Flipped true once hasEventuallyConsistentIndexes() confirms this region actually has an EC
+  // index. Until then sleepWithLagSampling does not emit, so tables that immediately exit "no EC
+  // index" produce no cold-start lag samples into the global / per-table histograms.
+  private volatile boolean lagEmissionEnabled = false;
   private volatile boolean stopped = false;
   private Thread consumerThread;
   private boolean hasParentPartitions = false;
@@ -222,13 +245,21 @@ public class IndexCDCConsumer implements Runnable {
     this.batchSize = baseBatchSize + jitter;
     this.pollIntervalMs =
       config.getLong(INDEX_CDC_CONSUMER_POLL_INTERVAL_MS, DEFAULT_POLL_INTERVAL_MS);
+    long baseIdlePollInterval =
+      config.getLong(INDEX_CDC_CONSUMER_IDLE_POLL_INTERVAL_MS, DEFAULT_IDLE_POLL_INTERVAL_MS);
+    this.idlePollIntervalMs =
+      baseIdlePollInterval + ThreadLocalRandom.current().nextLong(baseIdlePollInterval / 5 + 1);
     this.timestampBufferMs =
       config.getLong(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, DEFAULT_TIMESTAMP_BUFFER_MS);
     this.maxDataVisibilityRetries = config.getInt(INDEX_CDC_CONSUMER_MAX_DATA_VISIBILITY_RETRIES,
       DEFAULT_MAX_DATA_VISIBILITY_RETRIES);
     this.parentProgressPauseMs =
       config.getLong(INDEX_CDC_CONSUMER_PARENT_PROGRESS_PAUSE_MS, DEFAULT_PARENT_PROGRESS_PAUSE_MS);
+    this.lagSampleIntervalMs = Math.max(MIN_LAG_SAMPLE_INTERVAL_MS,
+      config.getLong(INDEX_CDC_CONSUMER_LAG_SAMPLE_INTERVAL_MS, DEFAULT_LAG_SAMPLE_INTERVAL_MS));
     this.metricSource = MetricsIndexerSourceFactory.getInstance().getIndexCDCConsumerSource();
+    this.progress = new IndexCDCConsumerProgress(EnvironmentEdgeManager.currentTimeMillis(),
+      this.timestampBufferMs);
     DelegateRegionCoprocessorEnvironment indexWriterEnv =
       new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
     this.indexWriter =
@@ -259,13 +290,23 @@ public class IndexCDCConsumer implements Runnable {
   }
 
   /**
-   * Sleeps for the specified duration if the consumer has not been stopped.
-   * @param millis the duration to sleep in milliseconds.
-   * @throws InterruptedException if the thread is interrupted while sleeping.
+   * Sleeps for up to {@code totalMillis}, emitting a {@code cdcIndexUpdateLag} sample at the start
+   * of each {@code lagSampleIntervalMs} slice once {@link #lagEmissionEnabled} is set. Aborts
+   * immediately when stopped. Used for all consumer-thread sleeps so the lag metric stays
+   * non-silent across idle, failure, post-startup, and parent-replay phases.
    */
-  private void sleepIfNotStopped(long millis) throws InterruptedException {
-    if (!stopped) {
-      Thread.sleep(millis);
+  private void sleepWithLagSampling(long totalMillis) throws InterruptedException {
+    long deadline = EnvironmentEdgeManager.currentTimeMillis() + totalMillis;
+    while (!stopped) {
+      long now = EnvironmentEdgeManager.currentTimeMillis();
+      if (lagEmissionEnabled) {
+        metricSource.updateCdcLag(dataTableName, progress.currentLagMs(now));
+      }
+      long remaining = deadline - now;
+      if (remaining <= 0) {
+        return;
+      }
+      Thread.sleep(Math.min(remaining, lagSampleIntervalMs));
     }
   }
 
@@ -374,7 +415,7 @@ public class IndexCDCConsumer implements Runnable {
           "Error while retrieving partition keys from CDC_STREAM for partition {} table {}. "
             + "Retry #{}, sleeping {} ms before retrying...",
           partitionId, dataTableName, retryCount, sleepTime, e);
-        sleepIfNotStopped(sleepTime);
+        sleepWithLagSampling(sleepTime);
       }
     }
     return null;
@@ -405,7 +446,7 @@ public class IndexCDCConsumer implements Runnable {
   public void run() {
     try {
       if (startupDelayMs > 0 && getCDCStreamNumPartitions() <= 1) {
-        sleepIfNotStopped(startupDelayMs);
+        sleepWithLagSampling(startupDelayMs);
       }
       if (stopped) {
         return;
@@ -415,13 +456,16 @@ public class IndexCDCConsumer implements Runnable {
           dataTableName);
         return;
       }
+      // Only enable lag sampling once we've confirmed this table actually has an EC index,
+      // so non-EC-indexed tables don't pollute the lag histograms with cold-start samples.
+      lagEmissionEnabled = true;
       LOG.info(
         "IndexCDCConsumer started for table {} region {}"
-          + " [batchSize: {}, pollIntervalMs: {}, timestampBufferMs: {}, startupDelayMs: {},"
-          + " pause: {}, maxDataVisibilityRetries: {}, parentProgressPauseMs: {},"
-          + " serializeCDCMutations: {}]",
-        dataTableName, encodedRegionName, batchSize, pollIntervalMs, timestampBufferMs,
-        startupDelayMs, pause, maxDataVisibilityRetries, parentProgressPauseMs,
+          + " [batchSize: {}, pollIntervalMs: {}, idlePollIntervalMs: {}, timestampBufferMs: {},"
+          + " startupDelayMs: {}, pause: {}, maxDataVisibilityRetries: {},"
+          + " parentProgressPauseMs: {}, serializeCDCMutations: {}]",
+        dataTableName, encodedRegionName, batchSize, pollIntervalMs, idlePollIntervalMs,
+        timestampBufferMs, startupDelayMs, pause, maxDataVisibilityRetries, parentProgressPauseMs,
         serializeCDCMutations);
       if (!waitForCDCStreamEntry()) {
         LOG.error(
@@ -438,48 +482,59 @@ public class IndexCDCConsumer implements Runnable {
           dataTableName, encodedRegionName);
         return;
       } else if (lastProcessedTimestamp > 0) {
+        progress.recordProcessed(lastProcessedTimestamp);
         LOG.info(
           "Found existing tracker entry for table {} region {} with lastTimestamp {}. "
             + "Resuming from last position (region movement scenario).",
           dataTableName, encodedRegionName, lastProcessedTimestamp);
       } else {
         if (hasParentPartitions) {
-          sleepIfNotStopped(timestampBufferMs + 1);
-          replayAndCompleteParentRegions(encodedRegionName);
+          metricSource.incrementCdcParentReplayActiveRegions(dataTableName);
+          try {
+            sleepWithLagSampling(timestampBufferMs + 1);
+            replayAndCompleteParentRegions(encodedRegionName);
+          } finally {
+            metricSource.decrementCdcParentReplayActiveRegions(dataTableName);
+          }
         } else {
           LOG.info("No parent partitions for table {} region {}, skipping parent replay",
             dataTableName, encodedRegionName);
         }
       }
       int retryCount = 0;
-      while (!stopped) {
-        try {
-          long previousTimestamp = lastProcessedTimestamp;
-          if (serializeCDCMutations) {
-            lastProcessedTimestamp =
-              processCDCBatch(encodedRegionName, encodedRegionName, lastProcessedTimestamp, false);
-          } else {
-            lastProcessedTimestamp = processCDCBatchGenerated(encodedRegionName, encodedRegionName,
-              lastProcessedTimestamp, false);
-          }
-          if (lastProcessedTimestamp == previousTimestamp) {
-            sleepIfNotStopped(ConnectionUtils.getPauseTime(pause, ++retryCount));
-          } else {
+      metricSource.incrementCdcConsumerActiveRegions(dataTableName);
+      try {
+        while (!stopped) {
+          try {
+            long previousTimestamp = lastProcessedTimestamp;
+            if (serializeCDCMutations) {
+              lastProcessedTimestamp = processCDCBatch(encodedRegionName, encodedRegionName,
+                lastProcessedTimestamp, false);
+            } else {
+              lastProcessedTimestamp = processCDCBatchGenerated(encodedRegionName,
+                encodedRegionName, lastProcessedTimestamp, false);
+            }
             retryCount = 0;
-            sleepIfNotStopped(pollIntervalMs);
+            if (lastProcessedTimestamp == previousTimestamp) {
+              sleepWithLagSampling(idlePollIntervalMs);
+            } else {
+              sleepWithLagSampling(pollIntervalMs);
+            }
+          } catch (Exception e) {
+            if (e instanceof InterruptedException) {
+              throw (InterruptedException) e;
+            }
+            metricSource.incrementCdcBatchFailureCount(dataTableName);
+            long sleepTime = ConnectionUtils.getPauseTime(pause, ++retryCount);
+            LOG.error(
+              "Error processing CDC mutations for table {} region {}. "
+                + "Retry #{}, sleeping {} ms before retrying...",
+              dataTableName, encodedRegionName, retryCount, sleepTime, e);
+            sleepWithLagSampling(sleepTime);
           }
-        } catch (Exception e) {
-          if (e instanceof InterruptedException) {
-            throw (InterruptedException) e;
-          }
-          metricSource.incrementCdcBatchFailureCount(dataTableName);
-          long sleepTime = ConnectionUtils.getPauseTime(pause, ++retryCount);
-          LOG.error(
-            "Error processing CDC mutations for table {} region {}. "
-              + "Retry #{}, sleeping {} ms before retrying...",
-            dataTableName, encodedRegionName, retryCount, sleepTime, e);
-          sleepIfNotStopped(sleepTime);
         }
+      } finally {
+        metricSource.decrementCdcConsumerActiveRegions(dataTableName);
       }
     } catch (InterruptedException e) {
       if (!stopped) {
@@ -518,7 +573,7 @@ public class IndexCDCConsumer implements Runnable {
           "Error checking for eventually consistent indexes for table {}. "
             + "Retry #{}, sleeping {} ms before retrying...",
           dataTableName, retryCount, sleepTime, e);
-        sleepIfNotStopped(sleepTime);
+        sleepWithLagSampling(sleepTime);
       }
     }
     return false;
@@ -559,7 +614,7 @@ public class IndexCDCConsumer implements Runnable {
           "Error getting CDC_STREAM row count for table {}. "
             + "Retry #{}, sleeping {} ms before retrying...",
           dataTableName, retryCount, sleepTime, e);
-        sleepIfNotStopped(sleepTime);
+        sleepWithLagSampling(sleepTime);
       }
     }
     return -1;
@@ -597,14 +652,14 @@ public class IndexCDCConsumer implements Runnable {
           "CDC_STREAM entry not found for table {} partition {}. "
             + "Attempt #{}, sleeping {} ms before retrying...",
           dataTableName, encodedRegionName, retryCount, sleepTime);
-        sleepIfNotStopped(sleepTime);
+        sleepWithLagSampling(sleepTime);
       } catch (SQLException e) {
         long sleepTime = ConnectionUtils.getPauseTime(pause, ++retryCount);
         LOG.warn(
           "Error checking CDC_STREAM for table {} partition {}. "
             + "Retry #{}, sleeping {} ms before retrying...",
           dataTableName, encodedRegionName, retryCount, sleepTime, e);
-        sleepIfNotStopped(sleepTime);
+        sleepWithLagSampling(sleepTime);
       }
     }
     return false;
@@ -662,7 +717,7 @@ public class IndexCDCConsumer implements Runnable {
           "Error checking IDX_CDC_TRACKER for table {} partition {} owner {}. "
             + "Retry #{}, sleeping {} ms before retrying...",
           dataTableName, partitionId, ownerPartitionId, retryCount, sleepTime, e);
-        sleepIfNotStopped(sleepTime);
+        sleepWithLagSampling(sleepTime);
       }
     }
     return 0;
@@ -695,7 +750,7 @@ public class IndexCDCConsumer implements Runnable {
           "Error checking if partition {} is completed for table {}. "
             + "Retry #{}, sleeping {} ms before retrying...",
           partitionId, dataTableName, retryCount, sleepTime, e);
-        sleepIfNotStopped(sleepTime);
+        sleepWithLagSampling(sleepTime);
       }
     }
     return false;
@@ -739,7 +794,7 @@ public class IndexCDCConsumer implements Runnable {
           "Error getting parent progress for partition {} table {}. "
             + "Retry #{}, sleeping {} ms before retrying...",
           partitionId, dataTableName, retryCount, sleepTime, e);
-        sleepIfNotStopped(sleepTime);
+        sleepWithLagSampling(sleepTime);
       }
     }
     throw new InterruptedException("IndexCDCConsumer stopped while getting parent progress.");
@@ -778,7 +833,7 @@ public class IndexCDCConsumer implements Runnable {
           "Error querying parent partitions from CDC_STREAM for table {} partition {}. "
             + "Retry #{}, sleeping {} ms before retrying...",
           dataTableName, partitionId, retryCount, sleepTime, e);
-        sleepIfNotStopped(sleepTime);
+        sleepWithLagSampling(sleepTime);
       }
     }
     return Collections.emptyList();
@@ -801,66 +856,79 @@ public class IndexCDCConsumer implements Runnable {
     long currentLastProcessedTimestamp = lastProcessedTimestamp;
     int retryCount = 0;
     int batchCount = 0;
-    while (!stopped) {
-      try {
-        if (batchCount > 0) {
-          if (isPartitionCompleted(partitionId)) {
+    long replayStartTime = EnvironmentEdgeManager.currentTimeMillis();
+    boolean reachedTerminalState = false;
+    try {
+      while (!stopped) {
+        try {
+          if (batchCount > 0) {
+            if (isPartitionCompleted(partitionId)) {
+              reachedTerminalState = true;
+              return;
+            }
+            long otherProgress = getParentProgress(partitionId);
+            if (otherProgress > currentLastProcessedTimestamp) {
+              long previousOtherProgress;
+              do {
+                previousOtherProgress = otherProgress;
+                sleepWithLagSampling(parentProgressPauseMs);
+                if (isPartitionCompleted(partitionId)) {
+                  reachedTerminalState = true;
+                  return;
+                }
+                otherProgress = getParentProgress(partitionId);
+              } while (!stopped && otherProgress > previousOtherProgress);
+              currentLastProcessedTimestamp = otherProgress;
+            }
+          }
+          long newTimestamp;
+          if (serializeCDCMutations) {
+            newTimestamp =
+              processCDCBatch(partitionId, ownerPartitionId, currentLastProcessedTimestamp, true);
+          } else {
+            newTimestamp = processCDCBatchGenerated(partitionId, ownerPartitionId,
+              currentLastProcessedTimestamp, true);
+          }
+          batchCount++;
+          retryCount = 0;
+          if (newTimestamp == currentLastProcessedTimestamp) {
+            if (isPartitionCompleted(partitionId)) {
+              LOG.info(
+                "Partition {} for table {} was completed by another consumer before {} could mark it",
+                partitionId, dataTableName, ownerPartitionId);
+              reachedTerminalState = true;
+              return;
+            }
+            LOG.info("Partition {} owner {} for table {} fully processed, marking as COMPLETE",
+              partitionId, ownerPartitionId, dataTableName);
+            try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(env.getConfiguration())
+              .unwrap(PhoenixConnection.class)) {
+              updateTrackerProgress(conn, partitionId, ownerPartitionId,
+                currentLastProcessedTimestamp, PhoenixDatabaseMetaData.TRACKER_STATUS_COMPLETE);
+            }
+            reachedTerminalState = true;
             return;
           }
-          long otherProgress = getParentProgress(partitionId);
-          if (otherProgress > currentLastProcessedTimestamp) {
-            long previousOtherProgress;
-            do {
-              previousOtherProgress = otherProgress;
-              sleepIfNotStopped(parentProgressPauseMs);
-              if (isPartitionCompleted(partitionId)) {
-                return;
-              }
-              otherProgress = getParentProgress(partitionId);
-            } while (!stopped && otherProgress > previousOtherProgress);
-            currentLastProcessedTimestamp = otherProgress;
-          }
+          currentLastProcessedTimestamp = newTimestamp;
+        } catch (SQLException | IOException e) {
+          metricSource.incrementCdcBatchFailureCount(dataTableName);
+          long sleepTime = ConnectionUtils.getPauseTime(pause, ++retryCount);
+          LOG.warn(
+            "Error processing CDC batch for partition {} owner {} table {} "
+              + "lastProcessedTimestamp {}. Retry #{}, sleeping {} ms",
+            partitionId, ownerPartitionId, dataTableName, currentLastProcessedTimestamp, retryCount,
+            sleepTime, e);
+          sleepWithLagSampling(sleepTime);
         }
-        long newTimestamp;
-        if (serializeCDCMutations) {
-          newTimestamp =
-            processCDCBatch(partitionId, ownerPartitionId, currentLastProcessedTimestamp, true);
-        } else {
-          newTimestamp = processCDCBatchGenerated(partitionId, ownerPartitionId,
-            currentLastProcessedTimestamp, true);
-        }
-        batchCount++;
-        retryCount = 0;
-        if (newTimestamp == currentLastProcessedTimestamp) {
-          if (isPartitionCompleted(partitionId)) {
-            LOG.info(
-              "Partition {} for table {} was completed by another consumer before {} could mark it",
-              partitionId, dataTableName, ownerPartitionId);
-            return;
-          }
-          LOG.info("Partition {} owner {} for table {} fully processed, marking as COMPLETE",
-            partitionId, ownerPartitionId, dataTableName);
-          try (PhoenixConnection conn = QueryUtil.getConnectionOnServer(env.getConfiguration())
-            .unwrap(PhoenixConnection.class)) {
-            updateTrackerProgress(conn, partitionId, ownerPartitionId,
-              currentLastProcessedTimestamp, PhoenixDatabaseMetaData.TRACKER_STATUS_COMPLETE);
-          }
-          return;
-        }
-        currentLastProcessedTimestamp = newTimestamp;
-      } catch (SQLException | IOException e) {
-        metricSource.incrementCdcBatchFailureCount(dataTableName);
-        long sleepTime = ConnectionUtils.getPauseTime(pause, ++retryCount);
-        LOG.warn(
-          "Error processing CDC batch for partition {} owner {} table {} "
-            + "lastProcessedTimestamp {}. Retry #{}, sleeping {} ms",
-          partitionId, ownerPartitionId, dataTableName, currentLastProcessedTimestamp, retryCount,
-          sleepTime, e);
-        sleepIfNotStopped(sleepTime);
+      }
+      LOG.info("Processing partition {} (owner {}) stopped before completion for table {}",
+        partitionId, ownerPartitionId, dataTableName);
+    } finally {
+      if (reachedTerminalState) {
+        metricSource.updateCdcParentReplayDuration(dataTableName,
+          EnvironmentEdgeManager.currentTimeMillis() - replayStartTime);
       }
     }
-    LOG.info("Processing partition {} (owner {}) stopped before completion for table {}",
-      partitionId, ownerPartitionId, dataTableName);
   }
 
   /**
@@ -943,7 +1011,11 @@ public class IndexCDCConsumer implements Runnable {
       long newLastTimestamp = lastProcessedTimestamp;
       boolean hasMoreRows = true;
       int retryCount = 0;
+      // Captured immediately before each query so the empty-poll watermark cannot over-advance
+      // past what the query's own (now - timestampBufferMs) upper bound actually proved empty.
+      long lastQueryStartTime = newLastTimestamp;
       while (hasMoreRows && batchMutations.isEmpty()) {
+        lastQueryStartTime = EnvironmentEdgeManager.currentTimeMillis();
         try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
           setStatementParams(scanInfo, partitionId, isParentReplay, newLastTimestamp, ps);
           Pair<Long, Boolean> result =
@@ -952,10 +1024,17 @@ public class IndexCDCConsumer implements Runnable {
           if (hasMoreRows) {
             newLastTimestamp = result.getFirst();
             if (batchMutations.isEmpty()) {
-              sleepIfNotStopped(ConnectionUtils.getPauseTime(pause, ++retryCount));
+              if (!isParentReplay) {
+                progress.recordProcessed(newLastTimestamp);
+              }
+              sleepWithLagSampling(ConnectionUtils.getPauseTime(pause, ++retryCount));
             }
           }
         }
+      }
+      // Empty own-partition poll proves we are caught up to (queryStart - timestampBufferMs).
+      if (!hasMoreRows && !isParentReplay) {
+        progress.recordEmptyPoll(lastQueryStartTime);
       }
       // With predefined LIMIT, there might be more rows with the same timestamp that were not
       // included in this batch.
@@ -985,8 +1064,9 @@ public class IndexCDCConsumer implements Runnable {
         metricSource.updateCdcBatchProcessTime(dataTableName,
           EnvironmentEdgeManager.currentTimeMillis() - batchStartTime);
         metricSource.incrementCdcBatchCount(dataTableName);
-        metricSource.updateCdcLag(dataTableName,
-          EnvironmentEdgeManager.currentTimeMillis() - newLastTimestamp);
+        if (!isParentReplay) {
+          progress.recordProcessed(newLastTimestamp);
+        }
         updateTrackerProgress(conn, partitionId, ownerPartitionId, newLastTimestamp,
           PhoenixDatabaseMetaData.TRACKER_STATUS_IN_PROGRESS);
       }
@@ -1050,32 +1130,43 @@ public class IndexCDCConsumer implements Runnable {
       List<Pair<Long, IndexMutationsProtos.DataRowStates>> batchStates = new ArrayList<>();
       long newLastTimestamp = lastProcessedTimestamp;
       long[] lastScannedTimestamp = { lastProcessedTimestamp };
+      long[] scannedRowCount = { 0L };
       boolean hasMoreRows = true;
       int retryCount = 0;
+      // Captured immediately before each query so the empty-poll watermark cannot over-advance
+      // past what the query's own (now - timestampBufferMs) upper bound actually proved empty.
+      long lastQueryStartTime = newLastTimestamp;
       while (hasMoreRows && batchStates.isEmpty()) {
+        lastQueryStartTime = EnvironmentEdgeManager.currentTimeMillis();
         try (PreparedStatement ps = conn.prepareStatement(cdcQuery)) {
           setStatementParams(scanInfo, partitionId, isParentReplay, newLastTimestamp, ps);
-          Pair<Long, Boolean> result =
-            getDataRowStatesAndTimestamp(ps, newLastTimestamp, batchStates, lastScannedTimestamp);
+          Pair<Long, Boolean> result = getDataRowStatesAndTimestamp(ps, newLastTimestamp,
+            batchStates, lastScannedTimestamp, scannedRowCount);
           hasMoreRows = result.getSecond();
           if (hasMoreRows) {
             if (!batchStates.isEmpty()) {
               newLastTimestamp = result.getFirst();
             } else if (retryCount >= maxDataVisibilityRetries) {
               LOG.warn(
-                "Skipping CDC events for table {} partition {} from timestamp {}"
+                "Skipping {} CDC events for table {} partition {} from timestamp {}"
                   + " to {} after {} retries — data table mutations may have failed",
-                dataTableName, partitionId, newLastTimestamp, lastScannedTimestamp[0], retryCount);
+                scannedRowCount[0], dataTableName, partitionId, newLastTimestamp,
+                lastScannedTimestamp[0], retryCount);
+              metricSource.incrementCdcEventSkippedCount(dataTableName, scannedRowCount[0]);
               newLastTimestamp = lastScannedTimestamp[0];
               break;
             } else {
               // CDC index entries are written but the data is not yet visible.
               // Don't advance newLastTimestamp so the same events are re-fetched
               // once the data becomes visible.
-              sleepIfNotStopped(ConnectionUtils.getPauseTime(pause, ++retryCount));
+              sleepWithLagSampling(ConnectionUtils.getPauseTime(pause, ++retryCount));
             }
           }
         }
+      }
+      // Empty own-partition poll proves we are caught up to (queryStart - timestampBufferMs).
+      if (!hasMoreRows && !isParentReplay) {
+        progress.recordEmptyPoll(lastQueryStartTime);
       }
       if (newLastTimestamp > lastProcessedTimestamp) {
         String sameTimestampQuery = String.format(
@@ -1089,8 +1180,8 @@ public class IndexCDCConsumer implements Runnable {
           int idx = scanInfo.bindParams(ps, 1);
           ps.setString(idx++, partitionId);
           ps.setDate(idx, new Date(newLastTimestamp));
-          Pair<Long, Boolean> result =
-            getDataRowStatesAndTimestamp(ps, newLastTimestamp, batchStates, lastScannedTimestamp);
+          Pair<Long, Boolean> result = getDataRowStatesAndTimestamp(ps, newLastTimestamp,
+            batchStates, lastScannedTimestamp, scannedRowCount);
           newLastTimestamp = result.getFirst();
           if (batchStates.isEmpty()) {
             newLastTimestamp = timestampToRefetch;
@@ -1106,10 +1197,11 @@ public class IndexCDCConsumer implements Runnable {
         metricSource.updateCdcBatchProcessTime(dataTableName,
           EnvironmentEdgeManager.currentTimeMillis() - batchStartTime);
         metricSource.incrementCdcBatchCount(dataTableName);
-        metricSource.updateCdcLag(dataTableName,
-          EnvironmentEdgeManager.currentTimeMillis() - newLastTimestamp);
       }
       if (newLastTimestamp > lastProcessedTimestamp) {
+        if (!isParentReplay) {
+          progress.recordProcessed(newLastTimestamp);
+        }
         updateTrackerProgress(conn, partitionId, ownerPartitionId, newLastTimestamp,
           PhoenixDatabaseMetaData.TRACKER_STATUS_IN_PROGRESS);
       }
@@ -1133,13 +1225,15 @@ public class IndexCDCConsumer implements Runnable {
 
   private static Pair<Long, Boolean> getDataRowStatesAndTimestamp(PreparedStatement ps,
     long initialLastTimestamp, List<Pair<Long, IndexMutationsProtos.DataRowStates>> batchStates,
-    long[] lastScannedTimestamp) throws SQLException, IOException {
+    long[] lastScannedTimestamp, long[] scannedRowCount) throws SQLException, IOException {
     boolean hasRows = false;
     long lastTimestamp = initialLastTimestamp;
     lastScannedTimestamp[0] = initialLastTimestamp;
+    scannedRowCount[0] = 0L;
     try (ResultSet rs = ps.executeQuery()) {
       while (rs.next()) {
         hasRows = true;
+        scannedRowCount[0]++;
         long rowTimestamp = rs.getDate(1).getTime();
         lastScannedTimestamp[0] = rowTimestamp;
         String cdcValue = rs.getString(2);

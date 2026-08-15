@@ -91,27 +91,27 @@ public class GoogleChartGenerator {
     String resultFileName = resultDir + PherfConstants.PATH_SEPARATOR + PherfConstants.RESULT_PREFIX
       + label + ResultFileDetails.CSV_AGGREGATE_PERFORMANCE.getExtension();
 
-    FileReader in = new FileReader(resultFileName);
-    final CSVParser parser = new CSVParser(in, CSVFormat.DEFAULT.withHeader());
+    try (CSVParser parser =
+      CSVParser.builder().setFormat(CSVFormat.DEFAULT.builder().setHeader().get())
+        .setReader(new FileReader(resultFileName)).get()) {
+      for (CSVRecord record : parser) {
+        String group = record.get("QUERY_GROUP");
+        String query = record.get("QUERY");
+        String explain = record.get("EXPLAIN_PLAN");
+        String tenantId = record.get("TENANT_ID");
+        long avgTime = Long.parseLong(record.get("AVG_TIME_MS"));
+        long minTime = Long.parseLong(record.get("AVG_MIN_TIME_MS"));
+        long numRuns = Long.parseLong(record.get("RUN_COUNT"));
+        long rowCount = Long.parseLong(record.get("RESULT_ROW_COUNT"));
+        Node node = new Node(minTime, avgTime, numRuns, explain, query, tenantId, label, rowCount);
 
-    for (CSVRecord record : parser) {
-      String group = record.get("QUERY_GROUP");
-      String query = record.get("QUERY");
-      String explain = record.get("EXPLAIN_PLAN");
-      String tenantId = record.get("TENANT_ID");
-      long avgTime = Long.parseLong(record.get("AVG_TIME_MS"));
-      long minTime = Long.parseLong(record.get("AVG_MIN_TIME_MS"));
-      long numRuns = Long.parseLong(record.get("RUN_COUNT"));
-      long rowCount = Long.parseLong(record.get("RESULT_ROW_COUNT"));
-      Node node = new Node(minTime, avgTime, numRuns, explain, query, tenantId, label, rowCount);
-
-      if (datanodes.containsKey(group)) {
-        datanodes.get(group).getDataSet().put(label, node);
-      } else {
-        datanodes.put(group, new DataNode(label, node));
+        if (datanodes.containsKey(group)) {
+          datanodes.get(group).getDataSet().put(label, node);
+        } else {
+          datanodes.put(group, new DataNode(label, node));
+        }
       }
     }
-    parser.close();
   }
 
   /**
