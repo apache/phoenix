@@ -41,6 +41,15 @@ public class LogFileWriter implements LogFile.Writer {
   private LogFileFormatWriter writer;
   private final AtomicBoolean closed = new AtomicBoolean(false);
   /**
+   * Latched on the first append/sync failure. Once set, the writer is fenced: every subsequent
+   * append/sync rethrows it rather than touching the underlying stream. This mirrors HDFS
+   * DFSOutputStream semantics -- once a sync fails the stream tears itself down and any further
+   * call throws. A partially-written block cannot be safely re-driven on the same writer, so the
+   * higher layer (ReplicationLog) must recover by rotating to a fresh writer and replaying the
+   * unsynced batch, not by retrying on this instance.
+   */
+  private volatile IOException fault;
+  /**
    * A monotonically increasing sequence number that identifies this writer instance, used to detect
    * log file rotations and ensure proper handling of in-flight operations. Higher layers will get a
    * new generation number that is higher than any previous generation and store it in the
@@ -89,19 +98,41 @@ public class LogFileWriter implements LogFile.Writer {
   @Override
   public boolean append(String tableName, long commitId, List<Cell> cells,
     Map<String, byte[]> attributes) throws IOException {
-    if (isClosed()) {
-      throw new IOException("Writer has been closed");
+    checkWritable();
+    try {
+      return writer.append(new LogFileRecord().setHBaseTableName(tableName).setCommitId(commitId)
+        .setCells(cells).setAttributes(attributes));
+    } catch (IOException e) {
+      throw fault(e);
     }
-    return writer.append(new LogFileRecord().setHBaseTableName(tableName).setCommitId(commitId)
-      .setCells(cells).setAttributes(attributes));
   }
 
   @Override
   public void sync() throws IOException {
+    checkWritable();
+    try {
+      writer.sync();
+    } catch (IOException e) {
+      throw fault(e);
+    }
+  }
+
+  /** Throws if the writer is closed or has been fenced by a prior append/sync failure. */
+  private void checkWritable() throws IOException {
     if (isClosed()) {
       throw new IOException("Writer has been closed");
     }
-    writer.sync();
+    if (fault != null) {
+      throw new IOException("Writer is faulted by a prior failure", fault);
+    }
+  }
+
+  /** Latches the first failure so subsequent append/sync calls fail fast, then returns it. */
+  private IOException fault(IOException e) {
+    if (fault == null) {
+      fault = e;
+    }
+    return e;
   }
 
   @Override

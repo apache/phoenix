@@ -389,6 +389,19 @@ public class ReplicationLogGroup {
       this.syncFuture = syncFuture;
       this.timestampNs = System.nanoTime();
     }
+
+    static String typeName(int type) {
+      switch (type) {
+        case EVENT_TYPE_DATA:
+          return "DATA";
+        case EVENT_TYPE_SYNC:
+          return "SYNC";
+        case EVENT_TYPE_SWAP:
+          return "SWAP";
+        default:
+          return "UNKNOWN(" + type + ")";
+      }
+    }
   }
 
   /**
@@ -1532,8 +1545,8 @@ public class ReplicationLogGroup {
         }
       } catch (IOException e) {
         try {
-          LOG.info("Failed to process event at sequence {} on mode {}", sequence, currentModeImpl,
-            e);
+          LOG.info("Failed to process {} event at sequence {} on mode {}",
+            LogEvent.typeName(event.type), sequence, currentModeImpl, e);
           onFailure(event, sequence, e);
         } catch (Exception fatalEx) {
           IOException fatalIOE =

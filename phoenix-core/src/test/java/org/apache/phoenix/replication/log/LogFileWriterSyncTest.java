@@ -17,7 +17,10 @@
  */
 package org.apache.phoenix.replication.log;
 
+import static org.junit.Assert.fail;
 import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -191,6 +194,123 @@ public class LogFileWriterSyncTest {
 
     // A total of one hsync
     verify(internalOutput, times(1)).hsync();
+  }
+
+  /**
+   * S17b guard: once a {@code sync()} fails at the durability barrier, the writer is fenced. A
+   * subsequent {@code sync()} on the SAME writer must NOT re-enter the underlying stream and must
+   * NOT report success -- it must throw.
+   * <p>
+   * In S17b the first {@code output.sync()} threw (dead peer DataNode) after {@code closeBlock()}
+   * had already advanced block state, so the original code's retry {@code sync()} found nothing to
+   * do and returned success -- a false ACK that cleared {@code currentBatch} and silently lost the
+   * record. The fix fences the writer on first failure (mirroring HDFS DFSOutputStream, whose
+   * stream tears itself down and rethrows on any call after a failed sync), so a same-writer retry
+   * fails fast instead of false-succeeding. Recovery is the higher layer's job: rotate to a fresh
+   * writer and replay the unsynced batch.
+   */
+  @Test
+  public void testWriterFencedAfterSyncFailure() throws IOException {
+    Mutation m1 = LogFileTestUtil.newPut("row1", 1L, 1);
+    writer.append("TBL", 1L, LogFileTestUtil.cellsOf(m1));
+
+    // First sync fails at the durability barrier (dead peer DataNode pipeline).
+    doThrow(new IOException("simulated peer DataNode pipeline failure")).when(internalOutput)
+      .hsync();
+    try {
+      writer.sync();
+      fail("Expected first sync() to propagate the hsync failure");
+    } catch (IOException expected) {
+      // The S17b starting condition.
+    }
+
+    // Even if the underlying stream would now succeed, the fenced writer must refuse to re-drive
+    // it: no false success, and no second hsync on the torn-down stream.
+    doNothing().when(internalOutput).hsync();
+    clearInvocations(internalOutput);
+    try {
+      writer.sync();
+      fail("Retry sync() on a fenced writer must throw, not report false success (S17b)");
+    } catch (IOException expected) {
+      // Correct: failure surfaced, record stays a replay candidate.
+    }
+    verify(internalOutput, never()).hsync();
+  }
+
+  /**
+   * S17b guard, append path: the fence must also latch when the failure originates in
+   * {@code append()} (a block-full internal sync against a dead peer DataNode), not just in an
+   * explicit {@code sync()}. Once fenced this way, a subsequent {@code sync()} must throw and must
+   * NOT re-enter the underlying stream. This is the companion to
+   * {@link #testWriterFencedAfterSyncFailure()}: {@code fault} is set in both {@code append()}'s
+   * and {@code sync()}'s catch blocks, and this test guards the append-triggered latch so a
+   * refactor that fences only in {@code sync()} would fail here rather than silently reopening the
+   * append path to a false-success retry.
+   */
+  @Test
+  public void testWriterFencedAfterAppendFailure() throws IOException {
+    // Tiny block so a single append fills the block and triggers the internal sync -> hsync.
+    SyncableDataOutput blockOutput = spy(new LogFileTestUtil.SyncableByteArrayOutputStream());
+    FileSystem blockMockFs = mock(FileSystem.class);
+    LogFileTestUtil.stubCreateFile(blockMockFs,
+      new FSDataOutputStream((OutputStream) blockOutput, new FileSystem.Statistics("hdfs"), 0));
+    when(blockOutput.getPos()).thenReturn(100L);
+    LogFileWriterContext blockContext =
+      new LogFileWriterContext(conf).setFileSystem(blockMockFs).setMaxBlockSize(1L);
+    LogFileWriter blockWriter = new LogFileWriter();
+    blockWriter.init(blockContext);
+    clearInvocations(blockOutput);
+
+    try {
+      // The block-full internal sync fails at the durability barrier (dead peer DataNode).
+      doThrow(new IOException("simulated peer DataNode pipeline failure")).when(blockOutput)
+        .hsync();
+      Mutation m1 = LogFileTestUtil.newPut("row1", 1L, 1);
+      try {
+        blockWriter.append("TBL", 1L, LogFileTestUtil.cellsOf(m1));
+        fail("Expected block-full append() to propagate the hsync failure");
+      } catch (IOException expected) {
+        // The S17b starting condition, triggered from the append path.
+      }
+
+      // Even if the underlying stream would now succeed, the fenced writer must refuse to re-drive
+      // it on a subsequent sync(): no false success, and no hsync on the torn-down stream.
+      doNothing().when(blockOutput).hsync();
+      clearInvocations(blockOutput);
+      try {
+        blockWriter.sync();
+        fail("sync() on a writer fenced by an append failure must throw, not false-succeed (S17b)");
+      } catch (IOException expected) {
+        // Correct: failure surfaced, record stays a replay candidate.
+      }
+      verify(blockOutput, never()).hsync();
+    } finally {
+      blockWriter.close();
+    }
+  }
+
+  /** A fenced writer also refuses further appends, so no record silently accumulates on it. */
+  @Test
+  public void testWriterFencedRejectsAppendAfterSyncFailure() throws IOException {
+    Mutation m1 = LogFileTestUtil.newPut("row1", 1L, 1);
+    writer.append("TBL", 1L, LogFileTestUtil.cellsOf(m1));
+
+    doThrow(new IOException("simulated peer DataNode pipeline failure")).when(internalOutput)
+      .hsync();
+    try {
+      writer.sync();
+      fail("Expected first sync() to propagate the hsync failure");
+    } catch (IOException expected) {
+      // expected
+    }
+
+    Mutation m2 = LogFileTestUtil.newPut("row2", 2L, 1);
+    try {
+      writer.append("TBL", 2L, LogFileTestUtil.cellsOf(m2));
+      fail("append() on a fenced writer must throw");
+    } catch (IOException expected) {
+      // Correct: the caller must route this record to a fresh writer, not this fenced one.
+    }
   }
 
   @Test
