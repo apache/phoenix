@@ -1673,6 +1673,8 @@ public class MutationState implements SQLCloseable {
           // than wrapping it in a CommitException, which would report it as a server-side commit
           // failure. Checked exceptions from hTable.batch() still fall through to the handler
           // below. This is the pattern SpotBugs REC_CATCH_EXCEPTION asks for.
+          PhoenixTracing.setError(child, e);
+          child.end();
           throw e;
         } catch (Exception e) {
           long serverTimestamp = ClientUtil.parseServerTimestamp(e);
@@ -1796,6 +1798,12 @@ public class MutationState implements SQLCloseable {
               }
             }
             if (sqlE != null) {
+              // The success path above already ended the span; every other way out of the try
+              // reaches here, so end it now or it is never exported.
+              if (!areAllBatchesSuccessful) {
+                PhoenixTracing.setError(child, sqlE);
+                child.end();
+              }
               throw sqlE;
             }
           }
