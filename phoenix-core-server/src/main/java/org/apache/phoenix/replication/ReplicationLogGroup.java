@@ -1030,9 +1030,19 @@ public class ReplicationLogGroup {
       Thread.currentThread().interrupt();
     }
     try {
-      // Remove every LOCAL state subscription registered in subscribeToStateChanges().
-      stateUnsubscribers.forEach(Runnable::run);
-      stateUnsubscribers.clear();
+      // Remove every LOCAL state subscription registered in subscribeToStateChanges(). Swallow an
+      // unchecked throw here: this runs before disruptor.shutdown() closes the writer, so letting
+      // it
+      // propagate would skip the writer teardown and jump straight to the finally cache removal --
+      // leaving a live consumer + writer while a racing get() mints a second instance, the exact
+      // double-writer this close ordering exists to prevent.
+      try {
+        stateUnsubscribers.forEach(Runnable::run);
+        stateUnsubscribers.clear();
+      } catch (RuntimeException e) {
+        LOG.warn("HAGroup {} error unsubscribing from state changes during close; "
+          + "continuing with disruptor shutdown", this, e);
+      }
 
       try {
         disruptor.shutdown(shutdownTimeoutMs, TimeUnit.MILLISECONDS);
