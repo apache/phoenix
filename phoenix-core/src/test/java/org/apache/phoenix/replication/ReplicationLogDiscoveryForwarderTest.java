@@ -19,20 +19,27 @@ package org.apache.phoenix.replication;
 
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.STORE_AND_FORWARD;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
+import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC_AND_FORWARD;
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Optional;
 import java.util.Set;
@@ -479,5 +486,117 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
       Thread.sleep(500);
     }
     assertEquals(SYNC, logGroup.getMode());
+  }
+
+  /**
+   * Builds a forwarder over a mock tracker so processNoMoreRoundsLeft can be driven directly with a
+   * controlled in-progress / next-round file state.
+   */
+  private ReplicationLogDiscoveryForwarder forwarderWithMockTracker(ReplicationLogTracker tracker) {
+    ReplicationShardDirectoryManager shardManager = mock(ReplicationShardDirectoryManager.class);
+    // stubs read by the ReplicationLogDiscovery constructor
+    doReturn(conf).when(tracker).getConf();
+    doReturn(haGroupName).when(tracker).getHaGroupName();
+    doReturn(shardManager).when(tracker).getReplicationShardDirectoryManager();
+    doReturn(20).when(shardManager).getReplicationRoundDurationSeconds();
+    doReturn(new ReplicationRound(0, 20_000)).when(shardManager).getNextRound(any());
+    ReplicationLogDiscoveryForwarder forwarder =
+      new ReplicationLogDiscoveryForwarder(logGroup, tracker);
+    forwarder.setLastRoundProcessed(new ReplicationRound(0, 20_000));
+    return forwarder;
+  }
+
+  /**
+   * The mode flip to SYNC_AND_FORWARD is gated only on an empty in-progress directory, not on the
+   * next round's shard scan. An idle RS whose own (and its peers') live rotation writer keeps the
+   * next-round scan non-empty must still promote its own mode; otherwise it stays pinned in
+   * STORE_AND_FORWARD and wedges the group at ACTIVE_NOT_IN_SYNC.
+   */
+  @Test
+  public void testModeFlipsWhenInProgressEmptyEvenIfNextRoundHasFiles() throws Exception {
+    ReplicationLogTracker tracker = mock(ReplicationLogTracker.class);
+    doReturn(Collections.emptyList()).when(tracker).getInProgressFiles();
+    // next round is non-empty (a live rotation writer masquerading as pending work)
+    doReturn(Collections.singletonList(new Path("out/shard/000/1_rs2.plog"))).when(tracker)
+      .getNewFilesForRound(any());
+    ReplicationLogDiscoveryForwarder forwarder = forwarderWithMockTracker(tracker);
+
+    forwarder.processNoMoreRoundsLeft();
+
+    // mode promoted despite the non-empty next-round scan ...
+    verify(logGroup, times(1)).checkAndSetModeAndNotify(STORE_AND_FORWARD, SYNC_AND_FORWARD);
+    assertEquals(SYNC_AND_FORWARD, logGroup.getMode());
+    // ... but the shared in-sync claim is withheld because the full guard is not satisfied
+    verify(logGroup, never()).setHAGroupStatusToSync();
+  }
+
+  /**
+   * A non-empty in-progress directory means this RS has claimed-but-stuck files (its forward path
+   * is unhealthy), so it must neither promote its own mode nor claim the group is in sync.
+   */
+  @Test
+  public void testNoModeFlipWhenInProgressNotEmpty() throws Exception {
+    ReplicationLogTracker tracker = mock(ReplicationLogTracker.class);
+    doReturn(Collections.singletonList(new Path("out_progress/1_rs2_uuid_2.plog"))).when(tracker)
+      .getInProgressFiles();
+    doReturn(Collections.emptyList()).when(tracker).getNewFilesForRound(any());
+    ReplicationLogDiscoveryForwarder forwarder = forwarderWithMockTracker(tracker);
+
+    forwarder.processNoMoreRoundsLeft();
+
+    verify(logGroup, never()).checkAndSetModeAndNotify(STORE_AND_FORWARD, SYNC_AND_FORWARD);
+    assertEquals(STORE_AND_FORWARD, logGroup.getMode());
+    verify(logGroup, never()).setHAGroupStatusToSync();
+  }
+
+  /**
+   * Fully caught up: in-progress empty and no new files for the ongoing round. Both the mode flip
+   * and the shared in-sync claim fire.
+   */
+  @Test
+  public void testStatusFlipsWhenFullyCaughtUp() throws Exception {
+    ReplicationLogTracker tracker = mock(ReplicationLogTracker.class);
+    doReturn(Collections.emptyList()).when(tracker).getInProgressFiles();
+    doReturn(Collections.emptyList()).when(tracker).getNewFilesForRound(any());
+    doReturn(0L).when(logGroup).setHAGroupStatusToSync();
+    ReplicationLogDiscoveryForwarder forwarder = forwarderWithMockTracker(tracker);
+
+    forwarder.processNoMoreRoundsLeft();
+
+    verify(logGroup, times(1)).checkAndSetModeAndNotify(STORE_AND_FORWARD, SYNC_AND_FORWARD);
+    assertEquals(SYNC_AND_FORWARD, logGroup.getMode());
+    verify(logGroup, times(1)).setHAGroupStatusToSync();
+  }
+
+  /**
+   * The mode flip is self-validating: promoting to SYNC_AND_FORWARD drives
+   * SyncAndForwardModeImpl.onEnter, which must reach the peer. If the peer is unreachable the flip
+   * bounces back to STORE_AND_FORWARD, so an optimistic promotion against a dead peer does not
+   * leave the group stuck advertising a healthy forward path. In-progress is empty (so the
+   * promotion fires) but getOrCreatePeerShardManager always throws (dead peer).
+   */
+  @Test
+  public void testModeFlipBouncesBackWhenPeerUnreachable() throws Exception {
+    ReplicationLogTracker tracker = mock(ReplicationLogTracker.class);
+    doReturn(Collections.emptyList()).when(tracker).getInProgressFiles();
+    doReturn(Collections.emptyList()).when(tracker).getNewFilesForRound(any());
+    // dead peer: onEnter for SYNC_AND_FORWARD can never reach the peer
+    doThrow(new IOException("Peer namenode unavailable")).when(logGroup)
+      .getOrCreatePeerShardManager();
+    ReplicationLogDiscoveryForwarder forwarder = forwarderWithMockTracker(tracker);
+
+    forwarder.processNoMoreRoundsLeft();
+
+    // the promotion is attempted ...
+    verify(logGroup, times(1)).checkAndSetModeAndNotify(STORE_AND_FORWARD, SYNC_AND_FORWARD);
+    // ... but onEnter's failed peer reach bounces the mode back asynchronously on the disruptor
+    long deadline = EnvironmentEdgeManager.currentTimeMillis() + 120_000;
+    while (
+      logGroup.getMode() != STORE_AND_FORWARD
+        && EnvironmentEdgeManager.currentTimeMillis() < deadline
+    ) {
+      Thread.sleep(100);
+    }
+    assertEquals(STORE_AND_FORWARD, logGroup.getMode());
   }
 }
