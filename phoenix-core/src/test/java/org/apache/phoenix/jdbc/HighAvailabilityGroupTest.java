@@ -20,6 +20,7 @@ package org.apache.phoenix.jdbc;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.SQLException;
@@ -203,20 +204,102 @@ public class HighAvailabilityGroupTest {
       HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.UNKNOWN, url2, ClusterRole.UNKNOWN, 12L);
 
     // Both usable: higher version wins (the stale-revert regression guard), either order.
-    assertTrue("Higher version must win when cluster 1 lags the peer",
-      v10 == HighAvailabilityGroup.reconcileClusterRoleRecords(v9, v10));
-    assertTrue("Higher version must win regardless of argument order",
-      v10 == HighAvailabilityGroup.reconcileClusterRoleRecords(v10, v9));
+    assertSame("Higher version must win when cluster 1 lags the peer", v10,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(v9, v10, null));
+    assertSame("Higher version must win regardless of argument order", v10,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(v10, v9, null));
 
     // Non-UNKNOWN beats UNKNOWN even at a lower version, either order.
-    assertTrue("Non-UNKNOWN must beat UNKNOWN even with a lower version (cluster 1 usable)",
-      v9 == HighAvailabilityGroup.reconcileClusterRoleRecords(v9, unknownV11));
-    assertTrue("Non-UNKNOWN must beat UNKNOWN even with a lower version (cluster 2 usable)",
-      v9 == HighAvailabilityGroup.reconcileClusterRoleRecords(unknownV11, v9));
+    assertSame("Non-UNKNOWN must beat UNKNOWN even with a lower version (cluster 1 usable)", v9,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(v9, unknownV11, null));
+    assertSame("Non-UNKNOWN must beat UNKNOWN even with a lower version (cluster 2 usable)", v9,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(unknownV11, v9, null));
 
     // UNKNOWN vs UNKNOWN: higher version wins.
-    assertTrue("Among two UNKNOWN records the higher version wins",
-      unknownV12 == HighAvailabilityGroup.reconcileClusterRoleRecords(unknownV11, unknownV12));
+    assertSame("Among two UNKNOWN records the higher version wins", unknownV12,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(unknownV11, unknownV12, null));
+
+    // A strictly newer UNKNOWN-tagged record that STILL names an active cluster (one role ACTIVE,
+    // peer momentarily UNKNOWN mid-transition) must beat a stale fully-known record: masking it
+    // would keep routing to the since-demoted cluster. Either order.
+    ClusterRoleRecord activeUnknownV13 = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.UNKNOWN, 13L);
+    assertSame(
+      "Newer UNKNOWN-tagged record that still names an ACTIVE cluster must win (cluster 2)",
+      activeUnknownV13,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(v9, activeUnknownV13, null));
+    assertSame(
+      "Newer UNKNOWN-tagged record that still names an ACTIVE cluster must win (cluster 1)",
+      activeUnknownV13,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(activeUnknownV13, v9, null));
+
+    // But a newer UNKNOWN record with NO active role stays masked behind the usable record: it
+    // cannot route a connection, and the non-active poller resolves the true state on its next
+    // tick. unknownV11 (url1 UNKNOWN, url2 STANDBY, no active) is newer than v9 but not routable.
+    assertSame("Newer UNKNOWN record with no active role stays masked behind the usable record", v9,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(v9, unknownV11, null));
+
+    // Equal-version boundary: an active-tagged UNKNOWN record at the SAME version as a fully-known
+    // usable record must NOT win. The newer-UNKNOWN carve-out is strict '>', so only a strictly
+    // newer active-unknown record displaces the usable one; a same-version peer cannot. This pins
+    // the strict boundary — a '>=' mutant would wrongly route to the active-unknown record. Either
+    // order.
+    ClusterRoleRecord activeUnknownV9 = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.UNKNOWN, 9L);
+    assertSame("Equal-version active-unknown must NOT displace the fully-known usable record", v9,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(v9, activeUnknownV9, null));
+    assertSame("Equal-version active-unknown must NOT displace the usable record (order swapped)",
+      v9, HighAvailabilityGroup.reconcileClusterRoleRecords(activeUnknownV9, v9, null));
+  }
+
+  /**
+   * On an equal-version divergence (endpoints at the same version but different roles, one lagging)
+   * reconcile keeps the currently applied record when it sits at that version, deferring the
+   * transition until the endpoints converge; once both endpoints agree the same-version record is
+   * returned. A genuine version advance is never dropped.
+   */
+  @Test
+  public void testReconcileEqualVersionDivergence() {
+    String haGroupName = "testReconcileEqualVersionDivergence";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+
+    // Applied record: url1 ACTIVE, url2 STANDBY at v10.
+    ClusterRoleRecord current = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    // Same version, diverging roles — a lagging/leading peer mid-propagation.
+    ClusterRoleRecord divergentV10 = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.STANDBY, url2, ClusterRole.ACTIVE, 10L);
+    // Both endpoints agreeing on the new same-version roles (propagation complete).
+    ClusterRoleRecord agreedV10a = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.STANDBY, url2, ClusterRole.STANDBY, 10L);
+    ClusterRoleRecord agreedV10b = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.STANDBY, url2, ClusterRole.STANDBY, 10L);
+    // A genuine version advance both endpoints see.
+    ClusterRoleRecord v11 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.STANDBY, url2, ClusterRole.ACTIVE, 11L);
+
+    // Equal-version divergence with current at that version → keep current (no flap), either order.
+    assertSame("Equal-version divergence must keep the applied record (peer diverges)", current,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(current, divergentV10, current));
+    assertSame("Equal-version divergence defers regardless of which endpoint diverges", current,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(divergentV10, current, current));
+
+    // Both endpoints agree on the new same-version roles → apply it (autonomous transition). The
+    // equal-values branch returns recordFromCluster2, and the returned record differs from current
+    // so the refresh path will apply it.
+    assertSame("Both endpoints agreeing on a same-version role change must be applied", agreedV10b,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(agreedV10a, agreedV10b, current));
+    assertFalse("Agreed same-version record must differ from current so refresh applies it",
+      current.equals(agreedV10b));
+
+    // First load (current == null) with an equal-version divergence → deterministic peer record.
+    assertSame("First-load equal-version divergence falls back to the peer record", divergentV10,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(current, divergentV10, null));
+
+    // A genuine version advance is applied even though current is at the older version.
+    assertSame("A strictly newer version must still win over the applied record", v11,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(current, v11, current));
   }
 
   /** Refresh guard rejects a lower version but applies a same-version role change. */

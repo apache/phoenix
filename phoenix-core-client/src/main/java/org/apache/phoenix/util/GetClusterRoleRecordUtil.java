@@ -75,16 +75,19 @@ public class GetClusterRoleRecordUtil {
   }
 
   /**
-   * Method to get ClusterRoleRecord from RegionServer Endpoints. it picks a random region server
-   * and gets the CRR from it.
+   * Reads the ClusterRoleRecord from a random live region server at {@code url}. Pure read, no side
+   * effects: callers needing the non-active poller must reconcile both endpoints first and then
+   * call {@link #maybeSchedulePoller} on the result. Scheduling off a single raw fetch churned a
+   * poller for an ACTIVE-plus-stale-peer state and widened a {@code pollerLock}/write-lock AB-BA
+   * inversion into a reachable deadlock.
    * @param url         URL to create Connection to be used to get RegionServer Endpoint Service
    * @param haGroupName Name of the HA group
    * @param doRetry     Whether to retry if the operation fails
    * @param properties  Connection properties
-   * @return ClusterRoleRecord from the first available cluster
+   * @return ClusterRoleRecord read from the endpoint at {@code url}
    * @throws SQLException if there is an error getting the ClusterRoleRecord
    */
-  private static ClusterRoleRecord getClusterRoleRecord(String url, String haGroupName,
+  public static ClusterRoleRecord getClusterRoleRecord(String url, String haGroupName,
     boolean doRetry, Properties properties) throws SQLException {
     Connection conn = getConnection(url, properties);
     PhoenixConnection connection = conn.unwrap(PhoenixConnection.class);
@@ -149,44 +152,35 @@ public class GetClusterRoleRecordUtil {
   }
 
   /**
-   * Method to schedule a poller to fetch ClusterRoleRecord every 5 seconds (or configured value)
-   * until we get an Active ClusterRoleRecord (one role should be Active) if we receive an Active
-   * roleRecord then client this method will return the roleRecord to be consumed and used, if not
-   * then it will start a poller and return non-active roleRecord.
-   * <p>
-   * The poller alternates between {@code url1} and {@code url2} on successive ticks so a transient
-   * outage on one cluster does not stall progress; both URLs are passed in even though the initial
-   * fetch only targets one of them (selected by the caller via the {@code primaryUrl} hint).
-   * @param url1           URL of the RegionServer Endpoint Service for cluster 1
-   * @param url2           URL of the RegionServer Endpoint Service for cluster 2
-   * @param primaryUrl     URL to use for the initial (non-poller) fetch; must be either url1 or
-   *                       url2
-   * @param haGroupName    Name of the HA group
-   * @param haGroup        HighAvailabilityGroup object to refresh the ClusterRoleRecord when an
-   *                       Active CRR is found
-   * @param pollerInterval Interval in milliseconds to poll for ClusterRoleRecord
-   * @param properties     Connection properties
-   * @throws SQLException if there is an error getting the ClusterRoleRecord
+   * Starts the non-active CRR poller for {@code haGroupName} only when {@code reconciledRecord} is
+   * a FAILOVER record with no active role (neither cluster can take a connection); otherwise a
+   * no-op, so callers may invoke it unconditionally on the reconciled record.
+   * {@code reconciledRecord} must be the reconciled view of both endpoints — see
+   * {@link #getClusterRoleRecord} for why scheduling off a single raw fetch is unsafe. The poller
+   * alternates {@code url1}/{@code url2} each tick (so a transient outage on one cluster does not
+   * stall progress) until an ACTIVE CRR appears.
+   * @param url1             URL of the RegionServer Endpoint Service for cluster 1
+   * @param url2             URL of the RegionServer Endpoint Service for cluster 2
+   * @param haGroupName      Name of the HA group
+   * @param haGroup          HighAvailabilityGroup object to refresh the ClusterRoleRecord when an
+   *                         Active CRR is found
+   * @param reconciledRecord the reconciled CRR (across both endpoints) to gate scheduling on
+   * @param pollerInterval   Interval in milliseconds to poll for ClusterRoleRecord
+   * @param properties       Connection properties
    */
-  public static ClusterRoleRecord fetchClusterRoleRecord(String url1, String url2,
-    String primaryUrl, String haGroupName, HighAvailabilityGroup haGroup, long pollerInterval,
-    Properties properties) throws SQLException {
-    ClusterRoleRecord clusterRoleRecord =
-      getClusterRoleRecord(primaryUrl, haGroupName, true, properties);
+  public static void maybeSchedulePoller(String url1, String url2, String haGroupName,
+    HighAvailabilityGroup haGroup, ClusterRoleRecord reconciledRecord, long pollerInterval,
+    Properties properties) {
     if (
-      clusterRoleRecord.getPolicy() == HighAvailabilityPolicy.FAILOVER
-        && !clusterRoleRecord.getRole1().isActive() && !clusterRoleRecord.getRole2().isActive()
+      reconciledRecord.getPolicy() == HighAvailabilityPolicy.FAILOVER
+        && !reconciledRecord.getRole1().isActive() && !reconciledRecord.getRole2().isActive()
     ) {
       LOGGER.info(
         "Non-active ClusterRoleRecord found for HA group {}. Scheduling poller to check every {} ms,"
           + " alternating between url1 and url2 until we find an ACTIVE CRR",
         haGroupName, pollerInterval);
-      // Schedule a poller to fetch ClusterRoleRecord every pollerInterval milliseconds
-      // until we get an Active ClusterRoleRecord and return the Non-Active CRR
       schedulePoller(url1, url2, haGroupName, haGroup, pollerInterval, properties);
     }
-
-    return clusterRoleRecord;
   }
 
   /**
@@ -251,16 +245,24 @@ public class GetClusterRoleRecordUtil {
 
             LOGGER.info("Active ClusterRoleRecord found for HA group {}. Cancelling poller.",
               haGroupName);
+            // Elect a single winner tick under pollerLock, but refresh OUTSIDE it: refresh grabs
+            // the HA-group write lock, which the connect path holds before reaching pollerLock, so
+            // refreshing under pollerLock would close an AB-BA deadlock. Only the tick that removed
+            // the future refreshes and shuts the scheduler down, so each happens exactly once.
+            boolean winner;
+            ScheduledExecutorService scheduler;
             synchronized (pollerLock) {
               ScheduledFuture<?> future = futureMap.remove(haGroupName);
               if (future != null) {
                 future.cancel(false);
               }
+              winner = future != null;
+              scheduler = schedulerMap.remove(haGroupName);
+            }
+            if (winner) {
               try {
-                // Refresh ClusterRoleRecord for the HAGroup with appropriate transition
                 haGroup.refreshClusterRoleRecord(true);
               } finally {
-                ScheduledExecutorService scheduler = schedulerMap.remove(haGroupName);
                 if (scheduler != null) {
                   scheduler.shutdown();
                 }

@@ -24,6 +24,7 @@ import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLIENT_CONNE
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 
 import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
@@ -979,11 +980,17 @@ public class HighAvailabilityGroup {
   }
 
   /**
-   * Fetches the CRR from both cluster endpoints and returns the more authoritative one (see
+   * Reads the CRR from both cluster endpoints and returns the more authoritative one (see
    * {@link #reconcileClusterRoleRecords}). Consulting both avoids adopting a staler view when one
    * endpoint momentarily lags its peer. If the peer (cluster 2) is unreachable, cluster 1's record
-   * is used as-is.
-   * @return the reconciled ClusterRoleRecord
+   * is used as-is; if cluster 1 fails, cluster 2's record is used as-is.
+   * <p>
+   * Endpoints are read via {@link GetClusterRoleRecordUtil#getClusterRoleRecord} (a pure read); the
+   * non-active poller is scheduled at most once here, after reconciliation, via
+   * {@link GetClusterRoleRecordUtil#maybeSchedulePoller} on the resolved record — never off a
+   * single raw fetch (which churned a poller and widened a deadlock; see that method).
+   * @return the reconciled ClusterRoleRecord, or — on a fallback path where only one endpoint was
+   *         reachable — that single endpoint's un-reconciled record
    * @throws SQLException if there is an error getting the ClusterRoleRecord
    */
   private ClusterRoleRecord getClusterRoleRecordFromEndpoint() throws SQLException {
@@ -991,44 +998,78 @@ public class HighAvailabilityGroup {
       Long.parseLong(properties.getProperty(PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY, config
         .get(PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY, PHOENIX_HA_CRR_POLLER_INTERVAL_MS_DEFAULT)));
 
+    ClusterRoleRecord resolvedRecord;
     try {
-      // Get the CRR via RSEndpoint for cluster 1
-      ClusterRoleRecord roleRecord = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
-        info.getUrl2(), info.getUrl1(), info.getName(), this, pollerInterval, properties);
-      // Reconcile with cluster 2; if it is unreachable, keep cluster 1's record.
-      ClusterRoleRecord roleRecordFromPR;
+      // Read cluster 1's CRR (read-only; no poller side effect).
+      ClusterRoleRecord roleRecord = GetClusterRoleRecordUtil.getClusterRoleRecord(info.getUrl1(),
+        info.getName(), true, properties);
+      // Read cluster 2's CRR and reconcile; if cluster 2 is unreachable, keep cluster 1's record.
       try {
-        roleRecordFromPR = GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(),
-          info.getUrl2(), info.getUrl2(), info.getName(), this, pollerInterval, properties);
+        ClusterRoleRecord roleRecordFromPR = GetClusterRoleRecordUtil
+          .getClusterRoleRecord(info.getUrl2(), info.getName(), true, properties);
+        // Pass the currently applied record (this.roleRecord; null on first load) so an
+        // equal-version divergence between the endpoints defers to it rather than flapping.
+        resolvedRecord = reconcileClusterRoleRecords(roleRecord, roleRecordFromPR, this.roleRecord);
+        if (!roleRecord.equals(roleRecordFromPR)) {
+          LOG.info(
+            "Reconciled divergent CRRs for HA group {}: cluster1={} (V{}), cluster2={} (V{}); "
+              + "chose {} (V{})",
+            info.getName(), roleRecord, roleRecord.getVersion(), roleRecordFromPR,
+            roleRecordFromPR.getVersion(), resolvedRecord, resolvedRecord.getVersion());
+        }
       } catch (Exception e) {
+        // Any cluster 2 fetch failure degrades to cluster 1's record. Catch broadly: an unchecked
+        // exception from the pre-RPC connect path is still a reachability failure, and letting it
+        // reach the outer catch would discard the cluster 1 record we already hold. Restore the
+        // interrupt status if the failure wrapped one, so callers can observe cancellation.
+        if (isCausedByInterrupt(e)) {
+          Thread.currentThread().interrupt();
+        }
         LOG.warn(
           "Fetched CRR {} from cluster {} but cluster {} endpoint threw an exception; "
             + "returning cluster {} CRR without peer reconciliation",
           roleRecord.toPrettyString(), info.getUrl1(), info.getUrl2(), info.getUrl1(), e);
-        return roleRecord;
+        resolvedRecord = roleRecord;
       }
-      return reconcileClusterRoleRecords(roleRecord, roleRecordFromPR);
     } catch (Exception e) {
-      // If we get CRR Not Found on cluster 1, we should still try cluster 2, maybe
-      // haGroupStoreClient
-      // was not initialized somehow, but if we get any exception from cluster 2 too then we should
-      // throw CRR not found so that fallback can happen.
+      // Cluster 1 failed: fall back to cluster 2. On CRR-Not-Found, if cluster 2 also fails
+      // rethrow the original Not-Found so downstream fallback can trigger.
       if (
         e instanceof SQLException && ((SQLException) e).getErrorCode()
             == SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getErrorCode()
       ) {
         try {
-          return GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(), info.getUrl2(),
-            info.getUrl2(), info.getName(), this, pollerInterval, properties);
+          resolvedRecord = GetClusterRoleRecordUtil.getClusterRoleRecord(info.getUrl2(),
+            info.getName(), true, properties);
         } catch (Exception ignoredEx) {
           throw (SQLException) e;
         }
+      } else {
+        // If caught exception is not CRR not found, then just try cluster 2 endpoint.
+        resolvedRecord = GetClusterRoleRecordUtil.getClusterRoleRecord(info.getUrl2(),
+          info.getName(), true, properties);
       }
-
-      // If caught exception is not CRR not found, then just try cluster 2 endpoint.
-      return GetClusterRoleRecordUtil.fetchClusterRoleRecord(info.getUrl1(), info.getUrl2(),
-        info.getUrl2(), info.getName(), this, pollerInterval, properties);
     }
+
+    // Schedule the non-active CRR poller at most once, gated on the resolved record. maybeSchedule
+    // is a no-op when the record has an active role, so this is safe to call unconditionally.
+    GetClusterRoleRecordUtil.maybeSchedulePoller(info.getUrl1(), info.getUrl2(), info.getName(),
+      this, resolvedRecord, pollerInterval, properties);
+    return resolvedRecord;
+  }
+
+  /**
+   * True if {@code t}'s cause chain (bounded against cyclic causes) carries an interruption marker.
+   * A blocking endpoint RPC surfaces the interruption wrapped inside the thrown exception, and the
+   * JVM has already cleared the thread's interrupt flag, so the caller must restore it explicitly.
+   */
+  private static boolean isCausedByInterrupt(Throwable t) {
+    for (int depth = 0; t != null && depth < 16; t = t.getCause(), depth++) {
+      if (t instanceof InterruptedException || t instanceof InterruptedIOException) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -1245,23 +1286,70 @@ public class HighAvailabilityGroup {
   /**
    * Returns the more authoritative of the two records fetched from the cluster 1 and cluster 2
    * endpoints. Preference: a non-UNKNOWN record beats an UNKNOWN one (an UNKNOWN role can't resolve
-   * cluster roles and isn't usable for routing, so it never wins on version alone); otherwise the
-   * higher admin {@code version} wins; a tie returns the peer ({@code recordFromCluster2}).
-   * Package-private for direct unit testing. Neither argument may be {@code null}.
+   * cluster roles and isn't usable for routing, so it does not win on version alone) UNLESS the
+   * UNKNOWN-tagged record is strictly newer and still names an active cluster (a real state advance
+   * where the peer role is momentarily UNKNOWN mid-transition) — masking that behind a stale
+   * fully-known record would keep routing to a since-demoted cluster. Otherwise the higher admin
+   * {@code version} wins. On an equal-version divergence (both records at the same version but with
+   * different roles, one endpoint lagging its peer) there is no freshness signal to order them, so
+   * if {@code current} is already applied at that same version the currently applied record is
+   * kept, deferring any transition until the endpoints converge; this avoids flapping to a stale
+   * peer view and back. Once both endpoints agree on the new roles the same-version record is
+   * returned and the autonomous transition applies as normal. A genuine version advance is never
+   * dropped: the defer only fires when {@code current} sits at the endpoints' version.
+   * Package-private for direct unit testing. The two fetched records may not be {@code null};
+   * {@code current} is {@code null} on first load.
    * @param recordFromCluster1 CRR fetched from the cluster 1 endpoint ({@code info.getUrl1()})
    * @param recordFromCluster2 CRR fetched from the cluster 2 endpoint ({@code info.getUrl2()})
+   * @param current            the currently applied CRR, or {@code null} on first load
    * @return the more authoritative of the two records
    */
   static ClusterRoleRecord reconcileClusterRoleRecords(ClusterRoleRecord recordFromCluster1,
-    ClusterRoleRecord recordFromCluster2) {
-    // Prefer a usable (non-UNKNOWN) record over an UNKNOWN one regardless of version.
+    ClusterRoleRecord recordFromCluster2, ClusterRoleRecord current) {
+    // Exactly one record carries an UNKNOWN role. Prefer the usable (non-UNKNOWN) record so the
+    // client keeps a routable view -- EXCEPT when the UNKNOWN-tagged record is strictly newer AND
+    // still names an active cluster (one role resolved ACTIVE while its peer is mid-transition and
+    // momentarily UNKNOWN). There the newer record reflects a real state advance, and masking it
+    // behind a stale fully-known record would keep routing to a since-demoted cluster, so the newer
+    // record wins. A newer UNKNOWN record with NO active role stays masked: it cannot route a
+    // connection, and the non-active poller picks up the true state on its next tick.
     if (recordFromCluster1.hasUnknownRole() != recordFromCluster2.hasUnknownRole()) {
-      return recordFromCluster1.hasUnknownRole() ? recordFromCluster2 : recordFromCluster1;
+      ClusterRoleRecord unknownRecord =
+        recordFromCluster1.hasUnknownRole() ? recordFromCluster1 : recordFromCluster2;
+      ClusterRoleRecord usableRecord =
+        recordFromCluster1.hasUnknownRole() ? recordFromCluster2 : recordFromCluster1;
+      if (
+        unknownRecord.getVersion() > usableRecord.getVersion()
+          && unknownRecord.getActiveUrl().isPresent()
+      ) {
+        return unknownRecord;
+      }
+      return usableRecord;
     }
-    // Same category: keep the higher admin version. Ties fall through to the peer record.
-    return recordFromCluster1.getVersion() > recordFromCluster2.getVersion()
-      ? recordFromCluster1
-      : recordFromCluster2;
+    // Different versions: keep the higher admin version.
+    if (recordFromCluster1.getVersion() != recordFromCluster2.getVersion()) {
+      return recordFromCluster1.getVersion() > recordFromCluster2.getVersion()
+        ? recordFromCluster1
+        : recordFromCluster2;
+    }
+    // Equal version: if both endpoints agree, return it (a legitimate same-version autonomous
+    // transition applies once both endpoints reflect the new roles).
+    if (recordFromCluster1.equals(recordFromCluster2)) {
+      return recordFromCluster2;
+    }
+    // Equal-version divergence with no freshness signal. If the currently applied record sits at
+    // this same version, keep it and defer the transition until the endpoints converge, rather
+    // than arbitrarily adopting the peer and flapping. Scoping the defer to current's version
+    // ensures a genuine version advance is never suppressed.
+    if (
+      current != null && current.hasSameInfo(recordFromCluster1)
+        && current.getVersion() == recordFromCluster1.getVersion()
+    ) {
+      return current;
+    }
+    // First load, or current at a lower version than the (equal) endpoint version: fall back to
+    // the deterministic peer record so a real advance is not dropped.
+    return recordFromCluster2;
   }
 
   /**
