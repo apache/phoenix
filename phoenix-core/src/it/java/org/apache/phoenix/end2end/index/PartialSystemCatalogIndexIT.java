@@ -197,8 +197,6 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
       }
     });
     Configuration conf = HBaseFactoryProvider.getConfigurationFactory().getConfiguration();
-    conf.set(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-    conf.set(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     hbaseTestUtil = new HBaseTestingUtility(conf);
     setUpConfigForMiniCluster(conf);
     conf.set(QueryServices.EXTRA_JDBC_ARGUMENTS_ATTRIB,
@@ -214,8 +212,6 @@ public class PartialSystemCatalogIndexIT extends ParallelStatsDisabledIT {
           Integer.toString(0));
         put(QueryServices.PHOENIX_VIEW_TTL_ENABLED, Boolean.toString(true));
         put(QueryServices.PHOENIX_VIEW_TTL_TENANT_VIEWS_PER_SCAN_LIMIT, String.valueOf(1));
-        put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-        put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
       }
     };
 
