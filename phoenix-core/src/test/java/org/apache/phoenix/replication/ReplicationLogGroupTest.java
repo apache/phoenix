@@ -25,6 +25,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -36,6 +37,7 @@ import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.timeout;
@@ -75,6 +77,7 @@ import org.apache.phoenix.replication.log.LogFileReaderContext;
 import org.apache.phoenix.replication.log.LogFileTestUtil;
 import org.apache.phoenix.replication.log.LogFileWriter;
 import org.apache.phoenix.replication.log.LogFileWriterContext;
+import org.apache.phoenix.replication.metrics.MetricsReplicationLogGroupSource;
 import org.apache.phoenix.replication.metrics.ReplicationLogMetricValues;
 import org.junit.Assume;
 import org.junit.Test;
@@ -1459,6 +1462,152 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
 
     // Clean up
     g1_3.close();
+  }
+
+  /**
+   * A get() concurrent with a still-draining close() must NOT resurrect a second live instance for
+   * the same group. close() sets the closed flag first but removes the instance from the cache only
+   * after teardown, so a get() during that window returns the same (closing) instance rather than
+   * minting a new one -- avoiding the double-writer against the same shard.
+   * <p>
+   * The window is made deterministic by blocking the last teardown step (metrics.close()) on a
+   * latch, so close() is provably parked inside teardown -- after the closed flag is set, before
+   * the cache removal -- while the racing get() runs.
+   */
+  @Test(timeout = 60000)
+  public void testConcurrentGetDuringCloseDoesNotResurrectInstance() throws Exception {
+    final String haGroupId = "testResurrectionGuard";
+    final CountDownLatch closeInTeardown = new CountDownLatch(1);
+    final CountDownLatch releaseClose = new CountDownLatch(1);
+    MetricsReplicationLogGroupSource blockingMetrics = mock(MetricsReplicationLogGroupSource.class);
+    doAnswer(inv -> {
+      closeInTeardown.countDown();
+      releaseClose.await();
+      return null;
+    }).when(blockingMetrics).close();
+
+    ReplicationLogGroup group =
+      new TestableLogGroup(conf, serverName, haGroupId, haGroupStoreManager, useAlignedRotation()) {
+        @Override
+        protected MetricsReplicationLogGroupSource createMetricsSource() {
+          return blockingMetrics;
+        }
+      };
+    group.init();
+    ReplicationLogGroup.cacheForTesting(group);
+    try {
+      Thread closer = new Thread(group::close, "closer");
+      closer.start();
+
+      // Wait until close() is provably parked in teardown (flag set, cache entry not yet removed).
+      assertTrue("close() should reach the teardown step",
+        closeInTeardown.await(30, TimeUnit.SECONDS));
+      assertTrue("closed flag must be set before teardown removes the cache entry",
+        group.isClosed());
+
+      // A get() in this window must return the SAME (closing) instance, not a fresh one.
+      ReplicationLogGroup duringClose =
+        ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager).get();
+      assertSame("A get() during close()'s teardown must not resurrect a second instance", group,
+        duringClose);
+
+      releaseClose.countDown();
+      closer.join(10000);
+      assertFalse("closer thread should have finished", closer.isAlive());
+
+      // After close() fully completes, the entry is gone, so a later get() creates a fresh
+      // instance.
+      ReplicationLogGroup afterClose =
+        ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager).get();
+      assertNotSame("A get() after close() completes must create a new instance", group,
+        afterClose);
+      afterClose.close();
+    } finally {
+      releaseClose.countDown();
+      group.close();
+    }
+  }
+
+  /**
+   * A teardown step that throws inside close() must still remove the instance from the cache;
+   * otherwise a dangling closed instance is stranded and an active->standby->active cycle (which
+   * calls close() on demotion) would, on re-promotion without a JVM restart, hand the dead instance
+   * back to get() and every append()/sync() would throw "Closed" forever. The removal lives in a
+   * finally to guarantee this.
+   */
+  @Test
+  public void testCloseRemovesFromCacheEvenWhenTeardownThrows() throws Exception {
+    final String haGroupId = "testTeardownThrows";
+    // metrics.close() is the last teardown step in close(); make it throw.
+    MetricsReplicationLogGroupSource throwingMetrics = mock(MetricsReplicationLogGroupSource.class);
+    doThrow(new RuntimeException("simulated metrics.close() failure")).when(throwingMetrics)
+      .close();
+
+    ReplicationLogGroup group =
+      new TestableLogGroup(conf, serverName, haGroupId, haGroupStoreManager, useAlignedRotation()) {
+        @Override
+        protected MetricsReplicationLogGroupSource createMetricsSource() {
+          return throwingMetrics;
+        }
+      };
+    group.init();
+    ReplicationLogGroup.cacheForTesting(group);
+
+    try {
+      group.close();
+      fail("close() should propagate the teardown failure");
+    } catch (RuntimeException expected) {
+      assertEquals("simulated metrics.close() failure", expected.getMessage());
+    }
+
+    assertTrue("Group should still be marked closed", group.isClosed());
+    // Despite the thrown teardown, the cache entry must be gone: a fresh get() creates a NEW,
+    // usable instance rather than returning the stranded closed one.
+    ReplicationLogGroup afterClose =
+      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager).get();
+    assertNotSame("A stranded closed instance must not be returned after a throwing close()", group,
+      afterClose);
+    assertFalse("Re-created instance must be usable, not closed", afterClose.isClosed());
+    afterClose.close();
+  }
+
+  /**
+   * An unchecked throw from the state-unsubscribe step -- which runs before disruptor.shutdown()
+   * closes the writer -- must not skip the writer teardown. If it propagated, close() would jump
+   * straight to the finally cache removal while the consumer thread and writer were still alive,
+   * and a racing get() would mint a second live instance: the double-writer this close ordering
+   * exists to prevent. The throw is swallowed so shutdown still runs and the writer is closed.
+   */
+  @Test(timeout = 60000)
+  public void testCloseUnsubscribeThrowStillClosesWriter() throws Exception {
+    final String haGroupId = "testUnsubscribeThrows";
+    ReplicationLogGroup group =
+      new TestableLogGroup(conf, serverName, haGroupId, haGroupStoreManager, useAlignedRotation());
+    group.init();
+    ReplicationLogGroup.cacheForTesting(group);
+
+    LogFileWriter innerWriter = group.getActiveLog().getWriter();
+    assertNotNull("Inner writer should not be null", innerWriter);
+
+    // subscribeToStateChanges() registers unsubscribers that call unsubscribeFromTargetState;
+    // make the first one throw so the unsubscribe step throws before disruptor.shutdown().
+    doThrow(new RuntimeException("simulated unsubscribe failure")).when(haGroupStoreManager)
+      .unsubscribeFromTargetState(eq(haGroupId), any(HAGroupState.class), eq(ClusterType.LOCAL),
+        any(HAGroupStateListener.class));
+
+    // close() must not propagate the unsubscribe failure.
+    group.close();
+
+    // The writer was still closed despite the thrown unsubscribe.
+    verify(innerWriter, times(1)).close();
+    assertTrue("Group should be marked closed", group.isClosed());
+
+    // Cache entry removed: a fresh get() creates a NEW instance.
+    ReplicationLogGroup afterClose =
+      ReplicationLogGroup.get(conf, serverName, haGroupId, haGroupStoreManager).get();
+    assertNotSame("close() must remove the cache entry even when unsubscribe throws", group,
+      afterClose);
+    afterClose.close();
   }
 
   @Test
