@@ -65,6 +65,14 @@ public class BulkLoadToolTest {
   }
 
   @Test
+  public void testParseOptions_BadRecordsPath() {
+    CommandLine cmdLine = bulkLoadTool.parseOptions(new String[] { "--input", "/input", "--table",
+      "mytable", "--bad-records-path", "/tmp/bad-records" });
+    assertEquals("/tmp/bad-records",
+      cmdLine.getOptionValue(AbstractBulkLoadTool.BAD_RECORDS_PATH_OPT.getOpt()));
+  }
+
+  @Test
   public void testGetQualifiedTableName() {
     assertEquals("MYSCHEMA.MYTABLE", SchemaUtil.getQualifiedTableName("mySchema", "myTable"));
   }
