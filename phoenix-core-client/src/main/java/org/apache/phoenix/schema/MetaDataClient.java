@@ -3807,7 +3807,7 @@ public class MetaDataClient {
       MetaDataMutationResult result = connection.getQueryServices().createTable(tableMetaData,
         viewType == ViewType.MAPPED || allocateIndexId ? physicalNames.get(0).getBytes() : null,
         tableType, tableProps, familyPropList, splits, isNamespaceMapped, allocateIndexId,
-        UpgradeUtil.isNoUpgradeSet(connection.getClientInfo()), parent);
+        UpgradeUtil.isNoUpgradeSet(connection.getClientInfo()), parent, statement.ifNotExists());
       MutationCode code = result.getMutationCode();
       try {
         if (code != MutationCode.TABLE_NOT_FOUND) {
