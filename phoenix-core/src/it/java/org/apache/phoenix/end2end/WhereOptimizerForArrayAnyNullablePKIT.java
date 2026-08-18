@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -33,9 +34,6 @@ import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
 import java.util.Collection;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
-import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.junit.Assume;
 import org.junit.Test;
@@ -233,13 +231,7 @@ public class WhereOptimizerForArrayAnyNullablePKIT extends WhereOptimizerForArra
   }
 
   private void assertQueryUsesIndex(PreparedStatement stmt, String indexName) throws SQLException {
-    QueryPlan queryPlan = stmt.unwrap(PhoenixPreparedStatement.class).optimizeQuery();
-    ExplainPlan explain = queryPlan.getExplainPlan();
-    ExplainPlanAttributes planAttributes = explain.getPlanStepsAsAttributes();
-    String tableName = planAttributes.getTableName();
-    System.out.println("Explain plan: " + explain.toString());
-    assertTrue("Expected query to use index " + indexName + " but used table " + tableName,
-      tableName != null && tableName.contains(indexName));
+    assertPlan(stmt.unwrap(PhoenixPreparedStatement.class)).tableContains(indexName);
   }
 
   /**

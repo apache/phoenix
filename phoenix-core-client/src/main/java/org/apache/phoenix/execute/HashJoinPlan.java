@@ -40,7 +40,10 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.ServerCacheClient.ServerCache;
 import org.apache.phoenix.compile.ColumnProjector;
 import org.apache.phoenix.compile.ExplainPlan;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.FromCompiler;
+import org.apache.phoenix.compile.JoinCompiler;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.ScanRanges;
@@ -97,6 +100,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
   private final SelectStatement statement;
   private final HashJoinInfo joinInfo;
+  private JoinCompiler.Strategy strategy;
   private final SubPlan[] subPlans;
   private final boolean recompileWhereClause;
   private final Set<TableRef> tableRefs;
@@ -113,9 +117,10 @@ public class HashJoinPlan extends DelegateQueryPlan {
   private boolean hasSubPlansWithPersistentCache;
 
   public static HashJoinPlan create(SelectStatement statement, QueryPlan plan,
-    HashJoinInfo joinInfo, SubPlan[] subPlans) throws SQLException {
-    if (!(plan instanceof HashJoinPlan)) return new HashJoinPlan(statement, plan, joinInfo,
-      subPlans, joinInfo == null, Collections.<ImmutableBytesPtr, ServerCache> emptyMap());
+    HashJoinInfo joinInfo, SubPlan[] subPlans, JoinCompiler.Strategy strategy) throws SQLException {
+    if (!(plan instanceof HashJoinPlan))
+      return new HashJoinPlan(statement, plan, joinInfo, subPlans, joinInfo == null,
+        Collections.<ImmutableBytesPtr, ServerCache> emptyMap(), strategy);
 
     HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
     assert (hashJoinPlan.joinInfo == null && hashJoinPlan.delegate instanceof BaseQueryPlan);
@@ -128,16 +133,18 @@ public class HashJoinPlan extends DelegateQueryPlan {
       mergedSubPlans[i++] = subPlan;
     }
     return new HashJoinPlan(statement, hashJoinPlan.delegate, joinInfo, mergedSubPlans, true,
-      hashJoinPlan.dependencies);
+      hashJoinPlan.dependencies, strategy);
   }
 
   private HashJoinPlan(SelectStatement statement, QueryPlan plan, HashJoinInfo joinInfo,
     SubPlan[] subPlans, boolean recompileWhereClause,
-    Map<ImmutableBytesPtr, ServerCache> dependencies) throws SQLException {
+    Map<ImmutableBytesPtr, ServerCache> dependencies, JoinCompiler.Strategy strategy)
+    throws SQLException {
     super(plan);
     this.dependencies.putAll(dependencies);
     this.statement = statement;
     this.joinInfo = joinInfo;
+    this.strategy = strategy;
     this.subPlans = subPlans;
     this.recompileWhereClause = recompileWhereClause;
     this.tableRefs = Sets.newHashSetWithExpectedSize(subPlans.length + plan.getSourceRefs().size());
@@ -266,7 +273,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
       ? delegate.iterator(scanGrouper, scan)
       : ((BaseQueryPlan) delegate).iterator(dependencies, scanGrouper, scan);
     if (statement.getInnerSelectStatement() != null && postFilter != null) {
-      iterator = new FilterResultIterator(iterator, postFilter);
+      iterator = new FilterResultIterator(iterator, postFilter, delegate.getContext());
     }
 
     if (hasSubPlansWithPersistentCache) {
@@ -313,24 +320,71 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
   @Override
   public ExplainPlan getExplainPlan() throws SQLException {
-    // TODO : Support ExplainPlanAttributes for HashJoinPlan
-    List<String> planSteps = Lists.newArrayList(delegate.getExplainPlan().getPlanSteps());
+    ExplainPlan delegateExplainPlan = delegate.getExplainPlan();
+    List<String> planSteps = Lists.newArrayList(delegateExplainPlan.getPlanSteps());
+    // Each hash/skip-scan sub-plan is recorded under subPlans.
+    ExplainPlanAttributes delegateAttributes = delegateExplainPlan.getPlanStepsAsAttributes();
+    if (delegateAttributes == null) {
+      delegateAttributes = ExplainPlanAttributes.getDefaultExplainPlan();
+    }
+    ExplainPlanAttributesBuilder builder = new ExplainPlanAttributesBuilder(delegateAttributes);
+    List<ExplainPlanAttributes> subPlanAttributes = Lists.newArrayList();
     int count = subPlans.length;
+    // Carry the requested EXPLAIN options down to each sub-plan so every participating scan renders
+    // the same disclosures (e.g. VERBOSE predicate-origin attribution) as the driver scan.
     for (int i = 0; i < count; i++) {
-      planSteps.addAll(subPlans[i].getPreSteps(this));
+      subPlans[i].getInnerPlan().getContext().setExplainOptions(getContext().getExplainOptions());
     }
     for (int i = 0; i < count; i++) {
-      planSteps.addAll(subPlans[i].getPostSteps(this));
+      planSteps.addAll(subPlans[i].getPreSteps(this));
+      ExplainPlanAttributes subPlanAttribute = subPlans[i].getPreStepsAsAttributes(this);
+      if (subPlanAttribute != null) {
+        subPlanAttributes.add(subPlanAttribute);
+      }
+    }
+    for (int i = 0; i < count; i++) {
+      List<String> postSteps = subPlans[i].getPostSteps(this);
+      planSteps.addAll(postSteps);
+      for (String step : postSteps) {
+        String trimmed = step.trim();
+        if (trimmed.startsWith("DYNAMIC SERVER FILTER BY")) {
+          builder.setDynamicServerFilter(trimmed);
+        }
+      }
     }
 
     if (joinInfo != null && joinInfo.getPostJoinFilterExpression() != null) {
-      planSteps.add(
-        "    AFTER-JOIN SERVER FILTER BY " + joinInfo.getPostJoinFilterExpression().toString());
+      String afterJoinFilter =
+        "AFTER-JOIN SERVER FILTER BY " + joinInfo.getPostJoinFilterExpression().toString();
+      planSteps.add("    " + afterJoinFilter);
+      builder.setAfterJoinFilter(afterJoinFilter);
     }
     if (joinInfo != null && joinInfo.getLimit() != null) {
       planSteps.add("    JOIN-SCANNER " + joinInfo.getLimit() + " ROW LIMIT");
+      builder.setJoinScannerLimit(joinInfo.getLimit().longValue());
     }
-    return new ExplainPlan(planSteps);
+    if (!subPlanAttributes.isEmpty()) {
+      builder.setSubPlans(subPlanAttributes);
+    }
+    if (getContext().isRoot()) {
+      ExplainTable.populateTopOfPlanAttributes(builder, getContext(), getTableRef());
+      ExplainTable.populateTopOfPlanEstimates(builder, this);
+    }
+    return new ExplainPlan(planSteps, builder.build());
+  }
+
+  /**
+   * Builds the explain-plan attributes for a hash-join subplan by taking the inner plan's
+   * attributes (when available) and stamping the supplied join header onto abstractExplainPlan.
+   */
+  private static ExplainPlanAttributes subPlanAttributesWithHeader(QueryPlan plan, String header)
+    throws SQLException {
+    ExplainPlanAttributes innerAttributes = plan.getExplainPlan().getPlanStepsAsAttributes();
+    ExplainPlanAttributesBuilder builder =
+      (innerAttributes != null && innerAttributes != ExplainPlanAttributes.getDefaultExplainPlan())
+        ? new ExplainPlanAttributesBuilder(innerAttributes)
+        : new ExplainPlanAttributesBuilder();
+    return builder.setAbstractExplainPlan(header).build();
   }
 
   @Override
@@ -340,6 +394,14 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
   public HashJoinInfo getJoinInfo() {
     return joinInfo;
+  }
+
+  public JoinCompiler.Strategy getStrategy() {
+    return strategy;
+  }
+
+  public void setStrategy(JoinCompiler.Strategy strategy) {
+    this.strategy = strategy;
   }
 
   public SubPlan[] getSubPlans() {
@@ -430,6 +492,14 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
     public List<String> getPostSteps(HashJoinPlan parent) throws SQLException;
 
+    /**
+     * Returns the explain-plan attributes for this subplan, with its abstractExplainPlan. Returns
+     * null when no structured attributes are available for the inner plan.
+     */
+    default ExplainPlanAttributes getPreStepsAsAttributes(HashJoinPlan parent) throws SQLException {
+      return null;
+    }
+
     public QueryPlan getInnerPlan();
 
     public boolean hasKeyRangeExpression();
@@ -446,6 +516,7 @@ public class HashJoinPlan extends DelegateQueryPlan {
       this.expectSingleRow = expectSingleRow;
     }
 
+    @SuppressWarnings("rawtypes")
     @Override
     public ServerCache execute(HashJoinPlan parent) throws SQLException {
       List<Object> values = Lists.<Object> newArrayList();
@@ -506,6 +577,12 @@ public class HashJoinPlan extends DelegateQueryPlan {
         steps.add("        " + step);
       }
       return steps;
+    }
+
+    @Override
+    public ExplainPlanAttributes getPreStepsAsAttributes(HashJoinPlan parent) throws SQLException {
+      String header = "EXECUTE " + (expectSingleRow ? "SINGLE" : "MULTIPLE") + "-ROW SUBQUERY";
+      return subPlanAttributesWithHeader(plan, header);
     }
 
     @Override
@@ -628,22 +705,50 @@ public class HashJoinPlan extends DelegateQueryPlan {
       }
     }
 
+    /**
+     * Builds the join operator line (without leading indentation) for this subplan, with the chosen
+     * {@link JoinCompiler.Strategy} and the {@code SKIP MERGE} / {@code DELAYED EVALUATION}
+     * decorators rendered as a single trailing SQL comment.
+     */
+    private String buildHeader(HashJoinPlan parent) {
+      boolean isHashJoin = hashExpressions != null;
+      String op = isHashJoin
+        ? "PARALLEL " + parent.joinInfo.getJoinTypes()[index].toString().toUpperCase()
+          + "-JOIN TABLE " + index
+        : "SKIP-SCAN-JOIN TABLE " + index;
+      JoinCompiler.Strategy strategy = parent.getStrategy();
+      if (strategy == null) {
+        return op;
+      }
+      StringBuilder comment = new StringBuilder("/* HASH BUILD ");
+      comment.append(strategy == JoinCompiler.Strategy.HASH_BUILD_LEFT ? "LEFT" : "RIGHT");
+      if (isHashJoin) {
+        boolean skipMerge = parent.joinInfo.getSchemas()[index].getFieldCount() == 0;
+        boolean earlyEvaluation = parent.joinInfo.earlyEvaluation()[index];
+        if (skipMerge) {
+          comment.append(", SKIP MERGE");
+        }
+        if (!earlyEvaluation) {
+          comment.append(", DELAYED EVALUATION");
+        }
+      }
+      comment.append(" */");
+      return op + "  " + comment;
+    }
+
     @Override
     public List<String> getPreSteps(HashJoinPlan parent) throws SQLException {
       List<String> steps = Lists.newArrayList();
-      boolean earlyEvaluation = parent.joinInfo.earlyEvaluation()[index];
-      boolean skipMerge = parent.joinInfo.getSchemas()[index].getFieldCount() == 0;
-      if (hashExpressions != null) {
-        steps.add("    PARALLEL " + parent.joinInfo.getJoinTypes()[index].toString().toUpperCase()
-          + "-JOIN TABLE " + index + (earlyEvaluation ? "" : "(DELAYED EVALUATION)")
-          + (skipMerge ? " (SKIP MERGE)" : ""));
-      } else {
-        steps.add("    SKIP-SCAN-JOIN TABLE " + index);
-      }
+      steps.add("    " + buildHeader(parent));
       for (String step : plan.getExplainPlan().getPlanSteps()) {
         steps.add("        " + step);
       }
       return steps;
+    }
+
+    @Override
+    public ExplainPlanAttributes getPreStepsAsAttributes(HashJoinPlan parent) throws SQLException {
+      return subPlanAttributesWithHeader(plan, buildHeader(parent));
     }
 
     @Override

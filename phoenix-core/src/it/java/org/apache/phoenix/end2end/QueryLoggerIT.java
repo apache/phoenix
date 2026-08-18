@@ -117,7 +117,7 @@ public class QueryLoggerIT extends BaseTest {
 
     // sleep for sometime to let query log committed
     Thread.sleep(delay);
-    try (ResultSet explainRS = conn.createStatement().executeQuery("Explain with regions " + query);
+    try (ResultSet explainRS = conn.createStatement().executeQuery("Explain " + query);
       ResultSet rs = conn.createStatement().executeQuery(logQuery)) {
       boolean foundQueryLog = false;
 
@@ -127,6 +127,8 @@ public class QueryLoggerIT extends BaseTest {
           assertEquals(rs.getString(BIND_PARAMETERS), null);
           assertEquals(rs.getString(USER), System.getProperty("user.name"));
           assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
+          // The EXPLAIN_PLAN column logged by the query logger must be equal to a freshly
+          // computed plan.
           assertEquals(rs.getString(EXPLAIN_PLAN), QueryUtil.getExplainPlan(explainRS));
           assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), context.getScan().toJSON());
           assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 10);
@@ -299,8 +301,8 @@ public class QueryLoggerIT extends BaseTest {
 
       // sleep for sometime to let query log committed
       Thread.sleep(delay);
-      String explainQuery =
-        "EXPLAIN WITH REGIONS " + "SELECT * FROM " + tableName + " where V = 'value5'";
+      // Compare against a plain EXPLAIN (no REGIONS) to match the logged plan.
+      String explainQuery = "EXPLAIN " + "SELECT * FROM " + tableName + " where V = 'value5'";
       try (ResultSet explainRS = conn.createStatement().executeQuery(explainQuery);
         ResultSet rs = conn.createStatement().executeQuery(logQuery)) {
         boolean foundQueryLog = false;
@@ -311,6 +313,8 @@ public class QueryLoggerIT extends BaseTest {
               loglevel == LogLevel.TRACE ? "value5" : null);
             assertEquals(rs.getString(USER), System.getProperty("user.name"));
             assertEquals(rs.getString(CLIENT_IP), InetAddress.getLocalHost().getHostAddress());
+            // The EXPLAIN_PLAN column logged by the query logger must be equal to a freshly
+            // computed plan.
             assertEquals(rs.getString(EXPLAIN_PLAN), QueryUtil.getExplainPlan(explainRS));
             assertEquals(rs.getString(GLOBAL_SCAN_DETAILS), context.getScan().toJSON());
             assertEquals(rs.getLong(NO_OF_RESULTS_ITERATED), 1);

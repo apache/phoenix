@@ -55,7 +55,9 @@ public class LimitingResultIterator extends DelegateResultIterator {
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     super.explain(planSteps, explainPlanAttributesBuilder);
     explainPlanAttributesBuilder.setClientRowLimit(limit);
-    planSteps.add("CLIENT " + limit + " ROW LIMIT");
+    String step = "CLIENT " + limit + " ROW LIMIT";
+    planSteps.add(step);
+    explainPlanAttributesBuilder.addClientStep(step);
   }
 
   @Override

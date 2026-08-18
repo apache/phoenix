@@ -1755,8 +1755,15 @@ public class MetaDataClient {
         // can lose information during compilation
         StringBuilder buf = new StringBuilder();
         parseNode.toSQL(resolver, buf);
+        // Several ParseNode.toSQL implementations (FunctionParseNode, CastParseNode, etc.)
+        // unconditionally prepend a separator space so the serialized form composes safely
+        // when nested inside a larger expression. At the top of an index expression there is
+        // no surrounding context, so trim the resulting string before it becomes part of the
+        // functional index column name. Otherwise the leading space would be baked into the
+        // PColumn name and would later show up inside the double quotes of the case-sensitive
+        // display name (e.g. PROJECT " JSON_VALUE(DOC,'$.type')").
         // need to escape backslash as this expression will be re-parsed later
-        String expressionStr = StringUtil.escapeBackslash(buf.toString());
+        String expressionStr = StringUtil.escapeBackslash(buf.toString().trim());
 
         ColumnName colName = null;
         ColumnRef colRef = expressionIndexCompiler.getColumnRef();

@@ -17,10 +17,10 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -30,7 +30,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.Statement;
+import java.util.List;
 import java.util.Properties;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
@@ -38,7 +38,6 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -626,52 +625,41 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
       ExplainPlan plan = conn.prepareStatement(ddl).unwrap(PhoenixPreparedStatement.class)
         .optimizeQuery().getExplainPlan();
       ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
+      // The union composes each branch recursively into subPlans. The root carries only the union
+      // level
+      // client side, and each branch's scan attributes live on its own subPlan entry.
       assertEquals("UNION ALL OVER 2 QUERIES", explainPlanAttributes.getAbstractExplainPlan());
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(tableName1, explainPlanAttributes.getTableName());
-      assertEquals("[COL1]", explainPlanAttributes.getServerSortedBy());
-      assertEquals(1L, explainPlanAttributes.getServerRowLimit().longValue());
-      assertEquals(1, explainPlanAttributes.getClientRowLimit().intValue());
       assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
-      ExplainPlanAttributes rhsPlanAttributes = explainPlanAttributes.getRhsJoinQueryExplainPlan();
+      assertEquals(1, explainPlanAttributes.getClientRowLimit().intValue());
+      List<ExplainPlanAttributes> subPlans = explainPlanAttributes.getSubPlans();
+      assertEquals(2, subPlans.size());
+      ExplainPlanAttributes lhsPlanAttributes = subPlans.get(0);
+      assertEquals("PARALLEL 1-WAY", lhsPlanAttributes.getIteratorTypeAndScanSize());
+      assertEquals("FULL SCAN", lhsPlanAttributes.getExplainScanType());
+      assertEquals(tableName1, lhsPlanAttributes.getTableName());
+      assertEquals("[COL1]", lhsPlanAttributes.getServerSortedBy());
+      assertEquals(1L, lhsPlanAttributes.getServerRowLimit().longValue());
+      assertEquals(1, lhsPlanAttributes.getClientRowLimit().intValue());
+      assertEquals("CLIENT MERGE SORT", lhsPlanAttributes.getClientSortAlgo());
+      ExplainPlanAttributes rhsPlanAttributes = subPlans.get(1);
       assertEquals("PARALLEL 1-WAY", rhsPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", rhsPlanAttributes.getExplainScanType());
+      assertEquals("FULL SCAN", rhsPlanAttributes.getExplainScanType());
       assertEquals(tableName2, rhsPlanAttributes.getTableName());
       assertEquals("[COL1]", rhsPlanAttributes.getServerSortedBy());
       assertEquals(1L, rhsPlanAttributes.getServerRowLimit().longValue());
       assertEquals(1, rhsPlanAttributes.getClientRowLimit().intValue());
       assertEquals("CLIENT MERGE SORT", rhsPlanAttributes.getClientSortAlgo());
 
-      String limitPlan = "UNION ALL OVER 2 QUERIES\n" + "    CLIENT SERIAL 1-WAY FULL SCAN OVER "
-        + tableName1 + "\n" + "        SERVER 2 ROW LIMIT\n" + "    CLIENT 2 ROW LIMIT\n"
-        + "    CLIENT SERIAL 1-WAY FULL SCAN OVER " + tableName2 + "\n"
-        + "        SERVER 2 ROW LIMIT\n" + "    CLIENT 2 ROW LIMIT\n" + "CLIENT 2 ROW LIMIT";
-
+      // Each branch emits a SERIAL 1-WAY FULL SCAN with SERVER 2 ROW LIMIT and an inner CLIENT 2
+      // ROW LIMIT. The union root carries the single outer CLIENT 2 ROW LIMIT.
       ddl = "select a_string, col1 from " + tableName1 + " union all select a_string, col1 from "
         + tableName2 + " limit 2";
-      plan = conn.prepareStatement(ddl).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-        .getExplainPlan();
-      explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("UNION ALL OVER 2 QUERIES", explainPlanAttributes.getAbstractExplainPlan());
-      assertEquals("SERIAL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(tableName1, explainPlanAttributes.getTableName());
-      assertNull(explainPlanAttributes.getServerSortedBy());
-      assertEquals(2L, explainPlanAttributes.getServerRowLimit().longValue());
-      assertEquals(2, explainPlanAttributes.getClientRowLimit().intValue());
-      rhsPlanAttributes = explainPlanAttributes.getRhsJoinQueryExplainPlan();
-      assertEquals("SERIAL 1-WAY", rhsPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", rhsPlanAttributes.getExplainScanType());
-      assertEquals(tableName2, rhsPlanAttributes.getTableName());
-      assertNull(rhsPlanAttributes.getServerSortedBy());
-      assertEquals(2L, rhsPlanAttributes.getServerRowLimit().longValue());
-      assertEquals(2, rhsPlanAttributes.getClientRowLimit().intValue());
-
-      Statement stmt = conn.createStatement();
-      stmt.setMaxRows(2);
-      ResultSet rs = stmt.executeQuery("explain " + ddl);
-      assertEquals(limitPlan, QueryUtil.getExplainPlan(rs));
+      assertPlan(conn, ddl).abstractExplainPlan("UNION ALL OVER 2 QUERIES").clientRowLimit(2)
+        .clientSteps("CLIENT 2 ROW LIMIT").subPlanCount(2).subPlan(0).iteratorType("SERIAL")
+        .scanType("FULL SCAN").table(tableName1).serverSortedBy(null).serverRowLimit(2L)
+        .clientRowLimit(2).clientSteps("CLIENT 2 ROW LIMIT").end().subPlan(1).iteratorType("SERIAL")
+        .scanType("FULL SCAN").table(tableName2).serverSortedBy(null).serverRowLimit(2L)
+        .clientRowLimit(2).clientSteps("CLIENT 2 ROW LIMIT").end();
 
       ddl = "select a_string, col1 from " + tableName1 + " union all select a_string, col1 from "
         + tableName2;
@@ -679,12 +667,15 @@ public class UnionAllIT extends ParallelStatsDisabledIT {
         .getExplainPlan();
       explainPlanAttributes = plan.getPlanStepsAsAttributes();
       assertEquals("UNION ALL OVER 2 QUERIES", explainPlanAttributes.getAbstractExplainPlan());
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
-      assertEquals(tableName1, explainPlanAttributes.getTableName());
-      rhsPlanAttributes = explainPlanAttributes.getRhsJoinQueryExplainPlan();
+      subPlans = explainPlanAttributes.getSubPlans();
+      assertEquals(2, subPlans.size());
+      lhsPlanAttributes = subPlans.get(0);
+      assertEquals("PARALLEL 1-WAY", lhsPlanAttributes.getIteratorTypeAndScanSize());
+      assertEquals("FULL SCAN", lhsPlanAttributes.getExplainScanType());
+      assertEquals(tableName1, lhsPlanAttributes.getTableName());
+      rhsPlanAttributes = subPlans.get(1);
       assertEquals("PARALLEL 1-WAY", rhsPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", rhsPlanAttributes.getExplainScanType());
+      assertEquals("FULL SCAN", rhsPlanAttributes.getExplainScanType());
       assertEquals(tableName2, rhsPlanAttributes.getTableName());
     }
   }
