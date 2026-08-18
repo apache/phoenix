@@ -158,10 +158,11 @@ public class ConnectionQueryServicesMetricsManager {
   /**
    * This function will be used to add individual MetricType to LocalStore. Also this will serve as
    * LocalStore to store connection query service metrics before their current value is added to
-   * histogram. This func is only used for metrics which are counter based, where values increases
-   * or decreases frequently. Like Open Conn Counter. This function will first retrieve it's current
-   * value and increment or decrement (by +/-1) it as required then update the new values. <br>
-   * Example :- OPEN_PHOENIX_CONNECTIONS_COUNTER, OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER <br>
+   * histogram. In case of counter where values is passed as 1, this function will first retrieve
+   * it's current value and increment or decrement (by +/-1) it as required then update the new
+   * values. <br>
+   * Example :- OPEN_PHOENIX_CONNECTIONS_COUNTER, OPEN_INTERNAL_PHOENIX_CONNECTIONS_COUNTER,
+   * PHOENIX_CONNECTION_CREATION_DURATION_MS<br>
    * <br>
    * histogram will update with each increment/decrement.
    */
