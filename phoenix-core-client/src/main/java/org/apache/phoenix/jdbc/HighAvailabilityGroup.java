@@ -773,6 +773,11 @@ public class HighAvailabilityGroup {
     return roleRecord;
   }
 
+  @VisibleForTesting
+  State getStateForTesting() {
+    return state;
+  }
+
   /**
    * Package private close method.
    * <p>
@@ -993,69 +998,112 @@ public class HighAvailabilityGroup {
    *         reachable — that single endpoint's un-reconciled record
    * @throws SQLException if there is an error getting the ClusterRoleRecord
    */
-  private ClusterRoleRecord getClusterRoleRecordFromEndpoint() throws SQLException {
+  @VisibleForTesting
+  ClusterRoleRecord getClusterRoleRecordFromEndpoint() throws SQLException {
     long pollerInterval =
       Long.parseLong(properties.getProperty(PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY, config
         .get(PHOENIX_HA_CRR_POLLER_INTERVAL_MS_KEY, PHOENIX_HA_CRR_POLLER_INTERVAL_MS_DEFAULT)));
 
-    ClusterRoleRecord resolvedRecord;
+    ClusterRoleRecord resolvedRecord = null;
+    ClusterRoleRecord roleRecord1 = null;
     try {
       // Read cluster 1's CRR (read-only; no poller side effect).
-      ClusterRoleRecord roleRecord = GetClusterRoleRecordUtil.getClusterRoleRecord(info.getUrl1(),
-        info.getName(), true, properties);
-      // Read cluster 2's CRR and reconcile; if cluster 2 is unreachable, keep cluster 1's record.
+      roleRecord1 = fetchClusterRoleRecord(info.getUrl1());
+    } catch (Exception e) {
+      // Cluster 1 failed: fall back to cluster 2 (single endpoint, no reconciliation). Log first,
+      // otherwise a cluster-1 failure (including an unchecked bug such as an NPE) vanishes whenever
+      // cluster 2 succeeds.
+      LOG.warn("Cluster 1 endpoint {} for HA group {} threw an exception; attempting cluster 2 "
+        + "endpoint {}", info.getUrl1(), info.getName(), info.getUrl2(), e);
+      // Restore the interrupt status the cluster-1 fetch cleared in a finally, AFTER the fallback
+      // fetch on every exit path (normal or thrown): a stale flag set before the fetch would
+      // pre-empt the blocking work we depend on, but callers must still observe cancellation.
+      boolean cluster1Interrupted = isCausedByInterrupt(e);
       try {
-        ClusterRoleRecord roleRecordFromPR = GetClusterRoleRecordUtil
-          .getClusterRoleRecord(info.getUrl2(), info.getName(), true, properties);
-        // Pass the currently applied record (this.roleRecord; null on first load) so an
-        // equal-version divergence between the endpoints defers to it rather than flapping.
-        resolvedRecord = reconcileClusterRoleRecords(roleRecord, roleRecordFromPR, this.roleRecord);
-        if (!roleRecord.equals(roleRecordFromPR)) {
-          LOG.info(
-            "Reconciled divergent CRRs for HA group {}: cluster1={} (V{}), cluster2={} (V{}); "
-              + "chose {} (V{})",
-            info.getName(), roleRecord, roleRecord.getVersion(), roleRecordFromPR,
-            roleRecordFromPR.getVersion(), resolvedRecord, resolvedRecord.getVersion());
+        // On CRR-Not-Found, if cluster 2 also fails rethrow the original Not-Found (with the
+        // cluster-2 failure suppressed) so downstream fallback can trigger.
+        if (
+          e instanceof SQLException && ((SQLException) e).getErrorCode()
+              == SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getErrorCode()
+        ) {
+          try {
+            resolvedRecord = fetchClusterRoleRecord(info.getUrl2());
+          } catch (Exception ignoredEx) {
+            ((SQLException) e).addSuppressed(ignoredEx);
+            throw (SQLException) e;
+          }
+        } else {
+          // If caught exception is not CRR-Not-Found, try the cluster 2 endpoint. If cluster 2 also
+          // fails, attach cluster 1's failure as suppressed so the single propagating exception
+          // carries both root causes (parity with the Not-Found path above).
+          try {
+            resolvedRecord = fetchClusterRoleRecord(info.getUrl2());
+          } catch (Exception cluster2Ex) {
+            cluster2Ex.addSuppressed(e);
+            throw cluster2Ex;
+          }
         }
+      } finally {
+        if (cluster1Interrupted) {
+          Thread.currentThread().interrupt();
+        }
+      }
+    }
+
+    if (roleRecord1 != null) {
+      // Cluster 1 reachable. Read cluster 2's CRR; if cluster 2 is unreachable, degrade to
+      // cluster 1's record.
+      ClusterRoleRecord roleRecord2 = null;
+      try {
+        roleRecord2 = fetchClusterRoleRecord(info.getUrl2());
       } catch (Exception e) {
         // Any cluster 2 fetch failure degrades to cluster 1's record. Catch broadly: an unchecked
-        // exception from the pre-RPC connect path is still a reachability failure, and letting it
-        // reach the outer catch would discard the cluster 1 record we already hold. Restore the
-        // interrupt status if the failure wrapped one, so callers can observe cancellation.
+        // exception from the pre-RPC connect path is still a reachability failure. No further
+        // blocking work follows here, so restore the interrupt status immediately if the failure
+        // wrapped one, so callers can observe cancellation.
         if (isCausedByInterrupt(e)) {
           Thread.currentThread().interrupt();
         }
         LOG.warn(
           "Fetched CRR {} from cluster {} but cluster {} endpoint threw an exception; "
             + "returning cluster {} CRR without peer reconciliation",
-          roleRecord.toPrettyString(), info.getUrl1(), info.getUrl2(), info.getUrl1(), e);
-        resolvedRecord = roleRecord;
+          roleRecord1.toPrettyString(), info.getUrl1(), info.getUrl2(), info.getUrl1(), e);
       }
-    } catch (Exception e) {
-      // Cluster 1 failed: fall back to cluster 2. On CRR-Not-Found, if cluster 2 also fails
-      // rethrow the original Not-Found so downstream fallback can trigger.
-      if (
-        e instanceof SQLException && ((SQLException) e).getErrorCode()
-            == SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getErrorCode()
-      ) {
-        try {
-          resolvedRecord = GetClusterRoleRecordUtil.getClusterRoleRecord(info.getUrl2(),
-            info.getName(), true, properties);
-        } catch (Exception ignoredEx) {
-          throw (SQLException) e;
-        }
+      if (roleRecord2 == null) {
+        resolvedRecord = roleRecord1;
       } else {
-        // If caught exception is not CRR not found, then just try cluster 2 endpoint.
-        resolvedRecord = GetClusterRoleRecordUtil.getClusterRoleRecord(info.getUrl2(),
-          info.getName(), true, properties);
+        // Both endpoints reachable. Reconcile OUTSIDE both fetch try/catch blocks: it is pure
+        // computation, so a bug here surfaces as itself rather than being caught by a fetch catch,
+        // misreported as an endpoint failure, and silently degraded to a single-endpoint record.
+        // Pass the currently applied record (this.roleRecord; null on first load) so an
+        // equal-version divergence defers to it rather than flapping.
+        resolvedRecord = reconcileClusterRoleRecords(roleRecord1, roleRecord2, this.roleRecord);
+        if (!roleRecord1.equals(roleRecord2)) {
+          LOG.info(
+            "Reconciled divergent CRRs for HA group {}: cluster1={} (V{}), cluster2={} (V{}); "
+              + "chose {} (V{})",
+            info.getName(), roleRecord1, roleRecord1.getVersion(), roleRecord2,
+            roleRecord2.getVersion(), resolvedRecord, resolvedRecord.getVersion());
+        }
       }
     }
 
-    // Schedule the non-active CRR poller at most once, gated on the resolved record. maybeSchedule
-    // is a no-op when the record has an active role, so this is safe to call unconditionally.
+    // resolvedRecord is non-null here: either the cluster-1 fallback set it, or the cluster-1
+    // reachable branch did. Schedule the non-active CRR poller at most once, gated on the resolved
+    // record. maybeSchedulePoller is a no-op when the record has an active role, so this is safe to
+    // call unconditionally.
     GetClusterRoleRecordUtil.maybeSchedulePoller(info.getUrl1(), info.getUrl2(), info.getName(),
       this, resolvedRecord, pollerInterval, properties);
     return resolvedRecord;
+  }
+
+  /**
+   * Reads a single endpoint's CRR (a pure read; no poller side effect). Extracted as a seam so unit
+   * tests can stub per-endpoint fetches without a mini-cluster.
+   */
+  @VisibleForTesting
+  ClusterRoleRecord fetchClusterRoleRecord(String url) throws SQLException {
+    return GetClusterRoleRecordUtil.getClusterRoleRecord(url, info.getName(), true, properties);
   }
 
   /**
@@ -1063,7 +1111,8 @@ public class HighAvailabilityGroup {
    * A blocking endpoint RPC surfaces the interruption wrapped inside the thrown exception, and the
    * JVM has already cleared the thread's interrupt flag, so the caller must restore it explicitly.
    */
-  private static boolean isCausedByInterrupt(Throwable t) {
+  @VisibleForTesting
+  static boolean isCausedByInterrupt(Throwable t) {
     for (int depth = 0; t != null && depth < 16; t = t.getCause(), depth++) {
       if (t instanceof InterruptedException || t instanceof InterruptedIOException) {
         return true;
@@ -1311,8 +1360,9 @@ public class HighAvailabilityGroup {
     // still names an active cluster (one role resolved ACTIVE while its peer is mid-transition and
     // momentarily UNKNOWN). There the newer record reflects a real state advance, and masking it
     // behind a stale fully-known record would keep routing to a since-demoted cluster, so the newer
-    // record wins. A newer UNKNOWN record with NO active role stays masked: it cannot route a
-    // connection, and the non-active poller picks up the true state on its next tick.
+    // record wins. A newer UNKNOWN record with NO active role stays masked behind the usable
+    // record: it cannot route a connection, so recovery comes from the next scheduled refresh (and
+    // the poller only if the usable record is itself non-active, which schedules it after return).
     if (recordFromCluster1.hasUnknownRole() != recordFromCluster2.hasUnknownRole()) {
       ClusterRoleRecord unknownRecord =
         recordFromCluster1.hasUnknownRole() ? recordFromCluster1 : recordFromCluster2;

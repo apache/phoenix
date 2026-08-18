@@ -22,12 +22,19 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
+import java.io.IOException;
+import java.io.InterruptedIOException;
 import java.sql.SQLException;
 import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
+import org.apache.phoenix.jdbc.HighAvailabilityGroup.HAGroupInfo;
+import org.apache.phoenix.jdbc.HighAvailabilityGroup.State;
+import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.junit.Test;
+import org.mockito.Mockito;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -234,8 +241,9 @@ public class HighAvailabilityGroupTest {
       HighAvailabilityGroup.reconcileClusterRoleRecords(activeUnknownV13, v9, null));
 
     // But a newer UNKNOWN record with NO active role stays masked behind the usable record: it
-    // cannot route a connection, and the non-active poller resolves the true state on its next
-    // tick. unknownV11 (url1 UNKNOWN, url2 STANDBY, no active) is newer than v9 but not routable.
+    // cannot route a connection, so recovery comes from the next scheduled refresh (the poller runs
+    // only if the usable record is itself non-active). unknownV11 (url1 UNKNOWN, url2 STANDBY, no
+    // active) is newer than v9 but not routable.
     assertSame("Newer UNKNOWN record with no active role stays masked behind the usable record", v9,
       HighAvailabilityGroup.reconcileClusterRoleRecords(v9, unknownV11, null));
 
@@ -297,6 +305,18 @@ public class HighAvailabilityGroupTest {
     assertSame("First-load equal-version divergence falls back to the peer record", divergentV10,
       HighAvailabilityGroup.reconcileClusterRoleRecords(current, divergentV10, null));
 
+    // Equal-version divergence where the applied record is at a LOWER version than the endpoints:
+    // the defer guard (current.version == endpoints' version) does not fire, so this falls through
+    // to the deterministic peer record rather than keeping the stale applied record. This is the
+    // other branch of the fall-through the first-load case cannot reach (current != null).
+    ClusterRoleRecord olderCurrentV9 = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 9L);
+    assertSame(
+      "Equal-version divergence with the applied record at a lower version falls through to the "
+        + "peer record (the defer only fires when current sits at the endpoints' version)",
+      divergentV10,
+      HighAvailabilityGroup.reconcileClusterRoleRecords(current, divergentV10, olderCurrentV9));
+
     // A genuine version advance is applied even though current is at the older version.
     assertSame("A strictly newer version must still win over the applied record", v11,
       HighAvailabilityGroup.reconcileClusterRoleRecords(current, v11, current));
@@ -325,5 +345,277 @@ public class HighAvailabilityGroupTest {
     // A strict '>' guard would wrongly reject this same-version role change.
     assertTrue("Must apply a same-version record with changed roles (autonomous transition)",
       HighAvailabilityGroup.shouldApplyRefreshedRecord(v10, v10RolesChanged));
+  }
+
+  /**
+   * Pins {@link HighAvailabilityGroup#isCausedByInterrupt}: both interrupt marker types (direct and
+   * wrapped) are detected, non-interrupt chains are not, and the depth-16 bound stops the walk so a
+   * self-referential (cyclic) cause chain terminates rather than spinning forever.
+   */
+  @Test
+  public void testIsCausedByInterrupt() {
+    assertTrue("Direct InterruptedException must be detected",
+      HighAvailabilityGroup.isCausedByInterrupt(new InterruptedException()));
+    assertTrue("Direct InterruptedIOException must be detected",
+      HighAvailabilityGroup.isCausedByInterrupt(new InterruptedIOException()));
+    assertTrue("A wrapped interrupt marker must be detected", HighAvailabilityGroup
+      .isCausedByInterrupt(new SQLException("rpc", new InterruptedIOException())));
+    assertFalse("A non-interrupt cause chain must not be detected",
+      HighAvailabilityGroup.isCausedByInterrupt(new SQLException("rpc", new IOException("io"))));
+    assertFalse("null must not be detected", HighAvailabilityGroup.isCausedByInterrupt(null));
+
+    // An interrupt marker at chain index 15 is within the depth-16 bound → detected.
+    Throwable withinBound = new InterruptedException("deep");
+    for (int i = 0; i < 15; i++) {
+      withinBound = new RuntimeException("wrap" + i, withinBound);
+    }
+    assertTrue("An interrupt marker at depth 15 (within the bound) must be detected",
+      HighAvailabilityGroup.isCausedByInterrupt(withinBound));
+
+    // An interrupt marker at chain index 16 is beyond the bound → not detected.
+    Throwable beyondBound = new InterruptedException("deeper");
+    for (int i = 0; i < 16; i++) {
+      beyondBound = new RuntimeException("wrap" + i, beyondBound);
+    }
+    assertFalse("An interrupt marker at depth 16 (beyond the bound) must not be detected",
+      HighAvailabilityGroup.isCausedByInterrupt(beyondBound));
+
+    // A self-referential cause chain must terminate (the depth bound is the cycle guard).
+    Throwable selfCycle = new RuntimeException() {
+      @Override
+      public synchronized Throwable getCause() {
+        return this;
+      }
+    };
+    assertFalse("A cyclic cause chain must terminate and not be detected",
+      HighAvailabilityGroup.isCausedByInterrupt(selfCycle));
+  }
+
+  /**
+   * Wires the refresh no-rollback branch end to end: when the endpoint serves a strictly older
+   * record than the applied one, {@code refreshClusterRoleRecord} keeps the applied record, stays
+   * {@code READY}, does not count a failover, and returns {@code true}. A passing
+   * {@code shouldApplyRefreshedRecord} unit test alone does not prove this branch is wired — an
+   * inverted guard would silently reintroduce the rollback with the helper test still green.
+   */
+  @Test
+  public void testRefreshDoesNotRollBackToOlderRecord() throws Exception {
+    String haGroupName = "testRefreshDoesNotRollBackToOlderRecord";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord appliedV10 = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    ClusterRoleRecord staleV9 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.STANDBY, url2, ClusterRole.ACTIVE, 9L);
+
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+    HighAvailabilityGroup group =
+      Mockito.spy(new HighAvailabilityGroup(info, new Properties(), appliedV10, State.READY));
+    Mockito.doReturn(staleV9).when(group).getClusterRoleRecordFromEndpoint();
+
+    long failoverBefore = GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue();
+    assertTrue("Refresh that would roll back must be a no-op returning true",
+      group.refreshClusterRoleRecord(true));
+    assertSame("The applied record must be kept, not rolled back to the older fetched record",
+      appliedV10, group.getRoleRecord());
+    assertSame("HA group must stay READY after a rejected rollback", State.READY,
+      group.getStateForTesting());
+    assertEquals("A rejected rollback must not count as a failover", failoverBefore,
+      GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue());
+  }
+
+  /**
+   * Wires {@link HighAvailabilityGroup#getClusterRoleRecordFromEndpoint}: because reconcile is
+   * order-independent for most cases, a url1/url2 fetch swap or a wrong {@code current} argument
+   * would pass every reconcile helper test yet change first-load behavior. On a first-load
+   * equal-version divergence reconcile returns the cluster-2 record, so the resolved record must be
+   * the url2 fetch (a swap would surface the url1 fetch); once a same-version record is applied the
+   * defer must return that applied record (proving {@code this.roleRecord} is threaded as
+   * {@code current}).
+   */
+  @Test
+  public void testGetClusterRoleRecordFromEndpointWiring() throws Exception {
+    String haGroupName = "testGetClusterRoleRecordFromEndpointWiring";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord fromUrl1 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    ClusterRoleRecord fromUrl2 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.STANDBY, url2, ClusterRole.ACTIVE, 10L);
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+
+    // First load (current == null): equal-version divergence resolves to the cluster-2 (url2)
+    // fetch.
+    HighAvailabilityGroup firstLoad =
+      Mockito.spy(new HighAvailabilityGroup(info, new Properties(), null, State.UNINITIALIZED));
+    Mockito.doReturn(fromUrl1).when(firstLoad).fetchClusterRoleRecord(url1);
+    Mockito.doReturn(fromUrl2).when(firstLoad).fetchClusterRoleRecord(url2);
+    assertSame("url1 must be fetched as cluster 1 and url2 as cluster 2 (a swap would return the "
+      + "url1 record)", fromUrl2, firstLoad.getClusterRoleRecordFromEndpoint());
+
+    // Applied record at the endpoints' version: the equal-version defer must return
+    // this.roleRecord,
+    // proving current is threaded (otherwise the fall-through would return the url2 record).
+    ClusterRoleRecord appliedV10 = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    HighAvailabilityGroup applied =
+      Mockito.spy(new HighAvailabilityGroup(info, new Properties(), appliedV10, State.READY));
+    Mockito.doReturn(fromUrl1).when(applied).fetchClusterRoleRecord(url1);
+    Mockito.doReturn(fromUrl2).when(applied).fetchClusterRoleRecord(url2);
+    assertSame("Equal-version divergence must defer to the applied record (current threaded)",
+      appliedV10, applied.getClusterRoleRecordFromEndpoint());
+  }
+
+  /**
+   * Cluster-1 fails with CRR-Not-Found but cluster 2 serves a record: the method falls back to the
+   * cluster-2 record and returns it (no reconciliation on a single reachable endpoint).
+   */
+  @Test
+  public void testEndpointNotFoundOnCluster1FallsBackToCluster2() throws Exception {
+    String haGroupName = "testEndpointNotFoundOnCluster1FallsBackToCluster2";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord fromUrl2 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.STANDBY, url2, ClusterRole.ACTIVE, 10L);
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+
+    HighAvailabilityGroup group =
+      Mockito.spy(new HighAvailabilityGroup(info, new Properties(), null, State.UNINITIALIZED));
+    Mockito
+      .doThrow(
+        new SQLException("not found", SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getSQLState(),
+          SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getErrorCode()))
+      .when(group).fetchClusterRoleRecord(url1);
+    Mockito.doReturn(fromUrl2).when(group).fetchClusterRoleRecord(url2);
+
+    assertSame("A cluster-1 Not-Found must fall back to the cluster-2 record", fromUrl2,
+      group.getClusterRoleRecordFromEndpoint());
+  }
+
+  /**
+   * Cluster-1 fails with CRR-Not-Found and cluster 2 also fails: the original Not-Found propagates
+   * (so downstream single-cluster fallback can trigger) with the cluster-2 failure attached as a
+   * suppressed exception, so the single thrown exception carries both root causes.
+   */
+  @Test
+  public void testEndpointBothFailNotFoundRethrowsNotFoundWithSuppressed() throws Exception {
+    String haGroupName = "testEndpointBothFailNotFoundRethrowsNotFoundWithSuppressed";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+
+    HighAvailabilityGroup group =
+      Mockito.spy(new HighAvailabilityGroup(info, new Properties(), null, State.UNINITIALIZED));
+    SQLException notFound =
+      new SQLException("not found", SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getSQLState(),
+        SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getErrorCode());
+    SQLException cluster2Failure = new SQLException("cluster 2 unreachable");
+    Mockito.doThrow(notFound).when(group).fetchClusterRoleRecord(url1);
+    Mockito.doThrow(cluster2Failure).when(group).fetchClusterRoleRecord(url2);
+
+    try {
+      group.getClusterRoleRecordFromEndpoint();
+      fail("Expected the cluster-1 Not-Found to propagate when both endpoints fail");
+    } catch (SQLException e) {
+      assertSame("The original Not-Found must propagate so downstream fallback can trigger",
+        notFound, e);
+      assertEquals("Propagated Not-Found must keep its error code",
+        SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getErrorCode(), e.getErrorCode());
+      assertEquals("The cluster-2 failure must be attached as suppressed", 1,
+        e.getSuppressed().length);
+      assertSame(cluster2Failure, e.getSuppressed()[0]);
+    }
+  }
+
+  /**
+   * Cluster-1 fails with a non-Not-Found exception and cluster 2 also fails: the cluster-2
+   * exception propagates (its distinct error, not the cluster-1 transport failure) with the
+   * cluster-1 failure attached as suppressed, so the single thrown exception carries both root
+   * causes. This is the else-branch parity with the Not-Found path — the scenario where cluster 1
+   * is merely unreachable and cluster 2 then reports Not-Found.
+   */
+  @Test
+  public void testEndpointBothFailNonNotFoundRethrowsCluster2WithSuppressed() throws Exception {
+    String haGroupName = "testEndpointBothFailNonNotFoundRethrowsCluster2WithSuppressed";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+
+    HighAvailabilityGroup group =
+      Mockito.spy(new HighAvailabilityGroup(info, new Properties(), null, State.UNINITIALIZED));
+    SQLException cluster1Failure = new SQLException("cluster 1 unreachable");
+    SQLException cluster2NotFound =
+      new SQLException("not found", SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getSQLState(),
+        SQLExceptionCode.CLUSTER_ROLE_RECORD_NOT_FOUND.getErrorCode());
+    Mockito.doThrow(cluster1Failure).when(group).fetchClusterRoleRecord(url1);
+    Mockito.doThrow(cluster2NotFound).when(group).fetchClusterRoleRecord(url2);
+
+    try {
+      group.getClusterRoleRecordFromEndpoint();
+      fail("Expected the cluster-2 exception to propagate when both endpoints fail");
+    } catch (SQLException e) {
+      assertSame("The cluster-2 exception must propagate on the non-Not-Found fallback path",
+        cluster2NotFound, e);
+      assertEquals("The cluster-1 failure must be attached as suppressed", 1,
+        e.getSuppressed().length);
+      assertSame(cluster1Failure, e.getSuppressed()[0]);
+    }
+  }
+
+  /**
+   * Cluster-1 is reachable but the cluster-2 fetch fails: the method degrades to the cluster-1
+   * record (no reconciliation), rather than propagating the cluster-2 failure.
+   */
+  @Test
+  public void testEndpointCluster2FailureDegradesToCluster1() throws Exception {
+    String haGroupName = "testEndpointCluster2FailureDegradesToCluster1";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord fromUrl1 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+
+    HighAvailabilityGroup group =
+      Mockito.spy(new HighAvailabilityGroup(info, new Properties(), null, State.UNINITIALIZED));
+    Mockito.doReturn(fromUrl1).when(group).fetchClusterRoleRecord(url1);
+    Mockito.doThrow(new SQLException("cluster 2 unreachable")).when(group)
+      .fetchClusterRoleRecord(url2);
+
+    assertSame("A cluster-2 failure must degrade to the cluster-1 record", fromUrl1,
+      group.getClusterRoleRecordFromEndpoint());
+  }
+
+  /**
+   * A cluster-1 fetch failure wrapping an interruption restores the thread's interrupt status on
+   * the fallback path (the flag is cleared by the blocking fetch and must be re-raised so callers
+   * still observe cancellation).
+   */
+  @Test
+  public void testEndpointRestoresInterruptStatusOnFallback() throws Exception {
+    String haGroupName = "testEndpointRestoresInterruptStatusOnFallback";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord fromUrl2 = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.STANDBY, url2, ClusterRole.ACTIVE, 10L);
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+
+    HighAvailabilityGroup group =
+      Mockito.spy(new HighAvailabilityGroup(info, new Properties(), null, State.UNINITIALIZED));
+    // Non-Not-Found cluster-1 failure wrapping an interruption; cluster 2 then succeeds.
+    Mockito.doThrow(new SQLException("interrupted rpc", new InterruptedIOException())).when(group)
+      .fetchClusterRoleRecord(url1);
+    Mockito.doReturn(fromUrl2).when(group).fetchClusterRoleRecord(url2);
+
+    // Clear any pre-existing interrupt status so the assertion is meaningful.
+    Thread.interrupted();
+    try {
+      assertSame("Fallback to cluster 2 must still return its record", fromUrl2,
+        group.getClusterRoleRecordFromEndpoint());
+      assertTrue("The interrupt status must be restored after the fallback fetch",
+        Thread.currentThread().isInterrupted());
+    } finally {
+      // Consume the interrupt flag so it does not leak into a reused fork.
+      Thread.interrupted();
+    }
   }
 }
