@@ -35,6 +35,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.EOFException;
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -101,6 +102,7 @@ import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
+import org.apache.phoenix.coprocessor.ServerScanUtil;
 import org.apache.phoenix.coprocessor.generated.IndexMutationsProtos;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
@@ -144,6 +146,8 @@ import org.apache.phoenix.replication.MutationCellGrouper;
 import org.apache.phoenix.replication.ReplicationLogGroup;
 import org.apache.phoenix.replication.SystemCatalogWALEntryFilter;
 import org.apache.phoenix.schema.CompiledConditionalTTLExpression;
+import org.apache.phoenix.schema.CompiledTTLExpression;
+import org.apache.phoenix.schema.LiteralTTLExpression;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PRow;
 import org.apache.phoenix.schema.PTable;
@@ -495,7 +499,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     private boolean hasTransform;
     private boolean returnResult;
     private boolean returnOldRow;
-    private boolean hasConditionalTTL; // table has Conditional TTL
     private boolean immutableRows;
     // Where this batch came from, classified once from the first mutation and carried as the single
     // source of truth for this batch's HA disposition. The counter, the cluster-role gate, and
@@ -509,6 +512,39 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // global-index path (prepareReplicatedIndexMutations) and the local-index path. Null until
     // first built; only populated on the standby replay path (isReplay).
     private List<ReplicatedRowGroup> replicatedRowGroups;
+    // The deserialized CompiledTTLExpression for this batch, or null when no _TTL attribute was
+    // set. LiteralTTLExpression for a view with literal TTL; CompiledConditionalTTLExpression for
+    // a conditional TTL table. Populated once by extractTTLKindForInternalScan before
+    // identifyMutationTypes runs. Consumers gate on the concrete instance type via the
+    // hasLiteralTTL() / hasConditionalTTL() methods.
+    private CompiledTTLExpression ttlExpressionForBatch;
+    // The empty-column CF/CQ threaded by the client (ScanUtil.annotateMutationWithLiteralTTL) for
+    // any table/view with an effective literal TTL — the single source that lets the internal
+    // current-row scan mask, for the secondary-index and no-index (atomic / ON DUPLICATE KEY /
+    // returnResult / row-delete) paths alike. Null when no literal TTL applies. Unlike the _TTL
+    // attribute these are left on the mutations (they are inert on the write path).
+    private byte[] emptyCFForInternalScan;
+    private byte[] emptyCQForInternalScan;
+    // Whether the table/view uses strict TTL, captured (via isStrictTTLEnabled) alongside the other
+    // internal-scan attributes so getCurrentRowStates masks exactly like a client read: a
+    // non-strict table is never masked. Defaults to strict, matching isStrictTTLEnabled's default.
+    private boolean hasStrictTTL = PTable.DEFAULT_IS_STRICT_TTL;
+
+    public boolean hasLiteralTTL() {
+      return ttlExpressionForBatch instanceof LiteralTTLExpression;
+    }
+
+    public boolean hasConditionalTTL() {
+      return ttlExpressionForBatch instanceof CompiledConditionalTTLExpression;
+    }
+
+    public boolean hasStrictTTL() {
+      return hasStrictTTL;
+    }
+
+    public boolean hasStrictConditionalTTL() {
+      return hasConditionalTTL() && hasStrictTTL();
+    }
 
     public BatchMutateContext() {
       this.clientVersion = 0;
@@ -1174,7 +1210,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       Mutation m = miniBatchOp.getOperation(i);
       if (
         this.builder.isAtomicOp(m) || context.returnResult || this.builder.isEnabled(m)
-          || (this.builder.hasConditionalTTL(m) && isStrictTTLEnabled(miniBatchOp))
+          || context.hasStrictConditionalTTL()
       ) {
         ImmutableBytesPtr row = new ImmutableBytesPtr(m.getRow());
         context.rowsToLock.add(row);
@@ -1275,18 +1311,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    */
   private void updateMutationsForConditionalTTL(MiniBatchOperationInProgress<Mutation> miniBatchOp,
     BatchMutateContext context) throws IOException {
-    // If TTL is not strict, skip conditional TTL processing
-    if (!isStrictTTLEnabled(miniBatchOp)) {
+    if (!context.hasConditionalTTL()) {
       return;
     }
+    CompiledConditionalTTLExpression ttlExpr =
+      (CompiledConditionalTTLExpression) context.ttlExpressionForBatch;
     // mapping from row key to indices in mini batch
     Map<ImmutableBytesPtr, List<Integer>> expiredVersions = Maps.newHashMap();
     Set<ImmutableBytesPtr> notExpiredVersions = Sets.newHashSet();
     for (int i = 0; i < miniBatchOp.size(); i++) {
       Mutation m = miniBatchOp.getOperation(i);
-      if (!builder.hasConditionalTTL(m)) {
-        continue;
-      }
       if (IndexUtil.isDeleteFamily(m)) {
         // no need to fix DeleteFamily mutation
         continue;
@@ -1308,9 +1342,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         positions.add(i);
         continue;
       }
-      byte[] ttl = m.getAttribute(BaseScannerRegionObserverConstants.TTL);
-      CompiledConditionalTTLExpression ttlExpr =
-        (CompiledConditionalTTLExpression) TTLExpressionFactory.create(ttl);
       List<Cell> currentRow = flattenCells(currentVersion);
       // isRaw is false because we are looking at a Put mutation
       if (ttlExpr.isExpired(currentRow, false)) {
@@ -1413,7 +1444,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   public static void setTimestamps(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-    IndexBuildManager builder, long ts, boolean isTTLStrict) throws IOException {
+    IndexBuildManager builder, long ts, boolean hasStrictConditionalTTL) throws IOException {
     for (Integer i = 0; i < miniBatchOp.size(); i++) {
       if (isAtomicOperationComplete(miniBatchOp.getOperationStatus(i))) {
         continue;
@@ -1422,9 +1453,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // skip this mutation if we aren't enabling indexing or Conditional TTL
       // or not an atomic op or if it is an atomic op
       // and its timestamp is already set(not LATEST)
-      // Also, skip conditional TTL if TTL is not strict
       if (
-        !builder.isEnabled(m) && (!builder.hasConditionalTTL(m) || !isTTLStrict)
+        !builder.isEnabled(m) && !hasStrictConditionalTTL
           && !((builder.isAtomicOp(m) || builder.returnResult(m))
             && IndexUtil.getMaxTimestamp(m) == HConstants.LATEST_TIMESTAMP)
       ) {
@@ -2055,9 +2085,24 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
 
   /**
    * Retrieve the data row state either from memory or disk. The rows are locked by the caller.
+   * <p>
+   * The disk read is opened through {@link ServerScanUtil} so it is TTL-masked exactly like a
+   * client read: the internal scan otherwise bypasses the {@code postScannerOpen} coprocessor hook
+   * (the only place a scan is wrapped in {@code TTLRegionScanner}) and would rebuild the index from
+   * logically-expired-but-physically-present cells. The empty-column CF/CQ that enable masking are
+   * the bytes the client threaded on the mutation
+   * ({@link org.apache.phoenix.util.ScanUtil#annotateMutationWithLiteralTTL}) and captured into the
+   * batch context — the single source for every path that reaches here, index or no-index alike.
+   * When the batch has a literal TTL ({@link BatchMutateContext#hasLiteralTTL()}), the TTL
+   * expression is re-serialized and set on the scan so {@link TTLRegionScanner} masks with the
+   * view's TTL (null for base tables, which use the CF-descriptor fallback).
+   * {@link BatchMutateContext#hasStrictTTL()} avoids over-masking a non-strict table. Masking is a
+   * strict no-op when Phoenix compaction is disabled. Unlike a client read the scan is not paged:
+   * it is region-local (off the RPC path), so it holds no handler thread and there is nothing for
+   * paging to protect.
    */
   private void getCurrentRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
-    BatchMutateContext context) throws IOException {
+    BatchMutateContext context, long batchTimestamp) throws IOException {
     Set<KeyRange> keys = new HashSet<KeyRange>(context.rowsToLock.size());
     for (ImmutableBytesPtr rowKeyPtr : context.rowsToLock) {
       PendingRow pendingRow = new PendingRow(rowKeyPtr, context);
@@ -2106,6 +2151,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return;
     }
 
+    byte[] emptyCF = context.emptyCFForInternalScan;
+    byte[] emptyCQ = context.emptyCQForInternalScan;
+    // Re-serialize the literal TTL expression for the scan attribute. Only views carry a literal
+    // TTL here; a base table relies on the CF-descriptor fallback (null is correct for them).
+    byte[] literalTTLForScan = null;
+    try {
+      literalTTLForScan =
+        context.hasLiteralTTL() ? context.ttlExpressionForBatch.serialize() : null;
+    } catch (SQLException e) {
+      throw new IOException("Failed to serialize literal TTL expression for internal scan", e);
+    }
+    boolean isStrictTTL = context.hasStrictTTL();
+
     if (this.useBloomFilter) {
       for (KeyRange key : keys) {
         // Scan.java usage alters scan instances, safer to create scan instance per usage
@@ -2114,6 +2172,16 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // for bloom filters scan should be a get
         scan.withStartRow(key.getLowerRange(), true);
         scan.withStopRow(key.getLowerRange(), true);
+        // Anchor TTLRegionScanner's masking clock at batchTimestamp. The range upper bound is
+        // batchTimestamp + 1 (not batchTimestamp) because HBase scan time ranges are half-open
+        // [min, max): a bound of batchTimestamp would exclude any committed cell sitting at exactly
+        // batchTimestamp. That collision cannot happen in production (getBatchTimestamp forces a
+        // distinct timestamp for same-row batches), but a frozen test clock can produce it, and the
+        // read must see those cells to build a correct current-row state. The masking clock is then
+        // batchTimestamp + 1, trimming expired cells as of the timestamp the index is built at.
+        scan.setTimeRange(0, batchTimestamp + 1);
+        ServerScanUtil.setInternalScanAttributes(scan, emptyCF, emptyCQ, literalTTLForScan,
+          isStrictTTL);
         readDataTableRows(c, context, scan);
       }
     } else {
@@ -2122,13 +2190,27 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       scanRanges.initializeScan(scan);
       SkipScanFilter skipScanFilter = scanRanges.getSkipScanFilter();
       scan.setFilter(skipScanFilter);
+      // Anchor TTLRegionScanner's masking clock at batchTimestamp. The range upper bound is
+      // batchTimestamp + 1 (not batchTimestamp) because HBase scan time ranges are half-open
+      // [min, max): a bound of batchTimestamp would exclude any committed cell sitting at exactly
+      // batchTimestamp. That collision cannot happen in production (getBatchTimestamp forces a
+      // distinct timestamp for same-row batches), but a frozen test clock can produce it, and the
+      // read must see those cells to build a correct current-row state. The masking clock is then
+      // batchTimestamp + 1, trimming expired cells as of the timestamp the index is built at.
+      scan.setTimeRange(0, batchTimestamp + 1);
+      ServerScanUtil.setInternalScanAttributes(scan, emptyCF, emptyCQ, literalTTLForScan,
+        isStrictTTL);
       readDataTableRows(c, context, scan);
     }
   }
 
   private void readDataTableRows(ObserverContext<RegionCoprocessorEnvironment> c,
     BatchMutateContext context, Scan scan) throws IOException {
-    try (RegionScanner scanner = c.getEnvironment().getRegion().getScanner(scan)) {
+    // Open through ServerScanUtil so the scan is wrapped in TTLRegionScanner (mirroring
+    // postScannerOpen) and masks TTL-expired rows exactly like a client read. Masking no-ops when
+    // Phoenix compaction is off or the empty-column attributes are absent.
+    try (RegionScanner scanner =
+      ServerScanUtil.openRegionScanner(c.getEnvironment(), c.getEnvironment().getRegion(), scan)) {
       boolean more = true;
       while (more) {
         List<Cell> cells = new ArrayList<Cell>();
@@ -2581,6 +2663,42 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
   }
 
+  /**
+   * Captures the TTL-related internal-scan attributes the client threads off the representative
+   * mutation and deserializes the {@code _TTL} attribute into
+   * {@link BatchMutateContext#ttlExpressionForBatch}.
+   * <p>
+   * Two things are captured:
+   * <ul>
+   * <li>The <b>empty-column CF/CQ</b> — threaded whenever an effective (non-NONE) literal TTL
+   * applies, for both base tables and views. They are inert on the write path, so they are left on
+   * the mutations.</li>
+   * <li>The <b>{@code _TTL}</b> — deserialized once into {@code context.ttlExpressionForBatch}.
+   * When needed for an internal scan, the expression is re-serialized from this field.</li>
+   * </ul>
+   * Must run before {@link #identifyMutationTypes} so that {@code context.hasStrictTTL()} is
+   * available. A table has exactly one TTL kind and a batch never mixes views, so the deserialized
+   * expression is uniform across the batch.
+   */
+  private void extractTTLKindForInternalScan(MiniBatchOperationInProgress<Mutation> miniBatchOp,
+    BatchMutateContext context) throws IOException {
+    if (miniBatchOp.size() == 0) {
+      return;
+    }
+    Mutation representative = miniBatchOp.getOperation(0);
+    context.emptyCFForInternalScan =
+      representative.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_FAMILY_NAME);
+    context.emptyCQForInternalScan =
+      representative.getAttribute(BaseScannerRegionObserverConstants.EMPTY_COLUMN_QUALIFIER_NAME);
+    context.hasStrictTTL = isStrictTTLEnabled(miniBatchOp);
+
+    byte[] ttlBytes = representative.getAttribute(BaseScannerRegionObserverConstants.TTL);
+    if (ttlBytes == null) {
+      return;
+    }
+    context.ttlExpressionForBatch = TTLExpressionFactory.create(ttlBytes);
+  }
+
   private void identifyMutationTypes(MiniBatchOperationInProgress<Mutation> miniBatchOp,
     BatchMutateContext context) throws IOException {
     for (int i = 0; i < miniBatchOp.size(); i++) {
@@ -2595,9 +2713,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           context.returnOldRow = true;
         }
       }
-      if (this.builder.hasConditionalTTL(m) && isStrictTTLEnabled(miniBatchOp)) {
-        context.hasConditionalTTL = true;
-      }
+
       if (this.builder.isAtomicOp(m) || this.builder.returnResult(m)) {
         context.hasAtomic = true;
         if (context.hasRowDelete) {
@@ -2698,13 +2814,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // The timestamp for this batch will be different from the last batch processed.
         lastTimestamp = ts;
         batchesWithLastTimestamp.clear();
-        batchesWithLastTimestamp.add(context.rowsToLock);
+        // Register a snapshot, not the live rowsToLock: this now runs before
+        // releaseLocksForOnDupIgnoreMutations may structurally mutate rowsToLock (remove) outside
+        // synchronized(this), which would corrupt a concurrent shouldSleep iteration under
+        // synchronized(this). The snapshot is a superset of every later state (rowsToLock only
+        // shrinks after lockRows), so shouldSleep stays conservative: at most an extra sleep, never
+        // a missed one.
+        batchesWithLastTimestamp.add(new HashSet<>(context.rowsToLock));
         return ts;
       } else {
         if (!shouldSleep(context)) {
           // There is no need to sleep as the last batches with the same timestamp
           // do not have a common row this batch
-          batchesWithLastTimestamp.add(context.rowsToLock);
+          batchesWithLastTimestamp.add(new HashSet<>(context.rowsToLock));
           return ts;
         }
       }
@@ -2723,7 +2845,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // We do not have to check again if we need to sleep again since we got the next
       // timestamp while holding the row locks. This mean there cannot be a new
       // mutation with the same row attempting get the same timestamp
-      batchesWithLastTimestamp.add(context.rowsToLock);
+      batchesWithLastTimestamp.add(new HashSet<>(context.rowsToLock));
       return ts;
     }
   }
@@ -2743,13 +2865,14 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       "log group replicating but batch origin is %s, not CLIENT_HA", origin);
     setBatchMutateContext(c, context);
     identifyIndexMaintainerTypes(indexMetaData, context);
+    extractTTLKindForInternalScan(miniBatchOp, context);
     identifyMutationTypes(miniBatchOp, context);
     context.populateOriginalMutations(miniBatchOp);
     // Replicated batches must not carry active-side resolution flags. These are resolved on the
     // active cluster before replication, so cells reach the standby already in their final form.
     Preconditions.checkState(
       !context.isReplay()
-        || (!context.hasAtomic && !context.returnResult && !context.hasConditionalTTL),
+        || (!context.hasAtomic && !context.returnResult && !context.hasStrictConditionalTTL()),
       "replicated batch must not carry active-side resolution flags");
 
     if (context.hasRowDelete) {
@@ -2779,9 +2902,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     long onDupCheckTime = 0;
+
+    // Compute the batch timestamp now, while holding the row locks and before the current-row read,
+    // so the internal current-row scan can anchor its TTL masking clock at exactly the timestamp
+    // the
+    // index is built at (see getCurrentRowStates). getBatchTimestamp only needs the locked rows,
+    // which are already populated, and the "got the next timestamp while holding the row locks"
+    // invariant still holds since the locks are held through the rest of this method.
+    TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
+    context.batchTimestamp = getBatchTimestamp(context, table);
+
     if (
       context.hasAtomic || context.returnResult || context.hasGlobalIndex
-        || context.hasUncoveredIndex || context.hasTransform || context.hasConditionalTTL
+        || context.hasUncoveredIndex || context.hasTransform || context.hasStrictConditionalTTL()
     ) {
       // Retrieve the current row states from the data table while holding the lock.
       // This is needed for both atomic mutations and global indexes
@@ -2791,18 +2924,18 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       if (
         !context.immutableRows && context.hasGlobalIndex || context.hasTransform
           || context.hasAtomic || context.returnResult || context.hasRowDelete
-          || context.hasConditionalTTL
+          || context.hasStrictConditionalTTL()
           || !context.immutableRows && context.hasUncoveredIndex
             && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp)
           || context.immutableRows && (context.hasGlobalIndex || context.hasUncoveredIndex)
             && isPartialGlobalIndexMutation(indexMetaData, miniBatchOp)
       ) {
-        getCurrentRowStates(c, context);
+        getCurrentRowStates(c, context, context.batchTimestamp);
       }
       onDupCheckTime += (EnvironmentEdgeManager.currentTimeMillis() - start);
     }
 
-    if (context.hasConditionalTTL) {
+    if (context.hasStrictConditionalTTL()) {
       // If the table has conditional TTL, then before making any update to a row
       // we need to evaluate the ttl expression to check if the current row version has
       // expired. If the current row version has expired then the incoming mutation has to
@@ -2828,11 +2961,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
     }
 
-    TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-    context.batchTimestamp = getBatchTimestamp(context, table);
     // Update the timestamps of the data table mutations to prevent overlapping timestamps
     // (which prevents index inconsistencies as this case is not handled).
-    setTimestamps(miniBatchOp, builder, context.batchTimestamp, isStrictTTLEnabled(miniBatchOp));
+    setTimestamps(miniBatchOp, builder, context.batchTimestamp, context.hasStrictConditionalTTL());
     if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
       // Prepare next data rows states for pending mutations (for global indexes).
       prepareDataRowStates(c, miniBatchOp, context);
@@ -3506,7 +3637,6 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         delete.add(cell);
       }
     }
-
     if (!put.isEmpty() || !delete.isEmpty()) {
       PTable table = operations.get(0).getFirst();
       addEmptyKVCellToPut(put, tuple, table);
