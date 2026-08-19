@@ -248,8 +248,9 @@ public class HAGroupMetricsIT extends HABaseIT {
 
   @Test(timeout = 300000)
   public void testPollerTickCount() throws Exception {
-    // The poller starts only when fetchClusterRoleRecord observes both roles non-active under
-    // FAILOVER policy. Drive that state, await a couple of ticks, and verify the counter moved.
+    // The poller starts only when the reconciled CRR has both roles non-active under FAILOVER
+    // policy (maybeSchedulePoller). Drive that state, await a couple of ticks, and verify the
+    // counter moved.
     long beforeTicks = GLOBAL_HA_POLLER_TICK_COUNT.getMetric().getValue();
     long beforeFailures = GLOBAL_HA_POLLER_TICK_FAILURES.getMetric().getValue();
 
