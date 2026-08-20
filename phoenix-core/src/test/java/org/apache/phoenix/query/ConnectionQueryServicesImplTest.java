@@ -35,16 +35,21 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doCallRealMethod;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 import java.util.Collections;
@@ -58,6 +63,7 @@ import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.HRegionLocation;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.TableNotDisabledException;
 import org.apache.hadoop.hbase.TableNotEnabledException;
 import org.apache.hadoop.hbase.TableNotFoundException;
 import org.apache.hadoop.hbase.client.Admin;
@@ -69,10 +75,15 @@ import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptorBuilder;
 import org.apache.phoenix.SystemExitRule;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MetaDataMutationResult;
+import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -407,5 +418,125 @@ public class ConnectionQueryServicesImplTest {
     verify(mockAdmin, Mockito.times(1)).disableTable(TableName.valueOf("TEST_TABLE"));
     verify(mockAdmin, Mockito.times(1)).deleteTable(TableName.valueOf("TEST_TABLE"));
     verify(mockConn).getAdmin();
+  }
+
+  @Test
+  public void testEnableTableAlreadyEnabledSwallowsException() throws Exception {
+    // PHOENIX-7788: enableTable helper must swallow TableNotDisabledException,
+    // so a concurrent client that already re-enabled the table does not fail the CREATE.
+    TableName tableName = TableName.valueOf("TEST_TABLE");
+    doThrow(new TableNotDisabledException(tableName)).when(mockAdmin).enableTable(tableName);
+    invokeEnableTable(mockCqs, mockAdmin, tableName);
+    verify(mockAdmin, Mockito.times(1)).enableTable(tableName);
+  }
+
+  @Test
+  public void testEnableTablePropagatesOtherIOException() throws Exception {
+    TableName tableName = TableName.valueOf("TEST_TABLE");
+    IOException expected = new IOException("boom");
+    doThrow(expected).when(mockAdmin).enableTable(tableName);
+    try {
+      invokeEnableTable(mockCqs, mockAdmin, tableName);
+      fail("Expected IOException to propagate");
+    } catch (InvocationTargetException e) {
+      assertSame(expected, e.getCause());
+    }
+  }
+
+  private static void invokeEnableTable(ConnectionQueryServicesImpl cqs, Admin admin,
+    TableName tableName) throws Exception {
+    Method m = ConnectionQueryServicesImpl.class.getDeclaredMethod("enableTable", Admin.class,
+      TableName.class);
+    m.setAccessible(true);
+    m.invoke(cqs, admin, tableName);
+  }
+
+  @Test
+  public void testReenableOrphanedDisabledHBaseTableSkipsNonTableTypes() throws Exception {
+    // PHOENIX-7788: helper only runs for PTableType.TABLE; other types must return early.
+    byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
+    invokeReenableOrphanedDisabledHBaseTable(mockCqs, ByteUtil.EMPTY_BYTE_ARRAY, name, false,
+      PTableType.VIEW);
+    invokeReenableOrphanedDisabledHBaseTable(mockCqs, ByteUtil.EMPTY_BYTE_ARRAY, name, false,
+      PTableType.INDEX);
+    verify(mockConn, never()).getAdmin();
+  }
+
+  @Test
+  public void testReenableOrphanedDisabledHBaseTableSkipsWhenTableDoesNotExist() throws Exception {
+    byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
+    TableName physical = TableName.valueOf(name);
+    when(mockConn.getAdmin()).thenReturn(mockAdmin);
+    when(mockAdmin.tableExists(physical)).thenReturn(false);
+    invokeReenableOrphanedDisabledHBaseTable(mockCqs, ByteUtil.EMPTY_BYTE_ARRAY, name, false,
+      PTableType.TABLE);
+    verify(mockAdmin, never()).isTableDisabled(any());
+    verify(mockAdmin, never()).enableTable(any());
+  }
+
+  @Test
+  public void testReenableOrphanedDisabledHBaseTableSkipsWhenTableEnabled() throws Exception {
+    byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
+    TableName physical = TableName.valueOf(name);
+    when(mockConn.getAdmin()).thenReturn(mockAdmin);
+    when(mockAdmin.tableExists(physical)).thenReturn(true);
+    when(mockAdmin.isTableDisabled(physical)).thenReturn(false);
+    invokeReenableOrphanedDisabledHBaseTable(mockCqs, ByteUtil.EMPTY_BYTE_ARRAY, name, false,
+      PTableType.TABLE);
+    verify(mockAdmin, never()).enableTable(any());
+  }
+
+  @Test
+  public void testReenableOrphanedDisabledHBaseTableLeavesTableDisabledWhenMetadataPresent()
+    throws Exception {
+    // PHOENIX-7788: disabled physical table with existing SYSTEM.CATALOG metadata must NOT be
+    // re-enabled; an admin may have disabled a registered table intentionally, and
+    // CREATE TABLE IF NOT EXISTS must preserve that.
+    byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
+    TableName physical = TableName.valueOf(name);
+    when(mockConn.getAdmin()).thenReturn(mockAdmin);
+    when(mockAdmin.tableExists(physical)).thenReturn(true);
+    when(mockAdmin.isTableDisabled(physical)).thenReturn(true);
+    MetaDataMutationResult existing =
+      new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0L, null);
+    doReturn(existing).when(mockCqs).getTable(Mockito.<PName> any(), any(byte[].class),
+      any(byte[].class), anyLong(), anyLong());
+    invokeReenableOrphanedDisabledHBaseTable(mockCqs, ByteUtil.EMPTY_BYTE_ARRAY, name, false,
+      PTableType.TABLE);
+    verify(mockAdmin, never()).enableTable(any());
+  }
+
+  @Test
+  public void testReenableOrphanedDisabledHBaseTableReenablesOrphanedTable() throws Exception {
+    byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
+    TableName physical = TableName.valueOf(name);
+    when(mockConn.getAdmin()).thenReturn(mockAdmin);
+    when(mockAdmin.tableExists(physical)).thenReturn(true);
+    when(mockAdmin.isTableDisabled(physical)).thenReturn(true);
+    MetaDataMutationResult notFound =
+      new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0L, null);
+    doReturn(notFound).when(mockCqs).getTable(Mockito.<PName> any(), any(byte[].class),
+      any(byte[].class), anyLong(), anyLong());
+    doNothing().when(mockAdmin).enableTable(physical);
+    invokeReenableOrphanedDisabledHBaseTable(mockCqs, ByteUtil.EMPTY_BYTE_ARRAY, name, false,
+      PTableType.TABLE);
+    verify(mockAdmin, Mockito.times(1)).enableTable(physical);
+  }
+
+  private static void invokeReenableOrphanedDisabledHBaseTable(ConnectionQueryServicesImpl cqs,
+    byte[] schemaBytes, byte[] tableBytes, boolean isNamespaceMapped, PTableType tableType)
+    throws Exception {
+    Method m =
+      ConnectionQueryServicesImpl.class.getDeclaredMethod("reenableOrphanedDisabledHBaseTable",
+        byte[].class, byte[].class, boolean.class, PTableType.class);
+    m.setAccessible(true);
+    try {
+      m.invoke(cqs, schemaBytes, tableBytes, isNamespaceMapped, tableType);
+    } catch (InvocationTargetException e) {
+      if (e.getCause() instanceof Exception) {
+        throw (Exception) e.getCause();
+      }
+      throw e;
+    }
   }
 }
