@@ -359,8 +359,12 @@ public enum MetricType {
       + "from no-active state) recorded at the CRR write site",
     LogLevel.DEBUG, PLong.INSTANCE),
   HA_FAILOVER_DURATION_MS("hafd",
-    "Total time in milliseconds spent in connection-level failover transitions, summed across "
-      + "all observing connections (per-connection observation, not per-cluster-event)",
+    "Total time in milliseconds spent dispatching cluster-role transitions, recorded at the CRR "
+      + "write site (refreshClusterRoleRecord) on every transition exit",
+    LogLevel.DEBUG, PLong.INSTANCE),
+  HA_FAILOVER_CONNECTION_FAILED_COUNTER("hafcf",
+    "Counter for failed attempts to connect to the active cluster in an HA group, recorded at the "
+      + "connectActive throw site (no active cluster, demoted mid-connect, or connect error)",
     LogLevel.DEBUG, PLong.INSTANCE),
   HA_MUTATION_BLOCKED_COUNT("hambc",
     "Counter for MutationBlockedIOException surfaces caught by wrapActionDuringFailover",
