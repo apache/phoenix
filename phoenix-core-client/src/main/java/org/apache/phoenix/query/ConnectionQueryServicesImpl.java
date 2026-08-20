@@ -1091,7 +1091,16 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   }
 
   public PMetaData getMetaDataCache() {
-    return latestMetaData;
+    // A concurrent close() (e.g. connection pool teardown or cluster failover) nulls out
+    // latestMetaData. Read it once into a local so the null-check and the returned reference
+    // are guaranteed to be the same value; a caller that immediately dereferences the result
+    // then surfaces the descriptive "connection closed" exception instead of a bare NPE,
+    // matching every other cache accessor/mutator on this class.
+    PMetaData cache = latestMetaData;
+    if (cache == null) {
+      throwConnectionClosedException();
+    }
+    return cache;
   }
 
   @Override
