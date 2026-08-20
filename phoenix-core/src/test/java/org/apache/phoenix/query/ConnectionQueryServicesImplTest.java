@@ -81,10 +81,10 @@ import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.jdbc.ConnectionInfo;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.util.ByteUtil;
-import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -539,6 +539,8 @@ public class ConnectionQueryServicesImplTest {
       }
       throw e;
     }
+  }
+
   /**
    * When a connection is closed concurrently with query compilation (e.g. connection pool teardown
    * or cluster failover), the metadata cache is nulled out. getMetaDataCache() must surface the
