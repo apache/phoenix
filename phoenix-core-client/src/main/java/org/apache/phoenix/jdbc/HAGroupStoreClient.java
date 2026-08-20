@@ -110,6 +110,10 @@ public class HAGroupStoreClient implements Closeable {
   private static final long SYNC_JOB_MAX_JITTER_SECONDS = 10;
   // Exclusive upper bound for initial-delay jitter on the periodic reconciler (0..30s).
   private static final long LEGACY_CRR_SYNC_JOB_MAX_JITTER_SECONDS = 31;
+  // Total CAS attempts for the shared HA-status write. The first attempt uses the cache-derived
+  // version; each subsequent attempt re-reads the version fresh from ZK. Bounds the convergent-race
+  // reconcile loop so genuine contention still surfaces after a small number of tries.
+  private static final int SET_HA_GROUP_STATUS_MAX_ATTEMPTS = 3;
   private PhoenixHAAdmin phoenixHaAdmin;
   // Admin + NodeCache on /phoenix/ha; null when feature disabled.
   private volatile PhoenixHAAdmin legacyHaAdmin;
@@ -411,67 +415,98 @@ public class HAGroupStoreClient implements Closeable {
     if (!isHealthy) {
       throw new IOException("HAGroupStoreClient is not healthy");
     }
-    Pair<HAGroupStoreRecord, Stat> cacheRecord = fetchLocalRecordAndPopulateZKIfNeeded();
-    HAGroupStoreRecord currentHAGroupStoreRecord = cacheRecord.getLeft();
-    Stat currentHAGroupStoreRecordStat = cacheRecord.getRight();
-    if (currentHAGroupStoreRecord == null) {
-      throw new IOException("Current HAGroupStoreRecordStat in cache is null, "
-        + "cannot update HAGroupStoreRecord, the record should be initialized "
-        + "in System Table first" + haGroupName);
+    // First attempt uses the cache-derived (record, version) — the fast, uncontended path. On a
+    // stale-version CAS loss (a peer RS already advanced the shared record), later attempts re-read
+    // fresh from ZK and reconcile: if the target is already met the write is a no-op success, so a
+    // convergent race no longer surfaces as a fatal StaleHAGroupStoreRecordVersionException.
+    Pair<HAGroupStoreRecord, Stat> currentRecordAndStat = fetchLocalRecordAndPopulateZKIfNeeded();
+    for (int attempt = 1;; attempt++) {
+      HAGroupStoreRecord currentHAGroupStoreRecord = currentRecordAndStat.getLeft();
+      Stat currentHAGroupStoreRecordStat = currentRecordAndStat.getRight();
+      if (currentHAGroupStoreRecord == null) {
+        throw new IOException("Current HAGroupStoreRecordStat in cache is null, "
+          + "cannot update HAGroupStoreRecord, the record should be initialized "
+          + "in System Table first" + haGroupName);
+      }
+      // Convergent race: on the retry path (attempt > 1) currentHAGroupStoreRecord is the fresh ZK
+      // re-read (not the watch-lagged cache), so finding it already at the target means a peer won
+      // the CAS -- treat as a no-op success without ever concluding success from stale data. Runs
+      // before validateTransitionAndGetWaitTime so a converged non-self-transitionable target (e.g.
+      // ACTIVE_IN_SYNC) is a no-op rather than an InvalidClusterRoleTransitionException on the X->X
+      // self-transition. Attempt 1 never short-circuits, so the periodic ACTIVE_NOT_IN_SYNC
+      // heartbeat still writes its mtime bump.
+      if (attempt > 1 && currentHAGroupStoreRecord.getHAGroupState() == haGroupState) {
+        LOGGER.info("HAGroupStoreRecord for HA group {} is already at state {} after a fresh "
+          + "re-read, treating update as a no-op success", haGroupName, haGroupState);
+        return 0L;
+      }
+      long stateTransitionWaitTime =
+        validateTransitionAndGetWaitTime(currentHAGroupStoreRecord.getHAGroupState(),
+          currentHAGroupStoreRecordStat.getMtime(), haGroupState);
+      if (stateTransitionWaitTime > 0) {
+        LOGGER.info("Not updating HAGroupStoreRecord for HA group {} with state {}", haGroupName,
+          haGroupState);
+        return stateTransitionWaitTime;
+      }
+      // We maintain last sync time as the last time cluster was in sync state.
+      // If state changes from ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC, record that time
+      // Once state changes back to ACTIVE_IN_SYNC or the role is
+      // NOT ACTIVE or ACTIVE_TO_STANDBY
+      // set the time to null to mark that we are current(or we don't have any reader).
+      long lastSyncTimeInMs = lastSyncTimeInMsNullable != null
+        ? lastSyncTimeInMsNullable
+        : currentHAGroupStoreRecord.getLastSyncStateTimeInMs();
+      ClusterRole clusterRole = haGroupState.getClusterRole();
+      if (
+        currentHAGroupStoreRecord.getHAGroupState()
+            == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
+          && haGroupState == HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC
+      ) {
+        // We record the last round timestamp by subtracting the rotationTime and then
+        // taking the beginning of last round (floor) by first integer
+        // division and then multiplying again.
+        lastSyncTimeInMs =
+          ((System.currentTimeMillis() - rotationTimeMs) / rotationTimeMs) * rotationTimeMs;
+      }
+      HAGroupStoreRecord newHAGroupStoreRecord = new HAGroupStoreRecord(
+        currentHAGroupStoreRecord.getProtocolVersion(), currentHAGroupStoreRecord.getHaGroupName(),
+        haGroupState, lastSyncTimeInMs, currentHAGroupStoreRecord.getPolicy(),
+        currentHAGroupStoreRecord.getPeerZKUrl(), currentHAGroupStoreRecord.getClusterUrl(),
+        currentHAGroupStoreRecord.getPeerClusterUrl(), currentHAGroupStoreRecord.getHdfsUrl(),
+        currentHAGroupStoreRecord.getPeerHdfsUrl(), currentHAGroupStoreRecord.getAdminCRRVersion());
+      try {
+        phoenixHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, newHAGroupStoreRecord,
+          currentHAGroupStoreRecordStat.getVersion());
+      } catch (StaleHAGroupStoreRecordVersionException e) {
+        if (attempt >= SET_HA_GROUP_STATUS_MAX_ATTEMPTS) {
+          throw e;
+        }
+        // A peer RS advanced the record between our read and this CAS. Re-read fresh from ZK (not
+        // the watch-lagged cache) and retry; the loop head reconciles against the fresh state.
+        LOGGER.info("Stale-version CAS for HA group {} (attempt {}/{}); re-reading fresh from ZK "
+          + "and retrying", haGroupName, attempt, SET_HA_GROUP_STATUS_MAX_ATTEMPTS);
+        currentRecordAndStat = phoenixHaAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
+        continue;
+      }
+      // If cluster role is changing, if so, we update,
+      // the system table on best effort basis.
+      // We also have a periodic job which syncs the ZK
+      // state with System Table periodically.
+      if (currentHAGroupStoreRecord.getClusterRole() != clusterRole) {
+        HAGroupStoreRecord peerZkRecord = getHAGroupStoreRecordFromPeer();
+        ClusterRoleRecord.ClusterRole peerClusterRole = peerZkRecord != null
+          ? peerZkRecord.getClusterRole()
+          : ClusterRoleRecord.ClusterRole.UNKNOWN;
+        SystemTableHAGroupRecord systemTableRecord = new SystemTableHAGroupRecord(
+          HighAvailabilityPolicy.valueOf(newHAGroupStoreRecord.getPolicy()), clusterRole,
+          peerClusterRole, newHAGroupStoreRecord.getClusterUrl(),
+          newHAGroupStoreRecord.getPeerClusterUrl(), this.zkUrl,
+          newHAGroupStoreRecord.getPeerZKUrl(), newHAGroupStoreRecord.getHdfsUrl(),
+          newHAGroupStoreRecord.getPeerHdfsUrl(), newHAGroupStoreRecord.getAdminCRRVersion());
+        updateSystemTableHAGroupRecordSilently(haGroupName, systemTableRecord);
+      }
+      return 0L;
     }
-    long stateTransitionWaitTime =
-      validateTransitionAndGetWaitTime(currentHAGroupStoreRecord.getHAGroupState(),
-        currentHAGroupStoreRecordStat.getMtime(), haGroupState);
-    if (stateTransitionWaitTime > 0) {
-      LOGGER.info("Not updating HAGroupStoreRecord for HA group {} with state {}", haGroupName,
-        haGroupState);
-      return stateTransitionWaitTime;
-    }
-    // We maintain last sync time as the last time cluster was in sync state.
-    // If state changes from ACTIVE_IN_SYNC to ACTIVE_NOT_IN_SYNC, record that time
-    // Once state changes back to ACTIVE_IN_SYNC or the role is
-    // NOT ACTIVE or ACTIVE_TO_STANDBY
-    // set the time to null to mark that we are current(or we don't have any reader).
-    long lastSyncTimeInMs = lastSyncTimeInMsNullable != null
-      ? lastSyncTimeInMsNullable
-      : currentHAGroupStoreRecord.getLastSyncStateTimeInMs();
-    ClusterRole clusterRole = haGroupState.getClusterRole();
-    if (
-      currentHAGroupStoreRecord.getHAGroupState() == HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC
-        && haGroupState == HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC
-    ) {
-      // We record the last round timestamp by subtracting the rotationTime and then
-      // taking the beginning of last round (floor) by first integer
-      // division and then multiplying again.
-      lastSyncTimeInMs =
-        ((System.currentTimeMillis() - rotationTimeMs) / rotationTimeMs) * rotationTimeMs;
-    }
-    HAGroupStoreRecord newHAGroupStoreRecord = new HAGroupStoreRecord(
-      currentHAGroupStoreRecord.getProtocolVersion(), currentHAGroupStoreRecord.getHaGroupName(),
-      haGroupState, lastSyncTimeInMs, currentHAGroupStoreRecord.getPolicy(),
-      currentHAGroupStoreRecord.getPeerZKUrl(), currentHAGroupStoreRecord.getClusterUrl(),
-      currentHAGroupStoreRecord.getPeerClusterUrl(), currentHAGroupStoreRecord.getHdfsUrl(),
-      currentHAGroupStoreRecord.getPeerHdfsUrl(), currentHAGroupStoreRecord.getAdminCRRVersion());
-    phoenixHaAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName, newHAGroupStoreRecord,
-      currentHAGroupStoreRecordStat.getVersion());
-    // If cluster role is changing, if so, we update,
-    // the system table on best effort basis.
-    // We also have a periodic job which syncs the ZK
-    // state with System Table periodically.
-    if (currentHAGroupStoreRecord.getClusterRole() != clusterRole) {
-      HAGroupStoreRecord peerZkRecord = getHAGroupStoreRecordFromPeer();
-      ClusterRoleRecord.ClusterRole peerClusterRole = peerZkRecord != null
-        ? peerZkRecord.getClusterRole()
-        : ClusterRoleRecord.ClusterRole.UNKNOWN;
-      SystemTableHAGroupRecord systemTableRecord = new SystemTableHAGroupRecord(
-        HighAvailabilityPolicy.valueOf(newHAGroupStoreRecord.getPolicy()), clusterRole,
-        peerClusterRole, newHAGroupStoreRecord.getClusterUrl(),
-        newHAGroupStoreRecord.getPeerClusterUrl(), this.zkUrl, newHAGroupStoreRecord.getPeerZKUrl(),
-        newHAGroupStoreRecord.getHdfsUrl(), newHAGroupStoreRecord.getPeerHdfsUrl(),
-        newHAGroupStoreRecord.getAdminCRRVersion());
-      updateSystemTableHAGroupRecordSilently(haGroupName, systemTableRecord);
-    }
-    return 0L;
   }
 
   /**

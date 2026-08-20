@@ -530,8 +530,10 @@ public class PhoenixHAAdmin implements Closeable {
       getCurator().setData().withVersion(currentStatVersion).forPath(toPath(haGroupName),
         HAGroupStoreRecord.toJson(newHAGroupStoreRecord));
     } catch (KeeperException.BadVersionException e) {
-      LOG.error("Failed to set HAGroupStoreRecord for HA group {}, stale stat version", haGroupName,
-        e);
+      // A stale-version CAS loss is a routine optimistic-lock outcome under concurrent writers
+      // (e.g. co-active RegionServers refreshing the same status). The typed exception below lets
+      // the caller decide whether it is benign, so log at DEBUG here to avoid stacktrace spam.
+      LOG.debug("Stale stat version setting HAGroupStoreRecord for HA group {}", haGroupName, e);
       throw new StaleHAGroupStoreRecordVersionException(
         "Failed to set HAGroupStoreRecord for HA group " + haGroupName
           + " with cached stat version " + currentStatVersion,
