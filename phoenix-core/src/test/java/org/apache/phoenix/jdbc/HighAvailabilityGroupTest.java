@@ -27,6 +27,7 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.sql.SQLException;
+import java.util.HashSet;
 import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
@@ -617,5 +618,110 @@ public class HighAvailabilityGroupTest {
       // Consume the interrupt flag so it does not leak into a reused fork.
       Thread.interrupted();
     }
+  }
+
+  /**
+   * A real counted role-flip transition driven through {@code refreshClusterRoleRecord} must both
+   * increment {@code HA_FAILOVER_COUNT} and record a sample on {@code HA_FAILOVER_DURATION_MS}.
+   * This pins the duration metric to the CRR-write transition path (the path that autonomous
+   * failovers actually take) rather than the connection-level
+   * {@code FailoverPhoenixConnection.failover()} path, which is never auto-invoked under the
+   * default {@code ExplicitFailoverPolicy}. Active URL flips from url1 to url2 so
+   * {@code shouldCountFailover} returns true; the {@code URLS} entry is seeded empty so the policy
+   * transition is a clean no-op (no real connections needed).
+   */
+  @Test
+  public void testCountedTransitionRecordsFailoverCountAndDuration() throws Exception {
+    String haGroupName = "testCountedTransitionRecordsFailoverCountAndDuration";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord aActiveBStandby = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    ClusterRoleRecord aStandbyBActive = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.STANDBY, url2, ClusterRole.ACTIVE, 11L);
+
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+    // Seed an empty URL set so the policy-side transition iterates nothing and is a clean no-op.
+    HighAvailabilityGroup.URLS.put(info, new HashSet<>());
+    try {
+      HighAvailabilityGroup group = Mockito
+        .spy(new HighAvailabilityGroup(info, new Properties(), aActiveBStandby, State.READY));
+      Mockito.doReturn(aStandbyBActive).when(group).getClusterRoleRecordFromEndpoint();
+
+      long countBefore = GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue();
+      long durationSamplesBefore =
+        GlobalClientMetrics.GLOBAL_HA_FAILOVER_DURATION_MS.getMetric().getNumberOfSamples();
+
+      assertTrue("A real role-flip transition must apply and return true",
+        group.refreshClusterRoleRecord(true));
+      assertSame("The new record must be applied after the transition", aStandbyBActive,
+        group.getRoleRecord());
+
+      assertEquals("An active-URL flip must increment HA_FAILOVER_COUNT", countBefore + 1,
+        GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue());
+      assertEquals(
+        "The transition must record a HA_FAILOVER_DURATION_MS sample on the CRR-write " + "path",
+        durationSamplesBefore + 1,
+        GlobalClientMetrics.GLOBAL_HA_FAILOVER_DURATION_MS.getMetric().getNumberOfSamples());
+    } finally {
+      HighAvailabilityGroup.URLS.remove(info);
+    }
+  }
+
+  /**
+   * A failed {@code connectActive} (no active cluster in the record) must increment
+   * {@code HA_FAILOVER_CONNECTION_FAILED_COUNTER} on its single SQLException throw funnel.
+   */
+  @Test
+  public void testConnectActiveFailureIncrementsFailedCounter() {
+    String haGroupName = "testConnectActiveFailureIncrementsFailedCounter";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    // Both STANDBY → no active URL → connectActive takes the HA_NO_ACTIVE_CLUSTER throw path.
+    ClusterRoleRecord bothStandby = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.STANDBY, url2, ClusterRole.STANDBY, 10L);
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+    HighAvailabilityGroup group =
+      new HighAvailabilityGroup(info, new Properties(), bothStandby, State.READY);
+
+    long failedBefore =
+      GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER.getMetric().getValue();
+    try {
+      group.connectActive(new Properties(), new HAURLInfo(haGroupName));
+      fail("connectActive must throw when the HA group has no active cluster");
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION.getErrorCode(), e.getErrorCode());
+    }
+    assertEquals("A failed connectActive must increment the failed counter", failedBefore + 1,
+      GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER.getMetric().getValue());
+  }
+
+  /**
+   * A successful {@code connectActive} must NOT increment
+   * {@code HA_FAILOVER_CONNECTION_FAILED_COUNTER}. Guards against the counter being placed on a
+   * path that also runs on success (a non-vacuous negative assertion).
+   */
+  @Test
+  public void testConnectActiveSuccessLeavesFailedCounterUnchanged() throws Exception {
+    String haGroupName = "testConnectActiveSuccessLeavesFailedCounterUnchanged";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord aActiveBStandby = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+    HighAvailabilityGroup group =
+      Mockito.spy(new HighAvailabilityGroup(info, new Properties(), aActiveBStandby, State.READY));
+
+    PhoenixConnection conn = Mockito.mock(PhoenixConnection.class);
+    Mockito.doReturn(conn).when(group).connectToOneCluster(Mockito.any(String.class),
+      Mockito.any(Properties.class), Mockito.any(HAURLInfo.class));
+    Mockito.doReturn(true).when(group).isActive(conn);
+
+    long failedBefore =
+      GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER.getMetric().getValue();
+    assertSame("connectActive must return the established connection", conn,
+      group.connectActive(new Properties(), new HAURLInfo(haGroupName)));
+    assertEquals("A successful connectActive must not increment the failed counter", failedBefore,
+      GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER.getMetric().getValue());
   }
 }
