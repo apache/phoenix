@@ -1193,8 +1193,9 @@ public class PhoenixSyncTableToolIT {
 
   /**
    * Target row K has only tombstones (no live cells) under {@code --raw-scan}, source lacks the
-   * row. {@code tombstoneWholeRow} finds zero live cells to tombstone → row rolls up as
-   * unrepairable, {@code rowsExtraOnTarget} stays 0.
+   * row. {@code tombstoneWholeRow} unconditionally emits {@code Delete(rowKey, toTime)}; the row
+   * counts as {@code rowsExtraOnTarget}. Emitting the extra tombstone on top of pre-existing
+   * tombstones is a no-op for readers but keeps the branch uniform.
    */
   @Test
   public void testRepairAllTombstonedTargetRowExtra() throws Exception {
@@ -1223,7 +1224,7 @@ public class PhoenixSyncTableToolIT {
 
     SyncCountersResult dryRunCounters = getSyncCounters(result.dryRunJob);
     SyncCountersResult repairCounters = getSyncCounters(result.repairJob);
-    assertRowDriftCounters(repairCounters, 0, 0, 0, 1);
+    assertRowDriftCounters(repairCounters, 0, 1, 0, 0);
     // Phoenix SELECT already sees both sides as identical (target's row 5 is tombstone-only and
     // invisible). Divergence is at the raw-cell level only — not asserted via SELECT here.
     validateCheckpointEntries(uniqueTableName, null, dryRunCounters, repairCounters);

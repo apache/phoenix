@@ -253,15 +253,10 @@ public final class PhoenixSyncTableChunkRepairer {
         sourceResult = sourceScanner.next();
       } else {
         byte[] extraRowKey = targetResult.getRow();
-        int liveCellsTombstoned =
-          tombstoneWholeRow(targetResult, targetHTable, pendingPuts, pendingDeletes);
-        if (liveCellsTombstoned == 0) {
-          drift.rowsCannotRepair++;
-        } else {
-          drift.rowsExtraOnTarget++;
-        }
-        LOGGER.warn("Row extra on target for table {} row={}: liveCellsTombstoned={}", tableName,
-          Bytes.toStringBinary(extraRowKey), liveCellsTombstoned);
+        tombstoneWholeRow(targetResult, pendingDeletes);
+        drift.rowsExtraOnTarget++;
+        LOGGER.warn("Row extra on target for table {} row={}", tableName,
+          Bytes.toStringBinary(extraRowKey));
         targetResult = targetScanner.next();
       }
 
@@ -327,25 +322,13 @@ public final class PhoenixSyncTableChunkRepairer {
   }
 
   /**
-   * Tombstones every live cell of a row that is extra on target. Skips cells that are themselves
-   * already tombstones (see {@link #tombstoneTargetCell}).
-   * @return the number of live cells that contributed a tombstone marker. {@code 0} means the row
-   *         was already entirely tombstones; the caller records this as {@code ROWS_CANNOT_REPAIR}.
+   * Emits a single row-scoped {@code Delete(rowKey, toTime)} for a row that is extra on target. On
+   * write, HBase records one {@code DeleteFamily(cf, toTime)} per column family, shadowing every
+   * target cell at {@code ts ≤ toTime}. Cells above {@code toTime} — outside the sync window —
+   * stay untouched.
    */
-  private int tombstoneWholeRow(Result targetResult, Table targetHTable, List<Put> pendingPuts,
-    List<Delete> pendingDeletes) throws IOException {
-    RowRepairBuffer rowRepairBuffer = new RowRepairBuffer(targetResult.getRow());
-    // Empty source map drives every target cell into tombstoneTargetCell's "no source column"
-    // branch (DeleteColumn at ts <= T).
-    Map<ColumnKey, Long> sourceMaxTsByColumn = Collections.emptyMap();
-    int liveCellsTombstoned = 0;
-    for (Cell cell : targetResult.rawCells()) {
-      if (tombstoneTargetCell(cell, targetHTable, rowRepairBuffer, sourceMaxTsByColumn)) {
-        liveCellsTombstoned++;
-      }
-    }
-    rowRepairBuffer.flush(pendingPuts, pendingDeletes);
-    return liveCellsTombstoned;
+  private void tombstoneWholeRow(Result targetResult, List<Delete> pendingDeletes) {
+    pendingDeletes.add(new Delete(targetResult.getRow(), toTime));
   }
 
   /**
