@@ -192,7 +192,6 @@ public class PhoenixSyncTableMapper
   @Override
   protected void map(NullWritable key, DBInputFormat.NullDBWritable value, Context context)
     throws IOException, InterruptedException {
-    LOGGER.info("Mapper being called");
     context.getCounter(PhoenixJobCounters.INPUT_RECORDS).increment(1);
     if (currentRangeIndex >= regionKeyRanges.size()) {
       throw new IllegalStateException(
