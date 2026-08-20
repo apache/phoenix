@@ -3520,6 +3520,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (context.getOriginalMutations().isEmpty()) {
       return;
     }
+    // replicationSyncTime SLI: full per-batch replication cost (flatten + append + sync), not just
+    // the barrier that ReplicationLogGroup already meters. Recorded on the work path only.
+    long start = EnvironmentEdgeManager.currentTimeMillis();
     // Read the batch's now-final cells directly from miniBatchOp in POST. By this point HBase has
     // finalized timestamps and merged every coprocessor-added cell (local index, on-dup, TTL) into
     // the data mutation's family map (checkAndMergeCPMutations). Local-index (L#) cells are merged
@@ -3552,8 +3555,13 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       return;
     }
     Map<String, byte[]> replicationAttributes = buildReplicationAttributes(context);
-    logGroup.append(dataTableName, -1, flattened, replicationAttributes);
-    logGroup.sync();
+    try {
+      logGroup.append(dataTableName, -1, flattened, replicationAttributes);
+      logGroup.sync();
+    } finally {
+      metricSource.updateReplicationSyncTime(dataTableName,
+        EnvironmentEdgeManager.currentTimeMillis() - start);
+    }
   }
 
   /**
