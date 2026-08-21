@@ -17,8 +17,12 @@
  */
 package org.apache.phoenix.replication.metrics;
 
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_DESC;
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_NAME;
+
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
 import org.apache.hadoop.metrics2.lib.MutableHistogram;
 
@@ -38,6 +42,7 @@ public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
     this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT,
       METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName);
     groupMetricsContext = METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName;
+    getMetricsRegistry().tag(Interns.info(HA_GROUP_TAG_NAME, HA_GROUP_TAG_DESC), haGroupName);
   }
 
   public MetricsReplicationLogProcessorImpl(String metricsName, String metricsDescription,

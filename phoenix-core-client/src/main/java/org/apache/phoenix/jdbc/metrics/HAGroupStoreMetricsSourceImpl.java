@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.jdbc.metrics;
 
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_DESC;
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_NAME;
+
 import java.util.concurrent.TimeUnit;
 import javax.management.ObjectName;
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
@@ -58,10 +61,10 @@ public class HAGroupStoreMetricsSourceImpl extends BaseSourceImpl
       metricsJmxContext + ",haGroup=" + ObjectName.quote(haGroupName));
     getMetricsRegistry().tag(Interns.info(HA_GROUP_TAG_NAME, HA_GROUP_TAG_DESC), haGroupName);
 
-    localCacheHealthStatus = getMetricsRegistry().newGauge(LOCAL_CACHE_HEALTH_STATUS,
-      LOCAL_CACHE_HEALTH_STATUS_DESC, 1L);
-    peerVisibilityStatus = getMetricsRegistry().newGauge(PEER_VISIBILITY_STATUS,
-      PEER_VISIBILITY_STATUS_DESC, 1L);
+    localCacheHealthStatus =
+      getMetricsRegistry().newGauge(LOCAL_CACHE_HEALTH_STATUS, LOCAL_CACHE_HEALTH_STATUS_DESC, 1L);
+    peerVisibilityStatus =
+      getMetricsRegistry().newGauge(PEER_VISIBILITY_STATUS, PEER_VISIBILITY_STATUS_DESC, 1L);
     degradedStandbyActive =
       getMetricsRegistry().newGauge(DEGRADED_STANDBY_ACTIVE, DEGRADED_STANDBY_ACTIVE_DESC, 0L);
     currentLocalState = getMetricsRegistry().newGauge(CURRENT_LOCAL_STATE, CURRENT_LOCAL_STATE_DESC,

@@ -30,7 +30,7 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * latest Metrics2 collection interval. Metrics are not transactionally coordinated across client
  * replacement or RegionServers and never feed HA decisions.
  * <p>
- * {@code haGroup} is the only source-specific tag. Monitoring systems must supply cluster,
+ * {@code ha_group} is the only source-specific tag. Monitoring systems must supply cluster,
  * environment, host, and RegionServer identity as external scrape-target labels; role is mutable
  * and is represented by the state gauges rather than a tag.
  * <p>
@@ -60,9 +60,6 @@ public interface HAGroupStoreMetricsSource extends BaseSource {
   // Server-oriented JMX identity consistent with sibling HBase/Phoenix sources. Short-lived admin
   // CLI invocations can create an incidental bean under the same context.
   String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
-
-  String HA_GROUP_TAG_NAME = "haGroup";
-  String HA_GROUP_TAG_DESC = "HA group name";
 
   String LOCAL_CACHE_HEALTH_STATUS = "haGroupStoreLocalCacheHealthStatus";
   String LOCAL_CACHE_HEALTH_STATUS_DESC =

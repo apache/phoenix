@@ -17,6 +17,11 @@
  */
 package org.apache.phoenix.replication.metrics;
 
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_DESC;
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_NAME;
+
+import org.apache.hadoop.metrics2.lib.Interns;
+
 /** Implementation of metrics source for ReplicationLogDiscoveryForwarder operations. */
 public class MetricsReplicationLogDiscoveryForwarderImpl
   extends MetricsReplicationLogDiscoveryImpl {
@@ -33,5 +38,6 @@ public class MetricsReplicationLogDiscoveryForwarderImpl
       MetricsReplicationLogDiscoveryForwarderImpl.METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName);
     super.groupMetricsContext =
       MetricsReplicationLogDiscoveryForwarderImpl.METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName;
+    getMetricsRegistry().tag(Interns.info(HA_GROUP_TAG_NAME, HA_GROUP_TAG_DESC), haGroupName);
   }
 }

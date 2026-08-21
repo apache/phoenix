@@ -17,6 +17,11 @@
  */
 package org.apache.phoenix.replication.metrics;
 
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_DESC;
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_NAME;
+
+import org.apache.hadoop.metrics2.lib.Interns;
+
 public class MetricsReplicationLogTrackerReplayImpl extends MetricsReplicationLogTrackerImpl {
 
   private static final String METRICS_NAME = "ReplicationLogReplayFileTracker";
@@ -31,6 +36,7 @@ public class MetricsReplicationLogTrackerReplayImpl extends MetricsReplicationLo
       MetricsReplicationLogTrackerReplayImpl.METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName);
     super.groupMetricsContext =
       MetricsReplicationLogTrackerReplayImpl.METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName;
+    getMetricsRegistry().tag(Interns.info(HA_GROUP_TAG_NAME, HA_GROUP_TAG_DESC), haGroupName);
   }
 
 }
