@@ -1575,10 +1575,10 @@ public class HAGroupStoreClientIT extends HABaseIT {
   }
 
   /**
-   * Convergent-race regression (docs/HA_Status_CAS_Stale_Cache_BadVersion.md): a peer RS advances
-   * the shared record to ACTIVE_NOT_IN_SYNC while this client still holds the pre-bump cached
-   * version. The client's own transition to the same target must reconcile (stale CAS -> re-read
-   * fresh -> observe target already met -> no-op success) rather than aborting with
+   * Convergent-race regression (PHOENIX-7990): a peer RS advances the shared record to
+   * ACTIVE_NOT_IN_SYNC while this client still holds the pre-bump cached version. The client's own
+   * transition to the same target must reconcile (stale CAS -> re-read fresh -> observe target
+   * already met -> no-op success) rather than aborting with
    * StaleHAGroupStoreRecordVersionException. The external advance happens immediately before the
    * client call so the local cache is still at the stale AIS version and the stale-CAS path is
    * exercised. Version is asserted >= the winner's: if the watch had already caught the cache up,
@@ -1636,6 +1636,11 @@ public class HAGroupStoreClientIT extends HABaseIT {
    * returns a no-op success. This is the case the reorder guards: revert it and attempt 2's
    * validate(STANDBY_TO_ACTIVE -> STANDBY_TO_ACTIVE) throws InvalidClusterRoleTransitionException
    * on the X -> X self-transition.
+   * <p>
+   * The stale attempt-1 read is injected deterministically by overriding
+   * fetchLocalRecordAndPopulateZKIfNeeded to hand back the captured pre-advance (record, version)
+   * exactly once, so the test does not depend on the client's watch losing a race with the peer's
+   * write (which would otherwise flake if the watch delivered the advance before the call).
    */
   @Test
   public void testSetHAGroupStatusIfNeededConvergentRaceNonSelfTransitionableTarget()
@@ -1648,34 +1653,43 @@ public class HAGroupStoreClientIT extends HABaseIT {
         this.peerMasterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
     createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, initialRecord);
 
-    HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient
-      .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
-    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-    assertEquals(HAGroupStoreRecord.HAGroupState.STANDBY,
-      haGroupStoreClient.getHAGroupStoreRecord().getHAGroupState());
+    // Capture the pre-advance (record, version) -- exactly what a watch-lagged cache would hold --
+    // and seed it as attempt 1's read via the override below, so the stale-CAS path is exercised
+    // deterministically regardless of whether the client's watch fires before the call.
+    Pair<HAGroupStoreRecord, Stat> stale = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
+    int versionBefore = stale.getRight().getVersion();
+    AtomicReference<Pair<HAGroupStoreRecord, Stat>> attempt1Seed = new AtomicReference<>(stale);
 
-    // A peer RS wins the CAS: advance the shared znode to STANDBY_TO_ACTIVE out from under this
-    // client's cache. This is the LAST ZK op before the client call (no read-back) so the client's
-    // watch has not fired and its cache is still stale at STANDBY -- the stale-CAS path. The
-    // winner's
-    // setData bumps the znode version by exactly one, so winnerVersion == versionBefore + 1.
-    Pair<HAGroupStoreRecord, Stat> current = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
-    int versionBefore = current.getRight().getVersion();
-    haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName,
-      current.getLeft().withHAGroupState(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE),
-      versionBefore);
+    HAGroupStoreClient haGroupStoreClient = new HAGroupStoreClient(
+      CLUSTERS.getHBaseCluster1().getConfiguration(), null, haGroupName, zkUrl) {
+      @Override
+      Pair<HAGroupStoreRecord, Stat> fetchLocalRecordAndPopulateZKIfNeeded() {
+        Pair<HAGroupStoreRecord, Stat> seed = attempt1Seed.getAndSet(null);
+        return seed != null ? seed : super.fetchLocalRecordAndPopulateZKIfNeeded();
+      }
+    };
+    try {
+      // A peer RS wins the CAS: advance the shared znode to STANDBY_TO_ACTIVE, bumping the znode
+      // version by exactly one, so winnerVersion == versionBefore + 1.
+      haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName,
+        stale.getLeft().withHAGroupState(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE),
+        versionBefore);
 
-    // Must not throw InvalidClusterRoleTransitionException on the converged X -> X target; the
-    // stale-CAS loser reconciles to a no-op success.
-    assertEquals(0L, haGroupStoreClient
-      .setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE));
+      // Attempt 1 reads the seeded stale STANDBY@versionBefore, loses the CAS on the stale version,
+      // re-reads fresh (now STANDBY_TO_ACTIVE), and the reordered no-op short-circuit returns a
+      // no-op success rather than throwing InvalidClusterRoleTransitionException on the X -> X
+      // target.
+      assertEquals(0L, haGroupStoreClient
+        .setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE));
 
-    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
-    Pair<HAGroupStoreRecord, Stat> after = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
-    assertEquals(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE,
-      after.getLeft().getHAGroupState());
-    assertEquals("Convergent-race no-op must not write to ZK: only the winner's write lands",
-      versionBefore + 1, after.getRight().getVersion());
+      Pair<HAGroupStoreRecord, Stat> after = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
+      assertEquals(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE,
+        after.getLeft().getHAGroupState());
+      assertEquals("Convergent-race no-op must not write to ZK: only the winner's write lands",
+        versionBefore + 1, after.getRight().getVersion());
+    } finally {
+      haGroupStoreClient.close();
+    }
   }
 
   /**

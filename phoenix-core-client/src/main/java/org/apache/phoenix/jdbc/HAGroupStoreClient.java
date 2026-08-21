@@ -1018,9 +1018,12 @@ public class HAGroupStoreClient implements Closeable {
 
   /**
    * Read the local record from the cache; if absent, rebuild once from the system table (the znode
-   * may have been deleted) and re-read. Returns (null, null) when still absent.
+   * may have been deleted) and re-read. Returns (null, null) when still absent. Package-private and
+   * overridable only so tests can seed attempt 1 of {@link #setHAGroupStatusIfNeeded} with a stale
+   * (record, version) and exercise the stale-CAS reconcile path deterministically.
    */
-  private Pair<HAGroupStoreRecord, Stat> fetchLocalRecordAndPopulateZKIfNeeded() {
+  @VisibleForTesting
+  Pair<HAGroupStoreRecord, Stat> fetchLocalRecordAndPopulateZKIfNeeded() {
     if (pathChildrenCache == null) {
       LOGGER.warn("LOCAL HAGroupStoreClient cache is null for HA group {}, returning null",
         haGroupName);
