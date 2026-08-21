@@ -364,7 +364,20 @@ public class HAGroupStoreManager {
         haGroupStoreRecord.getHAGroupState() == HAGroupState.ACTIVE_NOT_IN_SYNC_TO_STANDBY
           ? ACTIVE_IN_SYNC_TO_STANDBY
           : ACTIVE_IN_SYNC;
-      return haGroupStoreClient.setHAGroupStatusIfNeeded(targetHAGroupState);
+      try {
+        return haGroupStoreClient.setHAGroupStatusIfNeeded(targetHAGroupState);
+      } catch (InvalidClusterRoleTransitionException e) {
+        // Convergent race: co-active RS forwarders independently drive the group to the sync
+        // target. When a watch delivers a peer's winning write before this RS fires, the cache is
+        // already at the target and setHAGroupStatusIfNeeded rejects the X -> X self-transition
+        // (only ACTIVE_NOT_IN_SYNC self-transitions). The group-level goal is already met, so treat
+        // it as a no-op success. Guarded on current == target so a genuinely invalid transition
+        // still propagates.
+        if (isStateAlreadyUpdated(haGroupStoreClient, haGroupName, targetHAGroupState)) {
+          return 0L;
+        }
+        throw e;
+      }
     } else {
       throw new IOException("Current HAGroupStoreRecord is null for HA group: " + haGroupName);
     }

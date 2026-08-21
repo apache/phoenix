@@ -448,6 +448,38 @@ public class HAGroupStoreManagerIT extends HABaseIT {
     assertEquals(anisRecord.getLastSyncStateTimeInMs(), updatedRecord.getLastSyncStateTimeInMs());
   }
 
+  /**
+   * Convergent sync race (the watch-won case): a losing co-active RS forwarder drives
+   * ACTIVE_NOT_IN_SYNC -> ACTIVE_IN_SYNC, but the winner's write has already propagated to this
+   * RS's cache before it fires. setHAGroupStatusIfNeeded then rejects the ACTIVE_IN_SYNC ->
+   * ACTIVE_IN_SYNC self-transition with InvalidClusterRoleTransitionException (ACTIVE_IN_SYNC is
+   * not self-transitionable). Since the group is already at the sync target, setHAGroupStatusToSync
+   * must swallow that as a no-op success (return 0L, no write) rather than propagate a failure.
+   */
+  @Test
+  public void testSetHAGroupStatusToSyncConvergentRaceIsNoOp() throws Exception {
+    String haGroupName = testName.getMethodName();
+    HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf1);
+
+    // @Before seeds the record at ACTIVE_IN_SYNC; let the cache catch up so the target is already
+    // met, mirroring a losing forwarder whose watch delivered the winner's write first.
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+    HAGroupStoreRecord before = haGroupStoreManager.getHAGroupStoreRecord(haGroupName).orElse(null);
+    assertNotNull(before);
+    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, before.getHAGroupState());
+    int versionBefore =
+      haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getRight().getVersion();
+
+    // Must not throw InvalidClusterRoleTransitionException; converges as a no-op success.
+    assertEquals(0L, haGroupStoreManager.setHAGroupStatusToSync(haGroupName));
+
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+    Pair<HAGroupStoreRecord, Stat> after = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
+    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC, after.getLeft().getHAGroupState());
+    assertEquals("Convergent-race no-op must not write to ZK", versionBefore,
+      after.getRight().getVersion());
+  }
+
   @Test
   public void testGetHAGroupNamesFiltersCorrectlyByZkUrl() throws Exception {
     HAGroupStoreManager haGroupStoreManager = HAGroupStoreManager.getInstance(conf1);

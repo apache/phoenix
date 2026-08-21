@@ -1538,6 +1538,248 @@ public class HAGroupStoreClientIT extends HABaseIT {
   }
 
   /**
+   * A same-state write on the first attempt is an intentional refresh, not a no-op: the periodic
+   * STORE_AND_FORWARD heartbeat re-writes ACTIVE_NOT_IN_SYNC to bump the znode mtime so the
+   * standby's staleness check stays fresh (see
+   * StoreAndForwardModeImpl#startHAGroupStoreUpdateTask). It must proceed to the CAS and bump the
+   * version. The no-op short-circuit applies only on the reconcile retry path after a stale-version
+   * CAS loss (see the convergent-race test).
+   */
+  @Test
+  public void testSetHAGroupStatusIfNeededSameStateRefreshBumpsVersion() throws Exception {
+    String haGroupName = testName.getMethodName();
+
+    HAGroupStoreRecord initialRecord = new HAGroupStoreRecord("v1.0", haGroupName,
+      HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, 0L,
+      HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.masterUrl,
+      this.peerMasterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+    createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, initialRecord);
+
+    HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient
+      .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+    int versionBefore =
+      haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getRight().getVersion();
+
+    // Requested state == current state on the first attempt: this is the heartbeat refresh; it must
+    // write and bump the version so the mtime advances.
+    assertEquals(0L, haGroupStoreClient
+      .setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC));
+
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+    Pair<HAGroupStoreRecord, Stat> after = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
+    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC,
+      after.getLeft().getHAGroupState());
+    assertTrue("Same-state heartbeat refresh must bump the znode version",
+      after.getRight().getVersion() > versionBefore);
+  }
+
+  /**
+   * Convergent-race regression (PHOENIX-7990): a peer RS advances the shared record to
+   * ACTIVE_NOT_IN_SYNC while this client still holds the pre-bump cached version. The client's own
+   * transition to the same target must reconcile (stale CAS -> re-read fresh -> observe target
+   * already met -> no-op success) rather than aborting with
+   * StaleHAGroupStoreRecordVersionException. The external advance happens immediately before the
+   * client call so the local cache is still at the stale AIS version and the stale-CAS path is
+   * exercised. Version is asserted >= the winner's: if the watch had already caught the cache up,
+   * attempt 1 would instead do a legitimate same-state heartbeat refresh (one extra bump) — also
+   * correct; the invariant this test pins is "no abort, converges to ACTIVE_NOT_IN_SYNC".
+   */
+  @Test
+  public void testSetHAGroupStatusIfNeededConvergentRaceReconciles() throws Exception {
+    String haGroupName = testName.getMethodName();
+
+    HAGroupStoreRecord initialRecord =
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+        0L, HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.masterUrl,
+        this.peerMasterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+    createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, initialRecord);
+
+    HAGroupStoreClient haGroupStoreClient = HAGroupStoreClient
+      .getInstanceForZkUrl(CLUSTERS.getHBaseCluster1().getConfiguration(), haGroupName, zkUrl);
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_IN_SYNC,
+      haGroupStoreClient.getHAGroupStoreRecord().getHAGroupState());
+
+    // A peer RS wins the CAS: advance the shared znode to ACTIVE_NOT_IN_SYNC out from under this
+    // client's cache, then immediately drive this client to the same target before its watch fires.
+    Pair<HAGroupStoreRecord, Stat> current = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
+    haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName,
+      current.getLeft().withHAGroupState(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC),
+      current.getRight().getVersion());
+    int winnerVersion =
+      haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getRight().getVersion();
+
+    // Must not throw StaleHAGroupStoreRecordVersionException; converges as a no-op success.
+    assertEquals(0L, haGroupStoreClient
+      .setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC));
+
+    Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+    Pair<HAGroupStoreRecord, Stat> after = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
+    assertEquals(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC,
+      after.getLeft().getHAGroupState());
+    assertTrue(
+      "Loser must converge without clobbering: version >= winner's (equal on the stale-CAS "
+        + "reconcile path; winner+1 if the watch caught the cache up first and attempt 1 did a "
+        + "legitimate same-state refresh)",
+      after.getRight().getVersion() >= winnerVersion);
+  }
+
+  /**
+   * Subcase-A regression for a non-self-transitionable convergence target (PHOENIX-7990). Unlike
+   * {@link #testSetHAGroupStatusIfNeededConvergentRaceReconciles}, which converges on
+   * ACTIVE_NOT_IN_SYNC (the one self-transitionable state, so it reconciles even without the fix),
+   * this drives STANDBY -> STANDBY_TO_ACTIVE: an allowed, ungated transition whose target is NOT
+   * self-transitionable. A peer wins the CAS to STANDBY_TO_ACTIVE while this client's cache is
+   * still stale at STANDBY; attempt 1 loses the stale CAS, re-reads fresh (now STANDBY_TO_ACTIVE),
+   * and the no-op short-circuit — which the fix moved ahead of validateTransitionAndGetWaitTime —
+   * returns a no-op success. This is the case the reorder guards: revert it and attempt 2's
+   * validate(STANDBY_TO_ACTIVE -> STANDBY_TO_ACTIVE) throws InvalidClusterRoleTransitionException
+   * on the X -> X self-transition.
+   * <p>
+   * The stale attempt-1 read is injected deterministically by overriding
+   * fetchLocalRecordAndPopulateZKIfNeeded to hand back the captured pre-advance (record, version)
+   * exactly once, so the test does not depend on the client's watch losing a race with the peer's
+   * write (which would otherwise flake if the watch delivered the advance before the call).
+   */
+  @Test
+  public void testSetHAGroupStatusIfNeededConvergentRaceNonSelfTransitionableTarget()
+    throws Exception {
+    String haGroupName = testName.getMethodName();
+
+    HAGroupStoreRecord initialRecord =
+      new HAGroupStoreRecord("v1.0", haGroupName, HAGroupStoreRecord.HAGroupState.STANDBY, 0L,
+        HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.masterUrl,
+        this.peerMasterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+    createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, initialRecord);
+
+    // Capture the pre-advance (record, version) -- exactly what a watch-lagged cache would hold --
+    // and seed it as attempt 1's read via the override below, so the stale-CAS path is exercised
+    // deterministically regardless of whether the client's watch fires before the call.
+    Pair<HAGroupStoreRecord, Stat> stale = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
+    int versionBefore = stale.getRight().getVersion();
+    AtomicReference<Pair<HAGroupStoreRecord, Stat>> attempt1Seed = new AtomicReference<>(stale);
+
+    HAGroupStoreClient haGroupStoreClient = new HAGroupStoreClient(
+      CLUSTERS.getHBaseCluster1().getConfiguration(), null, haGroupName, zkUrl) {
+      @Override
+      Pair<HAGroupStoreRecord, Stat> fetchLocalRecordAndPopulateZKIfNeeded() {
+        Pair<HAGroupStoreRecord, Stat> seed = attempt1Seed.getAndSet(null);
+        return seed != null ? seed : super.fetchLocalRecordAndPopulateZKIfNeeded();
+      }
+    };
+    try {
+      // A peer RS wins the CAS: advance the shared znode to STANDBY_TO_ACTIVE, bumping the znode
+      // version by exactly one, so winnerVersion == versionBefore + 1.
+      haAdmin.updateHAGroupStoreRecordInZooKeeper(haGroupName,
+        stale.getLeft().withHAGroupState(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE),
+        versionBefore);
+
+      // Attempt 1 reads the seeded stale STANDBY@versionBefore, loses the CAS on the stale version,
+      // re-reads fresh (now STANDBY_TO_ACTIVE), and the reordered no-op short-circuit returns a
+      // no-op success rather than throwing InvalidClusterRoleTransitionException on the X -> X
+      // target.
+      assertEquals(0L, haGroupStoreClient
+        .setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE));
+
+      Pair<HAGroupStoreRecord, Stat> after = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName);
+      assertEquals(HAGroupStoreRecord.HAGroupState.STANDBY_TO_ACTIVE,
+        after.getLeft().getHAGroupState());
+      assertEquals("Convergent-race no-op must not write to ZK: only the winner's write lands",
+        versionBefore + 1, after.getRight().getVersion());
+    } finally {
+      haGroupStoreClient.close();
+    }
+  }
+
+  /**
+   * Multi-RegionServer STORE_AND_FORWARD heartbeat under contention. N independent clients — each
+   * with its own watch-lagged cache, exactly like N co-active RegionServers — re-write
+   * ACTIVE_NOT_IN_SYNC every cycle to keep the znode mtime fresh for the standby's staleness check
+   * (see StoreAndForwardModeImpl#startHAGroupStoreUpdateTask). Verifies the convergent-race fix
+   * preserves the heartbeat guarantee: each cycle the shared znode's version and mtime advance (one
+   * RS wins the CAS and bumps; the losers hit StaleHAGroupStoreRecordVersionException, re-read
+   * fresh, and reconcile to a no-op success) and no RS ever aborts. The per-cycle propagation pause
+   * mirrors the production cadence (heartbeat interval >> watch propagation): every RS enters the
+   * cycle with a fresh-enough version for its attempt-1 same-state write to land, so exactly one
+   * write per cycle succeeds and bumps.
+   */
+  @Test
+  public void testConcurrentStoreAndForwardHeartbeatBumpsVersionAndMtimeEachCycle()
+    throws Exception {
+    String haGroupName = testName.getMethodName();
+    final int numRegionServers = 4;
+    final int numCycles = 5;
+
+    HAGroupStoreRecord initialRecord = new HAGroupStoreRecord("v1.0", haGroupName,
+      HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC, 0L,
+      HighAvailabilityPolicy.FAILOVER.toString(), this.peerZKUrl, this.masterUrl,
+      this.peerMasterUrl, CLUSTERS.getHdfsUrl1(), CLUSTERS.getHdfsUrl2(), 0L);
+    createOrUpdateHAGroupStoreRecordOnZookeeper(haAdmin, haGroupName, initialRecord);
+
+    // Distinct instances (not the zkUrl-keyed singleton) so each has its own lagging cache, like
+    // separate RegionServers.
+    List<HAGroupStoreClient> clients = new ArrayList<>();
+    ExecutorService pool = Executors.newFixedThreadPool(numRegionServers);
+    try {
+      for (int i = 0; i < numRegionServers; i++) {
+        clients.add(new HAGroupStoreClient(CLUSTERS.getHBaseCluster1().getConfiguration(), null,
+          haGroupName, zkUrl));
+      }
+      Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+      Stat before = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getRight();
+      int prevVersion = before.getVersion();
+      long prevMtime = before.getMtime();
+
+      for (int cycle = 0; cycle < numCycles; cycle++) {
+        ConcurrentLinkedQueue<Throwable> failures = new ConcurrentLinkedQueue<>();
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(numRegionServers);
+        for (HAGroupStoreClient client : clients) {
+          pool.submit(() -> {
+            try {
+              start.await();
+              client.setHAGroupStatusIfNeeded(HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC);
+            } catch (Throwable t) {
+              failures.add(t);
+            } finally {
+              done.countDown();
+            }
+          });
+        }
+        start.countDown();
+        assertTrue("Cycle " + cycle + ": heartbeat writers timed out",
+          done.await(30, TimeUnit.SECONDS));
+        assertTrue(
+          "Cycle " + cycle + ": no RegionServer may abort on the heartbeat CAS; the "
+            + "convergent race must reconcile to a no-op success, but saw " + failures,
+          failures.isEmpty());
+
+        // Let the winning CAS propagate to every client's cache before the next cycle, mirroring
+        // the production heartbeat cadence (interval >> watch propagation).
+        Thread.sleep(ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS);
+
+        Stat after = haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getRight();
+        assertTrue("Cycle " + cycle + ": znode version must advance (a heartbeat write landed)",
+          after.getVersion() > prevVersion);
+        assertTrue("Cycle " + cycle + ": znode mtime must advance to stay fresh for the standby",
+          after.getMtime() > prevMtime);
+        assertEquals("Cycle " + cycle + ": state must remain ACTIVE_NOT_IN_SYNC",
+          HAGroupStoreRecord.HAGroupState.ACTIVE_NOT_IN_SYNC,
+          haAdmin.getHAGroupStoreRecordInZooKeeper(haGroupName).getLeft().getHAGroupState());
+        prevVersion = after.getVersion();
+        prevMtime = after.getMtime();
+      }
+    } finally {
+      pool.shutdownNow();
+      for (HAGroupStoreClient client : clients) {
+        client.close();
+      }
+    }
+  }
+
+  /**
    * Regression test for the startCache INITIALIZED-latch contract: a LOCAL cache listener that
    * throws while handling the INITIALIZED event must not strand startup. startCache releases its
    * initial-load latch in a finally, so the client still comes up healthy; dropping that finally
