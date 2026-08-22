@@ -228,23 +228,39 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
   }
 
   @Override
-  protected void processFile(Path path) throws IOException {
-    LOG.info("Starting to process file {}", path);
+  protected void processFile(Path path, boolean firstClaim) throws IOException {
+    LOG.info("Starting to process file {} (firstClaim={})", path, firstClaim);
     ReplicationLogTracker tracker = getReplicationLogFileTracker();
     long roundEligibleTime = getRoundEligibleTime(tracker.getFileTimestamp(path));
-    // Pickup lag (eligible -> claimed): the claim (rename into the in-progress directory) already
-    // happened in markInProgress, so record it at entry. Skip if the in-progress name carries no
-    // rename timestamp (should not happen for a file that reached processFile).
-    Optional<Long> renameTs = tracker.getRenameTimestamp(path);
-    renameTs
-      .ifPresent(ts -> getReplayMetrics().updatePickupLag(Math.max(0L, ts - roundEligibleTime)));
-    ReplicationLogProcessor.get(getConf(), getHaGroupName()).processLogFile(tracker.getFileSystem(),
-      path);
-    // End-to-end lag (eligible -> replay done): recorded only after a successful processLogFile
-    // return. On failure processLogFile throws and logFileReplayFailureCount already fires, so an
+    // Pickup lag (eligible -> claimed) is recorded only on the first claim (the new-files path).
+    // markInProgress re-stamps a fresh rename timestamp on every reclaim of an already-in-progress
+    // file, so recording on the in-progress path (firstClaim=false) would sample eligible ->
+    // latest-reclaim, not eligible -> first-pickup, and multi-count the same file across sweeps.
+    // Skip if the in-progress name carries no rename timestamp (should not happen for a file that
+    // reached processFile).
+    if (firstClaim) {
+      Optional<Long> renameTs = tracker.getRenameTimestamp(path);
+      renameTs
+        .ifPresent(ts -> getReplayMetrics().updatePickupLag(Math.max(0L, ts - roundEligibleTime)));
+    }
+    replayLogFile(path);
+    // End-to-end lag (eligible -> replay done): recorded only after a successful replayLogFile
+    // return. On failure replayLogFile throws and logFileReplayFailureCount already fires, so an
     // end-to-end lag sample for an unfinished replay would be misleading.
     getReplayMetrics().updateEndToEndReplayLag(
       Math.max(0L, EnvironmentEdgeManager.currentTime() - roundEligibleTime));
+  }
+
+  /**
+   * Replays a single log file through the {@link ReplicationLogProcessor}. Extracted as a seam so
+   * the lag-recording logic in {@link #processFile(Path, boolean)} can be unit-tested without a
+   * live processor or file system.
+   * @param path the in-progress log file to replay
+   * @throws IOException if replay fails; the caller then skips the end-to-end lag sample
+   */
+  protected void replayLogFile(Path path) throws IOException {
+    ReplicationLogProcessor.get(getConf(), getHaGroupName())
+      .processLogFile(getReplicationLogFileTracker().getFileSystem(), path);
   }
 
   /**
@@ -253,11 +269,21 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
    * This mirrors the eligibility gate used by {@link #getNextRoundToProcess()} (a round is eligible
    * once {@code currentTime >= roundEnd + bufferMillis}) and is the zero-reference for the
    * replay-lag metrics, so they exclude the fixed built-in wait rather than measuring raw file age.
+   * <p>
+   * Round bounds are inclusive at both ends (see {@code getNewFilesForRound}), so consecutive
+   * rounds share a boundary and a file whose creation timestamp lands exactly on a round boundary
+   * ({@code creationTs % roundTimeMills == 0}) matches both the earlier round (as its end) and the
+   * later round (as its start). The earlier round runs first and claims the file, so the owning
+   * round's end is {@code creationTs} itself in that case, not {@code creationTs + roundTimeMills}.
+   * Anchoring to the later round would over-count the eligibility by one full round and clamp the
+   * resulting lag to zero.
    * @param creationTs the file creation timestamp (first component of the log file name)
    * @return the round-eligible wall-clock instant in milliseconds
    */
   private long getRoundEligibleTime(long creationTs) {
-    return (creationTs / roundTimeMills) * roundTimeMills + roundTimeMills + bufferMillis;
+    long roundStart = (creationTs / roundTimeMills) * roundTimeMills;
+    long owningRoundEnd = (creationTs == roundStart) ? creationTs : roundStart + roundTimeMills;
+    return owningRoundEnd + bufferMillis;
   }
 
   /**

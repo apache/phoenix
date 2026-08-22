@@ -28,9 +28,9 @@ import org.junit.Test;
  * <ul>
  * <li>{@link MetricsReplicationLogDiscoveryReplayImpl}: endToEndReplayLag, pickupLag (histograms)
  * and roundsExceedingRoundTime (counter)</li>
- * <li>{@link MetricsReplicationLogProcessorImpl}: mutationsReplayedCount (counter) and
- * mutationsPerFile (histogram)</li>
- * <li>{@link MetricsReplicationLogTrackerReplayImpl}: markFileInProgressCollisionCount
+ * <li>{@link MetricsReplicationLogProcessorImpl}: successfulFileMutationsReplayedCount (counter)
+ * and mutationsPerFile (histogram)</li>
+ * <li>{@link MetricsReplicationLogTrackerReplayImpl}: markFileInProgressRenameFailedCount
  * (counter)</li>
  * </ul>
  * The sources are {@code static} and constructed once (mirroring
@@ -78,17 +78,20 @@ public class ReplicationReplayPerfMetricsTest {
   }
 
   /**
-   * Metrics #3 (mutationsReplayedCount) and #4 (mutationsPerFile) live on the log processor source.
-   * The count accumulates the supplied delta; the per-file histogram reports its max.
+   * Metrics #3 (successfulFileMutationsReplayedCount) and #4 (mutationsPerFile) live on the log
+   * processor source. The count accumulates the supplied delta; the per-file histogram reports its
+   * max.
    */
   @Test
   public void testProcessorMutationMetrics() {
-    // #3 mutationsReplayedCount counter accumulates by the supplied delta.
-    long baseMutations = PROCESSOR.getCurrentMetricValues().getMutationsReplayedCount();
-    PROCESSOR.incrementMutationsReplayedCount(150L);
-    PROCESSOR.incrementMutationsReplayedCount(50L);
-    assertEquals("mutationsReplayedCount should accumulate the supplied deltas",
-      baseMutations + 200, PROCESSOR.getCurrentMetricValues().getMutationsReplayedCount());
+    // #3 successfulFileMutationsReplayedCount counter accumulates by the supplied delta.
+    long baseMutations =
+      PROCESSOR.getCurrentMetricValues().getSuccessfulFileMutationsReplayedCount();
+    PROCESSOR.incrementSuccessfulFileMutationsReplayedCount(150L);
+    PROCESSOR.incrementSuccessfulFileMutationsReplayedCount(50L);
+    assertEquals("successfulFileMutationsReplayedCount should accumulate the supplied deltas",
+      baseMutations + 200,
+      PROCESSOR.getCurrentMetricValues().getSuccessfulFileMutationsReplayedCount());
 
     // #4 mutationsPerFile histogram reports the max per-file count.
     PROCESSOR.updateMutationsPerFile(150L);
@@ -99,16 +102,18 @@ public class ReplicationReplayPerfMetricsTest {
   }
 
   /**
-   * Metric #5 (markFileInProgressCollisionCount) lives on the tracker source and increments once
+   * Metric #5 (markFileInProgressRenameFailedCount) lives on the tracker source and increments once
    * per call.
    */
   @Test
-  public void testTrackerCollisionMetric() {
-    long baseCollisions = TRACKER.getCurrentMetricValues().getMarkFileInProgressCollisionCount();
-    TRACKER.incrementMarkFileInProgressCollisionCount();
-    TRACKER.incrementMarkFileInProgressCollisionCount();
-    TRACKER.incrementMarkFileInProgressCollisionCount();
-    assertEquals("markFileInProgressCollisionCount should increment once per call",
-      baseCollisions + 3, TRACKER.getCurrentMetricValues().getMarkFileInProgressCollisionCount());
+  public void testTrackerRenameFailedMetric() {
+    long baseRenameFailures =
+      TRACKER.getCurrentMetricValues().getMarkFileInProgressRenameFailedCount();
+    TRACKER.incrementMarkFileInProgressRenameFailedCount();
+    TRACKER.incrementMarkFileInProgressRenameFailedCount();
+    TRACKER.incrementMarkFileInProgressRenameFailedCount();
+    assertEquals("markFileInProgressRenameFailedCount should increment once per call",
+      baseRenameFailures + 3,
+      TRACKER.getCurrentMetricValues().getMarkFileInProgressRenameFailedCount());
   }
 }

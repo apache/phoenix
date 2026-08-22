@@ -439,7 +439,7 @@ public abstract class ReplicationLogDiscovery {
     List<Path> files = replicationLogTracker.getNewFilesForRound(replicationRound);
     LOG.info("Number of new files for round {} is {}", replicationRound, files.size());
     while (!files.isEmpty() && isRunning()) {
-      processOneRandomFile(files);
+      processOneRandomFile(files, true);
       files = replicationLogTracker.getNewFilesForRound(replicationRound);
     }
     long duration = EnvironmentEdgeManager.currentTime() - startTime;
@@ -472,7 +472,7 @@ public abstract class ReplicationLogDiscovery {
       replicationLogTracker.getInProgressLogSubDirectoryName(), renameTimestampThreshold,
       files.size(), haGroupName);
     while (!files.isEmpty() && isRunning()) {
-      Optional<Path> failedFile = processOneRandomFile(files);
+      Optional<Path> failedFile = processOneRandomFile(files, false);
       if (failedFile.isPresent()) {
         String prefix = replicationLogTracker.getFilePrefix(failedFile.get());
         int count = failureCount.merge(prefix, 1, Integer::sum);
@@ -498,17 +498,23 @@ public abstract class ReplicationLogDiscovery {
   /**
    * Processes a single random file from the provided list. Marks the file as in-progress, processes
    * it, and marks it as completed or failed.
-   * @param files - List of files from which to select and process one randomly
+   * @param files      - List of files from which to select and process one randomly
+   * @param firstClaim - true when {@code files} are new files being claimed for the first time
+   *                   (from {@link #processNewFilesForRound}); false when they are already in the
+   *                   in-progress directory and are being reprocessed (from
+   *                   {@link #processInProgressDirectory}). Forwarded to
+   *                   {@link #processFile(Path, boolean)}.
    * @return the original path of the file that failed, or empty if processing succeeded
    */
-  private Optional<Path> processOneRandomFile(final List<Path> files) throws IOException {
+  private Optional<Path> processOneRandomFile(final List<Path> files, final boolean firstClaim)
+    throws IOException {
     // Pick a random file and process it
     Path file = files.get(ThreadLocalRandom.current().nextInt(files.size()));
     Optional<Path> optionalInProgressFilePath = Optional.empty();
     try {
       optionalInProgressFilePath = replicationLogTracker.markInProgress(file);
       if (optionalInProgressFilePath.isPresent()) {
-        processFile(optionalInProgressFilePath.get());
+        processFile(optionalInProgressFilePath.get(), firstClaim);
         replicationLogTracker.markCompleted(optionalInProgressFilePath.get());
       }
     } catch (IOException exception) {
@@ -522,10 +528,15 @@ public abstract class ReplicationLogDiscovery {
 
   /**
    * Handles the processing of a single file.
-   * @param path - The file to be processed
+   * @param path       - The file to be processed
+   * @param firstClaim - true when this invocation is the file's first claim (it was just moved into
+   *                   the in-progress directory from the new-files path); false when reprocessing a
+   *                   file that was already in the in-progress directory. Lets subclasses record
+   *                   first-claim-only signals (e.g. pickup lag) without double counting on
+   *                   retries.
    * @throws IOException if there's an error during file processing
    */
-  protected abstract void processFile(Path path) throws IOException;
+  protected abstract void processFile(Path path, boolean firstClaim) throws IOException;
 
   /** Creates a new metrics source for monitoring operations. */
   protected abstract MetricsReplicationLogDiscovery createMetricsSource();

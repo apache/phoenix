@@ -33,7 +33,7 @@ public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
   private final MutableFastCounter logFileReplaySuccessCount;
   private final MutableHistogram batchReplayTime;
   private final MutableHistogram logFileReplayTime;
-  private final MutableFastCounter mutationsReplayedCount;
+  private final MutableFastCounter successfulFileMutationsReplayedCount;
   private final MutableHistogram mutationsPerFile;
 
   public MetricsReplicationLogProcessorImpl(final String haGroupName) {
@@ -56,8 +56,8 @@ public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
     batchReplayTime = getMetricsRegistry().newHistogram(BATCH_REPLAY_TIME, BATCH_REPLAY_TIME_DESC);
     logFileReplayTime =
       getMetricsRegistry().newHistogram(LOG_FILE_REPLAY_TIME, LOG_FILE_REPLAY_TIME_DESC);
-    mutationsReplayedCount =
-      getMetricsRegistry().newCounter(MUTATIONS_REPLAYED_COUNT, MUTATIONS_REPLAYED_COUNT_DESC, 0L);
+    successfulFileMutationsReplayedCount = getMetricsRegistry().newCounter(
+      SUCCESSFUL_FILE_MUTATIONS_REPLAYED_COUNT, SUCCESSFUL_FILE_MUTATIONS_REPLAYED_COUNT_DESC, 0L);
     mutationsPerFile =
       getMetricsRegistry().newHistogram(MUTATIONS_PER_FILE, MUTATIONS_PER_FILE_DESC);
   }
@@ -93,8 +93,8 @@ public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
   }
 
   @Override
-  public void incrementMutationsReplayedCount(long delta) {
-    mutationsReplayedCount.incr(delta);
+  public void incrementSuccessfulFileMutationsReplayedCount(long delta) {
+    successfulFileMutationsReplayedCount.incr(delta);
   }
 
   @Override
@@ -112,8 +112,8 @@ public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
   public ReplicationLogProcessorMetricValues getCurrentMetricValues() {
     return new ReplicationLogProcessorMetricValues(failedMutationsCount.value(),
       logFileReplayFailureCount.value(), logFileReplaySuccessCount.value(),
-      logFileReplayTime.getMax(), batchReplayTime.getMax(), mutationsReplayedCount.value(),
-      mutationsPerFile.getMax());
+      logFileReplayTime.getMax(), batchReplayTime.getMax(),
+      successfulFileMutationsReplayedCount.value(), mutationsPerFile.getMax());
   }
 
   @Override

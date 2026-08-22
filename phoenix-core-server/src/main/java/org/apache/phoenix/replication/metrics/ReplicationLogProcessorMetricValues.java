@@ -25,18 +25,18 @@ public class ReplicationLogProcessorMetricValues {
   private final long logFileReplaySuccessCount;
   private final long logFileReplayTime;
   private final long logFileBatchReplayTime;
-  private final long mutationsReplayedCount;
+  private final long successfulFileMutationsReplayedCount;
   private final long mutationsPerFile;
 
   public ReplicationLogProcessorMetricValues(long failedMutationsCount,
     long logFileReplayFailureCount, long logFileReplaySuccessCount, long logFileReplayTime,
-    long logFileBatchReplayTime, long mutationsReplayedCount, long mutationsPerFile) {
+    long logFileBatchReplayTime, long successfulFileMutationsReplayedCount, long mutationsPerFile) {
     this.failedMutationsCount = failedMutationsCount;
     this.logFileReplayFailureCount = logFileReplayFailureCount;
     this.logFileReplaySuccessCount = logFileReplaySuccessCount;
     this.logFileReplayTime = logFileReplayTime;
     this.logFileBatchReplayTime = logFileBatchReplayTime;
-    this.mutationsReplayedCount = mutationsReplayedCount;
+    this.successfulFileMutationsReplayedCount = successfulFileMutationsReplayedCount;
     this.mutationsPerFile = mutationsPerFile;
   }
 
@@ -60,8 +60,8 @@ public class ReplicationLogProcessorMetricValues {
     return logFileBatchReplayTime;
   }
 
-  public long getMutationsReplayedCount() {
-    return mutationsReplayedCount;
+  public long getSuccessfulFileMutationsReplayedCount() {
+    return successfulFileMutationsReplayedCount;
   }
 
   public long getMutationsPerFile() {
