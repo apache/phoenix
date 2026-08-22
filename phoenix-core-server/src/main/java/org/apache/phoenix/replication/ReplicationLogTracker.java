@@ -384,6 +384,9 @@ public class ReplicationLogTracker {
         return Optional.of(newPath);
       } else {
         LOG.warn("Failed to rename file for in-progress marking: {}", file);
+        // Rename lost to another process claiming the same file: a collision, a strict subset of
+        // the request count incremented in the finally block below.
+        getMetrics().incrementMarkFileInProgressCollisionCount();
         return Optional.empty();
       }
     } catch (IOException e) {

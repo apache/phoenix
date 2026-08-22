@@ -29,6 +29,9 @@ public interface MetricsReplicationLogTracker extends BaseSource {
   String MARK_FILE_IN_PROGRESS_REQUEST_COUNT = "markFileInProgressRequestCount";
   String MARK_FILE_IN_PROGRESS_REQUEST_COUNT_DESC =
     "Number of requests made to mark file in progress";
+  String MARK_FILE_IN_PROGRESS_COLLISION_COUNT = "markFileInProgressCollisionCount";
+  String MARK_FILE_IN_PROGRESS_COLLISION_COUNT_DESC =
+    "Number of mark-file-in-progress requests that lost the claim rename to another process";
   String MARK_FILE_COMPLETED_REQUEST_COUNT = "markFileCompletedRequestCount";
   String MARK_FILE_COMPLETED_REQUEST_COUNT_DESC = "Number of requests made to mark file completed";
   String MARK_FILE_FAILED_REQUEST_COUNT = "markFileFailedRequestCount";
@@ -51,6 +54,13 @@ public interface MetricsReplicationLogTracker extends BaseSource {
    * requests made to mark files in progress.
    */
   void incrementMarkFileInProgressRequestCount();
+
+  /**
+   * Increments the counter for mark-file-in-progress collisions. This counter tracks the number of
+   * claim attempts whose rename lost to another process (the decentralized, no-coordination claim
+   * design), a strict subset of {@link #incrementMarkFileInProgressRequestCount()}.
+   */
+  void incrementMarkFileInProgressCollisionCount();
 
   /**
    * Increments the counter for mark file completed requests. This counter tracks the number of

@@ -145,8 +145,9 @@ public abstract class ReplicationLogDiscovery {
   @GuardedBy("this")
   protected long lastAlignedTargetMillis = Long.MIN_VALUE;
   /**
-   * One-shot guard so a misconfigured {@link #REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY} logs its
-   * fall-back WARN once rather than every scheduling cycle (the epsilon is read live per cycle).
+   * One-shot guard so a misconfigured {@link #REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY} logs
+   * its fall-back WARN once rather than every scheduling cycle (the epsilon is read live per
+   * cycle).
    */
   private final AtomicBoolean warnedInvalidEpsilon = new AtomicBoolean(false);
 
@@ -279,11 +280,11 @@ public abstract class ReplicationLogDiscovery {
    * Runs one replay pass and, unless the service has been stopped, schedules the next aligned pass.
    * A recoverable {@link Exception} from {@link #replay()} is logged and the chain continues, so a
    * single failed round does not break it. A fatal {@link Error} (OOM, stack overflow, linkage) is
-   * logged, tears the chain down (marking the service not-running so the supervisor can rebuild it),
-   * and is rethrown -- never rescheduled onto a potentially corrupted JVM.
-   * The reschedule is guarded by the same lock stop() uses; if stop() shut the scheduler down
-   * first, {@link #isRunning} is false and we do not reschedule (and a concurrent shutdown that
-   * rejects the submission is caught and treated as "stop the chain").
+   * logged, tears the chain down (marking the service not-running so the supervisor can rebuild
+   * it), and is rethrown -- never rescheduled onto a potentially corrupted JVM. The reschedule is
+   * guarded by the same lock stop() uses; if stop() shut the scheduler down first,
+   * {@link #isRunning} is false and we do not reschedule (and a concurrent shutdown that rejects
+   * the submission is caught and treated as "stop the chain").
    * @param owner the scheduler this cycle was launched on. If a stop()->start() restart has since
    *              swapped in a new scheduler, {@code owner} no longer equals {@link #scheduler} and
    *              this stale cycle must not reschedule onto the new generation (which would create a
@@ -445,6 +446,9 @@ public abstract class ReplicationLogDiscovery {
     LOG.info("Finished new files processing for round: {} in {}ms for haGroup: {}",
       replicationRound, duration, haGroupName);
     getMetrics().updateTimeToProcessNewFiles(duration);
+    if (duration > roundTimeMills) {
+      getMetrics().incrementRoundsExceedingRoundTime();
+    }
   }
 
   /**
@@ -696,11 +700,12 @@ public abstract class ReplicationLogDiscovery {
   /**
    * Returns the epsilon margin (milliseconds) added to the aligned scheduler wake instant. Guards
    * against a misconfigured value: a non-numeric string, a negative value (which would move wakes
-   * <em>before</em> eligibility and reintroduce missed rounds), or a value {@code >= roundTimeMills}
-   * (which wraps through {@link Math#floorMod} and no longer represents the documented "epsilon
-   * after the boundary") all fall back to {@link #DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS} with a
-   * one-shot WARN. Riding over the misconfiguration keeps replay polling on a safe default rather
-   * than wedging the group, while the WARN makes the bad config visible.
+   * <em>before</em> eligibility and reintroduce missed rounds), or a value
+   * {@code >= roundTimeMills} (which wraps through {@link Math#floorMod} and no longer represents
+   * the documented "epsilon after the boundary") all fall back to
+   * {@link #DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS} with a one-shot WARN. Riding over the
+   * misconfiguration keeps replay polling on a safe default rather than wedging the group, while
+   * the WARN makes the bad config visible.
    * @return the epsilon margin in milliseconds, always within {@code [0, roundTimeMills)}.
    */
   public long getAlignedDelayEpsilonMillis() {
@@ -711,8 +716,8 @@ public abstract class ReplicationLogDiscovery {
     } catch (NumberFormatException e) {
       // Hadoop's getLong throws (rather than returning the default) when the key is present but
       // not parseable as a number.
-      warnInvalidEpsilon("non-numeric value \""
-        + conf.get(REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY) + "\"");
+      warnInvalidEpsilon(
+        "non-numeric value \"" + conf.get(REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY) + "\"");
       return DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS;
     }
     if (epsilon < 0 || epsilon >= roundTimeMills) {

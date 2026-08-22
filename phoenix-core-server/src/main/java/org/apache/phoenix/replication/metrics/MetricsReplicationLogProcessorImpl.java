@@ -33,6 +33,8 @@ public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
   private final MutableFastCounter logFileReplaySuccessCount;
   private final MutableHistogram batchReplayTime;
   private final MutableHistogram logFileReplayTime;
+  private final MutableFastCounter mutationsReplayedCount;
+  private final MutableHistogram mutationsPerFile;
 
   public MetricsReplicationLogProcessorImpl(final String haGroupName) {
     this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT,
@@ -54,6 +56,10 @@ public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
     batchReplayTime = getMetricsRegistry().newHistogram(BATCH_REPLAY_TIME, BATCH_REPLAY_TIME_DESC);
     logFileReplayTime =
       getMetricsRegistry().newHistogram(LOG_FILE_REPLAY_TIME, LOG_FILE_REPLAY_TIME_DESC);
+    mutationsReplayedCount =
+      getMetricsRegistry().newCounter(MUTATIONS_REPLAYED_COUNT, MUTATIONS_REPLAYED_COUNT_DESC, 0L);
+    mutationsPerFile =
+      getMetricsRegistry().newHistogram(MUTATIONS_PER_FILE, MUTATIONS_PER_FILE_DESC);
   }
 
   @Override
@@ -87,6 +93,16 @@ public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
   }
 
   @Override
+  public void incrementMutationsReplayedCount(long delta) {
+    mutationsReplayedCount.incr(delta);
+  }
+
+  @Override
+  public void updateMutationsPerFile(long mutationsCount) {
+    mutationsPerFile.add(mutationsCount);
+  }
+
+  @Override
   public void close() {
     // Unregister this metrics source
     DefaultMetricsSystem.instance().unregisterSource(groupMetricsContext);
@@ -96,7 +112,8 @@ public class MetricsReplicationLogProcessorImpl extends BaseSourceImpl
   public ReplicationLogProcessorMetricValues getCurrentMetricValues() {
     return new ReplicationLogProcessorMetricValues(failedMutationsCount.value(),
       logFileReplayFailureCount.value(), logFileReplaySuccessCount.value(),
-      logFileReplayTime.getMax(), batchReplayTime.getMax());
+      logFileReplayTime.getMax(), batchReplayTime.getMax(), mutationsReplayedCount.value(),
+      mutationsPerFile.getMax());
   }
 
   @Override

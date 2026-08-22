@@ -26,6 +26,14 @@ public interface MetricsReplicationLogDiscoveryReplay extends MetricsReplication
   String CONSISTENCY_POINT = "consistencyPoint";
   String CONSISTENCY_POINT_DESC =
     "Consistency point timestamp in milliseconds for the HA Group during replay";
+  String END_TO_END_REPLAY_LAG = "endToEndReplayLagMs";
+  String END_TO_END_REPLAY_LAG_DESC =
+    "Histogram of end-to-end replay lag, from when a file's round became eligible for processing "
+      + "to when the file finished replaying, in milliseconds";
+  String PICKUP_LAG = "pickupLagMs";
+  String PICKUP_LAG_DESC =
+    "Histogram of pickup lag, from when a file's round became eligible for processing to when the "
+      + "file was claimed (renamed into the in-progress directory), in milliseconds";
 
   /**
    * Updates the consistency point metric. The consistency point represents the timestamp up to
@@ -34,4 +42,19 @@ public interface MetricsReplicationLogDiscoveryReplay extends MetricsReplication
    * @param consistencyPointMs The consistency point timestamp in milliseconds
    */
   void updateConsistencyPoint(long consistencyPointMs);
+
+  /**
+   * Records a sample into the end-to-end replay lag histogram: the elapsed time from when a file's
+   * round became eligible for processing to when the file finished replaying.
+   * @param lagMs The end-to-end replay lag in milliseconds
+   */
+  void updateEndToEndReplayLag(long lagMs);
+
+  /**
+   * Records a sample into the pickup lag histogram: the elapsed time from when a file's round
+   * became eligible for processing to when the file was claimed (renamed into the in-progress
+   * directory).
+   * @param lagMs The pickup lag in milliseconds
+   */
+  void updatePickupLag(long lagMs);
 }

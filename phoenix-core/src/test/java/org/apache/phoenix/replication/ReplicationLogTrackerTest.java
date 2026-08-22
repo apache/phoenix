@@ -845,6 +845,59 @@ public class ReplicationLogTrackerTest {
   }
 
   @Test
+  public void testMarkInProgressCollisionIncrementsMetricOnRenameFailure() throws IOException {
+    // Initialize tracker
+    tracker.init();
+
+    // The static metrics source accumulates across tests in this class (e.g.
+    // testMarkInProgressForNonExistentFile also trips the rename-false path), so assert deltas.
+    long baseCollisions = metrics.getCurrentMetricValues().getMarkFileInProgressCollisionCount();
+    long baseRequests = metrics.getCurrentMetricValues().getMarkFileInProgressRequestCount();
+
+    // Create a real file so the outcome is driven purely by the claim rename, not a missing source.
+    ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
+    Path shardPath = shardManager.getAllShardPaths().get(0);
+    localFs.mkdirs(shardPath);
+    Path originalFile = new Path(shardPath, "1704153600000_rs1.plog");
+    localFs.create(originalFile, true).close();
+
+    // Force the claim rename to lose, as if another replayer claimed the same file first.
+    Mockito.doReturn(false).when(mockFs).rename(Mockito.eq(originalFile), Mockito.any(Path.class));
+
+    Optional<Path> result = tracker.markInProgress(originalFile);
+
+    assertFalse("markInProgress must fail when the claim rename loses", result.isPresent());
+    assertEquals("Collision count must increment by exactly one on rename failure",
+      baseCollisions + 1, metrics.getCurrentMetricValues().getMarkFileInProgressCollisionCount());
+    assertEquals("Request count must also increment (collision is a strict subset of requests)",
+      baseRequests + 1, metrics.getCurrentMetricValues().getMarkFileInProgressRequestCount());
+  }
+
+  @Test
+  public void testMarkInProgressNoCollisionOnRenameSuccess() throws IOException {
+    // Initialize tracker
+    tracker.init();
+
+    long baseCollisions = metrics.getCurrentMetricValues().getMarkFileInProgressCollisionCount();
+    long baseRequests = metrics.getCurrentMetricValues().getMarkFileInProgressRequestCount();
+
+    // Create a real file that the real rename will successfully claim.
+    ReplicationShardDirectoryManager shardManager = tracker.getReplicationShardDirectoryManager();
+    Path shardPath = shardManager.getAllShardPaths().get(0);
+    localFs.mkdirs(shardPath);
+    Path originalFile = new Path(shardPath, "1704153600000_rs1.plog");
+    localFs.create(originalFile, true).close();
+
+    Optional<Path> result = tracker.markInProgress(originalFile);
+
+    assertTrue("markInProgress must succeed when the claim rename lands", result.isPresent());
+    assertEquals("Collision count must not change on a successful claim", baseCollisions,
+      metrics.getCurrentMetricValues().getMarkFileInProgressCollisionCount());
+    assertEquals("Request count still increments on a successful claim", baseRequests + 1,
+      metrics.getCurrentMetricValues().getMarkFileInProgressRequestCount());
+  }
+
+  @Test
   public void testMarkCompletedSuccessfulDeletion() throws IOException {
     // Initialize tracker
     tracker.init();

@@ -29,11 +29,13 @@ public class ReplicationLogTrackerMetricValues {
   private final long markFileInProgressTimeMs;
   private final long markFileCompletedTimeMs;
   private final long markFileFailedTimeMs;
+  private final long markFileInProgressCollisionCount;
 
   public ReplicationLogTrackerMetricValues(long markFileInProgressRequestCount,
     long markFileCompletedRequestCount, long markFileFailedRequestCount,
     long markFileCompletedRequestFailedCount, long markFileInProgressTimeMs,
-    long markFileCompletedTimeMs, long markFileFailedTimeMs) {
+    long markFileCompletedTimeMs, long markFileFailedTimeMs,
+    long markFileInProgressCollisionCount) {
     this.markFileInProgressRequestCount = markFileInProgressRequestCount;
     this.markFileCompletedRequestCount = markFileCompletedRequestCount;
     this.markFileFailedRequestCount = markFileFailedRequestCount;
@@ -41,6 +43,7 @@ public class ReplicationLogTrackerMetricValues {
     this.markFileInProgressTimeMs = markFileInProgressTimeMs;
     this.markFileCompletedTimeMs = markFileCompletedTimeMs;
     this.markFileFailedTimeMs = markFileFailedTimeMs;
+    this.markFileInProgressCollisionCount = markFileInProgressCollisionCount;
   }
 
   public long getMarkFileInProgressRequestCount() {
@@ -69,6 +72,10 @@ public class ReplicationLogTrackerMetricValues {
 
   public long getMarkFileFailedTimeMs() {
     return markFileFailedTimeMs;
+  }
+
+  public long getMarkFileInProgressCollisionCount() {
+    return markFileInProgressCollisionCount;
   }
 
 }

@@ -37,6 +37,9 @@ public interface MetricsReplicationLogDiscovery extends BaseSource {
   String TIME_TO_PROCESS_IN_PROGRESS_FILES = "timeToProcessInProgressFilesMs";
   String TIME_TO_PROCESS_IN_PROGRESS_FILES_DESC =
     "Histogram of time taken to process in progress files in milliseconds";
+  String ROUNDS_EXCEEDING_ROUND_TIME = "roundsExceedingRoundTime";
+  String ROUNDS_EXCEEDING_ROUND_TIME_DESC =
+    "Number of rounds whose new-file processing time exceeded the round time";
 
   /**
    * Increments the counter for rounds processed. This counter tracks the number of rounds processed
@@ -61,6 +64,13 @@ public interface MetricsReplicationLogDiscovery extends BaseSource {
    * @param timeMs Time taken in milliseconds
    */
   void updateTimeToProcessInProgressFiles(long timeMs);
+
+  /**
+   * Increments the counter for rounds whose new-file processing time exceeded the round time. A
+   * rising rate of such rounds signals that replay is falling behind the cadence at which new
+   * rounds become eligible.
+   */
+  void incrementRoundsExceedingRoundTime();
 
   /**
    * Unregister this metrics source.

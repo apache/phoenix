@@ -28,6 +28,7 @@ public class MetricsReplicationLogTrackerImpl extends BaseSourceImpl
 
   protected String groupMetricsContext;
   protected final MutableFastCounter markFileInProgressRequestCount;
+  protected final MutableFastCounter markFileInProgressCollisionCount;
   protected final MutableFastCounter markFileCompletedRequestCount;
   protected final MutableFastCounter markFileFailedRequestCount;
   protected final MutableFastCounter markFileCompletedRequestFailedCount;
@@ -40,6 +41,8 @@ public class MetricsReplicationLogTrackerImpl extends BaseSourceImpl
     super(metricsName, metricsDescription, metricsContext, metricsJmxContext);
     markFileInProgressRequestCount = getMetricsRegistry().newCounter(
       MARK_FILE_IN_PROGRESS_REQUEST_COUNT, MARK_FILE_IN_PROGRESS_REQUEST_COUNT_DESC, 0L);
+    markFileInProgressCollisionCount = getMetricsRegistry().newCounter(
+      MARK_FILE_IN_PROGRESS_COLLISION_COUNT, MARK_FILE_IN_PROGRESS_COLLISION_COUNT_DESC, 0L);
     markFileCompletedRequestCount = getMetricsRegistry()
       .newCounter(MARK_FILE_COMPLETED_REQUEST_COUNT, MARK_FILE_COMPLETED_REQUEST_COUNT_DESC, 0L);
     markFileFailedRequestCount = getMetricsRegistry().newCounter(MARK_FILE_FAILED_REQUEST_COUNT,
@@ -57,6 +60,11 @@ public class MetricsReplicationLogTrackerImpl extends BaseSourceImpl
   @Override
   public void incrementMarkFileInProgressRequestCount() {
     markFileInProgressRequestCount.incr();
+  }
+
+  @Override
+  public void incrementMarkFileInProgressCollisionCount() {
+    markFileInProgressCollisionCount.incr();
   }
 
   @Override
@@ -100,7 +108,8 @@ public class MetricsReplicationLogTrackerImpl extends BaseSourceImpl
     return new ReplicationLogTrackerMetricValues(markFileInProgressRequestCount.value(),
       markFileCompletedRequestCount.value(), markFileFailedRequestCount.value(),
       markFileCompletedRequestFailedCount.value(), markFileInProgressTime.getMax(),
-      markFileCompletedTime.getMax(), markFileFailedTime.getMax());
+      markFileCompletedTime.getMax(), markFileFailedTime.getMax(),
+      markFileInProgressCollisionCount.value());
   }
 
   @Override

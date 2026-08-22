@@ -18,6 +18,9 @@
 package org.apache.phoenix.replication.metrics;
 
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
+import org.apache.hadoop.metrics2.lib.MutableHistogram;
+
+import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /** Implementation of metrics source for ReplicationLogDiscoveryReplay operations. */
 public class MetricsReplicationLogDiscoveryReplayImpl extends MetricsReplicationLogDiscoveryImpl
@@ -29,6 +32,8 @@ public class MetricsReplicationLogDiscoveryReplayImpl extends MetricsReplication
   private static final String METRICS_JMX_CONTEXT = "RegionServer,sub=" + METRICS_NAME;
 
   private final MutableGaugeLong consistencyPoint;
+  private final MutableHistogram endToEndReplayLag;
+  private final MutableHistogram pickupLag;
 
   public MetricsReplicationLogDiscoveryReplayImpl(final String haGroupName) {
     super(MetricsReplicationLogDiscoveryReplayImpl.METRICS_NAME,
@@ -36,10 +41,33 @@ public class MetricsReplicationLogDiscoveryReplayImpl extends MetricsReplication
       MetricsReplicationLogDiscoveryImpl.METRICS_CONTEXT,
       MetricsReplicationLogDiscoveryReplayImpl.METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName);
     consistencyPoint = getMetricsRegistry().newGauge(CONSISTENCY_POINT, CONSISTENCY_POINT_DESC, 0L);
+    endToEndReplayLag =
+      getMetricsRegistry().newHistogram(END_TO_END_REPLAY_LAG, END_TO_END_REPLAY_LAG_DESC);
+    pickupLag = getMetricsRegistry().newHistogram(PICKUP_LAG, PICKUP_LAG_DESC);
   }
 
   @Override
   public void updateConsistencyPoint(long consistencyPointMs) {
     consistencyPoint.set(consistencyPointMs);
+  }
+
+  @Override
+  public void updateEndToEndReplayLag(long lagMs) {
+    endToEndReplayLag.add(lagMs);
+  }
+
+  @Override
+  public void updatePickupLag(long lagMs) {
+    pickupLag.add(lagMs);
+  }
+
+  @VisibleForTesting
+  MutableHistogram getEndToEndReplayLagHistogram() {
+    return endToEndReplayLag;
+  }
+
+  @VisibleForTesting
+  MutableHistogram getPickupLagHistogram() {
+    return pickupLag;
   }
 }

@@ -329,7 +329,8 @@ public class ReplicationLogDiscoveryTest {
     discovery.setScheduler(mockScheduler);
     long roundTimeMs = discovery.roundTimeMills;
     // Pin wall-clock exactly on an epsilon-shifted grid tick so computeAlignedInitialDelay == 0.
-    long onTick = 5 * roundTimeMs + discovery.bufferMillis + discovery.getAlignedDelayEpsilonMillis();
+    long onTick =
+      5 * roundTimeMs + discovery.bufferMillis + discovery.getAlignedDelayEpsilonMillis();
     AtomicLong mockTime = new AtomicLong(onTick);
     EnvironmentEdgeManager.injectEdge(new EnvironmentEdge() {
       @Override
@@ -1068,6 +1069,60 @@ public class ReplicationLogDiscoveryTest {
         "Should NOT have processed in-progress file from 00:01:02: " + unexpectedFile.getName(),
         actualProcessedFilePrefixes.contains(unexpectedPrefix));
     }
+  }
+
+  /**
+   * Metric #6 (roundsExceedingRoundTime) recording site: a round whose new-file processing
+   * completes within the round time must NOT increment the counter. Freezing the clock makes the
+   * measured duration exactly 0, which is well under {@code roundTimeMills}.
+   */
+  @Test
+  public void testProcessNewFilesForRoundDoesNotCountFastRound() throws IOException {
+    long baseSlowRounds =
+      metricsLogDiscovery.getCurrentMetricValues().getRoundsExceedingRoundTime();
+
+    // Freeze the clock so startTime == endTime, giving duration == 0 (<= roundTimeMills).
+    EnvironmentEdge frozenEdge = () -> 1704153600000L;
+    EnvironmentEdgeManager.injectEdge(frozenEdge);
+    try {
+      // Empty round: no files created for it, so processing returns without entering the loop.
+      ReplicationRound emptyRound = new ReplicationRound(1704153600000L, 1704153660000L);
+      discovery.processNewFilesForRound(emptyRound);
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
+
+    assertEquals("A fast round must not increment roundsExceedingRoundTime", baseSlowRounds,
+      metricsLogDiscovery.getCurrentMetricValues().getRoundsExceedingRoundTime());
+  }
+
+  /**
+   * Metric #6 (roundsExceedingRoundTime) recording site: a round whose new-file processing exceeds
+   * the round time must increment the counter exactly once. An advancing clock whose step exceeds a
+   * full round guarantees the measured duration (end - start) strictly exceeds
+   * {@code roundTimeMills} regardless of how many times the wall clock is read during processing.
+   */
+  @Test
+  public void testProcessNewFilesForRoundCountsSlowRound() throws IOException {
+    long baseSlowRounds =
+      metricsLogDiscovery.getCurrentMetricValues().getRoundsExceedingRoundTime();
+
+    long step = discovery.getRoundTimeMills() + 1L;
+    AtomicLong clock = new AtomicLong(1704153600000L);
+    EnvironmentEdge advancingEdge = () -> clock.getAndAdd(step);
+    EnvironmentEdgeManager.injectEdge(advancingEdge);
+    try {
+      // Empty round: the start/end clock reads alone span more than a full round, so duration
+      // strictly exceeds roundTimeMills.
+      ReplicationRound emptyRound = new ReplicationRound(1704153600000L, 1704153660000L);
+      discovery.processNewFilesForRound(emptyRound);
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
+
+    assertEquals("A slow round must increment roundsExceedingRoundTime by exactly one",
+      baseSlowRounds + 1,
+      metricsLogDiscovery.getCurrentMetricValues().getRoundsExceedingRoundTime());
   }
 
   /**

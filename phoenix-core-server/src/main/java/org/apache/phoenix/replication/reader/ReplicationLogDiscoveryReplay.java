@@ -230,8 +230,34 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
   @Override
   protected void processFile(Path path) throws IOException {
     LOG.info("Starting to process file {}", path);
-    ReplicationLogProcessor.get(getConf(), getHaGroupName())
-      .processLogFile(getReplicationLogFileTracker().getFileSystem(), path);
+    ReplicationLogTracker tracker = getReplicationLogFileTracker();
+    long roundEligibleTime = getRoundEligibleTime(tracker.getFileTimestamp(path));
+    // Pickup lag (eligible -> claimed): the claim (rename into the in-progress directory) already
+    // happened in markInProgress, so record it at entry. Skip if the in-progress name carries no
+    // rename timestamp (should not happen for a file that reached processFile).
+    Optional<Long> renameTs = tracker.getRenameTimestamp(path);
+    renameTs
+      .ifPresent(ts -> getReplayMetrics().updatePickupLag(Math.max(0L, ts - roundEligibleTime)));
+    ReplicationLogProcessor.get(getConf(), getHaGroupName()).processLogFile(tracker.getFileSystem(),
+      path);
+    // End-to-end lag (eligible -> replay done): recorded only after a successful processLogFile
+    // return. On failure processLogFile throws and logFileReplayFailureCount already fires, so an
+    // end-to-end lag sample for an unfinished replay would be misleading.
+    getReplayMetrics().updateEndToEndReplayLag(
+      Math.max(0L, EnvironmentEdgeManager.currentTime() - roundEligibleTime));
+  }
+
+  /**
+   * Returns the wall-clock instant (ms) at which the round owning a file with the given creation
+   * timestamp became eligible for processing: the round's end boundary plus the waiting buffer.
+   * This mirrors the eligibility gate used by {@link #getNextRoundToProcess()} (a round is eligible
+   * once {@code currentTime >= roundEnd + bufferMillis}) and is the zero-reference for the
+   * replay-lag metrics, so they exclude the fixed built-in wait rather than measuring raw file age.
+   * @param creationTs the file creation timestamp (first component of the log file name)
+   * @return the round-eligible wall-clock instant in milliseconds
+   */
+  private long getRoundEligibleTime(long creationTs) {
+    return (creationTs / roundTimeMills) * roundTimeMills + roundTimeMills + bufferMillis;
   }
 
   /**
