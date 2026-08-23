@@ -146,11 +146,6 @@ public abstract class BaseIndexBuilder implements IndexBuilder {
     return false;
   }
 
-  @Override
-  public boolean hasConditionalTTL(Mutation m) {
-    return false;
-  }
-
   public RegionCoprocessorEnvironment getEnv() {
     return this.env;
   }
