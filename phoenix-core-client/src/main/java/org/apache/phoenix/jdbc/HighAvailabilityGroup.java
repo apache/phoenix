@@ -19,9 +19,11 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_CACHE_AGE_MS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_REFRESH_COUNT;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_DURATION_MS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_ROLE_TRANSITION_FAILED_COUNTER;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
 
@@ -63,6 +65,8 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.RegistryType;
+import org.apache.phoenix.monitoring.HAGroupMetricsManager;
+import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.util.GetClusterRoleRecordUtil;
 import org.apache.phoenix.util.JDBCUtil;
@@ -637,6 +641,11 @@ public class HighAvailabilityGroup {
     roleRecord = roleRecordFromEndpoint;
     lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
     state = State.READY;
+    // Pre-register the per-group metrics2 source so the ha_group-tagged series exists as soon as
+    // the
+    // group is ready, rather than only after the first HA metric fires. No-op when global client
+    // metrics are disabled.
+    HAGroupMetricsManager.getOrCreate(getName());
   }
 
   /**
@@ -706,6 +715,7 @@ public class HighAvailabilityGroup {
       // demoted mid-connect, or the underlying connect threw). Counted here so it tracks real
       // production failures regardless of failover policy.
       GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER.increment();
+      HAGroupMetricsManager.increment(getName(), MetricType.HA_FAILOVER_CONNECTION_FAILED_COUNTER);
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION)
         .setMessage("Failed to connect to active cluster in HA group")
         .setHaGroupInfo(info.toString()).setRootCause(e).build().buildException();
@@ -795,6 +805,8 @@ public class HighAvailabilityGroup {
    */
   void close() {
     state = State.CLOSED;
+    // Detach the per-group metrics2 source so its JMX-context name is freed for possible re-create.
+    HAGroupMetricsManager.remove(getName());
   }
 
   @Override
@@ -1166,6 +1178,7 @@ public class HighAvailabilityGroup {
       // otherwise inflate this counter against its name (a "refresh" with no fetch is a no-op
       // from a CRR-state perspective).
       GLOBAL_HA_CRR_REFRESH_COUNT.increment();
+      HAGroupMetricsManager.increment(getName(), MetricType.HA_CRR_REFRESH_COUNT);
       if (roleRecord == null) {
         // First-load init path: no prior cache state to compare against, so this is not a
         // failover transition and HA_FAILOVER_COUNT is intentionally NOT incremented here.
@@ -1205,6 +1218,11 @@ public class HighAvailabilityGroup {
 
       final ClusterRoleRecord oldRecord = roleRecord;
       state = State.IN_TRANSITION;
+      // Count every applied CRR transition, including transitions into a no-active state. Distinct
+      // from HA_FAILOVER_COUNT, which counts only transitions that establish/move an ACTIVE
+      // cluster.
+      GLOBAL_HA_CRR_TRANSITION_COUNT.increment();
+      HAGroupMetricsManager.increment(getName(), MetricType.CRR_TRANSITION_COUNT);
       LOG.info("HA group {} is in {} to set V{} record", info, state, newRoleRecord.getVersion());
       Future<?> future = crrChangedExecutor.submit(() -> {
         try {
@@ -1239,6 +1257,11 @@ public class HighAvailabilityGroup {
           LOG.error(
             "HA group {} failed to transit cluster roles per policy {} to new " + "record {}", info,
             roleRecord.getPolicy(), newRoleRecord, e);
+          // Dispatch of the policy-side cluster-role transition failed (execution error or timed
+          // out). Count every such failure, including the HA_ROLE_TRANSITION_NOT_ALLOWED case
+          // rethrown just below.
+          GLOBAL_HA_ROLE_TRANSITION_FAILED_COUNTER.increment();
+          HAGroupMetricsManager.increment(getName(), MetricType.HA_ROLE_TRANSITION_FAILED_COUNTER);
           // Rethrow the Role transitions not allowed exceptions
           if (e.getCause() != null && e.getCause().getCause() != null) {
             if (
@@ -1266,6 +1289,7 @@ public class HighAvailabilityGroup {
         // unit-tested directly without driving a full mini-cluster transition.
         if (shouldCountFailover(transitionSucceeded, oldRecord, newRoleRecord)) {
           GLOBAL_HA_FAILOVER_COUNT.increment();
+          HAGroupMetricsManager.increment(getName(), MetricType.HA_FAILOVER_COUNT);
         }
         // Update the role record and the last refresh time
         roleRecord = newRoleRecord;
@@ -1276,7 +1300,10 @@ public class HighAvailabilityGroup {
         LOG.debug("HA group is ready: {}", this);
         return true;
       } finally {
-        GLOBAL_HA_FAILOVER_DURATION_MS.update(System.currentTimeMillis() - transitionStartMs);
+        long transitionDurationMs = System.currentTimeMillis() - transitionStartMs;
+        GLOBAL_HA_FAILOVER_DURATION_MS.update(transitionDurationMs);
+        HAGroupMetricsManager.update(getName(), MetricType.HA_FAILOVER_DURATION_MS,
+          transitionDurationMs);
       }
     } finally {
       writeLock.unlock();

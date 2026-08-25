@@ -364,7 +364,22 @@ public enum MetricType {
     LogLevel.DEBUG, PLong.INSTANCE),
   HA_FAILOVER_CONNECTION_FAILED_COUNTER("hafcf",
     "Counter for failed attempts to connect to the active cluster in an HA group, recorded at the "
-      + "connectActive throw site (no active cluster, demoted mid-connect, or connect error)",
+      + "connectActive throw site (no active cluster, demoted mid-connect, or connect error); "
+      + "incremented on every failed attempt across all callers, including each failover retry",
+    LogLevel.DEBUG, PLong.INSTANCE),
+  HA_FAILOVER_CONNECTION_CREATED_COUNTER("hafcc",
+    "Counter for FailoverPhoenixConnection instances successfully created (connected to the active "
+      + "cluster); one increment per constructed connection. Not a matched pair with "
+      + "HA_FAILOVER_CONNECTION_FAILED_COUNTER, which counts every failed active-connect attempt "
+      + "across all callers (including per failover retry)",
+    LogLevel.DEBUG, PLong.INSTANCE),
+  HA_ROLE_TRANSITION_FAILED_COUNTER("hrtf",
+    "Counter for cluster-role-transition dispatch failures (ExecutionException/TimeoutException) "
+      + "when applying a new CRR per HA policy at the CRR-write path",
+    LogLevel.DEBUG, PLong.INSTANCE),
+  CRR_TRANSITION_COUNT("crtc",
+    "Counter for cluster role record transitions applied per HA policy (a role/url change that "
+      + "triggers a transit), including transitions to a no-active state",
     LogLevel.DEBUG, PLong.INSTANCE),
   HA_MUTATION_BLOCKED_COUNT("hambc",
     "Counter for MutationBlockedIOException surfaces caught by wrapActionDuringFailover",

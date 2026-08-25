@@ -30,6 +30,8 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.HAGroupMetricsManager;
+import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -194,6 +196,8 @@ public enum HighAvailabilityPolicy {
         // Give regular connection or a failover connection?
         LOG.warn("Falling back to single phoenix connection due to resource constraints");
         GlobalClientMetrics.GLOBAL_HA_PARALLEL_CONNECTION_FALLBACK_COUNTER.increment();
+        HAGroupMetricsManager.increment(haGroup.getName(),
+          MetricType.HA_PARALLEL_CONNECTION_FALLBACK_COUNTER);
         return haGroup.connectActive(info, haURLInfo);
       }
     }

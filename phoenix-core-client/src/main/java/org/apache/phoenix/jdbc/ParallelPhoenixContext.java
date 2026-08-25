@@ -32,6 +32,7 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.monitoring.HAGroupMetricsManager;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -80,6 +81,8 @@ public class ParallelPhoenixContext {
     Preconditions.checkArgument(executors.size() >= 2,
       "Expected 2 executor pairs, one for each connection with a normal/close executor");
     GLOBAL_HA_PARALLEL_CONNECTION_CREATED_COUNTER.increment();
+    HAGroupMetricsManager.increment(haGroup.getName(),
+      MetricType.HA_PARALLEL_CONNECTION_CREATED_COUNTER);
     this.properties = properties;
     this.haGroup = haGroup;
     this.haurlInfo = haurlInfo;
@@ -176,6 +179,8 @@ public class ParallelPhoenixContext {
     isClosed = true;
     if (isErrored) {
       GLOBAL_HA_PARALLEL_CONNECTION_ERROR_COUNTER.increment();
+      HAGroupMetricsManager.increment(this.haGroup.getName(),
+        MetricType.HA_PARALLEL_CONNECTION_ERROR_COUNTER);
     }
   }
 

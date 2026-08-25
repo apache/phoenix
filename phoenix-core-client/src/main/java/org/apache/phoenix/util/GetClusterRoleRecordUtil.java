@@ -43,6 +43,8 @@ import org.apache.phoenix.jdbc.HighAvailabilityGroup;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.HAGroupMetricsManager;
+import org.apache.phoenix.monitoring.MetricType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -223,6 +225,7 @@ public class GetClusterRoleRecordUtil {
         // Increment unconditionally so a failed tick still alternates next iteration.
         long tick = tickCount.getAndIncrement();
         GlobalClientMetrics.GLOBAL_HA_POLLER_TICK_COUNT.increment();
+        HAGroupMetricsManager.increment(haGroupName, MetricType.HA_POLLER_TICK_COUNT);
         // Sample current CRR cache age into the gauge each tick. Without this, the
         // HA_CRR_CACHE_AGE_MS counter-backed gauge is only updated on connect() and would
         // not advance during idle periods between connects, making it look fresher than it
@@ -271,6 +274,7 @@ public class GetClusterRoleRecordUtil {
           }
         } catch (SQLException e) {
           GlobalClientMetrics.GLOBAL_HA_POLLER_TICK_FAILURES.increment();
+          HAGroupMetricsManager.increment(haGroupName, MetricType.HA_POLLER_TICK_FAILURES);
           LOGGER.error(
             "Exception found while polling for ClusterRoleRecord on {} for HA group" + " {}: {}",
             tickUrl, haGroupName, e.getMessage());

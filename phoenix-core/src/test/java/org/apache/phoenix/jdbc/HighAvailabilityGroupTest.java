@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -34,6 +35,9 @@ import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityGroup.HAGroupInfo;
 import org.apache.phoenix.jdbc.HighAvailabilityGroup.State;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.HAGroupClientMetricsSource;
+import org.apache.phoenix.monitoring.HAGroupMetricsManager;
+import org.apache.phoenix.monitoring.MetricType;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
@@ -663,8 +667,19 @@ public class HighAvailabilityGroupTest {
         "The transition must record a HA_FAILOVER_DURATION_MS sample on the CRR-write " + "path",
         durationSamplesBefore + 1,
         GlobalClientMetrics.GLOBAL_HA_FAILOVER_DURATION_MS.getMetric().getNumberOfSamples());
+
+      // Per-group (ha_group-tagged) emission mirrors the JVM-global counters. This group name is
+      // unique to this test, so its source starts empty and this single transition yields exactly 1
+      // on both the failover and the applied-transition counters.
+      HAGroupClientMetricsSource source = HAGroupMetricsManager.getIfPresent(haGroupName);
+      assertNotNull("The transition must register the per-group metrics source", source);
+      assertEquals("Per-group HA_FAILOVER_COUNT must count the active-URL flip", 1L,
+        source.getCounterValue(MetricType.HA_FAILOVER_COUNT));
+      assertEquals("Per-group CRR_TRANSITION_COUNT must count the applied transition", 1L,
+        source.getCounterValue(MetricType.CRR_TRANSITION_COUNT));
     } finally {
       HighAvailabilityGroup.URLS.remove(info);
+      HAGroupMetricsManager.remove(haGroupName);
     }
   }
 
@@ -694,6 +709,12 @@ public class HighAvailabilityGroupTest {
     }
     assertEquals("A failed connectActive must increment the failed counter", failedBefore + 1,
       GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER.getMetric().getValue());
+    // Per-group mirror: unique group name → its FAILED counter reflects exactly this one failure.
+    HAGroupClientMetricsSource source = HAGroupMetricsManager.getIfPresent(haGroupName);
+    assertNotNull("A failed connectActive must register the per-group metrics source", source);
+    assertEquals("Per-group HA_FAILOVER_CONNECTION_FAILED_COUNTER must count the failed connect",
+      1L, source.getCounterValue(MetricType.HA_FAILOVER_CONNECTION_FAILED_COUNTER));
+    HAGroupMetricsManager.remove(haGroupName);
   }
 
   /**
@@ -723,5 +744,41 @@ public class HighAvailabilityGroupTest {
       group.connectActive(new Properties(), new HAURLInfo(haGroupName)));
     assertEquals("A successful connectActive must not increment the failed counter", failedBefore,
       GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER.getMetric().getValue());
+    // Per-group negative check: a successful connect emits no FAILED for this group. Either the
+    // source was never created (no emission touched it) or its FAILED counter is still zero.
+    HAGroupClientMetricsSource source = HAGroupMetricsManager.getIfPresent(haGroupName);
+    assertTrue("A successful connectActive must not emit a per-group failed count", source == null
+      || source.getCounterValue(MetricType.HA_FAILOVER_CONNECTION_FAILED_COUNTER) == 0L);
+    HAGroupMetricsManager.remove(haGroupName);
+  }
+
+  /**
+   * The per-group metrics source lifecycle is bound to the HA group: {@code init} pre-registers it
+   * (so the {@code ha_group}-tagged series exists as soon as the group is ready) and {@code close}
+   * detaches it (freeing the metrics2 source name for a later re-create).
+   */
+  @Test
+  public void testInitRegistersPerGroupSourceAndCloseRemovesIt() throws Exception {
+    String haGroupName = "testInitRegistersPerGroupSourceAndCloseRemovesIt";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord record = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+    HighAvailabilityGroup group =
+      Mockito.spy(new HighAvailabilityGroup(info, new Properties(), record, State.UNINITIALIZED));
+    Mockito.doReturn(record).when(group).getClusterRoleRecordFromEndpoint();
+    try {
+      assertNull("No per-group source should exist before init",
+        HAGroupMetricsManager.getIfPresent(haGroupName));
+      group.init();
+      assertNotNull("init must pre-register the per-group metrics source",
+        HAGroupMetricsManager.getIfPresent(haGroupName));
+      group.close();
+      assertNull("close must detach the per-group metrics source",
+        HAGroupMetricsManager.getIfPresent(haGroupName));
+    } finally {
+      HAGroupMetricsManager.remove(haGroupName);
+    }
   }
 }

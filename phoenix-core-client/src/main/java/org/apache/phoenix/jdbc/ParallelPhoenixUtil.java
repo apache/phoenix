@@ -34,7 +34,9 @@ import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
 import org.apache.hadoop.hbase.util.PairOfSameType;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.monitoring.HAGroupMetricsManager;
 import org.apache.phoenix.monitoring.Metric;
+import org.apache.phoenix.monitoring.MetricType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -126,6 +128,8 @@ public class ParallelPhoenixUtil {
 
     if (timedout) {
       GLOBAL_HA_PARALLEL_TASK_TIMEOUT_COUNTER.increment();
+      HAGroupMetricsManager.increment(context.getHaGroup().getName(),
+        MetricType.HA_PARALLEL_TASK_TIMEOUT_COUNTER);
 
       if (futures.isEmpty()) {
         LOGGER.warn("Unexpected race between timeout and failure occurred.");
