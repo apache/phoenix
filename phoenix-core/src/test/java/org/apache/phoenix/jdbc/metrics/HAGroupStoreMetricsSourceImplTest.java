@@ -21,7 +21,6 @@ import static org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource.CURRENT_
 import static org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource.CURRENT_PEER_STATE;
 import static org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource.DEGRADED_STANDBY_ACTIVE;
 import static org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource.DEGRADED_STANDBY_PRESENTED_COUNT;
-import static org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource.HA_GROUP_TAG_NAME;
 import static org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource.INVALID_TRANSITION_REJECTED_COUNT;
 import static org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource.LOCAL_CACHE_HEALTH_STATUS;
 import static org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource.LOCAL_ZK_CONNECTION_LOST_COUNT;
@@ -31,6 +30,7 @@ import static org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource.PEER_VIS
 import static org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource.SUBSCRIBER_NOTIFY_TIME_MS;
 import static org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource.SUBSCRIBER_NOTIFY_TIME_MS_EXPORTED_BASE;
 import static org.apache.phoenix.jdbc.metrics.HAGroupStoreMetricsSource.SYSTEM_TABLE_SYNC_FAILED_COUNT;
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;

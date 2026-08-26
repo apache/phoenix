@@ -17,6 +17,9 @@
  */
 package org.apache.phoenix.jdbc.metrics;
 
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_DESC;
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_NAME;
+
 import java.util.concurrent.TimeUnit;
 import javax.management.ObjectName;
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;

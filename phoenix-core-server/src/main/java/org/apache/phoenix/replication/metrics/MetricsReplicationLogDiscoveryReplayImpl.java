@@ -17,6 +17,10 @@
  */
 package org.apache.phoenix.replication.metrics;
 
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_DESC;
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_NAME;
+
+import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MutableGaugeLong;
 
 /** Implementation of metrics source for ReplicationLogDiscoveryReplay operations. */
@@ -35,6 +39,7 @@ public class MetricsReplicationLogDiscoveryReplayImpl extends MetricsReplication
       MetricsReplicationLogDiscoveryReplayImpl.METRICS_DESCRIPTION,
       MetricsReplicationLogDiscoveryImpl.METRICS_CONTEXT,
       MetricsReplicationLogDiscoveryReplayImpl.METRICS_JMX_CONTEXT + ",haGroup=" + haGroupName);
+    getMetricsRegistry().tag(Interns.info(HA_GROUP_TAG_NAME, HA_GROUP_TAG_DESC), haGroupName);
     consistencyPoint = getMetricsRegistry().newGauge(CONSISTENCY_POINT, CONSISTENCY_POINT_DESC, 0L);
   }
 

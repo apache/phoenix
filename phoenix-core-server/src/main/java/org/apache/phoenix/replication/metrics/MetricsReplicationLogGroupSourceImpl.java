@@ -17,12 +17,16 @@
  */
 package org.apache.phoenix.replication.metrics;
 
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_DESC;
+import static org.apache.phoenix.metrics.MetricConstants.HA_GROUP_TAG_NAME;
+
 import java.lang.reflect.Field;
 import java.util.concurrent.TimeUnit;
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
 import org.apache.hadoop.hbase.metrics.Snapshot;
 import org.apache.hadoop.hbase.metrics.impl.HistogramImpl;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
+import org.apache.hadoop.metrics2.lib.Interns;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
 import org.apache.hadoop.metrics2.lib.MutableHistogram;
 import org.apache.hadoop.metrics2.lib.MutableSizeHistogram;
@@ -52,6 +56,7 @@ public class MetricsReplicationLogGroupSourceImpl extends BaseSourceImpl
     String metricsContext, String metricsJmxContext, String haGroupName) {
     super(metricsName, metricsDescription, metricsContext,
       metricsJmxContext + ",haGroup=" + haGroupName);
+    getMetricsRegistry().tag(Interns.info(HA_GROUP_TAG_NAME, HA_GROUP_TAG_DESC), haGroupName);
     rotationCount = getMetricsRegistry().newCounter(ROTATION_COUNT, ROTATION_COUNT_DESC, 0L);
     rotationFailuresCount =
       getMetricsRegistry().newCounter(ROTATION_FAILURES, ROTATION_FAILURES_DESC, 0L);
