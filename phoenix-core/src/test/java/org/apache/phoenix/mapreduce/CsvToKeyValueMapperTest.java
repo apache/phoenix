@@ -18,9 +18,15 @@
 package org.apache.phoenix.mapreduce;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.io.StringReader;
+import java.io.UncheckedIOException;
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
 import org.apache.commons.csv.CSVRecord;
 import org.junit.Test;
 
@@ -48,5 +54,103 @@ public class CsvToKeyValueMapperTest {
     assertEquals(";two\\", parsed.get(1));
     assertTrue(parsed.isConsistent());
     assertEquals(1, parsed.getRecordNumber());
+  }
+
+  @Test(expected = IOException.class)
+  public void testCsvLineParserUnterminatedQuoteThrowsIOException() throws IOException {
+    CsvToKeyValueMapper.CsvLineParser lineParser =
+      new CsvToKeyValueMapper.CsvLineParser(',', '"', '\\');
+    // Unterminated quoted field should throw IOException
+    lineParser.parse("1,\"unterminated quote,3");
+  }
+
+  @Test(expected = IOException.class)
+  public void testCsvLineParserEOFInEncapsulatedToken() throws IOException {
+    CsvToKeyValueMapper.CsvLineParser lineParser =
+      new CsvToKeyValueMapper.CsvLineParser(',', '"', '\\');
+    // This simulates the exact error: "EOF reached before encapsulated token finished"
+    lineParser.parse("3,\"Charlie,Sales");
+  }
+
+  @Test
+  public void testCsvLineParserEmptyLineReturnsNull() throws IOException {
+    CsvToKeyValueMapper.CsvLineParser lineParser =
+      new CsvToKeyValueMapper.CsvLineParser(',', '"', '\\');
+    CSVRecord parsed = lineParser.parse("");
+    assertNull(parsed);
+  }
+
+  @Test
+  public void testCsvLineParserValidRecordAfterBadRecord() throws IOException {
+    CsvToKeyValueMapper.CsvLineParser lineParser =
+      new CsvToKeyValueMapper.CsvLineParser(',', '"', '\\');
+
+    // Bad record throws
+    try {
+      lineParser.parse("3,\"Charlie,Sales");
+      fail("Expected IOException for unterminated quote");
+    } catch (IOException e) {
+      // expected
+    }
+
+    // Valid record still parses fine (parser is stateless per line)
+    CSVRecord parsed = lineParser.parse("4,Diana,Finance");
+    assertEquals("4", parsed.get(0));
+    assertEquals("Diana", parsed.get(1));
+    assertEquals("Finance", parsed.get(2));
+  }
+
+  @Test
+  public void testCsvLineParserEmbeddedCommaInQuotedField() throws IOException {
+    CsvToKeyValueMapper.CsvLineParser lineParser =
+      new CsvToKeyValueMapper.CsvLineParser(',', '"', '\\');
+    // Valid: comma inside quoted field
+    CSVRecord parsed = lineParser.parse("1,\"Sales, Marketing\",HR");
+    assertEquals("1", parsed.get(0));
+    assertEquals("Sales, Marketing", parsed.get(1));
+    assertEquals("HR", parsed.get(2));
+  }
+
+  @Test
+  public void testCsvLineParserOnlyDelimiters() throws IOException {
+    CsvToKeyValueMapper.CsvLineParser lineParser =
+      new CsvToKeyValueMapper.CsvLineParser(',', '"', '\\');
+    // Valid: three empty fields
+    CSVRecord parsed = lineParser.parse(",,");
+    assertEquals("", parsed.get(0));
+    assertEquals("", parsed.get(1));
+    assertEquals("", parsed.get(2));
+  }
+
+  @Test(expected = IOException.class)
+  public void testCsvLineParserSingleDanglingQuote() throws IOException {
+    CsvToKeyValueMapper.CsvLineParser lineParser =
+      new CsvToKeyValueMapper.CsvLineParser(',', '"', '\\');
+    // Single dangling quote - unterminated encapsulated token
+    lineParser.parse("\"");
+  }
+
+  @Test(expected = IOException.class)
+  public void testCsvLineParserInvalidCharAfterQuotedField() throws IOException {
+    CsvToKeyValueMapper.CsvLineParser lineParser =
+      new CsvToKeyValueMapper.CsvLineParser(',', '"', '\\');
+    // Invalid char between closing quote and delimiter: "Eve,"Bad
+    lineParser.parse("5,\"Eve,\"Bad quote handling");
+  }
+
+  @Test
+  public void testCsvParserIteratorThrowsUncheckedIOException() throws IOException {
+    // Proves that the CSVParser iterator throws UncheckedIOException on malformed input.
+    // This is WHY CsvLineParser.parse() needs to catch UncheckedIOException.
+    CSVFormat format = CSVFormat.DEFAULT.builder().setIgnoreEmptyLines(true).get();
+    try (CSVParser parser = CSVParser.builder().setFormat(format)
+      .setReader(new StringReader("1,\"unterminated quote")).get()) {
+      for (CSVRecord record : parser) {
+        fail("Should have thrown UncheckedIOException");
+      }
+    } catch (UncheckedIOException e) {
+      // This is what the iterator throws — confirming Uncheck.get() wraps IOException
+      assertTrue(e.getCause() instanceof IOException);
+    }
   }
 }

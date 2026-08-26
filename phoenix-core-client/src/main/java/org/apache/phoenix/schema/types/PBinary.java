@@ -124,6 +124,9 @@ public class PBinary extends PBinaryBase {
 
   @Override
   public Object toObject(Object object, PDataType actualType) {
+    if (actualType == PVarbinaryEncoded.INSTANCE) {
+      return object;
+    }
     return actualType.toBytes(object);
   }
 

@@ -69,6 +69,39 @@ and optionally, to just skip all the tests and build the jars:
 
 Note: javadocs are generated in target/apidocs
 
+Note: by default `mvn package` does not build `phoenix-mapreduce-byo-shaded-hbase`,
+and the resulting binary tarball does not contain its uberjar. RC / publish builds
+should use `-Prelease`, which adds that module back to the reactor and bundles its
+uberjar into the tarball. See "Faster builds" below.
+
+Faster builds
+-------------
+
+The following options can dramatically reduce wall-clock time:
+
+* `phoenix-mapreduce-byo-shaded-hbase` is the most expensive shade in the project
+  and is only needed for releases, so it is built only under `-Prelease`. A normal
+  `mvn package` skips it, and the binary tarball does not contain its uberjar.
+  Pass `-Prelease` to restore the previous behavior (this is what the ASF release
+  build does).
+
+* The shade modules are reactor-siblings and the shade plugin is thread-safe, so
+  they build concurrently with parallel reactor builds:
+
+  `$ mvn -T 1C clean package -DskipTests`
+
+  (`-T 1C` uses one build thread per CPU core. `-T 4` is also fine.)
+
+* Skip the shaded artifacts and assembly entirely when you are iterating on
+  `phoenix-core*` and do not need the shaded uberjars or the binary tarball.
+  Pass `-DPhoenixPatchProcess` to deactivate the `shade-and-assembly` profile
+  (this is what the ASF Yetus precommit and the Jenkinsfile use):
+
+  `$ mvn package -DskipTests -DPhoenixPatchProcess`
+
+* Shaded sources jars are off by default. `-Prelease` (or `-DshadeSources=true`)
+  re-enables them; RC / publish builds get them automatically.
+
 HBase version compatibility
 ---------------------------
 

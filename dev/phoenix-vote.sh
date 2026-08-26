@@ -77,16 +77,29 @@ operator may still consider to verify the following manually
 3. Other concerns if any
 __EOF
 
+if ! command -v wget >/dev/null 2>&1; then
+    echo "ERROR: wget is required but was not found on PATH."
+    echo "       On macOS install with: brew install wget"
+    exit 1
+fi
+
 [[ "${SOURCE_URL}" != */ ]] && SOURCE_URL="${SOURCE_URL}/"
-PHOENIX_RC_VERSION=$(tr "/" "\n" <<< "${SOURCE_URL}" | tail -n2)
-PHOENIX_VERSION=$(echo "${PHOENIX_RC_VERSION}" | sed -e 's/RC[0-9]//g' | sed -e 's/phoenix-//g')
+# Extract the trailing path component without depending on a fixed number of path segments.
+PHOENIX_RC_VERSION=$(echo "${SOURCE_URL}" | sed -E 's|/+$||' | awk -F/ '{ print $NF }')
+PHOENIX_VERSION=$(echo "${PHOENIX_RC_VERSION}" | sed -E 's/RC[0-9]+//' | sed -e 's/phoenix-//')
+# Number of path components above the RC directory; wget --cut-dirs needs this
+# to drop the leading host-relative path so files land under ./${PHOENIX_RC_VERSION}/.
+URL_PATH=$(echo "${SOURCE_URL}" | sed -E 's|^https?://[^/]+/||; s|/+$||')
+WGET_CUT_DIRS=$(echo "${URL_PATH%/*}" | tr -cd '/' | wc -c | tr -d ' ')
+WGET_CUT_DIRS=$((WGET_CUT_DIRS + 1))
 JAVA_VERSION=$(java -version 2>&1 | cut -f3 -d' ' | head -n1 | sed -e 's/"//g')
 OUTPUT_DIR="${OUTPUT_DIR:-$(pwd)}"
 
-if [ ! -d "${OUTPUT_DIR}" ]; then
-    echo "Output directory ${OUTPUT_DIR} does not exist, please create it before running this script."
-    exit 1
-fi
+# Create the output dir if it doesn't exist, then resolve to an absolute path so
+# logs and downloaded artifacts stay together regardless of CWD.
+mkdir -p "${OUTPUT_DIR}"
+OUTPUT_DIR="$(cd "${OUTPUT_DIR}" && pwd)"
+cd "${OUTPUT_DIR}"
 
 OUTPUT_PATH_PREFIX="${OUTPUT_DIR}"/"${PHOENIX_RC_VERSION}"
 
@@ -109,24 +122,59 @@ function download_and_import_keys() {
 }
 
 function download_release_candidate () {
-    # get all files from release candidate repo
-    wget -r -np -N -nH --cut-dirs 4 "${SOURCE_URL}"
+    # dist.apache.org's robots.txt disallows /repos/, so wget would otherwise
+    # stop after fetching the directory index. -e robots=off lets it follow the
+    # links to the artifacts. -A scopes the recursion to release files only.
+    wget -r -np -N -nH \
+        -e robots=off \
+        -A "*.tar.gz,*.tar.gz.asc,*.tar.gz.sha512,*.tar.gz.sha256,CHANGES.md,RELEASENOTES.md" \
+        --cut-dirs "${WGET_CUT_DIRS}" "${SOURCE_URL}"
+    if ! ls "${PHOENIX_RC_VERSION}"/*.tar.gz >/dev/null 2>&1; then
+        echo "ERROR: no .tar.gz files were downloaded under ${OUTPUT_DIR}/${PHOENIX_RC_VERSION}/."
+        echo "       Check that ${SOURCE_URL} is a valid release candidate URL."
+        exit 1
+    fi
 }
 
 function verify_signatures() {
     rm -f "${OUTPUT_PATH_PREFIX}"_verify_signatures
+    SIGNATURE_PASSED=1
     for file in *.tar.gz; do
-        gpg --verify "${file}".asc "${file}" 2>&1 | tee -a "${OUTPUT_PATH_PREFIX}"_verify_signatures && SIGNATURE_PASSED=1 || SIGNATURE_PASSED=0
+        if ! gpg --verify "${file}".asc "${file}" 2>&1 | tee -a "${OUTPUT_PATH_PREFIX}"_verify_signatures; then
+            SIGNATURE_PASSED=0
+        fi
     done
+}
+
+function _sha512_hex() {
+    # Pull just the lowercase hex digest out of a `gpg --print-md SHA512`
+    # output (or a Phoenix .sha512 file produced by the same tool). The file
+    # is wrapped across N lines and the wrap width can differ between gpg
+    # versions, so we strip the leading "<filename>: " prefix on line 1 and
+    # then drop all whitespace before lower-casing.
+    sed -e '1s/^[^:]*: //' "$1" | tr -d '[:space:]' | tr 'A-F' 'a-f'
 }
 
 function verify_checksums() {
     rm -f "${OUTPUT_PATH_PREFIX}"_verify_checksums
     SHA_EXT=$(find . -name "*.sha*" | awk -F '.' '{ print $NF }' | head -n 1)
+    CHECKSUM_PASSED=1
     for file in *.tar.gz; do
-        gpg --print-md SHA512 "${file}" > "${file}"."${SHA_EXT}".tmp
-        diff "${file}"."${SHA_EXT}".tmp "${file}"."${SHA_EXT}" 2>&1 | tee -a "${OUTPUT_PATH_PREFIX}"_verify_checksums && CHECKSUM_PASSED=1 || CHECKSUM_PASSED=0
-        rm -f "${file}"."${SHA_EXT}".tmp
+        local_tmp="${file}.${SHA_EXT}.tmp"
+        gpg --print-md SHA512 "${file}" > "${local_tmp}"
+        local_hex=$(_sha512_hex "${local_tmp}")
+        dist_hex=$(_sha512_hex "${file}.${SHA_EXT}")
+        rm -f "${local_tmp}"
+        if [ -n "${local_hex}" ] && [ "${local_hex}" = "${dist_hex}" ]; then
+            echo "${file}: SHA512 OK" | tee -a "${OUTPUT_PATH_PREFIX}"_verify_checksums
+        else
+            {
+                echo "${file}: SHA512 MISMATCH"
+                echo "  expected: ${dist_hex}"
+                echo "  actual:   ${local_hex}"
+            } | tee -a "${OUTPUT_PATH_PREFIX}"_verify_checksums
+            CHECKSUM_PASSED=0
+        fi
     done
 }
 

@@ -105,12 +105,12 @@ public class CSVCommonsLoader {
    * @return CSVFormat based on constructor settings.
    */
   private CSVFormat buildFormat() {
-    CSVFormat format =
-      CSVFormat.DEFAULT.withIgnoreEmptyLines(true).withDelimiter(asControlCharacter(fieldDelimiter))
-        .withQuote(asControlCharacter(quoteCharacter));
+    CSVFormat.Builder builder = CSVFormat.DEFAULT.builder().setIgnoreEmptyLines(true)
+      .setDelimiter(asControlCharacter(fieldDelimiter))
+      .setQuote(asControlCharacter(quoteCharacter));
 
     if (escapeCharacter != null) {
-      format = format.withEscape(asControlCharacter(escapeCharacter));
+      builder.setEscape(asControlCharacter(escapeCharacter));
     }
 
     switch (headerSource) {
@@ -119,17 +119,17 @@ public class CSVCommonsLoader {
         break;
       case IN_LINE:
         // an empty string array triggers csv loader to grab the first line as the header
-        format = format.withHeader(new String[0]);
+        builder.setHeader(new String[0]);
         break;
       case SUPPLIED_BY_USER:
         // a populated string array supplied by the user
-        format = format.withHeader(columns.toArray(new String[columns.size()]));
+        builder.setHeader(columns.toArray(new String[columns.size()]));
         break;
       default:
         throw new RuntimeException("Header source was unable to be inferred.");
 
     }
-    return format;
+    return builder.get();
   }
 
   /**
@@ -146,12 +146,13 @@ public class CSVCommonsLoader {
    * constructor determines the format for the CSV files.
    */
   public void upsert(String fileName) throws Exception {
-    CSVParser parser = CSVParser.parse(new File(fileName), Charsets.UTF_8, format);
+    CSVParser parser = CSVParser.builder().setFormat(format).setCharset(Charsets.UTF_8)
+      .setFile(new File(fileName)).get();
     upsert(parser);
   }
 
   public void upsert(Reader reader) throws Exception {
-    CSVParser parser = new CSVParser(reader, format);
+    CSVParser parser = CSVParser.builder().setFormat(format).setReader(reader).get();
     upsert(parser);
   }
 

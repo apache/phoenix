@@ -73,7 +73,7 @@
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
-    <hbase.profile.list>2.5.0 2.5 2.6</hbase.profile.list>
+    <hbase.profile.list>2.5.0 2.5 2.6.0 2.6</hbase.profile.list>
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.4.runtime.version>2.5.10-hadoop3</hbase-2.5.4.runtime.version>
@@ -92,7 +92,10 @@
     <test.output.tofile>true</test.output.tofile>
     <top.dir>${project.basedir}/..</top.dir>
     <test.tmp.dir>${project.build.directory}</test.tmp.dir>
-    <shadeSources>true</shadeSources>
+    <!-- Sources-jar shading roughly doubles the time of every shade execution.
+         Default it OFF here; the `release` profile re-enables it so RC / publish
+         builds still produce shaded sources jars. -->
+    <shadeSources>false</shadeSources>
 
     <!-- Dependency versions -->
     <jackson-bom.version>2.18.4.1</jackson-bom.version>
@@ -109,7 +112,7 @@
     <protoc.version>2.5.0</protoc.version>
     <commons-io.version>2.18.0</commons-io.version>
     <commons-lang3.version>3.18.0</commons-lang3.version>
-    <commons-csv.version>1.0</commons-csv.version>
+    <commons-csv.version>1.14.1</commons-csv.version>
     <commons-compress.version>1.26.0</commons-compress.version>
     <sqlline.version>1.9.0</sqlline.version>
     <jcip-annotations.version>1.0-1</jcip-annotations.version>
@@ -161,7 +164,7 @@
     <lifecycle-mapping.version>1.0.0</lifecycle-mapping.version>
     <maven-bundle-plugin.version>5.1.9</maven-bundle-plugin.version>
     <exec-maven-plugin.version>3.1.1</exec-maven-plugin.version>
-    <maven-shade-plugin.version>3.6.0</maven-shade-plugin.version>
+    <maven-shade-plugin.version>3.6.2</maven-shade-plugin.version>
     <!-- This overrides the property in the ASF parent project-->
     <version.maven-site-plugin>3.21.0</version.maven-site-plugin>
     <spotless.version>2.30.0</spotless.version>
@@ -1644,6 +1647,7 @@
               </goals>
               <configuration>
                 <reuseForks>false</reuseForks>
+                <forkedProcessTimeoutInSeconds>1800</forkedProcessTimeoutInSeconds>
                 <skip>${skipNeedsOwnMiniClusterTests}</skip>
                 <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
               </configuration>
@@ -1660,6 +1664,10 @@
               <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-core</ignoredUnusedDeclaredDependency>
               <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-slf4j-impl</ignoredUnusedDeclaredDependency>
               <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-1.2-api</ignoredUnusedDeclaredDependency>
+              <!-- The bouncycastle artifact name/version differs across HBase profiles: we declare
+                   jdk18on:1.79, but the 2.6.0 profile's HBase pulls jdk15on:1.68 transitively. The
+                   analyzer then flags jdk18on as unused for that profile. -->
+              <ignoredUnusedDeclaredDependency>org.bouncycastle:bcprov-jdk18on</ignoredUnusedDeclaredDependency>
             </ignoredUnusedDeclaredDependencies>
             <ignoredUsedUndeclaredDependencies>
               <ignoredUsedUndeclaredDependency>
@@ -1676,6 +1684,11 @@
                   without having to also declare a dependency on commons-text dependency
                   (which we do not use directly at all)-->
                 org.apache.commons:commons-configuration2
+              </ignoredUsedUndeclaredDependency>
+              <ignoredUsedUndeclaredDependency>
+                <!-- The 2.6.0 profile's HBase (2.6.1-hadoop3) pulls bcprov-jdk15on:1.68
+                  transitively for tests, while we declare jdk18on (see note above). -->
+                org.bouncycastle:bcprov-jdk15on
               </ignoredUsedUndeclaredDependency>
             </ignoredUsedUndeclaredDependencies>
           </configuration>
@@ -1865,6 +1878,8 @@
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+          <forkedProcessTimeoutInSeconds>1800</forkedProcessTimeoutInSeconds>
+          <forkedProcessExitTimeoutInSeconds>180</forkedProcessExitTimeoutInSeconds>
           <shutdown>exit</shutdown>
           <trimStackTrace>false</trimStackTrace>
           <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>
@@ -1915,6 +1930,8 @@
             <!-- tmp files -->
             <exclude>dev/work/**</exclude>
             <exclude>dev/artifacts/**</exclude>
+            <!-- GitHub templates -->
+            <exclude>.github/PULL_REQUEST_TEMPLATE</exclude>
           </excludes>
         </configuration>
       </plugin>
@@ -2092,13 +2109,22 @@
         <module>phoenix-client-parent/phoenix-client-embedded</module>
         <module>phoenix-client-parent/phoenix-client-lite</module>
         <module>phoenix-server</module>
-        <module>phoenix-mapreduce-byo-shaded-hbase</module>
         <module>phoenix-assembly</module>
       </modules>
     </profile>
     <!-- this profile should be activated for release builds -->
     <profile>
       <id>release</id>
+      <!-- The byo-shaded-hbase mapreduce uberjar is a release-only artifact.
+           It costs several minutes to shade and is not needed for normal
+           dev builds, so we only add it to the reactor under -Prelease. -->
+      <modules>
+        <module>phoenix-mapreduce-byo-shaded-hbase</module>
+      </modules>
+      <properties>
+        <!-- Re-enable shaded sources jars for RC / publish builds. -->
+        <shadeSources>true</shadeSources>
+      </properties>
       <build>
         <plugins>
           <plugin>
