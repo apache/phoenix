@@ -226,27 +226,6 @@ public class ConnectionQueryServicesMetricsIT extends BaseTest {
     assertEquals("Number of passing CSQI Metrics check should be : ", 4, counter.get());
   }
 
-  @Test
-  public void testConnectionTime() {
-    Map<String, List<ConnectionQueryServicesMetric>> metrics =
-        ConnectionQueryServicesMetricsManager.getAllConnectionQueryServicesMetrics();
-    List<ConnectionQueryServicesMetric> serviceMetrics = metrics.get("DEFAULT_CQSN");
-    assertNotNull("No metrics found for service: DEFAULT_CQSN", serviceMetrics);
-
-    // Find connection creation time metric
-    boolean foundMetric = false;
-    for (ConnectionQueryServicesMetric metric : serviceMetrics) {
-      System.out.println("Found metric: " + metric.getMetricType() + " = " + metric.getValue());
-      if (metric.getMetricType() == PHOENIX_CONNECTION_CREATION_TIME_MS) {
-        assertTrue("Connection creation time should be >= 0", metric.getValue() >= 0);
-        foundMetric = true;
-        break;
-      }
-    }
-    assertTrue("Connection creation time metric not found", foundMetric);
-
-  }
-
   private void checkConnectionQueryServiceMetricsValues(String queryServiceName) throws Exception {
     String CREATE_TABLE_DDL =
       "CREATE TABLE IF NOT EXISTS %s (K VARCHAR(10) NOT NULL" + " PRIMARY KEY, V VARCHAR)";

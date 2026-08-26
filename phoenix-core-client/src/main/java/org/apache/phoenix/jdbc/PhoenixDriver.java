@@ -41,7 +41,6 @@ import org.apache.phoenix.query.HBaseFactoryProvider;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesImpl;
 import org.apache.phoenix.query.QueryServicesOptions;
-import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -206,7 +205,6 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
 
   @Override
   public Connection connect(String url, Properties info) throws SQLException {
-    long connectionStartTime = EnvironmentEdgeManager.currentTimeMillis();
     GLOBAL_PHOENIX_CONNECTIONS_ATTEMPTED_COUNTER.increment();
     if (!acceptsURL(url)) {
       GLOBAL_FAILED_PHOENIX_CONNECTIONS.increment();
@@ -215,7 +213,7 @@ public final class PhoenixDriver extends PhoenixEmbeddedDriver {
     lockInterruptibly(LockMode.READ);
     try {
       checkClosed();
-      return createConnection(url, info, connectionStartTime);
+      return createConnection(url, info);
     } catch (SQLException sqlException) {
       if (sqlException.getErrorCode() != SQLExceptionCode.NEW_CONNECTION_THROTTLED.getErrorCode()) {
         GLOBAL_FAILED_PHOENIX_CONNECTIONS.increment();
