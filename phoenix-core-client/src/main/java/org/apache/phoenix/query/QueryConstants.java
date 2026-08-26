@@ -38,6 +38,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_QUALIFIER_COUNTER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CURRENT_VALUE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CUTOVER_TS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CYCLE_FLAG;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE;
@@ -99,6 +100,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_END_TIME
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_START_KEY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PARTITION_START_TIME;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PENDING_PARTIAL_PASS_UNTIL_TS;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHOENIX_TTL_HWM;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.PHYSICAL_NAME;
@@ -172,6 +174,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_SEQUENCE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPGRADE_TS_ANCHOR_5_4_0;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USER;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
@@ -419,7 +422,8 @@ public interface QueryConstants {
       + " BOOLEAN, \n" + SCHEMA_VERSION + " VARCHAR, \n" + EXTERNAL_SCHEMA_ID + " VARCHAR, \n"
       + STREAMING_TOPIC_NAME + " VARCHAR, \n" + INDEX_WHERE + " VARCHAR, \n" + CDC_INCLUDE_TABLE
       + " VARCHAR, \n" + TTL + " VARCHAR, \n" + ROW_KEY_MATCHER + " VARBINARY_ENCODED, \n"
-      + IS_STRICT_TTL + " BOOLEAN, \n" + INDEX_CONSISTENCY + " CHAR(1), \n" +
+      + IS_STRICT_TTL + " BOOLEAN, \n" + INDEX_CONSISTENCY + " CHAR(1), \n"
+      + UPGRADE_TS_ANCHOR_5_4_0 + " CHAR(1), \n" +
       // Column metadata (will be null for table row)
       DATA_TYPE + " INTEGER," + COLUMN_SIZE + " INTEGER," + DECIMAL_DIGITS + " INTEGER," + NULLABLE
       + " INTEGER," + ORDINAL_POSITION + " INTEGER," + SORT_ORDER + " INTEGER," + ARRAY_SIZE
@@ -566,9 +570,10 @@ public interface QueryConstants {
       TRANSFORM_STATUS + " VARCHAR NULL," + TRANSFORM_JOB_ID + " VARCHAR NULL,"
       + TRANSFORM_RETRY_COUNT + " INTEGER NULL," + TRANSFORM_START_TS + " TIMESTAMP NULL,"
       + TRANSFORM_LAST_STATE_TS + " TIMESTAMP NULL," + OLD_METADATA + " VARBINARY NULL,\n"
-      + NEW_METADATA + " VARCHAR NULL,\n" + TRANSFORM_FUNCTION + " VARCHAR NULL\n" + "CONSTRAINT "
-      + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + TABLE_SCHEM + ","
-      + LOGICAL_TABLE_NAME + "))\n" + HConstants.VERSIONS + "=%s,\n"
+      + NEW_METADATA + " VARCHAR NULL,\n" + TRANSFORM_FUNCTION + " VARCHAR NULL,\n"
+      + PENDING_PARTIAL_PASS_UNTIL_TS + " BIGINT NULL,\n" + CUTOVER_TS + " BIGINT NULL\n"
+      + "CONSTRAINT " + SYSTEM_TABLE_PK_NAME + " PRIMARY KEY (" + TENANT_ID + "," + TABLE_SCHEM
+      + "," + LOGICAL_TABLE_NAME + "))\n" + HConstants.VERSIONS + "=%s,\n"
       + ColumnFamilyDescriptorBuilder.KEEP_DELETED_CELLS + "=%s,\n"
       + ColumnFamilyDescriptorBuilder.TTL + "=" + TRANSFORM_TABLE_TTL + ",\n" + // 90 days
       TableDescriptorBuilder.SPLIT_POLICY + "='" + SYSTEM_TASK_SPLIT_POLICY_CLASSNAME + "',\n"

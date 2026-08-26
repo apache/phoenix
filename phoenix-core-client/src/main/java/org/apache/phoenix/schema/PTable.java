@@ -326,7 +326,11 @@ public interface PTable extends PMetaDataEntity {
     }
 
     public static TransformType getPartialTransform(TransformType transformType) {
-      if (transformType == METADATA_TRANSFORM) {
+      // A full transform's partial variant is the partial type. Asking for the partial variant of a
+      // record that is already partial-type yields the partial type itself: this is what lets a
+      // failed partial pass be re-kicked (the record is already partial-type on retry) instead of
+      // being mistaken for "no partial pass needed" and completed early.
+      if (transformType == METADATA_TRANSFORM || transformType == METADATA_TRANSFORM_PARTIAL) {
         return METADATA_TRANSFORM_PARTIAL;
       }
       return null;
@@ -353,6 +357,16 @@ public interface PTable extends PMetaDataEntity {
     PENDING_CUTOVER {
       public String toString() {
         return "PENDING_CUTOVER";
+      }
+    },
+    PENDING_PARTIAL_PASS {
+      public String toString() {
+        return "PENDING_PARTIAL_PASS";
+      }
+    },
+    PARTIAL_PASS_RUNNING {
+      public String toString() {
+        return "PARTIAL_PASS_RUNNING";
       }
     },
     COMPLETED {

@@ -82,8 +82,9 @@ public class TransformClient {
     + PhoenixDatabaseMetaData.TRANSFORM_START_TS + ", "
     + PhoenixDatabaseMetaData.TRANSFORM_LAST_STATE_TS + ", " + PhoenixDatabaseMetaData.OLD_METADATA
     + " , " + PhoenixDatabaseMetaData.NEW_METADATA + " , "
-    + PhoenixDatabaseMetaData.TRANSFORM_FUNCTION + " FROM "
-    + PhoenixDatabaseMetaData.SYSTEM_TRANSFORM_NAME;
+    + PhoenixDatabaseMetaData.TRANSFORM_FUNCTION + " , "
+    + PhoenixDatabaseMetaData.PENDING_PARTIAL_PASS_UNTIL_TS + " , "
+    + PhoenixDatabaseMetaData.CUTOVER_TS + " FROM " + PhoenixDatabaseMetaData.SYSTEM_TRANSFORM_NAME;
 
   public static SystemTransformRecord getTransformRecord(PName schema, PName logicalTableName,
     PName logicalParentName, PName tenantId, PhoenixConnection connection) throws SQLException {
@@ -355,7 +356,9 @@ public class TransformClient {
       + PhoenixDatabaseMetaData.TRANSFORM_START_TS + ", "
       + PhoenixDatabaseMetaData.TRANSFORM_LAST_STATE_TS + ", "
       + PhoenixDatabaseMetaData.OLD_METADATA + " , " + PhoenixDatabaseMetaData.NEW_METADATA + " , "
-      + PhoenixDatabaseMetaData.TRANSFORM_FUNCTION + " ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
+      + PhoenixDatabaseMetaData.TRANSFORM_FUNCTION + " , "
+      + PhoenixDatabaseMetaData.PENDING_PARTIAL_PASS_UNTIL_TS + " , "
+      + PhoenixDatabaseMetaData.CUTOVER_TS + " ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
       int colNum = 1;
       if (systemTransformParams.getSchemaName() != null) {
         stmt.setString(colNum++, systemTransformParams.getSchemaName());
@@ -407,6 +410,16 @@ public class TransformClient {
         stmt.setString(colNum++, systemTransformParams.getTransformFunction());
       } else {
         stmt.setNull(colNum++, Types.VARCHAR);
+      }
+      if (systemTransformParams.getPendingPartialPassUntilTs() != null) {
+        stmt.setLong(colNum++, systemTransformParams.getPendingPartialPassUntilTs());
+      } else {
+        stmt.setNull(colNum++, Types.BIGINT);
+      }
+      if (systemTransformParams.getCutoverTs() != null) {
+        stmt.setLong(colNum++, systemTransformParams.getCutoverTs());
+      } else {
+        stmt.setNull(colNum++, Types.BIGINT);
       }
       LOGGER.info("Adding transform type: " + systemTransformParams.getString());
       stmt.execute();

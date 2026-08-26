@@ -848,8 +848,20 @@ public class TransformTool extends Configured implements Tool {
   public void pauseTransform() throws Exception {
     SystemTransformRecord transformRecord =
       getTransformRecord(connection.unwrap(PhoenixConnection.class));
-    if (transformRecord.getTransformStatus().equals(PTable.TransformStatus.COMPLETED.name())) {
+    String status = transformRecord.getTransformStatus();
+    if (status.equals(PTable.TransformStatus.COMPLETED.name())) {
       throw new IllegalStateException("A completed transform cannot be paused");
+    }
+    // A transform that has already cut over must not be paused: resume re-runs a FULL transform
+    // (resumeTransform -> runTransform), but after cutover the physical-table pointer has already
+    // been swapped, so a full re-run would operate against the swapped-in table. These post-cutover
+    // partial-pass states are driven to completion by the TransformMonitor, not by pause/resume.
+    if (
+      status.equals(PTable.TransformStatus.PENDING_PARTIAL_PASS.name())
+        || status.equals(PTable.TransformStatus.PARTIAL_PASS_RUNNING.name())
+    ) {
+      throw new IllegalStateException(
+        "A transform that has already cut over cannot be paused; it is in state " + status);
     }
 
     updateTransformRecord(connection.unwrap(PhoenixConnection.class),
