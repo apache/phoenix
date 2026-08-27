@@ -81,7 +81,7 @@ public class ParallelPhoenixContext {
     Preconditions.checkArgument(executors.size() >= 2,
       "Expected 2 executor pairs, one for each connection with a normal/close executor");
     GLOBAL_HA_PARALLEL_CONNECTION_CREATED_COUNTER.increment();
-    HAGroupMetricsManager.increment(haGroup.getName(),
+    HAGroupMetricsManager.increment(haGroup != null ? haGroup.getName() : null,
       MetricType.HA_PARALLEL_CONNECTION_CREATED_COUNTER);
     this.properties = properties;
     this.haGroup = haGroup;
@@ -179,7 +179,7 @@ public class ParallelPhoenixContext {
     isClosed = true;
     if (isErrored) {
       GLOBAL_HA_PARALLEL_CONNECTION_ERROR_COUNTER.increment();
-      HAGroupMetricsManager.increment(this.haGroup.getName(),
+      HAGroupMetricsManager.increment(this.haGroup != null ? this.haGroup.getName() : null,
         MetricType.HA_PARALLEL_CONNECTION_ERROR_COUNTER);
     }
   }

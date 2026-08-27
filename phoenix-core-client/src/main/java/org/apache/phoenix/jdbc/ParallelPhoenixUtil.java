@@ -128,7 +128,8 @@ public class ParallelPhoenixUtil {
 
     if (timedout) {
       GLOBAL_HA_PARALLEL_TASK_TIMEOUT_COUNTER.increment();
-      HAGroupMetricsManager.increment(context.getHaGroup().getName(),
+      HAGroupMetricsManager.increment(
+        context.getHaGroup() != null ? context.getHaGroup().getName() : null,
         MetricType.HA_PARALLEL_TASK_TIMEOUT_COUNTER);
 
       if (futures.isEmpty()) {
