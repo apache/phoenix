@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.replication.reader;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -144,6 +145,26 @@ public class ReplicationLogDiscoveryReplayProcessFileTest {
     verify(metrics, never()).updateEndToEndReplayLag(anyLong());
   }
 
+  /**
+   * A malformed in-progress file name (getFileTimestamp throws NumberFormatException) must surface
+   * as an IOException -- the type processOneRandomFile catches and routes through markFailed --
+   * rather than an unchecked exception that would escape the per-file handler and abort the whole
+   * sweep. Nothing is replayed and no lag sample is recorded.
+   */
+  @Test
+  public void testMalformedFileNameSurfacesAsIOException() throws IOException {
+    ReplicationLogTracker tracker = mock(ReplicationLogTracker.class);
+    MetricsReplicationLogDiscoveryReplay metrics = mock(MetricsReplicationLogDiscoveryReplay.class);
+    when(tracker.getFileTimestamp(any())).thenThrow(new NumberFormatException("bad name"));
+    TestReplay replay = newReplay(tracker, metrics);
+
+    assertThrows(IOException.class, () -> replay.processFile(FILE, true));
+
+    assertFalse("replay must not run when the file name cannot be parsed", replay.replayInvoked);
+    verify(metrics, never()).updatePickupLag(anyLong());
+    verify(metrics, never()).updateEndToEndReplayLag(anyLong());
+  }
+
   private static void injectNow(long now) {
     EnvironmentEdgeManager.injectEdge(new EnvironmentEdge() {
       @Override
@@ -171,6 +192,7 @@ public class ReplicationLogDiscoveryReplayProcessFileTest {
 
     private final MetricsReplicationLogDiscoveryReplay replayMetricsMock;
     private boolean failReplay;
+    private boolean replayInvoked;
 
     TestReplay(ReplicationLogTracker tracker,
       MetricsReplicationLogDiscoveryReplay replayMetricsMock) {
@@ -190,6 +212,7 @@ public class ReplicationLogDiscoveryReplayProcessFileTest {
 
     @Override
     protected void replayLogFile(Path path) throws IOException {
+      replayInvoked = true;
       if (failReplay) {
         throw new IOException("injected replay failure");
       }

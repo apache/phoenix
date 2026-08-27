@@ -231,7 +231,19 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
   protected void processFile(Path path, boolean firstClaim) throws IOException {
     LOG.info("Starting to process file {} (firstClaim={})", path, firstClaim);
     ReplicationLogTracker tracker = getReplicationLogFileTracker();
-    long roundEligibleTime = getRoundEligibleTime(tracker.getFileTimestamp(path));
+    final long fileTimestamp;
+    try {
+      fileTimestamp = tracker.getFileTimestamp(path);
+    } catch (NumberFormatException e) {
+      // A malformed file name cannot be anchored to a round. getFileTimestamp is validated on the
+      // new-files path (getNewFilesForRound skips names that fail to parse) but not on the reclaim
+      // path, so convert the unchecked parse failure into the IOException that every other per-file
+      // failure uses. That keeps a single bad name isolated to processOneRandomFile's catch (marked
+      // failed and retry-counted) instead of escaping as a RuntimeException that aborts the whole
+      // in-progress sweep for the cycle.
+      throw new IOException("Cannot extract timestamp from replication log file name: " + path, e);
+    }
+    long roundEligibleTime = getRoundEligibleTime(fileTimestamp);
     // Pickup lag (eligible -> claimed) is recorded only on the first claim (the new-files path).
     // markInProgress re-stamps a fresh rename timestamp on every reclaim of an already-in-progress
     // file, so recording on the in-progress path (firstClaim=false) would sample eligible ->
@@ -240,13 +252,23 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
     // reached processFile).
     if (firstClaim) {
       Optional<Long> renameTs = tracker.getRenameTimestamp(path);
-      renameTs
-        .ifPresent(ts -> getReplayMetrics().updatePickupLag(Math.max(0L, ts - roundEligibleTime)));
+      if (renameTs.isPresent()) {
+        getReplayMetrics().updatePickupLag(Math.max(0L, renameTs.get() - roundEligibleTime));
+      } else {
+        // A first-claim file was just renamed into the in-progress directory by markInProgress,
+        // which always stamps a rename timestamp, so this should not happen. Drop the pickup-lag
+        // sample rather than record a bogus one, but leave a breadcrumb -- getRenameTimestamp only
+        // logs on a malformed 4-part name, not on an unexpectedly short name.
+        LOG.warn("No rename timestamp on first-claim file {}; skipping pickup-lag sample", path);
+      }
     }
     replayLogFile(path);
     // End-to-end lag (eligible -> replay done): recorded only after a successful replayLogFile
     // return. On failure replayLogFile throws and logFileReplayFailureCount already fires, so an
-    // end-to-end lag sample for an unfinished replay would be misleading.
+    // end-to-end lag sample for an unfinished replay would be misleading. Every successfully
+    // replayed file is sampled here -- including rotation-only / zero-mutation files, which the
+    // mutationsPerFile histogram deliberately excludes -- so the two distributions cover different
+    // file populations.
     getReplayMetrics().updateEndToEndReplayLag(
       Math.max(0L, EnvironmentEdgeManager.currentTime() - roundEligibleTime));
   }

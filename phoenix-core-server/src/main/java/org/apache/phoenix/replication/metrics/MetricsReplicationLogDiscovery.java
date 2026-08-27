@@ -66,9 +66,10 @@ public interface MetricsReplicationLogDiscovery extends BaseSource {
   void updateTimeToProcessInProgressFiles(long timeMs);
 
   /**
-   * Increments the counter for rounds whose new-file processing time exceeded the round time. A
-   * rising rate of such rounds signals that replay is falling behind the cadence at which new
-   * rounds become eligible.
+   * Increments the counter for rounds whose new-file processing time exceeded the round time. This
+   * counter lives on the shared discovery base, so it is emitted by both the forwarder-side and
+   * replay-side discovery sources; a rising rate signals that that side's new-file processing is
+   * falling behind the cadence at which new rounds become eligible.
    */
   void incrementRoundsExceedingRoundTime();
 

@@ -32,8 +32,9 @@ public interface MetricsReplicationLogTracker extends BaseSource {
   String MARK_FILE_IN_PROGRESS_RENAME_FAILED_COUNT = "markFileInProgressRenameFailedCount";
   String MARK_FILE_IN_PROGRESS_RENAME_FAILED_COUNT_DESC =
     "Number of mark-file-in-progress attempts whose claim rename returned false; typically the "
-      + "claim was lost to another process, but any other rename failure is also counted. A strict "
-      + "subset of the request count.";
+      + "claim was lost to another process. Counts only the boolean rename() == false outcome -- an "
+      + "IOException thrown during the rename is not counted here (that path only logs an error). A "
+      + "strict subset of the request count.";
   String MARK_FILE_COMPLETED_REQUEST_COUNT = "markFileCompletedRequestCount";
   String MARK_FILE_COMPLETED_REQUEST_COUNT_DESC = "Number of requests made to mark file completed";
   String MARK_FILE_FAILED_REQUEST_COUNT = "markFileFailedRequestCount";
@@ -60,7 +61,8 @@ public interface MetricsReplicationLogTracker extends BaseSource {
   /**
    * Increments the counter for mark-file-in-progress claim renames that returned false. Typically
    * the claim was lost to another process (the decentralized, no-coordination claim design), but
-   * any other {@code rename() == false} outcome is also counted. A strict subset of
+   * any other {@code rename() == false} outcome is also counted. An IOException thrown during the
+   * rename is not counted here (that path only logs an error and returns empty). A strict subset of
    * {@link #incrementMarkFileInProgressRequestCount()}.
    */
   void incrementMarkFileInProgressRenameFailedCount();
