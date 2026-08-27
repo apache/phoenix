@@ -626,7 +626,7 @@ public class HighAvailabilityGroupTest {
 
   /**
    * A real counted role-flip transition driven through {@code refreshClusterRoleRecord} must both
-   * increment {@code HA_FAILOVER_COUNT} and record a sample on {@code HA_FAILOVER_DURATION_MS}.
+   * increment {@code HA_FAILOVER_COUNT} and record a sample on {@code CRR_TRANSITION_DURATION_MS}.
    * This pins the duration metric to the CRR-write transition path (the path that autonomous
    * failovers actually take) rather than the connection-level
    * {@code FailoverPhoenixConnection.failover()} path, which is never auto-invoked under the
@@ -654,7 +654,7 @@ public class HighAvailabilityGroupTest {
 
       long countBefore = GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue();
       long durationSamplesBefore =
-        GlobalClientMetrics.GLOBAL_HA_FAILOVER_DURATION_MS.getMetric().getNumberOfSamples();
+        GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_DURATION_MS.getMetric().getNumberOfSamples();
 
       assertTrue("A real role-flip transition must apply and return true",
         group.refreshClusterRoleRecord(true));
@@ -664,9 +664,9 @@ public class HighAvailabilityGroupTest {
       assertEquals("An active-URL flip must increment HA_FAILOVER_COUNT", countBefore + 1,
         GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue());
       assertEquals(
-        "The transition must record a HA_FAILOVER_DURATION_MS sample on the CRR-write " + "path",
+        "The transition must record a CRR_TRANSITION_DURATION_MS sample on the CRR-write " + "path",
         durationSamplesBefore + 1,
-        GlobalClientMetrics.GLOBAL_HA_FAILOVER_DURATION_MS.getMetric().getNumberOfSamples());
+        GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_DURATION_MS.getMetric().getNumberOfSamples());
 
       // Per-group (ha_group-tagged) emission mirrors the JVM-global counters. This group name is
       // unique to this test, so its source starts empty and this single transition yields exactly 1
@@ -677,6 +677,66 @@ public class HighAvailabilityGroupTest {
         source.getCounterValue(MetricType.HA_FAILOVER_COUNT));
       assertEquals("Per-group CRR_TRANSITION_COUNT must count the applied transition", 1L,
         source.getCounterValue(MetricType.CRR_TRANSITION_COUNT));
+    } finally {
+      HighAvailabilityGroup.URLS.remove(info);
+      HAGroupMetricsManager.remove(haGroupName);
+    }
+  }
+
+  /**
+   * A strictly newer CRR version whose registry/url/role fields are all identical is a pure version
+   * bump, not a transition. It clears the {@code equals()} and {@code shouldApplyRefreshedRecord()}
+   * guards in {@code refreshClusterRoleRecord} (so the newer record is still adopted), but the HA
+   * policy's change guard in {@code transitClusterRoleRecord} must skip it: no
+   * {@code CRR_TRANSITION_COUNT} increment, no {@code CRR_TRANSITION_DURATION_MS} sample, and no
+   * failover. This pins the guard against a regression that would re-inflate the transition
+   * counters on version bumps.
+   */
+  @Test
+  public void testPureVersionBumpDoesNotCountOrTimeTransition() throws Exception {
+    String haGroupName = "testPureVersionBumpDoesNotCountOrTimeTransition";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord recordV10 = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    // Same registry/url/role, only the admin version advances.
+    ClusterRoleRecord recordV11 = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 11L);
+
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+    HighAvailabilityGroup.URLS.put(info, new HashSet<>());
+    try {
+      HighAvailabilityGroup group =
+        Mockito.spy(new HighAvailabilityGroup(info, new Properties(), recordV10, State.READY));
+      Mockito.doReturn(recordV11).when(group).getClusterRoleRecordFromEndpoint();
+
+      long transitionCountBefore =
+        GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_COUNT.getMetric().getValue();
+      long durationSamplesBefore =
+        GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_DURATION_MS.getMetric().getNumberOfSamples();
+      long failoverCountBefore =
+        GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue();
+
+      assertTrue("A strictly newer version must still be applied",
+        group.refreshClusterRoleRecord(true));
+      assertSame("The newer-version record must be adopted", recordV11, group.getRoleRecord());
+
+      assertEquals("A pure version bump must not increment CRR_TRANSITION_COUNT",
+        transitionCountBefore,
+        GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_COUNT.getMetric().getValue());
+      assertEquals("A pure version bump must not record a CRR_TRANSITION_DURATION_MS sample",
+        durationSamplesBefore,
+        GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_DURATION_MS.getMetric().getNumberOfSamples());
+      assertEquals("A pure version bump is not a failover", failoverCountBefore,
+        GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue());
+
+      // Nothing was emitted for this group, so if a per-group source exists its transition counter
+      // must still be zero.
+      HAGroupClientMetricsSource source = HAGroupMetricsManager.getIfPresent(haGroupName);
+      if (source != null) {
+        assertEquals("Per-group CRR_TRANSITION_COUNT must stay zero on a version bump", 0L,
+          source.getCounterValue(MetricType.CRR_TRANSITION_COUNT));
+      }
     } finally {
       HighAvailabilityGroup.URLS.remove(info);
       HAGroupMetricsManager.remove(haGroupName);

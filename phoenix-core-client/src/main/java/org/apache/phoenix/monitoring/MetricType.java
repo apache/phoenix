@@ -358,9 +358,10 @@ public enum MetricType {
     "Counter for cluster-level failover transitions (active URL flips between peers or recovers "
       + "from no-active state) recorded at the CRR write site",
     LogLevel.DEBUG, PLong.INSTANCE),
-  HA_FAILOVER_DURATION_MS("hafd",
-    "Total time in milliseconds spent dispatching cluster-role transitions, recorded at the CRR "
-      + "write site (refreshClusterRoleRecord) on every transition exit",
+  CRR_TRANSITION_DURATION_MS("crtdms",
+    "Total time in milliseconds spent dispatching cluster role record transitions per HA policy "
+      + "(HighAvailabilityPolicy#transitClusterRoleRecord), recorded on each applied "
+      + "registry/url/role change; pairs with CRR_TRANSITION_COUNT",
     LogLevel.DEBUG, PLong.INSTANCE),
   HA_FAILOVER_CONNECTION_FAILED_COUNTER("hafcf",
     "Counter for failed attempts to connect to the active cluster in an HA group, recorded at the "
@@ -378,8 +379,8 @@ public enum MetricType {
       + "when applying a new CRR per HA policy at the CRR-write path",
     LogLevel.DEBUG, PLong.INSTANCE),
   CRR_TRANSITION_COUNT("crtc",
-    "Counter for cluster role record transitions applied per HA policy (a role/url change that "
-      + "triggers a transit), including transitions to a no-active state",
+    "Counter for cluster role record transitions applied per HA policy (a registry/url/role change "
+      + "that triggers a transit), including transitions to a no-active state",
     LogLevel.DEBUG, PLong.INSTANCE),
   HA_MUTATION_BLOCKED_COUNT("hambc",
     "Counter for MutationBlockedIOException surfaces caught by wrapActionDuringFailover",

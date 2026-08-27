@@ -127,7 +127,7 @@ public class HAGroupMetricsManagerTest {
   @Test
   public void testUpdateAccumulatesPerGroupDuration() {
     String group = track("mgrDuration");
-    MetricType type = MetricType.HA_FAILOVER_DURATION_MS;
+    MetricType type = MetricType.CRR_TRANSITION_DURATION_MS;
     HAGroupMetricsManager.update(group, type, 40L);
     HAGroupMetricsManager.update(group, type, 60L);
     assertEquals(100L, HAGroupMetricsManager.getIfPresent(group).getCounterValue(type));

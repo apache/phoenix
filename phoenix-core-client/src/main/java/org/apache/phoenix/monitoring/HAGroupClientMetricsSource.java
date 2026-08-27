@@ -18,11 +18,11 @@
 package org.apache.phoenix.monitoring;
 
 import static org.apache.phoenix.monitoring.MetricType.CRR_TRANSITION_COUNT;
+import static org.apache.phoenix.monitoring.MetricType.CRR_TRANSITION_DURATION_MS;
 import static org.apache.phoenix.monitoring.MetricType.HA_CRR_REFRESH_COUNT;
 import static org.apache.phoenix.monitoring.MetricType.HA_FAILOVER_CONNECTION_CREATED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_FAILOVER_CONNECTION_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_FAILOVER_COUNT;
-import static org.apache.phoenix.monitoring.MetricType.HA_FAILOVER_DURATION_MS;
 import static org.apache.phoenix.monitoring.MetricType.HA_MUTATION_BLOCKED_COUNT;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_CONNECTION_CREATED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_CONNECTION_ERROR_COUNTER;
@@ -34,6 +34,7 @@ import static org.apache.phoenix.monitoring.MetricType.HA_ROLE_TRANSITION_FAILED
 import static org.apache.phoenix.monitoring.MetricType.HA_STALE_CRR_DETECTED_COUNT;
 
 import java.util.EnumMap;
+import java.util.List;
 import java.util.Map;
 import javax.management.ObjectName;
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
@@ -43,6 +44,7 @@ import org.apache.hadoop.metrics2.lib.MutableFastCounter;
 import org.apache.phoenix.metrics.MetricConstants;
 
 import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTesting;
+import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 /**
  * Per-HA-group Hadoop Metrics2 source for the ZK-less HA client's HA/CRR/failover metrics.
@@ -54,9 +56,9 @@ import org.apache.phoenix.thirdparty.com.google.common.annotations.VisibleForTes
  * {@code HAGroupStoreMetricsSourceImpl} tagging pattern; both reference the same tag key.
  * <p>
  * Each metric in {@link #METRIC_TYPES} is a monotonic {@link MutableFastCounter}. Accumulating
- * metrics such as {@code HA_FAILOVER_DURATION_MS} add total milliseconds via {@link #update}, which
- * matches the semantics of the JVM-global {@code GLOBAL_HA_*} counters; those continue to emit
- * unchanged alongside this per-group source (dual emit).
+ * metrics such as {@code CRR_TRANSITION_DURATION_MS} add total milliseconds via {@link #update},
+ * which matches the semantics of the JVM-global {@code GLOBAL_HA_*} counters; those continue to
+ * emit unchanged alongside this per-group source (dual emit).
  * <p>
  * The set is intentionally limited to metrics attributable to a single HA group (each emission site
  * has a {@code HighAvailabilityGroup} in scope). The shared parallel-executor pool metrics
@@ -74,13 +76,13 @@ public class HAGroupClientMetricsSource extends BaseSourceImpl {
    * The HA metrics attributable to a single HA group; each emission site has a
    * {@code HighAvailabilityGroup} in scope.
    */
-  public static final MetricType[] METRIC_TYPES = new MetricType[] { HA_FAILOVER_COUNT,
-    HA_FAILOVER_DURATION_MS, HA_FAILOVER_CONNECTION_CREATED_COUNTER,
+  private static final List<MetricType> METRIC_TYPES = ImmutableList.of(HA_FAILOVER_COUNT,
+    CRR_TRANSITION_DURATION_MS, HA_FAILOVER_CONNECTION_CREATED_COUNTER,
     HA_FAILOVER_CONNECTION_FAILED_COUNTER, HA_STALE_CRR_DETECTED_COUNT, HA_MUTATION_BLOCKED_COUNT,
     HA_CRR_REFRESH_COUNT, HA_ROLE_TRANSITION_FAILED_COUNTER, CRR_TRANSITION_COUNT,
     HA_PARALLEL_CONNECTION_FALLBACK_COUNTER, HA_PARALLEL_CONNECTION_CREATED_COUNTER,
     HA_PARALLEL_CONNECTION_ERROR_COUNTER, HA_PARALLEL_TASK_TIMEOUT_COUNTER, HA_POLLER_TICK_COUNT,
-    HA_POLLER_TICK_FAILURES };
+    HA_POLLER_TICK_FAILURES);
 
   private final Map<MetricType, MutableFastCounter> counters = new EnumMap<>(MetricType.class);
 
@@ -106,7 +108,7 @@ public class HAGroupClientMetricsSource extends BaseSourceImpl {
 
   /**
    * Add {@code value} to the group's accumulating counter for the given HA metric type (used for
-   * {@code HA_FAILOVER_DURATION_MS}).
+   * {@code CRR_TRANSITION_DURATION_MS}).
    */
   public void update(MetricType type, long value) {
     MutableFastCounter counter = counters.get(type);

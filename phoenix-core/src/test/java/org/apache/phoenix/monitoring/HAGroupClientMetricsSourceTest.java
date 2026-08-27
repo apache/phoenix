@@ -81,11 +81,11 @@ public class HAGroupClientMetricsSourceTest {
     source.increment(MetricType.HA_FAILOVER_CONNECTION_FAILED_COUNTER);
     source.increment(MetricType.HA_FAILOVER_CONNECTION_FAILED_COUNTER);
     // The duration metric accumulates via update(); other counters are untouched by it.
-    source.update(MetricType.HA_FAILOVER_DURATION_MS, 40L);
-    source.update(MetricType.HA_FAILOVER_DURATION_MS, 60L);
+    source.update(MetricType.CRR_TRANSITION_DURATION_MS, 40L);
+    source.update(MetricType.CRR_TRANSITION_DURATION_MS, 60L);
 
     assertEquals(2L, source.getCounterValue(MetricType.HA_FAILOVER_CONNECTION_FAILED_COUNTER));
-    assertEquals(100L, source.getCounterValue(MetricType.HA_FAILOVER_DURATION_MS));
+    assertEquals(100L, source.getCounterValue(MetricType.CRR_TRANSITION_DURATION_MS));
     assertEquals("an untouched counter stays at zero", 0L,
       source.getCounterValue(MetricType.HA_STALE_CRR_DETECTED_COUNT));
   }

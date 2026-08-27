@@ -97,7 +97,7 @@ public class HAGroupMetricsManager {
   }
 
   /**
-   * Add a sample to a per-group accumulating HA metric (e.g. {@code HA_FAILOVER_DURATION_MS}).
+   * Add a sample to a per-group accumulating HA metric (e.g. {@code CRR_TRANSITION_DURATION_MS}).
    * Registers the group's source if needed. Best-effort; never propagates an exception.
    */
   public static void update(String haGroupName, MetricType type, long value) {

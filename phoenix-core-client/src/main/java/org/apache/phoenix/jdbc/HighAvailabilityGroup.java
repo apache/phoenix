@@ -19,10 +19,8 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_CACHE_AGE_MS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_REFRESH_COUNT;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_DURATION_MS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_ROLE_TRANSITION_FAILED_COUNTER;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_CLIENT_CONNECTION_CACHE_MAX_DURATION;
 import static org.apache.phoenix.util.PhoenixRuntime.JDBC_PROTOCOL_SEPARATOR;
@@ -1216,13 +1214,13 @@ public class HighAvailabilityGroup {
         return true;
       }
 
+      // The detected CRR change is dispatched to the HA policy, which decides whether it is a real
+      // transition (a url or role change) versus a pure version bump, and counts and times it
+      // there (see HighAvailabilityPolicy#transitClusterRoleRecord). The equals() and
+      // shouldApplyRefreshedRecord() guards above only establish that this is a strictly newer
+      // record for the same HA group.
       final ClusterRoleRecord oldRecord = roleRecord;
       state = State.IN_TRANSITION;
-      // Count every applied CRR transition, including transitions into a no-active state. Distinct
-      // from HA_FAILOVER_COUNT, which counts only transitions that establish/move an ACTIVE
-      // cluster.
-      GLOBAL_HA_CRR_TRANSITION_COUNT.increment();
-      HAGroupMetricsManager.increment(getName(), MetricType.CRR_TRANSITION_COUNT);
       LOG.info("HA group {} is in {} to set V{} record", info, state, newRoleRecord.getVersion());
       Future<?> future = crrChangedExecutor.submit(() -> {
         try {
@@ -1237,74 +1235,59 @@ public class HighAvailabilityGroup {
       long maxTransitionTimeMs = StringUtils.isNotEmpty(transitionTimeoutProp)
         ? Long.parseLong(transitionTimeoutProp)
         : PHOENIX_HA_TRANSITION_TIMEOUT_MS_DEFAULT;
-      // Time the cluster-transition dispatch on this CRR-write path, which is where autonomous
-      // failovers are actually driven. The duration is recorded on every exit (success, timeout,
-      // policy failure, or interrupt) via the finally block below so it tracks time spent handling
-      // detected CRR transitions rather than the connection-level failover() path, which is never
-      // auto-invoked under the default ExplicitFailoverPolicy.
-      final long transitionStartMs = System.currentTimeMillis();
+      boolean transitionSucceeded = false;
       try {
-        boolean transitionSucceeded = false;
-        try {
-          future.get(maxTransitionTimeMs, TimeUnit.MILLISECONDS);
-          transitionSucceeded = true;
-        } catch (InterruptedException ie) {
-          LOG.error("Got interrupted when transiting cluster roles for HA group {}", info, ie);
-          future.cancel(true);
-          Thread.currentThread().interrupt();
-          return false;
-        } catch (ExecutionException | TimeoutException e) {
-          LOG.error(
-            "HA group {} failed to transit cluster roles per policy {} to new " + "record {}", info,
-            roleRecord.getPolicy(), newRoleRecord, e);
-          // Dispatch of the policy-side cluster-role transition failed (execution error or timed
-          // out). Count every such failure, including the HA_ROLE_TRANSITION_NOT_ALLOWED case
-          // rethrown just below.
-          GLOBAL_HA_ROLE_TRANSITION_FAILED_COUNTER.increment();
-          HAGroupMetricsManager.increment(getName(), MetricType.HA_ROLE_TRANSITION_FAILED_COUNTER);
-          // Rethrow the Role transitions not allowed exceptions
-          if (e.getCause() != null && e.getCause().getCause() != null) {
-            if (
-              e.getCause().getCause() instanceof SQLException
-                && ((SQLException) e.getCause().getCause()).getErrorCode()
-                    == SQLExceptionCode.HA_ROLE_TRANSITION_NOT_ALLOWED.getErrorCode()
-            ) {
-              state = State.READY;
-              throw (SQLException) e.getCause().getCause();
-            }
+        future.get(maxTransitionTimeMs, TimeUnit.MILLISECONDS);
+        transitionSucceeded = true;
+      } catch (InterruptedException ie) {
+        LOG.error("Got interrupted when transiting cluster roles for HA group {}", info, ie);
+        future.cancel(true);
+        Thread.currentThread().interrupt();
+        return false;
+      } catch (ExecutionException | TimeoutException e) {
+        LOG.error("HA group {} failed to transit cluster roles per policy {} to new " + "record {}",
+          info, roleRecord.getPolicy(), newRoleRecord, e);
+        // Dispatch of the policy-side cluster-role transition failed (execution error or timed
+        // out). Count every such failure, including the HA_ROLE_TRANSITION_NOT_ALLOWED case
+        // rethrown just below.
+        GLOBAL_HA_ROLE_TRANSITION_FAILED_COUNTER.increment();
+        HAGroupMetricsManager.increment(getName(), MetricType.HA_ROLE_TRANSITION_FAILED_COUNTER);
+        // Rethrow the Role transitions not allowed exceptions
+        if (e.getCause() != null && e.getCause().getCause() != null) {
+          if (
+            e.getCause().getCause() instanceof SQLException
+              && ((SQLException) e.getCause().getCause()).getErrorCode()
+                  == SQLExceptionCode.HA_ROLE_TRANSITION_NOT_ALLOWED.getErrorCode()
+          ) {
+            state = State.READY;
+            throw (SQLException) e.getCause().getCause();
           }
-          // Calling back HA policy function for cluster switch is conducted with best effort.
-          // HA group continues transition when its HA policy fails to deal with context switch
-          // (e.g. to close existing connections)
-          // The goal here is to gain higher availability even though existing resources against
-          // previous ACTIVE cluster may have not been closed cleanly.
         }
-        // Count the transition as a failover only when the policy-side transition actually
-        // succeeded AND an active cluster is established or moves between peers. Operator-driven
-        // transitions to a no-active state (both clusters STANDBY) are not counted as failovers;
-        // recovery from no-active back to having an ACTIVE peer is counted. Transitions where
-        // future.get() failed (ExecutionException/TimeoutException) are best-effort fall-through
-        // per the comment above, but they are NOT counted as successful failovers. Gate decision
-        // factored into the package-private static {@link #shouldCountFailover} so it can be
-        // unit-tested directly without driving a full mini-cluster transition.
-        if (shouldCountFailover(transitionSucceeded, oldRecord, newRoleRecord)) {
-          GLOBAL_HA_FAILOVER_COUNT.increment();
-          HAGroupMetricsManager.increment(getName(), MetricType.HA_FAILOVER_COUNT);
-        }
-        // Update the role record and the last refresh time
-        roleRecord = newRoleRecord;
-        lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
-        state = State.READY;
-        LOG.info("HA group {} is in {} state, Old: {}, new: {}", info, state, oldRecord,
-          roleRecord);
-        LOG.debug("HA group is ready: {}", this);
-        return true;
-      } finally {
-        long transitionDurationMs = System.currentTimeMillis() - transitionStartMs;
-        GLOBAL_HA_FAILOVER_DURATION_MS.update(transitionDurationMs);
-        HAGroupMetricsManager.update(getName(), MetricType.HA_FAILOVER_DURATION_MS,
-          transitionDurationMs);
+        // Calling back HA policy function for cluster switch is conducted with best effort.
+        // HA group continues transition when its HA policy fails to deal with context switch
+        // (e.g. to close existing connections)
+        // The goal here is to gain higher availability even though existing resources against
+        // previous ACTIVE cluster may have not been closed cleanly.
       }
+      // Count the transition as a failover only when the policy-side transition actually
+      // succeeded AND an active cluster is established or moves between peers. Operator-driven
+      // transitions to a no-active state (both clusters STANDBY) are not counted as failovers;
+      // recovery from no-active back to having an ACTIVE peer is counted. Transitions where
+      // future.get() failed (ExecutionException/TimeoutException) are best-effort fall-through
+      // per the comment above, but they are NOT counted as successful failovers. Gate decision
+      // factored into the package-private static {@link #shouldCountFailover} so it can be
+      // unit-tested directly without driving a full mini-cluster transition.
+      if (shouldCountFailover(transitionSucceeded, oldRecord, newRoleRecord)) {
+        GLOBAL_HA_FAILOVER_COUNT.increment();
+        HAGroupMetricsManager.increment(getName(), MetricType.HA_FAILOVER_COUNT);
+      }
+      // Update the role record and the last refresh time
+      roleRecord = newRoleRecord;
+      lastClusterRoleRecordRefreshTime = System.currentTimeMillis();
+      state = State.READY;
+      LOG.info("HA group {} is in {} state, Old: {}, new: {}", info, state, oldRecord, roleRecord);
+      LOG.debug("HA group is ready: {}", this);
+      return true;
     } finally {
       writeLock.unlock();
     }
