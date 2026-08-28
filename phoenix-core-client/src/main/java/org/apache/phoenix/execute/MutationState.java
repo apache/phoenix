@@ -1927,7 +1927,9 @@ public class MutationState implements SQLCloseable {
       }
       PTable logicalTable = tableInfo.getPTable();
       if (
-        !this.serverSideImmutableIndexes && tableInfo.getOrigTableRef().getTable().isImmutableRows()
+        !IndexUtil.isServerSideImmutableIndexMaintenanceEnabled(
+          tableInfo.getOrigTableRef().getTable(), this.serverSideImmutableIndexes)
+          && tableInfo.getOrigTableRef().getTable().isImmutableRows()
           && (this.indexRegionObserverEnabledAllTables
             || IndexUtil.isGlobalIndexCheckerEnabled(connection, tableInfo.getHTableName()))
       ) {
