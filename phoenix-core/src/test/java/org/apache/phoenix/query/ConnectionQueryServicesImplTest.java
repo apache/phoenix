@@ -83,8 +83,6 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
-import org.apache.phoenix.schema.PTableType;
-import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -453,41 +451,6 @@ public class ConnectionQueryServicesImplTest {
   }
 
   @Test
-  public void testReenableOrphanedDisabledHBaseTableSkipsNonTableTypes() throws Exception {
-    // PHOENIX-7788: helper only runs for PTableType.TABLE; other types must return early.
-    byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
-    invokeReenableOrphanedDisabledHBaseTable(mockCqs, ByteUtil.EMPTY_BYTE_ARRAY, name, false,
-      PTableType.VIEW);
-    invokeReenableOrphanedDisabledHBaseTable(mockCqs, ByteUtil.EMPTY_BYTE_ARRAY, name, false,
-      PTableType.INDEX);
-    verify(mockConn, never()).getAdmin();
-  }
-
-  @Test
-  public void testReenableOrphanedDisabledHBaseTableSkipsWhenTableDoesNotExist() throws Exception {
-    byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
-    TableName physical = TableName.valueOf(name);
-    when(mockConn.getAdmin()).thenReturn(mockAdmin);
-    when(mockAdmin.tableExists(physical)).thenReturn(false);
-    invokeReenableOrphanedDisabledHBaseTable(mockCqs, ByteUtil.EMPTY_BYTE_ARRAY, name, false,
-      PTableType.TABLE);
-    verify(mockAdmin, never()).isTableDisabled(any());
-    verify(mockAdmin, never()).enableTable(any());
-  }
-
-  @Test
-  public void testReenableOrphanedDisabledHBaseTableSkipsWhenTableEnabled() throws Exception {
-    byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
-    TableName physical = TableName.valueOf(name);
-    when(mockConn.getAdmin()).thenReturn(mockAdmin);
-    when(mockAdmin.tableExists(physical)).thenReturn(true);
-    when(mockAdmin.isTableDisabled(physical)).thenReturn(false);
-    invokeReenableOrphanedDisabledHBaseTable(mockCqs, ByteUtil.EMPTY_BYTE_ARRAY, name, false,
-      PTableType.TABLE);
-    verify(mockAdmin, never()).enableTable(any());
-  }
-
-  @Test
   public void testReenableOrphanedDisabledHBaseTableLeavesTableDisabledWhenMetadataPresent()
     throws Exception {
     // PHOENIX-7788: disabled physical table with existing SYSTEM.CATALOG metadata must NOT be
@@ -495,44 +458,63 @@ public class ConnectionQueryServicesImplTest {
     // CREATE TABLE IF NOT EXISTS must preserve that.
     byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
     TableName physical = TableName.valueOf(name);
-    when(mockConn.getAdmin()).thenReturn(mockAdmin);
-    when(mockAdmin.tableExists(physical)).thenReturn(true);
-    when(mockAdmin.isTableDisabled(physical)).thenReturn(true);
     MetaDataMutationResult existing =
       new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0L, null);
     doReturn(existing).when(mockCqs).getTable(Mockito.<PName> any(), any(byte[].class),
       any(byte[].class), anyLong(), anyLong());
-    invokeReenableOrphanedDisabledHBaseTable(mockCqs, ByteUtil.EMPTY_BYTE_ARRAY, name, false,
-      PTableType.TABLE);
-    verify(mockAdmin, never()).enableTable(any());
+    invokeReenableOrphanedDisabledHBaseTable(mockCqs, name, mockAdmin);
+    verify(mockAdmin, never()).enableTable(physical);
   }
 
   @Test
   public void testReenableOrphanedDisabledHBaseTableReenablesOrphanedTable() throws Exception {
     byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
     TableName physical = TableName.valueOf(name);
-    when(mockConn.getAdmin()).thenReturn(mockAdmin);
-    when(mockAdmin.tableExists(physical)).thenReturn(true);
-    when(mockAdmin.isTableDisabled(physical)).thenReturn(true);
     MetaDataMutationResult notFound =
       new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0L, null);
     doReturn(notFound).when(mockCqs).getTable(Mockito.<PName> any(), any(byte[].class),
       any(byte[].class), anyLong(), anyLong());
-    doNothing().when(mockAdmin).enableTable(physical);
-    invokeReenableOrphanedDisabledHBaseTable(mockCqs, ByteUtil.EMPTY_BYTE_ARRAY, name, false,
-      PTableType.TABLE);
+    invokeReenableOrphanedDisabledHBaseTable(mockCqs, name, mockAdmin);
     verify(mockAdmin, Mockito.times(1)).enableTable(physical);
   }
 
-  private static void invokeReenableOrphanedDisabledHBaseTable(ConnectionQueryServicesImpl cqs,
-    byte[] schemaBytes, byte[] tableBytes, boolean isNamespaceMapped, PTableType tableType)
+  @Test
+  public void testReenableOrphanedDisabledHBaseTableDerivesLogicalNameForNamespaceMapped()
     throws Exception {
-    Method m =
-      ConnectionQueryServicesImpl.class.getDeclaredMethod("reenableOrphanedDisabledHBaseTable",
-        byte[].class, byte[].class, boolean.class, PTableType.class);
+    // PHOENIX-7788: for a namespace-mapped physical name "MYSCHEMA:MYTABLE" the metadata
+    // lookup must be against logical schema="MYSCHEMA", table="MYTABLE".
+    byte[] name = "MYSCHEMA:MYTABLE".getBytes(StandardCharsets.UTF_8);
+    MetaDataMutationResult notFound =
+      new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0L, null);
+    doReturn(notFound).when(mockCqs).getTable(Mockito.<PName> any(), any(byte[].class),
+      any(byte[].class), anyLong(), anyLong());
+    invokeReenableOrphanedDisabledHBaseTable(mockCqs, name, mockAdmin);
+    verify(mockCqs).getTable(Mockito.<PName> any(), eq("MYSCHEMA".getBytes(StandardCharsets.UTF_8)),
+      eq("MYTABLE".getBytes(StandardCharsets.UTF_8)), anyLong(), anyLong());
+  }
+
+  @Test
+  public void testReenableOrphanedDisabledHBaseTableDerivesLogicalNameForNonNamespaceMapped()
+    throws Exception {
+    // PHOENIX-7788: for a non-namespace-mapped physical name "MYSCHEMA.MYTABLE" the metadata
+    // lookup must be against logical schema="MYSCHEMA", table="MYTABLE".
+    byte[] name = "MYSCHEMA.MYTABLE".getBytes(StandardCharsets.UTF_8);
+    MetaDataMutationResult notFound =
+      new MetaDataMutationResult(MutationCode.TABLE_NOT_FOUND, 0L, null);
+    doReturn(notFound).when(mockCqs).getTable(Mockito.<PName> any(), any(byte[].class),
+      any(byte[].class), anyLong(), anyLong());
+    invokeReenableOrphanedDisabledHBaseTable(mockCqs, name, mockAdmin);
+    verify(mockCqs).getTable(Mockito.<PName> any(), eq("MYSCHEMA".getBytes(StandardCharsets.UTF_8)),
+      eq("MYTABLE".getBytes(StandardCharsets.UTF_8)), anyLong(), anyLong());
+  }
+
+  private static void invokeReenableOrphanedDisabledHBaseTable(ConnectionQueryServicesImpl cqs,
+    byte[] physicalTableNameBytes, Admin admin) throws Exception {
+    Method m = ConnectionQueryServicesImpl.class
+      .getDeclaredMethod("reenableOrphanedDisabledHBaseTable", byte[].class, Admin.class);
     m.setAccessible(true);
     try {
-      m.invoke(cqs, schemaBytes, tableBytes, isNamespaceMapped, tableType);
+      m.invoke(cqs, physicalTableNameBytes, admin);
     } catch (InvocationTargetException e) {
       if (e.getCause() instanceof Exception) {
         throw (Exception) e.getCause();
