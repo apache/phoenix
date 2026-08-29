@@ -303,7 +303,8 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
    * @return the round-eligible wall-clock instant in milliseconds
    */
   private long getRoundEligibleTime(long creationTs) {
-    long roundStart = (creationTs / roundTimeMills) * roundTimeMills;
+    long roundStart = replicationLogTracker.getReplicationShardDirectoryManager()
+      .getNearestRoundStartTimestamp(creationTs);
     long owningRoundEnd = (creationTs == roundStart) ? creationTs : roundStart + roundTimeMills;
     return owningRoundEnd + bufferMillis;
   }

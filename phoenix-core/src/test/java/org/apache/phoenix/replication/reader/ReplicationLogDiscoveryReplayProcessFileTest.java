@@ -28,6 +28,8 @@ import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.util.Optional;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hbase.util.EnvironmentEdge;
 import org.apache.hadoop.hbase.util.EnvironmentEdgeManager;
@@ -176,9 +178,16 @@ public class ReplicationLogDiscoveryReplayProcessFileTest {
 
   private static TestReplay newReplay(ReplicationLogTracker tracker,
     MetricsReplicationLogDiscoveryReplay metrics) {
-    ReplicationShardDirectoryManager shardManager = mock(ReplicationShardDirectoryManager.class);
+    // Use a real ReplicationShardDirectoryManager, not a mock: its constructor only reads config
+    // and never touches the file system, so getRoundEligibleTime's round math uses the real
+    // getNearestRoundStartTimestamp instead of a stubbed constant that would otherwise re-encode
+    // the same floor formula this test verifies.
+    Configuration conf = new Configuration(false);
+    conf.setInt(ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY,
+      (int) ROUND_SECONDS);
+    ReplicationShardDirectoryManager shardManager =
+      new ReplicationShardDirectoryManager(conf, mock(FileSystem.class), new Path("/replication"));
     when(tracker.getReplicationShardDirectoryManager()).thenReturn(shardManager);
-    when(shardManager.getReplicationRoundDurationSeconds()).thenReturn((int) ROUND_SECONDS);
     return new TestReplay(tracker, metrics);
   }
 
