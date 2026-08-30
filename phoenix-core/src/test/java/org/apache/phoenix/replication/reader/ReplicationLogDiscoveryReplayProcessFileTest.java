@@ -45,16 +45,17 @@ import org.junit.Test;
  * metric source in isolation. They cover:
  * <ul>
  * <li>the {@code getRoundEligibleTime} math the lag samples are anchored to, including a file whose
- * creation timestamp lands exactly on a round boundary (owned by the earlier round);</li>
+ * creation timestamp lands exactly on a round boundary (owned by the round that starts there);</li>
  * <li>first-claim gating: pickup lag is recorded on the new-files path (firstClaim=true) and not on
  * an in-progress reclaim (firstClaim=false);</li>
  * <li>failure handling: a file that throws mid-replay still records pickup lag but never records an
  * end-to-end lag sample.</li>
  * </ul>
- * The round duration is stubbed to 60s and the waiting buffer to 15%, giving a round of 60000ms and
- * a buffer of 9000ms. A file created at 100000ms is owned by the round ending at 120000ms and thus
- * becomes eligible at 120000 + 9000 = 129000ms; a file created exactly on the 120000ms boundary is
- * owned by that same earlier round and is also eligible at 129000ms.
+ * The round duration is configured to 60s and the waiting buffer to 15%, giving a round of 60000ms
+ * and a buffer of 9000ms. Rounds are half-open [start, end): a file created at 100000ms belongs to
+ * the round [60000, 120000) and becomes eligible at 120000 + 9000 = 129000ms; a file created
+ * exactly on the 120000ms boundary belongs to the next round [120000, 180000) and is eligible at
+ * 180000 + 9000 = 189000ms.
  */
 public class ReplicationLogDiscoveryReplayProcessFileTest {
 
@@ -88,23 +89,28 @@ public class ReplicationLogDiscoveryReplayProcessFileTest {
   }
 
   /**
-   * A file created exactly on a round boundary is owned by the earlier round (inclusive round
-   * bounds), so its eligibility is the boundary itself plus the buffer, not a full round later.
-   * Regression guard for the off-by-one: the old formula anchored to 189000ms, which clamped this
-   * pickup lag to 0; the corrected formula anchors to 129000ms and records the real 1000ms.
+   * A file created exactly on a round boundary belongs to the round that starts at that boundary,
+   * not the one that ends there: rounds are half-open [start, end) and getShardDirectory floors the
+   * timestamp, so the boundary file is stored in and replayed by the later round. Its owning round
+   * is [120000, 180000), so it becomes eligible at 180000 + 9000 = 189000ms -- a full round later
+   * than a file created just inside the previous round. Regression guard against anchoring a
+   * boundary file to the round that ends there, which would under-count eligibility by one round
+   * and over-report its lag.
    */
   @Test
-  public void testFirstClaimOnRoundBoundaryAnchorsToOwningRound() throws IOException {
+  public void testFirstClaimOnRoundBoundaryAnchorsToStartingRound() throws IOException {
     ReplicationLogTracker tracker = mock(ReplicationLogTracker.class);
     MetricsReplicationLogDiscoveryReplay metrics = mock(MetricsReplicationLogDiscoveryReplay.class);
     when(tracker.getFileTimestamp(any())).thenReturn(120000L);
-    when(tracker.getRenameTimestamp(any())).thenReturn(Optional.of(130000L));
-    injectNow(140000L);
+    when(tracker.getRenameTimestamp(any())).thenReturn(Optional.of(190000L));
+    injectNow(200000L);
 
     newReplay(tracker, metrics).processFile(FILE, true);
 
-    verify(metrics).updatePickupLag(130000L - ELIGIBLE_MS);
-    verify(metrics).updateEndToEndReplayLag(140000L - ELIGIBLE_MS);
+    // Owning round [120000, 180000); eligible = 180000 + 9000 buffer = 189000.
+    long eligible = 189000L;
+    verify(metrics).updatePickupLag(190000L - eligible);
+    verify(metrics).updateEndToEndReplayLag(200000L - eligible);
   }
 
   /**

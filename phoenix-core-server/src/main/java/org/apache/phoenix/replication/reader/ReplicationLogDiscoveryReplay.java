@@ -292,21 +292,19 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
    * once {@code currentTime >= roundEnd + bufferMillis}) and is the zero-reference for the
    * replay-lag metrics, so they exclude the fixed built-in wait rather than measuring raw file age.
    * <p>
-   * Round bounds are inclusive at both ends (see {@code getNewFilesForRound}), so consecutive
-   * rounds share a boundary and a file whose creation timestamp lands exactly on a round boundary
-   * ({@code creationTs % roundTimeMills == 0}) matches both the earlier round (as its end) and the
-   * later round (as its start). The earlier round runs first and claims the file, so the owning
-   * round's end is {@code creationTs} itself in that case, not {@code creationTs + roundTimeMills}.
-   * Anchoring to the later round would over-count the eligibility by one full round and clamp the
-   * resulting lag to zero.
+   * Rounds are half-open {@code [start, end)}: a file at {@code creationTs} belongs to the round
+   * {@code [roundStart, roundStart + roundTimeMills)}, where {@code roundStart} floors
+   * {@code creationTs} down to a round boundary. This matches the on-disk layout, since
+   * getShardDirectory also floors the timestamp: a file that lands exactly on a boundary is stored
+   * in, and replayed by, the round that starts there -- not the one that ends there. The owning
+   * round's end is therefore always {@code roundStart + roundTimeMills}, including on a boundary.
    * @param creationTs the file creation timestamp (first component of the log file name)
    * @return the round-eligible wall-clock instant in milliseconds
    */
   private long getRoundEligibleTime(long creationTs) {
     long roundStart = replicationLogTracker.getReplicationShardDirectoryManager()
       .getNearestRoundStartTimestamp(creationTs);
-    long owningRoundEnd = (creationTs == roundStart) ? creationTs : roundStart + roundTimeMills;
-    return owningRoundEnd + bufferMillis;
+    return roundStart + roundTimeMills + bufferMillis;
   }
 
   /**
