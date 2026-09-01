@@ -104,8 +104,14 @@ public class ReplicationLogDiscoveryForwarder extends ReplicationLogDiscovery {
     super.init();
   }
 
+  /**
+   * Forwards a single log file to the peer cluster. The {@code firstClaim} flag (true when the file
+   * was just claimed from the new-files directory, false on an in-progress reclaim) is unused here:
+   * forwarding is idempotent on the stable (ts, originServerName) destination and records no
+   * claim-latency metrics, so first claims and reclaims are handled identically.
+   */
   @Override
-  protected void processFile(Path src) throws IOException {
+  protected void processFile(Path src, boolean firstClaim) throws IOException {
     FileSystem srcFS = replicationLogTracker.getFileSystem();
     FileStatus srcStat = srcFS.getFileStatus(src);
     long ts = replicationLogTracker.getFileTimestamp(srcStat.getPath());

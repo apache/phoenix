@@ -384,6 +384,11 @@ public class ReplicationLogTracker {
         return Optional.of(newPath);
       } else {
         LOG.warn("Failed to rename file for in-progress marking: {}", file);
+        // Claim rename returned false. Usually another process claimed the same file first (the
+        // common collision case), but any other rename() == false outcome lands here too, so the
+        // counter is named for the observable condition (rename failed), not the presumed cause. A
+        // strict subset of the request count incremented in the finally block below.
+        getMetrics().incrementMarkFileInProgressRenameFailedCount();
         return Optional.empty();
       }
     } catch (IOException e) {

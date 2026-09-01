@@ -329,7 +329,8 @@ public class ReplicationLogDiscoveryTest {
     discovery.setScheduler(mockScheduler);
     long roundTimeMs = discovery.roundTimeMills;
     // Pin wall-clock exactly on an epsilon-shifted grid tick so computeAlignedInitialDelay == 0.
-    long onTick = 5 * roundTimeMs + discovery.bufferMillis + discovery.getAlignedDelayEpsilonMillis();
+    long onTick =
+      5 * roundTimeMs + discovery.bufferMillis + discovery.getAlignedDelayEpsilonMillis();
     AtomicLong mockTime = new AtomicLong(onTick);
     EnvironmentEdgeManager.injectEdge(new EnvironmentEdge() {
       @Override
@@ -1071,6 +1072,60 @@ public class ReplicationLogDiscoveryTest {
   }
 
   /**
+   * Metric #6 (roundsExceedingRoundTime) recording site: a round whose new-file processing
+   * completes within the round time must NOT increment the counter. Freezing the clock makes the
+   * measured duration exactly 0, which is well under {@code roundTimeMills}.
+   */
+  @Test
+  public void testProcessNewFilesForRoundDoesNotCountFastRound() throws IOException {
+    long baseSlowRounds =
+      metricsLogDiscovery.getCurrentMetricValues().getRoundsExceedingRoundTime();
+
+    // Freeze the clock so startTime == endTime, giving duration == 0 (<= roundTimeMills).
+    EnvironmentEdge frozenEdge = () -> 1704153600000L;
+    EnvironmentEdgeManager.injectEdge(frozenEdge);
+    try {
+      // Empty round: no files created for it, so processing returns without entering the loop.
+      ReplicationRound emptyRound = new ReplicationRound(1704153600000L, 1704153660000L);
+      discovery.processNewFilesForRound(emptyRound);
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
+
+    assertEquals("A fast round must not increment roundsExceedingRoundTime", baseSlowRounds,
+      metricsLogDiscovery.getCurrentMetricValues().getRoundsExceedingRoundTime());
+  }
+
+  /**
+   * Metric #6 (roundsExceedingRoundTime) recording site: a round whose new-file processing exceeds
+   * the round time must increment the counter exactly once. An advancing clock whose step exceeds a
+   * full round guarantees the measured duration (end - start) strictly exceeds
+   * {@code roundTimeMills} regardless of how many times the wall clock is read during processing.
+   */
+  @Test
+  public void testProcessNewFilesForRoundCountsSlowRound() throws IOException {
+    long baseSlowRounds =
+      metricsLogDiscovery.getCurrentMetricValues().getRoundsExceedingRoundTime();
+
+    long step = discovery.getRoundTimeMills() + 1L;
+    AtomicLong clock = new AtomicLong(1704153600000L);
+    EnvironmentEdge advancingEdge = () -> clock.getAndAdd(step);
+    EnvironmentEdgeManager.injectEdge(advancingEdge);
+    try {
+      // Empty round: the start/end clock reads alone span more than a full round, so duration
+      // strictly exceeds roundTimeMills.
+      ReplicationRound emptyRound = new ReplicationRound(1704153600000L, 1704153660000L);
+      discovery.processNewFilesForRound(emptyRound);
+    } finally {
+      EnvironmentEdgeManager.reset();
+    }
+
+    assertEquals("A slow round must increment roundsExceedingRoundTime by exactly one",
+      baseSlowRounds + 1,
+      metricsLogDiscovery.getCurrentMetricValues().getRoundsExceedingRoundTime());
+  }
+
+  /**
    * Tests partial failure handling during new file processing. Validates that successful files are
    * marked completed while failed files are marked failed.
    */
@@ -1086,12 +1141,14 @@ public class ReplicationLogDiscoveryTest {
     // matching
     String file1Prefix = newFilesForRound.get(1).getName().substring(0,
       newFilesForRound.get(1).getName().lastIndexOf("."));
-    Mockito.doThrow(new IOException("Processing failed for file 1")).when(discovery)
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+    Mockito.doThrow(new IOException("Processing failed for file 1")).when(discovery).processFile(
+      Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)),
+      Mockito.anyBoolean());
     String file3Prefix = newFilesForRound.get(3).getName().substring(0,
       newFilesForRound.get(3).getName().lastIndexOf("."));
-    Mockito.doThrow(new IOException("Processing failed for file 3")).when(discovery)
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file3Prefix)));
+    Mockito.doThrow(new IOException("Processing failed for file 3")).when(discovery).processFile(
+      Mockito.argThat(path -> extractPrefix(path.getName()).equals(file3Prefix)),
+      Mockito.anyBoolean());
 
     // Process new files for the round
     discovery.processNewFilesForRound(replicationRound);
@@ -1106,14 +1163,16 @@ public class ReplicationLogDiscoveryTest {
     }
 
     // Verify that processFile was called for each file in the round
-    Mockito.verify(discovery, Mockito.times(5)).processFile(Mockito.any(Path.class));
+    Mockito.verify(discovery, Mockito.times(5)).processFile(Mockito.any(Path.class),
+      Mockito.anyBoolean());
 
     // Verify that processFile was called for each specific file (using prefix matching)
     for (Path expectedFile : newFilesForRound) {
       String expectedPrefix =
         expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("."));
-      Mockito.verify(discovery, Mockito.times(1))
-        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+      Mockito.verify(discovery, Mockito.times(1)).processFile(
+        Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)),
+        Mockito.anyBoolean());
     }
 
     // Verify that markCompleted was called for each successfully processed file
@@ -1176,14 +1235,16 @@ public class ReplicationLogDiscoveryTest {
       String filePrefix = file.getName().substring(0, file.getName().lastIndexOf("."));
       Mockito.doThrow(new IOException("Processing failed for file: " + file.getName()))
         .when(discovery)
-        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(filePrefix)));
+        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(filePrefix)),
+          Mockito.anyBoolean());
     }
 
     // Process new files for the round
     discovery.processNewFilesForRound(replicationRound);
 
     // Verify that processFile was called for each file in the round
-    Mockito.verify(discovery, Mockito.times(5)).processFile(Mockito.any(Path.class));
+    Mockito.verify(discovery, Mockito.times(5)).processFile(Mockito.any(Path.class),
+      Mockito.anyBoolean());
 
     // Verify that markInProgress was called 5 times (before processing fails)
     Mockito.verify(fileTracker, Mockito.times(5)).markInProgress(Mockito.any(Path.class));
@@ -1198,8 +1259,9 @@ public class ReplicationLogDiscoveryTest {
     for (Path expectedFile : newFilesForRound) {
       String expectedPrefix =
         expectedFile.getName().substring(0, expectedFile.getName().lastIndexOf("."));
-      Mockito.verify(discovery, Mockito.times(1))
-        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+      Mockito.verify(discovery, Mockito.times(1)).processFile(
+        Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)),
+        Mockito.anyBoolean());
     }
 
     // Verify that markCompleted was NOT called for any file (all failed)
@@ -1377,11 +1439,13 @@ public class ReplicationLogDiscoveryTest {
     String file1Prefix = extractPrefix(allInProgressFiles.get(1).getName());
     Mockito.doThrow(new IOException("Processing failed for file 1")).doCallRealMethod()
       .when(discovery)
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)),
+        Mockito.anyBoolean());
     String file3Prefix = extractPrefix(allInProgressFiles.get(3).getName());
     Mockito.doThrow(new IOException("Processing failed for file 3")).doCallRealMethod()
       .when(discovery)
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file3Prefix)));
+      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file3Prefix)),
+        Mockito.anyBoolean());
 
     // Inject an advancing clock so that rename timestamps from markInProgress are always
     // strictly before the renameTimestampThreshold computed on the next loop iteration
@@ -1407,7 +1471,8 @@ public class ReplicationLogDiscoveryTest {
 
       // Verify that processFile was called for each file in the directory (i.e. 5 + 2 times for
       // failed once that would succeed in next retry)
-      Mockito.verify(discovery, Mockito.times(7)).processFile(Mockito.any(Path.class));
+      Mockito.verify(discovery, Mockito.times(7)).processFile(Mockito.any(Path.class),
+        Mockito.anyBoolean());
 
       // Verify that processFile was called for each specific file (using prefix matching)
       // Files 1 and 3 should be called twice (fail once, succeed on retry), others once
@@ -1417,7 +1482,8 @@ public class ReplicationLogDiscoveryTest {
         int expectedTimes = (i == 1 || i == 3) ? 2 : 1; // Files 1 and 3 are called twice (fail +
                                                         // retry success)
         Mockito.verify(discovery, Mockito.times(expectedTimes)).processFile(
-          Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)));
+          Mockito.argThat(path -> extractPrefix(path.getName()).equals(expectedPrefix)),
+          Mockito.anyBoolean());
       }
 
       // Verify that markCompleted was called for each successfully processed file
@@ -1471,8 +1537,9 @@ public class ReplicationLogDiscoveryTest {
 
     // Mock processFile to always throw for file 1 (persistent failure)
     String file1Prefix = extractPrefix(inProgressFiles.get(1).getName());
-    Mockito.doThrow(new IOException("Persistent failure for file 1")).when(discovery)
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+    Mockito.doThrow(new IOException("Persistent failure for file 1")).when(discovery).processFile(
+      Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)),
+      Mockito.anyBoolean());
 
     // Process in-progress directory
     discovery.processInProgressDirectory();
@@ -1483,7 +1550,8 @@ public class ReplicationLogDiscoveryTest {
     Mockito.verify(fileTracker, Mockito.times(3)).markInProgress(Mockito.any(Path.class));
 
     // processFile called 3 times (all files attempted once)
-    Mockito.verify(discovery, Mockito.times(3)).processFile(Mockito.any(Path.class));
+    Mockito.verify(discovery, Mockito.times(3)).processFile(Mockito.any(Path.class),
+      Mockito.anyBoolean());
 
     // markCompleted called only for the 2 successful files
     Mockito.verify(fileTracker, Mockito.times(2)).markCompleted(Mockito.any(Path.class));
@@ -1492,16 +1560,19 @@ public class ReplicationLogDiscoveryTest {
     Mockito.verify(fileTracker, Mockito.times(1)).markFailed(Mockito.any(Path.class));
 
     // Verify the failed file was NOT retried (processFile called exactly once for file1)
-    Mockito.verify(discovery, Mockito.times(1))
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+    Mockito.verify(discovery, Mockito.times(1)).processFile(
+      Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)),
+      Mockito.anyBoolean());
 
     // Verify the successful files were each called exactly once
     String file0Prefix = extractPrefix(inProgressFiles.get(0).getName());
-    Mockito.verify(discovery, Mockito.times(1))
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
+    Mockito.verify(discovery, Mockito.times(1)).processFile(
+      Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)),
+      Mockito.anyBoolean());
     String file2Prefix = extractPrefix(inProgressFiles.get(2).getName());
-    Mockito.verify(discovery, Mockito.times(1))
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
+    Mockito.verify(discovery, Mockito.times(1)).processFile(
+      Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)),
+      Mockito.anyBoolean());
   }
 
   /**
@@ -1522,22 +1593,26 @@ public class ReplicationLogDiscoveryTest {
 
     // Mock processFile to always throw for all files
     Mockito.doThrow(new IOException("Persistent failure")).when(discovery)
-      .processFile(Mockito.any(Path.class));
+      .processFile(Mockito.any(Path.class), Mockito.anyBoolean());
 
     // Process in-progress directory - should terminate without infinite loop
     discovery.processInProgressDirectory();
 
     // Each file attempted exactly once
     Mockito.verify(fileTracker, Mockito.times(3)).markInProgress(Mockito.any(Path.class));
-    Mockito.verify(discovery, Mockito.times(3)).processFile(Mockito.any(Path.class));
+    Mockito.verify(discovery, Mockito.times(3)).processFile(Mockito.any(Path.class),
+      Mockito.anyBoolean());
 
     // Verify per-prefix: each file attempted once
-    Mockito.verify(discovery, Mockito.times(1))
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
-    Mockito.verify(discovery, Mockito.times(1))
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
-    Mockito.verify(discovery, Mockito.times(1))
-      .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
+    Mockito.verify(discovery, Mockito.times(1)).processFile(
+      Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)),
+      Mockito.anyBoolean());
+    Mockito.verify(discovery, Mockito.times(1)).processFile(
+      Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)),
+      Mockito.anyBoolean());
+    Mockito.verify(discovery, Mockito.times(1)).processFile(
+      Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)),
+      Mockito.anyBoolean());
 
     // All files marked as failed
     Mockito.verify(fileTracker, Mockito.times(3)).markFailed(Mockito.any(Path.class));
@@ -1588,7 +1663,8 @@ public class ReplicationLogDiscoveryTest {
       // Mock processFile to fail for file 1 only on the first call, succeed on subsequent calls
       Mockito.doThrow(new IOException("Transient failure for file 1")).doCallRealMethod()
         .when(discovery)
-        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
+        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)),
+          Mockito.anyBoolean());
 
       // --- First invocation: file 1 fails, files 0 and 2 succeed ---
       discovery.processInProgressDirectory();
@@ -1602,12 +1678,15 @@ public class ReplicationLogDiscoveryTest {
         .markInProgress(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
 
       // Verify processFile called once per file
-      Mockito.verify(discovery, Mockito.times(1))
-        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)));
-      Mockito.verify(discovery, Mockito.times(1))
-        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)));
-      Mockito.verify(discovery, Mockito.times(1))
-        .processFile(Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)));
+      Mockito.verify(discovery, Mockito.times(1)).processFile(
+        Mockito.argThat(path -> extractPrefix(path.getName()).equals(file0Prefix)),
+        Mockito.anyBoolean());
+      Mockito.verify(discovery, Mockito.times(1)).processFile(
+        Mockito.argThat(path -> extractPrefix(path.getName()).equals(file1Prefix)),
+        Mockito.anyBoolean());
+      Mockito.verify(discovery, Mockito.times(1)).processFile(
+        Mockito.argThat(path -> extractPrefix(path.getName()).equals(file2Prefix)),
+        Mockito.anyBoolean());
 
       // Verify markCompleted called for files 0 and 2 (successful)
       Mockito.verify(fileTracker, Mockito.times(1))
@@ -1665,7 +1744,7 @@ public class ReplicationLogDiscoveryTest {
         assertTrue("Second round rename timestamp should be newer than first round's",
           ts.get() > firstRoundRenameTs);
         return true;
-      }));
+      }), Mockito.anyBoolean());
 
       // Verify markCompleted called for file 1
       Mockito.verify(fileTracker, Mockito.times(1))
@@ -2685,7 +2764,7 @@ public class ReplicationLogDiscoveryTest {
     }
 
     @Override
-    protected void processFile(Path path) throws IOException {
+    protected void processFile(Path path, boolean firstClaim) throws IOException {
       // Simulate file processing
       processedFiles.add(path);
     }

@@ -31,6 +31,7 @@ public class MetricsReplicationLogDiscoveryImpl extends BaseSourceImpl
   protected final MutableFastCounter numInProgressDirectoryProcessed;
   protected final MutableHistogram timeToProcessNewFiles;
   protected final MutableHistogram timeToProcessInProgressFiles;
+  protected final MutableFastCounter roundsExceedingRoundTime;
 
   public MetricsReplicationLogDiscoveryImpl(String metricsName, String metricsDescription,
     String metricsContext, String metricsJmxContext) {
@@ -43,6 +44,8 @@ public class MetricsReplicationLogDiscoveryImpl extends BaseSourceImpl
       getMetricsRegistry().newHistogram(TIME_TO_PROCESS_NEW_FILES, TIME_TO_PROCESS_NEW_FILES_DESC);
     timeToProcessInProgressFiles = getMetricsRegistry()
       .newHistogram(TIME_TO_PROCESS_IN_PROGRESS_FILES, TIME_TO_PROCESS_IN_PROGRESS_FILES_DESC);
+    roundsExceedingRoundTime = getMetricsRegistry().newCounter(ROUNDS_EXCEEDING_ROUND_TIME,
+      ROUNDS_EXCEEDING_ROUND_TIME_DESC, 0L);
   }
 
   @Override
@@ -66,6 +69,11 @@ public class MetricsReplicationLogDiscoveryImpl extends BaseSourceImpl
   }
 
   @Override
+  public void incrementRoundsExceedingRoundTime() {
+    roundsExceedingRoundTime.incr();
+  }
+
+  @Override
   public void close() {
     // Unregister this metrics source
     DefaultMetricsSystem.instance().unregisterSource(groupMetricsContext);
@@ -75,7 +83,7 @@ public class MetricsReplicationLogDiscoveryImpl extends BaseSourceImpl
   public ReplicationLogDiscoveryMetricValues getCurrentMetricValues() {
     return new ReplicationLogDiscoveryMetricValues(numRoundsProcessed.value(),
       numInProgressDirectoryProcessed.value(), timeToProcessNewFiles.getMax(),
-      timeToProcessInProgressFiles.getMax());
+      timeToProcessInProgressFiles.getMax(), roundsExceedingRoundTime.value());
   }
 
   @Override

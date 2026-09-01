@@ -278,6 +278,15 @@ public class ReplicationLogProcessor implements Closeable {
       LOG.info("Completed processing log file {}. Total mutations processed: {}",
         logFileReader.getContext().getFilePath(), totalProcessed);
       getMetrics().incrementLogFileReplaySuccessCount();
+      // Replay throughput for files that completed successfully. This runs only after the whole
+      // file replayed without error (before the catch), so mutations already applied by a file that
+      // then fails mid-replay are not counted (+= 0 is a no-op for rotation-only files). The
+      // per-file distribution below excludes zero-mutation files so they do not skew it toward
+      // zero.
+      getMetrics().incrementSuccessfulFileMutationsReplayedCount(totalProcessed);
+      if (totalProcessed > 0) {
+        getMetrics().updateMutationsPerFile(totalProcessed);
+      }
     } catch (Exception e) {
       LOG.error("Error while processing replication log file", e);
       getMetrics().incrementLogFileReplayFailureCount();

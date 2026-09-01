@@ -195,8 +195,8 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
     Path srcB =
       markInProgressSource(localTracker, new Path(shardDir, ts + "_" + originB + ".plog"));
 
-    forwarder.processFile(srcA);
-    forwarder.processFile(srcB);
+    forwarder.processFile(srcA, true);
+    forwarder.processFile(srcB, true);
 
     // Both files must land on the peer under their own origin identity -- no collision.
     Path peerShardDir = peerShardManager.getShardDirectory(ts);
@@ -314,7 +314,7 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
       }
     }).when(peerFs).rename(eq(staging), eq(dst));
 
-    logGroup.getLogForwarder().processFile(src);
+    logGroup.getLogForwarder().processFile(src, true);
 
     assertTrue("rename interceptor should have run", invariantHeld[0]);
     assertTrue(".plog must exist after rename", peerFs.exists(dst));
@@ -346,7 +346,7 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
       out.write(existing);
     }
 
-    logGroup.getLogForwarder().processFile(src);
+    logGroup.getLogForwarder().processFile(src, true);
 
     assertTrue("dst should still exist", peerFs.exists(dst));
     assertFalse("staging file should be cleaned up", peerFs.exists(staging));
@@ -371,7 +371,7 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
       out.write("stale-garbage-bytes".getBytes());
     }
 
-    logGroup.getLogForwarder().processFile(src);
+    logGroup.getLogForwarder().processFile(src, true);
 
     assertTrue("dst should be published", peerFs.exists(dst));
     assertFalse("staging file should be gone", peerFs.exists(staging));
@@ -395,7 +395,7 @@ public class ReplicationLogDiscoveryForwarderTest extends ReplicationLogBaseTest
     doReturn(false).when(peerFs).rename(eq(staging), eq(dst));
 
     try {
-      logGroup.getLogForwarder().processFile(src);
+      logGroup.getLogForwarder().processFile(src, true);
       fail("processFile should have thrown on rename failure");
     } catch (IOException expected) {
       // expected
