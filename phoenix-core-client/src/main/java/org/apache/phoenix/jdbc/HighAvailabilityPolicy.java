@@ -30,6 +30,8 @@ import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.HAGroupMetricsManager;
+import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -194,6 +196,8 @@ public enum HighAvailabilityPolicy {
         // Give regular connection or a failover connection?
         LOG.warn("Falling back to single phoenix connection due to resource constraints");
         GlobalClientMetrics.GLOBAL_HA_PARALLEL_CONNECTION_FALLBACK_COUNTER.increment();
+        HAGroupMetricsManager.increment(haGroup.getName(),
+          MetricType.HA_PARALLEL_CONNECTION_FALLBACK_COUNTER);
         return haGroup.connectActive(info, haURLInfo);
       }
     }
@@ -322,15 +326,44 @@ public enum HighAvailabilityPolicy {
    */
   public void transitClusterRoleRecord(HighAvailabilityGroup haGroup, ClusterRoleRecord oldRecord,
     ClusterRoleRecord newRecord) throws SQLException {
-    if (
-      !oldRecord.getUrl1().equals(newRecord.getUrl1())
-        || !oldRecord.getUrl2().equals(newRecord.getUrl2())
-    ) {
-      // If there is a change in url then we need to handle the transitions.
-      transitClusterUrl(haGroup, oldRecord, newRecord);
-    } else {
-      // If url is not changing then we need to check if there is a role transition.
-      transitClusterRole(haGroup, oldRecord, newRecord);
+    boolean registryChanged = oldRecord.getRegistryType() != newRecord.getRegistryType();
+    boolean urlChanged = !oldRecord.getUrl1().equals(newRecord.getUrl1())
+      || !oldRecord.getUrl2().equals(newRecord.getUrl2());
+    boolean roleChanged =
+      oldRecord.getRole1() != newRecord.getRole1() || oldRecord.getRole2() != newRecord.getRole2();
+
+    // "Transition" here means the CRR changed in a field this dispatch reacts to: registry, url, or
+    // role. A strictly newer CRR version can arrive with all three identical (a pure version bump)
+    // after clearing the isNewerThan + hasSameInfo guards in refreshClusterRoleRecord; that is not
+    // a transition, so skip it rather than inflate CRR_TRANSITION_COUNT or push a sample into
+    // CRR_TRANSITION_DURATION_MS.
+    if (!registryChanged && !urlChanged && !roleChanged) {
+      LOG.info("HA group {} applied a newer CRR version with no registry/url/role change; no "
+        + "transition work to do", haGroup.getGroupInfo());
+      return;
+    }
+
+    // Count and time the transition here on the CRR-write path, the autonomous-failover path for
+    // the ZK-less client: refreshClusterRoleRecord detects a newer CRR and dispatches here to run
+    // the close/invalidate work per HA policy. Duration is recorded in finally so a transit that
+    // fails partway still contributes its time-to-failure; HA_ROLE_TRANSITION_FAILED_COUNTER
+    // (recorded by the caller on dispatch failure/timeout) distinguishes failed transits.
+    GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_COUNT.increment();
+    HAGroupMetricsManager.increment(haGroup.getName(), MetricType.CRR_TRANSITION_COUNT);
+    long startTime = System.currentTimeMillis();
+    try {
+      if (urlChanged) {
+        // A change in url requires handling the connection transitions.
+        transitClusterUrl(haGroup, oldRecord, newRecord);
+      } else {
+        // If url is not changing then handle any role transition.
+        transitClusterRole(haGroup, oldRecord, newRecord);
+      }
+    } finally {
+      long durationMs = System.currentTimeMillis() - startTime;
+      GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_DURATION_MS.update(durationMs);
+      HAGroupMetricsManager.update(haGroup.getName(), MetricType.CRR_TRANSITION_DURATION_MS,
+        durationMs);
     }
   }
 

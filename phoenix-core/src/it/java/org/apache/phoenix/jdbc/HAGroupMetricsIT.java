@@ -21,8 +21,8 @@ import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATT
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_CACHE_AGE_MS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_REFRESH_COUNT;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_DURATION_MS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_DURATION_MS;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_MUTATION_BLOCKED_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_POLLER_TICK_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_POLLER_TICK_FAILURES;
@@ -109,7 +109,7 @@ public class HAGroupMetricsIT extends HABaseIT {
   @Test(timeout = 300000)
   public void testFailoverCountAndDuration() throws Exception {
     long countBefore = GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue();
-    long durationBefore = GLOBAL_HA_FAILOVER_DURATION_MS.getMetric().getValue();
+    long durationBefore = GLOBAL_HA_CRR_TRANSITION_DURATION_MS.getMetric().getValue();
 
     try (Connection conn = DriverManager.getConnection(CLUSTERS.getJdbcHAUrl(), clientProperties)) {
       conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (1, 1)");
@@ -118,10 +118,10 @@ public class HAGroupMetricsIT extends HABaseIT {
     }
 
     long countAfter = GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue();
-    long durationAfter = GLOBAL_HA_FAILOVER_DURATION_MS.getMetric().getValue();
+    long durationAfter = GLOBAL_HA_CRR_TRANSITION_DURATION_MS.getMetric().getValue();
     assertTrue("HA_FAILOVER_COUNT should increment on cluster role transition",
       countAfter > countBefore);
-    assertTrue("HA_FAILOVER_DURATION_MS sum should grow on transition",
+    assertTrue("CRR_TRANSITION_DURATION_MS sum should grow on transition",
       durationAfter >= durationBefore);
   }
 
@@ -281,7 +281,7 @@ public class HAGroupMetricsIT extends HABaseIT {
 
   private void resetAllHaMetrics() {
     GLOBAL_HA_FAILOVER_COUNT.getMetric().reset();
-    GLOBAL_HA_FAILOVER_DURATION_MS.getMetric().reset();
+    GLOBAL_HA_CRR_TRANSITION_DURATION_MS.getMetric().reset();
     GLOBAL_HA_MUTATION_BLOCKED_COUNT.getMetric().reset();
     GLOBAL_HA_STALE_CRR_DETECTED_COUNT.getMetric().reset();
     GLOBAL_HA_CRR_REFRESH_COUNT.getMetric().reset();

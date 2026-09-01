@@ -35,10 +35,13 @@ import static org.apache.phoenix.monitoring.MetricType.COUNT_ROWS_SCANNED;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_CALLS;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_RPC_RETRIES;
 import static org.apache.phoenix.monitoring.MetricType.COUNT_SCANNED_REGIONS;
+import static org.apache.phoenix.monitoring.MetricType.CRR_TRANSITION_COUNT;
+import static org.apache.phoenix.monitoring.MetricType.CRR_TRANSITION_DURATION_MS;
 import static org.apache.phoenix.monitoring.MetricType.HA_CRR_CACHE_AGE_MS;
 import static org.apache.phoenix.monitoring.MetricType.HA_CRR_REFRESH_COUNT;
+import static org.apache.phoenix.monitoring.MetricType.HA_FAILOVER_CONNECTION_CREATED_COUNTER;
+import static org.apache.phoenix.monitoring.MetricType.HA_FAILOVER_CONNECTION_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_FAILOVER_COUNT;
-import static org.apache.phoenix.monitoring.MetricType.HA_FAILOVER_DURATION_MS;
 import static org.apache.phoenix.monitoring.MetricType.HA_MUTATION_BLOCKED_COUNT;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_CONNECTION_CREATED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_CONNECTION_ERROR_COUNTER;
@@ -56,6 +59,7 @@ import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_POOL2_TASK_RE
 import static org.apache.phoenix.monitoring.MetricType.HA_PARALLEL_TASK_TIMEOUT_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_POLLER_TICK_COUNT;
 import static org.apache.phoenix.monitoring.MetricType.HA_POLLER_TICK_FAILURES;
+import static org.apache.phoenix.monitoring.MetricType.HA_ROLE_TRANSITION_FAILED_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.HA_STALE_CRR_DETECTED_COUNT;
 import static org.apache.phoenix.monitoring.MetricType.HCONNECTIONS_COUNTER;
 import static org.apache.phoenix.monitoring.MetricType.INDEX_COMMIT_FAILURE_SIZE;
@@ -172,7 +176,11 @@ public enum GlobalClientMetrics {
   GLOBAL_HA_PARALLEL_CONNECTION_CREATED_COUNTER(HA_PARALLEL_CONNECTION_CREATED_COUNTER),
 
   GLOBAL_HA_FAILOVER_COUNT(HA_FAILOVER_COUNT),
-  GLOBAL_HA_FAILOVER_DURATION_MS(HA_FAILOVER_DURATION_MS),
+  GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER(HA_FAILOVER_CONNECTION_FAILED_COUNTER),
+  GLOBAL_HA_FAILOVER_CONNECTION_CREATED_COUNTER(HA_FAILOVER_CONNECTION_CREATED_COUNTER),
+  GLOBAL_HA_ROLE_TRANSITION_FAILED_COUNTER(HA_ROLE_TRANSITION_FAILED_COUNTER),
+  GLOBAL_HA_CRR_TRANSITION_COUNT(CRR_TRANSITION_COUNT),
+  GLOBAL_HA_CRR_TRANSITION_DURATION_MS(CRR_TRANSITION_DURATION_MS),
   GLOBAL_HA_MUTATION_BLOCKED_COUNT(HA_MUTATION_BLOCKED_COUNT),
   GLOBAL_HA_STALE_CRR_DETECTED_COUNT(HA_STALE_CRR_DETECTED_COUNT),
   GLOBAL_HA_CRR_REFRESH_COUNT(HA_CRR_REFRESH_COUNT),

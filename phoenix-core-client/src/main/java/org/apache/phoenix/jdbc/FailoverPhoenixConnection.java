@@ -19,7 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.apache.phoenix.jdbc.HighAvailabilityUtil.isMutationBlockedIOExceptionExistsInThrowable;
 import static org.apache.phoenix.jdbc.HighAvailabilityUtil.isStaleClusterRoleRecordExceptionExistsInThrowable;
-import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_DURATION_MS;
+import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_CREATED_COUNTER;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_MUTATION_BLOCKED_COUNT;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_HA_STALE_CRR_DETECTED_COUNT;
 
@@ -44,6 +44,7 @@ import java.util.concurrent.Executor;
 import org.apache.phoenix.exception.FailoverSQLException;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
+import org.apache.phoenix.monitoring.HAGroupMetricsManager;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.slf4j.Logger;
@@ -111,6 +112,13 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
     this.isClosed = false;
     this.connection =
       context.getHAGroup().connectActive(context.getProperties(), context.getHAURLInfo());
+    // Count one successfully constructed FailoverPhoenixConnection. This is not a matched pair with
+    // HA_FAILOVER_CONNECTION_FAILED_COUNTER: that counter increments on every failed active-connect
+    // attempt across all callers (including each failover() retry), so failed/(created+failed) is
+    // not a valid rate.
+    GLOBAL_HA_FAILOVER_CONNECTION_CREATED_COUNTER.increment();
+    HAGroupMetricsManager.increment(context.getHAGroup().getName(),
+      MetricType.HA_FAILOVER_CONNECTION_CREATED_COUNTER);
   }
 
   /**
@@ -175,63 +183,55 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
       return;
     }
 
-    final long failoverStartMs = EnvironmentEdgeManager.currentTimeMillis();
-    try {
-      PhoenixConnection newConn = null;
-      SQLException cause = null;
-      final long startTime = EnvironmentEdgeManager.currentTimeMillis();
-      while (
-        newConn == null && EnvironmentEdgeManager.currentTimeMillis() < startTime + timeoutMs
-      ) {
+    PhoenixConnection newConn = null;
+    SQLException cause = null;
+    final long startTime = EnvironmentEdgeManager.currentTimeMillis();
+    while (newConn == null && EnvironmentEdgeManager.currentTimeMillis() < startTime + timeoutMs) {
+      try {
+        newConn =
+          context.getHAGroup().connectActive(context.getProperties(), context.getHAURLInfo());
+      } catch (SQLException e) {
+        cause = e;
+        LOG.info("Got exception when trying to connect to active cluster.", e);
         try {
-          newConn =
-            context.getHAGroup().connectActive(context.getProperties(), context.getHAURLInfo());
-        } catch (SQLException e) {
-          cause = e;
-          LOG.info("Got exception when trying to connect to active cluster.", e);
-          try {
-            Thread.sleep(100); // TODO: be smart than this
-          } catch (InterruptedException ie) {
-            Thread.currentThread().interrupt();
-            throw new SQLException("Got interrupted waiting for connection failover", e);
-          }
+          Thread.sleep(100); // TODO: be smart than this
+        } catch (InterruptedException ie) {
+          Thread.currentThread().interrupt();
+          throw new SQLException("Got interrupted waiting for connection failover", e);
         }
       }
-      if (newConn == null) {
-        throw new FailoverSQLException("Can not failover connection",
-          context.getHAGroup().getGroupInfo().toString(), cause);
-      }
-
-      final PhoenixConnection oldConn = connection;
-      connection = newConn;
-      if (oldConn != null) {
-        // aggregate metrics
-        previousMutationMetrics = oldConn.getMutationMetrics();
-        previousReadMetrics = oldConn.getReadMetrics();
-        oldConn.clearMetrics();
-
-        // close old connection
-        if (!oldConn.isClosed()) {
-          // TODO: what happens to in-flight edits/mutations?
-          // Can we copy into the new connection we do not allow this failover?
-          // MutationState state = oldConn.getMutationState();
-          try {
-            oldConn.close(new SQLExceptionInfo.Builder(SQLExceptionCode.HA_CLOSED_AFTER_FAILOVER)
-              .setMessage("Phoenix connection got closed due to failover")
-              .setHaGroupInfo(context.getHAGroup().getGroupInfo().toString()).build()
-              .buildException());
-          } catch (SQLException e) {
-            LOG.error("Failed to close old connection after failover: {}", e.getMessage());
-            LOG.info("Full stack when closing old connection after failover", e);
-          }
-        }
-      }
-      LOG.info("Connection {} failed over to {}", context.getHAGroup().getGroupInfo(),
-        connection.getURL());
-    } finally {
-      GLOBAL_HA_FAILOVER_DURATION_MS
-        .update(EnvironmentEdgeManager.currentTimeMillis() - failoverStartMs);
     }
+    if (newConn == null) {
+      throw new FailoverSQLException("Can not failover connection",
+        context.getHAGroup().getGroupInfo().toString(), cause);
+    }
+
+    final PhoenixConnection oldConn = connection;
+    connection = newConn;
+    if (oldConn != null) {
+      // aggregate metrics
+      previousMutationMetrics = oldConn.getMutationMetrics();
+      previousReadMetrics = oldConn.getReadMetrics();
+      oldConn.clearMetrics();
+
+      // close old connection
+      if (!oldConn.isClosed()) {
+        // TODO: what happens to in-flight edits/mutations?
+        // Can we copy into the new connection we do not allow this failover?
+        // MutationState state = oldConn.getMutationState();
+        try {
+          oldConn.close(new SQLExceptionInfo.Builder(SQLExceptionCode.HA_CLOSED_AFTER_FAILOVER)
+            .setMessage("Phoenix connection got closed due to failover")
+            .setHaGroupInfo(context.getHAGroup().getGroupInfo().toString()).build()
+            .buildException());
+        } catch (SQLException e) {
+          LOG.error("Failed to close old connection after failover: {}", e.getMessage());
+          LOG.info("Full stack when closing old connection after failover", e);
+        }
+      }
+    }
+    LOG.info("Connection {} failed over to {}", context.getHAGroup().getGroupInfo(),
+      connection.getURL());
   }
 
   /**
@@ -337,6 +337,8 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
       } catch (Exception e) {
         if (isStaleClusterRoleRecordExceptionExistsInThrowable(e)) {
           GLOBAL_HA_STALE_CRR_DETECTED_COUNT.increment();
+          HAGroupMetricsManager.increment(context.getHAGroup().getName(),
+            MetricType.HA_STALE_CRR_DETECTED_COUNT);
           // If we receive StaleClusterRoleRecordException, that means Operation was
           // supposed to be executed on Active Cluster but was in reality was sent to
           // STANDBY Cluster, that can happen only when Failover is in Progress, So we
@@ -363,6 +365,8 @@ public class FailoverPhoenixConnection implements PhoenixMonitoredConnection {
         }
         if (isMutationBlockedIOExceptionExistsInThrowable(e)) {
           GLOBAL_HA_MUTATION_BLOCKED_COUNT.increment();
+          HAGroupMetricsManager.increment(context.getHAGroup().getName(),
+            MetricType.HA_MUTATION_BLOCKED_COUNT);
         }
         if (policy.shouldFailover(e, ++failoverCount)) {
           failover(timeoutMs);

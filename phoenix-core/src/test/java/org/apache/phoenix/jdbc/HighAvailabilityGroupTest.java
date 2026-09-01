@@ -19,6 +19,7 @@ package org.apache.phoenix.jdbc;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
@@ -27,12 +28,16 @@ import static org.junit.Assert.fail;
 import java.io.IOException;
 import java.io.InterruptedIOException;
 import java.sql.SQLException;
+import java.util.HashSet;
 import java.util.Properties;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.jdbc.ClusterRoleRecord.ClusterRole;
 import org.apache.phoenix.jdbc.HighAvailabilityGroup.HAGroupInfo;
 import org.apache.phoenix.jdbc.HighAvailabilityGroup.State;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
+import org.apache.phoenix.monitoring.HAGroupClientMetricsSource;
+import org.apache.phoenix.monitoring.HAGroupMetricsManager;
+import org.apache.phoenix.monitoring.MetricType;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.slf4j.Logger;
@@ -616,6 +621,224 @@ public class HighAvailabilityGroupTest {
     } finally {
       // Consume the interrupt flag so it does not leak into a reused fork.
       Thread.interrupted();
+    }
+  }
+
+  /**
+   * A real counted role-flip transition driven through {@code refreshClusterRoleRecord} must both
+   * increment {@code HA_FAILOVER_COUNT} and record a sample on {@code CRR_TRANSITION_DURATION_MS}.
+   * This pins the duration metric to the CRR-write transition path (the path that autonomous
+   * failovers actually take) rather than the connection-level
+   * {@code FailoverPhoenixConnection.failover()} path, which is never auto-invoked under the
+   * default {@code ExplicitFailoverPolicy}. Active URL flips from url1 to url2 so
+   * {@code shouldCountFailover} returns true; the {@code URLS} entry is seeded empty so the policy
+   * transition is a clean no-op (no real connections needed).
+   */
+  @Test
+  public void testCountedTransitionRecordsFailoverCountAndDuration() throws Exception {
+    String haGroupName = "testCountedTransitionRecordsFailoverCountAndDuration";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord aActiveBStandby = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    ClusterRoleRecord aStandbyBActive = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.STANDBY, url2, ClusterRole.ACTIVE, 11L);
+
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+    // Seed an empty URL set so the policy-side transition iterates nothing and is a clean no-op.
+    HighAvailabilityGroup.URLS.put(info, new HashSet<>());
+    try {
+      HighAvailabilityGroup group = Mockito
+        .spy(new HighAvailabilityGroup(info, new Properties(), aActiveBStandby, State.READY));
+      Mockito.doReturn(aStandbyBActive).when(group).getClusterRoleRecordFromEndpoint();
+
+      long countBefore = GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue();
+      long durationSamplesBefore =
+        GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_DURATION_MS.getMetric().getNumberOfSamples();
+
+      assertTrue("A real role-flip transition must apply and return true",
+        group.refreshClusterRoleRecord(true));
+      assertSame("The new record must be applied after the transition", aStandbyBActive,
+        group.getRoleRecord());
+
+      assertEquals("An active-URL flip must increment HA_FAILOVER_COUNT", countBefore + 1,
+        GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue());
+      assertEquals(
+        "The transition must record a CRR_TRANSITION_DURATION_MS sample on the CRR-write " + "path",
+        durationSamplesBefore + 1,
+        GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_DURATION_MS.getMetric().getNumberOfSamples());
+
+      // Per-group (ha_group-tagged) emission mirrors the JVM-global counters. This group name is
+      // unique to this test, so its source starts empty and this single transition yields exactly 1
+      // on both the failover and the applied-transition counters.
+      HAGroupClientMetricsSource source = HAGroupMetricsManager.getIfPresent(haGroupName);
+      assertNotNull("The transition must register the per-group metrics source", source);
+      assertEquals("Per-group HA_FAILOVER_COUNT must count the active-URL flip", 1L,
+        source.getCounterValue(MetricType.HA_FAILOVER_COUNT));
+      assertEquals("Per-group CRR_TRANSITION_COUNT must count the applied transition", 1L,
+        source.getCounterValue(MetricType.CRR_TRANSITION_COUNT));
+    } finally {
+      HighAvailabilityGroup.URLS.remove(info);
+      HAGroupMetricsManager.remove(haGroupName);
+    }
+  }
+
+  /**
+   * A strictly newer CRR version whose registry/url/role fields are all identical is a pure version
+   * bump, not a transition. It clears the {@code equals()} and {@code shouldApplyRefreshedRecord()}
+   * guards in {@code refreshClusterRoleRecord} (so the newer record is still adopted), but the HA
+   * policy's change guard in {@code transitClusterRoleRecord} must skip it: no
+   * {@code CRR_TRANSITION_COUNT} increment, no {@code CRR_TRANSITION_DURATION_MS} sample, and no
+   * failover. This pins the guard against a regression that would re-inflate the transition
+   * counters on version bumps.
+   */
+  @Test
+  public void testPureVersionBumpDoesNotCountOrTimeTransition() throws Exception {
+    String haGroupName = "testPureVersionBumpDoesNotCountOrTimeTransition";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord recordV10 = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    // Same registry/url/role, only the admin version advances.
+    ClusterRoleRecord recordV11 = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 11L);
+
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+    HighAvailabilityGroup.URLS.put(info, new HashSet<>());
+    try {
+      HighAvailabilityGroup group =
+        Mockito.spy(new HighAvailabilityGroup(info, new Properties(), recordV10, State.READY));
+      Mockito.doReturn(recordV11).when(group).getClusterRoleRecordFromEndpoint();
+
+      long transitionCountBefore =
+        GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_COUNT.getMetric().getValue();
+      long durationSamplesBefore =
+        GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_DURATION_MS.getMetric().getNumberOfSamples();
+      long failoverCountBefore =
+        GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue();
+
+      assertTrue("A strictly newer version must still be applied",
+        group.refreshClusterRoleRecord(true));
+      assertSame("The newer-version record must be adopted", recordV11, group.getRoleRecord());
+
+      assertEquals("A pure version bump must not increment CRR_TRANSITION_COUNT",
+        transitionCountBefore,
+        GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_COUNT.getMetric().getValue());
+      assertEquals("A pure version bump must not record a CRR_TRANSITION_DURATION_MS sample",
+        durationSamplesBefore,
+        GlobalClientMetrics.GLOBAL_HA_CRR_TRANSITION_DURATION_MS.getMetric().getNumberOfSamples());
+      assertEquals("A pure version bump is not a failover", failoverCountBefore,
+        GlobalClientMetrics.GLOBAL_HA_FAILOVER_COUNT.getMetric().getValue());
+
+      // Nothing was emitted for this group, so if a per-group source exists its transition counter
+      // must still be zero.
+      HAGroupClientMetricsSource source = HAGroupMetricsManager.getIfPresent(haGroupName);
+      if (source != null) {
+        assertEquals("Per-group CRR_TRANSITION_COUNT must stay zero on a version bump", 0L,
+          source.getCounterValue(MetricType.CRR_TRANSITION_COUNT));
+      }
+    } finally {
+      HighAvailabilityGroup.URLS.remove(info);
+      HAGroupMetricsManager.remove(haGroupName);
+    }
+  }
+
+  /**
+   * A failed {@code connectActive} (no active cluster in the record) must increment
+   * {@code HA_FAILOVER_CONNECTION_FAILED_COUNTER} on its single SQLException throw funnel.
+   */
+  @Test
+  public void testConnectActiveFailureIncrementsFailedCounter() {
+    String haGroupName = "testConnectActiveFailureIncrementsFailedCounter";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    // Both STANDBY → no active URL → connectActive takes the HA_NO_ACTIVE_CLUSTER throw path.
+    ClusterRoleRecord bothStandby = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.STANDBY, url2, ClusterRole.STANDBY, 10L);
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+    HighAvailabilityGroup group =
+      new HighAvailabilityGroup(info, new Properties(), bothStandby, State.READY);
+
+    long failedBefore =
+      GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER.getMetric().getValue();
+    try {
+      group.connectActive(new Properties(), new HAURLInfo(haGroupName));
+      fail("connectActive must throw when the HA group has no active cluster");
+    } catch (SQLException e) {
+      assertEquals(SQLExceptionCode.CANNOT_ESTABLISH_CONNECTION.getErrorCode(), e.getErrorCode());
+    }
+    assertEquals("A failed connectActive must increment the failed counter", failedBefore + 1,
+      GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER.getMetric().getValue());
+    // Per-group mirror: unique group name → its FAILED counter reflects exactly this one failure.
+    HAGroupClientMetricsSource source = HAGroupMetricsManager.getIfPresent(haGroupName);
+    assertNotNull("A failed connectActive must register the per-group metrics source", source);
+    assertEquals("Per-group HA_FAILOVER_CONNECTION_FAILED_COUNTER must count the failed connect",
+      1L, source.getCounterValue(MetricType.HA_FAILOVER_CONNECTION_FAILED_COUNTER));
+    HAGroupMetricsManager.remove(haGroupName);
+  }
+
+  /**
+   * A successful {@code connectActive} must NOT increment
+   * {@code HA_FAILOVER_CONNECTION_FAILED_COUNTER}. Guards against the counter being placed on a
+   * path that also runs on success (a non-vacuous negative assertion).
+   */
+  @Test
+  public void testConnectActiveSuccessLeavesFailedCounterUnchanged() throws Exception {
+    String haGroupName = "testConnectActiveSuccessLeavesFailedCounterUnchanged";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord aActiveBStandby = new ClusterRoleRecord(haGroupName,
+      HighAvailabilityPolicy.FAILOVER, url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+    HighAvailabilityGroup group =
+      Mockito.spy(new HighAvailabilityGroup(info, new Properties(), aActiveBStandby, State.READY));
+
+    PhoenixConnection conn = Mockito.mock(PhoenixConnection.class);
+    Mockito.doReturn(conn).when(group).connectToOneCluster(Mockito.any(String.class),
+      Mockito.any(Properties.class), Mockito.any(HAURLInfo.class));
+    Mockito.doReturn(true).when(group).isActive(conn);
+
+    long failedBefore =
+      GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER.getMetric().getValue();
+    assertSame("connectActive must return the established connection", conn,
+      group.connectActive(new Properties(), new HAURLInfo(haGroupName)));
+    assertEquals("A successful connectActive must not increment the failed counter", failedBefore,
+      GlobalClientMetrics.GLOBAL_HA_FAILOVER_CONNECTION_FAILED_COUNTER.getMetric().getValue());
+    // Per-group negative check: a successful connect emits no FAILED for this group. Either the
+    // source was never created (no emission touched it) or its FAILED counter is still zero.
+    HAGroupClientMetricsSource source = HAGroupMetricsManager.getIfPresent(haGroupName);
+    assertTrue("A successful connectActive must not emit a per-group failed count", source == null
+      || source.getCounterValue(MetricType.HA_FAILOVER_CONNECTION_FAILED_COUNTER) == 0L);
+    HAGroupMetricsManager.remove(haGroupName);
+  }
+
+  /**
+   * The per-group metrics source lifecycle is bound to the HA group: {@code init} pre-registers it
+   * (so the {@code ha_group}-tagged series exists as soon as the group is ready) and {@code close}
+   * detaches it (freeing the metrics2 source name for a later re-create).
+   */
+  @Test
+  public void testInitRegistersPerGroupSourceAndCloseRemovesIt() throws Exception {
+    String haGroupName = "testInitRegistersPerGroupSourceAndCloseRemovesIt";
+    String url1 = "host1\\:60010";
+    String url2 = "host2\\:60010";
+    ClusterRoleRecord record = new ClusterRoleRecord(haGroupName, HighAvailabilityPolicy.FAILOVER,
+      url1, ClusterRole.ACTIVE, url2, ClusterRole.STANDBY, 10L);
+    HAGroupInfo info = new HAGroupInfo(haGroupName, url1, url2);
+    HighAvailabilityGroup group =
+      Mockito.spy(new HighAvailabilityGroup(info, new Properties(), record, State.UNINITIALIZED));
+    Mockito.doReturn(record).when(group).getClusterRoleRecordFromEndpoint();
+    try {
+      assertNull("No per-group source should exist before init",
+        HAGroupMetricsManager.getIfPresent(haGroupName));
+      group.init();
+      assertNotNull("init must pre-register the per-group metrics source",
+        HAGroupMetricsManager.getIfPresent(haGroupName));
+      group.close();
+      assertNull("close must detach the per-group metrics source",
+        HAGroupMetricsManager.getIfPresent(haGroupName));
+    } finally {
+      HAGroupMetricsManager.remove(haGroupName);
     }
   }
 }
