@@ -1190,6 +1190,47 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
+   * Determines whether any data table mutation in the batch omits a column that a covered global
+   * index materializes (an indexed or a covered column). Such a partial upsert cannot be indexed
+   * from the mutation alone: for an immutable table the region-side build skips the current-row
+   * read-back, so a covered column set by an earlier upsert would be dropped from the index while
+   * surviving in the data table. Columns are resolved to their on-disk qualifiers per the data
+   * table storage scheme, so a single-cell table (whose upserts rewrite the whole cell) is never
+   * treated as partial. Only covered global maintainers are considered.
+   */
+  private boolean isPartialCoveredIndexMutation(PhoenixIndexMetaData indexMetaData,
+    MiniBatchOperationInProgress<Mutation> miniBatchOp) {
+    Set<ColumnReference> columns = new HashSet<ColumnReference>();
+    for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
+      if (
+        indexMaintainer instanceof TransformMaintainer || indexMaintainer.isLocalIndex()
+          || indexMaintainer.isUncovered()
+      ) {
+        continue;
+      }
+      columns.addAll(indexMaintainer.getAllColumnsForDataTable());
+    }
+    if (columns.isEmpty()) {
+      return false;
+    }
+    for (int i = 0; i < miniBatchOp.size(); i++) {
+      if (isAtomicOperationComplete(miniBatchOp.getOperationStatus(i))) {
+        continue;
+      }
+      Mutation m = miniBatchOp.getOperation(i);
+      if (!this.builder.isEnabled(m)) {
+        continue;
+      }
+      for (ColumnReference column : columns) {
+        if (m.get(column.getFamily(), column.getQualifier()).isEmpty()) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  /**
    * Retrieve the data row state either from memory or disk. The rows are locked by the caller.
    * <p>
    * The disk read is opened through {@link ServerScanUtil} so it is TTL-masked exactly like a
@@ -1985,6 +2026,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           || context.hasStrictConditionalTTL()
           || !context.immutableRows && context.hasUncoveredIndex
             && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp)
+          || context.immutableRows && context.hasGlobalIndex
+            && isPartialCoveredIndexMutation(indexMetaData, miniBatchOp)
       ) {
         getCurrentRowStates(c, context, batchTimestamp);
       }
