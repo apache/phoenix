@@ -1190,22 +1190,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * Determines whether any data table mutation in the batch omits a column that a covered global
-   * index materializes (an indexed or a covered column). Such a partial upsert cannot be indexed
-   * from the mutation alone: for an immutable table the region-side build skips the current-row
-   * read-back, so a covered column set by an earlier upsert would be dropped from the index while
-   * surviving in the data table. Columns are resolved to their on-disk qualifiers per the data
-   * table storage scheme, so a single-cell table (whose upserts rewrite the whole cell) is never
-   * treated as partial. Only covered global maintainers are considered.
+   * Determines whether any data table mutation in the batch omits an on-disk column that a global
+   * index materializes (an indexed, covered, or index-WHERE column). For an immutable table the
+   * region-side build skips the current-row read-back, so such a partial upsert would drop or
+   * misbuild that column in the index while it survives in the data table. Columns are resolved to
+   * their on-disk qualifiers per the data table storage scheme, so a single-cell table (whose
+   * upserts rewrite the whole cell) is never treated as partial. Both covered and uncovered global
+   * maintainers are considered; transform and local index maintainers are skipped.
    */
-  private boolean isPartialCoveredIndexMutation(PhoenixIndexMetaData indexMetaData,
+  private boolean isPartialGlobalIndexMutation(PhoenixIndexMetaData indexMetaData,
     MiniBatchOperationInProgress<Mutation> miniBatchOp) {
     Set<ColumnReference> columns = new HashSet<ColumnReference>();
     for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
-      if (
-        indexMaintainer instanceof TransformMaintainer || indexMaintainer.isLocalIndex()
-          || indexMaintainer.isUncovered()
-      ) {
+      if (indexMaintainer instanceof TransformMaintainer || indexMaintainer.isLocalIndex()) {
         continue;
       }
       columns.addAll(indexMaintainer.getAllColumnsForDataTable());
@@ -2026,8 +2023,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           || context.hasStrictConditionalTTL()
           || !context.immutableRows && context.hasUncoveredIndex
             && isPartialUncoveredIndexMutation(indexMetaData, miniBatchOp)
-          || context.immutableRows && context.hasGlobalIndex
-            && isPartialCoveredIndexMutation(indexMetaData, miniBatchOp)
+          || context.immutableRows && (context.hasGlobalIndex || context.hasUncoveredIndex)
+            && isPartialGlobalIndexMutation(indexMetaData, miniBatchOp)
       ) {
         getCurrentRowStates(c, context, batchTimestamp);
       }

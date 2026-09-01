@@ -753,6 +753,65 @@ public class GlobalIndexCheckerIT extends BaseTest {
     }
   }
 
+  /**
+   * Same partial-upsert scenario as testPartialRowUpdateForImmutable but for an UNCOVERED global
+   * index. A partial upsert that omits the indexed column (val1) must not create a spurious
+   * NULL-keyed index entry: for an immutable table val1 keeps its earlier value, so the index must
+   * still resolve the row under its original key and never under IS NULL. Verified via the index
+   * path (explain plan asserts the index table is used).
+   */
+  @Test
+  public void testPartialRowUpdateForImmutableUncovered() throws Exception {
+    if (async || encoded) {
+      // No need to run this test more than once
+      return;
+    }
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      conn.createStatement()
+        .execute("create table " + dataTableName
+          + " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10))"
+          + " IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME="
+          + PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+      // full upsert that sets the indexed column
+      conn.createStatement()
+        .execute("upsert into " + dataTableName + " (id, val1, val2) values ('a', 'ab', 'abc')");
+      conn.commit();
+      String indexTableName = generateUniqueName();
+      conn.createStatement().execute("CREATE UNCOVERED INDEX " + indexTableName + " on "
+        + dataTableName + " (val1)" + this.indexDDLOptions);
+      // PARTIAL upsert that omits the indexed column val1. For immutable rows val1 stays 'ab'.
+      conn.createStatement()
+        .execute("upsert into " + dataTableName + " (id, val2) values ('a', 'xyz')");
+      conn.commit();
+
+      // (a) index path must still resolve the row under its original key 'ab'
+      String selectAb = "SELECT id from " + dataTableName + " WHERE val1 = 'ab'";
+      assertExplainPlan(conn, selectAb, dataTableName, indexTableName);
+      try (ResultSet rs = conn.createStatement().executeQuery(selectAb)) {
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertFalse(rs.next());
+      }
+
+      // (b) count via the index must be exactly 1
+      String countAb = "SELECT COUNT(*) from " + dataTableName + " WHERE val1 = 'ab'";
+      assertExplainPlan(conn, countAb, dataTableName, indexTableName);
+      try (ResultSet rs = conn.createStatement().executeQuery(countAb)) {
+        assertTrue(rs.next());
+        assertEquals(1, rs.getInt(1));
+      }
+
+      // (c) a partial build lacking the read-back would emit a spurious NULL-keyed index entry
+      // pointing at id='a'; the index path for IS NULL must therefore return nothing
+      String selectNull = "SELECT id from " + dataTableName + " WHERE val1 IS NULL";
+      assertExplainPlan(conn, selectNull, dataTableName, indexTableName);
+      try (ResultSet rs = conn.createStatement().executeQuery(selectNull)) {
+        assertFalse(rs.next());
+      }
+    }
+  }
+
   @Test
   public void testFailPreIndexRowUpdate() throws Exception {
     String dataTableName = generateUniqueName();
