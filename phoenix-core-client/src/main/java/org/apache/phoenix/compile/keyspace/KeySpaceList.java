@@ -41,10 +41,25 @@ public final class KeySpaceList {
 
   private final List<KeySpace> spaces;
   private final int nDims;
+  /**
+   * True when this list was produced by {@link #widenToBudget} (trailing dims replaced
+   * with EVERYTHING to stay under the cartesian bound). Residual filter must retain
+   * predicates for dropped dimensions.
+   */
+  private final boolean approximated;
 
   private KeySpaceList(int nDims, List<KeySpace> spaces) {
+    this(nDims, spaces, false);
+  }
+
+  private KeySpaceList(int nDims, List<KeySpace> spaces, boolean approximated) {
     this.nDims = nDims;
     this.spaces = Collections.unmodifiableList(spaces);
+    this.approximated = approximated;
+  }
+
+  public boolean isApproximated() {
+    return approximated;
   }
 
   public static KeySpaceList unsatisfiable(int nDims) {
@@ -174,6 +189,8 @@ public final class KeySpaceList {
       right = widenToBudget(right, budget);
       productSize = (long) left.spaces.size() * (long) right.spaces.size();
     }
+    boolean approx = this.approximated || other.approximated
+        || left.approximated || right.approximated;
     List<KeySpace> result = new ArrayList<>((int) Math.min(productSize, CARTESIAN_BOUND));
     for (KeySpace a : left.spaces) {
       for (KeySpace b : right.spaces) {
@@ -183,7 +200,8 @@ public final class KeySpaceList {
         }
       }
     }
-    return fromNormalized(nDims, result);
+    KeySpaceList out = fromNormalized(nDims, result);
+    return approx ? new KeySpaceList(out.nDims, new java.util.ArrayList<>(out.spaces), true) : out;
   }
 
   /**
@@ -221,7 +239,7 @@ public final class KeySpaceList {
       current = dropped;
     }
     mergeToFixpoint(current);
-    return new KeySpaceList(n, current);
+    return new KeySpaceList(n, current, true);
   }
 
   /**
@@ -259,7 +277,9 @@ public final class KeySpaceList {
     List<KeySpace> combined = new ArrayList<>(this.spaces.size() + other.spaces.size());
     combined.addAll(this.spaces);
     combined.addAll(other.spaces);
-    return fromNormalized(nDims, combined);
+    KeySpaceList out = fromNormalized(nDims, combined);
+    return (this.approximated || other.approximated)
+      ? new KeySpaceList(out.nDims, new java.util.ArrayList<>(out.spaces), true) : out;
   }
 
   /**

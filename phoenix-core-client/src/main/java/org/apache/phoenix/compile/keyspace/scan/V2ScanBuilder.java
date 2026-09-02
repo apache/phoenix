@@ -124,18 +124,29 @@ public final class V2ScanBuilder {
      * own classification path (not always derivable from {@code scanRanges}).
      */
     public final boolean isNothing;
+    /**
+     * True when the emitted scan is a sound over-approximation of the {@link KeySpaceList}
+     * (algebra widening and/or extractor cartesian truncation). Callers must retain
+     * visitor-consumed predicates in the residual filter.
+     */
+    public final boolean approximated;
 
     public Result(ScanRanges scanRanges, boolean isNothing) {
+      this(scanRanges, isNothing, false);
+    }
+
+    public Result(ScanRanges scanRanges, boolean isNothing, boolean approximated) {
       this.scanRanges = scanRanges;
       this.isNothing = isNothing;
+      this.approximated = approximated;
     }
 
     public static Result nothing() {
-      return new Result(ScanRanges.NOTHING, true);
+      return new Result(ScanRanges.NOTHING, true, false);
     }
 
     public static Result everything() {
-      return new Result(ScanRanges.EVERYTHING, false);
+      return new Result(ScanRanges.EVERYTHING, false, false);
     }
   }
 
@@ -233,7 +244,8 @@ public final class V2ScanBuilder {
 
     ScanRanges scanRanges = ScanRanges.create(in.schema, cnf, slotSpan, in.nBuckets, useSkipScan,
       in.table.getRowTimestampColPos(), in.minOffset);
-    return new Result(scanRanges, false);
+    boolean approximated = extract.approximated || in.list.isApproximated();
+    return new Result(scanRanges, false, approximated);
   }
 
   /**
@@ -272,8 +284,11 @@ public final class V2ScanBuilder {
       for (int d = in.prefixSlots; d < nPk; d++) {
         KeyRange r = s.get(d);
         if (r == KeyRange.EVERYTHING_RANGE) {
-          if (thisProductive > 0) return false;  // middle gap
-          continue;
+          // Any unconstrained user dimension (leading or middle) means this is not a
+          // full-row point key. Leading EVERYTHING is especially dangerous: the encoder
+          // emits a separator for the wildcard and buildPointLookupList would treat the
+          // resulting bytes as an exact point, missing valid rows.
+          return false;
         }
         if (r == KeyRange.IS_NULL_RANGE || r == KeyRange.IS_NOT_NULL_RANGE) return false;
         if (!r.isSingleKey()) return false;
@@ -337,7 +352,7 @@ public final class V2ScanBuilder {
       org.apache.phoenix.util.SchemaUtil.VAR_BINARY_SCHEMA,
       cnf, slotSpan, in.nBuckets, pointKeys.size() > 1,
       in.table.getRowTimestampColPos(), in.minOffset);
-    return new Result(scanRanges, false);
+    return new Result(scanRanges, false, in.list.isApproximated());
   }
 
   /**

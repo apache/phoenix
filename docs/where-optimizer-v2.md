@@ -2,7 +2,7 @@
 
 PHOENIX-6791 redesigns Apache Phoenix's WHERE-clause optimizer. This document describes what the redesign is, why it exists, the mathematical model it implements, and how that model is realized in code — with a walkthrough of the pipeline end-to-end.
 
-The source lives in `phoenix-core-client/src/main/java/org/apache/phoenix/compile/keyspace/`. The feature is gated by `QueryServices.WHERE_OPTIMIZER_V2_ENABLED` (default `true` on this branch). When the flag is off, the legacy optimizer runs unchanged.
+The source lives in `phoenix-core-client/src/main/java/org/apache/phoenix/compile/keyspace/`. The feature is gated by `QueryServices.WHERE_OPTIMIZER_V2_ENABLED` (default `false` for first ship; opt-in via config). When the flag is off, the legacy optimizer runs unchanged.
 
 ---
 
@@ -441,7 +441,7 @@ This was a significant debugging accelerator. When the production emission diver
 Two new `QueryServices` constants:
 
 ```
-phoenix.where.optimizer.v2.enabled          (default true  on this branch)
+phoenix.where.optimizer.v2.enabled          (default false for first ship; opt-in via config)
 phoenix.where.optimizer.v2.cartesianBound   (default 50000, same magnitude as legacy MAX_IN_LIST_SKIP_SCAN_SIZE)
 ```
 
@@ -464,7 +464,7 @@ Two test-side helpers compress the most common divergence patterns:
 **Running the suites in either mode.**
 
 ```bash
-# V2 (default) — unit + IT in one invocation:
+# V2 (opt-in) — unit + IT in one invocation:
 mvn -pl phoenix-core verify -DnumForkedIT=12 -Dsurefire.Xmx=4096m -DfailIfNoTests=false
 
 # V1 (legacy) — same, with the override flag flipped off:

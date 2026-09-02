@@ -74,11 +74,23 @@ public final class KeyRangeExtractor {
     public final List<List<KeyRange>> ranges;
     public final int[] slotSpan;
     public final boolean useSkipScan;
+    /**
+     * True when emission widened or truncated relative to the input {@link KeySpaceList}
+     * (cartesian-bound collapse of compounds, or dropping trailing slots). Callers must
+     * keep visitor-consumed predicates in the residual filter when this is set.
+     */
+    public final boolean approximated;
 
     public Result(List<List<KeyRange>> ranges, int[] slotSpan, boolean useSkipScan) {
+      this(ranges, slotSpan, useSkipScan, false);
+    }
+
+    public Result(List<List<KeyRange>> ranges, int[] slotSpan, boolean useSkipScan,
+      boolean approximated) {
       this.ranges = ranges;
       this.slotSpan = slotSpan;
       this.useSkipScan = useSkipScan;
+      this.approximated = approximated;
     }
 
     public boolean isNothing() {
@@ -392,6 +404,7 @@ public final class KeyRangeExtractor {
     // Build one compound KeyRange per space, only over the [compoundStart, compoundEnd)
     // window. Pinned prefix/suffix dims are emitted as individual slots outside the loop.
     List<KeyRange> compounds = new ArrayList<>(list.size());
+    boolean compoundsApproximated = false;
     // Skip the compound build entirely when every productive dim is pinned: no range
     // part to compound. The pinned slots below carry all the narrowing.
     if (compoundLen > 0) {
@@ -514,9 +527,12 @@ public final class KeyRangeExtractor {
     // the list is already bounded. Still, apply a defensive cap.
     BigInteger bound = BigInteger.valueOf(Math.max(1, cartesianBound));
     if (BigInteger.valueOf(compounds.size()).compareTo(bound) > 0) {
-      // Over budget — drop everything past the bound (sound widening: truncation admits
-      // more rows but never fewer; residual filter handles any extras).
-      compounds = compounds.subList(0, cartesianBound);
+      // Over budget — truncating the list would drop matching OR branches (false
+      // negatives a residual cannot recover). Collapse to a single covering envelope
+      // instead; residual filter rejects extras admitted by the wider scan.
+      compounds = java.util.Collections.singletonList(
+        collapseToSingleBoundingRange(compounds));
+      compoundsApproximated = true;
     }
     } // end if (compoundLen > 0)
 
@@ -655,7 +671,7 @@ public final class KeyRangeExtractor {
     //       inside the compound but whose trailing dims don't equal the pinned values
     //       slip through. Force useSkipScan so the filter enforces per-row equality.
     boolean useSkipScan = coalesced.size() > 1 || emittedTrailingPinned;
-    return new Result(out, slotSpan, useSkipScan);
+    return new Result(out, slotSpan, useSkipScan, compoundsApproximated);
   }
 
   /**
@@ -849,10 +865,13 @@ public final class KeyRangeExtractor {
       int slotSize = perSlot.get(d).isEmpty() ? 1 : perSlot.get(d).size();
       running = running.multiply(BigInteger.valueOf(slotSize));
       if (running.compareTo(bound) > 0) {
-        allowed = d + 1;
+        // Stop BEFORE the slot that overflows the bound so the product of emitted
+        // slots stays ≤ bound. Dropped-slot predicates must remain in the residual.
+        allowed = d;
         break;
       }
     }
+    boolean approximated = allowed < kept;
 
     List<List<KeyRange>> out = new ArrayList<>(allowed);
     boolean useSkipScan = false;
@@ -873,7 +892,7 @@ public final class KeyRangeExtractor {
       return everything();
     }
     int[] slotSpan = new int[out.size()];
-    return new Result(out, slotSpan, useSkipScan);
+    return new Result(out, slotSpan, useSkipScan, approximated);
   }
 
   /** First dim at or after {@code from} with a non-EVERYTHING range, or {@code -1}. */
@@ -979,10 +998,13 @@ public final class KeyRangeExtractor {
       int slotSize = perSlot.get(d).isEmpty() ? 1 : perSlot.get(d).size();
       running = running.multiply(BigInteger.valueOf(slotSize));
       if (running.compareTo(bound) > 0) {
-        allowed = d + 1;
+        // Stop BEFORE the slot that overflows the bound so the product of emitted
+        // slots stays ≤ bound. Dropped-slot predicates must remain in the residual.
+        allowed = d;
         break;
       }
     }
+    boolean approximated = allowed < kept;
 
     // Emit per-slot, starting at prefixSlots. Fill EVERYTHING for any gap-slots between
     // prefixSlots and the first constrained dim.
@@ -1142,7 +1164,7 @@ public final class KeyRangeExtractor {
         }
       }
     }
-    return new Result(out, slotSpan, useSkipScan);
+    return new Result(out, slotSpan, useSkipScan, approximated);
   }
 
   /**

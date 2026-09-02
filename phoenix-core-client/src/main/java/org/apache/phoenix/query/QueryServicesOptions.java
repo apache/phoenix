@@ -216,7 +216,7 @@ public class QueryServicesOptions {
   public static final boolean DEFAULT_IS_NAMESPACE_MAPPING_ENABLED = false;
   public static final boolean DEFAULT_IS_SYSTEM_TABLE_MAPPED_TO_NAMESPACE = true;
   public static final int DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE = 50000;
-  public static final boolean DEFAULT_WHERE_OPTIMIZER_V2_ENABLED = true;
+  public static final boolean DEFAULT_WHERE_OPTIMIZER_V2_ENABLED = false;
   public static final int DEFAULT_WHERE_OPTIMIZER_V2_CARTESIAN_BOUND =
     DEFAULT_MAX_IN_LIST_SKIP_SCAN_SIZE;
 

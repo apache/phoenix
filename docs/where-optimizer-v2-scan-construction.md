@@ -1,8 +1,8 @@
 # V2 Scan Construction
 
-> Status: **default path**. `WHERE_OPTIMIZER_V2_ENABLED=true` (default) routes WHERE
-> optimization through V2. `WHERE_OPTIMIZER_V2_ENABLED=false` selects the legacy V1
-> `WhereOptimizer` and is kept as a regression-comparison escape hatch. Companion
+> Status: **opt-in**. `WHERE_OPTIMIZER_V2_ENABLED` defaults to `false` (legacy V1 path).
+> Set `true` to route WHERE optimization through V2. V1 remains as a rollback /
+> regression-comparison escape hatch. Companion
 > to `where-optimizer-v2.md`.
 
 ## Pipeline

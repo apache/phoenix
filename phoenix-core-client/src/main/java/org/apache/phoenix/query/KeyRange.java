@@ -253,6 +253,7 @@ public class KeyRange implements Writable {
   }
 
   private void init() {
+    cachedHashCode = 0;
     this.isSingleKey = lowerRange != UNBOUND && upperRange != UNBOUND && lowerInclusive
       && upperInclusive && Bytes.compareTo(lowerRange, upperRange) == 0;
   }
@@ -384,8 +385,8 @@ public class KeyRange implements Writable {
   }
 
   // Cached hash. 0 means uncomputed (the chance of a legitimate 0 hash is negligible and
-  // even if it hits we just recompute). KeyRange is effectively immutable once constructed
-  // (fields are final), so memoization is safe.
+  // even if it hits we just recompute). KeyRange fields are not final — readFields(DataInput)
+  // (Writable) reassigns them — so init() must clear this cache on every mutation.
   private int cachedHashCode;
 
   @Override

@@ -804,10 +804,13 @@ public class KeySpaceExpressionVisitor
       if (sliceType != null && sliceType.isFixedWidth()) {
         len = (sliceMaxLen != null) ? sliceMaxLen : sliceType.getByteSize();
       } else {
-        // Variable-width: scan to the next separator byte.
+        // Variable-width: scan to the next ASC or DESC separator byte.
+        // DESC columns pack with DESC_SEPARATOR_BYTE (0xFF); only checking 0x00 would
+        // over-consume into subsequent columns for DESC var-width RVC-IN literals.
         int end = offset;
-        while (end < packed.length && packed[end]
-            != org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE) {
+        while (end < packed.length
+            && packed[end] != org.apache.phoenix.query.QueryConstants.SEPARATOR_BYTE
+            && packed[end] != org.apache.phoenix.query.QueryConstants.DESC_SEPARATOR_BYTE) {
           end++;
         }
         len = end - offset;

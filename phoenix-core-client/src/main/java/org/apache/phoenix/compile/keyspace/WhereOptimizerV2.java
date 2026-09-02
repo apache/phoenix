@@ -181,7 +181,11 @@ public final class WhereOptimizerV2 {
     boolean forcedSkipScan = hints != null && hints.contains(Hint.SKIP_SCAN);
     boolean leadingEverythingPastPrefix = !emittedEverything && !forcedSkipScan
         && hasLeadingEverythingAt(keySpaceList, prefixSlots);
-    if (!emittedEverything && !leadingEverythingPastPrefix) {
+    // When the algebra or extractor approximated (dropped dims / collapsed compounds),
+    // visitor-consumed nodes are no longer fully enforced by the scan — keep them in
+    // the residual filter.
+    boolean approximated = r.approximated || keySpaceList.isApproximated();
+    if (!emittedEverything && !leadingEverythingPastPrefix && !approximated) {
       consumed.addAll(visitorConsumed);
     }
 
