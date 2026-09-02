@@ -725,6 +725,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2, val3) "
         + "values ('a', 'ab', 'abcc', null)");
       conn.commit();
+      waitForEventualConsistency();
       String selectSql = "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
       // Verify that we will read from the index table
       assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
@@ -784,6 +785,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement()
         .execute("upsert into " + dataTableName + " (id, val2) values ('a', 'xyz')");
       conn.commit();
+      waitForEventualConsistency();
 
       // (a) index path must still resolve the row under its original key 'ab'
       String selectAb = "SELECT id from " + dataTableName + " WHERE val1 = 'ab'";
