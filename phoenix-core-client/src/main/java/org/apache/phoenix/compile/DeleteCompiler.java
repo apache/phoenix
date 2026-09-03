@@ -18,8 +18,6 @@
 package org.apache.phoenix.compile;
 
 import static org.apache.phoenix.execute.MutationState.RowTimestampColInfo.NULL_ROWTIMESTAMP_INFO;
-import static org.apache.phoenix.query.QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED;
 import static org.apache.phoenix.util.NumberUtil.add;
 
 import edu.umd.cs.findbugs.annotations.NonNull;
@@ -214,7 +212,7 @@ public class DeleteCompiler {
           // The data table is always the last one in the list if it's
           // not chosen as the best of the possible plans.
           dataTable = otherTableRefs.get(otherTableRefs.size() - 1).getTable();
-          if (!isMaintainedOnClient(table, connection)) {
+          if (!isMaintainedOnClient(table, dataTable, connection)) {
             // dataTable is a projected table and may not include all the indexed columns and so we
             // need to get
             // the actual data table
@@ -259,7 +257,7 @@ public class DeleteCompiler {
         // row timestamp column, then the
         // row key will already have its value.
         // Check for otherTableRefs being empty required when deleting directly from the index
-        if (otherTableRefs.isEmpty() || isMaintainedOnClient(table, connection)) {
+        if (otherTableRefs.isEmpty() || isMaintainedOnClient(table, dataTable, connection)) {
           mutations.put(rowKeyPtr,
             new RowMutationState(PRow.DELETE_MARKER, 0,
               statement.getConnection().getStatementExecutionCounter(), NULL_ROWTIMESTAMP_INFO,
@@ -385,7 +383,7 @@ public class DeleteCompiler {
       for (PTable index : table.getIndexes()) {
         if (
           !index.getIndexState().isDisabled()
-            && isMaintainedOnClient(index, statement.getConnection())
+            && isMaintainedOnClient(index, table, statement.getConnection())
         ) {
           nonDisabledIndexes.add(index);
         }
@@ -569,7 +567,7 @@ public class DeleteCompiler {
     // mutations are generated on the client side. Indexed columns are needed to identify index rows
     // to be deleted
     for (PTable index : table.getIndexes()) {
-      if (isMaintainedOnClient(index, connection)) {
+      if (isMaintainedOnClient(index, table, connection)) {
         IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
         // Go through maintainer as it handles functional indexes correctly
         for (Pair<String, String> columnInfo : maintainer.getIndexedColumnInfo()) {
@@ -1135,15 +1133,16 @@ public class DeleteCompiler {
     }
   }
 
-  private static boolean isMaintainedOnClient(PTable table, PhoenixConnection connection) {
+  private static boolean isMaintainedOnClient(PTable table, PTable dataTable,
+    PhoenixConnection connection) {
     if (CDCUtil.isCDCIndex(table)) {
       return false;
     }
+    // The server-side-maintenance flag is read against the data table so a ROW_TIMESTAMP data
+    // table keeps its indexes client-maintained (see IndexUtil).
     if (
       !table.isTransactional() && table.getIndexType() != IndexType.LOCAL
-        && connection.getQueryServices().getConfiguration().getBoolean(
-          SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
-          DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED)
+        && IndexUtil.isServerSideImmutableIndexMaintenanceEnabled(dataTable, connection)
     ) {
       return false;
     }

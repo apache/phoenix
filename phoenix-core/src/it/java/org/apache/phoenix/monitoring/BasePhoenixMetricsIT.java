@@ -67,6 +67,8 @@ public abstract class BasePhoenixMetricsIT extends BaseTest {
     // disable renewing leases as this will force spooling to happen.
     props.put(QueryServices.RENEW_LEASE_ENABLED, String.valueOf(false));
     props.put(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
+    // Keep immutable-index maintenance client-side so mutation metrics account for index mutations.
+    props.put(QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB, Boolean.FALSE.toString());
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));
     // need the non-test driver for some tests that check number of hconnections, etc.
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
