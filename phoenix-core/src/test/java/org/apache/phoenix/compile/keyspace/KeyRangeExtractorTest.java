@@ -119,18 +119,18 @@ public class KeyRangeExtractorTest {
   public void cartesianBoundTruncatesTrailingSlots() {
     // Build a key space list whose spaces all share slot 0 so they don't trigger the
     // multi-dim divergence bail-out, but whose slot 1 has multiple ranges that push the
-    // running product past the bound. The extractor emits slots up to and including the
-    // one that tripped the bound, then stops.
+    // running product past the bound. The extractor stops BEFORE the overflowing slot so
+    // the product of emitted slots stays ≤ bound; dropped-slot predicates stay in residual.
     KeySpaceList list = KeySpaceList.of(
       ks(3, pt("a"), pt("1")),
       ks(3, pt("a"), pt("2")),
       ks(3, pt("a"), pt("3")));
     Result r = KeyRangeExtractor.extract(list, 3, 1);
-    // With bound=1 the trip happens at slot 1 (1 * 3 = 3 > 1), so slots 0 and 1 are emitted
-    // and further trailing slots (none here) are truncated.
-    assertEquals(2, r.ranges.size());
+    // With bound=1 the trip happens at slot 1 (1 * 3 = 3 > 1), so only slot 0 is emitted.
+    assertEquals(1, r.ranges.size());
     assertEquals(1, r.ranges.get(0).size());
-    assertEquals(3, r.ranges.get(1).size());
+    assertTrue("truncated emission must be marked approximated for residual retention",
+      r.approximated);
   }
 
   @Test
