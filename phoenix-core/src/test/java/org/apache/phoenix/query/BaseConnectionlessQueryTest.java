@@ -86,7 +86,16 @@ public class BaseConnectionlessQueryTest extends BaseTest {
     // only load the test driver if we are testing locally - for integration tests, we want to
     // test on a wider scale
     if (PhoenixEmbeddedDriver.isTestUrl(url)) {
+      // Layer in any driver-level config the JVM was launched with via -D system
+      // properties. Today this is just the V2 WHERE-optimizer flag, which lets the
+      // same suite be re-run under V2 with `mvn test -Dphoenix.where.optimizer.v2
+      // .enabled=true` (CI runs both). New per-test-run knobs can join the same
+      // map without restructuring the driver init.
       Map<String, String> props = Maps.newHashMapWithExpectedSize(1);
+      String v2 = System.getProperty(QueryServices.WHERE_OPTIMIZER_V2_ENABLED);
+      if (v2 != null && !v2.isEmpty()) {
+        props.put(QueryServices.WHERE_OPTIMIZER_V2_ENABLED, v2);
+      }
       driver = initDriver(new ReadOnlyProps(props));
       assertTrue(DriverManager.getDriver(url) == driver);
       driver.connect(url, PropertiesUtil.deepCopy(TEST_PROPERTIES));

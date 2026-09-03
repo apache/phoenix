@@ -1525,16 +1525,21 @@ public class GlobalIndexCheckerWithRegionMovesIT extends BaseTest {
 
       String selectSql =
         "SELECT id, val3 from " + dataTableName + " WHERE val1 = 'bc' and val2 = 'bcd' ";
-      // Verify that we will read from the index table
+      // Verify that we will read from the index table. V1 emits `RANGE SCAN` with the
+      // trailing constraint kept in a server filter; V2 emits `SKIP SCAN ON 1 KEY` with
+      // the trailing constraint consumed into the scan bounds. Either scan shape is
+      // correct; the subsequent query-result assertion (below) is the source of truth
+      // for correctness.
       try (ResultSet rs = conn.createStatement().executeQuery("EXPLAIN " + selectSql)) {
         String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-        String expectedExplainPlan = String.format("RANGE SCAN OVER %s", indexName);
-        String filter =
-          String.format("SERVER FILTER BY %s ONLY AND", encoded ? "FIRST KEY" : "EMPTY COLUMN");
+        String rangeScan = String.format("RANGE SCAN OVER %s", indexName);
+        String skipScan = String.format("SKIP SCAN ON 1 KEY OVER %s", indexName);
         assertTrue(String.format("actual=%s", actualExplainPlan),
-          actualExplainPlan.contains(expectedExplainPlan));
+          actualExplainPlan.contains(rangeScan) || actualExplainPlan.contains(skipScan));
+        String firstKeyOrEmpty =
+          String.format("SERVER FILTER BY %s ONLY", encoded ? "FIRST KEY" : "EMPTY COLUMN");
         assertTrue(String.format("actual=%s", actualExplainPlan),
-          actualExplainPlan.contains(filter));
+          actualExplainPlan.contains(firstKeyOrEmpty));
       }
       try (ResultSet rs = conn.createStatement().executeQuery(selectSql)) {
         assertTrue(rs.next());

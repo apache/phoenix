@@ -91,6 +91,23 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.ImmutableList;
 
 public class WhereCompilerTest extends BaseConnectionlessQueryTest {
 
+  /**
+   * True when the V2 WHERE optimizer is enabled for this test JVM. Tests whose expected
+   * scan bytes differ between V1 and V2 (typically a trailing SEP byte that V2 retains
+   * and V1 strips) branch on this helper to pin both forms.
+   */
+  protected static boolean isV2Optimizer() {
+    try (java.sql.Connection conn = java.sql.DriverManager.getConnection(getUrl(),
+      org.apache.phoenix.util.PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+      return conn.unwrap(org.apache.phoenix.jdbc.PhoenixConnection.class).getQueryServices()
+        .getConfiguration().getBoolean(
+          org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
+          org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED);
+    } catch (java.sql.SQLException e) {
+      return false;
+    }
+  }
+
   private PhoenixPreparedStatement newPreparedStatement(PhoenixConnection pconn, String query)
     throws SQLException {
     PhoenixPreparedStatement pstmt = new PhoenixPreparedStatement(pconn, query);
@@ -743,8 +760,12 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     byte[] startRow = PVarchar.INSTANCE.toBytes(tenantId + entityId1);
     assertArrayEquals(startRow, scan.getStartRow());
     byte[] stopRow = PVarchar.INSTANCE.toBytes(tenantId + entityId2);
-    assertArrayEquals(ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY),
-      scan.getStopRow());
+    // V1 keeps the original last byte and appends a trailing SEP; V2 promotes the
+    // IN-list to point lookups whose exclusive upper is nextKey(stopRow). Same rows.
+    byte[] expectedStop = isV2Optimizer()
+      ? ByteUtil.nextKey(stopRow)
+      : ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY);
+    assertArrayEquals(expectedStop, scan.getStopRow());
 
     Filter filter = scan.getFilter();
 
@@ -821,8 +842,12 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     assertArrayEquals(startRow, scan.getStartRow());
     byte[] stopRow =
       ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId3), PVarchar.INSTANCE.toBytes(entityId));
-    assertArrayEquals(ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY),
-      scan.getStopRow());
+    // V1 keeps the original last byte and appends a trailing SEP; V2 promotes the
+    // IN-list to point lookups whose exclusive upper is nextKey(stopRow). Same rows.
+    byte[] expectedStop = isV2Optimizer()
+      ? ByteUtil.nextKey(stopRow)
+      : ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY);
+    assertArrayEquals(expectedStop, scan.getStopRow());
     // TODO: validate scan ranges
   }
 
@@ -905,8 +930,13 @@ public class WhereCompilerTest extends BaseConnectionlessQueryTest {
     assertArrayEquals(startRow, scan.getStartRow());
     byte[] stopRow =
       ByteUtil.concat(PVarchar.INSTANCE.toBytes(tenantId3), PVarchar.INSTANCE.toBytes(entityId2));
-    assertArrayEquals(ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY),
-      scan.getStopRow());
+    // V1 keeps the original last byte and appends a trailing SEP (31 bytes); V2
+    // promotes the IN-list to point lookups whose exclusive upper is nextKey(stopRow)
+    // (last byte 'Y' bumped to 'Z', 30 bytes). Same admitted rows.
+    byte[] expectedStop = isV2Optimizer()
+      ? ByteUtil.nextKey(stopRow)
+      : ByteUtil.concat(stopRow, QueryConstants.SEPARATOR_BYTE_ARRAY);
+    assertArrayEquals(expectedStop, scan.getStopRow());
     // TODO: validate scan ranges
   }
 

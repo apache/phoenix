@@ -253,6 +253,7 @@ public class KeyRange implements Writable {
   }
 
   private void init() {
+    cachedHashCode = 0;
     this.isSingleKey = lowerRange != UNBOUND && upperRange != UNBOUND && lowerInclusive
       && upperInclusive && Bytes.compareTo(lowerRange, upperRange) == 0;
   }
@@ -383,14 +384,24 @@ public class KeyRange implements Writable {
     return lowerRange == UNBOUND;
   }
 
+  // Cached hash. 0 means uncomputed (the chance of a legitimate 0 hash is negligible and
+  // even if it hits we just recompute). KeyRange fields are not final — readFields(DataInput)
+  // (Writable) reassigns them — so init() must clear this cache on every mutation.
+  private int cachedHashCode;
+
   @Override
   public int hashCode() {
+    int h = cachedHashCode;
+    if (h != 0) {
+      return h;
+    }
     final int prime = 31;
     int result = 1;
     result = prime * result + Arrays.hashCode(lowerRange);
     if (lowerRange != null) result = prime * result + (lowerInclusive ? 1231 : 1237);
     result = prime * result + Arrays.hashCode(upperRange);
     if (upperRange != null) result = prime * result + (upperInclusive ? 1231 : 1237);
+    cachedHashCode = result;
     return result;
   }
 
