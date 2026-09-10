@@ -83,6 +83,7 @@ import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.ScanUtil;
+import org.apache.phoenix.util.ServerUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -493,7 +494,16 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
                 kv = new KeyValue(QueryConstants.OFFSET_ROW_KEY_BYTES, QueryConstants.OFFSET_FAMILY,
                   QueryConstants.OFFSET_COLUMN, remainingOffset);
               } else {
-                kv = getOffsetKvWithLastScannedRowKey(remainingOffset, tuple);
+                // Check if tuple is empty before calling getOffsetKvWithLastScannedRowKey
+                // to avoid IndexOutOfBoundsException when accessing tuple.getKey()
+                if (tuple.size() > 0) {
+                  kv = getOffsetKvWithLastScannedRowKey(remainingOffset, tuple);
+                } else {
+                  // Use fallback logic when tuple is empty (PHOENIX-7524)
+                  byte[] rowKey = ServerUtil.deriveRowKeyFromScanOrRegionBoundaries(scan, region);
+                  kv = new KeyValue(rowKey, QueryConstants.OFFSET_FAMILY,
+                    QueryConstants.OFFSET_COLUMN, remainingOffset);
+                }
               }
               results.add(kv);
             } else {
