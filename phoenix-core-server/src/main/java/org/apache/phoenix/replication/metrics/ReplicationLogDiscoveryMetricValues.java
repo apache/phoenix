@@ -26,14 +26,16 @@ public class ReplicationLogDiscoveryMetricValues {
   private final long numInProgressDirectoryProcessed;
   private final long timeToProcessNewFilesMs;
   private final long timeToProcessInProgressFilesMs;
+  private final long roundsExceedingRoundTime;
 
   public ReplicationLogDiscoveryMetricValues(long numRoundsProcessed,
     long numInProgressDirectoryProcessed, long timeToProcessNewFilesMs,
-    long timeToProcessInProgressFilesMs) {
+    long timeToProcessInProgressFilesMs, long roundsExceedingRoundTime) {
     this.numRoundsProcessed = numRoundsProcessed;
     this.numInProgressDirectoryProcessed = numInProgressDirectoryProcessed;
     this.timeToProcessNewFilesMs = timeToProcessNewFilesMs;
     this.timeToProcessInProgressFilesMs = timeToProcessInProgressFilesMs;
+    this.roundsExceedingRoundTime = roundsExceedingRoundTime;
   }
 
   public long getNumRoundsProcessed() {
@@ -50,6 +52,10 @@ public class ReplicationLogDiscoveryMetricValues {
 
   public long getTimeToProcessInProgressFilesMs() {
     return timeToProcessInProgressFilesMs;
+  }
+
+  public long getRoundsExceedingRoundTime() {
+    return roundsExceedingRoundTime;
   }
 
 }

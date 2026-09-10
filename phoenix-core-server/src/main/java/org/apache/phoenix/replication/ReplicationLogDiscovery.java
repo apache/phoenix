@@ -47,7 +47,7 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFac
  * service Round-based Processing: - Files are organized into replication rounds based on timestamps
  * - Each round represents a time window (e.g., 1 minute) of replication activity - Processing waits
  * for round completion + buffer time before processing to ensure all files are available Subclasses
- * must implement: - processFile(Path): Defines how individual replication log files are processed -
+ * must implement: - processFile(Path, boolean): Defines how individual replication log files are processed -
  * createMetricsSource(): Provides metrics tracking for monitoring - Configuration methods: Thread
  * counts, intervals, probabilities, etc. File Processing Flow: 1. Discover new files for the
  * current round 2. Mark files as in-progress (move to in-progress directory) 3. Process each file
@@ -145,8 +145,9 @@ public abstract class ReplicationLogDiscovery {
   @GuardedBy("this")
   protected long lastAlignedTargetMillis = Long.MIN_VALUE;
   /**
-   * One-shot guard so a misconfigured {@link #REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY} logs its
-   * fall-back WARN once rather than every scheduling cycle (the epsilon is read live per cycle).
+   * One-shot guard so a misconfigured {@link #REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY} logs
+   * its fall-back WARN once rather than every scheduling cycle (the epsilon is read live per
+   * cycle).
    */
   private final AtomicBoolean warnedInvalidEpsilon = new AtomicBoolean(false);
 
@@ -279,11 +280,11 @@ public abstract class ReplicationLogDiscovery {
    * Runs one replay pass and, unless the service has been stopped, schedules the next aligned pass.
    * A recoverable {@link Exception} from {@link #replay()} is logged and the chain continues, so a
    * single failed round does not break it. A fatal {@link Error} (OOM, stack overflow, linkage) is
-   * logged, tears the chain down (marking the service not-running so the supervisor can rebuild it),
-   * and is rethrown -- never rescheduled onto a potentially corrupted JVM.
-   * The reschedule is guarded by the same lock stop() uses; if stop() shut the scheduler down
-   * first, {@link #isRunning} is false and we do not reschedule (and a concurrent shutdown that
-   * rejects the submission is caught and treated as "stop the chain").
+   * logged, tears the chain down (marking the service not-running so the supervisor can rebuild
+   * it), and is rethrown -- never rescheduled onto a potentially corrupted JVM. The reschedule is
+   * guarded by the same lock stop() uses; if stop() shut the scheduler down first,
+   * {@link #isRunning} is false and we do not reschedule (and a concurrent shutdown that rejects
+   * the submission is caught and treated as "stop the chain").
    * @param owner the scheduler this cycle was launched on. If a stop()->start() restart has since
    *              swapped in a new scheduler, {@code owner} no longer equals {@link #scheduler} and
    *              this stale cycle must not reschedule onto the new generation (which would create a
@@ -438,13 +439,16 @@ public abstract class ReplicationLogDiscovery {
     List<Path> files = replicationLogTracker.getNewFilesForRound(replicationRound);
     LOG.info("Number of new files for round {} is {}", replicationRound, files.size());
     while (!files.isEmpty() && isRunning()) {
-      processOneRandomFile(files);
+      processOneRandomFile(files, true);
       files = replicationLogTracker.getNewFilesForRound(replicationRound);
     }
     long duration = EnvironmentEdgeManager.currentTime() - startTime;
     LOG.info("Finished new files processing for round: {} in {}ms for haGroup: {}",
       replicationRound, duration, haGroupName);
     getMetrics().updateTimeToProcessNewFiles(duration);
+    if (duration > roundTimeMills) {
+      getMetrics().incrementRoundsExceedingRoundTime();
+    }
   }
 
   /**
@@ -468,7 +472,7 @@ public abstract class ReplicationLogDiscovery {
       replicationLogTracker.getInProgressLogSubDirectoryName(), renameTimestampThreshold,
       files.size(), haGroupName);
     while (!files.isEmpty() && isRunning()) {
-      Optional<Path> failedFile = processOneRandomFile(files);
+      Optional<Path> failedFile = processOneRandomFile(files, false);
       if (failedFile.isPresent()) {
         String prefix = replicationLogTracker.getFilePrefix(failedFile.get());
         int count = failureCount.merge(prefix, 1, Integer::sum);
@@ -494,17 +498,23 @@ public abstract class ReplicationLogDiscovery {
   /**
    * Processes a single random file from the provided list. Marks the file as in-progress, processes
    * it, and marks it as completed or failed.
-   * @param files - List of files from which to select and process one randomly
+   * @param files      - List of files from which to select and process one randomly
+   * @param firstClaim - true when {@code files} are new files being claimed for the first time
+   *                   (from {@link #processNewFilesForRound}); false when they are already in the
+   *                   in-progress directory and are being reprocessed (from
+   *                   {@link #processInProgressDirectory}). Forwarded to
+   *                   {@link #processFile(Path, boolean)}.
    * @return the original path of the file that failed, or empty if processing succeeded
    */
-  private Optional<Path> processOneRandomFile(final List<Path> files) throws IOException {
+  private Optional<Path> processOneRandomFile(final List<Path> files, final boolean firstClaim)
+    throws IOException {
     // Pick a random file and process it
     Path file = files.get(ThreadLocalRandom.current().nextInt(files.size()));
     Optional<Path> optionalInProgressFilePath = Optional.empty();
     try {
       optionalInProgressFilePath = replicationLogTracker.markInProgress(file);
       if (optionalInProgressFilePath.isPresent()) {
-        processFile(optionalInProgressFilePath.get());
+        processFile(optionalInProgressFilePath.get(), firstClaim);
         replicationLogTracker.markCompleted(optionalInProgressFilePath.get());
       }
     } catch (IOException exception) {
@@ -518,10 +528,15 @@ public abstract class ReplicationLogDiscovery {
 
   /**
    * Handles the processing of a single file.
-   * @param path - The file to be processed
+   * @param path       - The file to be processed
+   * @param firstClaim - true when this invocation is the file's first claim (it was just moved into
+   *                   the in-progress directory from the new-files path); false when reprocessing a
+   *                   file that was already in the in-progress directory. Lets subclasses record
+   *                   first-claim-only signals (e.g. pickup lag) without double counting on
+   *                   retries.
    * @throws IOException if there's an error during file processing
    */
-  protected abstract void processFile(Path path) throws IOException;
+  protected abstract void processFile(Path path, boolean firstClaim) throws IOException;
 
   /** Creates a new metrics source for monitoring operations. */
   protected abstract MetricsReplicationLogDiscovery createMetricsSource();
@@ -696,11 +711,12 @@ public abstract class ReplicationLogDiscovery {
   /**
    * Returns the epsilon margin (milliseconds) added to the aligned scheduler wake instant. Guards
    * against a misconfigured value: a non-numeric string, a negative value (which would move wakes
-   * <em>before</em> eligibility and reintroduce missed rounds), or a value {@code >= roundTimeMills}
-   * (which wraps through {@link Math#floorMod} and no longer represents the documented "epsilon
-   * after the boundary") all fall back to {@link #DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS} with a
-   * one-shot WARN. Riding over the misconfiguration keeps replay polling on a safe default rather
-   * than wedging the group, while the WARN makes the bad config visible.
+   * <em>before</em> eligibility and reintroduce missed rounds), or a value
+   * {@code >= roundTimeMills} (which wraps through {@link Math#floorMod} and no longer represents
+   * the documented "epsilon after the boundary") all fall back to
+   * {@link #DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS} with a one-shot WARN. Riding over the
+   * misconfiguration keeps replay polling on a safe default rather than wedging the group, while
+   * the WARN makes the bad config visible.
    * @return the epsilon margin in milliseconds, always within {@code [0, roundTimeMills)}.
    */
   public long getAlignedDelayEpsilonMillis() {
@@ -711,8 +727,8 @@ public abstract class ReplicationLogDiscovery {
     } catch (NumberFormatException e) {
       // Hadoop's getLong throws (rather than returning the default) when the key is present but
       // not parseable as a number.
-      warnInvalidEpsilon("non-numeric value \""
-        + conf.get(REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY) + "\"");
+      warnInvalidEpsilon(
+        "non-numeric value \"" + conf.get(REPLICATION_ALIGNED_DELAY_EPSILON_MILLIS_KEY) + "\"");
       return DEFAULT_ALIGNED_DELAY_EPSILON_MILLIS;
     }
     if (epsilon < 0 || epsilon >= roundTimeMills) {

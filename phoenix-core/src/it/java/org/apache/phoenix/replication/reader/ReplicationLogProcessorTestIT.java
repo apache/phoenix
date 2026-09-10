@@ -628,6 +628,18 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
         metricValues.getFailedMutationsCount());
       assertEquals("There must not be any failed files", 0,
         metricValues.getLogFileReplayFailureCount());
+      // Recording-site guard (PHOENIX-7992): incrementSuccessfulFileMutationsReplayedCount is
+      // written inside processLogFile before the catch, not by its callers, so a real replay is the
+      // only thing that exercises it. The exact replayed-mutation count is intentionally not
+      // asserted: generateHBaseMutations builds its Puts from a Phoenix mutation state that is never
+      // committed or cleared between rows, so the replayed total is an artifact of that helper rather
+      // than the "2 + 5" rows requested (testProcessLogFileBatchSizeLogic pins an exact count on a
+      // 1:1 record model). We also do not assert the mutationsPerFile histogram here:
+      // MutableHistogram.getMax() reads FastLongHistogram bins that the metrics system resets to 0 on
+      // its periodic snapshot(), so a positive max is not stable to read after a multi-second real
+      // replay -- only the counter (a MutableFastCounter, never reset by snapshot) is reliable.
+      assertTrue("A successful multi-mutation file must record positive replay throughput",
+        metricValues.getSuccessfulFileMutationsReplayedCount() > 0);
 
     } finally {
       replicationLogProcessor.close();
@@ -698,6 +710,13 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
         metricValues.getFailedMutationsCount());
       assertEquals("There must not be any failed files", 0,
         metricValues.getLogFileReplayFailureCount());
+      // A rotation-only / zero-mutation file adds 0 to the throughput counter and, because of the
+      // `totalProcessed > 0` guard, must not populate the per-file histogram (its max stays 0
+      // rather than skewing the distribution toward zero).
+      assertEquals("Zero-mutation file must not add to the throughput counter", 0,
+        metricValues.getSuccessfulFileMutationsReplayedCount());
+      assertEquals("Zero-mutation file must not populate the mutationsPerFile histogram", 0,
+        metricValues.getMutationsPerFile());
     } catch (Exception e) {
       fail("Processing empty log file should not throw exception: " + e.getMessage());
     } finally {
@@ -970,8 +989,64 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
       metricValues.getFailedMutationsCount());
     assertEquals("There must not be any failed files", 0,
       metricValues.getLogFileReplayFailureCount());
+    // Accumulation guard: totalProcessed sums across all three batch flushes (4 + 5 + 2 = 11), and
+    // is recorded on the same line as updateMutationsPerFile, so the exact counter value also pins
+    // the histogram's input. We assert the counter (a MutableFastCounter) rather than
+    // getMutationsPerFile(): the histogram max is read from FastLongHistogram bins that the metrics
+    // system resets to 0 on its periodic snapshot(), so a positive max is not a stable value to
+    // assert against.
+    assertEquals("successfulFileMutationsReplayedCount must sum across batches", 11,
+      metricValues.getSuccessfulFileMutationsReplayedCount());
 
     // Clean up
+    spyProcessor.close();
+  }
+
+  /**
+   * Guards the placement of the throughput / per-file metric writes: they sit after a whole-file
+   * success and before the catch, so a file that applies some batches and then throws mid-replay
+   * must count zero mutations. The second batch flush is stubbed to throw after the first has
+   * "applied", and the file must then book purely as a failure with no throughput recorded.
+   */
+  @Test
+  public void testProcessLogFileMidReplayFailureDoesNotCountMutations() throws Exception {
+    final Path filePath = new Path(testFolder.newFile("testProcessLogFileMidReplayFailure").toURI());
+    final String tableNameString = "T_" + generateUniqueName();
+    LogFileWriter writer = initLogFileWriter(filePath);
+    // Six single-mutation records with batch size 3 -> two full flushes; the second one throws.
+    for (int i = 0; i < 6; i++) {
+      Put put = new Put(Bytes.toBytes("row" + i));
+      put.addColumn(Bytes.toBytes("cf"), Bytes.toBytes("qual"), Bytes.toBytes("v" + i));
+      writer.append(tableNameString, i, LogFileTestUtil.cellsOf(put));
+    }
+    writer.close();
+
+    Configuration testConf = new Configuration(conf);
+    testConf.setInt(ReplicationLogProcessor.REPLICATION_STANDBY_LOG_REPLAY_BATCH_SIZE, 3);
+    ReplicationLogProcessor spyProcessor =
+      Mockito.spy(new ReplicationLogProcessor(testConf, testHAGroupName));
+    // First flush applies (no-op); the second throws mid-replay after the first already "applied".
+    Mockito.doNothing().doThrow(new IOException("injected mid-replay failure")).when(spyProcessor)
+      .processReplicationLogBatch(Mockito.any(Map.class));
+    try {
+      spyProcessor.processLogFile(localFs, filePath);
+      fail("processLogFile must propagate the mid-replay failure");
+    } catch (IOException expected) {
+      // expected
+    }
+
+    ReplicationLogProcessorMetricValues metricValues =
+      spyProcessor.getMetrics().getCurrentMetricValues();
+    assertEquals("A mid-replay failure books the file as a failure", 1,
+      metricValues.getLogFileReplayFailureCount());
+    assertEquals("No success is recorded for a file that failed mid-replay", 0,
+      metricValues.getLogFileReplaySuccessCount());
+    // The first batch's mutations were applied, but the throughput write sits after whole-file
+    // success and before the catch, so nothing is counted.
+    assertEquals("Mutations applied before a mid-replay failure must not be counted", 0,
+      metricValues.getSuccessfulFileMutationsReplayedCount());
+    assertEquals("A failed file must not populate the mutationsPerFile histogram", 0,
+      metricValues.getMutationsPerFile());
     spyProcessor.close();
   }
 

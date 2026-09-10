@@ -228,10 +228,83 @@ public class ReplicationLogDiscoveryReplay extends ReplicationLogDiscovery {
   }
 
   @Override
-  protected void processFile(Path path) throws IOException {
-    LOG.info("Starting to process file {}", path);
+  protected void processFile(Path path, boolean firstClaim) throws IOException {
+    LOG.info("Starting to process file {} (firstClaim={})", path, firstClaim);
+    ReplicationLogTracker tracker = getReplicationLogFileTracker();
+    final long fileTimestamp;
+    try {
+      fileTimestamp = tracker.getFileTimestamp(path);
+    } catch (NumberFormatException e) {
+      // A malformed file name cannot be anchored to a round. getFileTimestamp is validated on the
+      // new-files path (getNewFilesForRound skips names that fail to parse) but not on the reclaim
+      // path, so convert the unchecked parse failure into the IOException that every other per-file
+      // failure uses. That keeps a single bad name isolated to processOneRandomFile's catch (marked
+      // failed and retry-counted) instead of escaping as a RuntimeException that aborts the whole
+      // in-progress sweep for the cycle.
+      throw new IOException("Cannot extract timestamp from replication log file name: " + path, e);
+    }
+    long roundEligibleTime = getRoundEligibleTime(fileTimestamp);
+    // Pickup lag (eligible -> claimed) is recorded only on the first claim (the new-files path).
+    // markInProgress re-stamps a fresh rename timestamp on every reclaim of an already-in-progress
+    // file, so recording on the in-progress path (firstClaim=false) would sample eligible ->
+    // latest-reclaim, not eligible -> first-pickup, and multi-count the same file across sweeps.
+    // Skip if the in-progress name carries no rename timestamp (should not happen for a file that
+    // reached processFile).
+    if (firstClaim) {
+      Optional<Long> renameTs = tracker.getRenameTimestamp(path);
+      if (renameTs.isPresent()) {
+        getReplayMetrics().updatePickupLag(Math.max(0L, renameTs.get() - roundEligibleTime));
+      } else {
+        // A first-claim file was just renamed into the in-progress directory by markInProgress,
+        // which always stamps a rename timestamp, so this should not happen. Drop the pickup-lag
+        // sample rather than record a bogus one, but leave a breadcrumb -- getRenameTimestamp only
+        // logs on a malformed 4-part name, not on an unexpectedly short name.
+        LOG.warn("No rename timestamp on first-claim file {}; skipping pickup-lag sample", path);
+      }
+    }
+    replayLogFile(path);
+    // End-to-end lag (eligible -> replay done): recorded only after a successful replayLogFile
+    // return. On failure replayLogFile throws and logFileReplayFailureCount already fires, so an
+    // end-to-end lag sample for an unfinished replay would be misleading. Every successfully
+    // replayed file is sampled here -- including rotation-only / zero-mutation files, which the
+    // mutationsPerFile histogram deliberately excludes -- so the two distributions cover different
+    // file populations.
+    getReplayMetrics().updateEndToEndReplayLag(
+      Math.max(0L, EnvironmentEdgeManager.currentTime() - roundEligibleTime));
+  }
+
+  /**
+   * Replays a single log file through the {@link ReplicationLogProcessor}. Extracted as a seam so
+   * the lag-recording logic in {@link #processFile(Path, boolean)} can be unit-tested without a
+   * live processor or file system.
+   * @param path the in-progress log file to replay
+   * @throws IOException if replay fails; the caller then skips the end-to-end lag sample
+   */
+  protected void replayLogFile(Path path) throws IOException {
     ReplicationLogProcessor.get(getConf(), getHaGroupName())
       .processLogFile(getReplicationLogFileTracker().getFileSystem(), path);
+  }
+
+  /**
+   * Returns the wall-clock instant (ms) at which the round owning a file with the given creation
+   * timestamp became eligible for processing: the round's end boundary plus the waiting buffer.
+   * This mirrors the eligibility gate used by {@link #getNextRoundToProcess()} (a round is eligible
+   * once {@code currentTime >= roundEnd + bufferMillis}) and is the zero-reference for the
+   * replay-lag metrics, so they exclude the fixed built-in wait rather than measuring raw file age.
+   * <p>
+   * Rounds are half-open {@code [start, end)}: a file at {@code creationTs} belongs to the round
+   * {@code [roundStart, roundStart + roundTimeMills)}, where {@code roundStart} floors
+   * {@code creationTs} down to a round boundary. This matches the on-disk layout, since
+   * getShardDirectory also floors the timestamp: a file that lands exactly on a boundary is stored
+   * in, and replayed by, the round that starts there -- not the one that ends there. The owning
+   * round's end is therefore always {@code roundStart + roundTimeMills}, including on a boundary.
+   * @param creationTs the file creation timestamp (first component of the log file name)
+   * @return the round-eligible wall-clock instant in milliseconds
+   */
+  private long getRoundEligibleTime(long creationTs) {
+    long roundStart = replicationLogTracker.getReplicationShardDirectoryManager()
+      .getNearestRoundStartTimestamp(creationTs);
+    return roundStart + roundTimeMills + bufferMillis;
   }
 
   /**

@@ -41,6 +41,13 @@ public interface MetricsReplicationLogProcessor extends BaseSource {
   String LOG_FILE_REPLAY_TIME = "logFileReplayTimeMs";
   String LOG_FILE_REPLAY_TIME_DESC =
     "Histogram of time taken for replaying a log file in milliseconds";
+  String SUCCESSFUL_FILE_MUTATIONS_REPLAYED_COUNT = "successfulFileMutationsReplayedCount";
+  String SUCCESSFUL_FILE_MUTATIONS_REPLAYED_COUNT_DESC =
+    "Total number of mutations replayed across log files that completed successfully; mutations "
+      + "already applied by a file that then fails mid-replay are not counted";
+  String MUTATIONS_PER_FILE = "mutationsPerFile";
+  String MUTATIONS_PER_FILE_DESC =
+    "Histogram of the number of mutations replayed per log file (files with mutations only)";
 
   /**
    * Increments the counter for failed mutations. This counter tracks the number of mutations that
@@ -77,6 +84,22 @@ public interface MetricsReplicationLogProcessor extends BaseSource {
    * @param timeMs Time taken in milliseconds
    */
   void updateLogFileReplayTime(long timeMs);
+
+  /**
+   * Increments the count of mutations replayed by files that completed successfully. Called once
+   * per file after its replay returns without error, so mutations already applied by a file that
+   * then fails mid-replay are not counted. Tracks replay throughput across fully-successful files.
+   * @param delta the number of mutations replayed for a successfully completed log file
+   */
+  void incrementSuccessfulFileMutationsReplayedCount(long delta);
+
+  /**
+   * Records a sample into the per-file mutation-count histogram. Called only for files that
+   * replayed at least one mutation, so rotation-only (zero-mutation) files do not skew the
+   * distribution toward zero.
+   * @param mutationsCount the number of mutations replayed for a single log file
+   */
+  void updateMutationsPerFile(long mutationsCount);
 
   /**
    * Unregister this metrics source.
