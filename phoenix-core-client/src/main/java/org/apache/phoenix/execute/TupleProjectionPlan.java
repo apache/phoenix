@@ -27,6 +27,7 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.ExplainPlanAttributes;
+import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainFilter;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
@@ -40,6 +41,7 @@ import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.ProjectedColumnExpression;
 import org.apache.phoenix.iterate.DelegateResultIterator;
+import org.apache.phoenix.iterate.ExplainTable;
 import org.apache.phoenix.iterate.FilterResultIterator;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -53,6 +55,7 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
   private final TupleProjector tupleProjector;
   private final Expression postFilter;
   private final ColumnResolver columnResolver;
+  private final StatementContext statementContext;
   private final List<OrderBy> actualOutputOrderBys;
 
   public TupleProjectionPlan(QueryPlan plan, TupleProjector tupleProjector,
@@ -63,6 +66,7 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
     }
     this.tupleProjector = tupleProjector;
     this.postFilter = postFilter;
+    this.statementContext = statementContext;
     if (statementContext != null) {
       this.columnResolver = statementContext.getResolver();
       this.actualOutputOrderBys = this.convertInputOrderBys(plan);
@@ -143,14 +147,33 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
 
   @Override
   public ExplainPlan getExplainPlan() throws SQLException {
+    // getContext() is the delegate's context (already carrying the requested EXPLAIN options).
+    // Carry those same options onto the separate post-filter context so this plan's CLIENT FILTER
+    // BY
+    // renders the same disclosures (e.g. VERBOSE predicate-origin attribution) as the driver scan.
+    if (statementContext != null) {
+      statementContext.setExplainOptions(getContext().getExplainOptions());
+    }
     ExplainPlan explainPlan = delegate.getExplainPlan();
     List<String> planSteps = Lists.newArrayList(explainPlan.getPlanSteps());
     ExplainPlanAttributes explainPlanAttributes = explainPlan.getPlanStepsAsAttributes();
     if (postFilter != null) {
-      planSteps.add("CLIENT FILTER BY " + postFilter.toString());
       ExplainPlanAttributesBuilder newBuilder =
         new ExplainPlanAttributesBuilder(explainPlanAttributes);
-      newBuilder.setClientFilterBy(postFilter.toString());
+      if (statementContext != null && statementContext.isVerbose()) {
+        int from = planSteps.size();
+        List<ExplainFilter> filters = ExplainTable.renderVerboseFilters(statementContext,
+          postFilter, postFilter.toString(), "CLIENT FILTER BY", planSteps);
+        for (int i = from; i < planSteps.size(); i++) {
+          newBuilder.addClientStep(planSteps.get(i));
+        }
+        newBuilder.setClientFilters(filters);
+      } else {
+        String step = "CLIENT FILTER BY " + postFilter.toString();
+        planSteps.add(step);
+        newBuilder.setClientFilterBy(postFilter.toString());
+        newBuilder.addClientStep(step);
+      }
       explainPlanAttributes = newBuilder.build();
     }
 
@@ -176,7 +199,7 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
     };
 
     if (postFilter != null) {
-      iterator = new FilterResultIterator(iterator, postFilter);
+      iterator = new FilterResultIterator(iterator, postFilter, statementContext);
     }
 
     return iterator;

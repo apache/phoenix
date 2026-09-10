@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.analyzeTable;
 import static org.apache.phoenix.util.TestUtil.getAllSplits;
@@ -36,7 +37,6 @@ import java.util.List;
 import java.util.Properties;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Before;
@@ -536,10 +536,7 @@ public class MultiCfQueryExecIT extends ParallelStatsEnabledIT {
       // Tests for FORWARD_SCAN hint
       String query =
         "SELECT /*+ FORWARD_SCAN */ * FROM " + tableName + " WHERE COL2 = 'AAA' ORDER BY COL1 DESC";
-      try (ResultSet rs = stmt.executeQuery("EXPLAIN " + query)) {
-        String explainPlan = QueryUtil.getExplainPlan(rs);
-        assertFalse(explainPlan.contains("REVERSE"));
-      }
+      assertPlan(conn, query).clientSortedBy(null);
       try (ResultSet rs = stmt.executeQuery(query)) {
         assertTrue(rs.next());
         assertEquals(rs.getString("COL1"), "222");

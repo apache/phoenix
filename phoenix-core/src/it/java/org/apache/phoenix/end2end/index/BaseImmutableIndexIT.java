@@ -17,8 +17,8 @@
  */
 package org.apache.phoenix.end2end.index;
 
-import static org.apache.phoenix.end2end.IndexToolIT.assertExplainPlan;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.IMMUTABLE_STORAGE_SCHEME;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.schema.PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.apache.phoenix.util.TestUtil.getRowCount;
@@ -71,7 +71,6 @@ import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
 import org.junit.Ignore;
@@ -465,9 +464,9 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
       admin.truncateTable(TableName.valueOf(fullTableName), true);
       String selectFromIndex = "SELECT long_pk, varchar_pk, long_col1 FROM " + TABLE_NAME
         + " WHERE varchar_pk='varchar2' AND long_pk=2";
-      rs = conn.createStatement().executeQuery("EXPLAIN " + selectFromIndex);
-      String actualExplainPlan = QueryUtil.getExplainPlan(rs);
-      assertExplainPlan(false, actualExplainPlan, fullTableName, fullIndexName);
+      // Verify the query is served by a RANGE SCAN over the index table.
+      assertPlan(conn, selectFromIndex).scanType("RANGE SCAN")
+        .tableContains(SchemaUtil.normalizeIdentifier(fullIndexName));
 
       rs = conn.createStatement().executeQuery(selectFromIndex);
       assertFalse(rs.next());
