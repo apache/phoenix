@@ -784,6 +784,9 @@ public enum SQLExceptionCode {
 
   CANNOT_TRANSFORM_TRANSACTIONAL_TABLE(914, "43M25", "Cannot transform a transactional table."),
 
+  CANNOT_TRANSFORM_MUTABLE_TABLE_TO_SCAWO(917, "43M28",
+    "IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS is incompatible with mutable rows."),
+
   STALE_METADATA_CACHE_EXCEPTION(915, "43M26", "Stale metadata cache exception",
     info -> new StaleMetadataCacheException(info.getMessage())),
 
