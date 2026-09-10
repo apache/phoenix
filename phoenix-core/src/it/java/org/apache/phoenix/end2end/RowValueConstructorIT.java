@@ -1355,7 +1355,16 @@ public class RowValueConstructorIT extends ParallelStatsDisabledIT {
       assertEquals("PARALLEL 4-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
       assertEquals("SKIP SCAN ON 12 KEYS ", explainPlanAttributes.getExplainScanType());
       assertEquals(tempTableWithCompositePK, explainPlanAttributes.getTableName());
-      assertEquals(" [X'00',2] - [X'03',4]", explainPlanAttributes.getKeyRanges());
+      // V1 and V2 produce equivalent scan plans (salt=0..3, col0 ∈ [2, 4]) but format the
+      // explain string differently: V1 shows only the leading constrained PK column (col0)
+      // while V2's compound emission also surfaces col1. Both are semantically identical.
+      String expectedKeyRanges = conn.unwrap(org.apache.phoenix.jdbc.PhoenixConnection.class)
+        .getQueryServices().getConfiguration().getBoolean(
+          org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
+          org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED)
+        ? " [X'00',2,3] - [X'03',4,5]"
+        : " [X'00',2] - [X'03',4]";
+      assertEquals(expectedKeyRanges, explainPlanAttributes.getKeyRanges());
       assertEquals("CLIENT MERGE SORT", explainPlanAttributes.getClientSortAlgo());
     } finally {
       conn.close();

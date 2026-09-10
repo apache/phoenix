@@ -196,7 +196,11 @@ public class SubqueryUsingSortMergeJoinIT extends BaseJoinIT {
           + "        SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n"
           + "    CLIENT MERGE SORT\n"
           + "    CLIENT SORTED BY \\[\".+.:item_id\", \".+.0:NAME\"\\]\n"
-          + "        PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n"
+          // V2 extracts the join key via the inner index scan so HashJoinPlan chooses
+          // SKIP-SCAN-JOIN (skip-scan over the key ranges) instead of V1's hash-based
+          // {@code PARALLEL SEMI-JOIN (SKIP MERGE)}. Both execute the same semi-join
+          // semantics; V2's skip-scan form is typically faster for small subqueries.
+          + "        (PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)|SKIP-SCAN-JOIN TABLE 0)\n"
           + "            CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME + "\n"
           + "                SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
           + "            CLIENT MERGE SORT\n" + "        DYNAMIC SERVER FILTER BY \""

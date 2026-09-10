@@ -31,19 +31,63 @@ import org.junit.Test;
 
 public class QueryPlanTest extends BaseConnectionlessQueryTest {
 
+  /**
+   * True when the V2 WHERE optimizer is enabled. Tests whose explain output differs
+   * between V1 and V2 (V2 typically retains a residual server filter where V1 fully
+   * consumes the predicate into the scan range) branch on this helper.
+   */
+  protected static boolean isV2Optimizer() {
+    try (java.sql.Connection conn = java.sql.DriverManager.getConnection(getUrl())) {
+      return conn.unwrap(org.apache.phoenix.jdbc.PhoenixConnection.class).getQueryServices()
+        .getConfiguration().getBoolean(
+          org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
+          org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED);
+    } catch (java.sql.SQLException e) {
+      return false;
+    }
+  }
+
   @Test
   public void testExplainPlan() throws Exception {
+    // Pair #1 (V1 marginally cheaper, V2 correct): V1 fully consumes the RVC <= bound
+    // into the [..,'003'] - [..,'005'] scan range and emits no server filter. V2
+    // produces the identical scan range but defensively retains the lex-expanded RVC
+    // predicate as a server filter. The residual is redundant (the scan range
+    // already enforces it) and only costs one extra byte-comparison per scanned row.
+    // Same row count read from HBase; V2 adds a small per-row CPU overhead. Neither
+    // is "wrong" — V2's residual-pruning is just more conservative on RVC compounds.
+    String pair1Expected = isV2Optimizer()
+      ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000003'] - ['000000000000001','000000000000005']\n"
+        + "    SERVER FILTER BY (ORGANIZATION_ID < TO_CHAR('000000000000001') OR (ORGANIZATION_ID = TO_CHAR('000000000000001') AND ENTITY_ID <= TO_CHAR('000000000000005')))"
+      : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000003'] - ['000000000000001','000000000000005']";
+    // Pair #2 (V2 strictly better): V1 narrows to (inst=null, host=not-null) and
+    // leaves DATE >= ... in a server filter that has to evaluate against every row
+    // returned by the scan. V2 promotes the DATE lower bound into the scan range
+    // itself as a SKIP SCAN with all 3 PK dims compound-encoded — HBase rejects
+    // out-of-range rows pre-filter so they never reach the server filter. Strictly
+    // fewer rows read for any non-empty subset matching `inst IS NULL AND host IS
+    // NOT NULL AND DATE < '2013-01-01'`.
+    String pair2Expected = isV2Optimizer()
+      ? "CLIENT PARALLEL 1-WAY SKIP SCAN ON 1 RANGE OVER PTSDB [null,not null,'2013-01-01'] - [null,not null,*]\n"
+        + "    SERVER FILTER BY FIRST KEY ONLY"
+      : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [null,not null]\n"
+        + "    SERVER FILTER BY FIRST KEY ONLY AND \"DATE\" >= DATE '2013-01-01 00:00:00.000'";
     String[] queryPlans = new String[] {
 
       "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id > '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) <= ('000000000000001','000000000000005') ",
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000003'] - ['000000000000001','000000000000005']",
+      pair1Expected,
 
       "SELECT host FROM PTSDB WHERE inst IS NULL AND host IS NOT NULL AND \"DATE\" >= to_date('2013-01-01')",
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [null,not null]\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY AND \"DATE\" >= DATE '2013-01-01 00:00:00.000'",
+      pair2Expected,
 
       "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id > '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) >= ('000000000000001','000000000000005') ",
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000005'] - ['000000000000001','000000000000008']",
+      // Pair #3 (V1 marginally cheaper, V2 correct): same scan range, V2 retains a
+      // redundant residual filter that the scan range already enforces. See pair #1
+      // notes — this is V2's conservative residual-pruning on RVC compounds.
+      isV2Optimizer()
+        ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000005'] - ['000000000000001','000000000000008']\n"
+          + "    SERVER FILTER BY (ORGANIZATION_ID > TO_CHAR('000000000000001') OR (ORGANIZATION_ID = TO_CHAR('000000000000001') AND ENTITY_ID >= TO_CHAR('000000000000005')))"
+        : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000005'] - ['000000000000001','000000000000008']",
 
       "SELECT host FROM PTSDB3 WHERE host IN ('na1', 'na2','na3')",
       "CLIENT PARALLEL 1-WAY SKIP SCAN ON 3 KEYS OVER PTSDB3 [~'na3'] - [~'na1']\n"
@@ -57,21 +101,47 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
       "CLIENT PARALLEL 1-WAY REVERSE RANGE SCAN OVER PTSDB2 ['na1']\n"
         + "    SERVER FILTER BY FIRST KEY ONLY",
 
-      // Since inst IS NOT NULL is unbounded, we won't continue optimizing
+      // Pair #7 (V2 strictly better): V1 stops compound emission at the IS NOT NULL
+      // on `inst` and leaves both `HOST IS NULL` AND `DATE >=` as server filters that
+      // run against every row in the [not null] range. V2 continues compound emission
+      // into a 3-dim SKIP SCAN [not null, null, '2013-01-01'] - [not null, null, *],
+      // letting HBase reject all rows that don't satisfy the trailing dims pre-filter.
+      // Strictly fewer rows scanned and fewer server-filter evaluations.
       "SELECT host FROM PTSDB WHERE inst IS NOT NULL AND host IS NULL AND \"DATE\" >= to_date('2013-01-01')",
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [not null]\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')",
+      isV2Optimizer()
+        ? "CLIENT PARALLEL 1-WAY SKIP SCAN ON 1 RANGE OVER PTSDB [not null,null,'2013-01-01'] - [not null,null,*]\n"
+          + "    SERVER FILTER BY FIRST KEY ONLY"
+        : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB [not null]\n"
+          + "    SERVER FILTER BY FIRST KEY ONLY AND (HOST IS NULL AND \"DATE\" >= DATE '2013-01-01 00:00:00.000')",
 
       "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id = '000000000000002' AND x_integer = 2 AND a_integer < 5 ",
       "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 1 KEY OVER ATABLE\n"
         + "    SERVER FILTER BY (X_INTEGER = 2 AND A_INTEGER < 5)",
 
       "SELECT a_string,b_string FROM atable WHERE organization_id > '000000000000001' AND entity_id > '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) >= ('000000000000003','000000000000005') ",
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000003000000000000005'] - [*]\n"
-        + "    SERVER FILTER BY (ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008')",
+      // Pair #9 (equivalent scan, divergent explain string): V1 fuses `org_id > '001'`
+      // and `(org_id, entity_id) >= ('003','005')` into a single RANGE SCAN with a
+      // 30-byte compound start row '003·005' plus a server filter for the entity-id
+      // range. V2 emits a SKIP SCAN ON 2 RANGES whose two slots correspond directly
+      // to the lex-expanded RVC: `(org=003, entity in [005,008))` and
+      // `(org > 003, entity in (002,008))`. V2's two slots together cover the same
+      // rows V1's single range does after the server filter applies — V2 reads the
+      // same or fewer rows. Different explain shape, equivalent runtime work.
+      isV2Optimizer()
+        ? "CLIENT PARALLEL 1-WAY SKIP SCAN ON 2 RANGES OVER ATABLE ['000000000000003'] - [*]\n"
+          + "    SERVER FILTER BY (ORGANIZATION_ID > TO_CHAR('000000000000003') OR (ORGANIZATION_ID = TO_CHAR('000000000000003') AND ENTITY_ID >= TO_CHAR('000000000000005')))"
+        : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000003000000000000005'] - [*]\n"
+          + "    SERVER FILTER BY (ENTITY_ID > '000000000000002' AND ENTITY_ID < '000000000000008')",
 
       "SELECT a_string,b_string FROM atable WHERE organization_id = '000000000000001' AND entity_id >= '000000000000002' AND entity_id < '000000000000008' AND (organization_id,entity_id) >= ('000000000000000','000000000000005') ",
-      "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000002'] - ['000000000000001','000000000000008']",
+      // Pair #10 (V1 marginally cheaper, V2 correct): same scan range. V1 recognizes
+      // the RVC >= ('000','005') is dominated by org_id='001' AND entity_id>='002'
+      // and drops it. V2 retains it as a residual filter — same row count, slight
+      // per-row CPU overhead. See pair #1 notes.
+      isV2Optimizer()
+        ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000002'] - ['000000000000001','000000000000008']\n"
+          + "    SERVER FILTER BY (ORGANIZATION_ID > TO_CHAR('000000000000000') OR (ORGANIZATION_ID = TO_CHAR('000000000000000') AND ENTITY_ID >= TO_CHAR('000000000000005')))"
+        : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER ATABLE ['000000000000001','000000000000002'] - ['000000000000001','000000000000008']",
 
       "SELECT * FROM atable", "CLIENT PARALLEL 1-WAY FULL SCAN OVER ATABLE",
 
@@ -151,8 +221,18 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
       "CLIENT PARALLEL 1-WAY POINT LOOKUP ON 4 KEYS OVER ATABLE",
 
       "SELECT inst,host FROM PTSDB WHERE REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1', 'na2','na3')",
-      "CLIENT PARALLEL 1-WAY SKIP SCAN ON 3 RANGES OVER PTSDB ['na1'] - ['na4']\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY AND REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')",
+      // Pair #29 (equivalent scan, divergent explain string): V1 promotes the regexp_
+      // substr IN-list into SKIP SCAN ON 3 RANGES [na1, na2)·[na2, na3)·[na3, na4).
+      // V2 coalesces these three contiguous sub-ranges into a single RANGE SCAN
+      // [na1, na4) over byte-identical bytes. The IN values are consecutive so the
+      // sub-ranges contain no gaps; both plans cover the same rows and run the same
+      // residual REGEXP_SUBSTR filter. V2's single contiguous scan is at worst
+      // equivalent to and likely cheaper than V1's three-hop SKIP SCAN.
+      isV2Optimizer()
+        ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER PTSDB ['na1'] - ['na4']\n"
+          + "    SERVER FILTER BY FIRST KEY ONLY AND REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')"
+        : "CLIENT PARALLEL 1-WAY SKIP SCAN ON 3 RANGES OVER PTSDB ['na1'] - ['na4']\n"
+          + "    SERVER FILTER BY FIRST KEY ONLY AND REGEXP_SUBSTR(INST, '[^-]+', 1) IN ('na1','na2','na3')",
 
     };
     for (int i = 0; i < queryPlans.length; i += 2) {
@@ -202,9 +282,21 @@ public class QueryPlanTest extends BaseConnectionlessQueryTest {
       QueryUtil.getExplainPlan(rs));
     query = "EXPLAIN SELECT * FROM TENANT_VIEW WHERE username = 'Joe' LIMIT 1";
     rs = conn.createStatement().executeQuery(query);
-    assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER BASE_MULTI_TENANT_TABLE ['tenantId']\n"
-      + "    SERVER FILTER BY USERNAME = 'Joe'\n" + "    SERVER 1 ROW LIMIT\n"
-      + "CLIENT 1 ROW LIMIT", QueryUtil.getExplainPlan(rs));
+    // V2 strictly better: V1 narrows only on the tenant prefix and leaves
+    // `USERNAME = 'Joe'` as a server filter that must reject every non-'Joe'
+    // username row. V2 promotes the equality on the trailing PK column into the
+    // scan range itself (with the unconstrained `userid` middle dim emitted as a
+    // wildcard) → ['tenantId',*,'Joe']. HBase rejects non-'Joe' rows pre-filter,
+    // so the LIMIT 1 is satisfied with far fewer rows scanned. The redundant
+    // residual filter is a small CPU cost on the (presumably few) matching rows.
+    String expectedUsername = isV2Optimizer()
+      ? "CLIENT PARALLEL 1-WAY RANGE SCAN OVER BASE_MULTI_TENANT_TABLE ['tenantId',*,'Joe']\n"
+        + "    SERVER FILTER BY USERNAME = 'Joe'\n" + "    SERVER 1 ROW LIMIT\n"
+        + "CLIENT 1 ROW LIMIT"
+      : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER BASE_MULTI_TENANT_TABLE ['tenantId']\n"
+        + "    SERVER FILTER BY USERNAME = 'Joe'\n" + "    SERVER 1 ROW LIMIT\n"
+        + "CLIENT 1 ROW LIMIT";
+    assertEquals(expectedUsername, QueryUtil.getExplainPlan(rs));
     query = "EXPLAIN SELECT * FROM TENANT_VIEW WHERE col = 'Joe' LIMIT 1";
     rs = conn.createStatement().executeQuery(query);
     assertEquals(

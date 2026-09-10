@@ -296,6 +296,12 @@ public abstract class BaseOrderByIT extends ParallelStatsDisabledIT {
     assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
     assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
     assertEquals(tableName, explainPlanAttributes.getTableName());
+    // K2='ABC' is a predicate on a non-leading PK column with no constraint on K1.
+    // Neither V1 nor V2 can install a SkipScanFilter here: the leading slot would be
+    // EVERYTHING, which violates SkipScanFilter's setNextCellHint invariant (the hint
+    // would be shorter than any already-scanned row, triggering a backward seek). The
+    // predicate is kept in the residual RowKeyComparisonFilter and rendered as the
+    // server where-filter at explain time.
     assertEquals("SERVER FILTER BY K2 = 'ABC'", explainPlanAttributes.getServerWhereFilter());
     assertEquals("SERVER AGGREGATE INTO DISTINCT ROWS BY [K2, VAL1, VAL2]",
       explainPlanAttributes.getServerAggregate());

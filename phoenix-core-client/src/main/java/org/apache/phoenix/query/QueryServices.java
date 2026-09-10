@@ -538,6 +538,16 @@ public interface QueryServices extends SQLCloseable {
   // The max point keys that can be generated for large in list clause
   public static final String MAX_IN_LIST_SKIP_SCAN_SIZE = "phoenix.max.inList.skipScan.size";
 
+  // Route WHERE optimization through the N-dimensional key-space implementation
+  // (org.apache.phoenix.compile.keyspace) instead of the legacy key-slot enumerator.
+  public static final String WHERE_OPTIMIZER_V2_ENABLED = "phoenix.where.optimizer.v2.enabled";
+
+  // Upper bound on the number of key ranges the v2 optimizer may emit per scan before
+  // it drops trailing PK dimensions and falls back to an unbounded span. The residual
+  // filter catches any rows that over-approximation lets through.
+  public static final String WHERE_OPTIMIZER_V2_CARTESIAN_BOUND =
+    "phoenix.where.optimizer.v2.cartesianBound";
+
   /**
    * Parameter to skip the system tables existence check to avoid unnecessary calls to Region server
    * holding the SYSTEM.CATALOG table in batch oriented jobs.

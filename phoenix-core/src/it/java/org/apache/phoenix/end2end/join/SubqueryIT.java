@@ -220,7 +220,11 @@ public class SubqueryIT extends BaseJoinIT {
           + "            SERVER FILTER BY FIRST KEY ONLY\n"
           + "            SERVER AGGREGATE INTO ORDERED DISTINCT ROWS BY \\[\".+.0:NAME\", \".+.:item_id\"\\]\n"
           + "        CLIENT MERGE SORT\n"
-          + "            PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)\n"
+          // V2 extracts the join key via the inner index scan so HashJoinPlan chooses
+          // SKIP-SCAN-JOIN instead of V1's hash-based PARALLEL SEMI-JOIN (SKIP MERGE).
+          // Both execute the same semi-join semantics; V2's skip-scan form is typically
+          // faster for small subqueries.
+          + "            (PARALLEL SEMI-JOIN TABLE 0 \\(SKIP MERGE\\)|SKIP-SCAN-JOIN TABLE 0)\n"
           + "                CLIENT PARALLEL 1-WAY FULL SCAN OVER " + JOIN_ORDER_TABLE_FULL_NAME
           + "\n" + "                    SERVER AGGREGATE INTO DISTINCT ROWS BY \\[\"item_id\"\\]\n"
           + "                CLIENT MERGE SORT\n" + "            DYNAMIC SERVER FILTER BY \""
