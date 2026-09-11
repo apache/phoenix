@@ -125,9 +125,9 @@ public class IndexCDCConsumer implements Runnable {
    * The time buffer in milliseconds subtracted from current time when querying CDC mutations to
    * help avoid reading mutations that are too recent.
    */
-  public static final String INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS =
+  private static final String INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS =
     "phoenix.index.cdc.consumer.timestamp.buffer.ms";
-  private static final long DEFAULT_TIMESTAMP_BUFFER_MS = 5000;
+  private static final long DEFAULT_TIMESTAMP_BUFFER_MS = 1000;
 
   /**
    * Maximum number of retries when CDC events exist but the corresponding data table mutations are
