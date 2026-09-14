@@ -17,8 +17,6 @@
  */
 package org.apache.phoenix.compile;
 
-import static org.apache.phoenix.query.QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB;
-import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED;
 import static org.apache.phoenix.thirdparty.com.google.common.base.Preconditions.checkArgument;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithCapacity;
 
@@ -626,9 +624,8 @@ public class UpsertCompiler {
         // region space managed by region servers. So we bail out on executing on server side.
         // Disable running upsert select on server side if a table has global mutable secondary
         // indexes on it
-        boolean serverSideImmutableIndexes = connection.getQueryServices().getConfiguration()
-          .getBoolean(SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
-            DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
+        boolean serverSideImmutableIndexes =
+          IndexUtil.isServerSideImmutableIndexMaintenanceEnabled(table, connection);
         boolean hasGlobalServerSideIndexes = SchemaUtil.hasGlobalIndex(table)
           && (serverSideImmutableIndexes || !table.isImmutableRows());
         boolean hasWhereSubquery = select.getWhere() != null && select.getWhere().hasSubquery();
