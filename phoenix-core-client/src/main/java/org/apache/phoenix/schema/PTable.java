@@ -359,11 +359,15 @@ public interface PTable extends PMetaDataEntity {
         return "PENDING_CUTOVER";
       }
     },
+    /**
+     * Cutover is done; the post-cutover partial-pass repair scan is deferred until the UCF wait.
+     */
     PENDING_PARTIAL_PASS {
       public String toString() {
         return "PENDING_PARTIAL_PASS";
       }
     },
+    /** The post-cutover partial-pass repair scan has been launched and is being monitored. */
     PARTIAL_PASS_RUNNING {
       public String toString() {
         return "PARTIAL_PASS_RUNNING";

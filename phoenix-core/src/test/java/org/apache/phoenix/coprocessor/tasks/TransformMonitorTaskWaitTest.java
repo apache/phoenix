@@ -21,6 +21,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Timestamp;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.transform.SystemTransformRecord;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.ManualEnvironmentEdge;
@@ -79,6 +80,40 @@ public class TransformMonitorTaskWaitTest {
       TransformMonitorTask.boundedPartialPassWaitMs(MAX_WAIT_MS));
     assertEquals("A frequency above the ceiling clamps to the ceiling", MAX_WAIT_MS,
       TransformMonitorTask.boundedPartialPassWaitMs(MAX_WAIT_MS + 1));
+  }
+
+  @Test
+  public void testEffectiveUpdateCacheFrequencyPrefersExplicitTableValue() {
+    // A table with an explicit (non-default) UPDATE_CACHE_FREQUENCY pins every client's cache
+    // lifetime, so it wins outright and the connection default is ignored.
+    long tableUcf = 90L * 60L * 1000L;
+    long connectionDefault = 5L * 60L * 1000L;
+    assertEquals("An explicit table frequency must be used verbatim", tableUcf,
+      TransformMonitorTask.effectiveUpdateCacheFrequency(tableUcf, connectionDefault));
+  }
+
+  @Test
+  public void testEffectiveUpdateCacheFrequencyFallsBackToConnectionDefaultForSentinel() {
+    // A table carrying the ALWAYS/default sentinel understates the real cache lifetime: clients
+    // fall back to their connection-level phoenix.default.update.cache.frequency, so we must too.
+    long connectionDefault = 90L * 60L * 1000L;
+    assertEquals("The sentinel table frequency must defer to the connection default",
+      connectionDefault, TransformMonitorTask.effectiveUpdateCacheFrequency(
+        QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY, connectionDefault));
+  }
+
+  @Test
+  public void testSentinelTableWithLargeConnectionDefaultDrivesWaitPastFloor() {
+    // End-to-end of the fix: a sentinel-UCF table under a large connection default must produce a
+    // wait derived from that default (scaled by 1.10), not collapse to the 30-minute floor as it
+    // did when the monitor read the stored sentinel (0) directly.
+    long connectionDefault = 90L * 60L * 1000L;
+    long effective = TransformMonitorTask.effectiveUpdateCacheFrequency(
+      QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY, connectionDefault);
+    long wait = TransformMonitorTask.boundedPartialPassWaitMs(effective);
+    assertEquals("A large connection default must drive the wait above the floor",
+      (long) (connectionDefault * 1.10), wait);
+    assertTrue("The resulting wait must exceed the minimum floor", wait > MIN_WAIT_MS);
   }
 
   private static SystemTransformRecord recordWith(Long cutoverTs, Long lastStateTs) {

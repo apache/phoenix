@@ -36,7 +36,6 @@ import java.sql.Timestamp;
 import java.util.List;
 import java.util.Properties;
 import org.apache.hadoop.hbase.coprocessor.RegionCoprocessorEnvironment;
-import org.apache.hadoop.mapreduce.Job;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.tasks.TransformMonitorTask;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
@@ -60,7 +59,6 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
-import org.mockito.Mockito;
 
 /**
  * Integration tests for the cutover lifecycle: after the physical-table pointer swap the transform
@@ -467,10 +465,8 @@ public class CutoverLifecycleIT extends ParallelStatsDisabledIT {
     // below.
     // The gate keeps a full-type record from ever consulting the lookup, so the record stays put.
     // Reset via @After resetJobLookupForTesting().
-    Job successfulJob = Mockito.mock(Job.class);
-    Mockito.when(successfulJob.isComplete()).thenReturn(true);
-    Mockito.when(successfulJob.isSuccessful()).thenReturn(true);
-    TransformMonitorTask.setJobLookupForTesting((configuration, jobId) -> successfulJob);
+    TransformMonitorTask.setJobLookupForTesting(
+      (configuration, jobId) -> new TransformMonitorTask.JobStatus(true, true));
 
     try (PhoenixConnection conn =
       (PhoenixConnection) DriverManager.getConnection(getUrl(), testProps)) {
@@ -574,10 +570,8 @@ public class CutoverLifecycleIT extends ParallelStatsDisabledIT {
     // Inject a job that is complete and unsuccessful so the PARTIAL_PASS_RUNNING branch takes the
     // failure path. The retry count is seeded above the maximum so the branch treats retries as
     // exhausted and must transition to FAILED.
-    Job failedJob = Mockito.mock(Job.class);
-    Mockito.when(failedJob.isComplete()).thenReturn(true);
-    Mockito.when(failedJob.isSuccessful()).thenReturn(false);
-    TransformMonitorTask.setJobLookupForTesting((configuration, jobId) -> failedJob);
+    TransformMonitorTask.setJobLookupForTesting(
+      (configuration, jobId) -> new TransformMonitorTask.JobStatus(true, false));
 
     try (PhoenixConnection conn =
       (PhoenixConnection) DriverManager.getConnection(getUrl(), testProps)) {
@@ -783,10 +777,8 @@ public class CutoverLifecycleIT extends ParallelStatsDisabledIT {
 
       // Now force the PARTIAL_PASS_RUNNING branch down the retry path: the injected job is complete
       // and unsuccessful, so the monitor retries the partial pass rather than completing it.
-      Job failedJob = Mockito.mock(Job.class);
-      Mockito.when(failedJob.isComplete()).thenReturn(true);
-      Mockito.when(failedJob.isSuccessful()).thenReturn(false);
-      TransformMonitorTask.setJobLookupForTesting((configuration, jobId) -> failedJob);
+      TransformMonitorTask.setJobLookupForTesting(
+        (configuration, jobId) -> new TransformMonitorTask.JobStatus(true, false));
 
       // Seed the observable state of a running-but-failing partial pass, one retry below the
       // maximum so the failure path takes a genuine retry (not the already-exhausted

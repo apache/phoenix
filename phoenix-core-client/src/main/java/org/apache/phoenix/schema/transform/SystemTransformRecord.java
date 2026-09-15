@@ -73,10 +73,11 @@ public class SystemTransformRecord {
 
   public String getString() {
     return String.format(
-      "transformType: %s, schameName: %s, logicalTableName: %s, newPhysicalTableName: %s, logicalParentName: %s, status: %s",
+      "transformType: %s, schameName: %s, logicalTableName: %s, newPhysicalTableName: %s, logicalParentName: %s, status: %s, pendingPartialPassUntilTs: %s, cutoverTs: %s",
       String.valueOf(transformType), String.valueOf(schemaName), String.valueOf(logicalTableName),
       String.valueOf(newPhysicalTableName), String.valueOf(logicalParentName),
-      String.valueOf(transformStatus));
+      String.valueOf(transformStatus), String.valueOf(pendingPartialPassUntilTs),
+      String.valueOf(cutoverTs));
   }
 
   public PTable.TransformType getTransformType() {

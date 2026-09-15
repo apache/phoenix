@@ -32,6 +32,9 @@ import org.apache.hadoop.mapreduce.JobID;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.transform.TransformTool;
+import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.ConnectionProperty;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.task.ServerTask;
 import org.apache.phoenix.schema.task.SystemTaskParams;
@@ -78,20 +81,60 @@ public class TransformMonitorTask extends BaseTask {
   }
 
   /**
-   * Resolves the running MapReduce job for a given job id. Extracted behind an overridable seam so
-   * a test can inject a completed/failed job and exercise the PARTIAL_PASS_RUNNING branch's
-   * retries-exhausted -&gt; FAILED transition deterministically, without submitting a real MR job
-   * that fails. The default implementation looks the job up on the real cluster.
+   * Resolves the completion/success of the MapReduce job for a given job id, as an immutable
+   * snapshot. Extracted behind an overridable seam so a test can inject a completed/failed status
+   * and exercise the PARTIAL_PASS_RUNNING branch's retries-exhausted -&gt; FAILED transition
+   * deterministically, without submitting a real MR job that fails. Returns {@code null} when the
+   * job id cannot be resolved. The default implementation looks the job up on the real cluster.
    */
   @VisibleForTesting
   public interface JobLookup {
-    Job getJob(Configuration configuration, String jobId) throws Exception;
+    JobStatus getJobStatus(Configuration configuration, String jobId) throws Exception;
+  }
+
+  /**
+   * Immutable snapshot of a looked-up MR job's completion and success. The status must be captured
+   * while the owning {@link Cluster} is still open: a Job obtained from a Cluster cannot outlive it
+   * -- once the Cluster is closed its client is torn down and the Job's isComplete()/isSuccessful()
+   * can no longer issue their status RPCs. The seam therefore materializes both booleans up front
+   * and hands back this snapshot rather than a live Job whose Cluster the caller has no handle to
+   * close.
+   */
+  @VisibleForTesting
+  public static final class JobStatus {
+    private final boolean complete;
+    private final boolean successful;
+
+    public JobStatus(boolean complete, boolean successful) {
+      this.complete = complete;
+      this.successful = successful;
+    }
+
+    public boolean isComplete() {
+      return complete;
+    }
+
+    public boolean isSuccessful() {
+      return successful;
+    }
   }
 
   private static JobLookup defaultJobLookup() {
+    // Materialize the job's completion/success while the Cluster is open, then close it. Cluster
+    // opens a YARN/job-history client (RPC proxies, threads, file descriptors); the
+    // PARTIAL_PASS_RUNNING branch looks a job up on every ~60s monitor scan for the duration of the
+    // partial pass, so a leaked Cluster per scan would accumulate abandoned clients. Cluster is not
+    // AutoCloseable, and the returned Job cannot outlive its Cluster (a closed cluster's client can
+    // no longer serve status RPCs), so we snapshot the status here and close in a finally rather
+    // than return a live Job.
     return (configuration, jobId) -> {
       Cluster cluster = new Cluster(configuration);
-      return cluster.getJob(JobID.forName(jobId));
+      try {
+        Job job = cluster.getJob(JobID.forName(jobId));
+        return job == null ? null : new JobStatus(job.isComplete(), job.isSuccessful());
+      } finally {
+        cluster.close();
+      }
     };
   }
 
@@ -200,6 +243,12 @@ public class TransformMonitorTask extends BaseTask {
           Transform.updateTransformRecord(conn, systemTransformRecord,
             PTable.TransformStatus.COMPLETED);
         }
+        // Commit this post-cutover transition durably here rather than relying on the ServerTask
+        // commit at the tail of run(): the pointer swap in doCutover is already committed, so a
+        // throw between here and that tail commit would discard the buffered status upsert and
+        // leave a swapped-but-still-PENDING_CUTOVER record. Every other transition in this method
+        // commits explicitly for the same reason.
+        conn.commit();
       } else if (
         systemTransformRecord.getTransformStatus()
           .equals(PTable.TransformStatus.PENDING_PARTIAL_PASS.name())
@@ -246,7 +295,9 @@ public class TransformMonitorTask extends BaseTask {
         systemTransformRecord.getTransformStatus()
           .equals(PTable.TransformStatus.PARTIAL_PASS_RUNNING.name())
       ) {
-        LOGGER.info("Partial pass is running, we will monitor {}", tableName);
+        // DEBUG, not INFO: this branch is re-entered on every ~60s monitor scan for the whole
+        // duration of the partial pass, so an INFO here would repeat the same line many times.
+        LOGGER.debug("Partial pass is running, we will monitor {}", tableName);
         // Monitor the partial-pass job to completion, then advance to COMPLETED.
         String jobId = systemTransformRecord.getTransformJobId();
         // Defense-in-depth alongside the job-id clearing on the PENDING_PARTIAL_PASS ->
@@ -268,10 +319,12 @@ public class TransformMonitorTask extends BaseTask {
           // resource-manager restart, etc.) is likewise unconfirmable. In every one of these cases
           // the pass cannot be confirmed successful, so it is routed through the same
           // retry-budgeted path as an outright failed job below -- never left to no-op forever.
-          Job job = jobId != null ? jobLookup.getJob(configuration, jobId) : null;
+          JobStatus job = jobId != null ? jobLookup.getJobStatus(configuration, jobId) : null;
           if (job != null && !job.isComplete()) {
-            // Partial pass is still running; re-evaluate on the next monitor scan.
-            LOGGER.info("Partial pass job is still running, we will keep monitoring {}", tableName);
+            // Partial pass is still running; re-evaluate on the next monitor scan. DEBUG, not INFO:
+            // this repeats every ~60s scan until the job completes.
+            LOGGER.debug("Partial pass job is still running, we will keep monitoring {}",
+              tableName);
           } else if (job != null && job.isSuccessful()) {
             Transform.updateTransformRecord(conn, systemTransformRecord,
               PTable.TransformStatus.COMPLETED);
@@ -345,7 +398,7 @@ public class TransformMonitorTask extends BaseTask {
         // Monitor the job of transform tool and decide to retry
         String jobId = systemTransformRecord.getTransformJobId();
         if (jobId != null) {
-          Job job = jobLookup.getJob(configuration, jobId);
+          JobStatus job = jobLookup.getJobStatus(configuration, jobId);
           if (job == null) {
             LOGGER.warn(String.format("Transform job with Id=%s is not found", jobId));
             return new TaskRegionObserver.TaskResult(TaskRegionObserver.TaskResultCode.SKIPPED,
@@ -452,12 +505,37 @@ public class TransformMonitorTask extends BaseTask {
       String logicalTableName = SchemaUtil.getTableName(systemTransformRecord.getSchemaName(),
         systemTransformRecord.getLogicalTableName());
       PTable logicalTable = conn.getTable(systemTransformRecord.getTenantId(), logicalTableName);
-      updateCacheFrequency = logicalTable.getUpdateCacheFrequency();
+      long connectionDefaultUpdateCacheFrequency =
+        (Long) ConnectionProperty.UPDATE_CACHE_FREQUENCY.getValue(conn.getQueryServices().getProps()
+          .get(QueryServices.DEFAULT_UPDATE_CACHE_FREQUENCY_ATRRIB));
+      updateCacheFrequency = effectiveUpdateCacheFrequency(logicalTable.getUpdateCacheFrequency(),
+        connectionDefaultUpdateCacheFrequency);
     } catch (Exception e) {
       LOGGER.warn("Could not resolve update cache frequency for the logical table; "
         + "falling back to the minimum partial-pass wait", e);
     }
     return boundedPartialPassWaitMs(updateCacheFrequency);
+  }
+
+  /**
+   * Resolves the update-cache-frequency that governs how long clients may keep writing to the old
+   * physical pointer after cutover. A table with an explicit (non-default) UPDATE_CACHE_FREQUENCY
+   * pins every client's cache lifetime to that value. When the table carries no explicit value (its
+   * stored frequency equals the ALWAYS/default sentinel), a client instead caches for its own
+   * connection-level {@code phoenix.default.update.cache.frequency} -- the same precedence
+   * {@code MetaDataClient#avoidRpcToGetTable} applies. In that case the stored sentinel understates
+   * the real cache lifetime, so we substitute the server's configured default as the best available
+   * proxy for the clients' default; otherwise a fleet running a large or NEVER default would keep
+   * writing to the old pointer well past the 30-minute floor and strand those late rows as
+   * unverified. The result is fed through {@link #boundedPartialPassWaitMs}, which scales and
+   * clamps it.
+   */
+  @VisibleForTesting
+  static long effectiveUpdateCacheFrequency(long tableUpdateCacheFrequency,
+    long connectionDefaultUpdateCacheFrequency) {
+    return tableUpdateCacheFrequency != QueryServicesOptions.DEFAULT_UPDATE_CACHE_FREQUENCY
+      ? tableUpdateCacheFrequency
+      : connectionDefaultUpdateCacheFrequency;
   }
 
   /**
