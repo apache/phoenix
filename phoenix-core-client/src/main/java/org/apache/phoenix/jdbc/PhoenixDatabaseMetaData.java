@@ -215,6 +215,18 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final byte[] INDEX_TYPE_BYTES = Bytes.toBytes(INDEX_TYPE);
   public static final String INDEX_CONSISTENCY = "INDEX_CONSISTENCY";
   public static final byte[] INDEX_CONSISTENCY_BYTES = Bytes.toBytes(INDEX_CONSISTENCY);
+  // No-op SYSTEM.CATALOG marker column, never populated or read. It exists solely to advance the
+  // SYSTEM.CATALOG header timestamp to MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0 during an in-place upgrade.
+  // The isUpgradeRequired() gate keys off SYSTEM.CATALOG's header timestamp; the paired
+  // SYSTEM.TRANSFORM column-add does not itself advance that timestamp, so on a cluster
+  // bootstrapped
+  // in the window between sibling 5.4.0 features (already at the old threshold via
+  // INDEX_CONSISTENCY)
+  // the transform column-add would be unreachable and clients would loop on
+  // UpgradeRequiredException.
+  // Adding this genuinely-new column at the new threshold makes the upgrade reachable. Single-use:
+  // a future timestamp bump needs its own new marker (re-adding an existing column is a no-op).
+  public static final String UPGRADE_TS_ANCHOR_5_4_0 = "UPGRADE_TS_ANCHOR_5_4_0";
   public static final String LINK_TYPE = "LINK_TYPE";
   public static final byte[] LINK_TYPE_BYTES = Bytes.toBytes(LINK_TYPE);
   public static final String TASK_TYPE = "TASK_TYPE";
@@ -236,6 +248,14 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final String OLD_METADATA = "OLD_METADATA";
   public static final String NEW_METADATA = "NEW_METADATA";
   public static final String TRANSFORM_FUNCTION = "TRANSFORM_FUNCTION";
+  // Epoch-millis (BIGINT, nullable) marking the earliest time the transform monitor may leave the
+  // PENDING_PARTIAL_PASS wait window. Compared against EnvironmentEdgeManager.currentTimeMillis().
+  public static final String PENDING_PARTIAL_PASS_UNTIL_TS = "PENDING_PARTIAL_PASS_UNTIL_TS";
+  // Epoch-millis (BIGINT, nullable) captured just before the cutover pointer swap and preserved
+  // across later transitions. The partial pass derives its repair-scan lower bound from this so
+  // rows written to the old pointer during the post-cutover cache-refresh window are re-verified
+  // rather than skipped.
+  public static final String CUTOVER_TS = "CUTOVER_TS";
   public static final String TRANSFORM_TABLE_TTL = "7776000"; // 90 days
 
   public static final int TTL_FOR_MUTEX = 15 * 60; // 15min
