@@ -33,6 +33,7 @@ import org.apache.hadoop.hbase.ipc.CallRunner;
 import org.apache.hadoop.hbase.regionserver.RSRpcServices;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.query.BaseTest;
+import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -58,8 +59,14 @@ public class PhoenixClientRpcIT extends BaseTest {
       Collections.singletonMap(RSRpcServices.REGION_SERVER_RPC_SCHEDULER_FACTORY_CLASS,
         TestPhoenixIndexRpcSchedulerFactory.class.getName());
     NUM_SLAVES_BASE = 2;
+    // Keep immutable-index maintenance client-side: this test verifies that client-originated
+    // index writes do not use the region-server index RPC queue. Under server-side maintenance
+    // that invariant no longer holds (the write is routed through the index handler pool only
+    // when the index region is not colocated with the data region), so pin the flag off here.
+    Map<String, String> clientProps = Collections.singletonMap(
+      QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB, Boolean.FALSE.toString());
     setUpTestDriver(new ReadOnlyProps(serverProps.entrySet().iterator()),
-      ReadOnlyProps.EMPTY_PROPS);
+      new ReadOnlyProps(clientProps.entrySet().iterator()));
   }
 
   @AfterClass
