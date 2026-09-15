@@ -761,6 +761,25 @@ public class IndexUtil {
     }
   }
 
+  /**
+   * Whether server-side maintenance of an immutable data table's global indexes applies. A table
+   * with a ROW_TIMESTAMP column stays client-maintained even when the flag is set: server-side
+   * maintenance stamps every cell with the server batch timestamp, which would overwrite the
+   * user-supplied ROW_TIMESTAMP value and silently drop rows on ROW_TIMESTAMP range scans.
+   */
+  public static boolean isServerSideImmutableIndexMaintenanceEnabled(PTable dataTable,
+    boolean configured) {
+    return configured && dataTable.getRowTimestampColPos() == -1;
+  }
+
+  public static boolean isServerSideImmutableIndexMaintenanceEnabled(PTable dataTable,
+    PhoenixConnection connection) {
+    return isServerSideImmutableIndexMaintenanceEnabled(dataTable,
+      connection.getQueryServices().getConfiguration().getBoolean(
+        QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+        QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED));
+  }
+
   public static List<PTable> getClientMaintainedIndexes(PTable table,
     boolean serverSideImmutableIndex) {
     Iterator<PTable> indexIterator = // Only maintain tables with immutable rows through this
@@ -768,7 +787,9 @@ public class IndexUtil {
       (table.isTransactional() && table.getTransactionProvider().getTransactionProvider()
         .isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER))
         ? IndexMaintainer.maintainedIndexes(table.getIndexes().iterator())
-        : (table.isImmutableRows() && !serverSideImmutableIndex || table.isTransactional())
+        : (table.isImmutableRows()
+          && !isServerSideImmutableIndexMaintenanceEnabled(table, serverSideImmutableIndex)
+          || table.isTransactional())
           // If the data table has a different storage scheme than index table, don't maintain
           // this on the client. For example, if the index is single cell but the data table is
           // one_cell, and there is a partial update on the data table, index can't be built
