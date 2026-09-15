@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.hbase.index.metrics;
 
+import java.util.concurrent.ConcurrentHashMap;
 import org.apache.hadoop.hbase.metrics.BaseSourceImpl;
 import org.apache.hadoop.metrics2.MetricHistogram;
 import org.apache.hadoop.metrics2.lib.MutableFastCounter;
@@ -48,6 +49,14 @@ public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsI
   private final MetricHistogram postIndexUpdateFailureTimeHisto;
   private final MutableFastCounter preIndexUpdateFailures;
   private final MutableFastCounter postIndexUpdateFailures;
+
+  // Resolved per-(table, base-metric) handles, memoized so the name concat and registry lookup
+  // run once per pair instead of on every per-batch metric update. Keyed tableName -> baseName ->
+  // handle; the (base, table) set is small and bounded, matching the registry's own retention.
+  private final ConcurrentHashMap<String,
+    ConcurrentHashMap<String, MetricHistogram>> tableHistograms = new ConcurrentHashMap<>();
+  private final ConcurrentHashMap<String,
+    ConcurrentHashMap<String, MutableFastCounter>> tableCounters = new ConcurrentHashMap<>();
 
   public MetricsIndexerSourceImpl() {
     this(METRICS_NAME, METRICS_DESCRIPTION, METRICS_CONTEXT, METRICS_JMX_CONTEXT);
@@ -225,15 +234,15 @@ public class MetricsIndexerSourceImpl extends BaseSourceImpl implements MetricsI
   }
 
   private void incrementTableSpecificCounter(String baseCounterName, String tableName) {
-    MutableFastCounter indexSpecificCounter =
-      getMetricsRegistry().getCounter(getCounterName(baseCounterName, tableName), 0);
-    indexSpecificCounter.incr();
+    tableCounters.computeIfAbsent(tableName, k -> new ConcurrentHashMap<>())
+      .computeIfAbsent(baseCounterName,
+        b -> getMetricsRegistry().getCounter(getCounterName(b, tableName), 0))
+      .incr();
   }
 
   private void incrementTableSpecificHistogram(String baseCounterName, String tableName, long t) {
-    MetricHistogram tableSpecificHistogram =
-      getMetricsRegistry().getHistogram(getCounterName(baseCounterName, tableName));
-    tableSpecificHistogram.add(t);
+    tableHistograms.computeIfAbsent(tableName, k -> new ConcurrentHashMap<>()).computeIfAbsent(
+      baseCounterName, b -> getMetricsRegistry().getHistogram(getCounterName(b, tableName))).add(t);
   }
 
   private String getCounterName(String baseCounterName, String tableName) {

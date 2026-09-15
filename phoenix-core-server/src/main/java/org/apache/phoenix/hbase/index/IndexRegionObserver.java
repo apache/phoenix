@@ -3012,9 +3012,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         throw new DoNotRetryIOException(
           "Simulating the last (i.e., post) index table write failure");
       }
-      doIndexWritesWithExceptions(context, true);
-      metricSource.updatePostIndexUpdateTime(dataTableName,
-        EnvironmentEdgeManager.currentTimeMillis() - start);
+      // Only record the post-index-update time when there were actually index updates to write;
+      // otherwise every batch with no post index updates emits a near-zero sample.
+      if (doIndexWritesWithExceptions(context, true)) {
+        metricSource.updatePostIndexUpdateTime(dataTableName,
+          EnvironmentEdgeManager.currentTimeMillis() - start);
+      }
     } catch (Throwable e) {
       metricSource.updatePostIndexUpdateFailureTime(dataTableName,
         EnvironmentEdgeManager.currentTimeMillis() - start);
@@ -3023,14 +3026,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
   }
 
-  private void doIndexWritesWithExceptions(BatchMutateContext context, boolean post)
+  /** Returns true if index updates were actually written, false if there was no work to do. */
+  private boolean doIndexWritesWithExceptions(BatchMutateContext context, boolean post)
     throws IOException {
     ListMultimap<HTableInterfaceReference, Mutation> indexUpdates =
       post ? context.postIndexUpdates : context.preIndexUpdates;
     // short circuit, if we don't need to do any work
 
     if (context == null || indexUpdates == null || indexUpdates.isEmpty()) {
-      return;
+      return false;
     }
 
     // get the current span, or just use a null-span to avoid a bunch of if statements
@@ -3048,6 +3052,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         preWriter.write(indexUpdates, false, context.clientVersion);
       }
     }
+    return true;
   }
 
   private void removePendingRows(BatchMutateContext context) {
@@ -3067,9 +3072,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         throw new DoNotRetryIOException(
           "Simulating the first (i.e., pre) index table write failure");
       }
-      doIndexWritesWithExceptions(context, false);
-      metricSource.updatePreIndexUpdateTime(dataTableName,
-        EnvironmentEdgeManager.currentTimeMillis() - start);
+      // Only record the pre-index-update time when there were actually index updates to write;
+      // otherwise every batch with no pre index updates emits a near-zero sample.
+      if (doIndexWritesWithExceptions(context, false)) {
+        metricSource.updatePreIndexUpdateTime(dataTableName,
+          EnvironmentEdgeManager.currentTimeMillis() - start);
+      }
     } catch (Throwable e) {
       metricSource.updatePreIndexUpdateFailureTime(dataTableName,
         EnvironmentEdgeManager.currentTimeMillis() - start);
