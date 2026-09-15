@@ -631,11 +631,14 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
       // Recording-site guard (PHOENIX-7992): incrementSuccessfulFileMutationsReplayedCount is
       // written inside processLogFile before the catch, not by its callers, so a real replay is the
       // only thing that exercises it. The exact replayed-mutation count is intentionally not
-      // asserted: generateHBaseMutations builds its Puts from a Phoenix mutation state that is never
-      // committed or cleared between rows, so the replayed total is an artifact of that helper rather
+      // asserted: generateHBaseMutations builds its Puts from a Phoenix mutation state that is
+      // never
+      // committed or cleared between rows, so the replayed total is an artifact of that helper
+      // rather
       // than the "2 + 5" rows requested (testProcessLogFileBatchSizeLogic pins an exact count on a
       // 1:1 record model). We also do not assert the mutationsPerFile histogram here:
-      // MutableHistogram.getMax() reads FastLongHistogram bins that the metrics system resets to 0 on
+      // MutableHistogram.getMax() reads FastLongHistogram bins that the metrics system resets to 0
+      // on
       // its periodic snapshot(), so a positive max is not stable to read after a multi-second real
       // replay -- only the counter (a MutableFastCounter, never reset by snapshot) is reliable.
       assertTrue("A successful multi-mutation file must record positive replay throughput",
@@ -1010,7 +1013,8 @@ public class ReplicationLogProcessorTestIT extends ParallelStatsDisabledIT {
    */
   @Test
   public void testProcessLogFileMidReplayFailureDoesNotCountMutations() throws Exception {
-    final Path filePath = new Path(testFolder.newFile("testProcessLogFileMidReplayFailure").toURI());
+    final Path filePath =
+      new Path(testFolder.newFile("testProcessLogFileMidReplayFailure").toURI());
     final String tableNameString = "T_" + generateUniqueName();
     LogFileWriter writer = initLogFileWriter(filePath);
     // Six single-mutation records with batch size 3 -> two full flushes; the second one throws.

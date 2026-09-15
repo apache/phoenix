@@ -134,7 +134,6 @@ import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.index.PhoenixIndexBuilderHelper;
 import org.apache.phoenix.index.PhoenixIndexCodec;
 import org.apache.phoenix.index.PhoenixIndexMetaData;
-import org.apache.phoenix.index.PhoenixIndexMetaDataBuilder;
 import org.apache.phoenix.jdbc.HAGroupStoreManager;
 import org.apache.phoenix.jdbc.HAGroupStoreRecord;
 import org.apache.phoenix.jdbc.HighAvailabilityPolicy;
@@ -442,6 +441,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     // The collection of candidate index mutations that will be applied after the data table
     // mutations.
     private ListMultimap<HTableInterfaceReference, Pair<Mutation, byte[]>> indexUpdates;
+    // The batch-wide timestamp stamped on every data/index mutation on the active path (see
+    // setTimestamps). Lets the index-prepare steps timestamp index mutations without re-scanning
+    // each mutation's cells. Unused on the standby replay path, which derives per-(row, ts)
+    // timestamps from each mutation directly.
+    private long batchTimestamp;
     // Map of (data table row key, group ts) to IndexMutations bytes containing pre-index mutations
     // for eventually consistent indexes (UNVERIFIED Puts only, no Deletes). Keyed by (row, ts) so
     // multiple per-row entries from the standby's per-(row, ts) grouping don't collide. On the
@@ -1053,20 +1057,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     if (replicable.isEmpty()) {
       return;
     }
-    Map<String, byte[]> replicationAttrs = new HashMap<>();
-    for (String attrKey : ReplicationLogGroup.REPLICATION_ATTR_KEYS) {
-      byte[] val = walKeyAttrs.get(attrKey);
-      if (val != null) {
-        replicationAttrs.put(attrKey, val);
-      }
-    }
     // INDEX_UUID rides the WAL key only when appendReplicationAttributesToWALKey stamped it (i.e.
-    // the batch's table was indexed, gated on hasIndex()); copy it through verbatim so this path
-    // follows the same server-PTable resolution the synchronous path triggers.
-    byte[] indexUuid = walKeyAttrs.get(PhoenixIndexCodec.INDEX_UUID);
-    if (indexUuid != null) {
-      replicationAttrs.put(PhoenixIndexCodec.INDEX_UUID, indexUuid);
-    }
+    // the batch's table was indexed, gated on hasIndex()); its presence drives the same empty-UUID
+    // stamp here, so this path follows the same server-PTable resolution the synchronous path does.
+    // The stamped value is always empty, so re-stamping empty is equivalent to copying it through.
+    Map<String, byte[]> replicationAttrs = MutationCellGrouper.buildReplicationAttributes(
+      walKeyAttrs, walKeyAttrs.containsKey(PhoenixIndexCodec.INDEX_UUID));
     logGroup.append(tableName, -1, replicable, replicationAttrs);
     logGroup.sync();
   }
@@ -1428,7 +1424,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * called, the next row states is set to current row states.
    */
   private void applyPendingPutMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-    BatchMutateContext context, long now) throws IOException {
+    BatchMutateContext context) throws IOException {
     for (Integer i = 0; i < miniBatchOp.size(); i++) {
       if (isAtomicOperationComplete(miniBatchOp.getOperationStatus(i))) {
         continue;
@@ -1467,12 +1463,12 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * * Prepares next data row state
    */
   private void prepareDataRowStates(ObserverContext<RegionCoprocessorEnvironment> c,
-    MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context, long now)
+    MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context)
     throws IOException {
     if (context.rowsToLock.size() == 0) {
       return;
     }
-    applyPendingPutMutations(miniBatchOp, context, now);
+    applyPendingPutMutations(miniBatchOp, context);
     applyPendingDeleteMutations(miniBatchOp, context);
   }
 
@@ -1733,13 +1729,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * True when this batch will be shipped to the replication log: replication is on, not disabled
-   * for testing, and an HA log group is present. Gates the active-side pre-image capture — the
-   * pre-image exists only so the standby can regenerate its index, so capturing it on a
-   * non-replicated batch would be wasted work (and an unnecessary region scan on the local path).
+   * True when this batch is replicated on an active, replication-configured cluster: replication is
+   * on and an HA log group is present. Gates the active-side pre-image capture — the pre-image
+   * exists only so the standby can regenerate its index, so capturing it on a non-replicated batch
+   * would be wasted work (and an unnecessary region scan on the local path) — and the WAL-key
+   * replication stamp. It intentionally does NOT gate on {@code ignoreSyncReplicationForTesting}:
+   * that flag suppresses only the synchronous ship (checked explicitly at the ship site) to
+   * simulate an RS crash after the WAL write but before the ship, leaving pre-image capture, the
+   * WAL stamp, and the replay path intact so crash-recovery re-ship is faithfully exercised.
    */
   private boolean isReplicatedBatch(BatchMutateContext context) {
-    return shouldReplicate && !ignoreSyncReplicationForTesting && context.logGroup.isPresent();
+    return shouldReplicate && context.logGroup.isPresent();
   }
 
   /**
@@ -2122,8 +2122,8 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * Generate the index update for a data row from the mutation that are obtained by merging the
    * previous data row state with the pending row mutation.
    */
-  private void prepareIndexMutations(BatchMutateContext context, List<IndexMaintainer> maintainers,
-    long batchTimestamp) throws IOException {
+  private void prepareIndexMutations(BatchMutateContext context, List<IndexMaintainer> maintainers)
+    throws IOException {
     List<Pair<IndexMaintainer, HTableInterfaceReference>> indexTables =
       buildIndexTablesList(maintainers);
     for (Map.Entry<ImmutableBytesPtr, Pair<Put, Put>> entry : context.dataRowStates.entrySet()) {
@@ -2135,8 +2135,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         continue;
       }
       ListMultimap<HTableInterfaceReference, Mutation> idxUpdates = ArrayListMultimap.create();
-      generateIndexMutationsForRow(rowKeyPtr, currentDataRowState, nextDataRowState, batchTimestamp,
-        encodedRegionName, QueryConstants.UNVERIFIED_BYTES, indexTables, idxUpdates);
+      generateIndexMutationsForRow(rowKeyPtr, currentDataRowState, nextDataRowState,
+        context.batchTimestamp, encodedRegionName, QueryConstants.UNVERIFIED_BYTES, indexTables,
+        idxUpdates);
       for (Map.Entry<HTableInterfaceReference, Mutation> idxUpdate : idxUpdates.entries()) {
         context.indexUpdates.put(idxUpdate.getKey(),
           new Pair<>(idxUpdate.getValue(), rowKeyPtr.get()));
@@ -2174,8 +2175,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    * row is deleted.
    */
   private void preparePreIndexMutations(MiniBatchOperationInProgress<Mutation> miniBatchOp,
-    BatchMutateContext context, long batchTimestamp, PhoenixIndexMetaData indexMetaData)
-    throws Throwable {
+    BatchMutateContext context, PhoenixIndexMetaData indexMetaData) throws Throwable {
     List<IndexMaintainer> maintainers = indexMetaData.getIndexMaintainers();
     // get the current span, or just use a null-span to avoid a bunch of if statements
     try (TraceScope scope = Trace.startSpan("Starting to build index updates")) {
@@ -2193,7 +2193,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         // pre-image — recovers the active-batch boundary the reader's coalescing can erase.
         prepareReplicatedIndexMutations(miniBatchOp, context, maintainers);
       } else {
-        prepareIndexMutations(context, maintainers, batchTimestamp);
+        prepareIndexMutations(context, maintainers);
       }
 
       if (serializeCDCMutations) {
@@ -2217,7 +2217,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         List<Pair<Mutation, byte[]>> updates = context.indexUpdates.get(hTableInterfaceReference);
         for (Pair<Mutation, byte[]> update : updates) {
           Mutation m = update.getFirst();
-          long ts = IndexUtil.getMaxTimestamp(m);
+          long ts = indexMutationTimestamp(context, m);
           RowTsKey cdcKey = new RowTsKey(new ImmutableBytesPtr(update.getSecond()), ts);
           if (m instanceof Put) {
             if (indexMaintainer.isCDCIndex() && context.cdcPreMutationsBytes != null) {
@@ -2285,7 +2285,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       for (Pair<Mutation, byte[]> update : updates) {
         Mutation m = update.getFirst();
         byte[] dataRowKey = update.getSecond();
-        long ts = IndexUtil.getMaxTimestamp(m);
+        long ts = indexMutationTimestamp(context, m);
         RowTsKey key = new RowTsKey(new ImmutableBytesPtr(dataRowKey), ts);
         IndexMutationsProtos.IndexMutations.Builder preBuilder =
           preBuilderMap.computeIfAbsent(key, k -> IndexMutationsProtos.IndexMutations.newBuilder());
@@ -2373,6 +2373,17 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     return (PhoenixIndexMetaData) indexMetaData;
   }
 
+  /**
+   * Timestamp to stamp/key a generated index mutation by. On the active path every index-mutation
+   * cell carries {@code batchTimestamp} (see {@link #setTimestamps}), so we use that directly and
+   * skip the O(cells) {@link IndexUtil#getMaxTimestamp} scan. The standby regenerates index updates
+   * per {@code (row, ts)} group, where the mutation's own timestamp is authoritative, so it must
+   * read it from the mutation.
+   */
+  private static long indexMutationTimestamp(BatchMutateContext context, Mutation m) {
+    return context.isReplication ? IndexUtil.getMaxTimestamp(m) : context.batchTimestamp;
+  }
+
   private void preparePostIndexMutations(BatchMutateContext context,
     PhoenixIndexMetaData indexMetaData) {
     context.postIndexUpdates = ArrayListMultimap.<HTableInterfaceReference, Mutation> create();
@@ -2395,7 +2406,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
           if (!indexMaintainer.isUncovered()) {
             Put verifiedPut = new Put(m.getRow());
             // Set the status of the index row to "verified"
-            verifiedPut.addColumn(emptyCF, emptyCQ, IndexUtil.getMaxTimestamp(m),
+            verifiedPut.addColumn(emptyCF, emptyCQ, indexMutationTimestamp(context, m),
               QueryConstants.VERIFIED_BYTES);
             context.postIndexUpdates.put(hTableInterfaceReference, verifiedPut);
           }
@@ -2416,7 +2427,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         for (Pair<Mutation, byte[]> update : updates) {
           Mutation m = update.getFirst();
           if (m instanceof Put) {
-            long ts = IndexUtil.getMaxTimestamp(m);
+            long ts = indexMutationTimestamp(context, m);
             RowTsKey cdcKey = new RowTsKey(new ImmutableBytesPtr(update.getSecond()), ts);
             byte[] cdcMutationsBytes = context.cdcPostMutationsBytes.get(cdcKey);
             if (cdcMutationsBytes != null) {
@@ -2707,21 +2718,20 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
 
     TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
-    long batchTimestamp = getBatchTimestamp(context, table);
+    context.batchTimestamp = getBatchTimestamp(context, table);
     // Update the timestamps of the data table mutations to prevent overlapping timestamps
     // (which prevents index inconsistencies as this case is not handled).
-    setTimestamps(miniBatchOp, builder, batchTimestamp, isStrictTTLEnabled(miniBatchOp));
+    setTimestamps(miniBatchOp, builder, context.batchTimestamp, isStrictTTLEnabled(miniBatchOp));
     if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
       // Prepare next data rows states for pending mutations (for global indexes).
-      prepareDataRowStates(c, miniBatchOp, context, batchTimestamp);
+      prepareDataRowStates(c, miniBatchOp, context);
       // dataRowStates is now populated; on a replicated batch write per-row pre-image cells to the
       // WAL edit so both replication paths (replicateMutations and replicateEditOnWALRestore) ship
       // them. Skip on a non-replicated batch — the pre-image would be unused work.
       if (isReplicatedBatch(context)) {
         capturePreImageCells(miniBatchOp, context);
       }
-      prepareAndCommitGlobalIndexUpdates(table, miniBatchOp, context, batchTimestamp,
-        indexMetaData);
+      prepareAndCommitGlobalIndexUpdates(table, miniBatchOp, context, indexMetaData);
     }
     if (context.hasLocalIndex) {
       // Group all the updates for a single row into a single update to be processed (for local
@@ -2763,9 +2773,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     PhoenixIndexMetaData indexMetaData) throws Throwable {
     TableName table = c.getEnvironment().getRegion().getRegionInfo().getTable();
     if (context.hasGlobalIndex || context.hasUncoveredIndex || context.hasTransform) {
-      // batchTimestamp is unused on this path: prepareReplicatedIndexMutations derives each index
-      // update's timestamp from its (row, ts) group, not from a batch-wide timestamp.
-      prepareAndCommitGlobalIndexUpdates(table, miniBatchOp, context, 0, indexMetaData);
+      prepareAndCommitGlobalIndexUpdates(table, miniBatchOp, context, indexMetaData);
     }
     if (context.hasLocalIndex) {
       // Group by (row, ts) so each replayed active-side batch's cells stay in their own uniform-ts
@@ -2792,10 +2800,10 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
    */
   private void prepareAndCommitGlobalIndexUpdates(TableName table,
     MiniBatchOperationInProgress<Mutation> miniBatchOp, BatchMutateContext context,
-    long batchTimestamp, PhoenixIndexMetaData indexMetaData) throws Throwable {
+    PhoenixIndexMetaData indexMetaData) throws Throwable {
     // early exit if it turns out we don't have any edits
     long start = EnvironmentEdgeManager.currentTimeMillis();
-    preparePreIndexMutations(miniBatchOp, context, batchTimestamp, indexMetaData);
+    preparePreIndexMutations(miniBatchOp, context, indexMetaData);
     metricSource.updateIndexPrepareTime(dataTableName,
       EnvironmentEdgeManager.currentTimeMillis() - start);
     // Release the locks before making RPC calls for index updates
@@ -2862,16 +2870,11 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   @Override
   public void preWALAppend(ObserverContext<RegionCoprocessorEnvironment> c, WALKey key,
     WALEdit edit) {
+    BatchMutateContext context = getBatchMutateContext(c);
     if (shouldWALAppend) {
-      BatchMutateContext context = getBatchMutateContext(c);
       appendMutationAttributesToWALKey(key, context);
     }
-
-    if (shouldReplicate) {
-      BatchMutateContext context = getBatchMutateContext(c);
-      appendHAGroupAttributeToWALKey(key, context);
-      appendReplicationAttributesToWALKey(key, context);
-    }
+    appendReplicationAttributesToWALKey(key, context);
   }
 
   private void appendMutationAttributesToWALKey(WALKey key,
@@ -2890,27 +2893,35 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
   }
 
   /**
-   * Save the HA group name if present in the WAL key so that we can use it when restoring from the
-   * WAL
+   * Stamp the WAL key with everything the WAL-restore re-ship path consumes: the HA group name it
+   * keys on ({@link #getHAGroupFromWALKey}) plus the replication attribute envelope
+   * (schema/table/tenant, and an empty INDEX_UUID for indexed tables) it reads back in
+   * {@link #replicateEditOnWALRestore}. Gated on {@link #isReplicatedBatch} — the same predicate
+   * that gates pre-image capture — so the WAL carries this stamp exactly when it carries the
+   * pre-images the re-ship needs. On a standby replay the log group is absent, so the standby's WAL
+   * never carries replication metadata it could never re-ship.
    */
-  private void appendHAGroupAttributeToWALKey(WALKey key,
+  private void appendReplicationAttributesToWALKey(WALKey key,
     IndexRegionObserver.BatchMutateContext context) {
-    if (context != null && context.logGroup.isPresent()) {
-      String haGroupName = context.logGroup.get().getHAGroupName();
-      IndexRegionObserver.appendToWALKey(key,
-        BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB, Bytes.toBytes(haGroupName));
+    if (context == null || !isReplicatedBatch(context)) {
+      return;
+    }
+    IndexRegionObserver.appendToWALKey(key, BaseScannerRegionObserverConstants.HA_GROUP_NAME_ATTRIB,
+      Bytes.toBytes(context.logGroup.get().getHAGroupName()));
+    for (Map.Entry<String, byte[]> e : buildReplicationAttributes(context).entrySet()) {
+      IndexRegionObserver.appendToWALKey(key, e.getKey(), e.getValue());
     }
   }
 
-  private void appendReplicationAttributesToWALKey(WALKey key,
-    IndexRegionObserver.BatchMutateContext context) {
-    if (context == null || context.getOriginalMutations().isEmpty()) {
-      return;
-    }
-    Map<String, byte[]> replicationAttributes = buildReplicationAttributes(context);
-    for (Map.Entry<String, byte[]> e : replicationAttributes.entrySet()) {
-      IndexRegionObserver.appendToWALKey(key, e.getKey(), e.getValue());
-    }
+  /**
+   * Active-path replication envelope for a batch: the well-known metadata keys carried on the
+   * batch's first mutation, plus an empty INDEX_UUID when the table is indexed
+   * ({@link BatchMutateContext#hasIndex()}). Shared by the synchronous ship and the WAL-append
+   * stamp; the WAL-restore path builds the same envelope from the WAL key attributes instead.
+   */
+  private static Map<String, byte[]> buildReplicationAttributes(BatchMutateContext context) {
+    return MutationCellGrouper.buildReplicationAttributes(
+      context.getOriginalMutations().get(0).getAttributesMap(), context.hasIndex());
   }
 
   /**
@@ -2975,7 +2986,9 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
                      // updates
         CompletableFuture<Void> postIndexFuture =
           CompletableFuture.runAsync(() -> doPost(c, context));
-        if (isReplicatedBatch(context)) {
+        // ignoreSyncReplicationForTesting suppresses only this synchronous ship, simulating an RS
+        // crash after the WAL write but before the ship; the WAL-restore path re-ships on replay.
+        if (isReplicatedBatch(context) && !ignoreSyncReplicationForTesting) {
           replicateMutations(context.logGroup.get(), miniBatchOp, context);
         }
         FutureUtils.get(postIndexFuture);
@@ -3612,23 +3625,4 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     }
   }
 
-  /**
-   * Build the replication attribute envelope shipped with a batch: the well-known metadata keys
-   * carried on the batch's mutations, plus an empty {@link PhoenixIndexCodec#INDEX_UUID} when (and
-   * only when) the table carries an index. An empty UUID forces the standby down the server-PTable
-   * resolution path (see {@link PhoenixIndexMetaDataBuilder}), which rebuilds index maintainers
-   * from the schema/table/tenant attributes in this same envelope. It is stamped only for indexed
-   * tables: a non-indexed table needs no regeneration, and an empty UUID there would push the
-   * standby into the server-cache branch and fail with INDEX_METADATA_NOT_FOUND. The active's own
-   * resolved index maintainers ({@link BatchMutateContext#hasIndex()}) are the source of truth, not
-   * the client-set UUID attribute.
-   */
-  private static Map<String, byte[]> buildReplicationAttributes(BatchMutateContext context) {
-    Map<String, byte[]> replicationAttributes =
-      MutationCellGrouper.extractReplicationAttributes(context.getOriginalMutations().get(0));
-    if (context.hasIndex()) {
-      MutationCellGrouper.stampIndexAttribute(replicationAttributes);
-    }
-    return replicationAttributes;
-  }
 }

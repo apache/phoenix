@@ -873,14 +873,16 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
     final String tableName = "T_" + generateUniqueName();
     final String indexName = "I_" + generateUniqueName();
     TableName table = TableName.valueOf(tableName);
-    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
-      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
-      String ddl = String.format("create table %s (id1 integer not null, "
+    final String createTableDdl =
+      String.format("create table if not exists %s (id1 integer not null, "
         + "id2 integer not null, val1 varchar, val2 varchar "
         + "constraint pk primary key (id1, id2))", tableName);
-      conn.createStatement().execute(ddl);
-      ddl = String.format("create index %s on %s (val1) include (val2)", indexName, tableName);
-      conn.createStatement().execute(ddl);
+    final String createIndexDdl = String
+      .format("create index if not exists %s on %s (val1) include (val2)", indexName, tableName);
+    try (FailoverPhoenixConnection conn = (FailoverPhoenixConnection) DriverManager
+      .getConnection(CLUSTERS.getJdbcHAUrl(), clientProps)) {
+      conn.createStatement().execute(createTableDdl);
+      conn.createStatement().execute(createIndexDdl);
       conn.commit();
     }
     // Mini cluster by default comes with only 1 RS. Starting a second RS so that
@@ -933,6 +935,12 @@ public class ReplicationLogGroupIT extends ReplicationLogGroupBaseIT {
       // expected.put(SYSTEM_CATALOG_NAME, 1);
       verifyReplication(expected);
     }
+    // Beyond the log-entry count, replay the re-shipped log onto cluster 2 and assert the data
+    // table and the standby-regenerated index are byte-for-byte equal across clusters. This
+    // exercises index regeneration from the pre-images the WAL-restore re-ship carries -- which
+    // ignoreSyncReplicationForTesting must leave intact (it suppresses only the synchronous ship).
+    replayAndVerifyAcrossClusters(Arrays.asList(createTableDdl, createIndexDdl), tableName,
+      indexName);
   }
 
   @Ignore("Mutations on SYSTEM.CATALOG and SYSTEM.CHILD_LINK are generated on the server side and don't have the HAGroup attribute set")

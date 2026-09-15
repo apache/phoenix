@@ -81,16 +81,30 @@ public final class MutationCellGrouper {
    * for indexed tables (see {@code IndexRegionObserver}).
    */
   public static Map<String, byte[]> extractReplicationAttributes(Mutation mutation) {
+    return buildReplicationAttributes(mutation.getAttributesMap(), false);
+  }
+
+  /**
+   * Build the replication attribute envelope from a raw attribute source: the
+   * {@link ReplicationLogGroup#REPLICATION_ATTR_KEYS} present in {@code source}, plus an empty
+   * {@link PhoenixIndexCodec#INDEX_UUID} when {@code indexed}. Shared by the active write path
+   * (source = the batch's first mutation attributes, {@code indexed} = context.hasIndex()) and the
+   * WAL-restore path (source = the WAL key attributes, {@code indexed} = INDEX_UUID already rode
+   * the key). Returns a mutable, possibly empty map.
+   */
+  public static Map<String, byte[]> buildReplicationAttributes(Map<String, byte[]> source,
+    boolean indexed) {
     Map<String, byte[]> envelope = new HashMap<>();
-    Map<String, byte[]> mutationAttrs = mutation.getAttributesMap();
-    if (mutationAttrs == null || mutationAttrs.isEmpty()) {
-      return envelope;
-    }
-    for (String key : ReplicationLogGroup.REPLICATION_ATTR_KEYS) {
-      byte[] v = mutationAttrs.get(key);
-      if (v != null) {
-        envelope.put(key, v);
+    if (source != null) {
+      for (String key : ReplicationLogGroup.REPLICATION_ATTR_KEYS) {
+        byte[] v = source.get(key);
+        if (v != null) {
+          envelope.put(key, v);
+        }
       }
+    }
+    if (indexed) {
+      stampIndexAttribute(envelope);
     }
     return envelope;
   }
