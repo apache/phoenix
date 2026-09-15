@@ -69,6 +69,7 @@ import org.apache.phoenix.parse.TableName;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
@@ -300,14 +301,19 @@ public abstract class BaseIndexWithRegionMovesIT extends ParallelStatsDisabledWi
     if (iterator.hasNext()) {
       byte[] tableName = iterator.next().getFirst(); // skip data table mutations
       PTable table = PhoenixRuntime.getTable(conn, Bytes.toString(tableName));
-      boolean clientSideUpdate =
-        (!localIndex || (transactional && table.getTransactionProvider().getTransactionProvider()
-          .isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER))) && (!mutable || transactional);
+      // Immutable indexes are maintained server side unless client-side maintenance is enabled.
+      boolean serverSideImmutableIndexes = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        .getConfiguration().getBoolean(QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+          QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
+      boolean clientSideUpdate = (!localIndex || (transactional && table.getTransactionProvider()
+        .getTransactionProvider().isUnsupported(Feature.MAINTAIN_LOCAL_INDEX_ON_SERVER)))
+        && ((!mutable && !serverSideImmutableIndexes) || transactional);
       if (!clientSideUpdate) {
         assertTrue(table.getType() == PTableType.TABLE); // should be data table
       }
       boolean hasIndexData = iterator.hasNext();
-      // global immutable and global transactional tables are processed client side
+      // global transactional (and immutable when maintained client side) tables are processed
+      // client side
       assertEquals(clientSideUpdate, hasIndexData);
     }
   }
