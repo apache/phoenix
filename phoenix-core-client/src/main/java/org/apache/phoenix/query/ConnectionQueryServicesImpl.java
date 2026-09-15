@@ -5304,11 +5304,15 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     return metaConnection;
   }
 
-  private PhoenixConnection upgradeSystemTransform(PhoenixConnection metaConnection,
+  @VisibleForTesting
+  public PhoenixConnection upgradeSystemTransform(PhoenixConnection metaConnection,
     Map<String, String> systemTableToSnapshotMap) throws SQLException {
     try (Statement statement = metaConnection.createStatement()) {
       statement.executeUpdate(getTransformDDL());
     } catch (NewerTableAlreadyExistsException ignored) {
+      // A newer SYSTEM.TRANSFORM header means a same-or-newer client already ran this DDL, whose
+      // CREATE statement carries the two new columns; the column-add below is therefore already
+      // done and skipping it is safe.
     } catch (TableAlreadyExistsException e) {
       // This is the first-ever column add to SYSTEM.TRANSFORM, so take a snapshot before altering.
       takeSnapshotOfSysTable(systemTableToSnapshotMap, e);
