@@ -27,13 +27,13 @@ import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC;
 import static org.apache.phoenix.replication.ReplicationLogGroup.ReplicationMode.SYNC_AND_FORWARD;
 
+import com.lmax.disruptor.BlockingWaitStrategy;
 import com.lmax.disruptor.EventFactory;
 import com.lmax.disruptor.EventHandler;
 import com.lmax.disruptor.ExceptionHandler;
 import com.lmax.disruptor.InsufficientCapacityException;
 import com.lmax.disruptor.LifecycleAware;
 import com.lmax.disruptor.RingBuffer;
-import com.lmax.disruptor.YieldingWaitStrategy;
 import com.lmax.disruptor.dsl.Disruptor;
 import com.lmax.disruptor.dsl.ProducerType;
 import java.io.IOException;
@@ -795,8 +795,13 @@ public class ReplicationLogGroup {
     int ringBufferSize =
       conf.getInt(REPLICATION_LOG_RINGBUFFER_SIZE_KEY, DEFAULT_REPLICATION_LOG_RINGBUFFER_SIZE);
     this.disruptorExecutor = createDisruptorExecutor();
+    // BlockingWaitStrategy parks the consumer when the ring buffer is empty (0 CPU when idle).
+    // YieldingWaitStrategy busy-spins/yields and pins a core per HA group even with no traffic,
+    // which starves the RS write path. HBase's WAL Disruptor (FSHLog) uses BlockingWaitStrategy
+    // for the same reason: the HDFS append/sync work dwarfs any wakeup latency, so spinning makes
+    // no sense.
     disruptor = new Disruptor<>(LogEvent.EVENT_FACTORY, ringBufferSize, disruptorExecutor,
-      ProducerType.MULTI, new YieldingWaitStrategy());
+      ProducerType.MULTI, new BlockingWaitStrategy());
     eventHandler = new LogEventHandler();
     eventHandler.init();
     disruptor.handleEventsWith(eventHandler);
@@ -873,9 +878,9 @@ public class ReplicationLogGroup {
     }
     long startTime = System.nanoTime();
     try {
-      // ringBuffer.next() claims the next sequence number. Because we initialize the Disruptor
-      // with ProducerType.MULTI and the blocking YieldingWaitStrategy this call WILL BLOCK if
-      // the ring buffer is full, thus providing backpressure to the callers.
+      // ringBuffer.next() claims the next sequence number. Because appends batch onto a bounded
+      // ring buffer, this call WILL BLOCK if the ring is full (producer-side gating on the
+      // consumer's sequence), thus providing backpressure to the callers.
       long sequence = ringBuffer.next();
       try {
         LogEvent event = ringBuffer.get(sequence);

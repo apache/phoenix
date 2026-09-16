@@ -47,12 +47,12 @@ import org.apache.phoenix.thirdparty.com.google.common.util.concurrent.ThreadFac
  * service Round-based Processing: - Files are organized into replication rounds based on timestamps
  * - Each round represents a time window (e.g., 1 minute) of replication activity - Processing waits
  * for round completion + buffer time before processing to ensure all files are available Subclasses
- * must implement: - processFile(Path, boolean): Defines how individual replication log files are processed -
- * createMetricsSource(): Provides metrics tracking for monitoring - Configuration methods: Thread
- * counts, intervals, probabilities, etc. File Processing Flow: 1. Discover new files for the
- * current round 2. Mark files as in-progress (move to in-progress directory) 3. Process each file
- * via abstract processFile() method 4. Mark successfully processed files as completed (delete from
- * in-progress) 5. Update lastRoundProcessed to track progress
+ * must implement: - processFile(Path, boolean): Defines how individual replication log files are
+ * processed - createMetricsSource(): Provides metrics tracking for monitoring - Configuration
+ * methods: Thread counts, intervals, probabilities, etc. File Processing Flow: 1. Discover new
+ * files for the current round 2. Mark files as in-progress (move to in-progress directory) 3.
+ * Process each file via abstract processFile() method 4. Mark successfully processed files as
+ * completed (delete from in-progress) 5. Update lastRoundProcessed to track progress
  */
 public abstract class ReplicationLogDiscovery {
 
