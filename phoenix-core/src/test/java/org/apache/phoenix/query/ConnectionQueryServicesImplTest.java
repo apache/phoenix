@@ -83,6 +83,7 @@ import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.monitoring.GlobalClientMetrics;
 import org.apache.phoenix.schema.PMetaData;
 import org.apache.phoenix.schema.PName;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Before;
 import org.junit.ClassRule;
@@ -459,7 +460,7 @@ public class ConnectionQueryServicesImplTest {
     byte[] name = "TEST_TABLE".getBytes(StandardCharsets.UTF_8);
     TableName physical = TableName.valueOf(name);
     MetaDataMutationResult existing =
-      new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0L, null);
+      new MetaDataMutationResult(MutationCode.TABLE_ALREADY_EXISTS, 0L, Mockito.mock(PTable.class));
     doReturn(existing).when(mockCqs).getTable(Mockito.<PName> any(), any(byte[].class),
       any(byte[].class), anyLong(), anyLong());
     invokeReenableOrphanedDisabledHBaseTable(mockCqs, name, mockAdmin);
@@ -510,11 +511,12 @@ public class ConnectionQueryServicesImplTest {
 
   private static void invokeReenableOrphanedDisabledHBaseTable(ConnectionQueryServicesImpl cqs,
     byte[] physicalTableNameBytes, Admin admin) throws Exception {
-    Method m = ConnectionQueryServicesImpl.class
-      .getDeclaredMethod("reenableOrphanedDisabledHBaseTable", byte[].class, Admin.class);
+    Method m = ConnectionQueryServicesImpl.class.getDeclaredMethod(
+      "reenableOrphanedDisabledHBaseTable", byte[].class, boolean.class, Admin.class);
     m.setAccessible(true);
     try {
-      m.invoke(cqs, physicalTableNameBytes, admin);
+      // These cases exercise base (non-view-index) physical tables, so isViewIndexTable is false.
+      m.invoke(cqs, physicalTableNameBytes, false, admin);
     } catch (InvocationTargetException e) {
       if (e.getCause() instanceof Exception) {
         throw (Exception) e.getCause();

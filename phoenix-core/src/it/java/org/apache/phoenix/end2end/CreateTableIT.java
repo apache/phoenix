@@ -82,6 +82,7 @@ import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
@@ -1823,6 +1824,42 @@ public class CreateTableIT extends ParallelStatsDisabledIT {
       assertTrue(
         "CREATE TABLE IF NOT EXISTS must not re-enable a disabled table with existing metadata",
         admin.isTableDisabled(hbaseTableName));
+    }
+  }
+
+  // PHOENIX-7788: when the base table still has metadata, a disabled shared view-index physical
+  // table must be left disabled -- an admin may have disabled it intentionally, and re-creating
+  // the base table must not silently undo that (same conservative rule as plain base tables).
+  @Test
+  public void testCreateTableDoesNotReenableDisabledViewIndexTableWhenBaseTableExists()
+    throws Exception {
+    String baseTable = generateUniqueName();
+    String ddl = "CREATE TABLE IF NOT EXISTS " + baseTable + " (T_ID VARCHAR NOT NULL, "
+      + "K VARCHAR NOT NULL, V VARCHAR CONSTRAINT PK PRIMARY KEY (T_ID, K)) "
+      + "MULTI_TENANT=true, COLUMN_ENCODED_BYTES=NONE";
+    Properties props = PropertiesUtil.deepCopy(TEST_PROPERTIES);
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.createStatement().execute(ddl);
+    }
+
+    ConnectionQueryServices services = driver.getConnectionQueryServices(getUrl(), props);
+    TableName physicalIndexTable =
+      TableName.valueOf(MetaDataUtil.getViewIndexPhysicalName(baseTable));
+
+    try (Admin admin = services.getAdmin()) {
+      admin.disableTable(physicalIndexTable);
+      assertTrue(admin.isTableDisabled(physicalIndexTable));
+    }
+
+    try (Connection conn = DriverManager.getConnection(getUrl(), props)) {
+      conn.unwrap(PhoenixConnection.class).getQueryServices().clearCache();
+      conn.createStatement().execute(ddl);
+    }
+
+    try (Admin admin = services.getAdmin()) {
+      assertTrue("Shared view-index table with a live base table must stay disabled",
+        admin.isTableDisabled(physicalIndexTable));
     }
   }
 
