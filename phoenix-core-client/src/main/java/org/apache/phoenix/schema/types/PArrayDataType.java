@@ -310,7 +310,28 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
   }
 
   @Override
+  public boolean isCoercibleTo(PDataType targetType) {
+    if (targetType != null && targetType.isVectorType()) {
+      PDataType elemType = PDataType.fromTypeId(this.getSqlType() - PDataType.ARRAY_TYPE_BASE);
+      return elemType.isCoercibleTo(PDouble.INSTANCE);
+    }
+    return super.isCoercibleTo(targetType);
+  }
+
+  @Override
+  public boolean isCastableTo(PDataType targetType) {
+    if (targetType != null && targetType.isVectorType()) {
+      PDataType elemType = PDataType.fromTypeId(this.getSqlType() - PDataType.ARRAY_TYPE_BASE);
+      return elemType.isCoercibleTo(PDouble.INSTANCE);
+    }
+    return super.isCastableTo(targetType);
+  }
+
+  @Override
   public boolean isCoercibleTo(PDataType targetType, Object value) {
+    if (targetType != null && targetType.isVectorType()) {
+      return isCoercibleTo(targetType);
+    }
     return targetType.isCoercibleTo(targetType, value);
   }
 

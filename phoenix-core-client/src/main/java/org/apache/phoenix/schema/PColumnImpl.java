@@ -373,4 +373,141 @@ public class PColumnImpl implements PColumn {
   public boolean isDerived() {
     return derived;
   }
+
+  public static class Builder {
+    private PName name;
+    private PName familyName;
+    private PDataType dataType;
+    private Integer maxLength;
+    private Integer scale;
+    private boolean nullable;
+    private int position;
+    private SortOrder sortOrder = SortOrder.getDefault();
+    private Integer arraySize;
+    private byte[] viewConstant;
+    private boolean isViewReferenced;
+    private String expressionStr;
+    private boolean isRowTimestamp;
+    private boolean isDynamic;
+    private byte[] columnQualifierBytes;
+    private long timestamp = HConstants.LATEST_TIMESTAMP;
+    private boolean derived;
+
+    public Builder() {
+    }
+
+    public Builder(PColumn column) {
+      this.name = column.getName();
+      this.familyName = column.getFamilyName();
+      this.dataType = column.getDataType();
+      this.maxLength = column.getMaxLength();
+      this.scale = column.getScale();
+      this.nullable = column.isNullable();
+      this.position = column.getPosition();
+      this.sortOrder = column.getSortOrder();
+      this.arraySize = column.getArraySize();
+      this.viewConstant = column.getViewConstant();
+      this.isViewReferenced = column.isViewReferenced();
+      this.expressionStr = column.getExpressionStr();
+      this.isRowTimestamp = column.isRowTimestamp();
+      this.isDynamic = column.isDynamic();
+      this.columnQualifierBytes = column.getColumnQualifierBytes();
+      this.timestamp = column.getTimestamp();
+      this.derived = column.isDerived();
+    }
+
+    public Builder setName(PName name) {
+      this.name = name;
+      return this;
+    }
+
+    public Builder setFamilyName(PName familyName) {
+      this.familyName = familyName;
+      return this;
+    }
+
+    public Builder setDataType(PDataType dataType) {
+      this.dataType = dataType;
+      return this;
+    }
+
+    public Builder setMaxLength(Integer maxLength) {
+      this.maxLength = maxLength;
+      return this;
+    }
+
+    public Builder setScale(Integer scale) {
+      this.scale = scale;
+      return this;
+    }
+
+    public Builder setNullable(boolean nullable) {
+      this.nullable = nullable;
+      return this;
+    }
+
+    public Builder setPosition(int position) {
+      this.position = position;
+      return this;
+    }
+
+    public Builder setSortOrder(SortOrder sortOrder) {
+      this.sortOrder = sortOrder;
+      return this;
+    }
+
+    public Builder setArraySize(Integer arraySize) {
+      this.arraySize = arraySize;
+      return this;
+    }
+
+    public Builder setViewConstant(byte[] viewConstant) {
+      this.viewConstant = viewConstant;
+      return this;
+    }
+
+    public Builder setViewReferenced(boolean isViewReferenced) {
+      this.isViewReferenced = isViewReferenced;
+      return this;
+    }
+
+    public Builder setExpressionStr(String expressionStr) {
+      this.expressionStr = expressionStr;
+      return this;
+    }
+
+    public Builder setIsRowTimestamp(boolean isRowTimestamp) {
+      this.isRowTimestamp = isRowTimestamp;
+      return this;
+    }
+
+    public Builder setIsDynamic(boolean isDynamic) {
+      this.isDynamic = isDynamic;
+      return this;
+    }
+
+    public Builder setColumnQualifierBytes(byte[] columnQualifierBytes) {
+      this.columnQualifierBytes = columnQualifierBytes;
+      return this;
+    }
+
+    public Builder setTimestamp(long timestamp) {
+      this.timestamp = timestamp;
+      return this;
+    }
+
+    public Builder setDerived(boolean derived) {
+      this.derived = derived;
+      return this;
+    }
+
+    public PColumnImpl build() {
+      if (name == null) {
+        name = PNameFactory.newName("COL");
+      }
+      return new PColumnImpl(name, familyName, dataType, maxLength, scale, nullable, position,
+        sortOrder, arraySize, viewConstant, isViewReferenced, expressionStr, isRowTimestamp,
+        isDynamic, columnQualifierBytes, timestamp, derived);
+    }
+  }
 }

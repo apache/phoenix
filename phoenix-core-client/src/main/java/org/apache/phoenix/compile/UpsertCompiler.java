@@ -53,6 +53,7 @@ import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.execute.MutationState.MultiRowMutationState;
 import org.apache.phoenix.execute.MutationState.RowMutationState;
 import org.apache.phoenix.execute.MutationState.RowTimestampColInfo;
+import org.apache.phoenix.expression.CoerceExpression;
 import org.apache.phoenix.expression.Determinism;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
@@ -68,6 +69,7 @@ import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.jdbc.PhoenixStatement.Operation;
 import org.apache.phoenix.optimize.QueryOptimizer;
 import org.apache.phoenix.parse.AliasedNode;
+import org.apache.phoenix.parse.ArrayConstructorNode;
 import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.ColumnName;
 import org.apache.phoenix.parse.HintNode;
@@ -1068,6 +1070,12 @@ public class UpsertCompiler {
       if (isTopLevel()) {
         context.getBindManager().addParamMetaData(node, column);
         Object value = context.getBindManager().getBindValue(node);
+        if (column.getDataType().isVectorType()) {
+          // Vector literals retain the target column dimension for dimension compatibility checks.
+          return LiteralExpression.newConstant(value, column.getDataType(), column.getMaxLength(),
+            column.getScale(), column.getSortOrder(), Determinism.ALWAYS);
+        }
+        // Scalar types omit column length to allow downstream size validation.
         return LiteralExpression.newConstant(value, column.getDataType(), column.getSortOrder(),
           Determinism.ALWAYS);
       }
@@ -1077,10 +1085,38 @@ public class UpsertCompiler {
     @Override
     public Expression visit(LiteralParseNode node) throws SQLException {
       if (isTopLevel()) {
+        if (column.getDataType().isVectorType()) {
+          return LiteralExpression.newConstant(node.getValue(), column.getDataType(),
+            column.getMaxLength(), column.getScale(), column.getSortOrder(), Determinism.ALWAYS);
+        }
         return LiteralExpression.newConstant(node.getValue(), column.getDataType(),
           column.getSortOrder(), Determinism.ALWAYS);
       }
       return super.visit(node);
+    }
+
+    @Override
+    public Expression visitLeave(ArrayConstructorNode node, List<Expression> children)
+      throws SQLException {
+      Expression arrayExpr = super.visitLeave(node, children);
+      if (isTopLevel() && column != null && column.getDataType().isVectorType()) {
+        boolean rowKeyOrderOptimizable =
+          context.getCurrentTable().getTable().rowKeyOrderOptimizable();
+        if (ExpressionUtil.isConstant(arrayExpr)) {
+          ImmutableBytesWritable ptr = context.getTempPtr();
+          arrayExpr.evaluate(null, ptr);
+          Object arrayVal = arrayExpr.getDataType().toObject(ptr, arrayExpr.getSortOrder(),
+            arrayExpr.getMaxLength(), arrayExpr.getScale());
+          Object vectorVal = column.getDataType().toObject(arrayVal, arrayExpr.getDataType());
+          return LiteralExpression.newConstant(vectorVal, column.getDataType(),
+            column.getMaxLength(), column.getScale(), column.getSortOrder(),
+            arrayExpr.getDeterminism(), rowKeyOrderOptimizable);
+        } else {
+          return CoerceExpression.create(arrayExpr, column.getDataType(), column.getSortOrder(),
+            column.getMaxLength(), rowKeyOrderOptimizable);
+        }
+      }
+      return arrayExpr;
     }
   }
 

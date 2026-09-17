@@ -192,7 +192,9 @@ public abstract class ValueSchema implements Writable {
       this.isNullable = isNullable;
       if (this.type != null && this.type.isFixedWidth() && this.type.getByteSize() == null) {
         if (datum.getMaxLength() != null) {
-          this.byteSize = datum.getMaxLength();
+          // Determine physical byte storage size from logical datum length.
+          Integer estByteSize = this.type.estimateByteSizeFromLength(datum.getMaxLength());
+          this.byteSize = estByteSize == null ? datum.getMaxLength() : estByteSize;
         }
       }
     }
@@ -233,9 +235,24 @@ public abstract class ValueSchema implements Writable {
       return count;
     }
 
+    /**
+     * Returns the logical length of this field, representing vector dimension for vector types or
+     * byte count for scalar fixed-width types.
+     */
     @Override
     public Integer getMaxLength() {
-      return type.isFixedWidth() ? byteSize : null;
+      if (!type.isFixedWidth()) {
+        return null;
+      }
+      if (type.getByteSize() == null) {
+        // Convert physical byte size to logical dimension using unit element width.
+        Integer unitByteSize = type.estimateByteSizeFromLength(1);
+        if (unitByteSize != null && unitByteSize > 0) {
+          return byteSize / unitByteSize;
+        }
+        return byteSize;
+      }
+      return null;
     }
 
     @Override

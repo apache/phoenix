@@ -169,6 +169,7 @@ tokens
     CONSISTENCY = 'consistency';
     EVENTUAL = 'eventual';
     STRONG = 'strong';
+    VECTOR = 'vector';
 }
 
 
@@ -224,6 +225,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.CDCChangeScope;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataTypeFactory;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
@@ -885,8 +887,30 @@ indexes returns [List<NamedNode> ret]
     :  v = index_name {$ret.add(v);}  (COMMA v = index_name {$ret.add(v);} )*
 ;
 
+vector_component_type returns [PDataType ret]
+    :   ct=identifier
+        {
+            $ret = PDataTypeFactory.getInstance().typeForVector(ct);
+            if ($ret == null) {
+                throw new ParseException("Unsupported vector component type: " + ct);
+            }
+        }
+    ;
+
 column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
+    :   c=column_name VECTOR LPAREN vt=vector_component_type COMMA dim=NUMBER RPAREN (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
+        { $ret = factory.columnDef(
+            c,
+            vt,
+            nn!=null ? Boolean.FALSE : n!=null ? Boolean.TRUE : null,
+            Integer.parseInt( dim.getText() ),
+            null,
+            pk != null, 
+            order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()),
+            df == null ? null : df.toString(),
+            eq == null ? null : Integer.parseInt( eq.getText() ),
+            rr != null); }
+    |   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
         { $ret = factory.columnDef(
             c,
             dt,
@@ -908,7 +932,14 @@ dyn_column_defs returns [List<ColumnDef> ret]
 ;
 
 dyn_column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)?
+    :   c=column_name VECTOR LPAREN vt=vector_component_type COMMA dim=NUMBER RPAREN
+        {$ret = factory.columnDef(c, vt, Boolean.TRUE,
+            Integer.parseInt( dim.getText() ),
+            null,
+            false, 
+            SortOrder.getDefault(),
+            false); }
+    |   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)?
         {$ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),
@@ -918,7 +949,14 @@ dyn_column_def returns [ColumnDef ret]
     ;
 
 dyn_column_name_or_def returns [ColumnDef ret]
-    :   c=column_name (dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? )? 
+    :   c=column_name VECTOR LPAREN vt=vector_component_type COMMA dim=NUMBER RPAREN
+        {$ret = factory.columnDef(c, vt, Boolean.TRUE,
+            Integer.parseInt( dim.getText() ),
+            null,
+            false, 
+            SortOrder.getDefault(),
+            false); }
+    |   c=column_name (dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? )? 
         {$ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
             l == null ? null : Integer.parseInt( l.getText() ),
             s == null ? null : Integer.parseInt( s.getText() ),

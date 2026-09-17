@@ -88,6 +88,7 @@ public enum SQLExceptionCode {
   DATA_EXCEEDS_MAX_CAPACITY(206, "22003", "The data exceeds the max capacity for the data type."),
   MISSING_MAX_LENGTH(207, "22004", "Max length must be specified for type."),
   NONPOSITIVE_MAX_LENGTH(208, "22006", "Max length must have a positive length for type."),
+  VECTOR_DIMENSION_EXCEEDED(210, "22007", "Vector dimension exceeds the configured maximum."),
   DECIMAL_PRECISION_OUT_OF_RANGE(209, "22003",
     "Decimal precision outside of range. Should be within 1 and " + PDataType.MAX_PRECISION + "."),
   SERVER_ARITHMETIC_ERROR(212, "22012", "Arithmetic error on server."),
