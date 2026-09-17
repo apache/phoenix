@@ -1196,7 +1196,20 @@ bind_expression  returns [BindParseNode ret]
     ;
     
 value_expression returns [ParseNode ret]
-    :   i=add_expression { $ret = i; }
+    :   i=distance_expression { $ret = i; }
+    ;
+
+distance_expression returns [ParseNode ret]
+@init{ParseNode lhs = null; List<ParseNode> l;}
+    :   i=add_expression {lhs = i;}
+        (op=(DIST_L2 | DIST_COSINE | DIST_INNER) rhs=add_expression {
+            l = Arrays.asList(lhs, rhs);
+            lhs = op.getType() == DIST_L2 ? factory.l2Distance(l)
+                : op.getType() == DIST_COSINE ? factory.cosineDistance(l)
+                : factory.innerProductDistance(l);
+            }
+        )*
+        { $ret = lhs; }
     ;
 
 add_expression returns [ParseNode ret]
@@ -1514,9 +1527,20 @@ EQ
     :   '='
     ;
 
+// Separate the infix distance operators (<=>, <->, <#>) from the less-than operator
 LT
     :   '<'
+        (   ('=' '>') => '=' '>'  { $type = DIST_COSINE; }
+        |   ('-' '>') => '-' '>'  { $type = DIST_L2; }
+        |   ('#' '>') => '#' '>'  { $type = DIST_INNER; }
+        |                         { $type = LT; }
+        )
     ;
+
+// Token types for the infix distance operators. Only the LT rule above emits these types.
+fragment DIST_L2 : '<->' ;
+fragment DIST_COSINE : '<=>' ;
+fragment DIST_INNER : '<#>' ;
 
 GT
     :   '>'
