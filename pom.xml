@@ -210,7 +210,8 @@
     <phoenix-surefire.jdk17.tuning.flags/>
     <!-- This is needed for SystemExitRule to work correctly. This may mask related issues in
     dependencies -->
-    <phoenix-surefire.jdk21.flags>-Djava.security.manager=allow</phoenix-surefire.jdk21.flags>
+    <phoenix-surefire.jdk21.flags>-Djava.security.manager=allow
+      --add-modules jdk.incubator.vector</phoenix-surefire.jdk21.flags>
 
     <!-- Surefire argLine defaults for Linux + JDK8 -->
     <argLine>${phoenix-surefire.argLine} ${phoenix-surefire.jdk8.tuning.flags} @{jacocoArgLine}</argLine>
