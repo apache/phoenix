@@ -58,6 +58,7 @@ import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PVectorDouble;
 import org.apache.phoenix.schema.types.PVectorFloat;
+import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Multimap;
@@ -495,6 +496,25 @@ public class DistanceFunctionsTest extends BaseConnectionlessQueryTest {
   }
 
   @Test
+  public void testCompilationFailsOnLiteralDimensionMismatch() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE t_literal_dim_mismatch ("
+        + "pk INTEGER PRIMARY KEY, " + "embedding VECTOR(FLOAT, 3))");
+
+      try (PreparedStatement stmt =
+        conn.prepareStatement("SELECT pk FROM t_literal_dim_mismatch ORDER BY "
+          + "L2_DISTANCE(embedding, ARRAY[1.0, 2.0]) LIMIT 10")) {
+        PhoenixPreparedStatement pStmt = stmt.unwrap(PhoenixPreparedStatement.class);
+        pStmt.compileQuery();
+        fail("Expected compilation to fail due to dimension mismatch between the column and "
+          + "the literal query vector");
+      } catch (SQLException e) {
+        assertEquals(SQLExceptionCode.VECTOR_DIMENSION_MISMATCH.getErrorCode(), e.getErrorCode());
+      }
+    }
+  }
+
+  @Test
   public void testCompilationFailsOnNonVectorArgument() throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.createStatement().execute(
@@ -526,6 +546,30 @@ public class DistanceFunctionsTest extends BaseConnectionlessQueryTest {
         // Compilation fails because the function name does not resolve
         assertNotNull(e.getMessage());
       }
+    }
+  }
+
+  @Test
+  public void testExplainTopKMerge() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE t_explain_topk (pk INTEGER PRIMARY KEY, "
+        + "v VECTOR(FLOAT, 3)) SALT_BUCKETS=4");
+      String query = "SELECT pk FROM t_explain_topk ORDER BY L2_DISTANCE(v, ARRAY[1.0, 0.0, 0.0])";
+
+      String plan = QueryUtil
+        .getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + query + " LIMIT 5"));
+      assertTrue(plan, plan.contains("SERVER TOP-5 BY L2_DISTANCE"));
+      assertTrue(plan, plan.contains("CLIENT MERGE SORT TOP-5"));
+      assertFalse(plan, plan.contains("CLIENT LIMIT"));
+
+      // With an OFFSET, the plan keeps separate merge, offset and limit steps.
+      plan = QueryUtil.getExplainPlan(
+        conn.createStatement().executeQuery("EXPLAIN " + query + " LIMIT 5 OFFSET 2"));
+      assertFalse(plan, plan.contains("CLIENT MERGE SORT TOP-"));
+      int merge = plan.indexOf("CLIENT MERGE SORT");
+      int offset = plan.indexOf("CLIENT OFFSET 2");
+      int limit = plan.indexOf("CLIENT LIMIT 5");
+      assertTrue(plan, merge >= 0 && merge < offset && offset < limit);
     }
   }
 }

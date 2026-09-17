@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.optimize.VectorSearchUtil;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
@@ -98,14 +99,24 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
     return super.next();
   }
 
+  /**
+   * Returns true if EXPLAIN shows the merge and the limit as one TOP-K step. This is true for a
+   * top-K vector search without an offset. A search with an offset keeps separate merge, offset and
+   * limit steps.
+   */
+  private boolean isTopKMerge() {
+    return offset <= 0 && VectorSearchUtil.isVectorSearch(orderByColumns, limit);
+  }
+
   @Override
   public void explain(List<String> planSteps) {
     resultIterators.explain(planSteps);
-    planSteps.add("CLIENT MERGE SORT");
+    boolean topKMerge = isTopKMerge();
+    planSteps.add(topKMerge ? "CLIENT MERGE SORT TOP-" + limit : "CLIENT MERGE SORT");
     if (offset > 0) {
       planSteps.add("CLIENT OFFSET " + offset);
     }
-    if (limit > 0) {
+    if (limit > 0 && !topKMerge) {
       planSteps.add("CLIENT LIMIT " + limit);
     }
   }
@@ -114,9 +125,14 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
   public void explain(List<String> planSteps,
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     resultIterators.explain(planSteps, explainPlanAttributesBuilder);
-    explainPlanAttributesBuilder.setClientSortAlgo("CLIENT MERGE SORT");
-    planSteps.add("CLIENT MERGE SORT");
-    explainPlanAttributesBuilder.addClientStep("CLIENT MERGE SORT");
+    boolean topKMerge = isTopKMerge();
+    String mergeStep = topKMerge ? "CLIENT MERGE SORT TOP-" + limit : "CLIENT MERGE SORT";
+    if (topKMerge) {
+      explainPlanAttributesBuilder.setVectorSearch(true);
+    }
+    explainPlanAttributesBuilder.setClientSortAlgo(mergeStep);
+    planSteps.add(mergeStep);
+    explainPlanAttributesBuilder.addClientStep(mergeStep);
     if (offset > 0) {
       explainPlanAttributesBuilder.setClientOffset(offset);
       String step = "CLIENT OFFSET " + offset;
@@ -125,9 +141,11 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
     }
     if (limit > 0) {
       explainPlanAttributesBuilder.setClientRowLimit(limit);
-      String step = "CLIENT LIMIT " + limit;
-      planSteps.add(step);
-      explainPlanAttributesBuilder.addClientStep(step);
+      if (!topKMerge) {
+        String step = "CLIENT LIMIT " + limit;
+        planSteps.add(step);
+        explainPlanAttributesBuilder.addClientStep(step);
+      }
     }
   }
 

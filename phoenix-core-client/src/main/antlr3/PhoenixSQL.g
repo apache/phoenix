@@ -1107,11 +1107,11 @@ order_by returns [List<OrderByNode> ret]
 
 //parse the individual field for an order by clause
 parseOrderByField returns [OrderByNode ret]
-@init{boolean isAscending = true; boolean nullsLast = false;}
+@init{boolean isAscending = true; Boolean nullsLast = null;}
     :   (expr = expression)
         (ASC {isAscending = true;} | DESC {isAscending = false;})?
         (NULLS (FIRST {nullsLast = false;} | LAST {nullsLast = true;}))?
-        { $ret = factory.orderBy(expr, nullsLast, isAscending); }
+        { $ret = nullsLast == null ? factory.orderBy(expr, isAscending) : factory.orderBy(expr, nullsLast, isAscending); }
     ;
 
 parseFrom returns [TableNode ret]
