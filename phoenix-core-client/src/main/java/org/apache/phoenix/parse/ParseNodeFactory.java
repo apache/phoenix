@@ -921,6 +921,22 @@ public class ParseNodeFactory {
     return new OrderByNode(expression, nullsLast, orderAscending);
   }
 
+  /** Creates an ORDER BY item without a NULLS FIRST or NULLS LAST clause. */
+  public OrderByNode orderBy(ParseNode expression, boolean orderAscending) {
+    return new OrderByNode(expression, orderAscending);
+  }
+
+  /**
+   * Creates an ORDER BY item over a rewritten expression with the ordering of the template. If the
+   * template resolves its default to NULLS LAST, as for a vector distance, the new item keeps NULLS
+   * LAST. This is also true if the rewritten expression is not a distance, such as an index column.
+   */
+  public OrderByNode orderBy(ParseNode expression, OrderByNode template) {
+    return template.isNullsDefault() && !template.isNullsLast()
+      ? new OrderByNode(expression, template.isAscending())
+      : new OrderByNode(expression, template.isNullsLast(), template.isAscending());
+  }
+
   public SelectStatement select(TableNode from, HintNode hint, boolean isDistinct,
     List<AliasedNode> select, ParseNode where, List<ParseNode> groupBy, ParseNode having,
     List<OrderByNode> orderBy, LimitNode limit, OffsetNode offset, int bindCount,
