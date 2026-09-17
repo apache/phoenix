@@ -447,4 +447,53 @@
       </plugin>
     </plugins>
   </build>
+
+  <profiles>
+    <profile>
+      <id>java21</id>
+      <!-- Multi-release build profile compiling SIMD kernels with the Panama Vector API (JDK 21+). -->
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <executions>
+              <execution>
+                <id>compile-java21</id>
+                <goals>
+                  <goal>compile</goal>
+                </goals>
+                <phase>compile</phase>
+                <configuration>
+                  <release>21</release>
+                  <compileSourceRoots>
+                    <compileSourceRoot>${project.basedir}/src/main/java21</compileSourceRoot>
+                  </compileSourceRoots>
+                  <outputDirectory>${project.build.outputDirectory}/META-INF/versions/21</outputDirectory>
+                  <compilerArgs>
+                    <arg>--add-modules</arg>
+                    <arg>jdk.incubator.vector</arg>
+                  </compilerArgs>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-jar-plugin</artifactId>
+            <configuration>
+              <archive>
+                <manifestEntries>
+                  <Multi-Release>true</Multi-Release>
+                </manifestEntries>
+              </archive>
+              <excludes>
+                <exclude>META-INF/versions/*/META-INF/**</exclude>
+              </excludes>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

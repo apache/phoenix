@@ -21,6 +21,7 @@ import java.lang.reflect.Constructor;
 import java.math.BigDecimal;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -33,11 +34,15 @@ import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.function.AvgAggregateFunction;
+import org.apache.phoenix.expression.function.CosineDistanceFunction;
 import org.apache.phoenix.expression.function.CountAggregateFunction;
 import org.apache.phoenix.expression.function.CurrentDateFunction;
 import org.apache.phoenix.expression.function.CurrentTimeFunction;
 import org.apache.phoenix.expression.function.DistinctCountAggregateFunction;
 import org.apache.phoenix.expression.function.FunctionExpression;
+import org.apache.phoenix.expression.function.InnerProductDistanceFunction;
+import org.apache.phoenix.expression.function.L2DistanceFunction;
+import org.apache.phoenix.expression.function.L2DistanceSquaredFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunction;
 import org.apache.phoenix.parse.FunctionParseNode.BuiltInFunctionInfo;
 import org.apache.phoenix.parse.JoinTableNode.JoinType;
@@ -190,9 +195,22 @@ public class ParseNodeFactory {
 
   public static BuiltInFunctionInfo get(String normalizedName, List<ParseNode> children) {
     initBuiltInFunctionMap();
-    BuiltInFunctionInfo info =
-      BUILT_IN_FUNCTION_MAP.get(new BuiltInFunctionKey(normalizedName, children.size()));
+    BuiltInFunctionInfo info = BUILT_IN_FUNCTION_MAP
+      .get(new BuiltInFunctionKey(SchemaUtil.normalizeIdentifier(normalizedName), children.size()));
     return info;
+  }
+
+  public static BuiltInFunctionInfo get(String normalizedName, int argCount) {
+    initBuiltInFunctionMap();
+    return BUILT_IN_FUNCTION_MAP
+      .get(new BuiltInFunctionKey(SchemaUtil.normalizeIdentifier(normalizedName), argCount));
+  }
+
+  public static BuiltInFunctionInfo getBuiltInFunction(String name) {
+    initBuiltInFunctionMap();
+    Collection<BuiltInFunctionInfo> infos =
+      BUILT_IN_FUNCTION_MULTIMAP.get(SchemaUtil.normalizeIdentifier(name));
+    return (infos == null || infos.isEmpty()) ? null : infos.iterator().next();
   }
 
   public static Multimap<String, BuiltInFunctionInfo> getBuiltInFunctionMultimap() {
@@ -241,6 +259,22 @@ public class ParseNodeFactory {
 
   public ModulusParseNode modulus(List<ParseNode> children) {
     return new ModulusParseNode(children);
+  }
+
+  public FunctionParseNode l2Distance(List<ParseNode> children) {
+    return function(L2DistanceFunction.NAME, children);
+  }
+
+  public FunctionParseNode l2DistanceSquared(List<ParseNode> children) {
+    return function(L2DistanceSquaredFunction.NAME, children);
+  }
+
+  public FunctionParseNode cosineDistance(List<ParseNode> children) {
+    return function(CosineDistanceFunction.NAME, children);
+  }
+
+  public FunctionParseNode innerProductDistance(List<ParseNode> children) {
+    return function(InnerProductDistanceFunction.NAME, children);
   }
 
   public AndParseNode and(List<ParseNode> children) {
