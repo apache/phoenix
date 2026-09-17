@@ -109,6 +109,15 @@ public class OrderByCompiler {
     public static boolean equalsForOutputOrderBy(OrderBy orderBy1, OrderBy orderBy2) {
       return Objects.equals(orderBy1.orderByExpressions, orderBy2.orderByExpressions);
     }
+
+    public boolean isVectorDistanceOrder() {
+      return orderByExpressions != null && orderByExpressions.size() == 1 && orderByExpressions
+        .get(0).getExpression() instanceof org.apache.phoenix.expression.function.DistanceFunction;
+    }
+
+    public boolean isVectorSearch(Integer limit) {
+      return org.apache.phoenix.optimize.VectorSearchUtil.isVectorSearch(this, limit);
+    }
   }
 
   /**
@@ -195,7 +204,7 @@ public class OrderByCompiler {
     // I think this makes sense for the pagination case but perhaps we can relax this for
     // other use cases.
     // Note If the table is salted we still mark as row ordered in this code path
-    if (offset.getByteOffset().isPresent() && orderByExpressions.isEmpty()) {
+    if (offset != null && offset.getByteOffset().isPresent() && orderByExpressions.isEmpty()) {
       throw new RowValueConstructorOffsetNotAllowedInQueryException(
         "RVC OFFSET requires either forceRowKeyOrder or explict ORDERBY with row key order");
     }
@@ -221,7 +230,7 @@ public class OrderByCompiler {
             && context.getCurrentTable().getTable().getType() != PTableType.SUBQUERY
             && !statement.getHint().hasHint(Hint.FORWARD_SCAN)
         ) {
-          if (offset.getByteOffset().isPresent()) {
+          if (offset != null && offset.getByteOffset().isPresent()) {
             throw new SQLException("Do not allow non-pk ORDER BY with RVC OFFSET");
           }
           context.addAppliedRewrite("REVERSE SCAN SUBSTITUTION");
@@ -232,7 +241,7 @@ public class OrderByCompiler {
       }
     }
     // If we were in row order this would be optimized out above
-    if (offset.getByteOffset().isPresent()) {
+    if (offset != null && offset.getByteOffset().isPresent()) {
       throw new RowValueConstructorOffsetNotCoercibleException(
         "Do not allow non-pk ORDER BY with RVC OFFSET");
     }
@@ -241,6 +250,10 @@ public class OrderByCompiler {
 
   public static boolean isTrackOrderByPreserving(SelectStatement selectStatement) {
     return !selectStatement.isUnion();
+  }
+
+  public static boolean isVectorSearchQuery(SelectStatement selectStatement) {
+    return org.apache.phoenix.optimize.VectorSearchUtil.isVectorSearchQuery(selectStatement);
   }
 
   private OrderByCompiler() {
