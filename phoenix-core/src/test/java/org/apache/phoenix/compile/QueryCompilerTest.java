@@ -125,6 +125,24 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
     justification = "Test code.")
 public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
+  /**
+   * True when the V2 WHERE optimizer is enabled for this test JVM. Tests whose expected
+   * scan bytes differ between V1 and V2 (typically a trailing SEP byte that V2 retains
+   * and V1 strips, or a tighter compound scan range that V2 produces) branch on this
+   * helper to pin both forms.
+   */
+  protected static boolean isV2Optimizer() {
+    try (java.sql.Connection conn = java.sql.DriverManager.getConnection(getUrl(),
+      org.apache.phoenix.util.PropertiesUtil.deepCopy(TEST_PROPERTIES))) {
+      return conn.unwrap(org.apache.phoenix.jdbc.PhoenixConnection.class).getQueryServices()
+        .getConfiguration().getBoolean(
+          org.apache.phoenix.query.QueryServices.WHERE_OPTIMIZER_V2_ENABLED,
+          org.apache.phoenix.query.QueryServicesOptions.DEFAULT_WHERE_OPTIMIZER_V2_ENABLED);
+    } catch (java.sql.SQLException e) {
+      return false;
+    }
+  }
+
   @Before
   public void setUp() {
     ParseNodeFactory.setTempAliasCounterValue(0);
@@ -1020,18 +1038,22 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
 
   @Test
   public void testRegexpSubstrSetScanKeys() throws Exception {
+    // Same SEP-byte parity as testSubstrSetScanKey.
+    byte[] expectedStart = isV2Optimizer()
+      ? ByteUtil.concat(Bytes.toBytes("abc"), QueryConstants.SEPARATOR_BYTE_ARRAY)
+      : Bytes.toBytes("abc");
     // First test scan keys are set when the offset is 0 or 1.
     String query = "SELECT host FROM ptsdb WHERE regexp_substr(inst, '[a-zA-Z]+') = 'abc'";
     List<Object> binds = Collections.emptyList();
     Scan scan = compileQuery(query, binds);
-    assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+    assertArrayEquals(expectedStart, scan.getStartRow());
     assertArrayEquals(ByteUtil.nextKey(Bytes.toBytes("abc")), scan.getStopRow());
     assertTrue(scan.getFilter() != null);
 
     query = "SELECT host FROM ptsdb WHERE regexp_substr(inst, '[a-zA-Z]+', 0) = 'abc'";
     binds = Collections.emptyList();
     scan = compileQuery(query, binds);
-    assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+    assertArrayEquals(expectedStart, scan.getStartRow());
     assertArrayEquals(ByteUtil.nextKey(Bytes.toBytes("abc")), scan.getStopRow());
     assertTrue(scan.getFilter() != null);
 
@@ -1148,7 +1170,13 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     String query = "SELECT inst FROM ptsdb WHERE substr(inst, 0, 3) = 'abc'";
     List<Object> binds = Collections.emptyList();
     Scan scan = compileQuery(query, binds);
-    assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+    // V2 encoder appends the SEP byte after `inst` on the startRow because dim 0 is
+    // var-width and there are trailing PK columns; V1 strips it. Both ranges admit
+    // the same rows.
+    byte[] expectedStart = isV2Optimizer()
+      ? ByteUtil.concat(Bytes.toBytes("abc"), QueryConstants.SEPARATOR_BYTE_ARRAY)
+      : Bytes.toBytes("abc");
+    assertArrayEquals(expectedStart, scan.getStartRow());
     assertArrayEquals(ByteUtil.nextKey(Bytes.toBytes("abc")), scan.getStopRow());
     assertTrue(scan.getFilter() == null); // Extracted.
   }
@@ -1158,7 +1186,11 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
     String query = "SELECT inst FROM ptsdb WHERE rtrim(inst) = 'abc'";
     List<Object> binds = Collections.emptyList();
     Scan scan = compileQuery(query, binds);
-    assertArrayEquals(Bytes.toBytes("abc"), scan.getStartRow());
+    // Same SEP-byte parity as testSubstrSetScanKey.
+    byte[] expectedStart = isV2Optimizer()
+      ? ByteUtil.concat(Bytes.toBytes("abc"), QueryConstants.SEPARATOR_BYTE_ARRAY)
+      : Bytes.toBytes("abc");
+    assertArrayEquals(expectedStart, scan.getStartRow());
     assertArrayEquals(ByteUtil.nextKey(Bytes.toBytes("abc ")), scan.getStopRow());
     assertNotNull(scan.getFilter());
   }
@@ -7234,12 +7266,22 @@ public class QueryCompilerTest extends BaseConnectionlessQueryTest {
         + " where k4=1 and k2=1 order by k1 asc, v1 asc limit  1";
       ResultSet rs = stmt.executeQuery("EXPLAIN " + query);
       String explainPlan = QueryUtil.getExplainPlan(rs);
-      // We are more interested in the query compiling than the exact result
-      assertEquals("CLIENT PARALLEL 1-WAY RANGE SCAN OVER II [1]\n"
-        + "    SERVER MERGE [0.V1, 0.V2, 0.V3, 0.V4]\n"
-        + "    SERVER FILTER BY FIRST KEY ONLY AND \"K2\" = 1\n"
-        + "    SERVER TOP 1 ROW SORTED BY [\"K1\", \"V1\"]\n" + "CLIENT MERGE SORT\n"
-        + "CLIENT LIMIT 1", explainPlan);
+      // V1 emits a RANGE SCAN [1] with K2=1 in the server filter; V2 promotes the K2
+      // equality into the scan range itself via SKIP_SCAN ON 1 KEY [1,*,1] — either
+      // form is correct (same row set), differing only in where the K2=1 narrowing is
+      // applied (scan vs filter).
+      String expected = isV2Optimizer()
+        ? "CLIENT PARALLEL 1-WAY SKIP SCAN ON 1 KEY OVER II [1,*,1]\n"
+          + "    SERVER MERGE [0.V1, 0.V2, 0.V3, 0.V4]\n"
+          + "    SERVER FILTER BY FIRST KEY ONLY\n"
+          + "    SERVER TOP 1 ROW SORTED BY [\"K1\", \"V1\"]\n" + "CLIENT MERGE SORT\n"
+          + "CLIENT LIMIT 1"
+        : "CLIENT PARALLEL 1-WAY RANGE SCAN OVER II [1]\n"
+          + "    SERVER MERGE [0.V1, 0.V2, 0.V3, 0.V4]\n"
+          + "    SERVER FILTER BY FIRST KEY ONLY AND \"K2\" = 1\n"
+          + "    SERVER TOP 1 ROW SORTED BY [\"K1\", \"V1\"]\n" + "CLIENT MERGE SORT\n"
+          + "CLIENT LIMIT 1";
+      assertEquals(expected, explainPlan);
     }
   }
 
