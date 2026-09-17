@@ -309,12 +309,29 @@ public abstract class PArrayDataType<T> extends PDataType<T> {
     throw new UnsupportedOperationException();
   }
 
+  /** Returns true if the given array type has numeric elements. */
+  private static boolean isNumericArray(PDataType arrayType) {
+    PDataType elemType = arrayBaseType(arrayType);
+    return elemType.isCoercibleTo(PDouble.INSTANCE) || elemType.isCoercibleTo(PDecimal.INSTANCE);
+  }
+
+  @Override
+  public boolean isCastableTo(PDataType targetType) {
+    if (targetType != null && targetType.isVectorType()) {
+      return isNumericArray(this);
+    }
+    return super.isCastableTo(targetType);
+  }
+
   @Override
   public boolean isCoercibleTo(PDataType targetType, Object value) {
     return targetType.isCoercibleTo(targetType, value);
   }
 
   public boolean isCoercibleTo(PDataType targetType, PDataType expectedTargetType) {
+    if (targetType.isVectorType()) {
+      return isNumericArray(expectedTargetType);
+    }
     if (!targetType.isArrayType()) {
       return false;
     } else {

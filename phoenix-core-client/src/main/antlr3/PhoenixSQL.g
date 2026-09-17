@@ -224,6 +224,7 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTable.CDCChangeScope;
 import org.apache.phoenix.schema.stats.StatisticsCollectionScope;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PDataTypeFactory;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PTime;
 import org.apache.phoenix.schema.types.PTimestamp;
@@ -885,16 +886,35 @@ indexes returns [List<NamedNode> ret]
     :  v = index_name {$ret.add(v);}  (COMMA v = index_name {$ret.add(v);} )*
 ;
 
+// Column type specification with optional length and scale, supporting parameterized
+// VECTOR(<component type>, <dimension>) definitions.
+column_type returns [String name, Integer maxLength, Integer scale]
+    :   dt=identifier (LPAREN (ct=identifier COMMA)? l=NUMBER (COMMA s=NUMBER)? RPAREN)?
+        {
+            $name = dt;
+            $maxLength = l == null ? null : Integer.parseInt( l.getText() );
+            $scale = s == null ? null : Integer.parseInt( s.getText() );
+            if (ct != null) {
+                PDataType vectorType = "VECTOR".equalsIgnoreCase(dt) && s == null
+                    ? PDataTypeFactory.getInstance().typeForVector(ct) : null;
+                if (vectorType == null) {
+                    throw new ParseException("Unsupported type: " + dt + "(" + ct + ", ...)");
+                }
+                $name = vectorType.getSqlTypeName();
+            }
+        }
+    ;
+
 column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
+    :   c=column_name t=column_type ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? (nn=NOT? n=NULL)? (DEFAULT df=expression)? ((pk=PRIMARY KEY (order=ASC|order=DESC)? rr=ROW_TIMESTAMP?)|(ENCODED_QUALIFIER eq=NUMBER))?
         { $ret = factory.columnDef(
             c,
-            dt,
+            $t.name,
             ar != null || lsq != null,
             a == null ? null :  Integer.parseInt( a.getText() ),
             nn!=null ? Boolean.FALSE : n!=null ? Boolean.TRUE : null,
-            l == null ? null : Integer.parseInt( l.getText() ),
-            s == null ? null : Integer.parseInt( s.getText() ),
+            $t.maxLength,
+            $t.scale,
             pk != null, 
             order == null ? SortOrder.getDefault() : SortOrder.fromDDLValue(order.getText()),
             df == null ? null : df.toString(),
@@ -908,20 +928,20 @@ dyn_column_defs returns [List<ColumnDef> ret]
 ;
 
 dyn_column_def returns [ColumnDef ret]
-    :   c=column_name dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)?
-        {$ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
-            l == null ? null : Integer.parseInt( l.getText() ),
-            s == null ? null : Integer.parseInt( s.getText() ),
+    :   c=column_name t=column_type ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)?
+        {$ret = factory.columnDef(c, $t.name, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
+            $t.maxLength,
+            $t.scale,
             false, 
             SortOrder.getDefault(),
             false); }
     ;
 
 dyn_column_name_or_def returns [ColumnDef ret]
-    :   c=column_name (dt=identifier (LPAREN l=NUMBER (COMMA s=NUMBER)? RPAREN)? ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? )? 
-        {$ret = factory.columnDef(c, dt, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
-            l == null ? null : Integer.parseInt( l.getText() ),
-            s == null ? null : Integer.parseInt( s.getText() ),
+    :   c=column_name (t=column_type ar=ARRAY? (lsq=LSQUARE (a=NUMBER)? RSQUARE)? )? 
+        {$ret = factory.columnDef(c, $t.name, ar != null || lsq != null, a == null ? null :  Integer.parseInt( a.getText() ), Boolean.TRUE,
+            $t.maxLength,
+            $t.scale,
             false, 
             SortOrder.getDefault(),
             false); }

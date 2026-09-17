@@ -126,6 +126,8 @@ public class PDataTypeFactory {
     types.add(PJson.INSTANCE);
     types.add(PBson.INSTANCE);
     types.add(PVarbinaryEncoded.INSTANCE);
+    types.add(PVectorFloat.INSTANCE);
+    types.add(PVectorDouble.INSTANCE);
 
     classToInstance = new HashMap<>(types.size());
     for (PDataType t : types) {
@@ -164,5 +166,19 @@ public class PDataTypeFactory {
     } else {
       return javaClassToInstance.get(clazz);
     }
+  }
+
+  /**
+   * Returns the vector data type corresponding to the given component type name, or null if
+   * unsupported.
+   */
+  public PDataType typeForVector(String componentType) {
+    String normalized = componentType.trim().toUpperCase();
+    if (PFloat.INSTANCE.getSqlTypeName().equals(normalized)) {
+      return PVectorFloat.INSTANCE;
+    } else if (PDouble.INSTANCE.getSqlTypeName().equals(normalized)) {
+      return PVectorDouble.INSTANCE;
+    }
+    return null;
   }
 }

@@ -26,6 +26,7 @@ import java.util.List;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PVectorDataType;
 import org.apache.phoenix.util.SizedUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
@@ -192,7 +193,10 @@ public abstract class ValueSchema implements Writable {
       this.isNullable = isNullable;
       if (this.type != null && this.type.isFixedWidth() && this.type.getByteSize() == null) {
         if (datum.getMaxLength() != null) {
-          this.byteSize = datum.getMaxLength();
+          // Vector maxLength represents dimension count rather than byte size.
+          this.byteSize = this.type.isVectorType()
+            ? this.type.estimateByteSizeFromLength(datum.getMaxLength())
+            : datum.getMaxLength();
         }
       }
     }
@@ -235,7 +239,13 @@ public abstract class ValueSchema implements Writable {
 
     @Override
     public Integer getMaxLength() {
-      return type.isFixedWidth() ? byteSize : null;
+      if (!type.isFixedWidth()) {
+        return null;
+      }
+      // Derive dimension count from total byte size for vector types.
+      return type.isVectorType()
+        ? byteSize / ((PVectorDataType) type).getElementByteSize()
+        : byteSize;
     }
 
     @Override
