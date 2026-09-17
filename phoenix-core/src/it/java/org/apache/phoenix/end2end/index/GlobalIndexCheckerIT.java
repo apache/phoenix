@@ -55,10 +55,12 @@ import org.apache.hadoop.mapreduce.CounterGroup;
 import org.apache.phoenix.end2end.IndexToolIT;
 import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.BaseTest;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -725,6 +727,7 @@ public class GlobalIndexCheckerIT extends BaseTest {
       conn.createStatement().execute("upsert into " + dataTableName + " (id, val1, val2, val3) "
         + "values ('a', 'ab', 'abcc', null)");
       conn.commit();
+      waitForEventualConsistency();
       String selectSql = "SELECT * from " + dataTableName + " WHERE val1  = 'ab'";
       // Verify that we will read from the index table
       assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
@@ -748,6 +751,74 @@ public class GlobalIndexCheckerIT extends BaseTest {
         assertEquals("ab", rs.getString(2));
         assertEquals("abcc", rs.getString(3));
         assertEquals("abcd", rs.getString(4));
+        assertFalse(rs.next());
+      }
+    }
+  }
+
+  /**
+   * Same partial-upsert scenario as testPartialRowUpdateForImmutable but for an UNCOVERED global
+   * index. A partial upsert that omits the indexed column (val1) must not create a spurious
+   * NULL-keyed index entry: for an immutable table val1 keeps its earlier value, so the index must
+   * still resolve the row under its original key and never under IS NULL. Verified via the index
+   * path (explain plan asserts the index table is used).
+   */
+  @Test
+  public void testPartialRowUpdateForImmutableUncovered() throws Exception {
+    if (async || encoded) {
+      // No need to run this test more than once
+      return;
+    }
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String dataTableName = generateUniqueName();
+      conn.createStatement()
+        .execute("create table " + dataTableName
+          + " (id varchar(10) not null primary key, val1 varchar(10), val2 varchar(10))"
+          + " IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME="
+          + PTableImpl.ImmutableStorageScheme.ONE_CELL_PER_COLUMN);
+      // full upsert that sets the indexed column
+      conn.createStatement()
+        .execute("upsert into " + dataTableName + " (id, val1, val2) values ('a', 'ab', 'abc')");
+      conn.commit();
+      String indexTableName = generateUniqueName();
+      conn.createStatement().execute("CREATE UNCOVERED INDEX " + indexTableName + " on "
+        + dataTableName + " (val1)" + this.indexDDLOptions);
+      // PARTIAL upsert that omits the indexed column val1. For immutable rows val1 stays 'ab'.
+      conn.createStatement()
+        .execute("upsert into " + dataTableName + " (id, val2) values ('a', 'xyz')");
+      conn.commit();
+      waitForEventualConsistency();
+
+      // (a) index path must still resolve the row under its original key 'ab'
+      String selectAb = "SELECT id from " + dataTableName + " WHERE val1 = 'ab'";
+      assertExplainPlan(conn, selectAb, dataTableName, indexTableName);
+      try (ResultSet rs = conn.createStatement().executeQuery(selectAb)) {
+        assertTrue(rs.next());
+        assertEquals("a", rs.getString(1));
+        assertFalse(rs.next());
+      }
+
+      // (b) count via the index must be exactly 1. The scan path (a)/(c) self-heals unverified
+      // index rows at read time, but the COUNT aggregate does not: only server-side maintenance
+      // reads the current row back and rewrites a verified entry for the retained key, so the
+      // COUNT path agrees only when server-side immutable-index maintenance is enabled.
+      boolean serverSideImmutableIndexes = conn.unwrap(PhoenixConnection.class).getQueryServices()
+        .getConfiguration().getBoolean(QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+          QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
+      if (serverSideImmutableIndexes) {
+        String countAb = "SELECT COUNT(*) from " + dataTableName + " WHERE val1 = 'ab'";
+        assertExplainPlan(conn, countAb, dataTableName, indexTableName);
+        try (ResultSet rs = conn.createStatement().executeQuery(countAb)) {
+          assertTrue(rs.next());
+          assertEquals(1, rs.getInt(1));
+        }
+      }
+
+      // (c) a partial build lacking the read-back would emit a spurious NULL-keyed index entry
+      // pointing at id='a'; the index path for IS NULL must therefore return nothing
+      String selectNull = "SELECT id from " + dataTableName + " WHERE val1 IS NULL";
+      assertExplainPlan(conn, selectNull, dataTableName, indexTableName);
+      try (ResultSet rs = conn.createStatement().executeQuery(selectNull)) {
         assertFalse(rs.next());
       }
     }

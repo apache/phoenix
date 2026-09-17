@@ -60,6 +60,7 @@ import org.apache.phoenix.parse.DeleteStatement;
 import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryServices;
+import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
@@ -505,7 +506,14 @@ public class DeleteIT extends ParallelStatsDisabledIT {
       psDelete.setString(3, "CC");
       psDelete.setDate(4, date);
       String explainPlan = QueryUtil.getExplainPlan(psDelete.executeQuery());
-      if (addNonPKIndex) {
+      // A non-PK index needs the row's non-PK values to maintain its entries. When immutable
+      // indexes are maintained client side the client must read the row first, so the delete is
+      // not a single-row plan. When they are maintained server side the region server reads and
+      // maintains the index, so the point delete stays a single-row plan.
+      boolean serverSideImmutableIndexes = con.unwrap(PhoenixConnection.class).getQueryServices()
+        .getConfiguration().getBoolean(QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB,
+          QueryServicesOptions.DEFAULT_SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED);
+      if (addNonPKIndex && !serverSideImmutableIndexes) {
         assertNotEquals("DELETE SINGLE ROW", explainPlan);
       } else {
         assertEquals("DELETE SINGLE ROW", explainPlan);

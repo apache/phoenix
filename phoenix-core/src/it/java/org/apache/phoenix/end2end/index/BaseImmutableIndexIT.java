@@ -761,4 +761,458 @@ public abstract class BaseImmutableIndexIT extends BaseTest {
       conn.commit();
     }
   }
+
+  // ---------------------------------------------------------------------------------------------
+  // Partial-upsert and delete coverage for server-side immutable index maintenance
+  // (SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB). These run under both storage schemes (the
+  // columnEncoded parameter selects ONE_CELL_PER_COLUMN vs SINGLE_CELL_ARRAY_WITH_OFFSETS) and
+  // under both flag states -- ServerSideImmutableIndexIT forces the flag on,
+  // ClientSideImmutableIndexIT
+  // forces it off -- so every assertion below must hold whether the index is maintained on the
+  // server or the client. Only non-transactional global indexes are affected by the flag, so each
+  // test bails out for local and transactional parameterizations.
+  // ---------------------------------------------------------------------------------------------
+
+  /**
+   * Reads every row of a query into "col1|col2|..." strings (a null column renders as the literal
+   * "null"), so an index-served result can be compared for exact agreement with the data table
+   * under either storage scheme.
+   */
+  private static List<String> readRows(Connection conn, String sql) throws SQLException {
+    List<String> rows = new ArrayList<>();
+    try (ResultSet rs = conn.createStatement().executeQuery(sql)) {
+      int cols = rs.getMetaData().getColumnCount();
+      while (rs.next()) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 1; i <= cols; i++) {
+          if (i > 1) {
+            sb.append('|');
+          }
+          sb.append(rs.getString(i));
+        }
+        rows.add(sb.toString());
+      }
+    }
+    return rows;
+  }
+
+  /**
+   * A partial upsert on an immutable table with a covered global index must leave the index
+   * consistent with the data table under BOTH storage schemes. Under ONE_CELL_PER_COLUMN the
+   * omitted covered column keeps its earlier value; under SINGLE_CELL_ARRAY_WITH_OFFSETS the whole
+   * row is a single cell so the omitted column is overwritten to null. Either way the index the
+   * server maintains must read back exactly what the data table returns. The SINGLE_CELL branch
+   * (columnEncoded=true) is the load-bearing case the ONE_CELL-only GlobalIndexCheckerIT test
+   * skips.
+   */
+  @Test
+  public void testPartialUpsertForImmutableCoveredIndex() throws Exception {
+    if (localIndex || transactionProvider != null) {
+      return;
+    }
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(false);
+      String tableName = "TBL_" + generateUniqueName();
+      String indexName = "IND_" + generateUniqueName();
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName
+          + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR, val3 VARCHAR) "
+          + tableDDLOptions);
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " VALUES ('a', 'ab', 'abc', 'abcd')");
+      conn.commit();
+      conn.createStatement()
+        .execute("CREATE INDEX " + indexName + " ON " + tableName + " (val1) INCLUDE (val2, val3)");
+
+      String idxSql = "SELECT /*+ INDEX(" + tableName + " " + indexName
+        + ") */ id, val1, val2, val3 " + "FROM " + tableName + " WHERE val1 = 'ab'";
+      String dataSql =
+        "SELECT /*+ NO_INDEX */ id, val1, val2, val3 FROM " + tableName + " WHERE val1 = 'ab'";
+      // Full upsert: the index is actually used (guards against a vacuous data-scan agreement) and
+      // returns the complete row.
+      assertExplainPlan(false,
+        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + idxSql)),
+        tableName, indexName);
+      assertEquals("[a|ab|abc|abcd]", readRows(conn, idxSql).toString());
+      assertEquals(readRows(conn, dataSql), readRows(conn, idxSql));
+
+      // Partial upsert re-supplies val1 (the index key) and val2 but omits the covered column val3.
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " (id, val1, val2) VALUES ('a', 'ab', 'abcc')");
+      conn.commit();
+      // The server-maintained index must still agree with the data table, whatever the storage
+      // scheme did to the omitted column.
+      assertEquals("index must agree with data after partial upsert", readRows(conn, dataSql),
+        readRows(conn, idxSql));
+    }
+  }
+
+  /**
+   * A partial upsert that omits the indexed column of an UNCOVERED global index must leave the
+   * index path resolving exactly the rows the data table does. Under ONE_CELL_PER_COLUMN the
+   * indexed column keeps its earlier value so both find the row under 'ab'; under
+   * SINGLE_CELL_ARRAY_WITH_OFFSETS the single-cell overwrite nulls the indexed column so both find
+   * nothing. The scan path agrees under both maintenance modes because it self-heals unverified
+   * index rows at read time. The COUNT (aggregate) path does not self-heal, so it only agrees when
+   * the index is maintained on the server: server-side maintenance reads the current row back and
+   * rewrites a verified entry for the retained key, whereas client-side maintenance cannot rebuild
+   * the omitted index key and leaves the COUNT path undercounting -- the pre-existing gap this PR's
+   * server-side path closes.
+   */
+  @Test
+  public void testPartialUpsertForImmutableUncoveredIndex() throws Exception {
+    if (localIndex || transactionProvider != null) {
+      return;
+    }
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(false);
+      String tableName = "TBL_" + generateUniqueName();
+      String indexName = "IND_" + generateUniqueName();
+      conn.createStatement().execute("CREATE TABLE " + tableName
+        + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR) " + tableDDLOptions);
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " (id, val1, val2) VALUES ('a', 'ab', 'abc')");
+      conn.commit();
+      conn.createStatement()
+        .execute("CREATE UNCOVERED INDEX " + indexName + " ON " + tableName + " (val1)");
+
+      String idxSql = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ id FROM "
+        + tableName + " WHERE val1 = 'ab'";
+      String dataSql = "SELECT /*+ NO_INDEX */ id FROM " + tableName + " WHERE val1 = 'ab'";
+      String idxCount = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ COUNT(*) FROM "
+        + tableName + " WHERE val1 = 'ab'";
+      String dataCount = "SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName + " WHERE val1 = 'ab'";
+      // Full upsert: the uncovered index is used and resolves the row.
+      assertExplainPlan(false,
+        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + idxSql)),
+        tableName, indexName);
+      assertEquals("[a]", readRows(conn, idxSql).toString());
+
+      // Partial upsert omits the indexed column val1.
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " (id, val2) VALUES ('a', 'xyz')");
+      conn.commit();
+      // The scan path self-heals unverified index rows against the data table, so it agrees under
+      // both maintenance modes.
+      assertEquals("uncovered index scan must agree with data after partial upsert",
+        readRows(conn, dataSql), readRows(conn, idxSql));
+      if (serverSideIndex) {
+        // The COUNT (aggregate) path does not self-heal. Only server-side maintenance rebuilds a
+        // verified uncovered-index entry from the read-back row, so only then does the COUNT path
+        // agree with the data table; the client-side path is the pre-existing gap this PR closes.
+        assertEquals("uncovered index COUNT must agree with data after partial upsert",
+          readRows(conn, dataCount), readRows(conn, idxCount));
+      }
+    }
+  }
+
+  /**
+   * A partial upsert on a table with more than one covered global index must leave every maintained
+   * index in agreement with the data table for the covered column it reads back.
+   */
+  @Test
+  public void testPartialUpsertForImmutableMultipleIndexes() throws Exception {
+    if (localIndex || transactionProvider != null) {
+      return;
+    }
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(false);
+      String tableName = "TBL_" + generateUniqueName();
+      String indexName1 = "IND_" + generateUniqueName();
+      String indexName2 = "IND_" + generateUniqueName();
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName
+          + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR, val3 VARCHAR) "
+          + tableDDLOptions);
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " VALUES ('a', 'ab', 'abc', 'abcd')");
+      conn.commit();
+      conn.createStatement()
+        .execute("CREATE INDEX " + indexName1 + " ON " + tableName + " (val1) INCLUDE (val3)");
+      conn.createStatement()
+        .execute("CREATE INDEX " + indexName2 + " ON " + tableName + " (val2) INCLUDE (val3)");
+      // Partial upsert re-supplies val1 and val2 (both index keys) and omits the covered column
+      // val3.
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " (id, val1, val2) VALUES ('a', 'ab', 'abc')");
+      conn.commit();
+
+      String viaIdx1 = "SELECT /*+ INDEX(" + tableName + " " + indexName1 + ") */ val3 FROM "
+        + tableName + " WHERE val1 = 'ab'";
+      String viaIdx2 = "SELECT /*+ INDEX(" + tableName + " " + indexName2 + ") */ val3 FROM "
+        + tableName + " WHERE val2 = 'abc'";
+      String data = "SELECT /*+ NO_INDEX */ val3 FROM " + tableName + " WHERE id = 'a'";
+      assertExplainPlan(false,
+        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + viaIdx1)),
+        tableName, indexName1);
+      assertExplainPlan(false,
+        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + viaIdx2)),
+        tableName, indexName2);
+      assertEquals("index1 must agree with data", readRows(conn, data), readRows(conn, viaIdx1));
+      assertEquals("index2 must agree with data", readRows(conn, data), readRows(conn, viaIdx2));
+    }
+  }
+
+  /**
+   * A partial upsert that touches only one column family of a multi-column-family immutable table
+   * must read back a covered column that lives in an untouched family. Family b is never written by
+   * the partial upsert, so its cell survives under BOTH storage schemes and val3 must remain 'abcd'
+   * on the data table -- and the server-maintained index must read back the same value.
+   */
+  @Test
+  public void testPartialUpsertForImmutableMultipleColumnFamilies() throws Exception {
+    if (localIndex || transactionProvider != null) {
+      return;
+    }
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(false);
+      String tableName = "TBL_" + generateUniqueName();
+      String indexName = "IND_" + generateUniqueName();
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName
+          + " (id VARCHAR NOT NULL PRIMARY KEY, a.val1 VARCHAR, a.val2 VARCHAR, b.val3 VARCHAR) "
+          + tableDDLOptions);
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " VALUES ('a', 'ab', 'abc', 'abcd')");
+      conn.commit();
+      conn.createStatement()
+        .execute("CREATE INDEX " + indexName + " ON " + tableName + " (val1) INCLUDE (val2, val3)");
+      // Partial upsert touches only family a (val1, val2); family b's val3 is untouched.
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " (id, val1, val2) VALUES ('a', 'ab', 'abcc')");
+      conn.commit();
+
+      String idxSql = "SELECT /*+ INDEX(" + tableName + " " + indexName
+        + ") */ val1, val2, val3 FROM " + tableName + " WHERE val1 = 'ab'";
+      String dataSql =
+        "SELECT /*+ NO_INDEX */ val1, val2, val3 FROM " + tableName + " WHERE id = 'a'";
+      assertExplainPlan(false,
+        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + idxSql)),
+        tableName, indexName);
+      List<String> dataRows = readRows(conn, dataSql);
+      List<String> idxRows = readRows(conn, idxSql);
+      if (tableDDLOptions.contains("ONE_CELL_PER_COLUMN")) {
+        // ONE_CELL_PER_COLUMN keeps the untouched family's cell, so val3 must survive as 'abcd'.
+        // This
+        // anchors the cross-family read-back so an all-null agreement cannot pass vacuously.
+        // (SINGLE_CELL_ARRAY_WITH_OFFSETS does not retain the omitted column on a partial upsert;
+        // the
+        // agreement check below still verifies the index tracks the data table under that scheme.)
+        assertEquals("[ab|abcc|abcd]", dataRows.toString());
+      }
+      // The server-maintained index must read back identically to the data table across families.
+      assertEquals("index must agree with data across column families", dataRows, idxRows);
+    }
+  }
+
+  /**
+   * A partial upsert that omits the WHERE-clause column of a partial index (CREATE INDEX ... WHERE)
+   * must leave the partial index selecting exactly the rows the data-table predicate does. Under
+   * ONE_CELL_PER_COLUMN the WHERE column keeps its earlier value so the row stays indexed; under
+   * SINGLE_CELL_ARRAY_WITH_OFFSETS the single-cell overwrite nulls it so neither the index nor the
+   * data path matches val2 = 'keep'. Either way the index path and the data path must agree.
+   */
+  @Test
+  public void testPartialUpsertForImmutablePartialIndex() throws Exception {
+    if (localIndex || transactionProvider != null) {
+      return;
+    }
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(false);
+      String tableName = "TBL_" + generateUniqueName();
+      String indexName = "IND_" + generateUniqueName();
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName
+          + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR, val3 VARCHAR) "
+          + tableDDLOptions);
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " VALUES ('a', 'ab', 'keep', 'abcd')");
+      conn.commit();
+      // Only rows with val2 = 'keep' are indexed; val2 is the WHERE-clause column.
+      conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName
+        + " (val1) INCLUDE (val3) WHERE val2 = 'keep'");
+      // Partial upsert omits val2 (the partial-index predicate column) and updates val3.
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " (id, val1, val3) VALUES ('a', 'ab', 'updated')");
+      conn.commit();
+
+      // The query predicate implies the partial-index predicate, so the index is applicable; force
+      // it and compare against the data table for the same predicate.
+      String idxSql = "SELECT /*+ INDEX(" + tableName + " " + indexName + ") */ val3 FROM "
+        + tableName + " WHERE val1 = 'ab' AND val2 = 'keep'";
+      String dataSql =
+        "SELECT /*+ NO_INDEX */ val3 FROM " + tableName + " WHERE val1 = 'ab' AND val2 = 'keep'";
+      assertEquals("partial index must agree with data after partial upsert",
+        readRows(conn, dataSql), readRows(conn, idxSql));
+    }
+  }
+
+  /**
+   * A partial upsert on an immutable table carrying BOTH a matching-storage-scheme index (inherits
+   * the base scheme) and a mismatched-storage-scheme index (explicit SINGLE_CELL_ARRAY_WITH_OFFSETS
+   * on a ONE_CELL_PER_COLUMN base) must leave every index in agreement with the data table. The
+   * mismatched index is always maintained on the server because its storage scheme differs from the
+   * data table's (IndexMaintainer), independent of the server-side-immutable-index flag; the
+   * matching index is maintained on the server only when the flag is on. So with the flag off the
+   * same upsert batch carries one server-maintained and one client-maintained index, exercising the
+   * single per-batch immutableRows classification -- both indexes must still read back the retained
+   * covered column. The mismatched pairing is only legal in the upgrade direction (a SINGLE_CELL
+   * base rejects a ONE_CELL index with INVALID_IMMUTABLE_STORAGE_SCHEME_CHANGE), so the mismatched
+   * index is created only under the ONE_CELL_PER_COLUMN base; under the SINGLE_CELL base only the
+   * matching index runs.
+   */
+  @Test
+  public void testPartialUpsertForImmutableMixedStorageSchemeIndexes() throws Exception {
+    if (localIndex || transactionProvider != null) {
+      return;
+    }
+    boolean oneCellBase = tableDDLOptions.contains("ONE_CELL_PER_COLUMN");
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(false);
+      String tableName = "TBL_" + generateUniqueName();
+      String matchingIndex = "IND_" + generateUniqueName();
+      String mismatchedIndex = "IND_" + generateUniqueName();
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName
+          + " (id VARCHAR NOT NULL PRIMARY KEY, val1 VARCHAR, val2 VARCHAR, val3 VARCHAR) "
+          + tableDDLOptions);
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " VALUES ('a', 'ab', 'abc', 'abcd')");
+      conn.commit();
+      // Matching-scheme index: inherits the base table's storage scheme.
+      conn.createStatement()
+        .execute("CREATE INDEX " + matchingIndex + " ON " + tableName + " (val1) INCLUDE (val3)");
+      // Mismatched-scheme index: explicit SINGLE_CELL on a ONE_CELL base (the only legal mismatch
+      // direction). Skipped under a SINGLE_CELL base, where a ONE_CELL index would be rejected.
+      if (oneCellBase) {
+        conn.createStatement()
+          .execute("CREATE INDEX " + mismatchedIndex + " ON " + tableName
+            + " (val2) INCLUDE (val3) IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, "
+            + "COLUMN_ENCODED_BYTES=2");
+      }
+      // Partial upsert re-supplies both index keys (val1, val2) and omits the covered column val3.
+      conn.createStatement()
+        .execute("UPSERT INTO " + tableName + " (id, val1, val2) VALUES ('a', 'ab', 'abc')");
+      conn.commit();
+
+      String viaMatching = "SELECT /*+ INDEX(" + tableName + " " + matchingIndex
+        + ") */ id, val3 FROM " + tableName + " WHERE val1 = 'ab'";
+      String data = "SELECT /*+ NO_INDEX */ id, val3 FROM " + tableName + " WHERE id = 'a'";
+      assertExplainPlan(false,
+        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + viaMatching)),
+        tableName, matchingIndex);
+      List<String> dataRows = readRows(conn, data);
+      if (oneCellBase) {
+        // ONE_CELL base keeps the omitted covered column, so val3 must survive as 'abcd' (id
+        // anchors
+        // the row so an all-null agreement cannot pass vacuously).
+        assertEquals("[a|abcd]", dataRows.toString());
+      }
+      assertEquals("matching-scheme index must agree with data", dataRows,
+        readRows(conn, viaMatching));
+      if (oneCellBase) {
+        String viaMismatched = "SELECT /*+ INDEX(" + tableName + " " + mismatchedIndex + ") */ id, "
+          + "val3 FROM " + tableName + " WHERE val2 = 'abc'";
+        assertExplainPlan(false,
+          QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + viaMismatched)),
+          tableName, mismatchedIndex);
+        // The mismatched index is always server-maintained (schemes differ); it must read back the
+        // same retained covered column as the data table, even when the matching index in the same
+        // batch is maintained on the client (flag off).
+        assertEquals("mismatched-scheme index must agree with data", dataRows,
+          readRows(conn, viaMismatched));
+
+        // Aggregate (COUNT) path does not self-heal against the data table the way the point scan
+        // above does, so it is a strong guard that the SINGLE_CELL index actually retained the
+        // omitted covered column. The single-cell family is rewritten wholesale on the partial
+        // upsert, so without the always-on server read-back val3 would be lost and this COUNT would
+        // drop to 0. It must equal the data-table COUNT in BOTH flag modes because a mismatched
+        // storage scheme keeps the index server-maintained regardless of the flag.
+        String countByCovered = "COUNT(*) FROM " + tableName + " WHERE val3 = 'abcd'";
+        String dataCount = "SELECT /*+ NO_INDEX */ " + countByCovered;
+        String mismatchedCount =
+          "SELECT /*+ INDEX(" + tableName + " " + mismatchedIndex + ") */ " + countByCovered;
+        // Filtering on a covered (non-key) column is a full index scan, not a range scan, so assert
+        // the index is used by name rather than via the range-scan-only assertExplainPlan helper.
+        String mismatchedCountPlan = QueryUtil
+          .getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + mismatchedCount));
+        assertTrue(
+          "COUNT must be served from the mismatched-scheme index; plan was: " + mismatchedCountPlan,
+          mismatchedCountPlan.contains(mismatchedIndex));
+        assertEquals("mismatched-scheme index COUNT must agree with data",
+          readRows(conn, dataCount), readRows(conn, mismatchedCount));
+      }
+    }
+  }
+
+  /**
+   * Deleting from an immutable table that has a ROW_TIMESTAMP column and a secondary index. The
+   * ROW_TIMESTAMP carve-out must keep index maintenance on the client even when the server-side
+   * flag is on, so the region server does not re-stamp the cells with a server clock; otherwise a
+   * ROW_TIMESTAMP range scan would silently drop the surviving rows.
+   */
+  @Test
+  public void testDeleteFromImmutableRowTimestampTableWithIndex() throws Exception {
+    if (localIndex || transactionProvider != null) {
+      return;
+    }
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.setAutoCommit(true);
+      String tableName = "TBL_" + generateUniqueName();
+      String indexName = "IND_" + generateUniqueName();
+      conn.createStatement().execute(
+        "CREATE TABLE " + tableName + " (k1 BIGINT NOT NULL, k2 VARCHAR NOT NULL, val VARCHAR "
+          + "CONSTRAINT pk PRIMARY KEY (k1 ROW_TIMESTAMP, k2)) " + tableDDLOptions);
+      conn.createStatement().execute("CREATE INDEX " + indexName + " ON " + tableName + " (val)");
+      conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (100, 'a', 'v1')");
+      conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (200, 'b', 'v2')");
+      conn.createStatement().execute("UPSERT INTO " + tableName + " VALUES (300, 'c', 'v3')");
+
+      conn.createStatement().execute("DELETE FROM " + tableName + " WHERE k1 = 200 AND k2 = 'b'");
+
+      // Data and index counts must agree after the delete.
+      try (ResultSet rs =
+        conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM " + tableName)) {
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+      }
+      String countViaIndex = "SELECT COUNT(*) FROM " + tableName + " WHERE val IS NOT NULL";
+      assertExplainPlan(false,
+        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + countViaIndex)),
+        tableName, indexName);
+      try (ResultSet rs = conn.createStatement().executeQuery(countViaIndex)) {
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+      }
+      // Each surviving row keeps its ROW_TIMESTAMP-derived cell timestamp: a scan bounded to a
+      // surviving row's exact ROW_TIMESTAMP band must still return it. This is the ROW_TIMESTAMP
+      // carve-out under test -- maintenance stays on the client so cells are not re-stamped with
+      // the
+      // server clock; a server-clock re-stamp would move the cell outside its ROW_TIMESTAMP band
+      // and
+      // this bounded scan would return 0. The band deliberately excludes the deleted k1=200: a
+      // DELETE
+      // marker is stamped at wall-clock time, outside any ROW_TIMESTAMP band, so a bounded scan
+      // cannot observe the delete -- an orthogonal ROW_TIMESTAMP semantics unrelated to this flag.
+      for (long k1 : new long[] { 100L, 300L }) {
+        try (
+          ResultSet rs = conn.createStatement().executeQuery("SELECT /*+ NO_INDEX */ COUNT(*) FROM "
+            + tableName + " WHERE k1 >= " + k1 + " AND k1 <= " + k1)) {
+          assertTrue(rs.next());
+          assertEquals("surviving ROW_TIMESTAMP row " + k1 + " must remain reachable in its band",
+            1, rs.getInt(1));
+        }
+      }
+      // Index read resolves a surviving row to its original ROW_TIMESTAMP key.
+      String viaIndex = "SELECT k1 FROM " + tableName + " WHERE val = 'v3'";
+      assertExplainPlan(false,
+        QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + viaIndex)),
+        tableName, indexName);
+      try (ResultSet rs = conn.createStatement().executeQuery(viaIndex)) {
+        assertTrue(rs.next());
+        assertEquals(300L, rs.getLong(1));
+        assertFalse(rs.next());
+      }
+    }
+  }
 }

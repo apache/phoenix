@@ -164,6 +164,8 @@ public class PhoenixTableLevelMetricsIT extends BaseTest {
     conf.set(QueryServices.TABLE_LEVEL_METRICS_ENABLED, String.valueOf(true));
     conf.set(QueryServices.METRIC_PUBLISHER_ENABLED, String.valueOf(true));
     conf.set(QueryServices.COLLECT_REQUEST_LEVEL_METRICS, String.valueOf(true));
+    // Keep immutable-index maintenance client-side so index-usage mutation metrics are recorded.
+    conf.set(QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB, String.valueOf(false));
 
     InstanceResolver.clearSingletons();
     // Override to get required config for static fields loaded that require HBase config
