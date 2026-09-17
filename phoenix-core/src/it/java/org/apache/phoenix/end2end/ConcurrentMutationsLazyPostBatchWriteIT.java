@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_BATCH_SIZE;
-import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_MUTATION_SERIALIZE;
 
 import java.util.Map;
@@ -57,7 +56,6 @@ public class ConcurrentMutationsLazyPostBatchWriteIT extends ConcurrentMutations
     props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(1));
     props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Integer.toString(-1));
     props.put(INDEX_CDC_CONSUMER_BATCH_SIZE, Integer.toString(4500));
-    props.put(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, Integer.toString(2500));
     props.put("hbase.coprocessor.master.classes", PhoenixMasterObserver.class.getName());
     props.put(PHOENIX_INDEX_CDC_MUTATION_SERIALIZE, Boolean.FALSE.toString());
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

@@ -20,7 +20,6 @@ package org.apache.phoenix.end2end;
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_LAG_SAMPLE_INTERVAL_MS;
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_POLL_INTERVAL_MS;
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_RETRY_PAUSE_MS;
-import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS;
 import static org.apache.phoenix.hbase.index.metrics.MetricsIndexCDCConsumerSource.CDC_INDEX_UPDATE_LAG;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -55,7 +54,6 @@ public class IndexCDCConsumerLagIT extends ParallelStatsDisabledIT {
 
   private static final Logger LOG = LoggerFactory.getLogger(IndexCDCConsumerLagIT.class);
 
-  private static final int TIMESTAMP_BUFFER_MS = 2_000;
   private static final int POLL_INTERVAL_MS = 500;
   private static final int LAG_SAMPLE_INTERVAL_MS = 500;
   private static final int RETRY_PAUSE_MS = 100;
@@ -78,7 +76,6 @@ public class IndexCDCConsumerLagIT extends ParallelStatsDisabledIT {
     props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(1));
     props.put(QueryServices.SERVER_SIDE_IMMUTABLE_INDEXES_ENABLED_ATTRIB, Boolean.TRUE.toString());
     props.put("hbase.coprocessor.master.classes", PhoenixMasterObserver.class.getName());
-    props.put(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, Integer.toString(TIMESTAMP_BUFFER_MS));
     props.put(INDEX_CDC_CONSUMER_POLL_INTERVAL_MS, Integer.toString(POLL_INTERVAL_MS));
     props.put(INDEX_CDC_CONSUMER_LAG_SAMPLE_INTERVAL_MS, Integer.toString(LAG_SAMPLE_INTERVAL_MS));
     props.put(INDEX_CDC_CONSUMER_RETRY_PAUSE_MS, Integer.toString(RETRY_PAUSE_MS));
