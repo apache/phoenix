@@ -666,9 +666,8 @@ public class ProjectionCompiler {
         PColumnFamily family = table.getColumnFamily(entry.getKey());
         if (entry.getValue() == null) {
           for (PColumn column : family.getColumns()) {
-            Integer maxLength = column.getMaxLength();
             int byteSize = column.getDataType().isFixedWidth()
-              ? maxLength == null ? column.getDataType().getByteSize() : maxLength
+              ? SchemaUtil.getFixedByteSize(column)
               : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
             estimatedByteSize += SizedUtil.KEY_VALUE_SIZE + estimatedKeySize + byteSize;
           }
@@ -681,9 +680,8 @@ public class ProjectionCompiler {
             if (column == null) {
               continue;
             }
-            Integer maxLength = column.getMaxLength();
             int byteSize = column.getDataType().isFixedWidth()
-              ? maxLength == null ? column.getDataType().getByteSize() : maxLength
+              ? SchemaUtil.getFixedByteSize(column)
               : RowKeySchema.ESTIMATED_VARIABLE_LENGTH_SIZE;
             estimatedByteSize += SizedUtil.KEY_VALUE_SIZE + estimatedKeySize + byteSize;
           }
