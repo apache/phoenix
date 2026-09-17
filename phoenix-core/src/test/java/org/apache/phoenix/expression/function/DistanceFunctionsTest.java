@@ -599,6 +599,27 @@ public class DistanceFunctionsTest extends BaseConnectionlessQueryTest {
   }
 
   @Test
+  public void testCompilationFailsOnLiteralDimensionMismatch() throws Exception {
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(
+        "CREATE TABLE t_literal_dim_mismatch (" + "pk INTEGER PRIMARY KEY, "
+          + "embedding VECTOR(FLOAT, 3))");
+
+      try (PreparedStatement stmt = conn
+        .prepareStatement("SELECT pk FROM t_literal_dim_mismatch ORDER BY "
+          + "L2_DISTANCE(embedding, ARRAY[1.0, 2.0]) LIMIT 10")) {
+        PhoenixPreparedStatement pStmt = stmt.unwrap(PhoenixPreparedStatement.class);
+        pStmt.compileQuery();
+        fail("Expected compilation to fail due to dimension mismatch between the column and "
+          + "the literal query vector");
+      } catch (SQLException e) {
+        assertTrue("Error message should mention dimension mismatch: " + e.getMessage(),
+          e.getMessage().contains("Vector dimension mismatch"));
+      }
+    }
+  }
+
+  @Test
   public void testCompilationFailsOnNonVectorArgument() throws Exception {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       conn.createStatement().execute(

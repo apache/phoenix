@@ -23,6 +23,7 @@ import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.expression.function.DistanceFunction;
 import org.apache.phoenix.schema.tuple.Tuple;
 
 /**
@@ -98,15 +99,33 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
     return super.next();
   }
 
+  private boolean isVectorSearch() {
+    if (limit <= 0 || orderByColumns == null || orderByColumns.size() != 1) {
+      return false;
+    }
+    OrderByExpression orderByExpression = orderByColumns.get(0);
+    if (!orderByExpression.isAscending()) {
+      return false;
+    }
+    return orderByExpression.getExpression() instanceof DistanceFunction;
+  }
+
   @Override
   public void explain(List<String> planSteps) {
     resultIterators.explain(planSteps);
-    planSteps.add("CLIENT MERGE SORT");
-    if (offset > 0) {
-      planSteps.add("CLIENT OFFSET " + offset);
-    }
-    if (limit > 0) {
-      planSteps.add("CLIENT LIMIT " + limit);
+    if (isVectorSearch()) {
+      planSteps.add("CLIENT MERGE SORT TOP-" + limit);
+      if (offset > 0) {
+        planSteps.add("CLIENT OFFSET " + offset);
+      }
+    } else {
+      planSteps.add("CLIENT MERGE SORT");
+      if (offset > 0) {
+        planSteps.add("CLIENT OFFSET " + offset);
+      }
+      if (limit > 0) {
+        planSteps.add("CLIENT LIMIT " + limit);
+      }
     }
   }
 
@@ -114,20 +133,37 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
   public void explain(List<String> planSteps,
     ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
     resultIterators.explain(planSteps, explainPlanAttributesBuilder);
-    explainPlanAttributesBuilder.setClientSortAlgo("CLIENT MERGE SORT");
-    planSteps.add("CLIENT MERGE SORT");
-    explainPlanAttributesBuilder.addClientStep("CLIENT MERGE SORT");
-    if (offset > 0) {
-      explainPlanAttributesBuilder.setClientOffset(offset);
-      String step = "CLIENT OFFSET " + offset;
-      planSteps.add(step);
-      explainPlanAttributesBuilder.addClientStep(step);
-    }
-    if (limit > 0) {
+    if (isVectorSearch()) {
+      // The top-K limit is part of the merge sort step itself, so no separate CLIENT LIMIT step
+      // is emitted.
+      String clientSortAlgo = "CLIENT MERGE SORT TOP-" + limit;
+      explainPlanAttributesBuilder.setVectorSearch(true);
+      explainPlanAttributesBuilder.setClientSortAlgo(clientSortAlgo);
       explainPlanAttributesBuilder.setClientRowLimit(limit);
-      String step = "CLIENT LIMIT " + limit;
-      planSteps.add(step);
-      explainPlanAttributesBuilder.addClientStep(step);
+      planSteps.add(clientSortAlgo);
+      explainPlanAttributesBuilder.addClientStep(clientSortAlgo);
+      if (offset > 0) {
+        explainPlanAttributesBuilder.setClientOffset(offset);
+        String step = "CLIENT OFFSET " + offset;
+        planSteps.add(step);
+        explainPlanAttributesBuilder.addClientStep(step);
+      }
+    } else {
+      explainPlanAttributesBuilder.setClientSortAlgo("CLIENT MERGE SORT");
+      planSteps.add("CLIENT MERGE SORT");
+      explainPlanAttributesBuilder.addClientStep("CLIENT MERGE SORT");
+      if (offset > 0) {
+        explainPlanAttributesBuilder.setClientOffset(offset);
+        String step = "CLIENT OFFSET " + offset;
+        planSteps.add(step);
+        explainPlanAttributesBuilder.addClientStep(step);
+      }
+      if (limit > 0) {
+        explainPlanAttributesBuilder.setClientRowLimit(limit);
+        String step = "CLIENT LIMIT " + limit;
+        planSteps.add(step);
+        explainPlanAttributesBuilder.addClientStep(step);
+      }
     }
   }
 

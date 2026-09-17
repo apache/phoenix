@@ -57,6 +57,7 @@ import org.apache.phoenix.filter.EmptyColumnOnlyFilter;
 import org.apache.phoenix.optimize.OptimizerDecision;
 import org.apache.phoenix.optimize.OptimizerReasons;
 import org.apache.phoenix.optimize.RejectedIndexEntry;
+import org.apache.phoenix.optimize.VectorSearchUtil;
 import org.apache.phoenix.parse.HintNode;
 import org.apache.phoenix.parse.HintNode.Hint;
 import org.apache.phoenix.query.KeyRange;
@@ -508,15 +509,29 @@ public abstract class ExplainTable {
     }
     if (!orderBy.getOrderByExpressions().isEmpty() && groupBy.isEmpty()) { // with GROUP BY, sort
                                                                            // happens client-side
-      String orderByExpressions =
-        "SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
-          + " SORTED BY " + orderBy.getOrderByExpressions().toString();
+      boolean isVectorSearch = VectorSearchUtil.isVectorSearch(orderBy, limit);
+      String orderByExpressions;
+      if (isVectorSearch) {
+        Expression distanceExpr = orderBy.getOrderByExpressions().get(0).getExpression();
+        orderByExpressions = "SERVER TOP-" + limit + " BY " + distanceExpr;
+      } else {
+        orderByExpressions =
+          "SERVER" + (limit == null ? "" : " TOP " + limit + " ROW" + (limit == 1 ? "" : "S"))
+            + " SORTED BY " + orderBy.getOrderByExpressions().toString();
+      }
       planSteps.add("    " + orderByExpressions);
       if (explainPlanAttributesBuilder != null) {
         if (limit != null) {
           explainPlanAttributesBuilder.setServerRowLimit(limit.longValue());
         }
-        explainPlanAttributesBuilder.setServerSortedBy(orderBy.getOrderByExpressions().toString());
+        if (isVectorSearch) {
+          explainPlanAttributesBuilder.setVectorSearch(true);
+          explainPlanAttributesBuilder.setServerSortAlgo(orderByExpressions);
+          explainPlanAttributesBuilder.setServerSortedBy(orderByExpressions);
+        } else {
+          explainPlanAttributesBuilder
+            .setServerSortedBy(orderBy.getOrderByExpressions().toString());
+        }
       }
     } else {
       if (offset != null) {

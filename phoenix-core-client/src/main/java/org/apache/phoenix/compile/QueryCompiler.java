@@ -61,6 +61,7 @@ import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.join.HashJoinInfo;
 import org.apache.phoenix.optimize.Cost;
+import org.apache.phoenix.optimize.VectorSearchUtil;
 import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.EqualParseNode;
 import org.apache.phoenix.parse.HintNode;
@@ -954,5 +955,9 @@ public class QueryCompiler {
     }
 
     return plan;
+  }
+
+  public static boolean isVectorSearchQuery(SelectStatement statement) {
+    return VectorSearchUtil.isVectorSearchQuery(statement);
   }
 }

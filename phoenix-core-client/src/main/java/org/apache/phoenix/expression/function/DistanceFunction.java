@@ -33,12 +33,16 @@ import org.apache.phoenix.schema.types.PVectorDouble;
 import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
 
 /**
- * Base class for vector distance scalar functions. Operates directly on packed vector byte buffers
- * without Java heap object allocation in the hot evaluation path.
+ * Base class for vector distance scalar functions. Operates directly on packed vector byte buffers,
+ * decoding no vector elements onto the Java heap; only the eight byte encoded result is allocated
+ * per evaluation.
  */
 public abstract class DistanceFunction extends ScalarFunction {
 
   private double distanceUpperBound = Double.MAX_VALUE;
+
+  // Scanner-thread scratch pointer reused across evaluate calls to avoid heap allocation.
+  private final ImmutableBytesWritable scratch = new ImmutableBytesWritable();
 
   public DistanceFunction() {
   }
@@ -113,14 +117,13 @@ public abstract class DistanceFunction extends ScalarFunction {
     boolean isDouble1 = child1.getDataType() == PVectorDouble.INSTANCE;
     int dim1 = isDouble1 ? (len1 / Bytes.SIZEOF_DOUBLE) : (len1 / Bytes.SIZEOF_FLOAT);
 
-    ImmutableBytesWritable ptr2 = new ImmutableBytesWritable();
     Expression child2 = children.get(1);
-    if (!child2.evaluate(tuple, ptr2) || ptr2.getLength() == 0) {
+    if (!child2.evaluate(tuple, scratch) || scratch.getLength() == 0) {
       return false;
     }
-    byte[] buf2 = ptr2.get();
-    int off2 = ptr2.getOffset();
-    int len2 = ptr2.getLength();
+    byte[] buf2 = scratch.get();
+    int off2 = scratch.getOffset();
+    int len2 = scratch.getLength();
     SortOrder order2 = child2.getSortOrder();
     boolean isDouble2 = child2.getDataType() == PVectorDouble.INSTANCE;
     int dim2 = isDouble2 ? (len2 / Bytes.SIZEOF_DOUBLE) : (len2 / Bytes.SIZEOF_FLOAT);
@@ -132,9 +135,11 @@ public abstract class DistanceFunction extends ScalarFunction {
     double distance = computeDistance(buf1, off1, order1, isDouble1, buf2, off2, order2, isDouble2,
       dim1, distanceUpperBound);
 
-    byte[] out = new byte[Bytes.SIZEOF_DOUBLE];
-    PDouble.INSTANCE.getCodec().encodeDouble(distance, out, 0);
-    ptr.set(out);
+    // Allocate a distinct buffer per call because downstream iterators retain sort keys across
+    // rows.
+    byte[] outBuf = new byte[Bytes.SIZEOF_DOUBLE];
+    PDouble.INSTANCE.getCodec().encodeDouble(distance, outBuf, 0);
+    ptr.set(outBuf);
     return true;
   }
 
