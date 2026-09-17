@@ -169,6 +169,10 @@ tokens
     CONSISTENCY = 'consistency';
     EVENTUAL = 'eventual';
     STRONG = 'strong';
+    // Infix vector distance operator tokens (<->, <=>, <#>)
+    DIST_L2;
+    DIST_COSINE;
+    DIST_INNER;
 }
 
 
@@ -1196,7 +1200,20 @@ bind_expression  returns [BindParseNode ret]
     ;
     
 value_expression returns [ParseNode ret]
-    :   i=add_expression { $ret = i; }
+    :   i=distance_expression { $ret = i; }
+    ;
+
+distance_expression returns [ParseNode ret]
+@init{ParseNode lhs = null; List<ParseNode> l;}
+    :   i=add_expression {lhs = i;}
+        (op=(DIST_L2 | DIST_COSINE | DIST_INNER) rhs=add_expression {
+            l = Arrays.asList(lhs, rhs);
+            lhs = op.getType() == DIST_L2 ? factory.l2Distance(l)
+                : op.getType() == DIST_COSINE ? factory.cosineDistance(l)
+                : factory.innerProductDistance(l);
+            }
+        )*
+        { $ret = lhs; }
     ;
 
 add_expression returns [ParseNode ret]
@@ -1514,8 +1531,14 @@ EQ
     :   '='
     ;
 
+// Disambiguate infix distance operators (<=>, <->, <#>) from less-than comparisons
 LT
     :   '<'
+        (   ('=' '>') => '=' '>'  { $type = DIST_COSINE; }
+        |   ('-' '>') => '-' '>'  { $type = DIST_L2; }
+        |   ('#' '>') => '#' '>'  { $type = DIST_INNER; }
+        |                         { $type = LT; }
+        )
     ;
 
 GT
