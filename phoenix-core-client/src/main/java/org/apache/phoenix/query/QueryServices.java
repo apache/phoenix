@@ -218,6 +218,11 @@ public interface QueryServices extends SQLCloseable {
 
   public static final String ALLOW_LOCAL_INDEX_ATTRIB = "phoenix.index.allowLocalIndex";
 
+  // See PHOENIX-6868: Comma-separated list of custom HBase table descriptor property keys that
+  // should be automatically inherited by index tables from their data table.
+  public static final String INDEX_INHERITABLE_TABLE_DESCRIPTOR_PROPERTIES =
+    "phoenix.index.inheritableTableDescriptorProperties";
+
   // Timeout config for PhoenixSyncTableTool
   String SYNC_TABLE_QUERY_TIMEOUT_ATTRIB = "phoenix.sync.table.query.timeout";
   String SYNC_TABLE_RPC_TIMEOUT_ATTRIB = "phoenix.sync.table.rpc.timeout";
