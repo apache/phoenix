@@ -86,10 +86,6 @@ public class UpsertSelectWithRegionMovesIT extends ParallelStatsDisabledWithRegi
     // An hour - inherited from ParallelStatsDisabledIT
     props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
       Integer.toString(60 * 60));
-    // Postpone scans of SYSTEM.TASK indefinitely so as to prevent
-    // any addition to GLOBAL_OPEN_PHOENIX_CONNECTIONS
-    props.put(QueryServices.TASK_HANDLING_INTERVAL_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
-    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     props.put(QueryServices.PHOENIX_SERVER_PAGE_SIZE_MS, Long.toString(0));
     props.put(QueryServices.TESTS_MINI_CLUSTER_NUM_REGION_SERVERS, String.valueOf(2));
     props.put(HConstants.HBASE_CLIENT_SCANNER_MAX_RESULT_SIZE_KEY, String.valueOf(1));

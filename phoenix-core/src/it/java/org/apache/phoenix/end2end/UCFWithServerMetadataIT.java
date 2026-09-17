@@ -100,7 +100,6 @@ public class UCFWithServerMetadataIT extends BaseTest {
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
     Map<String, String> props = new HashMap<>(1);
-    props.put(QueryServices.TASK_HANDLING_INITIAL_DELAY_MS_ATTRIB, Long.toString(Long.MAX_VALUE));
     props.put(PHOENIX_INDEX_CDC_CONSUMER_ENABLED, Boolean.toString(false));
     setUpTestDriver(new ReadOnlyProps(props));
   }
