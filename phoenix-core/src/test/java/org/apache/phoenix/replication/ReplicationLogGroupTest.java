@@ -2054,6 +2054,91 @@ public class ReplicationLogGroupTest extends ReplicationLogBaseTest {
   }
 
   /**
+   * The scheduled tick is never coalesced away. With the gate already held (as an on-demand
+   * size/fault rotation would hold it), a scheduled tick must still enqueue its own rotation task
+   * so the round boundary gets its own writer. Holds the gate with a bare flag set and directly
+   * drives {@code requestRotation(true)} to isolate the gate decision from executor scheduling
+   * order; the genuine in-flight overlap is covered by
+   * {@link #testOnDemandCoalescesIntoScheduledRotation}.
+   */
+  @Test
+  public void testScheduledTickNotCoalescedWhenGateHeld() throws Exception {
+    ReplicationLog activeLog = logGroup.getActiveLog();
+
+    AtomicInteger writersCreated = new AtomicInteger(0);
+    doAnswer(invocation -> {
+      LogFileWriter w = (LogFileWriter) invocation.callRealMethod();
+      writersCreated.incrementAndGet();
+      return w;
+    }).when(activeLog).createNewWriter();
+
+    // Hold the gate as an on-demand size/fault rotation would, without a task actually running.
+    activeLog.rotationRequested.set(true);
+
+    // Scheduled tick fires while the gate is held: it force-holds and always enqueues.
+    assertTrue("Scheduled tick must report a rotation queued", activeLog.requestRotation(true));
+
+    // The enqueued task runs on the rotation executor, creates a writer, and clears the gate in its
+    // finally. Wait on the gate clearing rather than the writer count: createNewWriter (which bumps
+    // the counter) runs before the finally, so polling the count alone could observe the flag still
+    // held mid-run.
+    long deadline = System.currentTimeMillis() + 5000;
+    while (activeLog.rotationRequested.get() && System.currentTimeMillis() < deadline) {
+      Thread.sleep(20);
+    }
+    assertFalse("Scheduled rotation task must clear the gate in finally",
+      activeLog.rotationRequested.get());
+    assertEquals("Scheduled tick must create its own writer even when the gate was held", 1,
+      writersCreated.get());
+  }
+
+  /**
+   * On-demand (size/fault) rotations coalesce into an in-flight rotation of any kind, including a
+   * scheduled one. With a scheduled rotation <i>genuinely in flight</i> — its
+   * {@link LogRotationTask} running on the executor and blocked inside {@code createNewWriter}
+   * while holding the gate — an on-demand request must not enqueue a second task; it coalesces and
+   * returns true (worth waiting for the writer the scheduled rotation will stage).
+   */
+  @Test
+  public void testOnDemandCoalescesIntoScheduledRotation() throws Exception {
+    ReplicationLog activeLog = logGroup.getActiveLog();
+
+    CountDownLatch writerEntered = new CountDownLatch(1);
+    CountDownLatch releaseWriter = new CountDownLatch(1);
+    doAnswer(invocation -> {
+      writerEntered.countDown();
+      assertTrue("Scheduled rotation was not released in time",
+        releaseWriter.await(5, TimeUnit.SECONDS));
+      return invocation.callRealMethod();
+    }).when(activeLog).createNewWriter();
+    // Drop the init-time createNewWriter call so the verify below counts only test-driven
+    // rotations.
+    Mockito.clearInvocations(activeLog);
+
+    // Put a scheduled rotation genuinely in flight: it enqueues a task that force-holds the gate
+    // and
+    // blocks inside createNewWriter until we release it.
+    assertTrue("Scheduled tick must enqueue a rotation", activeLog.requestRotation(true));
+    assertTrue("Scheduled rotation task must reach createNewWriter",
+      writerEntered.await(5, TimeUnit.SECONDS));
+
+    // On-demand request arrives while the scheduled rotation holds the gate: it must coalesce (no
+    // second task) and report the in-flight rotation is worth waiting for.
+    assertTrue("On-demand request must report the in-flight rotation is worth waiting for",
+      activeLog.requestRotation(false));
+    assertTrue("Gate stays held by the in-flight scheduled rotation",
+      activeLog.rotationRequested.get());
+
+    // Release the scheduled rotation; it stages its writer and clears the gate in finally. A
+    // coalescing regression would have enqueued a second task that the single-thread executor runs
+    // next; after() waits out that window, then asserts exactly one writer was ever created.
+    releaseWriter.countDown();
+    verify(activeLog, Mockito.after(500).times(1)).createNewWriter();
+    assertFalse("Scheduled rotation must clear the gate in finally",
+      activeLog.rotationRequested.get());
+  }
+
+  /**
    * Tests that the rotation executor fires at the round boundary by verifying that after waiting
    * for slightly more than a round, a rotation has occurred.
    */

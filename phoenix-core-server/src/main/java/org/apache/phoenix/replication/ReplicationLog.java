@@ -82,11 +82,11 @@ public class ReplicationLog {
   // stranded. The waited-on condition is pendingWriter itself, so a spurious notify is harmless.
   private final Object rotationSignal = new Object();
   private final AtomicBoolean closed = new AtomicBoolean(false);
-  // Single gate for rotation submission. Set by requestRotation()'s CAS before queuing a task,
-  // cleared in LogRotationTask's finally. Both scheduled ticks and on-demand callers go through
-  // requestRotation(), so a request that arrives while a rotation is queued or running is a
-  // no-op — preventing the duplicate-writer bug where an in-flight scheduled rotation and a
-  // concurrent size-triggered request both stage writers and the second closes the first.
+  // Single gate for rotation submission, cleared in LogRotationTask's finally. On-demand
+  // (size/fault) callers CAS it, so a request arriving while a rotation is queued or running
+  // coalesces — preventing the duplicate-writer bug where two requests both stage writers and the
+  // second closes the first. The scheduled tick instead force-holds it (set(true)) and always
+  // enqueues, so a round boundary is never coalesced away; see requestRotation(boolean).
   @VisibleForTesting
   final AtomicBoolean rotationRequested = new AtomicBoolean(false);
   private final ExecutorService closeExecutor;
@@ -170,9 +170,10 @@ public class ReplicationLog {
     rotationExecutor = Executors.newSingleThreadScheduledExecutor(new ThreadFactoryBuilder()
       .setNameFormat("ReplicationLogRotation-" + logGroup.getHAGroupName() + "-%d").setDaemon(true)
       .build());
-    // Scheduled ticks route through requestRotation() so they share the same CAS gate as on-demand
-    // size-triggered rotations — only one rotation can be queued or running at a time.
-    rotationExecutor.scheduleAtFixedRate(this::requestRotation, initialDelay, rotationTimeMs,
+    // Scheduled ticks force the rotation gate (see requestRotation(boolean)) so a round boundary is
+    // never coalesced away by an in-flight size-triggered rotation; on-demand rotations still
+    // coalesce, including into a scheduled one.
+    rotationExecutor.scheduleAtFixedRate(() -> requestRotation(true), initialDelay, rotationTimeMs,
       TimeUnit.MILLISECONDS);
     LOG.info("Started rotation executor with initial delay {}ms and interval {}ms", initialDelay,
       rotationTimeMs);
@@ -240,34 +241,56 @@ public class ReplicationLog {
     }
   }
 
+  /** On-demand (size/fault) callers request a rotation that coalesces via the gate. */
+  private boolean requestRotation() {
+    return requestRotation(false);
+  }
+
   /**
-   * Submits a {@link LogRotationTask} to the executor. The CAS gate ensures only one rotation can
-   * be queued or in flight at a time — if the flag is already set, a task is already pending or
-   * running. Both scheduled ticks and on-demand size-triggered callers go through this method.
+   * Submits a {@link LogRotationTask} to the executor. The {@code rotationRequested} gate coalesces
+   * rotations, but <b>asymmetrically</b> depending on the caller:
+   * <ul>
+   * <li><b>On-demand</b> (size/fault, {@code scheduled == false}): CAS the gate; if a rotation is
+   * already queued or in flight the request coalesces into it (idempotent "ensure a fresh writer" —
+   * a duplicate would just mint and immediately orphan-close a file). This now also coalesces into
+   * an in-flight scheduled rotation, since that too is minting a fresh writer.
+   * <li><b>Scheduled tick</b> ({@code scheduled == true}): <i>force-hold</i> the gate with
+   * {@code set(true)} and always enqueue. A round boundary is the placement unit the round-sharded
+   * reader is organized around, so it must never be coalesced away by an in-flight on-demand
+   * rotation. Holding the gate for the rotation's duration also makes concurrent on-demand requests
+   * coalesce into it.
+   * </ul>
+   * The enqueued {@link LogRotationTask} clears the gate in its {@code finally} regardless of which
+   * caller set it.
    * <p>
    * Suspends rotation during the in-sync cutover gate: while {@code failoverPending} is set we skip
-   * before the CAS so a tick never engages it. Minting a new file each round would keep dropping
-   * .plog files into the peer's shard directory and deadlock the standby's failover check; the
-   * current writer stays open so in-flight writes still land. Skipping ahead of the CAS (rather
-   * than inside {@link LogRotationTask#run()}) keeps the gate clear, so a later tick resumes
-   * rotation as soon as the flag clears on abort.
+   * before touching the gate so a tick never engages it. Minting a new file each round would keep
+   * dropping .plog files into the peer's shard directory and deadlock the standby's failover check;
+   * the current writer stays open so in-flight writes still land.
    * @return {@code true} if a rotation is now queued or already in flight (worth waiting for);
    *         {@code false} if rotation is suppressed this call (failover pending, or the executor is
    *         shutting down) so no task will run.
    */
-  private boolean requestRotation() {
+  @VisibleForTesting
+  boolean requestRotation(boolean scheduled) {
     if (logGroup.isFailoverPending()) {
       LOG.info("HAGroup {} rotation suspended: failover pending", logGroup);
       return false;
     }
-    if (rotationRequested.compareAndSet(false, true)) {
-      try {
-        rotationExecutor.execute(new LogRotationTask());
-      } catch (java.util.concurrent.RejectedExecutionException e) {
-        LOG.info("Rotation executor shut down, skipping rotation", e);
-        rotationRequested.set(false);
-        return false;
-      }
+    if (scheduled) {
+      // Force-hold rather than CAS: a round boundary is never coalesced away, and holding the gate
+      // makes concurrent on-demand requests coalesce into this rotation.
+      rotationRequested.set(true);
+    } else if (!rotationRequested.compareAndSet(false, true)) {
+      // On-demand request coalesces into the rotation already queued or running.
+      return true;
+    }
+    try {
+      rotationExecutor.execute(new LogRotationTask());
+    } catch (java.util.concurrent.RejectedExecutionException e) {
+      LOG.info("Rotation executor shut down, skipping rotation", e);
+      rotationRequested.set(false);
+      return false;
     }
     return true;
   }
@@ -498,12 +521,13 @@ public class ReplicationLog {
 
   /**
    * Creates a new writer on a background thread and stages it in {@code pendingWriter} for the
-   * consumer thread to drain inside {@link #apply}. Submitted via {@link #requestRotation()} from
-   * both the scheduled tick and on-demand size-triggered callers.
+   * consumer thread to drain inside {@link #apply}. Submitted via {@link #requestRotation(boolean)}
+   * from both the scheduled tick and on-demand size-triggered callers.
    * <p>
-   * {@code rotationRequested} stays set for the entire duration of run() (cleared in finally), so
-   * any request that arrives while this task is creating/staging a writer is rejected by
-   * {@link #requestRotation()}'s CAS and not duplicated.
+   * {@code rotationRequested} stays set for the entire duration of run() (cleared unconditionally
+   * in finally), so an on-demand request that arrives while this task is creating/staging a writer
+   * is rejected by {@link #requestRotation(boolean)}'s CAS and coalesced — regardless of whether
+   * this task was enqueued by an on-demand caller or a scheduled tick.
    */
   protected class LogRotationTask implements Runnable {
     @Override
