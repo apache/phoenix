@@ -1356,8 +1356,11 @@ public class ReplicationLogGroup {
     private final List<PendingSync> pendingSyncs = new ArrayList<>();
     private ReplicationModeImpl currentModeImpl;
     private volatile IOException fatalException;
-    // Counts events drained per Disruptor batch. Single-threaded access from onEvent.
-    private int batchEventCount;
+    // commitId (the HBase WAL sequence id) of the last data record handed to a mode via
+    // appendRecord -- covers both the normal event path and the post-failover replay path, so it
+    // stays current across a failure-driven mode switch. Logged at mode switches so a transition is
+    // correlatable with the WAL position. -1 until the first data record.
+    private long lastCommitId = -1;
     // Counted down by onStart() once the consumer thread has entered its run loop (past
     // BatchEventProcessor.run()'s opening clearAlert()). close() awaits this before halting so
     // halt()'s alert cannot be swallowed by a clearAlert() that races an immediate close.
@@ -1451,7 +1454,8 @@ public class ReplicationLogGroup {
       ReplicationMode newMode = getMode();
       if (newMode != currentModeImpl.getMode()) {
         // some other thread switched the mode on the replication group
-        LOG.info("Mode switched at sequence {} from {} to {}", sequence, currentModeImpl, newMode);
+        LOG.info("Mode switched at sequence {} (lastCommitId {}) from {} to {}", sequence,
+          lastCommitId, currentModeImpl, newMode);
         // call exit on the last mode here since we can guarantee that the lastMode
         // is not processing any event like append/sync because this is the only thread
         // that is consuming the events from the ring buffer and handing them off to the
@@ -1501,10 +1505,22 @@ public class ReplicationLogGroup {
       replayFailedEvent(failedEvent, sequence);
     }
 
+    /**
+     * Hand a data record to the current mode and advance {@link #lastCommitId}. The single append
+     * path for every source (normal events and post-failover replays) so the last-seen commitId
+     * stays current across a failure-driven mode switch.
+     */
+    private void appendRecord(Record record) throws IOException {
+      currentModeImpl.append(record);
+      lastCommitId = record.commitId;
+    }
+
     /** Replay all append events which were not yet synced */
     private void replayBatch(List<Record> unsyncedAppends) throws IOException {
+      LOG.info("Replaying {} unsynced records into new mode {}", unsyncedAppends.size(),
+        currentModeImpl.getMode());
       for (Record r : unsyncedAppends) {
-        currentModeImpl.append(r);
+        appendRecord(r);
       }
     }
 
@@ -1515,7 +1531,7 @@ public class ReplicationLogGroup {
       // sync event future to the pending future list before the sync event can potentially
       // fail.
       if (failedEvent.type == EVENT_TYPE_DATA) {
-        currentModeImpl.append(failedEvent.record);
+        appendRecord(failedEvent.record);
       }
       processPendingSyncs(sequence);
     }
@@ -1553,7 +1569,6 @@ public class ReplicationLogGroup {
       if (event.type == EVENT_TYPE_SYNC) {
         metrics.updateRingBufferTime(currentTimeNs - event.timestampNs);
       }
-      batchEventCount++;
       if (fatalException != null) {
         // Append events are ignored; sync futures are failed immediately
         // so producer threads unblock without waiting for the sync timeout.
@@ -1565,7 +1580,7 @@ public class ReplicationLogGroup {
       try {
         switch (event.type) {
           case EVENT_TYPE_DATA:
-            currentModeImpl.append(event.record);
+            appendRecord(event.record);
             break;
           case EVENT_TYPE_SYNC:
             pendingSyncs.add(new PendingSync(event.syncFuture, currentTimeNs));
@@ -1597,13 +1612,6 @@ public class ReplicationLogGroup {
           new IOException("Unexpected error in event handler at sequence " + sequence, t);
         setFatalException(wrapped);
         failPendingSyncs(sequence, wrapped);
-      } finally {
-        // Reset on endOfBatch regardless of success/failure so the counter never leaks
-        // across batches when an exception path bypasses processPendingSyncs.
-        if (endOfBatch) {
-          metrics.updateBatchSize(batchEventCount);
-          batchEventCount = 0;
-        }
       }
     }
 

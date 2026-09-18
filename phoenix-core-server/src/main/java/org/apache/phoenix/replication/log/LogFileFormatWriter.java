@@ -42,6 +42,9 @@ public class LogFileFormatWriter implements Closeable {
   private DataOutputStream blockDataStream;
   private long recordCount = 0;
   private long blockCount = 0;
+  // commitId (WAL seqId) of the last appended record, so a writer switch is correlatable across
+  // files. -1 until the first append.
+  private long lastCommitId = -1;
   private long blocksStartOffset = -1;
   private CRC64 crc = new CRC64(); // Indirect this when we have more than one type
   // Cached buffer for compression for performance
@@ -80,6 +83,7 @@ public class LogFileFormatWriter implements Closeable {
     }
     encoder.write(record);
     recordCount++;
+    lastCommitId = record.getCommitId();
 
     // Check if the current block size exceeds the limit AFTER writing the record
     if (currentBlockBytes.size() >= context.getMaxBlockSize()) {
@@ -220,7 +224,8 @@ public class LogFileFormatWriter implements Closeable {
   @Override
   public String toString() {
     return "LogFileFormatWriter [writerContext=" + context + ", recordCount=" + recordCount
-      + ", blockCount=" + blockCount + ", blocksStartOffset=" + blocksStartOffset + "]";
+      + ", lastCommitId=" + lastCommitId + ", blockCount=" + blockCount + ", blocksStartOffset="
+      + blocksStartOffset + "]";
   }
 
 }

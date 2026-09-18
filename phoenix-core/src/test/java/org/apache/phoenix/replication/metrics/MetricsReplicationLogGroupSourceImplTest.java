@@ -95,11 +95,9 @@ public class MetricsReplicationLogGroupSourceImplTest {
   }
 
   @Test
-  public void testBatchSizeAndPendingSyncCount() {
-    source.updateBatchSize(100L);
+  public void testPendingSyncCount() {
     source.updatePendingSyncCount(50L);
     ReplicationLogMetricValues v = source.getCurrentMetricValues();
-    assertEquals(100L, v.getBatchSizeMax());
     assertEquals(50L, v.getPendingSyncCountMax());
   }
 }

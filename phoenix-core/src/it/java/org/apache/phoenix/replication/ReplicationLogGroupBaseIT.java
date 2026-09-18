@@ -21,7 +21,6 @@ import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_C
 import static org.apache.phoenix.jdbc.HighAvailabilityGroup.PHOENIX_HA_GROUP_ATTR;
 import static org.apache.phoenix.jdbc.HighAvailabilityTestingUtility.getHighAvailibilityGroup;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME;
-import static org.apache.phoenix.query.QueryServices.SYNCHRONOUS_REPLICATION_ENABLED;
 import static org.apache.phoenix.replication.ReplicationShardDirectoryManager.PHOENIX_REPLICATION_ROUND_DURATION_SECONDS_KEY;
 import static org.apache.phoenix.replication.reader.ReplicationLogReplayService.PHOENIX_REPLICATION_REPLAY_ENABLED;
 import static org.junit.Assert.assertArrayEquals;
@@ -102,8 +101,6 @@ public abstract class ReplicationLogGroupBaseIT extends HABaseIT {
     conf1.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, false);
     // Disable replay on cluster 2, we will explicitly replay the log files
     conf2.setBoolean(PHOENIX_REPLICATION_REPLAY_ENABLED, false);
-    // Disable writer on cluster 2
-    conf2.setBoolean(SYNCHRONOUS_REPLICATION_ENABLED, false);
     CLUSTERS.start();
     DriverManager.registerDriver(PhoenixDriver.INSTANCE);
   }
@@ -120,7 +117,7 @@ public abstract class ReplicationLogGroupBaseIT extends HABaseIT {
     haGroupName = name.getMethodName();
     clientProps = HighAvailabilityTestingUtility.getHATestProperties();
     clientProps.setProperty(PHOENIX_HA_GROUP_ATTR, haGroupName);
-    CLUSTERS.initClusterRole(haGroupName, HighAvailabilityPolicy.FAILOVER);
+    CLUSTERS.initClusterRole(haGroupName, getHAPolicy());
     haGroup = getHighAvailibilityGroup(CLUSTERS.getJdbcHAUrl(), clientProps);
     LOG.info("Initialized haGroup {} with URL {}", haGroup, CLUSTERS.getJdbcHAUrl());
     logGroup = getReplicationLogGroup();
@@ -131,6 +128,14 @@ public abstract class ReplicationLogGroupBaseIT extends HABaseIT {
     LOG.info("Starting cleanup for test {}", name.getMethodName());
     logGroup.close();
     LOG.info("Ending cleanup for test {}", name.getMethodName());
+  }
+
+  /**
+   * HA policy for the per-test group. Defaults to FAILOVER; a subclass overrides this to exercise
+   * the PARALLEL role/policy path (e.g. a double-write reaching a non-active PARALLEL cluster).
+   */
+  protected HighAvailabilityPolicy getHAPolicy() {
+    return HighAvailabilityPolicy.FAILOVER;
   }
 
   private ReplicationLogGroup getReplicationLogGroup() throws IOException {

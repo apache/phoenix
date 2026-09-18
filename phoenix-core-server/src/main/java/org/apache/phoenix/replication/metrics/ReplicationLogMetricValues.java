@@ -39,7 +39,6 @@ public class ReplicationLogMetricValues {
   private final long fsSyncTimeMs;
   private final long fsSyncTimeP50Ms;
   private final long fsSyncTimeP99Ms;
-  private final long batchSize;
   private final long pendingSyncCount;
   private final long pendingSyncWaitTimeNs;
   private final long pendingSyncWaitTimeP50Ns;
@@ -60,7 +59,6 @@ public class ReplicationLogMetricValues {
     this.fsSyncTimeMs = b.fsSyncTimeMs;
     this.fsSyncTimeP50Ms = b.fsSyncTimeP50Ms;
     this.fsSyncTimeP99Ms = b.fsSyncTimeP99Ms;
-    this.batchSize = b.batchSize;
     this.pendingSyncCount = b.pendingSyncCount;
     this.pendingSyncWaitTimeNs = b.pendingSyncWaitTimeNs;
     this.pendingSyncWaitTimeP50Ns = b.pendingSyncWaitTimeP50Ns;
@@ -127,10 +125,6 @@ public class ReplicationLogMetricValues {
     return fsSyncTimeP99Ms;
   }
 
-  public long getBatchSizeMax() {
-    return batchSize;
-  }
-
   public long getPendingSyncCountMax() {
     return pendingSyncCount;
   }
@@ -162,7 +156,6 @@ public class ReplicationLogMetricValues {
     private long fsSyncTimeMs;
     private long fsSyncTimeP50Ms;
     private long fsSyncTimeP99Ms;
-    private long batchSize;
     private long pendingSyncCount;
     private long pendingSyncWaitTimeNs;
     private long pendingSyncWaitTimeP50Ns;
@@ -235,11 +228,6 @@ public class ReplicationLogMetricValues {
 
     public Builder fsSyncTimeP99(long v) {
       this.fsSyncTimeP99Ms = v;
-      return this;
-    }
-
-    public Builder batchSizeMax(long v) {
-      this.batchSize = v;
       return this;
     }
 
