@@ -20,6 +20,11 @@ limitations under the License.
     <Class name="~org\.apache\.phoenix\.coprocessor\.generated\..*" />
   </Match>
   <Match>
+    <!-- ANTLR-generated parser; the missing default case comes from the grammar, not hand-written code -->
+    <Class name="org.apache.phoenix.parse.PhoenixSQLParser" />
+    <BugPattern name="SF_SWITCH_NO_DEFAULT" />
+  </Match>
+  <Match>
     <!-- Guava annotates some interfaces with @Null for some unfathomable reason -->
     <BugPattern name="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE" />
   </Match>

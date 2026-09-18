@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.getExplainAttributes;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -28,8 +30,8 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.Statement;
 import java.util.Properties;
+import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
 
@@ -108,19 +110,12 @@ public class ProjectArrayElemAfterHashJoinIT extends ParallelStatsDisabledIT {
 
   private void verifyExplain(Connection conn, String table, boolean fullArray, boolean hashJoin)
     throws Exception {
-
-    String query = "EXPLAIN " + getQuery(table, fullArray, hashJoin);
-    Statement stmt = conn.createStatement();
-    ResultSet rs = stmt.executeQuery(query);
-
-    try {
-      String plan = QueryUtil.getExplainPlan(rs);
-      assertTrue(plan != null);
-      assertTrue(fullArray || plan.contains("SERVER ARRAY ELEMENT PROJECTION"));
-      assertTrue(hashJoin == plan.contains("JOIN"));
-    } finally {
-      rs.close();
+    String query = getQuery(table, fullArray, hashJoin);
+    ExplainPlanAttributes attributes = getExplainAttributes(conn, query);
+    if (!fullArray) {
+      assertPlan(attributes).serverParsedProjectionCount("ARRAY", 4);
     }
+    assertPlan(attributes).subPlanCount(hashJoin ? 1 : 0);
   }
 
   private void verifyResults(Connection conn, String table, boolean fullArray, boolean hashJoin)
