@@ -1072,13 +1072,18 @@ public interface PTable extends PMetaDataEntity {
   /** Returns the vector dimension if this table is a vector index, or null otherwise. */
   Integer getVectorDimension();
 
-  /** Returns the number of IVF partitions or lists if this table is an IVF vector index, or null otherwise. */
+  /**
+   * Returns the number of IVF partitions or lists if this table is an IVF vector index, or null
+   * otherwise.
+   */
   Integer getVectorIvfLists();
 
   /** Returns the training sample size if this table is an IVF vector index, or null otherwise. */
   Integer getVectorIvfSampleSize();
 
-  /** Returns the active centroid generation ID if this table is a vector index, or null otherwise. */
+  /**
+   * Returns the active centroid generation ID if this table is a vector index, or null otherwise.
+   */
   Long getVectorCentroidGeneration();
 
   /** Returns true if this table is a vector index. */

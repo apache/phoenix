@@ -130,8 +130,8 @@ public class VectorSystemCatalogIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Verifies that ALTER TABLE ADD IF NOT EXISTS on vector metadata columns is idempotent,
-   * ensuring that repeatedly executing catalog schema upgrades succeeds without error.
+   * Verifies that ALTER TABLE ADD IF NOT EXISTS on vector metadata columns is idempotent, ensuring
+   * that repeatedly executing catalog schema upgrades succeeds without error.
    */
   @Test
   public void testVectorColumnAddIfNotExistsIsIdempotent() throws Exception {

@@ -637,13 +637,13 @@ public class VectorDataTypeTest {
     PTable original = new PTableImpl.Builder().setType(PTableType.INDEX)
       .setName(PNameFactory.newName("IDX_VEC")).setTableName(PNameFactory.newName("IDX_VEC"))
       .setParentTableName(PNameFactory.newName("DATA_TBL"))
-      .setPhysicalNames(Collections.emptyList()).vectorIndexAlgorithm("DISKANN")
+      .setPhysicalNames(Collections.emptyList()).vectorIndexAlgorithm("IVF")
       .vectorDistanceMetric("INNER_PRODUCT").vectorDimension(512).vectorIvfLists(128)
       .vectorIvfSampleSize(4096).vectorCentroidGeneration(777L).build();
 
     PTable cloned = PTableImpl.builderFromExisting(original).build();
     assertTrue(cloned.isVectorIndex());
-    assertEquals("DISKANN", cloned.getVectorIndexAlgorithm());
+    assertEquals("IVF", cloned.getVectorIndexAlgorithm());
     assertEquals("INNER_PRODUCT", cloned.getVectorDistanceMetric());
     assertEquals(Integer.valueOf(512), cloned.getVectorDimension());
     assertEquals(Integer.valueOf(128), cloned.getVectorIvfLists());
