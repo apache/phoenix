@@ -515,6 +515,7 @@ oneStatement returns [BindableStatement ret]
     |   s=create_schema_node
     |   s=create_view_node
     |   s=create_index_node
+    |   s=create_vector_index_node
     |   s=create_cdc_node
     |   s=cursor_open_node
     |   s=cursor_close_node
@@ -666,6 +667,21 @@ create_index_node returns [CreateIndexStatement ret]
                     l==null ? (u==null ? IndexType.getDefault() : IndexType.UNCOVERED_GLOBAL) :
                     IndexType.LOCAL, async != null, getBindCount(), new HashMap<String,
                     UDFParseNode>(udfParseNodes), where);
+        }
+    ;
+
+// Parse a create vector index statement.
+create_vector_index_node returns [CreateIndexStatement ret]
+    :   CREATE VECTOR INDEX (IF NOT ex=EXISTS)? i=index_name ON t=from_table_name
+        (LPAREN ik=ik_constraint RPAREN)
+        (INCLUDE (LPAREN icrefs=column_names RPAREN))?
+        ( (WITH? (LPAREN p=fam_properties RPAREN | p=fam_properties) (async=ASYNC)?)
+        | (async=ASYNC (WITH? (LPAREN p=fam_properties RPAREN | p=fam_properties))?)
+        )?
+        {
+            ret = factory.createIndex(i, factory.namedTable(null,t), ik, icrefs, null, p, ex!=null,
+                    IndexType.VECTOR_GLOBAL, async != null, getBindCount(), new HashMap<String,
+                    UDFParseNode>(udfParseNodes), null);
         }
     ;
 

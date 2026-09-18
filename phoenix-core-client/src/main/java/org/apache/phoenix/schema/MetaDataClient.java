@@ -39,6 +39,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ASYNC_REBUILD_TIME
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.AUTO_PARTITION_SEQ;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.BASE_COLUMN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CDC_INCLUDE_TABLE;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CENTROID_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CHANGE_DETECTION_ENABLED;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLASS_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT;
@@ -109,6 +110,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DIMENSION;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_LISTS;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_STATEMENT;
@@ -284,6 +291,7 @@ import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDate;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTimestamp;
 import org.apache.phoenix.schema.types.PUnsignedLong;
@@ -349,9 +357,11 @@ public class MetaDataClient {
     + IMMUTABLE_STORAGE_SCHEME + "," + ENCODING_SCHEME + "," + USE_STATS_FOR_PARALLELIZATION + ","
     + VIEW_INDEX_ID_DATA_TYPE + "," + CHANGE_DETECTION_ENABLED + "," + PHYSICAL_TABLE_NAME + ","
     + SCHEMA_VERSION + "," + STREAMING_TOPIC_NAME + "," + INDEX_WHERE + "," + CDC_INCLUDE_TABLE
-    + "," + TTL + "," + ROW_KEY_MATCHER + "," + IS_STRICT_TTL + "," + INDEX_CONSISTENCY
+    + "," + TTL + "," + ROW_KEY_MATCHER + "," + IS_STRICT_TTL + "," + INDEX_CONSISTENCY + ","
+    + VECTOR_INDEX_ALGORITHM + "," + VECTOR_DISTANCE_METRIC + "," + VECTOR_DIMENSION + ","
+    + VECTOR_IVF_LISTS + "," + VECTOR_IVF_SAMPLE_SIZE + "," + VECTOR_CENTROID_GENERATION
     + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, "
-    + "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+    + "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
   private static final String CREATE_SCHEMA = "UPSERT INTO " + SYSTEM_CATALOG_SCHEMA + ".\""
     + SYSTEM_CATALOG_TABLE + "\"( " + TABLE_SCHEM + "," + TABLE_NAME + ") VALUES (?,?)";
@@ -1716,6 +1726,17 @@ public class MetaDataClient {
           col.getName().getString(), col.isRowTimestamp()));
       }
 
+      boolean isVectorIndex = statement.getIndexType() == IndexType.VECTOR_GLOBAL;
+      if (isVectorIndex) {
+        ColumnName centroidColName =
+          ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, CENTROID_ID));
+        allPkColumns
+          .add(new ColumnDefInPkConstraint(centroidColName, SortOrder.getDefault(), false));
+        columnDefs.add(FACTORY.columnDef(centroidColName, PInteger.INSTANCE.getSqlTypeName(), false,
+          null, null, false, SortOrder.getDefault(), null, false));
+      }
+      List<ColumnDef> vectorColDefs = isVectorIndex ? new ArrayList<ColumnDef>() : null;
+
       PhoenixStatement phoenixStatment = new PhoenixStatement(connection);
       StatementContext context = new StatementContext(phoenixStatment, resolver);
       IndexExpressionCompiler expressionIndexCompiler = new IndexExpressionCompiler(context);
@@ -1784,12 +1805,34 @@ public class MetaDataClient {
           colName = ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, name));
         }
         indexedColumnNames.add(colName);
-        PDataType dataType =
-          IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
-        allPkColumns.add(new ColumnDefInPkConstraint(colName, pair.getSecond(), isRowTimestamp));
-        columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(),
-          expression.isNullable(), expression.getMaxLength(), expression.getScale(), false,
-          pair.getSecond(), expressionStr, isRowTimestamp));
+        if (isVectorIndex) {
+          String defaultFamily = dataTable.getDefaultFamilyName() != null
+            ? dataTable.getDefaultFamilyName().getString()
+            : QueryConstants.DEFAULT_COLUMN_FAMILY;
+          ColumnName vectorColDefName;
+          if (colRef != null) {
+            PColumn column = colRef.getColumn();
+            String columnFamilyName =
+              column.getFamilyName() != null ? column.getFamilyName().getString() : defaultFamily;
+            vectorColDefName = ColumnName.caseSensitiveColumnName(columnFamilyName,
+              IndexUtil.getIndexColumnName(columnFamilyName, column.getName().getString()));
+          } else {
+            String name = expressionStr.replaceAll("\"", "'");
+            vectorColDefName = ColumnName.caseSensitiveColumnName(defaultFamily,
+              IndexUtil.getIndexColumnName(null, name));
+          }
+          vectorColDefs
+            .add(FACTORY.columnDef(vectorColDefName, expression.getDataType().getSqlTypeName(),
+              expression.isNullable(), expression.getMaxLength(), expression.getScale(), false,
+              pair.getSecond(), expressionStr, isRowTimestamp));
+        } else {
+          PDataType dataType =
+            IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
+          allPkColumns.add(new ColumnDefInPkConstraint(colName, pair.getSecond(), isRowTimestamp));
+          columnDefs.add(FACTORY.columnDef(colName, dataType.getSqlTypeName(),
+            expression.isNullable(), expression.getMaxLength(), expression.getScale(), false,
+            pair.getSecond(), expressionStr, isRowTimestamp));
+        }
       }
 
       // Next all the PK columns from the data table that aren't indexed
@@ -1810,6 +1853,10 @@ public class MetaDataClient {
               false, colExpression.getSortOrder(), colExpression.toString(), col.isRowTimestamp()));
           }
         }
+      }
+
+      if (isVectorIndex && vectorColDefs != null) {
+        columnDefs.addAll(vectorColDefs);
       }
 
       // Last all the included columns (minus any PK columns)
@@ -1910,6 +1957,23 @@ public class MetaDataClient {
 
       tableProps.put(MetaDataUtil.DATA_TABLE_NAME_PROP_NAME,
         dataTable.getPhysicalName().getString());
+      if (isVectorIndex) {
+        if (statement.getVectorAlgorithm() != null) {
+          tableProps.put(VECTOR_INDEX_ALGORITHM, statement.getVectorAlgorithm());
+        }
+        if (statement.getVectorMetric() != null) {
+          tableProps.put(VECTOR_DISTANCE_METRIC, statement.getVectorMetric());
+        }
+        if (statement.getVectorDimension() != null) {
+          tableProps.put(VECTOR_DIMENSION, statement.getVectorDimension());
+        }
+        if (statement.getVectorLists() != null) {
+          tableProps.put(VECTOR_IVF_LISTS, statement.getVectorLists());
+        }
+        if (statement.getVectorSampleSize() != null) {
+          tableProps.put(VECTOR_IVF_SAMPLE_SIZE, statement.getVectorSampleSize());
+        }
+      }
       CreateTableStatement tableStatement = FACTORY.createTable(indexTableName,
         statement.getProps(), columnDefs, pk, statement.getSplitNodes(), PTableType.INDEX,
         statement.ifNotExists(), null, statement.getWhere(), statement.getBindCount(), null);
@@ -1942,6 +2006,16 @@ public class MetaDataClient {
 
     // If we create index in create_disabled state, we will build them later
     if (table.getIndexState() == PIndexState.CREATE_DISABLE) {
+      return new MutationState(0, 0, connection);
+    }
+
+    // Vector indexes bypass standard index table population during creation and
+    // remain in BUILDING state until centroid training and row assignment complete.
+    if (statement.getIndexType() == IndexType.VECTOR_GLOBAL || table.isVectorIndex()) {
+      if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
+        connection.removeTable(connection.getTenantId(), dataTable.getName().getString(), null,
+          dataTable.getTimeStamp());
+      }
       return new MutationState(0, 0, connection);
     }
 
@@ -3620,6 +3694,9 @@ public class MetaDataClient {
           defaultCreateState = PIndexState.BUILDING;
         }
       }
+      if (indexType == IndexType.VECTOR_GLOBAL) {
+        defaultCreateState = PIndexState.BUILDING;
+      }
       PIndexState indexState =
         parent == null || (tableType == PTableType.VIEW || tableType == PTableType.CDC)
           ? null
@@ -3627,6 +3704,18 @@ public class MetaDataClient {
       if (indexState == null && tableProps.containsKey(INDEX_STATE)) {
         indexState = PIndexState.fromSerializedValue(tableProps.get(INDEX_STATE).toString());
       }
+      String vectorIndexAlgorithm = (String) tableProps.get(VECTOR_INDEX_ALGORITHM);
+      String vectorDistanceMetric = (String) tableProps.get(VECTOR_DISTANCE_METRIC);
+      Object dimObj = tableProps.get(VECTOR_DIMENSION);
+      Integer vectorDimension = dimObj instanceof Number ? ((Number) dimObj).intValue() : null;
+      Object listsObj = tableProps.get(VECTOR_IVF_LISTS);
+      Integer vectorIvfLists = listsObj instanceof Number ? ((Number) listsObj).intValue() : null;
+      Object sampleObj = tableProps.get(VECTOR_IVF_SAMPLE_SIZE);
+      Integer vectorIvfSampleSize =
+        sampleObj instanceof Number ? ((Number) sampleObj).intValue() : null;
+      Object genObj = tableProps.get(VECTOR_CENTROID_GENERATION);
+      Long vectorCentroidGeneration =
+        genObj instanceof Number ? ((Number) genObj).longValue() : null;
       PreparedStatement tableUpsert = connection.prepareStatement(CREATE_TABLE);
       tableUpsert.setString(1, tenantIdStr);
       tableUpsert.setString(2, schemaName);
@@ -3763,6 +3852,42 @@ public class MetaDataClient {
         }
       } else {
         tableUpsert.setNull(39, Types.CHAR);
+      }
+
+      if (vectorIndexAlgorithm == null) {
+        tableUpsert.setNull(40, Types.VARCHAR);
+      } else {
+        tableUpsert.setString(40, vectorIndexAlgorithm);
+      }
+
+      if (vectorDistanceMetric == null) {
+        tableUpsert.setNull(41, Types.VARCHAR);
+      } else {
+        tableUpsert.setString(41, vectorDistanceMetric);
+      }
+
+      if (vectorDimension == null) {
+        tableUpsert.setNull(42, Types.INTEGER);
+      } else {
+        tableUpsert.setInt(42, vectorDimension);
+      }
+
+      if (vectorIvfLists == null) {
+        tableUpsert.setNull(43, Types.INTEGER);
+      } else {
+        tableUpsert.setInt(43, vectorIvfLists);
+      }
+
+      if (vectorIvfSampleSize == null) {
+        tableUpsert.setNull(44, Types.INTEGER);
+      } else {
+        tableUpsert.setInt(44, vectorIvfSampleSize);
+      }
+
+      if (vectorCentroidGeneration == null) {
+        tableUpsert.setNull(45, Types.BIGINT);
+      } else {
+        tableUpsert.setLong(45, vectorCentroidGeneration);
       }
 
       tableUpsert.execute();
@@ -3902,7 +4027,32 @@ public class MetaDataClient {
           .setTTL(ttl == null || ttl.equals(TTL_EXPRESSION_NOT_DEFINED)
             ? TTLExpressionFactory.create(ttlFromHierarchy)
             : TTLExpressionFactory.create(ttl))
-          .setRowKeyMatcher(rowKeyMatcher).build();
+          .setRowKeyMatcher(rowKeyMatcher)
+          .setVectorIndexAlgorithm(
+            result.getTable() != null && result.getTable().getVectorIndexAlgorithm() != null
+              ? result.getTable().getVectorIndexAlgorithm()
+              : vectorIndexAlgorithm)
+          .setVectorDistanceMetric(
+            result.getTable() != null && result.getTable().getVectorDistanceMetric() != null
+              ? result.getTable().getVectorDistanceMetric()
+              : vectorDistanceMetric)
+          .setVectorDimension(
+            result.getTable() != null && result.getTable().getVectorDimension() != null
+              ? result.getTable().getVectorDimension()
+              : vectorDimension)
+          .setVectorIvfLists(
+            result.getTable() != null && result.getTable().getVectorIvfLists() != null
+              ? result.getTable().getVectorIvfLists()
+              : vectorIvfLists)
+          .setVectorIvfSampleSize(
+            result.getTable() != null && result.getTable().getVectorIvfSampleSize() != null
+              ? result.getTable().getVectorIvfSampleSize()
+              : vectorIvfSampleSize)
+          .setVectorCentroidGeneration(
+            result.getTable() != null && result.getTable().getVectorCentroidGeneration() != null
+              ? result.getTable().getVectorCentroidGeneration()
+              : vectorCentroidGeneration)
+          .build();
         result = new MetaDataMutationResult(code, result.getMutationTime(), table, true);
         addTableToCache(result, false);
         return table;
@@ -4244,8 +4394,26 @@ public class MetaDataClient {
     String schemaName = statement.getTableName().getSchemaName();
     String tableName = statement.getIndexName().getName();
     String parentTableName = statement.getTableName().getTableName();
-    return dropTable(schemaName, tableName, parentTableName, PTableType.INDEX, statement.ifExists(),
-      false, false);
+    String fullIndexName = SchemaUtil.getTableName(schemaName, tableName);
+    boolean isVector = false;
+    try {
+      PTable indexTable = connection.getTable(fullIndexName);
+      if (
+        indexTable != null
+          && (indexTable.isVectorIndex() || indexTable.getIndexType() == IndexType.VECTOR_GLOBAL)
+      ) {
+        isVector = true;
+      }
+    } catch (TableNotFoundException ignored) {
+    }
+
+    MutationState state = dropTable(schemaName, tableName, parentTableName, PTableType.INDEX,
+      statement.ifExists(), false, false);
+
+    if (isVector) {
+      deleteVectorCentroids(fullIndexName);
+    }
+    return state;
   }
 
   public MutationState dropCDC(DropCDCStatement statement) throws SQLException {
@@ -4404,6 +4572,18 @@ public class MetaDataClient {
             parentTableName, result.getMutationTime());
 
           if (table != null) {
+            if (tableType == PTableType.TABLE && table.getIndexes() != null) {
+              for (PTable index : table.getIndexes()) {
+                if (index.isVectorIndex() || index.getIndexType() == IndexType.VECTOR_GLOBAL) {
+                  deleteVectorCentroids(index.getName().getString());
+                }
+              }
+            } else if (
+              tableType == PTableType.INDEX
+                && (table.isVectorIndex() || table.getIndexType() == IndexType.VECTOR_GLOBAL)
+            ) {
+              deleteVectorCentroids(table.getName().getString());
+            }
             boolean dropMetaData = connection.getQueryServices().getProps()
               .getBoolean(DROP_METADATA_ATTRIB, DEFAULT_DROP_METADATA);
             long ts = (scn == null ? result.getMutationTime() : scn);
@@ -4489,6 +4669,27 @@ public class MetaDataClient {
       return new MutationState(0, 0, connection);
     } finally {
       connection.setAutoCommit(wasAutoCommit);
+    }
+  }
+
+  private void deleteVectorCentroids(String fullIndexName) {
+    try {
+      boolean wasAutoCommit = connection.getAutoCommit();
+      try {
+        connection.setAutoCommit(true);
+        String deleteSql = "DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_NAME
+          + " WHERE " + PhoenixDatabaseMetaData.INDEX_NAME + " = ?";
+        try (PreparedStatement ps = connection.prepareStatement(deleteSql)) {
+          ps.setString(1, fullIndexName);
+          ps.executeUpdate();
+        }
+      } finally {
+        connection.setAutoCommit(wasAutoCommit);
+      }
+    } catch (Exception e) {
+      if (LOGGER.isDebugEnabled()) {
+        LOGGER.debug("Could not delete vector centroids for index: " + fullIndexName, e);
+      }
     }
   }
 

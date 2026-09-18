@@ -30,8 +30,8 @@ import org.apache.phoenix.schema.PTable.IndexType;
 import org.junit.Test;
 
 /**
- * Unit tests for {@link PTable.IndexType#VECTOR_GLOBAL} serialization, conversion,
- * and protobuf representation.
+ * Unit tests for {@link PTable.IndexType#VECTOR_GLOBAL} serialization, conversion, and protobuf
+ * representation.
  */
 public class VectorIndexTypeTest {
 

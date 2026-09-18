@@ -3110,8 +3110,8 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   }
 
   /**
-   * Resolves the data table column corresponding to an index column name. Returns null
-   * when no matching parent table column exists, such as for expression-based index columns.
+   * Resolves the data table column corresponding to an index column name. Returns null when no
+   * matching parent table column exists, such as for expression-based index columns.
    */
   private static PColumn resolveIndexColumnInParent(String indexColumnName, PTable parentTable) {
     String dataColName = indexColumnName.contains(IndexUtil.INDEX_COLUMN_NAME_SEP)
@@ -3137,9 +3137,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   }
 
   /**
-   * Resolves the source data table column referenced by an indexed vector expression.
-   * Returns the referenced parent column if the expression unambiguously targets a single
-   * column, or null otherwise.
+   * Resolves the source data table column referenced by an indexed vector expression. Returns the
+   * referenced parent column if the expression unambiguously targets a single column, or null
+   * otherwise.
    */
   private static PColumn resolveColumnFromIndexedExpression(String expression, PTable parentTable) {
     ParseNode parseNode;

@@ -20,12 +20,16 @@ package org.apache.phoenix.parse;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.sql.SQLException;
 import java.util.List;
+import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.types.PVectorDouble;
 import org.apache.phoenix.schema.types.PVectorFloat;
@@ -187,5 +191,141 @@ public class VectorColumnParseTest {
     ColumnDef doubleVec = new ColumnDef(new ColumnName("V"), PVectorDouble.INSTANCE, null, 64, null,
       false, SortOrder.getDefault(), null, null, false);
     assertEquals("V VECTOR(DOUBLE, 64)", doubleVec.toString());
+  }
+
+  @Test
+  public void testParseVectorIndexFullSyntax() throws Exception {
+    String ddl =
+      "CREATE VECTOR INDEX idx ON t (v) WITH (metric='COSINE', algorithm='IVF', lists=32, sample_size=1000)";
+    SQLParser parser = new SQLParser(ddl);
+    BindableStatement stmt = parser.parseStatement();
+    assertTrue("Expected CreateIndexStatement", stmt instanceof CreateIndexStatement);
+    CreateIndexStatement indexStmt = (CreateIndexStatement) stmt;
+    assertEquals("IDX", indexStmt.getIndexTableName().getTableName());
+    assertEquals("T", indexStmt.getTable().getName().getTableName());
+    assertEquals(PTable.IndexType.VECTOR_GLOBAL, indexStmt.getIndexType());
+    assertFalse("Expected ifNotExists to be false", indexStmt.ifNotExists());
+    assertFalse("Expected async to be false", indexStmt.isAsync());
+    assertEquals(1, indexStmt.getIndexConstraint().getParseNodeAndSortOrderList().size());
+
+    List<Pair<String, Object>> props =
+      indexStmt.getProps().get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY);
+    assertEquals(4, props.size());
+    boolean foundMetric = false, foundAlgorithm = false, foundLists = false,
+        foundSampleSize = false;
+    for (Pair<String, Object> prop : props) {
+      if ("METRIC".equals(prop.getFirst())) {
+        foundMetric = true;
+        assertEquals("COSINE", prop.getSecond());
+      } else if ("ALGORITHM".equals(prop.getFirst())) {
+        foundAlgorithm = true;
+        assertEquals("IVF", prop.getSecond());
+      } else if ("LISTS".equals(prop.getFirst())) {
+        foundLists = true;
+        assertEquals(32, ((Number) prop.getSecond()).intValue());
+      } else if ("SAMPLE_SIZE".equals(prop.getFirst())) {
+        foundSampleSize = true;
+        assertEquals(1000, ((Number) prop.getSecond()).intValue());
+      }
+    }
+    assertTrue("METRIC property expected", foundMetric);
+    assertTrue("ALGORITHM property expected", foundAlgorithm);
+    assertTrue("LISTS property expected", foundLists);
+    assertTrue("SAMPLE_SIZE property expected", foundSampleSize);
+  }
+
+  @Test
+  public void testParseVectorIndexIfNotExists() throws Exception {
+    String ddl =
+      "CREATE VECTOR INDEX IF NOT EXISTS idx ON t (v) WITH (algorithm='IVF', metric='L2', lists=16, sample_size=500)";
+    SQLParser parser = new SQLParser(ddl);
+    BindableStatement stmt = parser.parseStatement();
+    assertTrue("Expected CreateIndexStatement", stmt instanceof CreateIndexStatement);
+    CreateIndexStatement indexStmt = (CreateIndexStatement) stmt;
+    assertTrue("Expected ifNotExists to be true", indexStmt.ifNotExists());
+    assertEquals(PTable.IndexType.VECTOR_GLOBAL, indexStmt.getIndexType());
+  }
+
+  @Test
+  public void testParseVectorIndexAsync() throws Exception {
+    String ddl =
+      "CREATE VECTOR INDEX idx ON t (v) WITH (algorithm='IVF', metric='L2', lists=16, sample_size=500) ASYNC";
+    SQLParser parser = new SQLParser(ddl);
+    BindableStatement stmt = parser.parseStatement();
+    assertTrue("Expected CreateIndexStatement", stmt instanceof CreateIndexStatement);
+    CreateIndexStatement indexStmt = (CreateIndexStatement) stmt;
+    assertTrue("Expected async to be true", indexStmt.isAsync());
+    assertEquals(PTable.IndexType.VECTOR_GLOBAL, indexStmt.getIndexType());
+  }
+
+  @Test
+  public void testParseVectorIndexIncludeClause() throws Exception {
+    String ddl =
+      "CREATE VECTOR INDEX idx ON t (v) INCLUDE (col1, col2) WITH (metric='COSINE', algorithm='IVF', lists=32, sample_size=1000)";
+    SQLParser parser = new SQLParser(ddl);
+    BindableStatement stmt = parser.parseStatement();
+    assertTrue("Expected CreateIndexStatement", stmt instanceof CreateIndexStatement);
+    CreateIndexStatement indexStmt = (CreateIndexStatement) stmt;
+    List<ColumnName> includeCols = indexStmt.getIncludeColumns();
+    assertEquals(2, includeCols.size());
+    assertEquals("COL1", includeCols.get(0).getColumnName());
+    assertEquals("COL2", includeCols.get(1).getColumnName());
+  }
+
+  @Test
+  public void testParseVectorIndexFunctionExpression() throws Exception {
+    String ddl =
+      "CREATE VECTOR INDEX idx ON t (BSON_VECTOR_VALUE(profile, 'search.embedding', 768)) "
+        + "INCLUDE (author) WITH (metric='COSINE', algorithm='IVF', lists=1024, sample_size=50000)";
+    SQLParser parser = new SQLParser(ddl);
+    BindableStatement stmt = parser.parseStatement();
+    assertTrue("Expected CreateIndexStatement", stmt instanceof CreateIndexStatement);
+    CreateIndexStatement indexStmt = (CreateIndexStatement) stmt;
+    assertEquals(1, indexStmt.getIndexConstraint().getParseNodeAndSortOrderList().size());
+    assertTrue(indexStmt.getIndexConstraint().getParseNodeAndSortOrderList().get(0)
+      .getFirst() instanceof FunctionParseNode);
+    FunctionParseNode fn = (FunctionParseNode) indexStmt.getIndexConstraint()
+      .getParseNodeAndSortOrderList().get(0).getFirst();
+    assertEquals("BSON_VECTOR_VALUE", fn.getName());
+    assertEquals(1, indexStmt.getIncludeColumns().size());
+    assertEquals("AUTHOR", indexStmt.getIncludeColumns().get(0).getColumnName());
+  }
+
+  @Test
+  public void testVectorIndexAccessorValues() throws Exception {
+    String ddl =
+      "CREATE VECTOR INDEX idx ON t (v) WITH (algorithm='IVF', metric='COSINE', lists=32, sample_size=1000)";
+    SQLParser parser = new SQLParser(ddl);
+    BindableStatement stmt = parser.parseStatement();
+    assertTrue("Expected CreateIndexStatement", stmt instanceof CreateIndexStatement);
+    CreateIndexStatement indexStmt = (CreateIndexStatement) stmt;
+    assertEquals("IVF", indexStmt.getVectorAlgorithm());
+    assertEquals("COSINE", indexStmt.getVectorMetric());
+    assertEquals(Integer.valueOf(32), indexStmt.getVectorLists());
+    assertEquals(Integer.valueOf(1000), indexStmt.getVectorSampleSize());
+  }
+
+  @Test
+  public void testCreateIndexStatementConstructorOverload() {
+    CreateIndexStatement stmt = new CreateIndexStatement(new NamedNode("IDX"),
+      new NamedTableNode(null, TableName.create(null, "T")), IndexKeyConstraint.EMPTY, null, null,
+      null, false, PTable.IndexType.VECTOR_GLOBAL, false, 0, null, null, "IVF", "L2", 64, 2000);
+    assertEquals("IVF", stmt.getVectorAlgorithm());
+    assertEquals("L2", stmt.getVectorMetric());
+    assertEquals(Integer.valueOf(64), stmt.getVectorLists());
+    assertEquals(Integer.valueOf(2000), stmt.getVectorSampleSize());
+  }
+
+  @Test
+  public void testNonVectorIndexAccessorValues() throws Exception {
+    String ddl = "CREATE INDEX idx ON t (v)";
+    SQLParser parser = new SQLParser(ddl);
+    BindableStatement stmt = parser.parseStatement();
+    assertTrue("Expected CreateIndexStatement", stmt instanceof CreateIndexStatement);
+    CreateIndexStatement indexStmt = (CreateIndexStatement) stmt;
+    assertNull(indexStmt.getVectorAlgorithm());
+    assertNull(indexStmt.getVectorMetric());
+    assertNull(indexStmt.getVectorLists());
+    assertNull(indexStmt.getVectorSampleSize());
   }
 }
