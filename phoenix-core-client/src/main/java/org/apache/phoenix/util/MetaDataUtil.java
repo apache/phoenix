@@ -102,6 +102,8 @@ public class MetaDataUtil {
   public static final byte[] VIEW_INDEX_SEQUENCE_PREFIX_BYTES =
     Bytes.toBytes(VIEW_INDEX_SEQUENCE_PREFIX);
   public static final String VIEW_INDEX_ID_COLUMN_NAME = "_INDEX_ID";
+  /** Leading row key column in an IVF vector index table holding the partition centroid ID. */
+  public static final String VECTOR_CENTROID_ID_COLUMN_NAME = "_CENTROID_ID";
   public static final String PARENT_TABLE_KEY = "PARENT_TABLE";
   public static final String IS_VIEW_INDEX_TABLE_PROP_NAME = "IS_VIEW_INDEX_TABLE";
   public static final byte[] IS_VIEW_INDEX_TABLE_PROP_BYTES =

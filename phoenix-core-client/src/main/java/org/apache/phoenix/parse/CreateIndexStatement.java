@@ -18,8 +18,10 @@
 package org.apache.phoenix.parse;
 
 import java.util.Collections;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -40,6 +42,16 @@ public class CreateIndexStatement extends SingleTableStatement {
   private final Map<String, UDFParseNode> udfParseNodes;
   private final ParseNode where;
   private final IndexConsistency indexConsistency;
+  private final String vectorAlgorithm;
+  private final String vectorMetric;
+  private final Integer vectorLists;
+  private final Integer vectorSampleSize;
+
+  /** Vector index options accepted in the WITH clause of CREATE VECTOR INDEX. */
+  public static final String VECTOR_ALGORITHM_OPTION = "ALGORITHM";
+  public static final String VECTOR_METRIC_OPTION = "METRIC";
+  public static final String VECTOR_LISTS_OPTION = "LISTS";
+  public static final String VECTOR_SAMPLE_SIZE_OPTION = "SAMPLE_SIZE";
 
   public CreateIndexStatement(NamedNode indexTableName, NamedTableNode dataTable,
     IndexKeyConstraint indexKeyConstraint, List<ColumnName> includeColumns, List<ParseNode> splits,
@@ -69,6 +81,20 @@ public class CreateIndexStatement extends SingleTableStatement {
     this.udfParseNodes = udfParseNodes;
     this.where = where;
     this.indexConsistency = indexConsistency;
+    if (indexType == IndexType.VECTOR_GLOBAL) {
+      // Extract vector options so they are not passed to the physical HBase table descriptor.
+      this.vectorAlgorithm =
+        Objects.toString(removeVectorOption(this.props, VECTOR_ALGORITHM_OPTION), null);
+      this.vectorMetric =
+        Objects.toString(removeVectorOption(this.props, VECTOR_METRIC_OPTION), null);
+      this.vectorLists = toInteger(removeVectorOption(this.props, VECTOR_LISTS_OPTION));
+      this.vectorSampleSize = toInteger(removeVectorOption(this.props, VECTOR_SAMPLE_SIZE_OPTION));
+    } else {
+      this.vectorAlgorithm = null;
+      this.vectorMetric = null;
+      this.vectorLists = null;
+      this.vectorSampleSize = null;
+    }
   }
 
   public CreateIndexStatement(CreateIndexStatement createStmt,
@@ -85,6 +111,10 @@ public class CreateIndexStatement extends SingleTableStatement {
     this.udfParseNodes = createStmt.getUdfParseNodes();
     this.where = createStmt.where;
     this.indexConsistency = createStmt.getIndexConsistency();
+    this.vectorAlgorithm = createStmt.getVectorAlgorithm();
+    this.vectorMetric = createStmt.getVectorMetric();
+    this.vectorLists = createStmt.getVectorLists();
+    this.vectorSampleSize = createStmt.getVectorSampleSize();
   }
 
   public static IndexConsistency
@@ -101,6 +131,32 @@ public class CreateIndexStatement extends SingleTableStatement {
       }
     }
     return indexConsistency;
+  }
+
+  private static Object removeVectorOption(ListMultimap<String, Pair<String, Object>> props,
+    String option) {
+    Object value = null;
+    Iterator<Pair<String, Object>> it =
+      props.get(QueryConstants.ALL_FAMILY_PROPERTIES_KEY).iterator();
+    while (it.hasNext()) {
+      Pair<String, Object> prop = it.next();
+      if (option.equalsIgnoreCase(prop.getFirst())) {
+        value = prop.getSecond();
+        it.remove();
+      }
+    }
+    return value;
+  }
+
+  private static Integer toInteger(Object value) {
+    if (value instanceof Number) {
+      return ((Number) value).intValue();
+    }
+    try {
+      return value == null ? null : Integer.valueOf(value.toString().trim());
+    } catch (NumberFormatException e) {
+      return null;
+    }
   }
 
   public IndexKeyConstraint getIndexConstraint() {
@@ -145,5 +201,21 @@ public class CreateIndexStatement extends SingleTableStatement {
 
   public IndexConsistency getIndexConsistency() {
     return indexConsistency;
+  }
+
+  public String getVectorAlgorithm() {
+    return vectorAlgorithm;
+  }
+
+  public String getVectorMetric() {
+    return vectorMetric;
+  }
+
+  public Integer getVectorLists() {
+    return vectorLists;
+  }
+
+  public Integer getVectorSampleSize() {
+    return vectorSampleSize;
   }
 }
