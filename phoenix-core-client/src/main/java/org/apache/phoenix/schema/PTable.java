@@ -108,7 +108,8 @@ public interface PTable extends PMetaDataEntity {
   public enum IndexType {
     GLOBAL((byte) 1), // Covered Global
     LOCAL((byte) 2), // Covered Local
-    UNCOVERED_GLOBAL((byte) 3); // Uncovered Global
+    UNCOVERED_GLOBAL((byte) 3), // Uncovered Global
+    VECTOR_GLOBAL((byte) 4);
 
     private final byte[] byteValue;
     private final byte serializedValue;
@@ -1061,6 +1062,32 @@ public interface PTable extends PMetaDataEntity {
    *         words this will be one-to-one mapping between view and PREFIXED KeyRange that'll exist.
    */
   byte[] getRowKeyMatcher();
+
+  /** Returns the vector index algorithm (for example IVF), or null if not a vector index. */
+  String getVectorIndexAlgorithm();
+
+  /** Returns the distance metric of the vector index, or null if not a vector index. */
+  String getVectorDistanceMetric();
+
+  /** Returns the dimension of the indexed vectors, or null if not a vector index. */
+  Integer getVectorDimension();
+
+  /** Returns the number of IVF lists (partitions), or null if not a vector index. */
+  Integer getVectorIvfLists();
+
+  /** Returns the number of sample vectors for IVF training, or null if not a vector index. */
+  Integer getVectorIvfSampleSize();
+
+  /**
+   * Returns the ID of the active centroid generation. Returns null if this is not a vector index,
+   * or if the index does not have an active generation yet.
+   */
+  Long getVectorCentroidGeneration();
+
+  /** Returns true if this table is a vector index. */
+  default boolean isVectorIndex() {
+    return getIndexType() == IndexType.VECTOR_GLOBAL;
+  }
 
   /**
    * Class to help track encoded column qualifier counters per column family.
