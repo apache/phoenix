@@ -27,6 +27,7 @@ import static org.apache.phoenix.util.MetaDataUtil.convertForeverAndNoneTTLValue
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -108,6 +109,10 @@ public class SchemaExtractionProcessor implements SchemaProcessor {
   }
 
   protected String extractCreateIndexDDL(PTable indexPTable) throws SQLException, IOException {
+    if (indexPTable.isVectorIndex()) {
+      throw new SQLFeatureNotSupportedException(
+        "Schema extraction does not support vector indexes: " + indexPTable.getName());
+    }
     String quotedIndexTableName =
       SchemaUtil.getFullTableNameWithQuotes(null, indexPTable.getTableName().getString());
 

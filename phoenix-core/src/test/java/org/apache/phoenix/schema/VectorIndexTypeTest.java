@@ -25,10 +25,13 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.sql.SQLFeatureNotSupportedException;
 import java.util.Collections;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.schema.tool.SchemaExtractionProcessor;
 import org.junit.Test;
 
 /**
@@ -209,13 +212,13 @@ public class VectorIndexTypeTest {
     PTable original = new PTableImpl.Builder().setType(PTableType.INDEX)
       .setName(PNameFactory.newName("IDX_VEC")).setTableName(PNameFactory.newName("IDX_VEC"))
       .setIndexType(IndexType.VECTOR_GLOBAL).setParentTableName(PNameFactory.newName("DATA_TBL"))
-      .setPhysicalNames(Collections.emptyList()).setVectorIndexAlgorithm("DISKANN")
+      .setPhysicalNames(Collections.emptyList()).setVectorIndexAlgorithm("IVF")
       .setVectorDistanceMetric("INNER_PRODUCT").setVectorDimension(512).setVectorIvfLists(128)
       .setVectorIvfSampleSize(4096).setVectorCentroidGeneration(777L).build();
 
     PTable cloned = PTableImpl.builderFromExisting(original).build();
     assertTrue(cloned.isVectorIndex());
-    assertEquals("DISKANN", cloned.getVectorIndexAlgorithm());
+    assertEquals("IVF", cloned.getVectorIndexAlgorithm());
     assertEquals("INNER_PRODUCT", cloned.getVectorDistanceMetric());
     assertEquals(Integer.valueOf(512), cloned.getVectorDimension());
     assertEquals(Integer.valueOf(128), cloned.getVectorIvfLists());
@@ -268,5 +271,18 @@ public class VectorIndexTypeTest {
     assertNull("vectorIvfLists must be null", deserialized.getVectorIvfLists());
     assertNull("vectorIvfSampleSize must be null", deserialized.getVectorIvfSampleSize());
     assertNull("vectorCentroidGeneration must be null", deserialized.getVectorCentroidGeneration());
+  }
+
+  @Test
+  public void testSchemaExtractionRejectsVectorIndex() throws Exception {
+    PTable index = new PTableImpl.Builder().setType(PTableType.INDEX)
+      .setIndexType(IndexType.VECTOR_GLOBAL).setName(PNameFactory.newName("IDX_VEC"))
+      .setTableName(PNameFactory.newName("IDX_VEC")).setSchemaName(PNameFactory.newName(""))
+      .setParentTableName(PNameFactory.newName("DATA_TBL")).build();
+    try {
+      new SchemaExtractionProcessor(null, new Configuration(), index, false).process();
+      fail("Schema extraction cannot reproduce CREATE VECTOR INDEX and must say so");
+    } catch (SQLFeatureNotSupportedException expected) {
+    }
   }
 }
