@@ -480,4 +480,39 @@ public class DelegateTable implements PTable {
   public Map<String, String> getDefaultPropertyValues() {
     return delegate.getDefaultPropertyValues();
   }
+
+  @Override
+  public String getVectorIndexAlgorithm() {
+    return delegate.getVectorIndexAlgorithm();
+  }
+
+  @Override
+  public String getVectorDistanceMetric() {
+    return delegate.getVectorDistanceMetric();
+  }
+
+  @Override
+  public Integer getVectorDimension() {
+    return delegate.getVectorDimension();
+  }
+
+  @Override
+  public Integer getVectorIvfLists() {
+    return delegate.getVectorIvfLists();
+  }
+
+  @Override
+  public Integer getVectorIvfSampleSize() {
+    return delegate.getVectorIvfSampleSize();
+  }
+
+  @Override
+  public Long getVectorCentroidGeneration() {
+    return delegate.getVectorCentroidGeneration();
+  }
+
+  @Override
+  public boolean isVectorIndex() {
+    return delegate.isVectorIndex();
+  }
 }
