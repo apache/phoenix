@@ -125,6 +125,12 @@ message PTable {
   optional bytes rowKeyMatcher = 56;
   optional bool isStrictTTL = 57;
   optional string indexConsistency = 58;
+  optional string vectorIndexAlgorithm = 59;
+  optional string vectorDistanceMetric = 60;
+  optional int32 vectorDimension = 61;
+  optional int32 vectorIvfLists = 62;
+  optional int32 vectorIvfSampleSize = 63;
+  optional int64 vectorCentroidGeneration = 64;
 }
 
 message EncodedCQCounter {

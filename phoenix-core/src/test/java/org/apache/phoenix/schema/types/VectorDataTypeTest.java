@@ -26,13 +26,18 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.util.Collections;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.schema.ConstraintViolationException;
+import org.apache.phoenix.schema.DelegateTable;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnImpl;
 import org.apache.phoenix.schema.PNameFactory;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.SortOrder;
 import org.junit.Test;
 
@@ -563,5 +568,133 @@ public class VectorDataTypeTest {
       fail("Should throw on buffer too small");
     } catch (IllegalArgumentException expected) {
     }
+  }
+
+  @Test
+  public void testPTableIsVectorIndexPredicate() throws Exception {
+    PTable vectorTable = new PTableImpl.Builder().vectorIndexAlgorithm("IVF").build();
+    assertTrue("Expected isVectorIndex to be true", vectorTable.isVectorIndex());
+    assertEquals("IVF", vectorTable.getVectorIndexAlgorithm());
+
+    PTable nonVectorTable = new PTableImpl.Builder().build();
+    assertFalse("Expected isVectorIndex to be false", nonVectorTable.isVectorIndex());
+    assertNull(nonVectorTable.getVectorIndexAlgorithm());
+  }
+
+  @Test
+  public void testPTableVectorMetadataAccessors() throws Exception {
+    PTable table = new PTableImpl.Builder().vectorIndexAlgorithm("IVF")
+      .vectorDistanceMetric("COSINE").vectorDimension(128).vectorIvfLists(64)
+      .vectorIvfSampleSize(2048).vectorCentroidGeneration(1001L).build();
+
+    assertTrue(table.isVectorIndex());
+    assertEquals("IVF", table.getVectorIndexAlgorithm());
+    assertEquals("COSINE", table.getVectorDistanceMetric());
+    assertEquals(Integer.valueOf(128), table.getVectorDimension());
+    assertEquals(Integer.valueOf(64), table.getVectorIvfLists());
+    assertEquals(Integer.valueOf(2048), table.getVectorIvfSampleSize());
+    assertEquals(Long.valueOf(1001L), table.getVectorCentroidGeneration());
+  }
+
+  @Test
+  public void testPTableSerializationRoundTrip() throws Exception {
+    PTable original = new PTableImpl.Builder().setType(PTableType.INDEX)
+      .setName(PNameFactory.newName("IDX_VEC")).setTableName(PNameFactory.newName("IDX_VEC"))
+      .setParentTableName(PNameFactory.newName("DATA_TBL")).setAllColumns(Collections.emptyList())
+      .setPkColumns(Collections.emptyList()).setIndexes(Collections.emptyList())
+      .setPhysicalNames(Collections.emptyList()).vectorIndexAlgorithm("IVF")
+      .vectorDistanceMetric("L2").vectorDimension(256).vectorIvfLists(32).vectorIvfSampleSize(1024)
+      .vectorCentroidGeneration(42L).build();
+
+    PTableProtos.PTable proto = PTableImpl.toProto(original);
+    assertNotNull(proto);
+    assertTrue(proto.hasVectorIndexAlgorithm());
+    assertEquals("IVF", proto.getVectorIndexAlgorithm());
+    assertTrue(proto.hasVectorDistanceMetric());
+    assertEquals("L2", proto.getVectorDistanceMetric());
+    assertTrue(proto.hasVectorDimension());
+    assertEquals(256, proto.getVectorDimension());
+    assertTrue(proto.hasVectorIvfLists());
+    assertEquals(32, proto.getVectorIvfLists());
+    assertTrue(proto.hasVectorIvfSampleSize());
+    assertEquals(1024, proto.getVectorIvfSampleSize());
+    assertTrue(proto.hasVectorCentroidGeneration());
+    assertEquals(42L, proto.getVectorCentroidGeneration());
+
+    PTable deserialized = PTableImpl.fromProto(proto);
+    assertNotNull(deserialized);
+    assertTrue(deserialized.isVectorIndex());
+    assertEquals("IVF", deserialized.getVectorIndexAlgorithm());
+    assertEquals("L2", deserialized.getVectorDistanceMetric());
+    assertEquals(Integer.valueOf(256), deserialized.getVectorDimension());
+    assertEquals(Integer.valueOf(32), deserialized.getVectorIvfLists());
+    assertEquals(Integer.valueOf(1024), deserialized.getVectorIvfSampleSize());
+    assertEquals(Long.valueOf(42L), deserialized.getVectorCentroidGeneration());
+  }
+
+  @Test
+  public void testPTableBuilderFromExisting() throws Exception {
+    PTable original = new PTableImpl.Builder().setType(PTableType.INDEX)
+      .setName(PNameFactory.newName("IDX_VEC")).setTableName(PNameFactory.newName("IDX_VEC"))
+      .setParentTableName(PNameFactory.newName("DATA_TBL"))
+      .setPhysicalNames(Collections.emptyList()).vectorIndexAlgorithm("DISKANN")
+      .vectorDistanceMetric("INNER_PRODUCT").vectorDimension(512).vectorIvfLists(128)
+      .vectorIvfSampleSize(4096).vectorCentroidGeneration(777L).build();
+
+    PTable cloned = PTableImpl.builderFromExisting(original).build();
+    assertTrue(cloned.isVectorIndex());
+    assertEquals("DISKANN", cloned.getVectorIndexAlgorithm());
+    assertEquals("INNER_PRODUCT", cloned.getVectorDistanceMetric());
+    assertEquals(Integer.valueOf(512), cloned.getVectorDimension());
+    assertEquals(Integer.valueOf(128), cloned.getVectorIvfLists());
+    assertEquals(Integer.valueOf(4096), cloned.getVectorIvfSampleSize());
+    assertEquals(Long.valueOf(777L), cloned.getVectorCentroidGeneration());
+  }
+
+  @Test
+  public void testDelegateTableVectorMetadata() throws Exception {
+    PTable inner = new PTableImpl.Builder().vectorIndexAlgorithm("IVF")
+      .vectorDistanceMetric("COSINE").vectorDimension(64).vectorIvfLists(16)
+      .vectorIvfSampleSize(512).vectorCentroidGeneration(99L).build();
+
+    DelegateTable delegate = new DelegateTable(inner);
+    assertTrue(delegate.isVectorIndex());
+    assertEquals("IVF", delegate.getVectorIndexAlgorithm());
+    assertEquals("COSINE", delegate.getVectorDistanceMetric());
+    assertEquals(Integer.valueOf(64), delegate.getVectorDimension());
+    assertEquals(Integer.valueOf(16), delegate.getVectorIvfLists());
+    assertEquals(Integer.valueOf(512), delegate.getVectorIvfSampleSize());
+    assertEquals(Long.valueOf(99L), delegate.getVectorCentroidGeneration());
+  }
+
+  @Test
+  public void testPTableSerializationRoundTripWithoutVectorFields() throws Exception {
+    PTable original = new PTableImpl.Builder().setType(PTableType.TABLE)
+      .setName(PNameFactory.newName("NON_VECTOR")).setTableName(PNameFactory.newName("NON_VECTOR"))
+      .setAllColumns(Collections.emptyList()).setPkColumns(Collections.emptyList())
+      .setIndexes(Collections.emptyList()).setPhysicalNames(Collections.emptyList()).build();
+
+    assertFalse("Non-vector table must not be a vector index", original.isVectorIndex());
+
+    PTableProtos.PTable proto = PTableImpl.toProto(original);
+    assertNotNull(proto);
+    assertFalse("Proto should not have vectorIndexAlgorithm", proto.hasVectorIndexAlgorithm());
+    assertFalse("Proto should not have vectorDistanceMetric", proto.hasVectorDistanceMetric());
+    assertFalse("Proto should not have vectorDimension", proto.hasVectorDimension());
+    assertFalse("Proto should not have vectorIvfLists", proto.hasVectorIvfLists());
+    assertFalse("Proto should not have vectorIvfSampleSize", proto.hasVectorIvfSampleSize());
+    assertFalse("Proto should not have vectorCentroidGeneration",
+      proto.hasVectorCentroidGeneration());
+
+    PTable deserialized = PTableImpl.fromProto(proto);
+    assertNotNull(deserialized);
+    assertFalse("Deserialized non-vector table must not be a vector index",
+      deserialized.isVectorIndex());
+    assertNull("vectorIndexAlgorithm must be null", deserialized.getVectorIndexAlgorithm());
+    assertNull("vectorDistanceMetric must be null", deserialized.getVectorDistanceMetric());
+    assertNull("vectorDimension must be null", deserialized.getVectorDimension());
+    assertNull("vectorIvfLists must be null", deserialized.getVectorIvfLists());
+    assertNull("vectorIvfSampleSize must be null", deserialized.getVectorIvfSampleSize());
+    assertNull("vectorCentroidGeneration must be null", deserialized.getVectorCentroidGeneration());
   }
 }

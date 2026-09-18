@@ -81,6 +81,12 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TTL_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.UPDATE_CACHE_FREQUENCY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.USE_STATS_FOR_PARALLELIZATION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_CENTROID_GENERATION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DIMENSION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_LISTS_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_CONSTANT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VIEW_INDEX_ID_DATA_TYPE_BYTES;
@@ -219,16 +225,22 @@ import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.mapreduce.util.ConnectionUtil;
 import org.apache.phoenix.metrics.Metrics;
+import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.PFunction;
 import org.apache.phoenix.parse.PFunction.FunctionArgument;
 import org.apache.phoenix.parse.PSchema;
+import org.apache.phoenix.parse.ParseNode;
+import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.KeyRange;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.AmbiguousColumnException;
+import org.apache.phoenix.schema.ColumnFamilyNotFoundException;
+import org.apache.phoenix.schema.ColumnNotFoundException;
 import org.apache.phoenix.schema.ConditionalTTLExpression;
 import org.apache.phoenix.schema.MetaDataSplitPolicy;
 import org.apache.phoenix.schema.PColumn;
@@ -267,6 +279,7 @@ import org.apache.phoenix.schema.task.SystemTaskParams;
 import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PBinary;
 import org.apache.phoenix.schema.types.PBoolean;
+import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PChar;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PInteger;
@@ -274,6 +287,8 @@ import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PTinyint;
 import org.apache.phoenix.schema.types.PVarbinary;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVectorDouble;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.trace.util.Tracing;
 import org.apache.phoenix.transaction.TransactionFactory;
 import org.apache.phoenix.util.ByteUtil;
@@ -281,6 +296,7 @@ import org.apache.phoenix.util.CDCUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PhoenixKeyValueUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -423,6 +439,18 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, INDEX_WHERE_BYTES);
   private static final Cell INDEX_CONSISTENCY_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, INDEX_CONSISTENCY_BYTES);
+  private static final Cell VECTOR_INDEX_ALGORITHM_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_INDEX_ALGORITHM_BYTES);
+  private static final Cell VECTOR_DISTANCE_METRIC_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_DISTANCE_METRIC_BYTES);
+  private static final Cell VECTOR_DIMENSION_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_DIMENSION_BYTES);
+  private static final Cell VECTOR_IVF_LISTS_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_IVF_LISTS_BYTES);
+  private static final Cell VECTOR_IVF_SAMPLE_SIZE_KV =
+    createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_IVF_SAMPLE_SIZE_BYTES);
+  private static final Cell VECTOR_CENTROID_GENERATION_KV = createFirstOnRow(
+    ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, VECTOR_CENTROID_GENERATION_BYTES);
 
   private static final Cell TTL_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, TTL_BYTES);
@@ -441,7 +469,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
     AUTO_PARTITION_SEQ_KV, APPEND_ONLY_SCHEMA_KV, STORAGE_SCHEME_KV, ENCODING_SCHEME_KV,
     USE_STATS_FOR_PARALLELIZATION_KV, LAST_DDL_TIMESTAMP_KV, CHANGE_DETECTION_ENABLED_KV,
     SCHEMA_VERSION_KV, EXTERNAL_SCHEMA_ID_KV, STREAMING_TOPIC_NAME_KV, INDEX_WHERE_KV,
-    CDC_INCLUDE_KV, TTL_KV, ROW_KEY_MATCHER_KV, IS_STRICT_TTL_KV, INDEX_CONSISTENCY_KV);
+    CDC_INCLUDE_KV, TTL_KV, ROW_KEY_MATCHER_KV, IS_STRICT_TTL_KV, INDEX_CONSISTENCY_KV,
+    VECTOR_INDEX_ALGORITHM_KV, VECTOR_DISTANCE_METRIC_KV, VECTOR_DIMENSION_KV, VECTOR_IVF_LISTS_KV,
+    VECTOR_IVF_SAMPLE_SIZE_KV, VECTOR_CENTROID_GENERATION_KV);
 
   static {
     Collections.sort(TABLE_KV_COLUMNS, CellComparatorImpl.COMPARATOR);
@@ -504,6 +534,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
   private static final int ROW_KEY_MATCHER_INDEX = TABLE_KV_COLUMNS.indexOf(ROW_KEY_MATCHER_KV);
   private static final int IS_STRICT_TTL_INDEX = TABLE_KV_COLUMNS.indexOf(IS_STRICT_TTL_KV);
   private static final int INDEX_CONSISTENCY_INDEX = TABLE_KV_COLUMNS.indexOf(INDEX_CONSISTENCY_KV);
+  private static final int VECTOR_INDEX_ALGORITHM_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_INDEX_ALGORITHM_KV);
+  private static final int VECTOR_DISTANCE_METRIC_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_DISTANCE_METRIC_KV);
+  private static final int VECTOR_DIMENSION_INDEX = TABLE_KV_COLUMNS.indexOf(VECTOR_DIMENSION_KV);
+  private static final int VECTOR_IVF_LISTS_INDEX = TABLE_KV_COLUMNS.indexOf(VECTOR_IVF_LISTS_KV);
+  private static final int VECTOR_IVF_SAMPLE_SIZE_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_IVF_SAMPLE_SIZE_KV);
+  private static final int VECTOR_CENTROID_GENERATION_INDEX =
+    TABLE_KV_COLUMNS.indexOf(VECTOR_CENTROID_GENERATION_KV);
   // KeyValues for Column
   private static final KeyValue DECIMAL_DIGITS_KV =
     createFirstOnRow(ByteUtil.EMPTY_BYTE_ARRAY, TABLE_FAMILY_BYTES, DECIMAL_DIGITS_BYTES);
@@ -1603,6 +1643,70 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       : oldTable != null ? oldTable.getIndexConsistency()
       : null);
 
+    Cell vectorIndexAlgorithmKv = tableKeyValues[VECTOR_INDEX_ALGORITHM_INDEX];
+    String vectorIndexAlgorithm = null;
+    if (vectorIndexAlgorithmKv != null) {
+      vectorIndexAlgorithm =
+        (String) PVarchar.INSTANCE.toObject(vectorIndexAlgorithmKv.getValueArray(),
+          vectorIndexAlgorithmKv.getValueOffset(), vectorIndexAlgorithmKv.getValueLength());
+    }
+    builder.setVectorIndexAlgorithm(vectorIndexAlgorithm != null ? vectorIndexAlgorithm
+      : oldTable != null ? oldTable.getVectorIndexAlgorithm()
+      : null);
+
+    Cell vectorDistanceMetricKv = tableKeyValues[VECTOR_DISTANCE_METRIC_INDEX];
+    String vectorDistanceMetric = null;
+    if (vectorDistanceMetricKv != null) {
+      vectorDistanceMetric =
+        (String) PVarchar.INSTANCE.toObject(vectorDistanceMetricKv.getValueArray(),
+          vectorDistanceMetricKv.getValueOffset(), vectorDistanceMetricKv.getValueLength());
+    }
+    builder.setVectorDistanceMetric(vectorDistanceMetric != null ? vectorDistanceMetric
+      : oldTable != null ? oldTable.getVectorDistanceMetric()
+      : null);
+
+    Cell vectorDimensionKv = tableKeyValues[VECTOR_DIMENSION_INDEX];
+    Integer vectorDimension = null;
+    if (vectorDimensionKv != null) {
+      vectorDimension = (Integer) PInteger.INSTANCE.toObject(vectorDimensionKv.getValueArray(),
+        vectorDimensionKv.getValueOffset(), vectorDimensionKv.getValueLength());
+    }
+    builder.setVectorDimension(vectorDimension != null ? vectorDimension
+      : oldTable != null ? oldTable.getVectorDimension()
+      : null);
+
+    Cell vectorIvfListsKv = tableKeyValues[VECTOR_IVF_LISTS_INDEX];
+    Integer vectorIvfLists = null;
+    if (vectorIvfListsKv != null) {
+      vectorIvfLists = (Integer) PInteger.INSTANCE.toObject(vectorIvfListsKv.getValueArray(),
+        vectorIvfListsKv.getValueOffset(), vectorIvfListsKv.getValueLength());
+    }
+    builder.setVectorIvfLists(vectorIvfLists != null ? vectorIvfLists
+      : oldTable != null ? oldTable.getVectorIvfLists()
+      : null);
+
+    Cell vectorIvfSampleSizeKv = tableKeyValues[VECTOR_IVF_SAMPLE_SIZE_INDEX];
+    Integer vectorIvfSampleSize = null;
+    if (vectorIvfSampleSizeKv != null) {
+      vectorIvfSampleSize =
+        (Integer) PInteger.INSTANCE.toObject(vectorIvfSampleSizeKv.getValueArray(),
+          vectorIvfSampleSizeKv.getValueOffset(), vectorIvfSampleSizeKv.getValueLength());
+    }
+    builder.setVectorIvfSampleSize(vectorIvfSampleSize != null ? vectorIvfSampleSize
+      : oldTable != null ? oldTable.getVectorIvfSampleSize()
+      : null);
+
+    Cell vectorCentroidGenerationKv = tableKeyValues[VECTOR_CENTROID_GENERATION_INDEX];
+    Long vectorCentroidGeneration = null;
+    if (vectorCentroidGenerationKv != null) {
+      vectorCentroidGeneration =
+        (Long) PLong.INSTANCE.toObject(vectorCentroidGenerationKv.getValueArray(),
+          vectorCentroidGenerationKv.getValueOffset(), vectorCentroidGenerationKv.getValueLength());
+    }
+    builder.setVectorCentroidGeneration(vectorCentroidGeneration != null ? vectorCentroidGeneration
+      : oldTable != null ? oldTable.getVectorCentroidGeneration()
+      : null);
+
     // Check the cell tag to see whether the view has modified this property
     final byte[] tagUseStatsForParallelization = (useStatsForParallelizationKv == null)
       ? HConstants.EMPTY_BYTE_ARRAY
@@ -2459,6 +2563,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         request.hasParentTable() ? PTableImpl.createFromProto(request.getParentTable()) : null;
       PTableType tableType = MetaDataUtil.getTableType(tableMetadata,
         GenericKeyValueBuilder.INSTANCE, new ImmutableBytesWritable());
+      Put tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
 
       // Load table to see if it already exists
       byte[] tableKey = SchemaUtil.getTableKey(tenantIdBytes, schemaName, tableName);
@@ -2580,6 +2685,14 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
           parentTable = doGetTable(tenantIdBytes, parentSchemaName, parentTableName,
             clientTimeStamp, null, request.getClientVersion());
         }
+        validateVectorIndexMetadata(tableMetadata, tableHeaderPut, parentTable, tableType,
+          indexType, parentSchemaName, parentTableName, tableName);
+        if (parentTable == null) {
+          builder.setReturnCode(MetaDataProtos.MutationCode.PARENT_TABLE_NOT_FOUND);
+          builder.setMutationTime(EnvironmentEdgeManager.currentTimeMillis());
+          done.run(builder.build());
+          return;
+        }
         if (IndexType.LOCAL == indexType) {
           cPhysicalName = parentTable.getPhysicalName().getBytes();
           cParentPhysicalName = parentTable.getPhysicalName().getBytes();
@@ -2597,6 +2710,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             .getPhysicalHBaseTableName(parentSchemaName, parentTableName, isNamespaceMapped)
             .getBytes();
         }
+      } else {
+        validateVectorIndexMetadata(tableMetadata, tableHeaderPut, parentTable, tableType,
+          indexType, parentSchemaName, parentTableName, tableName);
       }
 
       getCoprocessorHost().preCreateTable(Bytes.toString(tenantIdBytes), fullTableName,
@@ -2706,7 +2822,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
           builder.setAutoPartitionNum(autoPartitionNum);
 
           // set the VIEW STATEMENT column of the header row
-          Put tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
+          if (tableHeaderPut == null) {
+            tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
+          }
           NavigableMap<byte[], List<Cell>> familyCellMap = tableHeaderPut.getFamilyCellMap();
           List<Cell> cells = familyCellMap.get(TABLE_FAMILY_BYTES);
           Cell cell = cells.get(0);
@@ -2756,7 +2874,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
             .unwrap(PhoenixConnection.class)) {
             PName physicalName = parentTable.getPhysicalName();
             long seqValue = getViewIndexSequenceValue(connection, tenantIdStr, parentTable);
-            Put tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
+            if (tableHeaderPut == null) {
+              tableHeaderPut = MetaDataUtil.getPutOnlyTableHeaderRow(tableMetadata);
+            }
             NavigableMap<byte[], List<Cell>> familyCellMap = tableHeaderPut.getFamilyCellMap();
             List<Cell> cells = familyCellMap.get(TABLE_FAMILY_BYTES);
             Cell cell = cells.get(0);
@@ -2959,6 +3079,334 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       metricsSource.incrementCreateViewCount();
     } else if (tableType == PTableType.INDEX) {
       metricsSource.incrementCreateIndexCount();
+    }
+  }
+
+  /** Returns true if the column mutation defines a vector data type. */
+  private static boolean isVectorTypedColumn(Put columnPut, KeyValueBuilder kvBuilder,
+    ImmutableBytesWritable ptr) {
+    if (
+      !MetaDataUtil.getMutationValue(columnPut, PhoenixDatabaseMetaData.DATA_TYPE_BYTES, kvBuilder,
+        ptr)
+    ) {
+      return false;
+    }
+    Integer sqlType =
+      (Integer) PInteger.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength());
+    return sqlType != null && (sqlType == PVectorFloat.INSTANCE.getSqlType()
+      || sqlType == PVectorDouble.INSTANCE.getSqlType());
+  }
+
+  /** Returns the column definition expression for the column mutation, or null if absent. */
+  private static String getColumnDef(Put columnPut, KeyValueBuilder kvBuilder,
+    ImmutableBytesWritable ptr) {
+    if (
+      !MetaDataUtil.getMutationValue(columnPut, PhoenixDatabaseMetaData.COLUMN_DEF_BYTES, kvBuilder,
+        ptr) || ptr.getLength() == 0
+    ) {
+      return null;
+    }
+    return (String) PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength());
+  }
+
+  /**
+   * Resolves the data table column corresponding to an index column name. Returns null
+   * when no matching parent table column exists, such as for expression-based index columns.
+   */
+  private static PColumn resolveIndexColumnInParent(String indexColumnName, PTable parentTable) {
+    String dataColName = indexColumnName.contains(IndexUtil.INDEX_COLUMN_NAME_SEP)
+      ? indexColumnName.substring(indexColumnName.lastIndexOf(IndexUtil.INDEX_COLUMN_NAME_SEP) + 1)
+      : indexColumnName;
+    if (dataColName.length() > 1 && dataColName.startsWith("\"") && dataColName.endsWith("\"")) {
+      dataColName = dataColName.substring(1, dataColName.length() - 1);
+    }
+    try {
+      String family = IndexUtil.getDataColumnFamilyName(indexColumnName);
+      if (family != null && !family.isEmpty()) {
+        return parentTable.getColumnFamily(family).getPColumnForColumnName(dataColName);
+      }
+      return parentTable.getColumnForColumnName(dataColName);
+    } catch (ColumnNotFoundException | ColumnFamilyNotFoundException | AmbiguousColumnException e) {
+      for (PColumn col : parentTable.getColumns()) {
+        if (col.getName().getString().equalsIgnoreCase(dataColName)) {
+          return col;
+        }
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Resolves the source data table column referenced by an indexed vector expression.
+   * Returns the referenced parent column if the expression unambiguously targets a single
+   * column, or null otherwise.
+   */
+  private static PColumn resolveColumnFromIndexedExpression(String expression, PTable parentTable) {
+    ParseNode parseNode;
+    try {
+      parseNode = SQLParser.parseCondition(expression);
+    } catch (SQLException e) {
+      LOGGER.warn("Could not parse indexed vector expression: " + expression, e);
+      return null;
+    }
+    List<ColumnParseNode> columnNodes = new ArrayList<>();
+    collectColumnParseNodes(parseNode, columnNodes);
+    PColumn resolved = null;
+    for (ColumnParseNode columnNode : columnNodes) {
+      PColumn candidate = resolveExpressionColumn(columnNode, parentTable);
+      if (candidate == null) {
+        continue;
+      }
+      if (resolved != null && resolved != candidate) {
+        // Ambiguous expression spanning multiple columns
+        return null;
+      }
+      resolved = candidate;
+    }
+    return resolved;
+  }
+
+  private static void collectColumnParseNodes(ParseNode node, List<ColumnParseNode> out) {
+    if (node == null) {
+      return;
+    }
+    if (node instanceof ColumnParseNode) {
+      out.add((ColumnParseNode) node);
+      return;
+    }
+    List<ParseNode> children = node.getChildren();
+    if (children != null) {
+      for (ParseNode child : children) {
+        collectColumnParseNodes(child, out);
+      }
+    }
+  }
+
+  private static PColumn resolveExpressionColumn(ColumnParseNode columnNode, PTable parentTable) {
+    String columnName = columnNode.getName();
+    // Qualified column references place the column family in the table name position.
+    String qualifier = columnNode.getTableName();
+    try {
+      if (qualifier != null && !qualifier.isEmpty()) {
+        try {
+          return parentTable.getColumnFamily(qualifier).getPColumnForColumnName(columnName);
+        } catch (ColumnFamilyNotFoundException | ColumnNotFoundException e) {
+          // Fall back to unqualified lookup when the qualifier is not a valid family name.
+        }
+      }
+      return parentTable.getColumnForColumnName(columnName);
+    } catch (ColumnNotFoundException | AmbiguousColumnException e) {
+      for (PColumn col : parentTable.getColumns()) {
+        if (col.getName().getString().equalsIgnoreCase(columnName)) {
+          return col;
+        }
+      }
+      return null;
+    }
+  }
+
+  private void validateVectorIndexMetadata(List<Mutation> tableMetadata, Put tableHeaderPut,
+    PTable parentTable, PTableType tableType, IndexType indexType, byte[] schemaName,
+    byte[] parentTableName, byte[] tableName) throws SQLException {
+    String hbaseVersion = VersionInfo.getVersion();
+    KeyValueBuilder kvBuilder = KeyValueBuilder.get(hbaseVersion);
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+
+    String vectorIndexAlgorithm = null;
+    if (
+      tableHeaderPut != null && MetaDataUtil.getMutationValue(tableHeaderPut,
+        PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM_BYTES, kvBuilder, ptr)
+    ) {
+      vectorIndexAlgorithm =
+        (String) PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength());
+    }
+
+    String vectorDistanceMetric = null;
+    if (
+      tableHeaderPut != null && MetaDataUtil.getMutationValue(tableHeaderPut,
+        PhoenixDatabaseMetaData.VECTOR_DISTANCE_METRIC_BYTES, kvBuilder, ptr)
+    ) {
+      vectorDistanceMetric =
+        (String) PVarchar.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength());
+    }
+
+    Integer vectorDimension = null;
+    if (
+      tableHeaderPut != null && MetaDataUtil.getMutationValue(tableHeaderPut,
+        PhoenixDatabaseMetaData.VECTOR_DIMENSION_BYTES, kvBuilder, ptr)
+    ) {
+      vectorDimension =
+        (Integer) PInteger.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength());
+    }
+
+    Integer vectorIvfLists = null;
+    if (
+      tableHeaderPut != null && MetaDataUtil.getMutationValue(tableHeaderPut,
+        PhoenixDatabaseMetaData.VECTOR_IVF_LISTS_BYTES, kvBuilder, ptr)
+    ) {
+      vectorIvfLists =
+        (Integer) PInteger.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength());
+    }
+
+    Integer vectorIvfSampleSize = null;
+    if (
+      tableHeaderPut != null && MetaDataUtil.getMutationValue(tableHeaderPut,
+        PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE_BYTES, kvBuilder, ptr)
+    ) {
+      vectorIvfSampleSize =
+        (Integer) PInteger.INSTANCE.toObject(ptr.get(), ptr.getOffset(), ptr.getLength());
+    }
+
+    boolean isVectorIndex = (indexType == IndexType.VECTOR_GLOBAL) || (vectorIndexAlgorithm != null)
+      || (vectorDimension != null) || (vectorDistanceMetric != null);
+
+    if (!isVectorIndex) {
+      return;
+    }
+
+    if (tableType != PTableType.INDEX) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_INDEX_ALGORITHM)
+        .setMessage("Vector index metadata can only be applied to INDEX table type").build()
+        .buildException();
+    }
+
+    if (parentTable == null) {
+      String schema = schemaName == null ? null : Bytes.toString(schemaName);
+      String parent = parentTableName == null ? null : Bytes.toString(parentTableName);
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.PARENT_TABLE_NOT_FOUND)
+        .setSchemaName(schema).setTableName(parent).build().buildException();
+    }
+
+    if (vectorIndexAlgorithm == null || !vectorIndexAlgorithm.trim().equalsIgnoreCase("IVF")) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_INDEX_ALGORITHM)
+        .setMessage("Unsupported vector index algorithm: " + vectorIndexAlgorithm).build()
+        .buildException();
+    }
+
+    boolean validMetric =
+      vectorDistanceMetric != null && (vectorDistanceMetric.trim().equalsIgnoreCase("L2")
+        || vectorDistanceMetric.trim().equalsIgnoreCase("COSINE")
+        || vectorDistanceMetric.trim().equalsIgnoreCase("INNER_PRODUCT"));
+    if (!validMetric) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_DISTANCE_METRIC)
+        .setMessage("Unsupported vector distance metric: " + vectorDistanceMetric).build()
+        .buildException();
+    }
+
+    if ("IVF".equalsIgnoreCase(vectorIndexAlgorithm.trim())) {
+      if (
+        vectorIvfLists == null || vectorIvfLists <= 0 || vectorIvfSampleSize == null
+          || vectorIvfSampleSize < vectorIvfLists
+      ) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+          .setMessage("Invalid vector index parameters: lists=" + vectorIvfLists + ", sample_size="
+            + vectorIvfSampleSize)
+          .build().buildException();
+      }
+    }
+
+    // Identify the indexed vector column among the column mutations. Covered columns may also
+    // have vector types, but only the primary indexed column defines the indexing expression.
+    List<String> indexColumnNames = new ArrayList<>();
+    String vectorColName = null;
+    String vectorColExpression = null;
+    for (Mutation mutation : tableMetadata) {
+      byte[][] colRowKeyMetaData = new byte[5][];
+      int nCols = SchemaUtil.getVarChars(mutation.getRow(), colRowKeyMetaData);
+      if (nCols >= 4 && colRowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX] != null) {
+        byte[] colTableName = colRowKeyMetaData[PhoenixDatabaseMetaData.TABLE_NAME_INDEX];
+        if (tableName == null || Bytes.compareTo(colTableName, tableName) == 0) {
+          String colName =
+            Bytes.toString(colRowKeyMetaData[PhoenixDatabaseMetaData.COLUMN_NAME_INDEX]);
+          if (colName != null && !colName.isEmpty()) {
+            indexColumnNames.add(colName);
+            if (mutation instanceof Put && isVectorTypedColumn((Put) mutation, kvBuilder, ptr)) {
+              String expression = getColumnDef((Put) mutation, kvBuilder, ptr);
+              if (vectorColName == null || (expression != null && vectorColExpression == null)) {
+                vectorColName = colName;
+                vectorColExpression = expression;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (indexColumnNames.isEmpty()) {
+      return;
+    }
+
+    String chosenColName = vectorColName;
+    PColumn sourceColumn = null;
+
+    // Resolve the indexed column directly from its expression or column name.
+    if (vectorColExpression != null) {
+      sourceColumn = resolveColumnFromIndexedExpression(vectorColExpression, parentTable);
+    }
+    if (sourceColumn == null && vectorColName != null) {
+      sourceColumn = resolveIndexColumnInParent(vectorColName, parentTable);
+    }
+
+    // When no vector-typed column is detected, locate the first non-primary-key candidate
+    // column to ensure validation errors reference the intended column.
+    if (sourceColumn == null && vectorColName == null) {
+      for (String colName : indexColumnNames) {
+        PColumn candidate = resolveIndexColumnInParent(colName, parentTable);
+        if (candidate != null && !SchemaUtil.isPKColumn(candidate)) {
+          chosenColName = colName;
+          sourceColumn = candidate;
+          break;
+        }
+      }
+      if (sourceColumn == null) {
+        chosenColName = indexColumnNames.get(0);
+        sourceColumn = resolveIndexColumnInParent(chosenColName, parentTable);
+      }
+    }
+
+    if (sourceColumn == null) {
+      String dataColName = chosenColName != null && chosenColName.contains(":")
+        ? chosenColName.substring(chosenColName.lastIndexOf(":") + 1)
+        : chosenColName;
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.COLUMN_NOT_FOUND)
+        .setColumnName(dataColName).setTableName(parentTable.getName().getString()).build()
+        .buildException();
+    }
+
+    boolean isVectorType = sourceColumn.getDataType() == PVectorFloat.INSTANCE
+      || sourceColumn.getDataType() == PVectorDouble.INSTANCE
+      || sourceColumn.getDataType() == PBson.INSTANCE;
+    if (!isVectorType) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_INDEX_ON_NON_VECTOR_TYPE)
+        .setColumnName(sourceColumn.getName().getString())
+        .setMessage("Vector index can only be created on a VECTOR or BSON column. Column '"
+          + sourceColumn.getName().getString() + "' has type "
+          + sourceColumn.getDataType().getSqlTypeName())
+        .build().buildException();
+    }
+
+    if (
+      sourceColumn.getDataType() == PVectorFloat.INSTANCE
+        || sourceColumn.getDataType() == PVectorDouble.INSTANCE
+    ) {
+      Integer colDim = sourceColumn.getMaxLength();
+      if (vectorDimension == null || vectorDimension <= 0) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+          .setMessage("Invalid vector index dimension: " + vectorDimension).build()
+          .buildException();
+      }
+      if (colDim != null && !vectorDimension.equals(colDim)) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_INDEX_DIMENSION_MISMATCH)
+          .setMessage("Vector index dimension " + vectorDimension
+            + " does not match source column dimension " + colDim)
+          .build().buildException();
+      }
+    } else if (sourceColumn.getDataType() == PBson.INSTANCE) {
+      if (vectorDimension == null || vectorDimension <= 0) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+          .setMessage("Vector dimension must be specified and positive for BSON column").build()
+          .buildException();
+      }
     }
   }
 
