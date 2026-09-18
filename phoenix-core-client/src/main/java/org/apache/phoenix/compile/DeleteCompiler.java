@@ -861,6 +861,9 @@ public class DeleteCompiler {
    * the table is not transactional, 4) the query has no LIMIT clause, and 5) the query has WHERE
    * clause and is not strictly point lookup.
    */
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+      justification = "QueryPlan and PhoenixConnection instances are intentionally shared by "
+        + "reference between the compiler and the executing mutation plan")
   public class ServerSelectDeleteMutationPlan implements MutationPlan {
     private final StatementContext context;
     private final QueryPlan dataPlan;
@@ -1036,6 +1039,9 @@ public class DeleteCompiler {
    * Implementation of MutationPlan that is selected if the query doesn't match the criteria of
    * ServerSelectDeleteMutationPlan.
    */
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+      justification = "QueryPlan, TableRef and PhoenixConnection instances are intentionally "
+        + "shared by reference between the compiler and the executing mutation plan")
   public class ClientSelectDeleteMutationPlan implements MutationPlan {
     private final StatementContext context;
     private final TableRef targetTableRef;

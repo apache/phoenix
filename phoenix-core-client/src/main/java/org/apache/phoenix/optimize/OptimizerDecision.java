@@ -55,6 +55,8 @@ public final class OptimizerDecision {
   }
 
   /** Never null; unmodifiable; possibly empty. */
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "EI_EXPOSE_REP",
+      justification = "field is already wrapped as an unmodifiable list in the constructor")
   public List<RejectedIndexEntry> getRejectedIndexes() {
     return rejectedIndexes;
   }

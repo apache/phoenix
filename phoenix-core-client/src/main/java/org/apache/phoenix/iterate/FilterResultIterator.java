@@ -41,6 +41,8 @@ public class FilterResultIterator extends LookAheadResultIterator {
   private final StatementContext context;
   private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "EI_EXPOSE_REP2",
+      justification = "StatementContext instances are intentionally shared by reference")
   public FilterResultIterator(ResultIterator delegate, Expression expression,
     StatementContext context) {
     if (delegate instanceof AggregatingResultIterator) {

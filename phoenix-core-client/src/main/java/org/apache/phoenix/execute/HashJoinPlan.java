@@ -118,9 +118,10 @@ public class HashJoinPlan extends DelegateQueryPlan {
 
   public static HashJoinPlan create(SelectStatement statement, QueryPlan plan,
     HashJoinInfo joinInfo, SubPlan[] subPlans, JoinCompiler.Strategy strategy) throws SQLException {
-    if (!(plan instanceof HashJoinPlan))
+    if (!(plan instanceof HashJoinPlan)) {
       return new HashJoinPlan(statement, plan, joinInfo, subPlans, joinInfo == null,
         Collections.<ImmutableBytesPtr, ServerCache> emptyMap(), strategy);
+    }
 
     HashJoinPlan hashJoinPlan = (HashJoinPlan) plan;
     assert (hashJoinPlan.joinInfo == null && hashJoinPlan.delegate instanceof BaseQueryPlan);

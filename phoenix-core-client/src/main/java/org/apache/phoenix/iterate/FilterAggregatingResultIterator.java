@@ -42,6 +42,8 @@ public class FilterAggregatingResultIterator implements AggregatingResultIterato
   private final StatementContext context;
   private final ImmutableBytesWritable ptr = new ImmutableBytesWritable();
 
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "EI_EXPOSE_REP2",
+      justification = "StatementContext instances are intentionally shared by reference")
   public FilterAggregatingResultIterator(AggregatingResultIterator delegate, Expression expression,
     StatementContext context) {
     this.delegate = delegate;

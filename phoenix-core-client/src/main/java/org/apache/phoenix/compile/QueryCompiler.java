@@ -333,6 +333,8 @@ public class QueryCompiler {
    * {@link org.apache.phoenix.util.ParseNodeUtil#rewrite} so the breadcrumbs recorded by the early
    * rewrite pass are carried onto the compilation context.
    */
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "EI_EXPOSE_REP2",
+      justification = "StatementContext instances are intentionally shared by reference")
   public QueryCompiler withRewriteContext(StatementContext prebuiltContext) {
     this.prebuiltContext = prebuiltContext;
     return this;

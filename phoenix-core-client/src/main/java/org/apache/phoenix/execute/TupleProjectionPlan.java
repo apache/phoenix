@@ -58,6 +58,8 @@ public class TupleProjectionPlan extends DelegateQueryPlan {
   private final StatementContext statementContext;
   private final List<OrderBy> actualOutputOrderBys;
 
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "EI_EXPOSE_REP2",
+      justification = "StatementContext instances are intentionally shared by reference")
   public TupleProjectionPlan(QueryPlan plan, TupleProjector tupleProjector,
     StatementContext statementContext, Expression postFilter) throws SQLException {
     super(plan);

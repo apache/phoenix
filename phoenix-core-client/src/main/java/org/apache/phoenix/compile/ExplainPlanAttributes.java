@@ -391,6 +391,8 @@ public class ExplainPlanAttributes {
     return serverMergeColumns;
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "EI_EXPOSE_REP",
+      justification = "explain plan attributes are intentionally shared by reference")
   public Map<String, List<String>> getServerParsedProjections() {
     return serverParsedProjections;
   }
@@ -1122,6 +1124,8 @@ public class ExplainPlanAttributes {
       return this;
     }
 
+    @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "EI_EXPOSE_REP2",
+        justification = "explain plan attributes are intentionally shared by reference")
     public ExplainPlanAttributesBuilder setSubPlans(List<ExplainPlanAttributes> subPlans) {
       this.subPlans = subPlans;
       return this;

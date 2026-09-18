@@ -46,6 +46,8 @@ public class UnionResultIterators implements ResultIterators {
   private final StatementContext parentStmtCtx;
   private final List<QueryPlan> plans;
 
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "EI_EXPOSE_REP2",
+      justification = "QueryPlan instances are intentionally shared by reference")
   public UnionResultIterators(List<QueryPlan> plans, StatementContext parentStmtCtx)
     throws SQLException {
     this.parentStmtCtx = parentStmtCtx;

@@ -1152,6 +1152,9 @@ public class UpsertCompiler {
     }
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = { "EI_EXPOSE_REP", "EI_EXPOSE_REP2" },
+      justification = "QueryPlan, StatementContext, Scan and PhoenixConnection instances are "
+        + "intentionally shared by reference between the compiler and the executing mutation plan")
   public class ServerUpsertSelectMutationPlan implements MutationPlan {
     private final QueryPlan queryPlan;
     private final TableRef tableRef;

@@ -538,6 +538,8 @@ public class StatementContext {
     appliedRewrites.add(rewrite);
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "EI_EXPOSE_REP",
+      justification = "statement context state is intentionally shared by reference")
   public List<String> getAppliedRewrites() {
     return appliedRewrites;
   }
@@ -729,14 +731,20 @@ public class StatementContext {
    * server, and consumed by {@code ExplainTable} to render the per-type {@code SERVER * PROJECTION}
    * clauses. {@code null} when no server-side parsed projection compile occurred.
    */
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "EI_EXPOSE_REP",
+      justification = "statement context state is intentionally shared by reference")
   public Map<String, List<Expression>> getServerParsedProjections() {
     return serverParsedProjections;
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "EI_EXPOSE_REP2",
+      justification = "statement context state is intentionally shared by reference")
   public void setServerParsedProjections(Map<String, List<Expression>> serverParsedProjections) {
     this.serverParsedProjections = serverParsedProjections;
   }
 
+  @edu.umd.cs.findbugs.annotations.SuppressWarnings(value = "EI_EXPOSE_REP",
+      justification = "statement context hierarchy is intentionally shared by reference")
   public StatementContext getParentContext() {
     return parentContext;
   }
