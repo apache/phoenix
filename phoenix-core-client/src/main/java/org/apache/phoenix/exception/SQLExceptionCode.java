@@ -121,6 +121,11 @@ public enum SQLExceptionCode {
     "Invalid index on table. Indexes on SYSTEM tables are not enabled."),
   CANNOT_INDEX_SYSTEM_TABLE(306, "23104",
     "Invalid index on table. SYSTEM Indexes can only be on SYSTEM.CATALOG table."),
+  VECTOR_INDEX_ON_NON_VECTOR_TYPE(307, "23105",
+    "Vector index can only be created on an expression of VECTOR type."),
+  UNSUPPORTED_VECTOR_INDEX_ALGORITHM(309, "23107", "Unsupported vector index algorithm: "),
+  UNSUPPORTED_VECTOR_DISTANCE_METRIC(310, "23108", "Unsupported vector distance metric: "),
+  INVALID_VECTOR_INDEX_PARAMS(311, "23109", "Invalid vector index parameters: "),
   /**
    * Invalid Cursor State (errorcode 04, sqlstate 24)
    */
