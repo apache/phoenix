@@ -262,6 +262,32 @@ public class VectorSearchUtilTest extends BaseConnectionlessQueryTest {
   }
 
   @Test
+  public void testDistanceRewrittenToIndexColumnKeepsNullsLast() throws Exception {
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+      String q = "ARRAY[1.0, 0.0, 0.0]";
+      conn.createStatement()
+        .execute("CREATE TABLE t_fidx (pk INTEGER PRIMARY KEY, v VECTOR(FLOAT, 3))");
+      conn.createStatement().execute("CREATE INDEX i_fidx ON t_fidx (L2_DISTANCE(v, " + q + "))");
+      // The functional index rewrites the distance to an index column, whether the query orders
+      // by the distance, by an alias, or by an ordinal. The index plan must still sort rows that
+      // have no vector last, as the data plan does. The row key order of the index puts them first.
+      for (String hint : new String[] { "/*+ INDEX(t_fidx i_fidx) */", "/*+ NO_INDEX */" }) {
+        for (String sql : new String[] {
+          "SELECT " + hint + " pk FROM t_fidx ORDER BY L2_DISTANCE(v, " + q + ") LIMIT 5",
+          "SELECT " + hint + " pk, L2_DISTANCE(v, " + q + ") d FROM t_fidx ORDER BY d LIMIT 5",
+          "SELECT " + hint + " pk, L2_DISTANCE(v, " + q + ") FROM t_fidx ORDER BY 2 LIMIT 5" }) {
+          org.apache.phoenix.compile.QueryPlan plan = conn.prepareStatement(sql)
+            .unwrap(org.apache.phoenix.jdbc.PhoenixPreparedStatement.class).optimizeQuery();
+          assertEquals(sql, hint.contains("NO_INDEX") ? "T_FIDX" : "I_FIDX",
+            plan.getTableRef().getTable().getTableName().getString());
+          assertEquals(sql, 1, plan.getOrderBy().getOrderByExpressions().size());
+          assertTrue(sql, plan.getOrderBy().getOrderByExpressions().get(0).isNullsLast());
+        }
+      }
+    }
+  }
+
+  @Test
   public void testLimitAsBindVariable() throws Exception {
     String sql = "SELECT * FROM t ORDER BY L2_DISTANCE(v, ?) ASC LIMIT ?";
     VectorSearchDescriptor d = VectorSearchUtil.getVectorSearchDescriptor(parse(sql));

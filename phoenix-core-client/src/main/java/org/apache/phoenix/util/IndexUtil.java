@@ -174,7 +174,7 @@ public class IndexUtil {
   // row key was already done, so here we just need to convert from one built-in type to
   // another.
   public static PDataType getIndexColumnDataType(boolean isNullable, PDataType dataType) {
-    if (dataType == null || !isNullable || !dataType.isFixedWidth()) {
+    if (dataType == null || !isNullable || !dataType.isFixedWidth() || dataType.isVectorType()) {
       return dataType;
     }
     // for fixed length numeric types and boolean
