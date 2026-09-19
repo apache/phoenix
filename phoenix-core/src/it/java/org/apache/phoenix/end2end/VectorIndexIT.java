@@ -44,6 +44,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -80,6 +81,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
@@ -868,6 +870,103 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
           "CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 32))");
         // Dropping a non-existent index should complete cleanly when IF EXISTS is specified.
         stmt.execute("DROP INDEX IF EXISTS " + indexName + " ON " + tableName);
+      }
+    }
+  }
+
+  @Test
+  public void testSynchronousVectorIndexPopulationAndActivation() throws Exception {
+    String tableName = "T_VEC_POP_" + generateUniqueName();
+    String indexName = "IDX_VEC_POP_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+      }
+
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, String.format("id_%03d", i));
+          Float[] vec = new Float[] { (float) (i % 4), (float) ((i + 1) % 4), (float) ((i + 2) % 4),
+            (float) ((i + 3) % 4) };
+          Array array = conn.createArrayOf("FLOAT", vec);
+          ps.setArray(2, array);
+          ps.setString(3, "label_" + i);
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute(
+          "CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) " + "INCLUDE (LABEL) "
+            + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+      assertNotNull("Index table must exist", indexTable);
+
+      // Synchronous vector index creation immediately transitions the index state to ACTIVE.
+      assertEquals("Index state must be ACTIVE after synchronous creation", PIndexState.ACTIVE,
+        indexTable.getIndexState());
+
+      // Verify the trained centroids are persisted under the initial generation in
+      // SYSTEM.VECTOR_CENTROID.
+      String centroidCountSql = "SELECT COUNT(*) FROM " + SYSTEM_VECTOR_CENTROID_NAME + " WHERE "
+        + INDEX_NAME + " = ? AND " + GENERATION_ID + " = 1";
+      try (PreparedStatement ps = conn.prepareStatement(centroidCountSql)) {
+        ps.setString(1, indexName);
+        try (ResultSet rs = ps.executeQuery()) {
+          assertTrue(rs.next());
+          assertEquals("Expected 4 centroids at generation 1", 4, rs.getInt(1));
+        }
+      }
+
+      // Verify populated index row count matches the base table.
+      try (Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + indexName)) {
+        assertTrue(rs.next());
+        assertEquals("Expected 100 rows in index table", 100, rs.getInt(1));
+      }
+
+      // Verify centroid partition assignment values and projected covered columns via SQL scan.
+      String selectIndexSql = "SELECT \":CENTROID_ID\", \":ID\", \"0:LABEL\" FROM " + indexName;
+      int scannedCount = 0;
+      try (Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery(selectIndexSql)) {
+        while (rs.next()) {
+          int centroidId = rs.getInt(1);
+          String id = rs.getString(2);
+          String label = rs.getString(3);
+
+          assertTrue("Centroid ID must be in [0, 3], got " + centroidId,
+            centroidId >= 0 && centroidId <= 3);
+          assertNotNull("ID must not be null", id);
+          assertNotNull("LABEL must not be null", label);
+          assertTrue("ID should match prefix id_", id.startsWith("id_"));
+          scannedCount++;
+        }
+      }
+      assertEquals("Expected 100 rows scanned from index", 100, scannedCount);
+
+      // Confirm raw HBase row keys are prefixed with the 4-byte big-endian centroid identifier.
+      byte[] physicalNameBytes = indexTable.getPhysicalName().getBytes();
+      try (Table hTable = pconn.getQueryServices().getTable(physicalNameBytes);
+        org.apache.hadoop.hbase.client.ResultScanner scanner =
+          hTable.getScanner(new org.apache.hadoop.hbase.client.Scan())) {
+        int hbaseRowCount = 0;
+        for (org.apache.hadoop.hbase.client.Result r : scanner) {
+          byte[] rowKey = r.getRow();
+          int centroidId = (Integer) PInteger.INSTANCE.toObject(rowKey, 0, Bytes.SIZEOF_INT,
+            PInteger.INSTANCE, SortOrder.getDefault());
+          assertTrue("Physical row key centroid ID prefix must be in [0, 3], got " + centroidId,
+            centroidId >= 0 && centroidId <= 3);
+          hbaseRowCount++;
+        }
+        assertEquals("Expected 100 physical rows in HBase index table", 100, hbaseRowCount);
       }
     }
   }
