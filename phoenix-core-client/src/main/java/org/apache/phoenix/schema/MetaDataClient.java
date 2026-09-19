@@ -157,6 +157,7 @@ import static org.apache.phoenix.util.MetaDataUtil.getCompatibleTTLExpression;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
+import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -202,6 +203,7 @@ import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexExpressionCompiler;
@@ -228,6 +230,10 @@ import org.apache.phoenix.expression.function.PartitionIdFunction;
 import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.KMeansConfig;
+import org.apache.phoenix.index.vector.KMeansResult;
+import org.apache.phoenix.index.vector.KMeansTrainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -239,6 +245,7 @@ import org.apache.phoenix.parse.CloseStatement;
 import org.apache.phoenix.parse.ColumnDef;
 import org.apache.phoenix.parse.ColumnDefInPkConstraint;
 import org.apache.phoenix.parse.ColumnName;
+import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.CreateCDCStatement;
 import org.apache.phoenix.parse.CreateFunctionStatement;
 import org.apache.phoenix.parse.CreateIndexStatement;
@@ -1502,7 +1509,7 @@ public class MetaDataClient {
       long sleepTime =
         connection.getQueryServices().getProps().getLong(QueryServices.INDEX_POPULATION_SLEEP_TIME,
           QueryServicesOptions.DEFAULT_INDEX_POPULATION_SLEEP_TIME);
-      if (!dataTableRef.getTable().isTransactional() && sleepTime > 0) {
+      if (!index.isVectorIndex() && !dataTableRef.getTable().isTransactional() && sleepTime > 0) {
         long delta = sleepTime - firstUpsertSelectTime;
         if (delta > 0) {
           try {
@@ -2012,11 +2019,19 @@ public class MetaDataClient {
     // Vector indexes bypass standard index table population during creation and
     // remain in BUILDING state until centroid training and row assignment complete.
     if (statement.getIndexType() == IndexType.VECTOR_GLOBAL || table.isVectorIndex()) {
+      if (statement.isAsync()) {
+        if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
+          connection.removeTable(connection.getTenantId(), dataTable.getName().getString(), null,
+            dataTable.getTimeStamp());
+        }
+        return new MutationState(0, 0, connection);
+      }
+      MutationState state = buildVectorIndex(table, tableRef, statement);
       if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
         connection.removeTable(connection.getTenantId(), dataTable.getName().getString(), null,
           dataTable.getTimeStamp());
       }
-      return new MutationState(0, 0, connection);
+      return state;
     }
 
     // If our connection is at a fixed point-in-time, we need to open a new
@@ -2033,6 +2048,151 @@ public class MetaDataClient {
         dataTable.getTimeStamp());
     }
     return state;
+  }
+
+  private MutationState buildVectorIndex(PTable index, TableRef dataTableRef,
+    CreateIndexStatement statement) throws SQLException {
+    PTable dataTable = dataTableRef.getTable();
+    String fullIndexName = index.getName().getString();
+
+    int lists = index.getVectorIvfLists() != null
+      ? index.getVectorIvfLists()
+      : (statement.getVectorLists() != null ? statement.getVectorLists() : 256);
+    int sampleSize = index.getVectorIvfSampleSize() != null
+      ? index.getVectorIvfSampleSize()
+      : (statement.getVectorSampleSize() != null
+        ? statement.getVectorSampleSize()
+        : Math.max(lists * 100, 1000));
+    String metric = index.getVectorDistanceMetric() != null
+      ? index.getVectorDistanceMetric()
+      : (statement.getVectorMetric() != null ? statement.getVectorMetric() : "L2");
+    int dimension = index.getVectorDimension() != null
+      ? index.getVectorDimension()
+      : (statement.getVectorDimension() != null ? statement.getVectorDimension() : 0);
+
+    String vectorColName = null;
+    if (
+      statement.getIndexConstraint() != null
+        && statement.getIndexConstraint().getParseNodeAndSortOrderList() != null
+        && !statement.getIndexConstraint().getParseNodeAndSortOrderList().isEmpty()
+    ) {
+      ParseNode node =
+        statement.getIndexConstraint().getParseNodeAndSortOrderList().get(0).getFirst();
+      if (node instanceof ColumnParseNode) {
+        vectorColName = ((ColumnParseNode) node).getName();
+      }
+    }
+    PColumn vectorCol = null;
+    if (vectorColName != null) {
+      try {
+        vectorCol = dataTable.getColumnForColumnName(vectorColName);
+      } catch (ColumnNotFoundException ignored) {
+      }
+    }
+    if (vectorCol == null) {
+      for (PColumn col : dataTable.getColumns()) {
+        if (col.getDataType() != null && col.getDataType().isVectorType()) {
+          vectorCol = col;
+          break;
+        }
+      }
+    }
+    if (vectorCol == null) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+        .setMessage("Vector column not found for index " + fullIndexName).build().buildException();
+    }
+    if (dimension == 0 && vectorCol.getMaxLength() != null) {
+      dimension = vectorCol.getMaxLength();
+    }
+
+    String vectorColSqlExpr =
+      (vectorCol.getFamilyName() != null && vectorCol.getFamilyName().getString().length() > 0)
+        ? ('"' + vectorCol.getFamilyName().getString() + "\".\"" + vectorCol.getName().getString()
+          + '"')
+        : ('"' + vectorCol.getName().getString() + '"');
+    String baseTableSqlName = SchemaUtil.getEscapedFullTableName(dataTable.getName().getString());
+
+    // Defer centroid training when the base table has fewer populated vector rows than requested
+    // centroid partitions. The index remains in BUILDING state until populated by IndexTool or
+    // REBUILD.
+    long vectorRowCount = countNonNullVectors(connection, baseTableSqlName, vectorColSqlExpr);
+    if (vectorRowCount < lists) {
+      LOGGER.info(
+        "Deferring centroid training for vector index {}: table {} has {} non-null"
+          + " vector rows, fewer than lists={}. The index stays in {} until ALTER INDEX {} REBUILD"
+          + " or IndexTool populates it.",
+        fullIndexName, dataTable.getName().getString(),
+        vectorRowCount < 0 ? "an undeterminable number of" : Long.toString(vectorRowCount), lists,
+        PIndexState.BUILDING, fullIndexName);
+      return new MutationState(0, 0, connection);
+    }
+
+    boolean localKMeans = connection.getQueryServices().getProps().getBoolean(
+      QueryServices.VECTOR_KMEANS_LOCAL_ATTRIB, QueryServicesOptions.DEFAULT_VECTOR_KMEANS_LOCAL);
+    KMeansResult kmeansResult = null;
+    KMeansConfig config =
+      KMeansConfig.newBuilder().distanceMetric(metric).sampleSize(sampleSize).build();
+
+    if (!localKMeans) {
+      try {
+        Class<?> toolClass = Class.forName("org.apache.phoenix.mapreduce.vector.KMeansTool");
+        Method trainMethod = toolClass.getMethod("trainDistributed", Configuration.class,
+          String.class, String.class, int.class, int.class, KMeansConfig.class);
+        kmeansResult = (KMeansResult) trainMethod.invoke(null,
+          connection.getQueryServices().getConfiguration(), dataTable.getName().getString(),
+          vectorCol.getName().getString(), dimension, lists, config);
+      } catch (Throwable t) {
+        LOGGER.warn(
+          "Distributed KMeansTool training failed or unavailable, falling back to client-side trainer: {}",
+          t.getMessage());
+      }
+    }
+
+    if (kmeansResult == null) {
+      List<float[]> sampled;
+      try {
+        sampled =
+          KMeansTrainer.sampleVectors(connection, baseTableSqlName, vectorColSqlExpr, sampleSize);
+      } catch (Exception e) {
+        throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
+          .setMessage("Failed to sample vectors for index " + fullIndexName + ": " + e.getMessage())
+          .setRootCause(e).build().buildException();
+      }
+      kmeansResult = KMeansTrainer.train(sampled, lists, config);
+    }
+
+    // Persist initial centroid generation metadata to the catalog and local caches, then
+    // populate the index table rows and transition index state to ACTIVE.
+    CentroidManager.persistCentroids(connection, fullIndexName, 1L, kmeansResult);
+    CentroidManager.setGenerationAndLists(connection, fullIndexName, 1L,
+      kmeansResult.getEffectiveK());
+    VectorCentroidCache.getInstance(connection.getQueryServices().getConfiguration())
+      .putCentroidsFromFloatList(fullIndexName, 1L, kmeansResult.getCentroids());
+
+    connection.removeTable(connection.getTenantId(), fullIndexName, null,
+      HConstants.LATEST_TIMESTAMP);
+    PTable updatedIndex = connection.getTableNoCache(fullIndexName);
+    return buildIndex(updatedIndex, dataTableRef);
+  }
+
+  /**
+   * Counts the rows of the base table carrying a non-null vector, or returns -1 when the count
+   * cannot be obtained. A table that cannot be scanned cannot be sampled either, so the caller
+   * treats -1 the same way it treats "too few rows": defer training rather than fail the DDL.
+   */
+  private static long countNonNullVectors(PhoenixConnection connection, String baseTableSqlName,
+    String vectorColSqlExpr) {
+    String sql =
+      "SELECT COUNT(*) FROM " + baseTableSqlName + " WHERE " + vectorColSqlExpr + " IS NOT NULL";
+    try (java.sql.ResultSet rs = connection.createStatement().executeQuery(sql)) {
+      if (rs.next()) {
+        return rs.getLong(1);
+      }
+    } catch (Exception e) {
+      LOGGER.info("Could not count non-null vectors in {}: {}", baseTableSqlName, e.getMessage());
+      return -1L;
+    }
+    return 0;
   }
 
   public MutationState createCDC(CreateCDCStatement statement) throws SQLException {

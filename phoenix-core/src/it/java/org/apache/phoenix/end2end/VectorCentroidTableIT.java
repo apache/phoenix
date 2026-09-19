@@ -40,7 +40,9 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.sql.Types;
+import java.util.Arrays;
 import java.util.List;
+import org.apache.phoenix.index.vector.CentroidManager;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -211,6 +213,114 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
 
         assertFalse("No additional columns expected", rs.next());
       }
+    }
+  }
+
+  @Test
+  public void testPersistAndLoadRoundTrip() throws Exception {
+    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    byte[] v0 = new byte[] { 1, 2, 3, 4 };
+    byte[] v1 = new byte[] { 5, 6, 7, 8 };
+    byte[] v2 = new byte[] { 9, 10, 11, 12 };
+    List<byte[]> centroids = Arrays.asList(v0, v1, v2);
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager manager = new CentroidManager(conn);
+      manager.persistCentroids(indexName, 1L, centroids);
+
+      List<byte[]> loaded = manager.loadCentroids(indexName, 1L);
+      assertNotNull(loaded);
+      assertEquals(3, loaded.size());
+      assertArrayEquals(v0, loaded.get(0));
+      assertArrayEquals(v1, loaded.get(1));
+      assertArrayEquals(v2, loaded.get(2));
+
+      List<byte[]> loadedStatic = CentroidManager.loadCentroids(conn, indexName, 1L);
+      assertEquals(3, loadedStatic.size());
+      assertArrayEquals(v0, loadedStatic.get(0));
+      assertArrayEquals(v1, loadedStatic.get(1));
+      assertArrayEquals(v2, loadedStatic.get(2));
+    }
+  }
+
+  @Test
+  public void testGenerationIsolation() throws Exception {
+    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    byte[] v0 = new byte[] { 10, 20, 30, 40 };
+    byte[] v1 = new byte[] { 50, 60, 70, 80 };
+    List<byte[]> centroids = Arrays.asList(v0, v1);
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager manager = new CentroidManager(conn);
+      manager.persistCentroids(indexName, 1L, centroids);
+
+      List<byte[]> wrongGen = manager.loadCentroids(indexName, 2L);
+      assertNotNull(wrongGen);
+      assertTrue("Wrong generation must return no centroids", wrongGen.isEmpty());
+
+      List<byte[]> correctGen = manager.loadCentroids(indexName, 1L);
+      assertEquals(2, correctGen.size());
+    }
+  }
+
+  @Test
+  public void testDeleteGeneration() throws Exception {
+    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    String indexName2 = "TEST_VECTOR_IDX_" + generateUniqueName();
+    byte[] v0 = new byte[] { 1, 1, 1, 1 };
+    byte[] v1 = new byte[] { 2, 2, 2, 2 };
+    List<byte[]> gen1Centroids = Arrays.asList(v0);
+    List<byte[]> gen2Centroids = Arrays.asList(v1);
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager manager = new CentroidManager(conn);
+      // Verify that deleting a generation removes only the targeted generation and isolates other
+      // index records.
+      manager.persistCentroids(indexName, 1L, gen1Centroids);
+      manager.persistCentroids(indexName2, 2L, gen2Centroids);
+
+      assertEquals(1, manager.loadCentroids(indexName, 1L).size());
+      assertEquals(1, manager.loadCentroids(indexName2, 2L).size());
+
+      manager.deleteGeneration(indexName, 1L);
+
+      assertTrue(manager.loadCentroids(indexName, 1L).isEmpty());
+      assertEquals(1, manager.loadCentroids(indexName2, 2L).size());
+      assertArrayEquals(v1, manager.loadCentroids(indexName2, 2L).get(0));
+    }
+  }
+
+  @Test
+  public void testIncrementGeneration() throws Exception {
+    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager manager = new CentroidManager(conn);
+
+      long gen1 = manager.incrementGeneration(indexName);
+      long gen2 = manager.incrementGeneration(indexName);
+      assertTrue("Returned generations must be monotonically increasing", gen2 > gen1);
+      assertEquals(gen1 + 1, gen2);
+      assertEquals(gen2, manager.getGeneration(indexName));
+
+      // Verify generation lifecycle operations on a catalog-defined vector index.
+      String dataTable = "DATA_" + generateUniqueName();
+      String vectorIdx = "IDX_" + generateUniqueName();
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + dataTable + " (ID VARCHAR PRIMARY KEY, V VECTOR(FLOAT, 4))");
+        stmt.execute("CREATE VECTOR INDEX " + vectorIdx + " ON " + dataTable + " (V) "
+          + "WITH (algorithm = 'IVF', metric = 'L2', dimension = 4, lists = 2, sample_size = 10)");
+      }
+
+      long idxGen1 = manager.incrementGeneration(vectorIdx);
+      long idxGen2 = manager.incrementGeneration(vectorIdx);
+      assertTrue("Generations must be monotonically increasing", idxGen2 > idxGen1);
+      assertEquals(idxGen1 + 1, idxGen2);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexPTable = pconn.getTableNoCache(vectorIdx);
+      assertNotNull(indexPTable);
+      assertEquals(Long.valueOf(idxGen2), indexPTable.getVectorCentroidGeneration());
     }
   }
 }

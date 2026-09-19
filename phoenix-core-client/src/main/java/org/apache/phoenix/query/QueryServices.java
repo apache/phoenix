@@ -150,6 +150,13 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.coprocessor.maxMetaDataCacheSize";
   public static final String MAX_CLIENT_METADATA_CACHE_SIZE_ATTRIB =
     "phoenix.client.maxMetaDataCacheSize";
+  public static final String VECTOR_CENTROID_CACHE_MAX_SIZE_ATTRIB =
+    "phoenix.vector.centroid.cache.maxSize";
+  public static final String VECTOR_CENTROID_BRUTEFORCE_LIMIT_ATTRIB =
+    "phoenix.vector.centroid.bruteforce.limit";
+  public static final String VECTOR_CENTROID_PROBE_BUCKETS_ATTRIB =
+    "phoenix.vector.centroid.probe.buckets";
+  public static final String VECTOR_KMEANS_LOCAL_ATTRIB = "phoenix.vector.kmeans.local";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
   // Mainly for testing to force spilling
