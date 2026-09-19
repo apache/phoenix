@@ -293,7 +293,12 @@ public class QueryOptimizer {
       }
     }
 
-    List<PTable> indexes = Lists.newArrayList(dataPlan.getTableRef().getTable().getIndexes());
+    List<PTable> indexes = Lists.newArrayList();
+    for (PTable idx : dataPlan.getTableRef().getTable().getIndexes()) {
+      if (!idx.isVectorIndex()) {
+        indexes.add(idx);
+      }
+    }
     if (
       dataPlan.isApplicable() && (indexes.isEmpty() || dataPlan.isDegenerate()
         || dataPlan.getTableRef().hasDynamicCols() || select.getHint().hasHint(Hint.NO_INDEX))

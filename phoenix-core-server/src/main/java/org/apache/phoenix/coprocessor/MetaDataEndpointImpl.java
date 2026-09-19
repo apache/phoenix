@@ -4606,7 +4606,16 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       int disableTimeStampKVIndex = -1;
       int indexStateKVIndex = 0;
       int index = 0;
+      // Track whether this mutation records a new vector centroid generation
+      boolean setsVectorGeneration = false;
       for (Cell cell : newKVs) {
+        if (
+          Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
+            cell.getQualifierLength(), VECTOR_CENTROID_GENERATION_BYTES, 0,
+            VECTOR_CENTROID_GENERATION_BYTES.length) == 0
+        ) {
+          setsVectorGeneration = true;
+        }
         if (
           Bytes.compareTo(cell.getQualifierArray(), cell.getQualifierOffset(),
             cell.getQualifierLength(), INDEX_STATE_BYTES, 0, INDEX_STATE_BYTES.length) == 0
@@ -4675,6 +4684,12 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
 
         PIndexState currentState = PIndexState
           .fromSerializedValue(currentStateKV.getValueArray()[currentStateKV.getValueOffset()]);
+        if (setsVectorGeneration && newState != currentState) {
+          // Centroid generation updates preserve current index state
+          newState = currentState;
+          newKVs.set(indexStateKVIndex, PhoenixKeyValueUtil.newKeyValue(key, TABLE_FAMILY_BYTES,
+            INDEX_STATE_BYTES, timeStamp, Bytes.toBytes(newState.getSerializedValue())));
+        }
         // Timestamp of INDEX_STATE gets updated with each call
         long actualTimestamp = currentStateKV.getTimestamp();
         long curTimeStampVal = 0;
@@ -4826,7 +4841,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
         }
 
         PTable returnTable = null;
-        if (currentState != newState || disableTimeStampKVIndex != -1) {
+        if (currentState != newState || disableTimeStampKVIndex != -1 || setsVectorGeneration) {
           // make a copy of tableMetadata so we can add to it
           tableMetadata = new ArrayList<Mutation>(tableMetadata);
           // Always include the empty column value at latest timestamp so
@@ -4872,6 +4887,7 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
           if (
             setRowKeyOrderOptimizableCell || disableTimeStampKVIndex != -1
               || currentState.isDisabled() || newState == PIndexState.BUILDING
+              || setsVectorGeneration
           ) {
             returnTable = doGetTable(tenantId, schemaName, tableName, HConstants.LATEST_TIMESTAMP,
               rowLock, request.getClientVersion());

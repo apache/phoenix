@@ -45,6 +45,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.IOException;
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
@@ -913,6 +914,161 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
           "CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 32))");
         stmt.execute("DROP INDEX IF EXISTS " + indexName + " ON " + tableName);
       }
+    }
+  }
+
+  private static void loadClusteredVectors(Connection conn, String tableName, int rows)
+    throws SQLException {
+    try (PreparedStatement ps =
+      conn.prepareStatement("UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)")) {
+      for (int i = 0; i < rows; i++) {
+        ps.setString(1, String.format("id_%03d", i));
+        Float[] vec = new Float[] { (float) (i % 4), (float) ((i + 1) % 4), (float) ((i + 2) % 4),
+          (float) ((i + 3) % 4) };
+        Array array = conn.createArrayOf("FLOAT", vec);
+        ps.setArray(2, array);
+        ps.setString(3, "label_" + i);
+        ps.executeUpdate();
+      }
+    }
+    conn.commit();
+  }
+
+  private static int countCentroids(Connection conn, String indexName, Long generation)
+    throws SQLException {
+    String sql = "SELECT COUNT(*) FROM " + SYSTEM_VECTOR_CENTROID_NAME + " WHERE " + INDEX_NAME
+      + " = ?" + (generation == null ? "" : " AND " + GENERATION_ID + " = ?");
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setString(1, indexName);
+      if (generation != null) {
+        ps.setLong(2, generation);
+      }
+      try (ResultSet rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        return rs.getInt(1);
+      }
+    }
+  }
+
+  /**
+   * Verifies that synchronous index creation trains initial centroids, records active generation
+   * metadata, and retains BUILDING state pending population.
+   */
+  @Test
+  public void testSynchronousVectorIndexTraining() throws Exception {
+    String tableName = "T_VEC_POP_" + generateUniqueName();
+    String indexName = "IDX_VEC_POP_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+      }
+      loadClusteredVectors(conn, tableName, 100);
+      long before = System.currentTimeMillis();
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute(
+          "CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) " + "INCLUDE (LABEL) "
+            + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+      PTable index = conn.unwrap(PhoenixConnection.class).getTableNoCache(indexName);
+      assertEquals(PIndexState.BUILDING, index.getIndexState());
+      Long generation = index.getVectorCentroidGeneration();
+      assertNotNull("Training records a generation", generation);
+      assertTrue("The first generation is the training time", generation >= before);
+      assertTrue(index.getVectorIvfLists() >= 4);
+      assertEquals(index.getVectorIvfLists().intValue(),
+        countCentroids(conn, indexName, generation));
+    }
+  }
+
+  /**
+   * Verifies that centroid training is deferred when the table contains fewer vectors than
+   * requested lists.
+   */
+  @Test
+  public void testTrainingDeferredOnEmptyTable() throws Exception {
+    String tableName = "T_VEC_" + generateUniqueName();
+    String indexName = "IDX_VEC_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+          + " (V) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+      PTable index = conn.unwrap(PhoenixConnection.class).getTableNoCache(indexName);
+      assertEquals(PIndexState.BUILDING, index.getIndexState());
+      assertNull(index.getVectorCentroidGeneration());
+      assertEquals(0, countCentroids(conn, indexName, null));
+    }
+  }
+
+  /**
+   * Verifies lifecycle of case sensitive index names across drop and recreate, ensuring new
+   * generation IDs prevent stale centroid model reuse.
+   */
+  @Test
+  public void testQuotedIndexNameTrainDropRecreate() throws Exception {
+    String schema = generateUniqueName();
+    String tableName = schema + ".T_" + generateUniqueName();
+    String indexName = "myIdx";
+    String fullIndexName = schema + "." + indexName;
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+      }
+      loadClusteredVectors(conn, tableName, 40);
+      String ddl = "CREATE VECTOR INDEX \"" + indexName + "\" ON " + tableName
+        + " (V) WITH (algorithm = 'IVF', metric = 'L2', lists = 2, sample_size = 40)";
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute(ddl);
+      }
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable index = pconn.getTableNoCache(fullIndexName);
+      assertEquals(fullIndexName, index.getName().getString());
+      Long firstGeneration = index.getVectorCentroidGeneration();
+      assertNotNull(firstGeneration);
+      assertTrue(countCentroids(conn, fullIndexName, firstGeneration) >= 2);
+      assertEquals(0, countCentroids(conn, fullIndexName.toUpperCase(), null));
+
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("DROP INDEX \"" + indexName + "\" ON " + tableName);
+      }
+      assertEquals(0, countCentroids(conn, fullIndexName, null));
+
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute(ddl);
+      }
+      Long secondGeneration = pconn.getTableNoCache(fullIndexName).getVectorCentroidGeneration();
+      assertNotNull(secondGeneration);
+      assertTrue(secondGeneration > firstGeneration);
+    }
+  }
+
+  /**
+   * Verifies that sample filtering via RAND() evaluates pushdown predicates per row across region
+   * servers.
+   */
+  @Test
+  public void testTrainingSampleFilterIsEvaluatedPerRowOnServer() throws Exception {
+    String tableName = "T_VEC_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+      }
+      loadClusteredVectors(conn, tableName, 1000);
+      String sql = "SELECT V FROM " + tableName + " WHERE V IS NOT NULL AND RAND() < 0.3";
+      String plan = QueryUtil.getExplainPlan(conn.createStatement().executeQuery("EXPLAIN " + sql));
+      assertTrue(plan, plan.contains("SERVER FILTER BY") && plan.contains("RAND()"));
+      int rows = 0;
+      try (ResultSet rs = conn.createStatement().executeQuery(sql)) {
+        while (rs.next()) {
+          rows++;
+        }
+      }
+      assertTrue("Sampled " + rows + " of 1000 at p=0.3", rows > 200 && rows < 400);
     }
   }
 }

@@ -40,7 +40,9 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.Statement;
 import java.sql.Types;
+import java.util.Arrays;
 import java.util.List;
+import org.apache.phoenix.index.vector.CentroidManager;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
@@ -211,6 +213,104 @@ public class VectorCentroidTableIT extends ParallelStatsDisabledIT {
 
         assertFalse("No additional columns expected", rs.next());
       }
+    }
+  }
+
+  private static void assertCentroidsEqual(List<float[]> expected, List<float[]> actual) {
+    assertEquals(expected.size(), actual.size());
+    for (int i = 0; i < expected.size(); i++) {
+      assertArrayEquals(expected.get(i), actual.get(i), 0f);
+    }
+  }
+
+  @Test
+  public void testPersistAndLoadRoundTrip() throws Exception {
+    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    List<float[]> centroids =
+      Arrays.asList(new float[] { 1, 2 }, new float[] { 3, 4 }, new float[] { 5, 6 });
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager.persistCentroids(conn, indexName, 1L, centroids);
+      assertCentroidsEqual(centroids, CentroidManager.loadCentroids(conn, indexName, 1L));
+    }
+  }
+
+  @Test
+  public void testGenerationIsolation() throws Exception {
+    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    List<float[]> gen1 = Arrays.asList(new float[] { 1, 1 }, new float[] { 2, 2 });
+    List<float[]> gen2 = Arrays.asList(new float[] { 9, 9 });
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager.persistCentroids(conn, indexName, 1L, gen1);
+      CentroidManager.persistCentroids(conn, indexName, 2L, gen2);
+      assertCentroidsEqual(gen1, CentroidManager.loadCentroids(conn, indexName, 1L));
+      assertCentroidsEqual(gen2, CentroidManager.loadCentroids(conn, indexName, 2L));
+      assertTrue(CentroidManager.loadCentroids(conn, indexName, 3L).isEmpty());
+    }
+  }
+
+  /** Verifies case sensitive isolation of centroid rows for quoted index names. */
+  @Test
+  public void testIndexNamesAreCaseSensitive() throws Exception {
+    String upper = "S.IDX_" + generateUniqueName();
+    String mixed = upper.replace("IDX_", "idx_");
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager.persistCentroids(conn, upper, 1L, Arrays.asList(new float[] { 1 }));
+      CentroidManager.persistCentroids(conn, mixed, 1L, Arrays.asList(new float[] { 2 }));
+      assertArrayEquals(new float[] { 1 }, CentroidManager.loadCentroids(conn, upper, 1L).get(0),
+        0f);
+      assertArrayEquals(new float[] { 2 }, CentroidManager.loadCentroids(conn, mixed, 1L).get(0),
+        0f);
+    }
+  }
+
+  @Test
+  public void testDeleteGenerationAndAll() throws Exception {
+    String indexName = "TEST_VECTOR_IDX_" + generateUniqueName();
+    String other = "TEST_VECTOR_IDX_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      CentroidManager.persistCentroids(conn, indexName, 1L, Arrays.asList(new float[] { 1 }));
+      CentroidManager.persistCentroids(conn, indexName, 2L, Arrays.asList(new float[] { 2 }));
+      CentroidManager.persistCentroids(conn, other, 1L, Arrays.asList(new float[] { 3 }));
+
+      CentroidManager.deleteGeneration(conn, indexName, 1L);
+      assertTrue(CentroidManager.loadCentroids(conn, indexName, 1L).isEmpty());
+      assertEquals(1, CentroidManager.loadCentroids(conn, indexName, 2L).size());
+
+      CentroidManager.deleteAllCentroids(conn, indexName);
+      assertTrue(CentroidManager.loadCentroids(conn, indexName, 2L).isEmpty());
+      assertEquals(1, CentroidManager.loadCentroids(conn, other, 1L).size());
+      assertFalse("Deletes restore the caller's autocommit setting", conn.getAutoCommit());
+    }
+  }
+
+  /**
+   * Verifies that recording a centroid generation through the metadata endpoint preserves index
+   * state and advances the DDL timestamp for client cache invalidation.
+   */
+  @Test
+  public void testSetGenerationAndListsThroughEndpoint() throws Exception {
+    String dataTable = "DATA_" + generateUniqueName();
+    String vectorIdx = "IDX_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + dataTable + " (ID VARCHAR PRIMARY KEY, V VECTOR(FLOAT, 4))");
+        stmt.execute("CREATE VECTOR INDEX " + vectorIdx + " ON " + dataTable
+          + " (V) WITH (algorithm = 'IVF', metric = 'L2', lists = 2, sample_size = 10)");
+      }
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable before = pconn.getTableNoCache(vectorIdx);
+      assertEquals("An empty table defers training", null, before.getVectorCentroidGeneration());
+
+      long generation = CentroidManager.nextGeneration(null);
+      try (PhoenixConnection internal = CentroidManager.newInternalConnection(pconn)) {
+        CentroidManager.setGenerationAndLists(internal, before, generation, 3);
+      }
+      PTable after = pconn.getTableNoCache(vectorIdx);
+      assertEquals(Long.valueOf(generation), after.getVectorCentroidGeneration());
+      assertEquals(Integer.valueOf(3), after.getVectorIvfLists());
+      assertEquals(before.getIndexState(), after.getIndexState());
+      assertTrue("The index DDL timestamp advances",
+        after.getLastDDLTimestamp() > before.getLastDDLTimestamp());
     }
   }
 }
