@@ -201,6 +201,7 @@ import org.apache.hadoop.hbase.security.access.Permission;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.util.StringUtils;
+import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.IndexExpressionCompiler;
@@ -227,6 +228,8 @@ import org.apache.phoenix.expression.function.PartitionIdFunction;
 import org.apache.phoenix.expression.function.PhoenixRowTimestampFunction;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.VectorIndexTrainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
@@ -2006,11 +2009,12 @@ public class MetaDataClient {
 
     // Vector indexes remain in BUILDING state until centroids are initialized and assigned.
     if (table.isVectorIndex()) {
+      MutationState state = trainVectorIndex(table, dataTable);
       if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
         connection.removeTable(connection.getTenantId(), dataTable.getName().getString(), null,
           dataTable.getTimeStamp());
       }
-      return new MutationState(0, 0, connection);
+      return state;
     }
 
     // If our connection is at a fixed point-in-time, we need to open a new
@@ -2027,6 +2031,20 @@ public class MetaDataClient {
         dataTable.getTimeStamp());
     }
     return state;
+  }
+
+  /**
+   * Trains and records the initial centroid generation for a vector index, retaining BUILDING
+   * state. Training is deferred if the data table contains fewer non-null vectors than requested
+   * lists.
+   */
+  private MutationState trainVectorIndex(PTable index, PTable dataTable) throws SQLException {
+    try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
+      VectorIndexTrainer.trainAndRecord(internal, dataTable, index);
+    }
+    connection.removeTable(connection.getTenantId(), index.getName().getString(),
+      dataTable.getName().getString(), HConstants.LATEST_TIMESTAMP);
+    return new MutationState(0, 0, connection);
   }
 
   public MutationState createCDC(CreateCDCStatement statement) throws SQLException {
@@ -4634,27 +4652,10 @@ public class MetaDataClient {
       return;
     }
     String indexName = index.getName().getString();
-    try {
-      Properties props = new Properties();
-      Properties clientInfo = connection.getClientInfo();
-      for (String key : clientInfo.stringPropertyNames()) {
-        if (
-          !PhoenixRuntime.TENANT_ID_ATTRIB.equals(key)
-            && !PhoenixRuntime.CURRENT_SCN_ATTRIB.equals(key)
-        ) {
-          props.setProperty(key, clientInfo.getProperty(key));
-        }
-      }
-      try (
-        PhoenixConnection conn =
-          new PhoenixConnection(connection, connection.getQueryServices(), props);
-        PreparedStatement ps =
-          conn.prepareStatement("DELETE FROM " + PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_NAME
-            + " WHERE " + PhoenixDatabaseMetaData.INDEX_NAME + " = ?")) {
-        conn.setAutoCommit(true);
-        ps.setString(1, indexName);
-        ps.executeUpdate();
-      }
+    VectorCentroidCache.getInstance(connection.getQueryServices().getConfiguration())
+      .invalidate(indexName);
+    try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
+      CentroidManager.deleteAllCentroids(internal, indexName);
     } catch (SQLException e) {
       LOGGER.warn("Could not delete the centroids of dropped vector index {}; its "
         + PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_NAME + " rows remain.", indexName, e);
