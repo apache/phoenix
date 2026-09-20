@@ -37,6 +37,7 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_ME
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_LISTS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE_BYTES;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -54,28 +55,42 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Random;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
+import org.apache.hadoop.hbase.client.ResultScanner;
+import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.hadoop.mapreduce.Counters;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateTableRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
+import org.apache.phoenix.end2end.index.IndexTestUtil;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.index.vector.CentroidManager;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.mapreduce.index.IndexTool;
+import org.apache.phoenix.mapreduce.index.PhoenixIndexToolJobCounters;
 import org.apache.phoenix.protobuf.ProtobufUtil;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PIndexState;
@@ -83,6 +98,7 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.PTableType;
+import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PBson;
 import org.apache.phoenix.schema.types.PDataType;
@@ -90,10 +106,12 @@ import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PLong;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVectorDouble;
 import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.Closeables;
+import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.MetaDataUtil;
 import org.apache.phoenix.util.PropertiesUtil;
@@ -613,6 +631,13 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
       assertEquals(MetaDataUtil.VECTOR_CENTROID_ID_COLUMN_NAME,
         pkColumns.get(0).getName().getString());
       assertEquals(":ID", pkColumns.get(1).getName().getString());
+
+      // Indexed vector column in data family retains PVectorDouble type
+      PColumn vectorCol = indexTable.getColumnForColumnName("0:V");
+      assertNotNull("Vector column 0:V must exist in index table", vectorCol);
+      assertEquals("Double vector column must have PVectorDouble data type", PVectorDouble.INSTANCE,
+        vectorCol.getDataType());
+      assertEquals(Integer.valueOf(64), vectorCol.getMaxLength());
     }
   }
 
@@ -906,12 +931,37 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
   @Test
   public void testDropVectorIndexIfExists() throws Exception {
     String tableName = "T_IF_EXISTS_" + generateUniqueName();
-    String indexName = "IDX_NON_EXISTENT_" + generateUniqueName();
+    String indexName = "IDX_IF_EXISTS_" + generateUniqueName();
 
-    try (Connection conn = DriverManager.getConnection(getUrl())) {
+    try (Connection conn = getDropMetadataConnection()) {
       try (Statement stmt = conn.createStatement()) {
         stmt.execute(
           "CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 32))");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
+          + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+
+      // Verify initial index presence in catalog
+      try (Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("SELECT 1 FROM SYSTEM.CATALOG WHERE TABLE_NAME = '"
+          + indexName + "' AND TABLE_SCHEM IS NULL AND TENANT_ID IS NULL")) {
+        assertTrue("Index must exist in SYSTEM.CATALOG before drop", rs.next());
+      }
+
+      // Drop existing index via IF EXISTS
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("DROP INDEX IF EXISTS " + indexName + " ON " + tableName);
+      }
+
+      try (Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("SELECT 1 FROM SYSTEM.CATALOG WHERE TABLE_NAME = '"
+          + indexName + "' AND TABLE_SCHEM IS NULL AND TENANT_ID IS NULL")) {
+        assertFalse("Index must be removed from SYSTEM.CATALOG after DROP INDEX IF EXISTS",
+          rs.next());
+      }
+
+      // Drop nonexistent index via IF EXISTS
+      try (Statement stmt = conn.createStatement()) {
         stmt.execute("DROP INDEX IF EXISTS " + indexName + " ON " + tableName);
       }
     }
@@ -951,11 +1001,11 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
   }
 
   /**
-   * Verifies that synchronous index creation trains initial centroids, records active generation
-   * metadata, and retains BUILDING state pending population.
+   * Verifies synchronous vector index population, building verified index rows keyed by centroid ID
+   * and transitioning index state to ACTIVE.
    */
   @Test
-  public void testSynchronousVectorIndexTraining() throws Exception {
+  public void testSynchronousVectorIndexPopulationAndActivation() throws Exception {
     String tableName = "T_VEC_POP_" + generateUniqueName();
     String indexName = "IDX_VEC_POP_" + generateUniqueName();
     try (Connection conn = DriverManager.getConnection(getUrl())) {
@@ -970,14 +1020,29 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
           "CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) " + "INCLUDE (LABEL) "
             + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
       }
-      PTable index = conn.unwrap(PhoenixConnection.class).getTableNoCache(indexName);
-      assertEquals(PIndexState.BUILDING, index.getIndexState());
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable index = pconn.getTableNoCache(indexName);
+      assertEquals(PIndexState.ACTIVE, index.getIndexState());
       Long generation = index.getVectorCentroidGeneration();
       assertNotNull("Training records a generation", generation);
       assertTrue("The first generation is the training time", generation >= before);
-      assertTrue(index.getVectorIvfLists() >= 4);
-      assertEquals(index.getVectorIvfLists().intValue(),
-        countCentroids(conn, indexName, generation));
+      int lists = index.getVectorIvfLists();
+      assertTrue(lists >= 4);
+      assertEquals(lists, countCentroids(conn, indexName, generation));
+
+      String sql = "SELECT \"_CENTROID_ID\", \":ID\", \"0:LABEL\" FROM " + indexName;
+      int rows = 0;
+      try (ResultSet rs = conn.createStatement().executeQuery(sql)) {
+        while (rs.next()) {
+          rows++;
+          assertTrue(rs.getInt(1) >= 0 && rs.getInt(1) < lists);
+          assertNotNull(rs.getString(2));
+          assertNotNull(rs.getString(3));
+        }
+      }
+      assertEquals(100, rows);
+      IndexTestUtil.assertRowsForEmptyColValue(conn, indexName, QueryConstants.VERIFIED_BYTES);
+      assertIndexVerifies(tableName, indexName, 100);
     }
   }
 
@@ -1069,6 +1134,807 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
         }
       }
       assertTrue("Sampled " + rows + " of 1000 at p=0.3", rows > 200 && rows < 400);
+    }
+  }
+
+  private static final List<float[]> KNOWN_CENTROIDS =
+    Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 1.0f }, // ID 0
+      new float[] { 0.0f, 0.0f, 1.0f, 0.0f }, // ID 1
+      new float[] { 1.0f, 0.0f, 0.0f, 0.0f }, // ID 2
+      new float[] { 0.0f, 1.0f, 0.0f, 0.0f }); // ID 3
+
+  /**
+   * Initializes test table and active vector index configured with deterministic centroid
+   * positions.
+   */
+  private void setupTableAndKnownCentroids(Connection conn, String tableName, String indexName)
+    throws Exception {
+    setupTableAndKnownCentroids(conn, tableName, indexName, "FLOAT", "");
+  }
+
+  private void setupTableAndKnownCentroids(Connection conn, String tableName, String indexName,
+    String elementType, String tableOptions) throws Exception {
+    try (Statement stmt = conn.createStatement()) {
+      stmt.execute("CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR("
+        + elementType + ", 4), LABEL VARCHAR) " + tableOptions);
+      stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
+        + "INCLUDE (LABEL) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+    }
+    recordKnownCentroids(conn, indexName, KNOWN_CENTROIDS);
+    PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+    IndexUtil.updateIndexState(pconn, indexName, PIndexState.ACTIVE, 0L);
+    pconn.removeTable(pconn.getTenantId(), indexName, null, HConstants.LATEST_TIMESTAMP);
+    pconn.removeTable(pconn.getTenantId(), tableName, null, HConstants.LATEST_TIMESTAMP);
+  }
+
+  /** Persists specified centroids as a new generation for the given index. */
+  private static long recordKnownCentroids(Connection conn, String indexName,
+    List<float[]> centroids) throws SQLException {
+    PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+    try (PhoenixConnection internal = CentroidManager.newInternalConnection(pconn)) {
+      PTable index = internal.getTableNoCache(indexName);
+      long generation = CentroidManager.nextGeneration(index.getVectorCentroidGeneration());
+      CentroidManager.persistCentroids(internal, indexName, generation, centroids);
+      CentroidManager.setGenerationAndLists(internal, index, generation, centroids.size());
+      return generation;
+    }
+  }
+
+  private List<byte[]> getHBaseRowKeys(PhoenixConnection pconn, PTable table) throws Exception {
+    byte[] physicalNameBytes = table.getPhysicalName().getBytes();
+    List<byte[]> rowKeys = new ArrayList<>();
+    try (Table hTable = pconn.getQueryServices().getTable(physicalNameBytes);
+      org.apache.hadoop.hbase.client.ResultScanner scanner =
+        hTable.getScanner(new org.apache.hadoop.hbase.client.Scan())) {
+      for (org.apache.hadoop.hbase.client.Result r : scanner) {
+        rowKeys.add(r.getRow());
+      }
+    }
+    return rowKeys;
+  }
+
+  private int extractCentroidId(byte[] rowKey) {
+    return (Integer) PInteger.INSTANCE.toObject(rowKey, 0, Bytes.SIZEOF_INT, PInteger.INSTANCE,
+      SortOrder.getDefault());
+  }
+
+  @Test
+  public void testVectorInsertGeneratesIndexRow() throws Exception {
+    String tableName = "T_VEC_INS_" + generateUniqueName();
+    String indexName = "IDX_VEC_INS_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupTableAndKnownCentroids(conn, tableName, indexName);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+
+      // Upsert test vector mapping to centroid ID 2
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "row_1");
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        ps.setString(3, "lbl_1");
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      // Verify physical HBase index row key contains assigned centroid ID
+      List<byte[]> rowKeys = getHBaseRowKeys(pconn, indexTable);
+      assertEquals("Expected exactly 1 index row", 1, rowKeys.size());
+      assertEquals("Centroid prefix must be 2", 2, extractCentroidId(rowKeys.get(0)));
+
+      // Verify index scan via SQL
+      String selectSql = "SELECT \"_CENTROID_ID\", \":ID\", \"0:LABEL\" FROM " + indexName;
+      try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(selectSql)) {
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("row_1", rs.getString(2));
+        assertEquals("lbl_1", rs.getString(3));
+        assertFalse(rs.next());
+      }
+    }
+  }
+
+  @Test
+  public void testVectorUpdateWithCentroidChange() throws Exception {
+    String tableName = "T_VEC_UPD_" + generateUniqueName();
+    String indexName = "IDX_VEC_UPD_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupTableAndKnownCentroids(conn, tableName, indexName);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+
+      // Insert initial row mapping to centroid 2
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "row_1");
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        ps.setString(3, "lbl_1");
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      List<byte[]> rowKeysBefore = getHBaseRowKeys(pconn, indexTable);
+      assertEquals(1, rowKeysBefore.size());
+      assertEquals(2, extractCentroidId(rowKeysBefore.get(0)));
+
+      // Update vector to value mapping to centroid 0
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "row_1");
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 0.0f, 0.0f, 0.0f, 1.0f }));
+        ps.setString(3, "lbl_updated");
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      // Verify index row key relocation from old centroid to new centroid
+      List<byte[]> rowKeysAfter = getHBaseRowKeys(pconn, indexTable);
+      assertEquals("Expected exactly 1 index row after vector update", 1, rowKeysAfter.size());
+      assertEquals("Centroid prefix must be updated to 0", 0,
+        extractCentroidId(rowKeysAfter.get(0)));
+
+      // Verify updated row visibility via SQL scan
+      String selectSql = "SELECT \"_CENTROID_ID\", \":ID\", \"0:LABEL\" FROM " + indexName;
+      try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(selectSql)) {
+        assertTrue(rs.next());
+        assertEquals(0, rs.getInt(1));
+        assertEquals("row_1", rs.getString(2));
+        assertEquals("lbl_updated", rs.getString(3));
+        assertFalse(rs.next());
+      }
+    }
+  }
+
+  @Test
+  public void testVectorCoveredColumnUpdateWithoutVectorChange() throws Exception {
+    String tableName = "T_VEC_COV_" + generateUniqueName();
+    String indexName = "IDX_VEC_COV_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupTableAndKnownCentroids(conn, tableName, indexName);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+
+      // Insert initial row mapping to centroid 2
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "row_1");
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        ps.setString(3, "initial_label");
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      List<byte[]> rowKeysBefore = getHBaseRowKeys(pconn, indexTable);
+      assertEquals(1, rowKeysBefore.size());
+      assertEquals(2, extractCentroidId(rowKeysBefore.get(0)));
+
+      // Update covered column without modifying vector value
+      try (PreparedStatement ps =
+        conn.prepareStatement("UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)")) {
+        ps.setString(1, "row_1");
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        ps.setString(3, "updated_label");
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      // Verify index row key and centroid prefix remain unchanged
+      List<byte[]> rowKeysAfter = getHBaseRowKeys(pconn, indexTable);
+      assertEquals("Expected exactly 1 index row", 1, rowKeysAfter.size());
+      assertEquals("Centroid prefix must still be 2", 2, extractCentroidId(rowKeysAfter.get(0)));
+
+      // Verify in-place update of covered column
+      String selectSql = "SELECT \"_CENTROID_ID\", \":ID\", \"0:LABEL\" FROM " + indexName;
+      try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(selectSql)) {
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("row_1", rs.getString(2));
+        assertEquals("updated_label", rs.getString(3));
+        assertFalse(rs.next());
+      }
+    }
+  }
+
+  @Test
+  public void testVectorDeleteRemovesIndexRow() throws Exception {
+    String tableName = "T_VEC_DEL_" + generateUniqueName();
+    String indexName = "IDX_VEC_DEL_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupTableAndKnownCentroids(conn, tableName, indexName);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+
+      // Insert initial row mapping to centroid 2
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "row_1");
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        ps.setString(3, "lbl_1");
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      List<byte[]> rowKeysBefore = getHBaseRowKeys(pconn, indexTable);
+      assertEquals(1, rowKeysBefore.size());
+
+      // Delete base table row
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("DELETE FROM " + tableName + " WHERE ID = 'row_1'");
+      }
+      conn.commit();
+
+      // Verify physical index row deletion
+      List<byte[]> rowKeysAfter = getHBaseRowKeys(pconn, indexTable);
+      assertEquals("Expected 0 index rows after delete", 0, rowKeysAfter.size());
+
+      // Verify index table scan returns zero rows
+      String selectSql = "SELECT COUNT(*) FROM " + indexName;
+      try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(selectSql)) {
+        assertTrue(rs.next());
+        assertEquals(0, rs.getInt(1));
+      }
+    }
+  }
+
+  @Test
+  public void testNullVectorExcludedFromIndex() throws Exception {
+    String tableName = "T_VEC_NULL_" + generateUniqueName();
+    String indexName = "IDX_VEC_NULL_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupTableAndKnownCentroids(conn, tableName, indexName);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+
+      // Insert row with null vector
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "row_null");
+        ps.setNull(2, java.sql.Types.ARRAY);
+        ps.setString(3, "null_label");
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      // Verify null vector does not generate index row
+      List<byte[]> rowKeys = getHBaseRowKeys(pconn, indexTable);
+      assertEquals("Null vector must not produce an index row", 0, rowKeys.size());
+
+      // Verify base table row presence
+      try (Statement stmt = conn.createStatement(); ResultSet rs =
+        stmt.executeQuery("SELECT ID, LABEL FROM " + tableName + " WHERE ID = 'row_null'")) {
+        assertTrue("Base table must contain the null vector row", rs.next());
+        assertEquals("row_null", rs.getString(1));
+        assertEquals("null_label", rs.getString(2));
+      }
+    }
+  }
+
+  @Test
+  public void testVectorUnchangedUpdateMaintainsIndexRowAndCoveredColumns() throws Exception {
+    String tableName = "T_VEC_ZUPD_" + generateUniqueName();
+    String indexName = "IDX_VEC_ZUPD_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupTableAndKnownCentroids(conn, tableName, indexName);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+
+      // Insert initial row
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "row_alloc_u");
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        ps.setString(3, "lbl_initial");
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      // Verify initial index row key and centroid prefix
+      List<byte[]> rowKeysBefore = getHBaseRowKeys(pconn, indexTable);
+      assertEquals(1, rowKeysBefore.size());
+      assertEquals(2, extractCentroidId(rowKeysBefore.get(0)));
+
+      // Partial update modifying covered column only
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute(
+          "UPSERT INTO " + tableName + " (ID, LABEL) VALUES ('row_alloc_u', 'lbl_updated')");
+      }
+      conn.commit();
+
+      // Verify index row key remains unchanged
+      List<byte[]> rowKeysAfterPartial = getHBaseRowKeys(pconn, indexTable);
+      assertEquals("Expected exactly 1 index row after partial update", 1,
+        rowKeysAfterPartial.size());
+      assertEquals(2, extractCentroidId(rowKeysAfterPartial.get(0)));
+
+      // Verify vector column payload is preserved during partial update
+      PColumn indexVecCol = indexTable.getColumnForColumnName("0:V");
+      try (
+        Table hTable = pconn.getQueryServices().getTable(indexTable.getPhysicalName().getBytes())) {
+        Result r = hTable.get(new Get(rowKeysAfterPartial.get(0)));
+        byte[] storedVec =
+          r.getValue(indexVecCol.getFamilyName().getBytes(), indexVecCol.getColumnQualifierBytes());
+        assertNotNull("index row must still carry the vector after a covered-only update",
+          storedVec);
+        assertArrayEquals(PVectorFloat.INSTANCE.toBytes(new float[] { 1.0f, 0.0f, 0.0f, 0.0f }),
+          storedVec);
+      }
+
+      // Full update supplying identical vector
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "row_alloc_u");
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        ps.setString(3, "lbl_updated_again");
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      // Verify index row key remains unchanged after full update with identical vector
+      List<byte[]> rowKeys = getHBaseRowKeys(pconn, indexTable);
+      assertEquals("Expected exactly 1 index row after full unchanged update", 1, rowKeys.size());
+      assertEquals(2, extractCentroidId(rowKeys.get(0)));
+
+      // Verify updated covered column values
+      String selectSql = "SELECT \"_CENTROID_ID\", \":ID\", \"0:LABEL\" FROM " + indexName;
+      try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(selectSql)) {
+        assertTrue(rs.next());
+        assertEquals(2, rs.getInt(1));
+        assertEquals("row_alloc_u", rs.getString(2));
+        assertEquals("lbl_updated_again", rs.getString(3));
+        assertFalse(rs.next());
+      }
+    }
+  }
+
+  @Test
+  public void testVerifiedMarkerPresentAfterCommit() throws Exception {
+    String tableName = "T_VEC_VER_" + generateUniqueName();
+    String indexName = "IDX_VEC_VER_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupTableAndKnownCentroids(conn, tableName, indexName);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+      byte[] physicalIndexName = indexTable.getPhysicalName().getBytes();
+
+      // Insert row mapping to centroid 2
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "row_v1");
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        ps.setString(3, "lbl_v1");
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(indexTable);
+      byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(indexTable).getFirst();
+
+      // Verify VERIFIED empty column cell directly on physical HBase table
+      try (Table hTable = pconn.getQueryServices().getTable(physicalIndexName);
+        ResultScanner scanner = hTable.getScanner(new Scan())) {
+        Result result = scanner.next();
+        assertNotNull("Expected index row in HBase table", result);
+
+        byte[] emptyColVal = result.getValue(emptyCF, emptyCQ);
+        assertNotNull("Empty column marker cell must be present on index row", emptyColVal);
+        assertTrue("Empty column marker must be VERIFIED_BYTES",
+          Bytes.equals(QueryConstants.VERIFIED_BYTES, emptyColVal));
+
+        assertNull("Expected exactly 1 index row", scanner.next());
+      }
+
+      // Verify verification status via IndexTestUtil
+      IndexTestUtil.assertRowsForEmptyColValue(conn, indexName, QueryConstants.VERIFIED_BYTES);
+    }
+  }
+
+  /**
+   * Verifies read repair cleans up stale index entries under outdated centroids and rebuilds
+   * verified rows matching the current vector.
+   */
+  @Test
+  public void testReadRepairWithCentroidReassignment() throws Exception {
+    String tableName = "T_VEC_RR_" + generateUniqueName();
+    String indexName = "IDX_VEC_RR_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupTableAndKnownCentroids(conn, tableName, indexName);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+
+      // Populate base table row while index is disabled
+      IndexUtil.updateIndexState(pconn, indexName, PIndexState.DISABLE, 0L);
+      pconn.removeTable(pconn.getTenantId(), tableName, null, HConstants.LATEST_TIMESTAMP);
+      try (PreparedStatement ps =
+        conn.prepareStatement("UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)")) {
+        ps.setString(1, "repair_row_1");
+        // Vector maps to centroid 2
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        ps.setString(3, "correct_label");
+        ps.executeUpdate();
+      }
+      conn.commit();
+      IndexUtil.updateIndexState(pconn, indexName, PIndexState.BUILDING, 0L);
+      IndexUtil.updateIndexState(pconn, indexName, PIndexState.ACTIVE, 0L);
+      pconn.removeTable(pconn.getTenantId(), indexName, null, HConstants.LATEST_TIMESTAMP);
+      pconn.removeTable(pconn.getTenantId(), tableName, null, HConstants.LATEST_TIMESTAMP);
+
+      PTable indexTable = pconn.getTableNoCache(indexName);
+      byte[] physicalIndexName = indexTable.getPhysicalName().getBytes();
+      byte[] centroid0RowKey =
+        ByteUtil.concat(PInteger.INSTANCE.toBytes(0), Bytes.toBytes("repair_row_1"));
+      byte[] centroid2RowKey =
+        ByteUtil.concat(PInteger.INSTANCE.toBytes(2), Bytes.toBytes("repair_row_1"));
+      byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(indexTable);
+      byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(indexTable).getFirst();
+      PColumn labelCol = indexTable.getColumnForColumnName("0:LABEL");
+      byte[] labelCF = labelCol.getFamilyName().getBytes();
+      byte[] labelCQ = labelCol.getColumnQualifierBytes();
+
+      // Simulate partial failure leaving unverified index row under incorrect centroid 0
+      try (Table hIndexTable = pconn.getQueryServices().getTable(physicalIndexName)) {
+        assertTrue(getHBaseRowKeys(pconn, indexTable).isEmpty());
+        Put stalePut = new Put(centroid0RowKey);
+        stalePut.addColumn(emptyCF, emptyCQ, QueryConstants.UNVERIFIED_BYTES);
+        stalePut.addColumn(labelCF, labelCQ, Bytes.toBytes("stale_label"));
+        hIndexTable.put(stalePut);
+      }
+
+      // Read repair triggers during index query
+      String selectSql = "SELECT \"_CENTROID_ID\", \":ID\", \"0:LABEL\" FROM " + indexName;
+      try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(selectSql)) {
+        assertTrue("Query through index should return the repaired row", rs.next());
+        assertEquals("Repaired centroid ID must be 2", 2, rs.getInt(1));
+        assertEquals("repair_row_1", rs.getString(2));
+        assertEquals("correct_label", rs.getString(3));
+        assertFalse("Only one row should be returned", rs.next());
+      }
+
+      try (Table hIndexTable = pconn.getQueryServices().getTable(physicalIndexName)) {
+        Result r2 = hIndexTable.get(new Get(centroid2RowKey));
+        assertFalse("Repaired centroid 2 row must exist after read repair", r2.isEmpty());
+        assertArrayEquals(QueryConstants.VERIFIED_BYTES, r2.getValue(emptyCF, emptyCQ));
+        assertEquals("correct_label", Bytes.toString(r2.getValue(labelCF, labelCQ)));
+        // Stale unverified row remains unserved until background cleanup
+        Result r0 = hIndexTable.get(new Get(centroid0RowKey));
+        assertTrue(r0.isEmpty()
+          || Bytes.equals(QueryConstants.UNVERIFIED_BYTES, r0.getValue(emptyCF, emptyCQ)));
+      }
+    }
+  }
+
+  private int findNearestCentroid(float[] v, List<float[]> centroids) {
+    int bestId = -1;
+    double bestDistSq = Double.MAX_VALUE;
+    for (int c = 0; c < centroids.size(); c++) {
+      float[] centroid = centroids.get(c);
+      double distSq = 0.0;
+      for (int d = 0; d < v.length; d++) {
+        double diff = v[d] - centroid[d];
+        distSq += diff * diff;
+      }
+      if (distSq < bestDistSq) {
+        bestDistSq = distSq;
+        bestId = c;
+      }
+    }
+    return bestId;
+  }
+
+  /** Verifies covered vector columns of differing element widths are preserved in index rows. */
+  @Test
+  public void testCoveredDoubleVectorColumn() throws Exception {
+    String tableName = "T_VEC_COVD_" + generateUniqueName();
+    String indexName = "IDX_VEC_COVD_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, "
+          + "V VECTOR(FLOAT, 4), LABEL VARCHAR, COV_D VECTOR(DOUBLE, 3))");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
+          + "INCLUDE (LABEL, COV_D) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, "
+          + "sample_size = 100)");
+      }
+      recordKnownCentroids(conn, indexName, KNOWN_CENTROIDS);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      IndexUtil.updateIndexState(pconn, indexName, PIndexState.ACTIVE, 0L);
+      pconn.removeTable(pconn.getTenantId(), indexName, null, HConstants.LATEST_TIMESTAMP);
+      pconn.removeTable(pconn.getTenantId(), tableName, null, HConstants.LATEST_TIMESTAMP);
+
+      String upsert = "UPSERT INTO " + tableName + " (ID, V, COV_D) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsert)) {
+        ps.setString(1, "r1");
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        ps.setArray(3, conn.createArrayOf("DOUBLE", new Double[] { 1.5, -2.25, 3.125 }));
+        ps.executeUpdate();
+      }
+      conn.commit();
+      // Update covered vector column only
+      try (PreparedStatement ps =
+        conn.prepareStatement("UPSERT INTO " + tableName + " (ID, COV_D) VALUES (?, ?)")) {
+        ps.setString(1, "r1");
+        ps.setArray(2, conn.createArrayOf("DOUBLE", new Double[] { 4.5, 5.5, -6.5 }));
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      PTable indexTable = pconn.getTableNoCache(indexName);
+      List<byte[]> rowKeys = getHBaseRowKeys(pconn, indexTable);
+      assertEquals(1, rowKeys.size());
+      assertEquals(2, extractCentroidId(rowKeys.get(0)));
+      PColumn covCol = indexTable.getColumnForColumnName("0:COV_D");
+      PColumn vecCol = indexTable.getColumnForColumnName("0:V");
+      try (
+        Table hTable = pconn.getQueryServices().getTable(indexTable.getPhysicalName().getBytes())) {
+        Result r = hTable.get(new Get(rowKeys.get(0)));
+        assertArrayEquals(PVectorDouble.INSTANCE.toBytes(new double[] { 4.5, 5.5, -6.5 }),
+          r.getValue(covCol.getFamilyName().getBytes(), covCol.getColumnQualifierBytes()));
+        assertArrayEquals(PVectorFloat.INSTANCE.toBytes(new float[] { 1.0f, 0.0f, 0.0f, 0.0f }),
+          r.getValue(vecCol.getFamilyName().getBytes(), vecCol.getColumnQualifierBytes()));
+      }
+    }
+  }
+
+  /** Verifies lifecycle maintenance of double precision indexes across centroid boundaries. */
+  @Test
+  public void testDoubleVectorIndexMaintenance() throws Exception {
+    String tableName = "T_VEC_DBL_" + generateUniqueName();
+    String indexName = "IDX_VEC_DBL_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupTableAndKnownCentroids(conn, tableName, indexName, "DOUBLE", "");
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+      String upsert = "UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsert)) {
+        ps.setString(1, "d1");
+        ps.setArray(2, conn.createArrayOf("DOUBLE", new Double[] { 0.9, 0.1, 0.0, 0.0 }));
+        ps.setString(3, "a");
+        ps.executeUpdate();
+      }
+      conn.commit();
+      List<byte[]> rowKeys = getHBaseRowKeys(pconn, indexTable);
+      assertEquals(1, rowKeys.size());
+      assertEquals(2, extractCentroidId(rowKeys.get(0)));
+
+      try (PreparedStatement ps = conn.prepareStatement(upsert)) {
+        ps.setString(1, "d1");
+        ps.setArray(2, conn.createArrayOf("DOUBLE", new Double[] { 0.0, 0.1, 0.0, 0.9 }));
+        ps.setString(3, "b");
+        ps.executeUpdate();
+      }
+      conn.commit();
+      rowKeys = getHBaseRowKeys(pconn, indexTable);
+      assertEquals(1, rowKeys.size());
+      assertEquals(0, extractCentroidId(rowKeys.get(0)));
+
+      conn.createStatement().execute("DELETE FROM " + tableName + " WHERE ID = 'd1'");
+      conn.commit();
+      assertEquals(0, getHBaseRowKeys(pconn, indexTable).size());
+    }
+  }
+
+  /** Runs IndexTool verification comparing physical index rows against server rebuilt rows. */
+  private static void assertIndexVerifies(String tableName, String indexName, long rows)
+    throws Exception {
+    IndexTool tool = IndexToolIT.runIndexTool(false, null, tableName, indexName, null, 0,
+      IndexTool.IndexVerifyType.ONLY);
+    Counters counters = tool.getJob().getCounters();
+    assertEquals(rows, counters
+      .findCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_VALID_INDEX_ROW_COUNT).getValue());
+    assertEquals(0, counters
+      .findCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_INVALID_INDEX_ROW_COUNT).getValue());
+    assertEquals(0, counters
+      .findCounter(PhoenixIndexToolJobCounters.BEFORE_REBUILD_MISSING_INDEX_ROW_COUNT).getValue());
+  }
+
+  private static float[][] loadRandomVectors(Connection conn, String tableName, String tenantCol,
+    String[] tenants, int rows, long seed) throws SQLException {
+    Random rng = new Random(seed);
+    float[][] vectors = new float[rows][4];
+    String upsert = tenantCol == null
+      ? "UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)"
+      : "UPSERT INTO " + tableName + " (" + tenantCol + ", ID, V, LABEL) VALUES (?, ?, ?, ?)";
+    try (PreparedStatement ps = conn.prepareStatement(upsert)) {
+      for (int i = 0; i < rows; i++) {
+        Float[] vec = new Float[4];
+        for (int d = 0; d < 4; d++) {
+          vec[d] = rng.nextFloat() * 10f;
+          vectors[i][d] = vec[d];
+        }
+        int p = 1;
+        if (tenantCol != null) {
+          ps.setString(p++, tenants[i % tenants.length]);
+        }
+        ps.setString(p++, String.format("row_%03d", i));
+        ps.setArray(p++, conn.createArrayOf("FLOAT", vec));
+        ps.setString(p, "label_" + i);
+        ps.executeUpdate();
+      }
+    }
+    conn.commit();
+    return vectors;
+  }
+
+  /**
+   * Verifies IndexTool execution for ASYNC vector indexes: initial centroid training, population of
+   * verified index rows, and transition to ACTIVE state.
+   */
+  @Test
+  public void testIndexToolTrainsAndBuilds() throws Exception {
+    String tableName = "T_VEC_IT_" + generateUniqueName();
+    String indexName = "IDX_VEC_IT_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + tableName
+        + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+      float[][] vectors = loadRandomVectors(conn, tableName, null, null, 500, 42);
+      conn.createStatement()
+        .execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) INCLUDE (LABEL)"
+          + " WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100) ASYNC");
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable pIndex = pconn.getTableNoCache(indexName);
+      assertEquals(PIndexState.BUILDING, pIndex.getIndexState());
+      assertNull(pIndex.getVectorCentroidGeneration());
+
+      // Execute IndexTool build
+      IndexToolIT.runIndexTool(false, null, tableName, indexName);
+
+      pIndex = pconn.getTableNoCache(indexName);
+      assertEquals(PIndexState.ACTIVE, pIndex.getIndexState());
+      Long generation = pIndex.getVectorCentroidGeneration();
+      assertNotNull("IndexTool trains the first generation", generation);
+      List<float[]> centroids = CentroidManager.loadCentroids(conn, indexName, generation);
+      assertEquals(pIndex.getVectorIvfLists().intValue(), centroids.size());
+
+      byte[] emptyCF = SchemaUtil.getEmptyColumnFamily(pIndex);
+      byte[] emptyCQ = EncodedColumnsUtil.getEmptyKeyValueInfo(pIndex).getFirst();
+      int rows = 0;
+      try (
+        Table hIndexTable = pconn.getQueryServices().getTable(pIndex.getPhysicalName().getBytes());
+        ResultScanner scanner = hIndexTable.getScanner(new Scan())) {
+        for (Result r : scanner) {
+          rows++;
+          byte[] rowKey = r.getRow();
+          String id = (String) PVarchar.INSTANCE.toObject(rowKey, Bytes.SIZEOF_INT,
+            rowKey.length - Bytes.SIZEOF_INT);
+          int rowIdx = Integer.parseInt(id.replace("row_", ""));
+          assertEquals("Centroid of " + id, findNearestCentroid(vectors[rowIdx], centroids),
+            extractCentroidId(rowKey));
+          assertArrayEquals(QueryConstants.VERIFIED_BYTES, r.getValue(emptyCF, emptyCQ));
+        }
+      }
+      assertEquals(500, rows);
+      assertIndexVerifies(tableName, indexName, 500);
+    }
+  }
+
+  /** Verifies IndexTool defers centroid training and index build when data is insufficient. */
+  @Test
+  public void testIndexToolDefersTrainingOnTooFewVectors() throws Exception {
+    String tableName = "T_VEC_IT_" + generateUniqueName();
+    String indexName = "IDX_VEC_IT_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute("CREATE TABLE " + tableName
+        + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+      loadRandomVectors(conn, tableName, null, null, 2, 7);
+      conn.createStatement().execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+        + " (V)" + " WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100) ASYNC");
+      IndexTool tool = new IndexTool();
+      tool.setConf(new Configuration(getUtility().getConfiguration()));
+      assertEquals(0, tool.run(new String[] { "-dt", tableName, "-it", indexName, "-runfg" }));
+      PTable pIndex = conn.unwrap(PhoenixConnection.class).getTableNoCache(indexName);
+      assertEquals(PIndexState.BUILDING, pIndex.getIndexState());
+      assertNull(pIndex.getVectorCentroidGeneration());
+    }
+  }
+
+  /** Verifies IndexTool build of multi-tenant vector indexes with composite row keys. */
+  @Test
+  public void testIndexToolBuildsMultiTenantVectorIndex() throws Exception {
+    String tableName = "T_VEC_MT_" + generateUniqueName();
+    String indexName = "IDX_VEC_MT_" + generateUniqueName();
+    String[] tenants = { "TA", "TB" };
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName + " (TENANT_ID VARCHAR NOT NULL, ID VARCHAR NOT NULL,"
+          + " V VECTOR(FLOAT, 4), LABEL VARCHAR CONSTRAINT PK PRIMARY KEY (TENANT_ID, ID))"
+          + " MULTI_TENANT = true");
+      float[][] vectors = loadRandomVectors(conn, tableName, "TENANT_ID", tenants, 200, 11);
+      conn.createStatement()
+        .execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) INCLUDE (LABEL)"
+          + " WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100) ASYNC");
+
+      IndexToolIT.runIndexTool(false, null, tableName, indexName);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable pIndex = pconn.getTableNoCache(indexName);
+      assertEquals(PIndexState.ACTIVE, pIndex.getIndexState());
+      List<float[]> centroids =
+        CentroidManager.loadCentroids(conn, indexName, pIndex.getVectorCentroidGeneration());
+      int rows = 0;
+      try (
+        Table hIndexTable = pconn.getQueryServices().getTable(pIndex.getPhysicalName().getBytes());
+        ResultScanner scanner = hIndexTable.getScanner(new Scan())) {
+        for (Result r : scanner) {
+          rows++;
+          byte[] rowKey = r.getRow();
+          // Row key format: [TENANT_ID][separator][centroid id][ID]
+          int sep = Bytes.indexOf(rowKey, QueryConstants.SEPARATOR_BYTE);
+          String tenant = Bytes.toString(rowKey, 0, sep);
+          int centroid = (Integer) PInteger.INSTANCE.toObject(rowKey, sep + 1, Bytes.SIZEOF_INT);
+          String id = Bytes.toString(rowKey, sep + 1 + Bytes.SIZEOF_INT,
+            rowKey.length - sep - 1 - Bytes.SIZEOF_INT);
+          int rowIdx = Integer.parseInt(id.replace("row_", ""));
+          assertEquals(tenants[rowIdx % tenants.length], tenant);
+          assertEquals("Centroid of " + id, findNearestCentroid(vectors[rowIdx], centroids),
+            centroid);
+        }
+      }
+      assertEquals(200, rows);
+      assertIndexVerifies(tableName, indexName, 200);
+    }
+  }
+
+  /** Verifies client side index maintenance on immutable tables matches server side row keys. */
+  @Test
+  public void testImmutableTableClientMaintenanceMatchesServerBuild() throws Exception {
+    String tableName = "T_VEC_IMM_" + generateUniqueName();
+    String indexName = "IDX_VEC_IMM_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupTableAndKnownCentroids(conn, tableName, indexName, "FLOAT", "IMMUTABLE_ROWS = true");
+      float[][] vectors = loadRandomVectors(conn, tableName, null, null, 50, 3);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable pIndex = pconn.getTableNoCache(indexName);
+      List<byte[]> rowKeys = getHBaseRowKeys(pconn, pIndex);
+      assertEquals(50, rowKeys.size());
+      for (byte[] rowKey : rowKeys) {
+        String id = Bytes.toString(rowKey, Bytes.SIZEOF_INT, rowKey.length - Bytes.SIZEOF_INT);
+        int rowIdx = Integer.parseInt(id.replace("row_", ""));
+        assertEquals(findNearestCentroid(vectors[rowIdx], KNOWN_CENTROIDS),
+          extractCentroidId(rowKey));
+      }
+      assertIndexVerifies(tableName, indexName, 50);
+    }
+  }
+
+  /** Verifies transactional constraints reject vector index creation. */
+  @Test
+  public void testVectorIndexRejectedOnTransactionalTable() throws Exception {
+    String txTable = "T_VEC_TX_" + generateUniqueName();
+    String plainTable = "T_VEC_NTX_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(
+        "CREATE TABLE " + txTable + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 3))"
+          + " TRANSACTIONAL=true, TRANSACTION_PROVIDER='OMID'");
+      try {
+        conn.createStatement().execute("CREATE VECTOR INDEX IDX_" + generateUniqueName() + " ON "
+          + txTable + " (V) WITH (metric='L2', algorithm='IVF', lists=2, sample_size=10)");
+        fail("CREATE VECTOR INDEX on a transactional table must be rejected");
+      } catch (SQLException e) {
+        assertEquals(SQLExceptionCode.VECTOR_INDEX_ON_TRANSACTIONAL_TABLE.getErrorCode(),
+          e.getErrorCode());
+      }
+
+      conn.createStatement().execute(
+        "CREATE TABLE " + plainTable + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 3))");
+      conn.createStatement().execute("CREATE VECTOR INDEX IDX_" + generateUniqueName() + " ON "
+        + plainTable + " (V) WITH (metric='L2', algorithm='IVF', lists=2, sample_size=10)");
+      try {
+        conn.createStatement().execute(
+          "ALTER TABLE " + plainTable + " SET TRANSACTIONAL=true, TRANSACTION_PROVIDER='OMID'");
+        fail("Making a table with a vector index transactional must be rejected");
+      } catch (SQLException e) {
+        assertEquals(SQLExceptionCode.VECTOR_INDEX_ON_TRANSACTIONAL_TABLE.getErrorCode(),
+          e.getErrorCode());
+      }
     }
   }
 }

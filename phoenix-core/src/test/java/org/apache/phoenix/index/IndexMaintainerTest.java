@@ -19,6 +19,7 @@ package org.apache.phoenix.index;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -29,6 +30,7 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -36,12 +38,17 @@ import java.util.Properties;
 import java.util.Set;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.cache.VectorCentroidCache;
+import org.apache.phoenix.cache.VectorCentroidCache.CachedCentroids;
+import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -50,10 +57,15 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.optimize.DistanceMetric;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.DelegateTable;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
@@ -443,6 +455,115 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
           }
         }
       }
+    }
+  }
+
+  /** Constructs an IndexMaintainer for a 2D vector index with pre-populated centroids. */
+  private IndexMaintainer createVectorIndexMaintainer(PhoenixConnection pconn, String tableName,
+    String indexName, String elementType, long generation) throws Exception {
+    pconn.createStatement().execute("CREATE TABLE " + tableName
+      + " (ID VARCHAR PRIMARY KEY, V VECTOR(" + elementType + ", 2), LABEL VARCHAR)");
+    pconn.createStatement()
+      .execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+        + " (V) INCLUDE (LABEL) WITH (algorithm = 'IVF', metric = 'L2', lists = 2,"
+        + " sample_size = 10) ASYNC");
+    PTable dataTable = pconn.getTable(tableName);
+    PTable index = pconn.getTable(indexName);
+    // Untrained ASYNC vector index should not generate maintenance mutations
+    assertNull(index.getVectorCentroidGeneration());
+    assertFalse(IndexMaintainer.sendIndexMaintainer(index));
+    PTable trained = new DelegateTable(index) {
+      @Override
+      public Long getVectorCentroidGeneration() {
+        return generation;
+      }
+    };
+    assertTrue(IndexMaintainer.sendIndexMaintainer(trained));
+    VectorCentroidCache.getInstance(HBaseConfiguration.create()).put(index.getName().getString(),
+      generation, new CachedCentroids(Arrays.asList(new float[] { 0, 0 }, new float[] { 10, 10 }),
+        DistanceMetric.L2));
+    return IndexMaintainer.create(dataTable, trained, pconn);
+  }
+
+  private static Put dataRow(PhoenixConnection pconn, String sql) throws Exception {
+    pconn.createStatement().execute(sql);
+    Iterator<Pair<byte[], List<Mutation>>> iterator = pconn.getMutationState().toMutations();
+    Put put = (Put) iterator.next().getSecond().get(0);
+    pconn.rollback();
+    return put;
+  }
+
+  @Test
+  public void testVectorIndexRowKey() throws Exception {
+    testVectorIndexRowKey("FLOAT");
+  }
+
+  @Test
+  public void testDoubleVectorIndexRowKey() throws Exception {
+    testVectorIndexRowKey("DOUBLE");
+  }
+
+  private void testVectorIndexRowKey(String elementType) throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      IndexMaintainer im =
+        createVectorIndexMaintainer(pconn, tableName, indexName, elementType, 7L);
+      assertTrue(im.isVectorIndex());
+      assertEquals(DistanceMetric.L2, im.getDistanceMetric());
+      assertEquals(Long.valueOf(7L), im.getCentroidGeneration());
+      // Leading row key slot is the centroid ID as a non-null INTEGER
+      assertEquals(PInteger.INSTANCE, im.getIndexRowKeySchema().getField(0).getDataType());
+
+      Put near = dataRow(pconn, "UPSERT INTO " + tableName + " VALUES ('a', ARRAY[9, 8], 'x')");
+      assertTrue(im.shouldPrepareIndexMutations(near));
+      long ts = EnvironmentEdgeManager.currentTimeMillis();
+      ImmutableBytesPtr rowKey = new ImmutableBytesPtr(near.getRow());
+      Put indexPut = im.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+        new IndexUtil.SimpleValueGetter(near), rowKey, ts, null, null, false, null);
+      assertArrayEquals(ByteUtil.concat(PInteger.INSTANCE.toBytes(1), Bytes.toBytes("a")),
+        indexPut.getRow());
+      // Indexed vector value is stored in the index row payload
+      PColumn vecCol = pconn.getTable(indexName).getColumnForColumnName("0:V");
+      assertEquals(1,
+        indexPut.get(vecCol.getFamilyName().getBytes(), vecCol.getColumnQualifierBytes()).size());
+
+      // Maintainer attributes survive serialization round-trip
+      IndexMaintainer fromProto = IndexMaintainer.fromProto(IndexMaintainer.toProto(im),
+        pconn.getTable(tableName).getRowKeySchema(), false);
+      assertTrue(fromProto.isVectorIndex());
+      assertEquals(Long.valueOf(7L), fromProto.getCentroidGeneration());
+      assertArrayEquals(indexPut.getRow(),
+        fromProto.buildRowKey(new IndexUtil.SimpleValueGetter(near), rowKey, null, null, ts));
+
+      // Rows without vectors produce no index mutations
+      Put noVector = dataRow(pconn, "UPSERT INTO " + tableName + " (ID, LABEL) VALUES ('b', 'y')");
+      assertFalse(im.shouldPrepareIndexMutations(noVector));
+      assertNull(im.buildRowKey(new IndexUtil.SimpleValueGetter(noVector),
+        new ImmutableBytesPtr(noVector.getRow()), null, null, ts));
+
+      Put same = dataRow(pconn, "UPSERT INTO " + tableName + " VALUES ('a', ARRAY[9, 8], 'z')");
+      Put moved = dataRow(pconn, "UPSERT INTO " + tableName + " VALUES ('a', ARRAY[1, 0], 'x')");
+      assertTrue(im.isVectorUnchanged(near, same));
+      assertFalse(im.isVectorUnchanged(near, moved));
+      assertFalse(im.isVectorUnchanged(noVector, near));
+    }
+  }
+
+  @Test
+  public void testNonVectorIndexMaintainerHasNoVectorFields() throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName + " (ID VARCHAR PRIMARY KEY, C VARCHAR)");
+      conn.createStatement().execute("CREATE INDEX I_" + tableName + " ON " + tableName + " (C)");
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable table = pconn.getTable(tableName);
+      IndexMaintainer im = table.getIndexes().get(0).getIndexMaintainer(table, pconn);
+      ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(im);
+      assertFalse(proto.hasVectorAlgorithm());
+      assertFalse(IndexMaintainer.fromProto(proto, table.getRowKeySchema(), false).isVectorIndex());
     }
   }
 }

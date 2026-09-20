@@ -84,6 +84,7 @@ import org.apache.hadoop.io.WritableUtils;
 import org.apache.htrace.Span;
 import org.apache.htrace.Trace;
 import org.apache.htrace.TraceScope;
+import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.compile.ScanRanges;
 import org.apache.phoenix.coprocessor.DelegateRegionCoprocessorEnvironment;
 import org.apache.phoenix.coprocessor.ServerScanUtil;
@@ -549,6 +550,7 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       }
 
       this.builder = new IndexBuildManager(env);
+      VectorCentroidCache.setServerConfiguration(env.getConfiguration());
       // Clone the config since it is shared
       DelegateRegionCoprocessorEnvironment indexWriterEnv =
         new DelegateRegionCoprocessorEnvironment(env, ConnectionType.INDEX_WRITER_CONNECTION);
@@ -1416,14 +1418,18 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
             indexUpdates.put(hTableInterfaceReference, deleteColumn);
           }
         }
-        // Delete the current index row if the new index key is different from the
-        // current one and the index is not a CDC index
-        if (currentDataRowState != null) {
+        // Delete the current index row if the new index key differs from the current one
+        // and the index is not CDC. Skip centroid assignment when the indexed vector is unchanged.
+        if (
+          currentDataRowState != null
+            && !indexMaintainer.isVectorUnchanged(currentDataRowState, nextDataRowState)
+        ) {
           ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
+          // Null when the current row produces no index row (e.g. null vector)
           byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG,
             rowKeyPtr, null, null, ts, encodedRegionName);
           if (
-            !indexMaintainer.isCDCIndex()
+            indexRowKeyForCurrentDataRow != null && !indexMaintainer.isCDCIndex()
               && Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0
           ) {
             Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
@@ -1985,6 +1991,15 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
       // Need to add cell tags to Delete Marker before we do any index processing
       // since we add tags to tables which doesn't have indexes also.
       ServerIndexUtil.setDeleteAttributes(miniBatchOp);
+    }
+
+    // Pre-warm centroid caches before acquiring row locks.
+    for (IndexMaintainer indexMaintainer : indexMetaData.getIndexMaintainers()) {
+      try {
+        indexMaintainer.loadCentroids(null);
+      } catch (SQLException e) {
+        throw ClientUtil.createIOException("Unable to load vector index centroids", e);
+      }
     }
 
     // Exclusively lock all rows to do consistent writes over multiple tables

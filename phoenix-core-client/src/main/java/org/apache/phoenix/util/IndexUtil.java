@@ -347,6 +347,7 @@ public class IndexUtil {
     try {
       final ImmutableBytesPtr ptr = new ImmutableBytesPtr();
       IndexMaintainer maintainer = index.getIndexMaintainer(table, connection);
+      maintainer.loadCentroids(connection);
       List<Mutation> indexMutations = Lists.newArrayListWithExpectedSize(dataMutations.size());
       for (final Mutation dataMutation : dataMutations) {
         long ts = MetaDataUtil.getClientTimeStamp(dataMutation);
@@ -403,8 +404,12 @@ public class IndexUtil {
             regionStartKey = tableRegionLocation.getRegion().getStartKey();
             regionEndkey = tableRegionLocation.getRegion().getEndKey();
           }
-          indexMutations.add(maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts,
-            regionStartKey, regionEndkey, false));
+          Put indexPut = maintainer.buildUpdateMutation(kvBuilder, valueGetter, ptr, ts,
+            regionStartKey, regionEndkey, false);
+          // Null vectors omit index mutations
+          if (indexPut != null) {
+            indexMutations.add(indexPut);
+          }
         }
       }
       return indexMutations;
@@ -848,12 +853,14 @@ public class IndexUtil {
   }
 
   public static boolean isCoveredGlobalIndex(final PTable table) {
-    return table.getIndexType() == PTable.IndexType.GLOBAL;
+    return table.getIndexType() == PTable.IndexType.GLOBAL
+      || table.getIndexType() == PTable.IndexType.VECTOR_GLOBAL;
   }
 
   public static boolean isGlobalIndex(final PTable table) {
     return table.getIndexType() == PTable.IndexType.GLOBAL
-      || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL;
+      || table.getIndexType() == PTable.IndexType.UNCOVERED_GLOBAL
+      || table.getIndexType() == PTable.IndexType.VECTOR_GLOBAL;
   }
 
   public static boolean shouldIndexBeUsedForUncoveredQuery(final TableRef tableRef) {

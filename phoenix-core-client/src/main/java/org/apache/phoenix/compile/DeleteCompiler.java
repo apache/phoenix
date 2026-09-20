@@ -248,6 +248,11 @@ public class DeleteCompiler {
         }
 
       }
+      if (maintainers != null) {
+        for (IndexMaintainer maintainer : maintainers) {
+          maintainer.loadCentroids(connection);
+        }
+      }
       byte[][] viewConstants = IndexUtil.getViewConstants(dataTable);
       int rowCount = 0;
       while (rs.next()) {
@@ -272,12 +277,21 @@ public class DeleteCompiler {
           if (table.getType() == PTableType.INDEX) {
             otherRowKeyPtr.set(scannedIndexMaintainer.buildDataRowKey(rowKeyPtr, viewConstants));
             if (otherTable.getType() == PTableType.INDEX) {
-              otherRowKeyPtr.set(maintainers[i].buildRowKey(getter, otherRowKeyPtr, null, null,
-                rs.getCurrentRow().getValue(0).getTimestamp()));
+              byte[] otherRowKey = maintainers[i].buildRowKey(getter, otherRowKeyPtr, null, null,
+                rs.getCurrentRow().getValue(0).getTimestamp());
+              if (otherRowKey == null) {
+                continue;
+              }
+              otherRowKeyPtr.set(otherRowKey);
             }
           } else {
-            otherRowKeyPtr.set(maintainers[i].buildRowKey(getter, rowKeyPtr, null, null,
-              rs.getCurrentRow().getValue(0).getTimestamp()));
+            // Null vectors omit index rows
+            byte[] otherRowKey = maintainers[i].buildRowKey(getter, rowKeyPtr, null, null,
+              rs.getCurrentRow().getValue(0).getTimestamp());
+            if (otherRowKey == null) {
+              continue;
+            }
+            otherRowKeyPtr.set(otherRowKey);
           }
           otherMutations.get(i).put(otherRowKeyPtr,
             new RowMutationState(PRow.DELETE_MARKER, 0,

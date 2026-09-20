@@ -2006,14 +2006,17 @@ public class MetaDataClient {
       return new MutationState(0, 0, connection);
     }
 
-    // Vector indexes remain in BUILDING state until centroids are initialized and assigned.
+    // Vector indexes require a trained centroid generation prior to index build.
+    // Indexes remain in BUILDING state if the data table has insufficient training vectors.
     if (table.isVectorIndex()) {
-      MutationState state = trainVectorIndex(table, dataTable);
-      if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
-        connection.removeTable(connection.getTenantId(), dataTable.getName().getString(), null,
-          dataTable.getTimeStamp());
+      table = trainVectorIndex(table, dataTable);
+      if (table.getVectorCentroidGeneration() == null) {
+        if (ValidateLastDDLTimestampUtil.getValidateLastDdlTimestampEnabled(connection)) {
+          connection.removeTable(connection.getTenantId(), dataTable.getName().getString(), null,
+            dataTable.getTimeStamp());
+        }
+        return new MutationState(0, 0, connection);
       }
-      return state;
     }
 
     // If our connection is at a fixed point-in-time, we need to open a new
@@ -2033,17 +2036,17 @@ public class MetaDataClient {
   }
 
   /**
-   * Trains and records the initial centroid generation for a vector index, retaining BUILDING
-   * state. Training is deferred if the data table contains fewer non-null vectors than requested
-   * lists.
+   * Trains and persists the initial centroid generation for a newly created vector index. Training
+   * is deferred if non-null vector count is less than the requested list count.
+   * @return refreshed index metadata from catalog
    */
-  private MutationState trainVectorIndex(PTable index, PTable dataTable) throws SQLException {
+  private PTable trainVectorIndex(PTable index, PTable dataTable) throws SQLException {
     try (PhoenixConnection internal = CentroidManager.newInternalConnection(connection)) {
       VectorIndexTrainer.trainAndRecord(internal, dataTable, index);
     }
     connection.removeTable(connection.getTenantId(), index.getName().getString(),
       dataTable.getName().getString(), HConstants.LATEST_TIMESTAMP);
-    return new MutationState(0, 0, connection);
+    return connection.getTableNoCache(index.getName().getString());
   }
 
   public MutationState createCDC(CreateCDCStatement statement) throws SQLException {
@@ -6744,6 +6747,13 @@ public class MetaDataClient {
           throw new SQLExceptionInfo.Builder(
             SQLExceptionCode.CANNOT_ALTER_TO_BE_TXN_IF_TXNS_DISABLED).setSchemaName(schemaName)
               .setTableName(tableName).build().buildException();
+        }
+        // cannot make a table transactional if it has a vector index
+        for (PTable index : table.getIndexes()) {
+          if (index.isVectorIndex()) {
+            throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_INDEX_ON_TRANSACTIONAL_TABLE)
+              .setSchemaName(schemaName).setTableName(tableName).build().buildException();
+          }
         }
         // cannot make a table transactional if it has a row timestamp column
         if (SchemaUtil.hasRowTimestampColumn(table)) {

@@ -128,6 +128,8 @@ public enum SQLExceptionCode {
   UNSUPPORTED_VECTOR_INDEX_ALGORITHM(309, "23107", "Unsupported vector index algorithm: "),
   UNSUPPORTED_VECTOR_DISTANCE_METRIC(310, "23108", "Unsupported vector distance metric: "),
   INVALID_VECTOR_INDEX_PARAMS(311, "23109", "Invalid vector index parameters: "),
+  VECTOR_INDEX_ON_TRANSACTIONAL_TABLE(312, "23110",
+    "Vector indexes are not supported on transactional tables."),
   /**
    * Invalid Cursor State (errorcode 04, sqlstate 24)
    */
