@@ -71,6 +71,8 @@ import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.VectorIndexTrainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
@@ -846,6 +848,10 @@ public class IndexTool extends Configured implements Tool {
       createIndexToolTables(conn);
       if (dataTable != null && indexTable != null) {
         setupIndexAndDataTable(conn);
+        if (pIndexTable.isVectorIndex() && pIndexTable.getVectorCentroidGeneration() == null) {
+          LOGGER.info("Vector index {} has no trained centroids, leaving it unbuilt", qIndexTable);
+          return 0;
+        }
         checkIfFeatureApplicable(startTime, endTime, lastVerifyTime, pDataTable, isLocalIndexBuild);
         if (shouldDeleteBeforeRebuild) {
           deleteBeforeRebuild(conn);
@@ -1002,6 +1008,18 @@ public class IndexTool extends Configured implements Tool {
           .replace(QueryConstants.NAME_SEPARATOR, QueryConstants.NAMESPACE_SEPARATOR));
     }
     indexType = pIndexTable.getIndexType();
+    if (
+      pIndexTable.isVectorIndex() && pIndexTable.getVectorCentroidGeneration() == null
+        && sourceTable == SourceTable.DATA_TABLE_SOURCE && indexVerifyType != IndexVerifyType.ONLY
+    ) {
+      // Train initial centroid generation for ASYNC vector indexes prior to build. A run that only
+      // verifies builds no index rows and must not train.
+      PhoenixConnection pconn = connection.unwrap(PhoenixConnection.class);
+      try (PhoenixConnection internal = CentroidManager.newInternalConnection(pconn)) {
+        VectorIndexTrainer.trainAndRecord(internal, pDataTable, pIndexTable);
+      }
+      pIndexTable = pconn.getTableNoCache(pIndexTable.getName().getString());
+    }
     qIndexTable = SchemaUtil.getQualifiedTableName(schemaName, indexTable);
     if (SchemaUtil.isNamespaceMappingEnabled(PTableType.SYSTEM, getConf())) {
       qIndexTable =

@@ -62,4 +62,15 @@ public class CentroidManagerTest {
     setClock(2_000L);
     assertEquals(2_000L, CentroidManager.nextGeneration(1_000L));
   }
+
+  /**
+   * Verifies that the name of an index that a view inherits resolves to the name of the parent
+   * index. The inherited name can have prefixes for the view and its ancestor views.
+   */
+  @Test
+  public void testInheritedIndexUsesIndexCentroids() {
+    assertEquals("S.IDX", CentroidManager.getCentroidIndexName("S.IDX"));
+    assertEquals("IDX", CentroidManager.getCentroidIndexName("V#IDX"));
+    assertEquals("S.IDX", CentroidManager.getCentroidIndexName("S.VS.V2#VS.V1#S.IDX"));
+  }
 }

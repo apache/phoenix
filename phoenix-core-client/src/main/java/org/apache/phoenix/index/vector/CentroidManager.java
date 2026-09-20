@@ -44,6 +44,7 @@ import org.apache.phoenix.coprocessorclient.MetaDataProtocol.MutationCode;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PVectorFloat;
@@ -96,6 +97,17 @@ public final class CentroidManager {
   public static long nextGeneration(Long current) {
     long now = EnvironmentEdgeManager.currentTimeMillis();
     return current == null ? now : Math.max(current + 1, now);
+  }
+
+  /**
+   * Returns the index name under which the centroids of a vector index are recorded. A view with a
+   * WHERE clause inherits each index of its parent with the name {@code <view>#<index>}. The
+   * inherited index uses the centroids of the parent index, so this method removes all view
+   * prefixes.
+   */
+  public static String getCentroidIndexName(String indexName) {
+    return indexName
+      .substring(indexName.lastIndexOf(QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR) + 1);
   }
 
   /** Writes the centroid vectors of a generation with IDs from 0, and commits the connection. */

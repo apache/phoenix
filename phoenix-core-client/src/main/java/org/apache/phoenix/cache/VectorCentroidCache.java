@@ -28,12 +28,14 @@ import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.exception.SQLExceptionInfo;
 import org.apache.phoenix.index.vector.CentroidManager;
 import org.apache.phoenix.index.vector.KMeansTrainer;
+import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.optimize.DistanceMetric;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PVectorDouble;
 import org.apache.phoenix.schema.types.PVectorFloat;
+import org.apache.phoenix.util.QueryUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,6 +54,8 @@ public final class VectorCentroidCache {
   private static final Logger LOGGER = LoggerFactory.getLogger(VectorCentroidCache.class);
 
   private static volatile VectorCentroidCache instance;
+  /** The server configuration that index maintenance uses to load centroids on a cache miss. */
+  private static volatile Configuration serverConf;
 
   private final Cache<Key, CachedCentroids> cache;
   private final long maxBytes;
@@ -102,6 +106,43 @@ public final class VectorCentroidCache {
     }
   }
 
+  /**
+   * Sets the server configuration that {@link #getForWrite} uses to load centroids on a cache miss
+   * without a caller connection. Only the first call sets the value.
+   */
+  public static void setServerConfiguration(Configuration conf) {
+    if (serverConf == null) {
+      serverConf = conf;
+    }
+  }
+
+  /**
+   * Returns the centroids that vector index maintenance uses for writes. A cache miss loads them
+   * through {@code conn}, or through an internal server connection if {@code conn} is null.
+   * @throws SQLException if no centroids are recorded for the generation, if the load fails, or if
+   *                      {@code conn} is null and no server configuration is set
+   */
+  public static CachedCentroids getForWrite(Connection conn, String indexName, long generation,
+    DistanceMetric metric) throws SQLException {
+    VectorCentroidCache cache = instance;
+    CachedCentroids centroids = cache == null ? null : cache.getIfPresent(indexName, generation);
+    if (centroids != null) {
+      return centroids;
+    }
+    if (conn != null) {
+      return getInstance(conn.unwrap(PhoenixConnection.class).getQueryServices().getConfiguration())
+        .get(conn, indexName, generation, metric);
+    }
+    Configuration conf = serverConf;
+    if (conf == null) {
+      throw new SQLException("Centroids of vector index " + indexName + " generation " + generation
+        + " are not loaded and no server connection is available");
+    }
+    try (Connection serverConn = QueryUtil.getConnectionOnServer(conf)) {
+      return getInstance(conf).get(serverConn, indexName, generation, metric);
+    }
+  }
+
   /** Returns the cached centroids of the index generation, or null on a miss. It does not load. */
   public CachedCentroids getIfPresent(String indexName, long generation) {
     return cache.getIfPresent(new Key(indexName, generation));
@@ -145,8 +186,10 @@ public final class VectorCentroidCache {
     throws SQLException {
     List<float[]> centroids = CentroidManager.loadCentroids(conn, key.indexName, key.generation);
     if (centroids.isEmpty()) {
-      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS).setMessage(
-        "No centroids recorded for vector index " + key.indexName + " generation " + key.generation)
+      // A generation without recorded centroids shows that the caller has stale index metadata
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.STALE_METADATA_CACHE_EXCEPTION)
+        .setMessage("No centroids recorded for vector index " + key.indexName + " generation "
+          + key.generation)
         .build().buildException();
     }
     return new CachedCentroids(centroids, metric);
