@@ -23,13 +23,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
 
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -159,46 +153,23 @@ public class VectorCentroidCacheTest {
   }
 
   /**
-   * Tests cache invalidation triggered automatically via catalog generation advancement.
+   * Tests cache invalidation triggered via explicit generation advancement.
    */
   @Test
-  public void testCacheInvalidationWithCatalogAdvance() throws Exception {
-    Connection mockConn = mock(Connection.class);
-    PreparedStatement psCatalog = mock(PreparedStatement.class);
-    ResultSet rsCatalog = mock(ResultSet.class);
+  public void testCacheInvalidationWithGenerationAdvance() throws Exception {
+    VectorCentroidCache cache = new VectorCentroidCache("TEST_IDX");
 
-    PreparedStatement psCentroids = mock(PreparedStatement.class);
-    ResultSet rsCentroids = mock(ResultSet.class);
-
-    when(mockConn.prepareStatement(anyString())).thenAnswer(invocation -> {
-      String sql = invocation.getArgument(0);
-      if (sql.contains("VECTOR_CENTROID_GENERATION")) {
-        return psCatalog;
-      }
-      return psCentroids;
-    });
-
-    when(psCatalog.executeQuery()).thenReturn(rsCatalog);
-    when(psCentroids.executeQuery()).thenReturn(rsCentroids);
-
-    // Simulate catalog generation advance from 1 to 2 across lookups
-    when(rsCatalog.next()).thenReturn(true);
-    when(rsCatalog.getLong(1)).thenReturn(1L, 2L);
-    when(rsCatalog.wasNull()).thenReturn(false);
-
-    byte[] v0 = PVectorFloat.INSTANCE.toBytes(new float[] { 0.0f, 0.0f });
-    byte[] v1 = PVectorFloat.INSTANCE.toBytes(new float[] { 10.0f, 0.0f });
-
-    when(rsCentroids.next()).thenReturn(true, true, false, true, true, false);
-    when(rsCentroids.getBytes(1)).thenReturn(v0, v1, v1, v0);
-
-    VectorCentroidCache cache = new VectorCentroidCache(mockConn);
-    cache.setDefaultIndexName("TEST_IDX");
-    cache.setCheckCatalogOnAccess(true);
+    List<float[]> gen1 = Arrays.asList(new float[] { 0.0f, 0.0f }, new float[] { 10.0f, 0.0f });
+    cache.putFloatCentroids("TEST_IDX", 1L, gen1);
 
     float[] query = new float[] { 9.5f, 0.5f };
-    assertEquals(1, cache.findNearestCentroid(query, "L2"));
-    assertEquals(0, cache.findNearestCentroid(query, "L2"));
+    assertEquals(1, cache.findNearestCentroid("TEST_IDX", 1L, query, "L2"));
+
+    List<float[]> gen2 = Arrays.asList(new float[] { 10.0f, 0.0f }, new float[] { 0.0f, 0.0f });
+    cache.advanceGeneration("TEST_IDX", 2L);
+    cache.putFloatCentroids("TEST_IDX", 2L, gen2);
+
+    assertEquals(0, cache.findNearestCentroid("TEST_IDX", 2L, query, "L2"));
   }
 
   /**

@@ -127,6 +127,17 @@ public class PVectorDouble extends PDataType<double[]> {
   }
 
   /**
+   * Returns a newly allocated byte array containing the transcoded vector bytes converted to the
+   * destination sort order without materializing an intermediate array.
+   */
+  public static byte[] transcodeBytes(byte[] src, int srcOffset, int srcLen, SortOrder srcOrder,
+    SortOrder destOrder) {
+    byte[] dest = new byte[srcLen];
+    transcodeBytes(src, srcOffset, srcLen, srcOrder, dest, 0, destOrder);
+    return dest;
+  }
+
+  /**
    * Copies and optionally transcodes packed vector bytes between sort orders directly at the byte
    * level without allocating an intermediate double array.
    * @param src        source byte array

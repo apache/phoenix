@@ -19,6 +19,7 @@ package org.apache.phoenix.index;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -42,6 +43,7 @@ import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -52,6 +54,7 @@ import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -443,6 +446,103 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
           }
         }
       }
+    }
+  }
+
+  @Test
+  public void testBuildDeleteColumnMutationReturnsNullWhenAllCoveredColumnsPresent()
+    throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    String ddl = String
+      .format("create table %s (id varchar primary key, col1 varchar, col2 varchar)", tableName);
+    String index =
+      String.format("create index %s on %s (col2) include (col1)", indexName, tableName);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(ddl);
+      conn.createStatement().execute(index);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable table = pconn.getTable(tableName);
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+      table.getIndexMaintainers(ptr, pconn);
+      List<IndexMaintainer> ims =
+        IndexMaintainer.deserialize(ptr, GenericKeyValueBuilder.INSTANCE, true);
+      assertEquals(1, ims.size());
+      IndexMaintainer im = ims.get(0);
+      String dml = String.format("upsert into %s values ('a', 'ab', 'abc')", tableName);
+      pconn.createStatement().execute(dml);
+      Iterator<Pair<byte[], List<Mutation>>> iterator = pconn.getMutationState().toMutations();
+      while (iterator.hasNext()) {
+        Pair<byte[], List<Mutation>> mutationPair = iterator.next();
+        Put dataRow = (Put) mutationPair.getSecond().get(0);
+        ValueGetter vg = new IndexUtil.SimpleValueGetter(dataRow);
+        long ts = EnvironmentEdgeManager.currentTimeMillis();
+        ImmutableBytesPtr rowKey = new ImmutableBytesPtr(dataRow.getRow());
+        Put indexPut = im.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE, vg, rowKey, ts, null,
+          null, false, null);
+        if (indexPut == null) {
+          byte[] indexRowKey = im.buildRowKey(vg, rowKey, null, null, ts, null);
+          indexPut = new Put(indexRowKey);
+        }
+        indexPut.addColumn(im.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+          im.getEmptyKeyValueQualifier(), ts, QueryConstants.UNVERIFIED_BYTES);
+        Delete deleteCol = im.buildDeleteColumnMutation(indexPut, ts);
+        assertNull("Full update should produce null delete (not an empty Delete)", deleteCol);
+      }
+    }
+  }
+
+  @Test
+  public void testCoveredVectorColumnTypeTracking() throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    String ddl = String.format(
+      "CREATE TABLE %s (ID VARCHAR PRIMARY KEY, V VECTOR(FLOAT, 4), COV_D VECTOR(DOUBLE, 3))",
+      tableName);
+    String indexDdl = String.format(
+      "CREATE VECTOR INDEX %s ON %s (V) INCLUDE (COV_D) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)",
+      indexName, tableName);
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(ddl);
+      conn.createStatement().execute(indexDdl);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable dataTable = pconn.getTable(tableName);
+      PTable indexTable = pconn.getTable(indexName);
+      IndexMaintainer maintainer = indexTable.getIndexMaintainer(dataTable, pconn);
+
+      PColumn covCol = dataTable.getColumnForColumnName("COV_D");
+      ColumnReference covRef =
+        new ColumnReference(covCol.getFamilyName().getBytes(), covCol.getColumnQualifierBytes());
+      PColumn indexedCol = dataTable.getColumnForColumnName("V");
+      ColumnReference indexedRef = new ColumnReference(indexedCol.getFamilyName().getBytes(),
+        indexedCol.getColumnQualifierBytes());
+
+      assertTrue("COV_D should be recognized as a covered vector column",
+        maintainer.isCoveredVectorColumn(covRef));
+      assertTrue("In vector index, V is stored in index CF and recognized as covered vector column",
+        maintainer.isCoveredVectorColumn(indexedRef));
+
+      assertFalse("COV_D is not the indexed vector column",
+        maintainer.isIndexedVectorColumn(covRef));
+      assertTrue("V is the indexed vector column", maintainer.isIndexedVectorColumn(indexedRef));
+
+      // Verify covered vector column data type resolution is independent of indexed column type
+      assertTrue("COV_D covered column is VECTOR(DOUBLE) so isDoubleVector should be true",
+        maintainer.isDoubleVector(covRef));
+      assertFalse("V indexed column is VECTOR(FLOAT) so isDoubleVector should be false",
+        maintainer.isDoubleVector(indexedRef));
+
+      // Verify serialization preserves covered vector column types
+      ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(maintainer);
+      IndexMaintainer fromProto = IndexMaintainer.fromProto(proto, dataTable.getRowKeySchema(),
+        dataTable.getBucketNum() != null);
+
+      assertTrue("COV_D should survive proto round-trip", fromProto.isCoveredVectorColumn(covRef));
+      assertTrue("V should survive proto round-trip", fromProto.isCoveredVectorColumn(indexedRef));
+      assertTrue("isDoubleVector(covRef) should survive proto round-trip",
+        fromProto.isDoubleVector(covRef));
+      assertFalse("isDoubleVector(indexedRef) should be false after proto round-trip",
+        fromProto.isDoubleVector(indexedRef));
     }
   }
 }

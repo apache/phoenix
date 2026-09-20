@@ -133,6 +133,17 @@ public final class PhoenixConfigurationUtil {
   public static final String SHOULD_FIX_UNVERIFIED_TRANSFORM =
     "phoenix.mr.fix.unverified.transform";
 
+  public static final String IS_VECTOR_INDEX = "phoenix.index.is.vector.index";
+
+  public static final String VECTOR_CENTROID_GENERATION = "phoenix.vector.centroid.generation";
+
+  public static final String VECTOR_DISTANCE_METRIC = "phoenix.vector.distance.metric";
+
+  public static final String VECTOR_INDEX_IN_SELECTED = "phoenix.vector.index.in.selected";
+
+  public static final String VECTOR_NON_CENTROID_COL_COUNT =
+    "phoenix.vector.non.centroid.col.count";
+
   public static final boolean DEFAULT_SHOULD_FIX_UNVERIFIED_TRANSFORM = false;
 
   public static final String SCRUTINY_OUTPUT_FORMAT = "phoenix.mr.scrutiny.output.format";
@@ -757,6 +768,48 @@ public final class PhoenixConfigurationUtil {
   public static String getIndexToolIndexTableName(Configuration configuration) {
     Preconditions.checkNotNull(configuration);
     return configuration.get(INDEX_TOOL_INDEX_TABLE_NAME);
+  }
+
+  public static void setIsVectorIndex(Configuration configuration, boolean isVectorIndex) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setBoolean(IS_VECTOR_INDEX, isVectorIndex);
+  }
+
+  public static boolean getIsVectorIndex(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getBoolean(IS_VECTOR_INDEX, false);
+  }
+
+  public static void setVectorCentroidGeneration(Configuration configuration, long generation) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setLong(VECTOR_CENTROID_GENERATION, generation);
+  }
+
+  public static long getVectorCentroidGeneration(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getLong(VECTOR_CENTROID_GENERATION, 1L);
+  }
+
+  public static void setVectorDistanceMetric(Configuration configuration, String metric) {
+    Preconditions.checkNotNull(configuration);
+    if (metric != null) {
+      configuration.set(VECTOR_DISTANCE_METRIC, metric);
+    }
+  }
+
+  public static String getVectorDistanceMetric(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.get(VECTOR_DISTANCE_METRIC, "L2");
+  }
+
+  public static void setVectorIndexInSelected(Configuration configuration, int index) {
+    Preconditions.checkNotNull(configuration);
+    configuration.setInt(VECTOR_INDEX_IN_SELECTED, index);
+  }
+
+  public static int getVectorIndexInSelected(Configuration configuration) {
+    Preconditions.checkNotNull(configuration);
+    return configuration.getInt(VECTOR_INDEX_IN_SELECTED, -1);
   }
 
   public static void setIndexToolSourceTable(Configuration configuration,

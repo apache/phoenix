@@ -196,6 +196,9 @@ public class PDataTypeFactory {
     }
     if (normalized.startsWith("VECTOR(") && normalized.endsWith(")")) {
       String component = normalized.substring(7, normalized.length() - 1).trim();
+      if (component.contains(",")) {
+        component = component.substring(0, component.indexOf(',')).trim();
+      }
       return typeForVector(component);
     }
     return null;

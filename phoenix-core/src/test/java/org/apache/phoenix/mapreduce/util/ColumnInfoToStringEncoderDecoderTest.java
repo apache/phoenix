@@ -24,6 +24,8 @@ import java.util.List;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.phoenix.schema.types.PDate;
 import org.apache.phoenix.schema.types.PVarchar;
+import org.apache.phoenix.schema.types.PVectorDouble;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.ColumnInfo;
 import org.junit.Test;
 
@@ -65,6 +67,20 @@ public class ColumnInfoToStringEncoderDecoderTest {
     assertEquals(columnInfo1.toString(), configuration
       .get(String.format("%s_%d", ColumnInfoToStringEncoderDecoder.CONFIGURATION_VALUE_PREFIX, 0)));
 
+    List<ColumnInfo> actualColInfos = ColumnInfoToStringEncoderDecoder.decode(configuration);
+    assertEquals(expectedColInfos, actualColInfos);
+  }
+
+  @Test
+  public void testEncodeDecodeVectorTypes() {
+    final Configuration configuration = new Configuration();
+    final ColumnInfo col1 = ColumnInfo.create("v1", PVectorFloat.INSTANCE.getSqlType(), 128, null);
+    final ColumnInfo col2 = ColumnInfo.create("v2", PVectorDouble.INSTANCE.getSqlType(), 64, null);
+    final ColumnInfo col3 = new ColumnInfo("label", PVarchar.INSTANCE.getSqlType());
+    ArrayList<ColumnInfo> expectedColInfos = Lists.newArrayList(col1, col2, col3);
+    ColumnInfoToStringEncoderDecoder.encode(configuration, expectedColInfos);
+
+    assertEquals(3, configuration.getInt(ColumnInfoToStringEncoderDecoder.CONFIGURATION_COUNT, 0));
     List<ColumnInfo> actualColInfos = ColumnInfoToStringEncoderDecoder.decode(configuration);
     assertEquals(expectedColInfos, actualColInfos);
   }
