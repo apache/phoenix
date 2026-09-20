@@ -1393,42 +1393,51 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
         nextDataRowState != null && indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)
       ) {
         ValueGetter nextDataRowVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
+        boolean isVectorUnchanged = false;
+        if (indexMaintainer.isVectorIndex() && currentDataRowState != null) {
+          isVectorUnchanged =
+            indexMaintainer.isVectorUnchanged(currentDataRowState, nextDataRowState);
+        }
         Put indexPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
-          nextDataRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName);
+          nextDataRowVG, rowKeyPtr, ts, null, null, false, encodedRegionName, isVectorUnchanged);
         if (indexPut == null) {
           // No covered column. Just prepare an index row with the empty column
           byte[] indexRowKey = indexMaintainer.buildRowKey(nextDataRowVG, rowKeyPtr, null, null, ts,
             encodedRegionName);
-          indexPut = new Put(indexRowKey);
+          if (indexRowKey != null) {
+            indexPut = new Put(indexRowKey);
+          }
         } else {
           IndexUtil.removeEmptyColumn(indexPut,
             indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
             indexMaintainer.getEmptyKeyValueQualifier());
         }
-        byte[] finalEmptyColumnValue =
-          indexMaintainer.isUncovered() ? QueryConstants.UNVERIFIED_BYTES : emptyColumnValue;
-        indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
-          indexMaintainer.getEmptyKeyValueQualifier(), ts, finalEmptyColumnValue);
-        indexUpdates.put(hTableInterfaceReference, indexPut);
-        if (!ignoreWritingDeleteColumnsToIndex) {
-          Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
-          if (deleteColumn != null) {
-            indexUpdates.put(hTableInterfaceReference, deleteColumn);
+        if (indexPut != null) {
+          byte[] finalEmptyColumnValue =
+            indexMaintainer.isUncovered() ? QueryConstants.UNVERIFIED_BYTES : emptyColumnValue;
+          indexPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+            indexMaintainer.getEmptyKeyValueQualifier(), ts, finalEmptyColumnValue);
+          indexUpdates.put(hTableInterfaceReference, indexPut);
+          if (!ignoreWritingDeleteColumnsToIndex) {
+            Delete deleteColumn = indexMaintainer.buildDeleteColumnMutation(indexPut, ts);
+            if (deleteColumn != null) {
+              indexUpdates.put(hTableInterfaceReference, deleteColumn);
+            }
           }
-        }
-        // Delete the current index row if the new index key is different from the
-        // current one and the index is not a CDC index
-        if (currentDataRowState != null) {
-          ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
-          byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG,
-            rowKeyPtr, null, null, ts, encodedRegionName);
-          if (
-            !indexMaintainer.isCDCIndex()
-              && Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0
-          ) {
-            Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
-              IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
-            indexUpdates.put(hTableInterfaceReference, del);
+          // Delete the current index row if the new index key is different from the
+          // current one and the index is not a CDC index
+          if (currentDataRowState != null && !isVectorUnchanged) {
+            ValueGetter currentDataRowVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
+            byte[] indexRowKeyForCurrentDataRow = indexMaintainer.buildRowKey(currentDataRowVG,
+              rowKeyPtr, null, null, ts, encodedRegionName);
+            if (
+              indexRowKeyForCurrentDataRow != null && !indexMaintainer.isCDCIndex()
+                && Bytes.compareTo(indexPut.getRow(), indexRowKeyForCurrentDataRow) != 0
+            ) {
+              Mutation del = indexMaintainer.buildRowDeleteMutation(indexRowKeyForCurrentDataRow,
+                IndexMaintainer.DeleteType.ALL_VERSIONS, ts);
+              indexUpdates.put(hTableInterfaceReference, del);
+            }
           }
         }
       } else if (

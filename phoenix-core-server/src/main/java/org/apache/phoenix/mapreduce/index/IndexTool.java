@@ -64,6 +64,7 @@ import org.apache.hadoop.mapreduce.lib.output.FileOutputFormat;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.util.Tool;
 import org.apache.hadoop.util.ToolRunner;
+import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.compile.PostIndexDDLCompiler;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
@@ -71,7 +72,12 @@ import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.IndexManagementUtil;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.KMeansConfig;
+import org.apache.phoenix.index.vector.KMeansResult;
+import org.apache.phoenix.index.vector.KMeansTrainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.mapreduce.CsvBulkImportUtil;
 import org.apache.phoenix.mapreduce.PhoenixServerBuildIndexInputFormat;
@@ -86,6 +92,8 @@ import org.apache.phoenix.query.ConnectionQueryServices;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
@@ -221,10 +229,19 @@ public class IndexTool extends Configured implements Tool {
   private String tenantId = null;
   private Job job;
   private Long startTime, endTime, lastVerifyTime;
+  private Long generation = null;
   private IndexType indexType;
   private String basePath;
   byte[][] splitKeysBeforeJob = null;
   Configuration configuration;
+
+  public Long getGeneration() {
+    return generation;
+  }
+
+  public void setGeneration(Long generation) {
+    this.generation = generation;
+  }
 
   private static final Option SCHEMA_NAME_OPTION =
     new Option("s", "schema", true, "Phoenix schema name (optional)");
@@ -296,6 +313,9 @@ public class IndexTool extends Configured implements Tool {
         + "Only supported for global indexes. If this option is used with -v AFTER, these "
         + "extra rows will be identified but not repaired.");
 
+  private static final Option GENERATION_OPTION =
+    new Option("g", "generation", true, "Vector centroid generation for rebuilds (optional)");
+
   public static final String INDEX_JOB_NAME_TEMPLATE = "PHOENIX_%s.%s_INDX_%s";
 
   public static final String FEATURE_NOT_APPLICABLE =
@@ -331,6 +351,8 @@ public class IndexTool extends Configured implements Tool {
     options.addOption(RETRY_VERIFY_OPTION);
     options.addOption(DISABLE_LOGGING_OPTION);
     options.addOption(USE_INDEX_TABLE_AS_SOURCE_OPTION);
+    GENERATION_OPTION.setOptionalArg(true);
+    options.addOption(GENERATION_OPTION);
     return options;
   }
 
@@ -500,6 +522,11 @@ public class IndexTool extends Configured implements Tool {
             Long.toString(TransactionUtil.convertToNanoseconds(maxTimeRange)));
           configuration.set(PhoenixConfigurationUtil.TX_PROVIDER,
             pDataTable.getTransactionProvider().name());
+        }
+        if (
+          pIndexTable.isVectorIndex() || IndexType.VECTOR_GLOBAL.equals(pIndexTable.getIndexType())
+        ) {
+          return configureJobForVectorIndex();
         }
         if (useSnapshot || (!isLocalIndexBuild && pDataTable.isTransactional())) {
           PhoenixConfigurationUtil.setCurrentScnValue(configuration, maxTimeRange);
@@ -680,9 +707,13 @@ public class IndexTool extends Configured implements Tool {
         PhoenixRuntime.generateColumnInfo(pConnection, indexTableWithSchema, indexColumns);
       ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
 
-      if (outputPath != null) {
-        fs = outputPath.getFileSystem(configuration);
-        fs.delete(outputPath, true);
+      Path targetOutputPath = outputPath;
+      if (targetOutputPath == null && configuration.get(FileOutputFormat.OUTDIR) != null) {
+        targetOutputPath = new Path(configuration.get(FileOutputFormat.OUTDIR));
+      }
+      if (targetOutputPath != null) {
+        fs = targetOutputPath.getFileSystem(configuration);
+        fs.delete(targetOutputPath, true);
       }
       final String jobName =
         String.format(INDEX_JOB_NAME_TEMPLATE, schemaName, dataTable, indexTable);
@@ -720,6 +751,142 @@ public class IndexTool extends Configured implements Tool {
         PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, snapshotName,
           dataTableWithSchema, restoreDir, selectQuery);
       }
+      TableMapReduceUtil.initCredentials(job);
+
+      job.setMapperClass(PhoenixIndexImportDirectMapper.class);
+      return configureSubmittableJobUsingDirectApi(job);
+    }
+
+    private Job configureJobForVectorIndex() throws Exception {
+      String physicalIndexTable = pIndexTable.getPhysicalName().getString();
+      final PhoenixConnection pConnection = connection.unwrap(PhoenixConnection.class);
+
+      long gen = (generation != null)
+        ? generation
+        : (pIndexTable.getVectorCentroidGeneration() != null
+          && pIndexTable.getVectorCentroidGeneration() > 0
+            ? pIndexTable.getVectorCentroidGeneration()
+            : 1L);
+
+      // Verify or auto-train centroids if needed
+      List<byte[]> existingCentroids = CentroidManager.loadCentroids(pConnection, qIndexTable, gen);
+      if (existingCentroids == null || existingCentroids.isEmpty()) {
+        int k = pIndexTable.getVectorIvfLists() != null && pIndexTable.getVectorIvfLists() > 0
+          ? pIndexTable.getVectorIvfLists()
+          : 4;
+        String distanceMetric = pIndexTable.getVectorDistanceMetric() != null
+          ? pIndexTable.getVectorDistanceMetric()
+          : "L2";
+
+        String vectorColName = null;
+        for (PColumn col : pDataTable.getColumns()) {
+          if (col.getDataType() != null && col.getDataType().isVectorType()) {
+            vectorColName = col.getName().getString();
+            break;
+          }
+        }
+        if (vectorColName != null) {
+          int sampleSize = Math.min(256 * k, 10000);
+          List<float[]> samples =
+            KMeansTrainer.sampleVectors(pConnection, qDataTable, vectorColName, sampleSize);
+          if (samples != null && !samples.isEmpty()) {
+            int actualK = Math.min(k, samples.size());
+            KMeansConfig kMeansConfig =
+              KMeansConfig.builder().distanceMetric(distanceMetric).maxIterations(20).build();
+            KMeansResult trainResult = KMeansTrainer.train(samples, actualK, kMeansConfig);
+            CentroidManager.persistCentroids(pConnection, qIndexTable, gen, trainResult);
+            CentroidManager.setGenerationAndLists(pConnection, qIndexTable, gen, actualK);
+          }
+        }
+      }
+
+      // Pre-load into VectorCentroidCache
+      VectorCentroidCache.getInstance(configuration).loadCentroids(qIndexTable, gen, pConnection);
+
+      final PostIndexDDLCompiler ddlCompiler =
+        new PostIndexDDLCompiler(pConnection, new TableRef(pDataTable));
+      ddlCompiler.compile(pIndexTable);
+      final List<String> indexColumns = ddlCompiler.getIndexColumnNames();
+      final String selectQuery = ddlCompiler.getSelectQuery();
+      final String upsertQuery =
+        QueryUtil.constructUpsertStatement(indexTableWithSchema, indexColumns, Hint.NO_INDEX);
+
+      // Determine vector column index in select query
+      boolean isSalted = pIndexTable.getBucketNum() != null;
+      boolean isMultiTenant = pConnection.getTenantId() != null && pIndexTable.isMultiTenant();
+      boolean isViewIndex = pIndexTable.getViewIndexId() != null;
+      int posOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isViewIndex ? 1 : 0);
+
+      String centroidColName =
+        IndexUtil.getIndexColumnName(null, PhoenixDatabaseMetaData.CENTROID_ID);
+      int vectorIndexInSelected = -1;
+      int colIdx = 0;
+      List<PColumn> indexPKColumns = pIndexTable.getPKColumns();
+      for (int i = posOffset; i < indexPKColumns.size(); i++) {
+        PColumn col = indexPKColumns.get(i);
+        String indexColName = col.getName().getString();
+        if (centroidColName.equals(indexColName)) {
+          continue;
+        }
+        if (col.getDataType() != null && col.getDataType().isVectorType()) {
+          vectorIndexInSelected = colIdx;
+        }
+        colIdx++;
+      }
+      for (PColumnFamily family : pIndexTable.getColumnFamilies()) {
+        for (PColumn col : family.getColumns()) {
+          if (col.getViewConstant() == null) {
+            if (col.getDataType() != null && col.getDataType().isVectorType()) {
+              vectorIndexInSelected = colIdx;
+            }
+            colIdx++;
+          }
+        }
+      }
+      int nonCentroidColCount = colIdx;
+
+      configuration.set(PhoenixConfigurationUtil.UPSERT_STATEMENT, upsertQuery);
+      PhoenixConfigurationUtil.setPhysicalTableName(configuration, physicalIndexTable);
+      PhoenixConfigurationUtil.setIndexToolIndexTableName(configuration, qIndexTable);
+      PhoenixConfigurationUtil.setDisableIndexes(configuration, indexTable);
+      PhoenixConfigurationUtil.setIsVectorIndex(configuration, true);
+      PhoenixConfigurationUtil.setVectorCentroidGeneration(configuration, gen);
+      if (pIndexTable.getVectorDistanceMetric() != null) {
+        PhoenixConfigurationUtil.setVectorDistanceMetric(configuration,
+          pIndexTable.getVectorDistanceMetric());
+      }
+      PhoenixConfigurationUtil.setVectorIndexInSelected(configuration, vectorIndexInSelected);
+      configuration.setInt(PhoenixConfigurationUtil.VECTOR_NON_CENTROID_COL_COUNT,
+        nonCentroidColCount);
+
+      PhoenixConfigurationUtil.setUpsertColumnNames(configuration,
+        indexColumns.toArray(new String[indexColumns.size()]));
+      if (tenantId != null) {
+        PhoenixConfigurationUtil.setTenantId(configuration, tenantId);
+      }
+      final List<ColumnInfo> columnMetadataList =
+        PhoenixRuntime.generateColumnInfo(pConnection, indexTableWithSchema, indexColumns);
+      ColumnInfoToStringEncoderDecoder.encode(configuration, columnMetadataList);
+
+      Path targetOutputPath = outputPath;
+      if (targetOutputPath == null && configuration.get(FileOutputFormat.OUTDIR) != null) {
+        targetOutputPath = new Path(configuration.get(FileOutputFormat.OUTDIR));
+      }
+      if (targetOutputPath != null) {
+        fs = targetOutputPath.getFileSystem(configuration);
+        fs.delete(targetOutputPath, true);
+      }
+      final String jobName =
+        String.format(INDEX_JOB_NAME_TEMPLATE, schemaName, dataTable, indexTable);
+      final Job job = Job.getInstance(configuration, jobName);
+      job.setJarByClass(IndexTool.class);
+      job.setMapOutputKeyClass(ImmutableBytesWritable.class);
+      if (outputPath != null) {
+        FileOutputFormat.setOutputPath(job, outputPath);
+      }
+
+      PhoenixMapReduceUtil.setInput(job, PhoenixIndexDBWritable.class, dataTableWithSchema,
+        selectQuery);
       TableMapReduceUtil.initCredentials(job);
 
       job.setMapperClass(PhoenixIndexImportDirectMapper.class);
@@ -949,6 +1116,9 @@ public class IndexTool extends Configured implements Tool {
     isForeground = cmdLine.hasOption(RUN_FOREGROUND_OPTION.getOpt());
     useSnapshot = cmdLine.hasOption(SNAPSHOT_OPTION.getOpt());
     shouldDeleteBeforeRebuild = cmdLine.hasOption(DELETE_ALL_AND_REBUILD_OPTION.getOpt());
+    if (cmdLine.hasOption(GENERATION_OPTION.getOpt())) {
+      generation = Long.parseLong(cmdLine.getOptionValue(GENERATION_OPTION.getOpt()));
+    }
     if (isTimeRangeSet(startTime, endTime)) {
       PhoenixMapReduceUtil.validateTimeRange(startTime, endTime, qDataTable);
     }
@@ -1222,6 +1392,13 @@ public class IndexTool extends Configured implements Tool {
   public static Map.Entry<Integer, Job> run(Configuration conf, String schemaName, String dataTable,
     String indexTable, boolean useSnapshot, String tenantId, boolean disableBefore,
     boolean shouldDeleteBeforeRebuild, boolean runForeground) throws Exception {
+    return run(conf, schemaName, dataTable, indexTable, useSnapshot, tenantId, disableBefore,
+      shouldDeleteBeforeRebuild, runForeground, null);
+  }
+
+  public static Map.Entry<Integer, Job> run(Configuration conf, String schemaName, String dataTable,
+    String indexTable, boolean useSnapshot, String tenantId, boolean disableBefore,
+    boolean shouldDeleteBeforeRebuild, boolean runForeground, Long generation) throws Exception {
     final List<String> args = Lists.newArrayList();
     if (schemaName != null) {
       args.add("--schema=" + schemaName);
@@ -1245,6 +1422,11 @@ public class IndexTool extends Configured implements Tool {
 
     if (shouldDeleteBeforeRebuild) {
       args.add("-deleteall");
+    }
+
+    if (generation != null) {
+      args.add("-g");
+      args.add(generation.toString());
     }
 
     args.add("-op");

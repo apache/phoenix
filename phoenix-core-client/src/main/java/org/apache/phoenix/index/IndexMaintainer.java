@@ -54,6 +54,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.compat.hbase.ByteStringer;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
@@ -77,6 +78,7 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.ParseNode;
@@ -109,7 +111,10 @@ import org.apache.phoenix.schema.tuple.ValueGetterTuple;
 import org.apache.phoenix.schema.types.IndexConsistency;
 import org.apache.phoenix.schema.types.PBoolean;
 import org.apache.phoenix.schema.types.PDataType;
+import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVarbinaryEncoded;
+import org.apache.phoenix.schema.types.PVectorDouble;
+import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.transaction.PhoenixTransactionProvider.Feature;
 import org.apache.phoenix.util.BitSet;
 import org.apache.phoenix.util.ByteUtil;
@@ -476,10 +481,39 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   private boolean isCDCIndex;
   private IndexConsistency indexConsistency;
 
-  protected IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
-    this.dataRowKeySchema = dataRowKeySchema;
+  /** Vector indexing algorithm identifier (e.g. "IVF"); non-null indicates a vector index. */
+  private String vectorAlgorithm;
+  /** Distance metric for similarity evaluation (e.g. "L2", "COSINE"). */
+  private String distanceMetric;
+  /** Dimensionality of indexed vector data. */
+  private Integer vectorDimension;
+  /** Centroid generation recorded during index training. */
+  private Long centroidGeneration;
+  /** Ordinal position of the vector expression within {@code indexedExpressions}. */
+  private int vectorExpressionOrdinal = -1;
+  /** Mapping of covered vector columns to their respective data types. */
+  private Map<ColumnReference, PDataType> coveredVectorColumnTypes = Collections.emptyMap();
+
+  public IndexMaintainer(RowKeySchema dataRowKeySchema, boolean isDataTableSalted) {
+    this.dataRowKeySchema =
+      dataRowKeySchema != null ? dataRowKeySchema : new RowKeySchema.RowKeySchemaBuilder(0).build();
     this.isDataTableSalted = isDataTableSalted;
     this.indexConsistency = null;
+    this.indexedColumns = Collections.emptySet();
+    this.indexedColumnTypes = Collections.emptyList();
+    this.coveredColumnsMap = Collections.emptyMap();
+    this.indexTableName = ByteUtil.EMPTY_BYTE_ARRAY;
+    this.dataEmptyKeyValueCF = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES;
+    this.emptyKeyValueCFPtr = QueryConstants.DEFAULT_COLUMN_FAMILY_BYTES_PTR;
+    this.indexedExpressions = Collections.emptyList();
+    this.rowKeyMetaData = newRowKeyMetaData(0);
+    this.coveredVectorColumnTypes = Collections.emptyMap();
+    this.indexedColumnsInfo = Collections.emptySet();
+    this.encodingScheme = QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+    this.immutableStorageScheme = ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+    this.dataEncodingScheme = QualifierEncodingScheme.NON_ENCODED_QUALIFIERS;
+    this.dataImmutableStorageScheme = ImmutableStorageScheme.ONE_CELL_PER_COLUMN;
+    this.logicalIndexName = "";
   }
 
   private IndexMaintainer(final PTable dataTable, final PTable index, PhoenixConnection connection)
@@ -501,6 +535,12 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     this.encodingScheme = index.getEncodingScheme();
     this.isCDCIndex = CDCUtil.isCDCIndex(index);
     this.indexConsistency = index.getIndexConsistency();
+    if (index.isVectorIndex()) {
+      this.vectorAlgorithm = index.getVectorIndexAlgorithm();
+      this.distanceMetric = index.getVectorDistanceMetric();
+      this.vectorDimension = index.getVectorDimension();
+      this.centroidGeneration = index.getVectorCentroidGeneration();
+    }
 
     // null check for b/w compatibility
     this.encodingScheme = index.getEncodingScheme() == null
@@ -600,9 +640,21 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     ColumnResolver resolver = null;
     List<ParseNode> parseNodes = new ArrayList<ParseNode>(1);
     UDFParseNodeVisitor visitor = new UDFParseNodeVisitor();
+    String centroidColName =
+      IndexUtil.getIndexColumnName(null, PhoenixDatabaseMetaData.CENTROID_ID);
     for (int i = indexPosOffset; i < index.getPKColumns().size(); i++) {
       PColumn indexColumn = index.getPKColumns().get(i);
-      String expressionStr = IndexUtil.getIndexColumnExpressionStr(indexColumn);
+      String expressionStr;
+      if (index.isVectorIndex() && centroidColName.equals(indexColumn.getName().getString())) {
+        PColumn vecCol = IndexUtil.findVectorColumn(index);
+        expressionStr = vecCol != null && vecCol.getExpressionStr() != null
+          ? vecCol.getExpressionStr()
+          : (vecCol != null
+            ? IndexUtil.getCaseSensitiveDataColumnFullName(vecCol.getName().getString())
+            : null);
+      } else {
+        expressionStr = IndexUtil.getIndexColumnExpressionStr(indexColumn);
+      }
       try {
         ParseNode parseNode = SQLParser.parseCondition(expressionStr);
         parseNode.accept(visitor);
@@ -633,7 +685,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       }
       if (expressionIndexCompiler.getColumnRef() != null) {
         // get the column of the data column that corresponds to this index column
-        PColumn column = IndexUtil.getDataColumn(dataTable, indexColumn.getName().getString());
+        String indexColName = indexColumn.getName().getString();
+        boolean isCentroidCol = index.isVectorIndex() && centroidColName.equals(indexColName);
+        PColumn column = isCentroidCol
+          ? expressionIndexCompiler.getColumnRef().getColumn()
+          : IndexUtil.getDataColumn(dataTable, indexColName);
         boolean isPKColumn = SchemaUtil.isPKColumn(column);
         if (isPKColumn) {
           int dataPkPos = dataTable.getPKColumns().indexOf(column)
@@ -725,6 +781,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     this.estimatedExpressionSize =
       expressionIndexCompiler.getTotalNodeCount() * ESTIMATED_EXPRESSION_SIZE;
+    Map<ColumnReference, PDataType> vectorCols = new HashMap<>();
     for (int i = 0; i < index.getColumnFamilies().size(); i++) {
       PColumnFamily family = index.getColumnFamilies().get(i);
       for (PColumn indexColumn : family.getColumns()) {
@@ -734,12 +791,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         if (dataColumn != null) {
           byte[] dataColumnCq = dataColumn.getColumnQualifierBytes();
           byte[] indexColumnCq = indexColumn.getColumnQualifierBytes();
-          this.coveredColumnsMap.put(
-            new ColumnReference(dataColumn.getFamilyName().getBytes(), dataColumnCq),
+          ColumnReference dataColRef =
+            new ColumnReference(dataColumn.getFamilyName().getBytes(), dataColumnCq);
+          this.coveredColumnsMap.put(dataColRef,
             new ColumnReference(indexColumn.getFamilyName().getBytes(), indexColumnCq));
+          if (dataColumn.getDataType() != null && dataColumn.getDataType().isVectorType()) {
+            vectorCols.put(dataColRef, dataColumn.getDataType());
+          }
         }
       }
     }
+    this.coveredVectorColumnTypes = vectorCols;
     this.estimatedIndexRowKeyBytes = estimateIndexRowKeyByteSize(indexColByteSize);
     this.logicalIndexName = index.getName().getString();
     if (index.getIndexWhere() != null) {
@@ -765,6 +827,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
   public byte[] buildRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
     byte[] regionStartKey, byte[] regionEndKey, long ts, byte[] encodedRegionName) {
+    if (vectorAlgorithm != null) {
+      return buildVectorRowKey(valueGetter, rowKeyPtr, ts);
+    }
     if (isCDCIndex && encodedRegionName == null) {
       throw new IllegalArgumentException("Encoded region name is required for a CDC index");
     }
@@ -1123,6 +1188,20 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
    */
 
   public boolean shouldPrepareIndexMutations(Put dataRowState) {
+    if (vectorAlgorithm != null) {
+      if (dataRowState == null) {
+        return false;
+      }
+      ValueGetter vg = new IndexUtil.SimpleValueGetter(dataRowState);
+      ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+      if (vectorExpressionOrdinal >= 0 && vectorExpressionOrdinal < indexedExpressions.size()) {
+        Expression vecExpr = indexedExpressions.get(vectorExpressionOrdinal);
+        vecExpr.evaluate(new ValueGetterTuple(vg, HConstants.LATEST_TIMESTAMP), ptr);
+      }
+      if (ptr.get() == null || ptr.getLength() == 0) {
+        return false;
+      }
+    }
     if (getIndexWhere() == null) {
       // It is a full index and the index row should be prepared.
       return true;
@@ -1239,11 +1318,19 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       Integer scaleToBe;
       if (indexField == null) {
         Expression e = expressionItr.next();
-        isNullableToBe = e.isNullable();
-        dataTypeToBe = IndexUtil.getIndexColumnDataType(isNullableToBe, e.getDataType());
-        sortOrderToBe = descIndexColumnBitSet.get(i) ? SortOrder.DESC : SortOrder.ASC;
-        maxLengthToBe = e.getMaxLength();
-        scaleToBe = e.getScale();
+        if (isVectorIndex() && i == 0) {
+          isNullableToBe = false;
+          dataTypeToBe = PInteger.INSTANCE;
+          sortOrderToBe = descIndexColumnBitSet.get(i) ? SortOrder.DESC : SortOrder.ASC;
+          maxLengthToBe = null;
+          scaleToBe = null;
+        } else {
+          isNullableToBe = e.isNullable();
+          dataTypeToBe = IndexUtil.getIndexColumnDataType(isNullableToBe, e.getDataType());
+          sortOrderToBe = descIndexColumnBitSet.get(i) ? SortOrder.DESC : SortOrder.ASC;
+          maxLengthToBe = e.getMaxLength();
+          scaleToBe = e.getScale();
+        }
       } else {
         isNullableToBe = indexField.isNullable();
         dataTypeToBe = IndexUtil.getIndexColumnDataType(isNullableToBe, indexField.getDataType());
@@ -1322,12 +1409,22 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
     ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey,
     boolean verified, byte[] encodedRegionName) throws IOException {
+    return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey,
+      regionEndKey, verified, encodedRegionName, false);
+  }
+
+  public Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
+    ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey,
+    boolean verified, byte[] encodedRegionName, boolean isVectorUnchanged) throws IOException {
     byte[] indexRowKey = this.buildRowKey(valueGetter, dataRowKeyPtr, regionStartKey, regionEndKey,
       ts, encodedRegionName);
+    if (indexRowKey == null) {
+      return null;
+    }
     return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey,
       regionEndKey, indexRowKey, this.getEmptyKeyValueFamily(), coveredColumnsMap,
       indexEmptyKeyValueRef, indexWALDisabled, dataImmutableStorageScheme, immutableStorageScheme,
-      encodingScheme, dataEncodingScheme, verified);
+      encodingScheme, dataEncodingScheme, verified, this, isVectorUnchanged);
   }
 
   public static Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
@@ -1337,6 +1434,20 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     boolean destWALDisabled, ImmutableStorageScheme srcImmutableStorageScheme,
     ImmutableStorageScheme destImmutableStorageScheme, QualifierEncodingScheme destEncodingScheme,
     QualifierEncodingScheme srcEncodingScheme, boolean verified) throws IOException {
+    return buildUpdateMutation(kvBuilder, valueGetter, dataRowKeyPtr, ts, regionStartKey,
+      regionEndKey, destRowKey, emptyKeyValueCFPtr, coveredColumnsMap, destEmptyKeyValueRef,
+      destWALDisabled, srcImmutableStorageScheme, destImmutableStorageScheme, destEncodingScheme,
+      srcEncodingScheme, verified, null, false);
+  }
+
+  public static Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
+    ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey,
+    byte[] destRowKey, ImmutableBytesPtr emptyKeyValueCFPtr,
+    Map<ColumnReference, ColumnReference> coveredColumnsMap, ColumnReference destEmptyKeyValueRef,
+    boolean destWALDisabled, ImmutableStorageScheme srcImmutableStorageScheme,
+    ImmutableStorageScheme destImmutableStorageScheme, QualifierEncodingScheme destEncodingScheme,
+    QualifierEncodingScheme srcEncodingScheme, boolean verified, IndexMaintainer maintainer,
+    boolean isVectorUnchanged) throws IOException {
     Set<ColumnReference> coveredColumns = coveredColumnsMap.keySet();
     Put put = null;
     // New row being inserted: add the empty key value
@@ -1429,7 +1540,24 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             // Data table is ONE_CELL_PER_COLUMN. Get the col value.
             ImmutableBytesWritable dataValue = valueGetter.getLatestValue(dataColRef, ts);
             if (dataValue != null && dataValue != ValueGetter.HIDDEN_BY_DELETE) {
-              value = dataValue.copyBytes();
+              if (maintainer != null && maintainer.isCoveredVectorColumn(dataColRef)) {
+                if (isVectorUnchanged && maintainer.isIndexedVectorColumn(dataColRef)) {
+                  continue;
+                }
+                byte[] transcoded = new byte[dataValue.getLength()];
+                if (maintainer.isDoubleVector(dataColRef)) {
+                  PVectorDouble.transcodeBytes(dataValue.get(), dataValue.getOffset(),
+                    dataValue.getLength(), maintainer.getVectorSortOrder(dataColRef), transcoded, 0,
+                    SortOrder.ASC);
+                } else {
+                  PVectorFloat.transcodeBytes(dataValue.get(), dataValue.getOffset(),
+                    dataValue.getLength(), maintainer.getVectorSortOrder(dataColRef), transcoded, 0,
+                    SortOrder.ASC);
+                }
+                value = transcoded;
+              } else {
+                value = dataValue.copyBytes();
+              }
             }
           }
           if (value != null) {
@@ -1464,6 +1592,21 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
           ImmutableBytesPtr cf = indexColRef.getFamilyWritable();
           ImmutableBytesWritable value = valueGetter.getLatestValue(ref, ts);
           if (value != null && value != ValueGetter.HIDDEN_BY_DELETE) {
+            if (maintainer != null && maintainer.isCoveredVectorColumn(ref)) {
+              if (isVectorUnchanged && maintainer.isIndexedVectorColumn(ref)) {
+                // Omit unchanged indexed vector column mutation
+                continue;
+              }
+              byte[] transcoded = new byte[value.getLength()];
+              if (maintainer.isDoubleVector(ref)) {
+                PVectorDouble.transcodeBytes(value.get(), value.getOffset(), value.getLength(),
+                  maintainer.getVectorSortOrder(ref), transcoded, 0, SortOrder.ASC);
+              } else {
+                PVectorFloat.transcodeBytes(value.get(), value.getOffset(), value.getLength(),
+                  maintainer.getVectorSortOrder(ref), transcoded, 0, SortOrder.ASC);
+              }
+              value = new ImmutableBytesPtr(transcoded);
+            }
             if (put == null) {
               put = new Put(destRowKey);
               put.setDurability(!destWALDisabled ? Durability.USE_DEFAULT : Durability.SKIP_WAL);
@@ -1532,6 +1675,20 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             valueBytes = ptr.copyBytesIfNecessary();
 
             if (valueBytes != null) {
+              if (maintainer != null && maintainer.isCoveredVectorColumn(dataColRef)) {
+                if (isVectorUnchanged && maintainer.isIndexedVectorColumn(dataColRef)) {
+                  continue;
+                }
+                byte[] transcoded = new byte[valueBytes.length];
+                if (maintainer.isDoubleVector(dataColRef)) {
+                  PVectorDouble.transcodeBytes(valueBytes, 0, valueBytes.length,
+                    maintainer.getVectorSortOrder(dataColRef), transcoded, 0, SortOrder.ASC);
+                } else {
+                  PVectorFloat.transcodeBytes(valueBytes, 0, valueBytes.length,
+                    maintainer.getVectorSortOrder(dataColRef), transcoded, 0, SortOrder.ASC);
+                }
+                valueBytes = transcoded;
+              }
               ImmutableBytesPtr cq = indexColRef.getQualifierWritable();
               ImmutableBytesPtr cf = indexColRef.getFamilyWritable();
               if (put == null) {
@@ -1579,13 +1736,17 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     for (Entry<ColumnReference, ColumnReference> coveredCol : coveredColumnsMap.entrySet()) {
       ColumnReference indexCol = coveredCol.getValue();
       if (!indexUpdate.has(indexCol.getFamily(), indexCol.getQualifier())) {
+        if (isIndexedVectorColumn(coveredCol.getKey())) {
+          // Unchanged indexed vector columns are omitted from Put mutations and must not be deleted
+          continue;
+        }
         KeyValue kv = GenericKeyValueBuilder.INSTANCE.buildDeleteColumns(rowKey,
           indexCol.getFamilyWritable(), indexCol.getQualifierWritable(), ts);
         delete.add(kv);
       }
     }
-    assert !delete.isEmpty();
-    return delete;
+    // Prevent emitting an empty Delete mutation that would delete the entire row
+    return delete.isEmpty() ? null : delete;
   }
 
   public enum DeleteType {
@@ -1724,6 +1885,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     byte[] regionStartKey, byte[] regionEndKey, byte[] encodedRegionName) throws IOException {
     byte[] indexRowKey = this.buildRowKey(oldState, dataRowKeyPtr, regionStartKey, regionEndKey, ts,
       encodedRegionName);
+    if (indexRowKey == null) {
+      return null;
+    }
     // Delete the entire row if any of the indexed columns changed
     DeleteType deleteType = null;
     if (
@@ -2076,6 +2240,24 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     maintainer.nDataTableSaltBuckets =
       proto.hasDataTableSaltBuckets() ? proto.getDataTableSaltBuckets() : -1;
+    maintainer.vectorAlgorithm = proto.hasVectorAlgorithm() ? proto.getVectorAlgorithm() : null;
+    maintainer.distanceMetric = proto.hasDistanceMetric() ? proto.getDistanceMetric() : null;
+    maintainer.vectorDimension = proto.hasVectorDimension() ? proto.getVectorDimension() : null;
+    maintainer.centroidGeneration =
+      proto.hasCentroidGeneration() ? proto.getCentroidGeneration() : null;
+    if (proto.getCoveredVectorColumnsCount() > 0) {
+      maintainer.coveredVectorColumnTypes =
+        Maps.newHashMapWithExpectedSize(proto.getCoveredVectorColumnsCount());
+      for (int i = 0; i < proto.getCoveredVectorColumnsCount(); i++) {
+        ServerCachingProtos.ColumnReference colRefFromProto = proto.getCoveredVectorColumns(i);
+        ColumnReference ref = new ColumnReference(colRefFromProto.getFamily().toByteArray(),
+          colRefFromProto.getQualifier().toByteArray());
+        PDataType type = PDataType.values()[proto.getCoveredVectorColumnTypeOrdinal(i)];
+        maintainer.coveredVectorColumnTypes.put(ref, type);
+      }
+    } else {
+      maintainer.coveredVectorColumnTypes = Collections.emptyMap();
+    }
     maintainer.initCachedState();
     return maintainer;
   }
@@ -2196,22 +2378,32 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     builder.setIndexWalDisabled(maintainer.indexWALDisabled);
     builder.setIndexRowKeyByteSize(maintainer.estimatedIndexRowKeyBytes);
     builder.setImmutable(maintainer.immutableRows);
-    for (Pair<String, String> p : maintainer.indexedColumnsInfo) {
-      ServerCachingProtos.ColumnInfo.Builder ciBuilder =
-        ServerCachingProtos.ColumnInfo.newBuilder();
-      if (p.getFirst() != null) {
-        ciBuilder.setFamilyName(p.getFirst());
+    if (maintainer.indexedColumnsInfo != null) {
+      for (Pair<String, String> p : maintainer.indexedColumnsInfo) {
+        ServerCachingProtos.ColumnInfo.Builder ciBuilder =
+          ServerCachingProtos.ColumnInfo.newBuilder();
+        if (p.getFirst() != null) {
+          ciBuilder.setFamilyName(p.getFirst());
+        }
+        ciBuilder.setColumnName(p.getSecond());
+        builder.addIndexedColumnInfo(ciBuilder.build());
       }
-      ciBuilder.setColumnName(p.getSecond());
-      builder.addIndexedColumnInfo(ciBuilder.build());
     }
-    builder.setEncodingScheme(maintainer.encodingScheme.getSerializedMetadataValue());
-    builder
-      .setImmutableStorageScheme(maintainer.immutableStorageScheme.getSerializedMetadataValue());
-    builder.setLogicalIndexName(maintainer.logicalIndexName);
-    builder.setDataEncodingScheme(maintainer.dataEncodingScheme.getSerializedMetadataValue());
-    builder.setDataImmutableStorageScheme(
-      maintainer.dataImmutableStorageScheme.getSerializedMetadataValue());
+    builder.setEncodingScheme(maintainer.encodingScheme != null
+      ? maintainer.encodingScheme.getSerializedMetadataValue()
+      : QualifierEncodingScheme.NON_ENCODED_QUALIFIERS.getSerializedMetadataValue());
+    builder.setImmutableStorageScheme(maintainer.immutableStorageScheme != null
+      ? maintainer.immutableStorageScheme.getSerializedMetadataValue()
+      : ImmutableStorageScheme.ONE_CELL_PER_COLUMN.getSerializedMetadataValue());
+    if (maintainer.logicalIndexName != null) {
+      builder.setLogicalIndexName(maintainer.logicalIndexName);
+    }
+    builder.setDataEncodingScheme(maintainer.dataEncodingScheme != null
+      ? maintainer.dataEncodingScheme.getSerializedMetadataValue()
+      : QualifierEncodingScheme.NON_ENCODED_QUALIFIERS.getSerializedMetadataValue());
+    builder.setDataImmutableStorageScheme(maintainer.dataImmutableStorageScheme != null
+      ? maintainer.dataImmutableStorageScheme.getSerializedMetadataValue()
+      : ImmutableStorageScheme.ONE_CELL_PER_COLUMN.getSerializedMetadataValue());
     builder.setIsUncovered(maintainer.isUncovered);
     if (maintainer.indexWhere != null) {
       try (ByteArrayOutputStream stream = new ByteArrayOutputStream()) {
@@ -2234,6 +2426,30 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     }
     if (maintainer.isDataTableSalted) {
       builder.setDataTableSaltBuckets(maintainer.nDataTableSaltBuckets);
+    }
+    if (maintainer.vectorAlgorithm != null) {
+      builder.setVectorAlgorithm(maintainer.vectorAlgorithm);
+      if (maintainer.distanceMetric != null) {
+        builder.setDistanceMetric(maintainer.distanceMetric);
+      }
+      if (maintainer.vectorDimension != null) {
+        builder.setVectorDimension(maintainer.vectorDimension);
+      }
+      if (maintainer.centroidGeneration != null) {
+        builder.setCentroidGeneration(maintainer.centroidGeneration);
+      }
+    }
+    if (
+      maintainer.coveredVectorColumnTypes != null && !maintainer.coveredVectorColumnTypes.isEmpty()
+    ) {
+      for (Entry<ColumnReference, PDataType> e : maintainer.coveredVectorColumnTypes.entrySet()) {
+        ServerCachingProtos.ColumnReference.Builder cRefBuilder =
+          ServerCachingProtos.ColumnReference.newBuilder();
+        cRefBuilder.setFamily(ByteStringer.wrap(e.getKey().getFamily()));
+        cRefBuilder.setQualifier(ByteStringer.wrap(e.getKey().getQualifier()));
+        builder.addCoveredVectorColumns(cRefBuilder.build());
+        builder.addCoveredVectorColumnTypeOrdinal(e.getValue().ordinal());
+      }
     }
     return builder.build();
   }
@@ -2372,6 +2588,21 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       indexPkPos--;
     }
     maxTrailingNulls = nIndexPkColumns - indexPkPos - 1;
+
+    // Resolve indexed vector expression ordinal for row key construction.
+    if (vectorAlgorithm != null) {
+      vectorExpressionOrdinal = -1;
+      for (int i = 0; i < indexedExpressions.size(); i++) {
+        PDataType t = indexedExpressions.get(i).getDataType();
+        if (t instanceof PVectorFloat || t instanceof PVectorDouble) {
+          vectorExpressionOrdinal = i;
+          break;
+        }
+      }
+      if (this.coveredVectorColumnTypes == null) {
+        this.coveredVectorColumnTypes = Collections.emptyMap();
+      }
+    }
   }
 
   private int getIndexPkColumnCount() {
@@ -2620,6 +2851,326 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
   public IndexConsistency getIndexConsistency() {
     return indexConsistency;
+  }
+
+  /** Returns the vector indexing algorithm identifier, or null if not a vector index. */
+  public String getVectorAlgorithm() {
+    return vectorAlgorithm;
+  }
+
+  /** Returns true if this maintainer manages a VECTOR_GLOBAL index. */
+  public boolean isVectorIndex() {
+    return vectorAlgorithm != null;
+  }
+
+  /** Returns true if the given data column reference is a covered vector column. */
+  public boolean isCoveredVectorColumn(ColumnReference ref) {
+    return coveredVectorColumnTypes != null && coveredVectorColumnTypes.containsKey(ref);
+  }
+
+  /** Returns true if the given column reference is the indexed vector column. */
+  public boolean isIndexedVectorColumn(ColumnReference ref) {
+    if (
+      ref == null || vectorExpressionOrdinal < 0
+        || vectorExpressionOrdinal >= indexedExpressions.size()
+    ) {
+      return false;
+    }
+    Expression expr = indexedExpressions.get(vectorExpressionOrdinal);
+    if (expr instanceof KeyValueColumnExpression) {
+      KeyValueColumnExpression kve = (KeyValueColumnExpression) expr;
+      return Bytes.compareTo(ref.getFamily(), kve.getColumnFamily()) == 0
+        && Bytes.compareTo(ref.getQualifier(), kve.getColumnQualifier()) == 0;
+    }
+    return false;
+  }
+
+  /**
+   * Returns true if the vector column (covered column or indexed expression) has double elements.
+   */
+  public boolean isDoubleVector(ColumnReference ref) {
+    if (ref != null && coveredVectorColumnTypes != null) {
+      PDataType type = coveredVectorColumnTypes.get(ref);
+      if (type != null) {
+        return type instanceof PVectorDouble;
+      }
+    }
+    if (vectorExpressionOrdinal >= 0 && vectorExpressionOrdinal < indexedExpressions.size()) {
+      return indexedExpressions.get(vectorExpressionOrdinal).getDataType() instanceof PVectorDouble;
+    }
+    return false;
+  }
+
+  /** Returns the map of covered vector columns to their PDataType. */
+  public Map<ColumnReference, PDataType> getCoveredVectorColumnTypes() {
+    return coveredVectorColumnTypes;
+  }
+
+  /** Returns the sort order of the vector column expression. */
+  public SortOrder getVectorSortOrder() {
+    if (vectorExpressionOrdinal >= 0 && vectorExpressionOrdinal < indexedExpressions.size()) {
+      return indexedExpressions.get(vectorExpressionOrdinal).getSortOrder();
+    }
+    return SortOrder.ASC;
+  }
+
+  /** Returns the sort order for the given vector column reference. */
+  public SortOrder getVectorSortOrder(ColumnReference ref) {
+    if (isIndexedVectorColumn(ref)) {
+      return getVectorSortOrder();
+    }
+    return SortOrder.ASC;
+  }
+
+  /**
+   * Evaluates and returns the vector expression value for the current row state.
+   */
+  public ImmutableBytesWritable getVectorValue(ValueGetter valueGetter, long ts) {
+    if (
+      valueGetter == null || vectorExpressionOrdinal < 0
+        || vectorExpressionOrdinal >= indexedExpressions.size()
+    ) {
+      return null;
+    }
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    Expression vectorExpression = indexedExpressions.get(vectorExpressionOrdinal);
+    vectorExpression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
+    if (ptr.get() == null || ptr.getLength() == 0) {
+      return null;
+    }
+    return ptr;
+  }
+
+  /**
+   * Evaluates whether the indexed vector value is unchanged between two row mutation states.
+   */
+  public boolean isVectorUnchanged(Put currentDataRowState, Put nextDataRowState) {
+    if (currentDataRowState == null || nextDataRowState == null || !isVectorIndex()) {
+      return false;
+    }
+    ValueGetter currentVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
+    ValueGetter nextVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
+    ImmutableBytesWritable currentPtr = getVectorValue(currentVG, HConstants.LATEST_TIMESTAMP);
+    ImmutableBytesWritable nextPtr = getVectorValue(nextVG, HConstants.LATEST_TIMESTAMP);
+    if (currentPtr == null || nextPtr == null) {
+      return false;
+    }
+    return Bytes.equals(currentPtr.get(), currentPtr.getOffset(), currentPtr.getLength(),
+      nextPtr.get(), nextPtr.getOffset(), nextPtr.getLength());
+  }
+
+  /** Returns the distance metric name, or null if this is not a vector index. */
+  public String getDistanceMetric() {
+    return distanceMetric;
+  }
+
+  public String getVectorIndexAlgorithm() {
+    return vectorAlgorithm;
+  }
+
+  public void setVectorAlgorithm(String vectorAlgorithm) {
+    this.vectorAlgorithm = vectorAlgorithm;
+  }
+
+  public String getVectorDistanceMetric() {
+    return distanceMetric;
+  }
+
+  public void setDistanceMetric(String distanceMetric) {
+    this.distanceMetric = distanceMetric;
+  }
+
+  public Integer getVectorDimension() {
+    return vectorDimension;
+  }
+
+  public void setVectorDimension(Integer vectorDimension) {
+    this.vectorDimension = vectorDimension;
+  }
+
+  public void setVectorDimension(int vectorDimension) {
+    this.vectorDimension = vectorDimension;
+  }
+
+  public Long getCentroidGeneration() {
+    return centroidGeneration;
+  }
+
+  public Long getVectorCentroidGeneration() {
+    return centroidGeneration;
+  }
+
+  public void setCentroidGeneration(Long centroidGeneration) {
+    this.centroidGeneration = centroidGeneration;
+  }
+
+  public void setCentroidGeneration(long centroidGeneration) {
+    this.centroidGeneration = centroidGeneration;
+  }
+
+  private byte[] buildVectorRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,
+    long ts) {
+    if (valueGetter == null) {
+      return null;
+    }
+    ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+    if (vectorExpressionOrdinal >= 0 && vectorExpressionOrdinal < indexedExpressions.size()) {
+      Expression vectorExpression = indexedExpressions.get(vectorExpressionOrdinal);
+      vectorExpression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
+    }
+    if (ptr.get() == null || ptr.getLength() == 0) {
+      return null;
+    }
+
+    // Assign against the maintainer's centroid generation, loading on cache miss.
+    VectorCentroidCache.CachedCentroids cachedCentroids =
+      VectorCentroidCache.getInstance().getCentroidsForWrite(logicalIndexName, centroidGeneration);
+    int centroidId = cachedCentroids.findNearestCentroid(ptr.get(), ptr.getOffset(),
+      ptr.getLength(), distanceMetric);
+
+    boolean isIndexSalted = nIndexSaltBuckets > 0;
+    TrustedByteArrayOutputStream stream =
+      new TrustedByteArrayOutputStream(estimatedIndexRowKeyBytes);
+    DataOutput output = new DataOutputStream(stream);
+
+    try {
+      if (isIndexSalted) {
+        output.write(0); // will be set at end to index salt byte
+      }
+      int dataPosOffset = isDataTableSalted ? 1 : 0;
+      BitSet viewConstantColumnBitSet = this.rowKeyMetaData.getViewConstantColumnBitSet();
+      int nIndexedColumns = getIndexPkColumnCount() - getNumViewConstants();
+      int[][] dataRowKeyLocator = new int[2][nIndexedColumns];
+      int maxRowKeyOffset = rowKeyPtr.getOffset() + rowKeyPtr.getLength();
+      dataRowKeySchema.iterator(rowKeyPtr, ptr, dataPosOffset);
+
+      if (viewIndexId != null) {
+        output.write(viewIndexId);
+      }
+
+      if (isMultiTenant) {
+        dataRowKeySchema.next(ptr, dataPosOffset, maxRowKeyOffset);
+        output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
+        if (!dataRowKeySchema.getField(dataPosOffset).getDataType().isFixedWidth()) {
+          output.write(SchemaUtil.getSeparatorBytes(
+            dataRowKeySchema.getField(dataPosOffset).getDataType(), rowKeyOrderOptimizable,
+            ptr.getLength() == 0, dataRowKeySchema.getField(dataPosOffset).getSortOrder()));
+        }
+        dataPosOffset++;
+      }
+
+      for (int i = dataPosOffset; i < indexDataColumnCount; i++) {
+        Boolean hasValue = dataRowKeySchema.next(ptr, i, maxRowKeyOffset);
+        if (!viewConstantColumnBitSet.get(i) || isIndexOnBaseTable()) {
+          int pos = rowKeyMetaData.getIndexPkPosition(i - dataPosOffset);
+          if (Boolean.TRUE.equals(hasValue)) {
+            dataRowKeyLocator[0][pos] = ptr.getOffset();
+            dataRowKeyLocator[1][pos] = ptr.getLength();
+          } else {
+            dataRowKeyLocator[0][pos] = 0;
+            dataRowKeyLocator[1][pos] = 0;
+          }
+        }
+      }
+
+      // Encode centroid ID prefix
+      byte[] centroidBytes = new byte[Bytes.SIZEOF_INT];
+      PInteger.INSTANCE.toBytes(centroidId, centroidBytes, 0);
+      output.write(centroidBytes);
+
+      BitSet descIndexColumnBitSet = rowKeyMetaData.getDescIndexColumnBitSet();
+      int trailingVariableWidthColumnNum = 0;
+      PDataType[] indexedColumnDataTypes = new PDataType[nIndexedColumns];
+      indexedColumnDataTypes[0] = PInteger.INSTANCE;
+
+      for (int i = 1; i < nIndexedColumns; i++) {
+        PDataType dataColumnType;
+        boolean isNullable;
+        SortOrder dataSortOrder;
+        if (dataPkPosition[i] == EXPRESSION_NOT_PRESENT) {
+          Expression expression = indexedExpressions.get(i);
+          dataColumnType = expression.getDataType();
+          dataSortOrder = expression.getSortOrder();
+          isNullable = expression.isNullable();
+          expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
+        } else {
+          Field field = dataRowKeySchema.getField(dataPkPosition[i]);
+          dataColumnType = field.getDataType();
+          ptr.set(rowKeyPtr.get(), dataRowKeyLocator[0][i], dataRowKeyLocator[1][i]);
+          dataSortOrder = field.getSortOrder();
+          isNullable = field.isNullable();
+        }
+        boolean isDataColumnInverted = dataSortOrder != SortOrder.ASC;
+        PDataType indexColumnType = IndexUtil.getIndexColumnDataType(isNullable, dataColumnType);
+        indexedColumnDataTypes[i] = indexColumnType;
+        boolean isBytesComparable = dataColumnType.isBytesComparableWith(indexColumnType);
+        boolean isIndexColumnDesc = descIndexColumnBitSet.get(i);
+        if (isBytesComparable && isDataColumnInverted == isIndexColumnDesc) {
+          output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
+        } else {
+          if (!isBytesComparable) {
+            indexColumnType.coerceBytes(ptr, dataColumnType, dataSortOrder, SortOrder.getDefault());
+          }
+          if (isDataColumnInverted != isIndexColumnDesc) {
+            writeInverted(ptr.get(), ptr.getOffset(), ptr.getLength(), output);
+          } else {
+            output.write(ptr.get(), ptr.getOffset(), ptr.getLength());
+          }
+        }
+
+        if (!indexColumnType.isFixedWidth()) {
+          output.write(SchemaUtil.getSeparatorBytes(indexColumnType, rowKeyOrderOptimizable,
+            ptr.getLength() == 0, isIndexColumnDesc ? SortOrder.DESC : SortOrder.ASC));
+          trailingVariableWidthColumnNum++;
+        } else {
+          trailingVariableWidthColumnNum = 0;
+        }
+      }
+
+      byte[] indexRowKey = stream.getBuffer();
+      int length = stream.size();
+      int minLength = length - maxTrailingNulls;
+      int indexColumnIdx = nIndexedColumns - 1;
+      while (trailingVariableWidthColumnNum > 0 && length > minLength) {
+        if (indexColumnIdx < 0) {
+          break;
+        }
+        if (indexedColumnDataTypes[indexColumnIdx] != PVarbinaryEncoded.INSTANCE) {
+          if (indexRowKey[length - 1] == QueryConstants.SEPARATOR_BYTE) {
+            length--;
+          } else {
+            break;
+          }
+        } else {
+          byte[] sepBytes = QueryConstants.VARBINARY_ENCODED_SEPARATOR_BYTES;
+          if (
+            length >= 2 && indexRowKey[length - 1] == sepBytes[1]
+              && indexRowKey[length - 2] == sepBytes[0]
+          ) {
+            length -= 2;
+          } else {
+            break;
+          }
+        }
+        trailingVariableWidthColumnNum--;
+        indexColumnIdx--;
+      }
+
+      if (isIndexSalted) {
+        byte saltByte = SaltingUtil.getSaltingByte(indexRowKey, SaltingUtil.NUM_SALTING_BYTES,
+          length - SaltingUtil.NUM_SALTING_BYTES, nIndexSaltBuckets);
+        indexRowKey[0] = saltByte;
+      }
+      return indexRowKey.length == length ? indexRowKey : Arrays.copyOf(indexRowKey, length);
+    } catch (IOException e) {
+      throw new RuntimeException(e);
+    } finally {
+      try {
+        stream.close();
+      } catch (IOException e) {
+        throw new RuntimeException(e);
+      }
+    }
   }
 
   public static class UDFParseNodeVisitor extends StatelessTraverseAllParseNodeVisitor {

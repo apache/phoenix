@@ -19,13 +19,23 @@ package org.apache.phoenix.schema;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInput;
+import java.io.DataInputStream;
+import java.io.DataOutput;
+import java.io.DataOutputStream;
 import java.util.Collections;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
+import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.junit.Test;
 
@@ -136,5 +146,57 @@ public class VectorIndexTypeTest {
 
     DelegateTable delegate = new DelegateTable(inner);
     assertEquals(IndexType.VECTOR_GLOBAL, delegate.getIndexType());
+  }
+
+  @Test
+  public void testIndexMaintainerWritableBackwardCompatibilityNonVectorIndex() throws Exception {
+    RowKeySchema schema = new RowKeySchema.RowKeySchemaBuilder(0).build();
+    IndexMaintainer maintainer = new IndexMaintainer(schema, false);
+    assertFalse(maintainer.isVectorIndex());
+
+    ByteArrayOutputStream outStream = new ByteArrayOutputStream();
+    DataOutput output = new DataOutputStream(outStream);
+    maintainer.write(output);
+
+    byte[] bytes = outStream.toByteArray();
+    IndexMaintainer deserialized = new IndexMaintainer(schema, false);
+    DataInput input = new DataInputStream(new ByteArrayInputStream(bytes));
+    deserialized.readFields(input);
+
+    assertFalse("Non-vector index maintainer must have isVectorIndex == false",
+      deserialized.isVectorIndex());
+    assertNull(deserialized.getVectorAlgorithm());
+    assertNull(deserialized.getVectorDimension());
+    assertNull(deserialized.getDistanceMetric());
+    assertNull(deserialized.getCentroidGeneration());
+  }
+
+  @Test
+  public void testIndexMaintainerProtoRoundTripVectorFields() throws Exception {
+    RowKeySchema schema = new RowKeySchema.RowKeySchemaBuilder(0).build();
+    IndexMaintainer maintainer = new IndexMaintainer(schema, false);
+    maintainer.setVectorAlgorithm("IVF");
+    maintainer.setVectorDimension(128);
+    maintainer.setDistanceMetric("L2");
+    maintainer.setCentroidGeneration(1L);
+
+    ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(maintainer);
+    assertNotNull(proto);
+    assertTrue(proto.hasVectorAlgorithm());
+    assertEquals("IVF", proto.getVectorAlgorithm());
+    assertTrue(proto.hasVectorDimension());
+    assertEquals(128, proto.getVectorDimension());
+    assertTrue(proto.hasDistanceMetric());
+    assertEquals("L2", proto.getDistanceMetric());
+    assertTrue(proto.hasCentroidGeneration());
+    assertEquals(1L, proto.getCentroidGeneration());
+
+    IndexMaintainer deserialized = IndexMaintainer.fromProto(proto, schema, false);
+    assertNotNull(deserialized);
+    assertTrue(deserialized.isVectorIndex());
+    assertEquals("IVF", deserialized.getVectorAlgorithm());
+    assertEquals(Integer.valueOf(128), deserialized.getVectorDimension());
+    assertEquals("L2", deserialized.getDistanceMetric());
+    assertEquals(Long.valueOf(1L), deserialized.getCentroidGeneration());
   }
 }

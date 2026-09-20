@@ -33,6 +33,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.expression.function.VectorDistanceUtil;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.vector.CentroidManager;
 import org.apache.phoenix.index.vector.KMeansTrainer;
 import org.apache.phoenix.optimize.DistanceMetric;
@@ -74,8 +75,13 @@ public class VectorCentroidCache {
 
   private static volatile VectorCentroidCache defaultInstance;
 
-  private final Configuration conf;
-  private volatile Connection connection;
+  /**
+   * Retained cluster configuration fallback for singleton access when no explicit
+   * {@link Configuration} is provided. Preserved across {@link #resetInstance()}.
+   */
+  private static volatile Configuration suppliedConf;
+
+  private volatile Configuration conf;
   private final Cache<CacheKey, CachedCentroids> cache;
   private final ConcurrentMap<String, Long> activeGenerations = new ConcurrentHashMap<>();
   private final int bruteforceLimit;
@@ -164,6 +170,8 @@ public class VectorCentroidCache {
     private final int bruteforceLimit;
     private final int probeBuckets;
     private final HierarchicalIndex hierarchicalIndex;
+    private final Cache<ImmutableBytesPtr, Integer> centroidAssignmentCache =
+      CacheBuilder.newBuilder().maximumSize(10000).build();
 
     public CachedCentroids(String indexName, long generation, List<byte[]> byteCentroids,
       int bruteforceLimit, int probeBuckets) {
@@ -390,20 +398,24 @@ public class VectorCentroidCache {
       }
     }
 
-    private float[] decodeQueryVector(byte[] queryVector) {
+    private float[] decodeQueryVector(byte[] queryVector, int offset, int length) {
       if (queryVector == null) {
         throw new IllegalArgumentException("queryVector must not be null");
       }
-      if (queryVector.length % Bytes.SIZEOF_FLOAT != 0) {
-        throw new IllegalArgumentException("Query vector length must be a multiple of "
-          + Bytes.SIZEOF_FLOAT + ", got: " + queryVector.length);
+      if (length % Bytes.SIZEOF_FLOAT != 0) {
+        throw new IllegalArgumentException(
+          "Query vector length must be a multiple of " + Bytes.SIZEOF_FLOAT + ", got: " + length);
       }
-      int qDim = queryVector.length / Bytes.SIZEOF_FLOAT;
+      int qDim = length / Bytes.SIZEOF_FLOAT;
       if (centroidCount > 0 && qDim != dimension) {
         throw new IllegalArgumentException(
           "Dimension mismatch: expected " + dimension + ", got " + qDim);
       }
-      return PVectorFloat.readElements(queryVector, 0, queryVector.length);
+      return PVectorFloat.readElements(queryVector, offset, length);
+    }
+
+    private float[] decodeQueryVector(byte[] queryVector) {
+      return decodeQueryVector(queryVector, 0, queryVector != null ? queryVector.length : 0);
     }
 
     /**
@@ -417,9 +429,30 @@ public class VectorCentroidCache {
       return findNearestCentroidBruteForce(queryVector, metric);
     }
 
+    /** Finds the nearest centroid ID for the given packed byte query vector slice. */
+    public int findNearestCentroid(byte[] queryVector, int offset, int length, String metric) {
+      if (queryVector == null) {
+        throw new IllegalArgumentException("queryVector must not be null");
+      }
+      ImmutableBytesPtr key = new ImmutableBytesPtr(queryVector, offset, length);
+      Integer cachedCentroid = centroidAssignmentCache.getIfPresent(key);
+      if (cachedCentroid != null) {
+        return cachedCentroid;
+      }
+      float[] decoded = decodeQueryVector(queryVector, offset, length);
+      int centroidId = findNearestCentroid(decoded, metric);
+      byte[] copy = new byte[length];
+      System.arraycopy(queryVector, offset, copy, 0, length);
+      centroidAssignmentCache.put(new ImmutableBytesPtr(copy), centroidId);
+      return centroidId;
+    }
+
     /** Finds the nearest centroid ID for the given packed byte query vector. */
     public int findNearestCentroid(byte[] queryVector, String metric) {
-      return findNearestCentroid(decodeQueryVector(queryVector), metric);
+      if (queryVector == null) {
+        throw new IllegalArgumentException("queryVector must not be null");
+      }
+      return findNearestCentroid(queryVector, 0, queryVector.length, metric);
     }
 
     /** Finds the nearest centroid ID using brute force linear scan. */
@@ -864,28 +897,19 @@ public class VectorCentroidCache {
   }
 
   public VectorCentroidCache() {
-    this(HBaseConfiguration.create(), null, null);
+    this(HBaseConfiguration.create(), null);
   }
 
   public VectorCentroidCache(Configuration conf) {
-    this(conf, null, null);
-  }
-
-  public VectorCentroidCache(Connection connection) {
-    this(null, connection, null);
-  }
-
-  public VectorCentroidCache(Configuration conf, Connection connection) {
-    this(conf, connection, null);
+    this(conf, null);
   }
 
   public VectorCentroidCache(String defaultIndexName) {
-    this(null, null, defaultIndexName);
+    this(null, defaultIndexName);
   }
 
-  public VectorCentroidCache(Configuration conf, Connection connection, String defaultIndexName) {
+  public VectorCentroidCache(Configuration conf, String defaultIndexName) {
     this.conf = conf != null ? conf : HBaseConfiguration.create();
-    this.connection = connection;
     this.defaultIndexName = defaultIndexName;
 
     long maxSize = this.conf.getLong(VECTOR_CENTROID_CACHE_MAX_SIZE_ATTRIB,
@@ -907,6 +931,9 @@ public class VectorCentroidCache {
 
   /** Returns the singleton instance of VectorCentroidCache for the given configuration. */
   public static VectorCentroidCache getInstance(Configuration conf) {
+    if (conf != null) {
+      suppliedConf = conf;
+    }
     VectorCentroidCache result = defaultInstance;
     if (result == null) {
       synchronized (VectorCentroidCache.class) {
@@ -916,11 +943,19 @@ public class VectorCentroidCache {
         }
       }
     }
+    if (conf != null && result.conf != conf) {
+      result.conf = conf;
+    }
     return result;
   }
 
+  /**
+   * Returns the singleton instance, preferring the last explicitly configured cluster configuration
+   * or falling back to a default {@link HBaseConfiguration}.
+   */
   public static VectorCentroidCache getInstance() {
-    return getInstance(HBaseConfiguration.create());
+    Configuration conf = suppliedConf;
+    return getInstance(conf != null ? conf : HBaseConfiguration.create());
   }
 
   public static synchronized void resetInstance() {
@@ -935,12 +970,11 @@ public class VectorCentroidCache {
     return conf;
   }
 
-  public Connection getConnection() {
-    return connection;
-  }
-
-  public void setConnection(Connection connection) {
-    this.connection = connection;
+  public void setConfiguration(Configuration conf) {
+    if (conf != null) {
+      suppliedConf = conf;
+    }
+    this.conf = conf;
   }
 
   public String getDefaultIndexName() {
@@ -957,45 +991,6 @@ public class VectorCentroidCache {
 
   public int getProbeBuckets() {
     return probeBuckets;
-  }
-
-  private volatile boolean checkCatalogOnAccess = false;
-
-  public boolean isCheckCatalogOnAccess() {
-    return checkCatalogOnAccess;
-  }
-
-  public void setCheckCatalogOnAccess(boolean checkCatalogOnAccess) {
-    this.checkCatalogOnAccess = checkCatalogOnAccess;
-  }
-
-  /**
-   * Resolves an active connection, preferring instance connection, thread-local, default, or
-   * server-side configuration connection.
-   */
-  protected Connection resolveConnection() throws SQLException {
-    if (this.connection != null) {
-      return this.connection;
-    }
-    Connection threadConn = CentroidManager.getThreadLocalConnection();
-    if (threadConn != null) {
-      return threadConn;
-    }
-    Connection defConn = CentroidManager.getDefaultConnection();
-    if (defConn != null) {
-      return defConn;
-    }
-    if (
-      this.conf != null
-        && this.conf.getBoolean("phoenix.vector.centroid.cache.server.connection.enabled", false)
-    ) {
-      try {
-        return QueryUtil.getConnectionOnServer(this.conf);
-      } catch (Exception e) {
-        LOG.debug("Could not obtain server connection via QueryUtil: {}", e.getMessage());
-      }
-    }
-    return null;
   }
 
   public CachedCentroids putCentroids(String indexName, long generation, List<byte[]> centroids) {
@@ -1054,9 +1049,9 @@ public class VectorCentroidCache {
     return putFloatCentroids(1L, centroids);
   }
 
-  public CachedCentroids loadCentroids(String indexName, long generation) throws SQLException {
+  public CachedCentroids loadCentroids(String indexName, long generation, Connection conn)
+    throws SQLException {
     String normalized = SchemaUtil.normalizeFullTableName(indexName);
-    Connection conn = resolveConnection();
     if (conn == null) {
       throw new IllegalStateException("No Connection available to load centroids from "
         + "SYSTEM.VECTOR_CENTROID for index: " + normalized);
@@ -1072,17 +1067,76 @@ public class VectorCentroidCache {
     return cached;
   }
 
-  public CachedCentroids loadCentroids(String indexName) throws SQLException {
+  /** Concurrency locks coordinating on-demand centroid loading during index write mutations. */
+  private final ConcurrentMap<CacheKey, Object> writeLoadLocks = new ConcurrentHashMap<>();
+
+  /**
+   * Retrieves centroids for index write assignment for the specified centroid generation, loading
+   * and caching them from {@code SYSTEM.VECTOR_CENTROID} on a cache miss.
+   * @param indexName  logical index table name
+   * @param generation centroid generation recorded in the system catalog
+   * @return cached centroid representation for vector assignment
+   * @throws IllegalStateException if generation is null or centroids cannot be loaded
+   */
+  public CachedCentroids getCentroidsForWrite(String indexName, Long generation) {
     String normalized = SchemaUtil.normalizeFullTableName(indexName);
-    Connection conn = resolveConnection();
-    long gen = 1L;
-    if (conn != null) {
-      long catalogGen = CentroidManager.getGeneration(conn, normalized);
-      if (catalogGen > 0) {
-        gen = catalogGen;
+    if (generation == null) {
+      throw new IllegalStateException("No centroid generation recorded for index " + normalized
+        + "; its centroids have not been trained");
+    }
+    CacheKey key = new CacheKey(normalized, generation);
+    CachedCentroids cached = cache.getIfPresent(key);
+    if (cached != null) {
+      return cached;
+    }
+    Object lock = writeLoadLocks.computeIfAbsent(key, k -> new Object());
+    try {
+      synchronized (lock) {
+        cached = cache.getIfPresent(key);
+        if (cached != null) {
+          return cached;
+        }
+        Configuration configuration = this.conf != null
+          ? this.conf
+          : (suppliedConf != null ? suppliedConf : HBaseConfiguration.create());
+        try (Connection conn = QueryUtil.getConnectionOnServer(configuration)) {
+          cached = loadCentroids(normalized, generation, conn);
+        } catch (SQLException e) {
+          throw new IllegalStateException("Could not load centroids for index " + normalized
+            + " generation " + generation + " from SYSTEM.VECTOR_CENTROID", e);
+        }
+        if (cached == null || cached.getCentroidCount() == 0) {
+          throw new IllegalStateException("No centroids recorded for index " + normalized
+            + " generation " + generation + "; the index cannot be maintained");
+        }
+        return cached;
+      }
+    } finally {
+      writeLoadLocks.remove(key, lock);
+    }
+  }
+
+  public CachedCentroids peekCentroids(String indexName, long generation) {
+    String normalized = SchemaUtil.normalizeFullTableName(indexName);
+    CacheKey key = new CacheKey(normalized, generation);
+    return cache.getIfPresent(key);
+  }
+
+  public CachedCentroids peekCentroids(String indexName) {
+    String normalized = SchemaUtil.normalizeFullTableName(indexName);
+    Long activeGen = activeGenerations.get(normalized);
+    if (activeGen != null) {
+      CachedCentroids cached = cache.getIfPresent(new CacheKey(normalized, activeGen));
+      if (cached != null) {
+        return cached;
       }
     }
-    return loadCentroids(normalized, gen);
+    for (Map.Entry<CacheKey, CachedCentroids> entry : cache.asMap().entrySet()) {
+      if (entry.getKey().getIndexName().equals(normalized)) {
+        return entry.getValue();
+      }
+    }
+    return null;
   }
 
   public CachedCentroids getCentroids(String indexName, long generation) {
@@ -1092,40 +1146,12 @@ public class VectorCentroidCache {
     if (cached != null) {
       return cached;
     }
-    try {
-      return loadCentroids(normalized, generation);
-    } catch (SQLException e) {
-      throw new RuntimeException("Failed to load centroids for " + key, e);
-    }
+    throw new IllegalStateException("No centroids in cache for index " + normalized + " generation "
+      + generation + "; centroids must be loaded before use");
   }
 
   public CachedCentroids getCentroids(String indexName) {
     String normalized = SchemaUtil.normalizeFullTableName(indexName);
-
-    if (checkCatalogOnAccess) {
-      Connection conn = null;
-      try {
-        conn = resolveConnection();
-      } catch (SQLException e) {
-        LOG.debug("Could not resolve connection for generation check: {}", e.getMessage());
-      }
-
-      if (conn != null) {
-        try {
-          long catalogGen = CentroidManager.getGeneration(conn, normalized);
-          if (catalogGen > 0) {
-            Long currentGen = activeGenerations.get(normalized);
-            if (currentGen != null && catalogGen > currentGen) {
-              cache.invalidate(new CacheKey(normalized, currentGen));
-              activeGenerations.put(normalized, catalogGen);
-            }
-            return getCentroids(normalized, catalogGen);
-          }
-        } catch (SQLException e) {
-          LOG.debug("Failed checking catalog generation: {}", e.getMessage());
-        }
-      }
-    }
 
     Long activeGen = activeGenerations.get(normalized);
     if (activeGen != null) {
@@ -1134,22 +1160,12 @@ public class VectorCentroidCache {
       if (cached != null) {
         return cached;
       }
-      return getCentroids(normalized, activeGen);
     }
 
     for (Map.Entry<CacheKey, CachedCentroids> entry : cache.asMap().entrySet()) {
       if (entry.getKey().getIndexName().equals(normalized)) {
         return entry.getValue();
       }
-    }
-
-    try {
-      Connection conn = resolveConnection();
-      if (conn != null) {
-        return getCentroids(normalized, 1L);
-      }
-    } catch (Exception e) {
-      LOG.debug("Could not resolve connection to load generation 1: {}", e.getMessage());
     }
 
     throw new IllegalStateException("No centroids found in cache for index: " + normalized);
@@ -1200,6 +1216,12 @@ public class VectorCentroidCache {
     return getCentroids(indexName, generation).findNearestCentroid(queryVector, metric);
   }
 
+  public int findNearestCentroid(String indexName, long generation, byte[] queryVector, int offset,
+    int length, String metric) {
+    return getCentroids(indexName, generation).findNearestCentroid(queryVector, offset, length,
+      metric);
+  }
+
   public int findNearestCentroid(String indexName, long generation, float[] queryVector,
     String metric) {
     return getCentroids(indexName, generation).findNearestCentroid(queryVector, metric);
@@ -1209,12 +1231,21 @@ public class VectorCentroidCache {
     return getCentroids(indexName).findNearestCentroid(queryVector, metric);
   }
 
+  public int findNearestCentroid(String indexName, byte[] queryVector, int offset, int length,
+    String metric) {
+    return getCentroids(indexName).findNearestCentroid(queryVector, offset, length, metric);
+  }
+
   public int findNearestCentroid(String indexName, float[] queryVector, String metric) {
     return getCentroids(indexName).findNearestCentroid(queryVector, metric);
   }
 
   public int findNearestCentroid(byte[] queryVector, String metric) {
     return getCentroids().findNearestCentroid(queryVector, metric);
+  }
+
+  public int findNearestCentroid(byte[] queryVector, int offset, int length, String metric) {
+    return getCentroids().findNearestCentroid(queryVector, offset, length, metric);
   }
 
   public int findNearestCentroid(float[] queryVector, String metric) {

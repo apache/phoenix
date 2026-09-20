@@ -36,7 +36,9 @@ import org.apache.hadoop.hbase.CellUtil;
 import org.apache.hadoop.hbase.CoprocessorEnvironment;
 import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.TableName;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.PackagePrivateFieldAccessor;
+import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
@@ -63,9 +65,11 @@ import org.apache.phoenix.coprocessor.DelegateRegionScanner;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants;
 import org.apache.phoenix.filter.PagingFilter;
 import org.apache.phoenix.filter.UnverifiedRowFilter;
+import org.apache.phoenix.hbase.index.ValueGetter;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.MetricsIndexerSourceFactory;
+import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
 import org.apache.phoenix.schema.SortOrder;
@@ -138,6 +142,7 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
     private Scan singleRowIndexScan;
     private Scan buildIndexScanForDataTable = null;
     private Table dataHTable = null;
+    private Table indexHTable = null;
     private byte[] emptyCF;
     private byte[] emptyCQ;
     private IndexMaintainer indexMaintainer = null;
@@ -313,6 +318,9 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
       if (dataHTable != null) {
         dataHTable.close();
       }
+      if (indexHTable != null) {
+        indexHTable.close();
+      }
     }
 
     @Override
@@ -337,6 +345,10 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
     }
 
     private void repairIndexRows(byte[] indexRowKey, long ts, List<Cell> row) throws IOException {
+      if (indexMaintainer.isVectorIndex()) {
+        repairVectorIndexRows(indexRowKey, ts, row);
+        return;
+      }
       if (buildIndexScanForDataTable == null) {
         buildIndexScanForDataTable = new Scan();
         indexScan = new Scan(scan);
@@ -535,6 +547,145 @@ public class GlobalIndexChecker extends BaseScannerRegionObserver implements Reg
         "The scan returned a row with row key (" + Bytes.toStringBinary(rowKey)
           + ") different than indexRowKey (" + Bytes.toStringBinary(indexRowKey) + ") for table "
           + region.getRegionInfo().getTable().getNameAsString());
+    }
+
+    private void repairVectorIndexRows(byte[] indexRowKey, long ts, List<Cell> row)
+      throws IOException {
+      if (dataHTable == null) {
+        indexScan = new Scan(scan);
+        singleRowIndexScan = new Scan(scan);
+        PackagePrivateFieldAccessor.setMvccReadPoint(indexScan, -1);
+        PackagePrivateFieldAccessor.setMvccReadPoint(singleRowIndexScan, -1);
+        byte[] dataTableName =
+          scan.getAttribute(BaseScannerRegionObserverConstants.PHYSICAL_DATA_TABLE_NAME);
+        dataHTable = ServerUtil.ConnectionFactory
+          .getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION, env)
+          .getTable(TableName.valueOf(dataTableName));
+        indexHTable = ServerUtil.ConnectionFactory
+          .getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION, env)
+          .getTable(TableName.valueOf(indexMaintainer.getIndexTableName()));
+        viewConstants = IndexUtil.deserializeViewConstantsFromScan(scan);
+      } else if (indexHTable == null) {
+        indexHTable = ServerUtil.ConnectionFactory
+          .getConnection(ServerUtil.ConnectionType.INDEX_WRITER_CONNECTION, env)
+          .getTable(TableName.valueOf(indexMaintainer.getIndexTableName()));
+      }
+
+      byte[] dataRowKey =
+        indexMaintainer.buildDataRowKey(new ImmutableBytesWritable(indexRowKey), viewConstants);
+      Get get = new Get(dataRowKey);
+      get.setTimeRange(0, maxTimestamp);
+      for (ColumnReference column : indexMaintainer.getAllColumnsForDataTable()) {
+        get.addColumn(column.getFamily(), column.getQualifier());
+      }
+      get.addColumn(indexMaintainer.getDataEmptyKeyValueCF(),
+        indexMaintainer.getEmptyKeyValueQualifierForDataTable());
+
+      Result dataRowResult = null;
+      try {
+        dataRowResult = dataHTable.get(get);
+      } catch (Throwable t) {
+        ClientUtil.throwIOException(dataHTable.getName().toString(), t);
+      }
+
+      long repairTs = ts;
+      if (dataRowResult != null && !dataRowResult.isEmpty()) {
+        for (Cell cell : dataRowResult.rawCells()) {
+          if (cell.getTimestamp() > repairTs) {
+            repairTs = cell.getTimestamp();
+          }
+        }
+      }
+      if (repairTs <= 0) {
+        repairTs = EnvironmentEdgeManager.currentTimeMillis();
+      }
+
+      if (dataRowResult == null || dataRowResult.isEmpty()) {
+        if (indexMaintainer.isAgedEnough(ts, ageThreshold)) {
+          region.delete(indexMaintainer.createDelete(indexRowKey, repairTs, false));
+          if (indexHTable != null) {
+            indexHTable.delete(indexMaintainer.createDelete(indexRowKey, repairTs, false));
+          }
+        }
+        scanner.close();
+        indexScan.withStartRow(indexRowKey, false);
+        scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(indexScan);
+        hasMore = true;
+        row.clear();
+        return;
+      }
+
+      Put dataPut = new Put(dataRowKey);
+      for (Cell cell : dataRowResult.rawCells()) {
+        dataPut.add(cell);
+      }
+
+      if (!indexMaintainer.shouldPrepareIndexMutations(dataPut)) {
+        if (indexMaintainer.isAgedEnough(ts, ageThreshold)) {
+          region.delete(indexMaintainer.createDelete(indexRowKey, repairTs, false));
+          if (indexHTable != null) {
+            indexHTable.delete(indexMaintainer.createDelete(indexRowKey, repairTs, false));
+          }
+        }
+        scanner.close();
+        indexScan.withStartRow(indexRowKey, false);
+        scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(indexScan);
+        hasMore = true;
+        row.clear();
+        return;
+      }
+
+      byte[] correctIndexRowKey = indexMaintainer.getIndexRowKey(dataPut);
+      boolean keyMatches = Bytes.compareTo(indexRowKey, 0, indexRowKey.length, correctIndexRowKey,
+        0, correctIndexRowKey.length) == 0;
+
+      ValueGetter vg = new IndexUtil.SimpleValueGetter(dataPut);
+      Put replacementPut = indexMaintainer.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE, vg,
+        new ImmutableBytesWritable(dataRowKey), repairTs, null, null, true, null);
+      if (replacementPut == null) {
+        replacementPut = new Put(correctIndexRowKey);
+      } else {
+        IndexUtil.removeEmptyColumn(replacementPut,
+          indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+          indexMaintainer.getEmptyKeyValueQualifier());
+      }
+      replacementPut.addColumn(indexMaintainer.getEmptyKeyValueFamily().copyBytesIfNecessary(),
+        indexMaintainer.getEmptyKeyValueQualifier(), repairTs, VERIFIED_BYTES);
+
+      if (keyMatches) {
+        if (indexHTable != null) {
+          indexHTable.put(replacementPut);
+        } else {
+          region.put(replacementPut);
+        }
+        scanner.close();
+        indexScan.withStartRow(indexRowKey, true);
+        scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(indexScan);
+        hasMore = scanner.next(row);
+        if (row.isEmpty() || isDummy(row)) {
+          return;
+        }
+        verifyRowAndRemoveEmptyColumn(row);
+        return;
+      } else {
+        if (indexMaintainer.isAgedEnough(ts, ageThreshold)) {
+          region.delete(indexMaintainer.createDelete(indexRowKey, repairTs, false));
+        }
+        if (indexHTable != null) {
+          if (indexMaintainer.isAgedEnough(ts, ageThreshold)) {
+            indexHTable.delete(indexMaintainer.createDelete(indexRowKey, repairTs, false));
+          }
+          indexHTable.put(replacementPut);
+        } else {
+          region.put(replacementPut);
+        }
+        scanner.close();
+        indexScan.withStartRow(indexRowKey, false);
+        scanner = ((DelegateRegionScanner) delegate).getNewRegionScanner(indexScan);
+        hasMore = true;
+        row.clear();
+        return;
+      }
     }
 
     private boolean isEmptyColumn(Cell cell) {

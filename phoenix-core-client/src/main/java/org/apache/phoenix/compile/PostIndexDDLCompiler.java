@@ -23,12 +23,14 @@ import java.sql.SQLException;
 import java.util.List;
 import org.apache.phoenix.execute.MutationState;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PColumnFamily;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.TableRef;
 import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -71,9 +73,16 @@ public class PostIndexDDLCompiler {
     boolean isMultiTenant = connection.getTenantId() != null && indexTable.isMultiTenant();
     boolean isViewIndex = indexTable.getViewIndexId() != null;
     int posOffset = (isSalted ? 1 : 0) + (isMultiTenant ? 1 : 0) + (isViewIndex ? 1 : 0);
+    String centroidColName =
+      IndexUtil.getIndexColumnName(null, PhoenixDatabaseMetaData.CENTROID_ID);
     for (int i = posOffset; i < nIndexPKColumns; i++) {
       PColumn col = indexPKColumns.get(i);
       String indexColName = col.getName().getString();
+      if (indexTable.isVectorIndex() && centroidColName.equals(indexColName)) {
+        indexColumns.append('"').append(indexColName).append("\",");
+        indexColumnNames.add(indexColName);
+        continue;
+      }
       // need to escape backslash as this used in the SELECT statement
       String dataColName = col.getExpressionStr() == null
         ? col.getName().getString()
@@ -126,6 +135,12 @@ public class PostIndexDDLCompiler {
       .append(dataTable.getTableName().getString()).append('"');
     this.selectQuery = selectQueryBuilder.toString();
     updateStmtStr.append(this.selectQuery);
+
+    if (indexTable.isVectorIndex()) {
+      ServerBuildIndexCompiler compiler = new ServerBuildIndexCompiler(connection,
+        SchemaUtil.getEscapedFullTableName(dataTable.getName().getString()));
+      return compiler.compile(indexTable);
+    }
 
     try (final PhoenixStatement statement = new PhoenixStatement(connection)) {
       DelegateMutationPlan delegate =

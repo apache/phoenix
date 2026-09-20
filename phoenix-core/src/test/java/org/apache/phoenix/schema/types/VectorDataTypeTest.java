@@ -697,4 +697,70 @@ public class VectorDataTypeTest {
     assertNull("vectorIvfSampleSize must be null", deserialized.getVectorIvfSampleSize());
     assertNull("vectorCentroidGeneration must be null", deserialized.getVectorCentroidGeneration());
   }
+
+  @Test
+  public void testTranscodeBytesRoundTrip() {
+    // 1. PVectorFloat
+    float[] floats = new float[] { 1.5f, -3.2f, 0.0f, -0.0f, Float.MAX_VALUE, Float.MIN_VALUE };
+    byte[] floatAsc = PVectorFloat.INSTANCE.toBytes(floats, SortOrder.ASC);
+    byte[] floatDesc = PVectorFloat.INSTANCE.toBytes(floats, SortOrder.DESC);
+
+    // ASC -> ASC
+    assertArrayEquals(floatAsc,
+      PVectorFloat.transcodeBytes(floatAsc, 0, floatAsc.length, SortOrder.ASC, SortOrder.ASC));
+    // DESC -> DESC
+    assertArrayEquals(floatDesc,
+      PVectorFloat.transcodeBytes(floatDesc, 0, floatDesc.length, SortOrder.DESC, SortOrder.DESC));
+    // ASC -> DESC
+    byte[] transcodedFloatDesc =
+      PVectorFloat.transcodeBytes(floatAsc, 0, floatAsc.length, SortOrder.ASC, SortOrder.DESC);
+    assertArrayEquals(floatDesc, transcodedFloatDesc);
+    assertArrayEquals(floats,
+      (float[]) PVectorFloat.INSTANCE.toObject(transcodedFloatDesc, SortOrder.DESC), 0.0f);
+    // DESC -> ASC
+    byte[] transcodedFloatAsc =
+      PVectorFloat.transcodeBytes(floatDesc, 0, floatDesc.length, SortOrder.DESC, SortOrder.ASC);
+    assertArrayEquals(floatAsc, transcodedFloatAsc);
+    assertArrayEquals(floats,
+      (float[]) PVectorFloat.INSTANCE.toObject(transcodedFloatAsc, SortOrder.ASC), 0.0f);
+
+    // Buffer with offset and slice
+    byte[] paddedFloat = new byte[floatAsc.length + 20];
+    System.arraycopy(floatAsc, 0, paddedFloat, 10, floatAsc.length);
+    byte[] transcodedSlice =
+      PVectorFloat.transcodeBytes(paddedFloat, 10, floatAsc.length, SortOrder.ASC, SortOrder.DESC);
+    assertArrayEquals(floatDesc, transcodedSlice);
+
+    // 2. PVectorDouble
+    double[] doubles =
+      new double[] { 1.5d, -3.2d, 0.0d, -0.0d, Double.MAX_VALUE, Double.MIN_VALUE };
+    byte[] doubleAsc = PVectorDouble.INSTANCE.toBytes(doubles, SortOrder.ASC);
+    byte[] doubleDesc = PVectorDouble.INSTANCE.toBytes(doubles, SortOrder.DESC);
+
+    // ASC -> ASC
+    assertArrayEquals(doubleAsc,
+      PVectorDouble.transcodeBytes(doubleAsc, 0, doubleAsc.length, SortOrder.ASC, SortOrder.ASC));
+    // DESC -> DESC
+    assertArrayEquals(doubleDesc, PVectorDouble.transcodeBytes(doubleDesc, 0, doubleDesc.length,
+      SortOrder.DESC, SortOrder.DESC));
+    // ASC -> DESC
+    byte[] transcodedDoubleDesc =
+      PVectorDouble.transcodeBytes(doubleAsc, 0, doubleAsc.length, SortOrder.ASC, SortOrder.DESC);
+    assertArrayEquals(doubleDesc, transcodedDoubleDesc);
+    assertArrayEquals(doubles,
+      (double[]) PVectorDouble.INSTANCE.toObject(transcodedDoubleDesc, SortOrder.DESC), 0.0d);
+    // DESC -> ASC
+    byte[] transcodedDoubleAsc =
+      PVectorDouble.transcodeBytes(doubleDesc, 0, doubleDesc.length, SortOrder.DESC, SortOrder.ASC);
+    assertArrayEquals(doubleAsc, transcodedDoubleAsc);
+    assertArrayEquals(doubles,
+      (double[]) PVectorDouble.INSTANCE.toObject(transcodedDoubleAsc, SortOrder.ASC), 0.0d);
+
+    // Buffer with offset and slice
+    byte[] paddedDouble = new byte[doubleAsc.length + 20];
+    System.arraycopy(doubleAsc, 0, paddedDouble, 10, doubleAsc.length);
+    byte[] transcodedDoubleSlice = PVectorDouble.transcodeBytes(paddedDouble, 10, doubleAsc.length,
+      SortOrder.ASC, SortOrder.DESC);
+    assertArrayEquals(doubleDesc, transcodedDoubleSlice);
+  }
 }

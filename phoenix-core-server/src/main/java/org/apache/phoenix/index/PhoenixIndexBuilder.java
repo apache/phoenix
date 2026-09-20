@@ -43,6 +43,7 @@ import org.apache.hadoop.hbase.regionserver.MiniBatchOperationInProgress;
 import org.apache.hadoop.hbase.regionserver.RegionScanner;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.hadoop.io.WritableUtils;
+import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessorclient.BaseScannerRegionObserverConstants.ReplayWrite;
 import org.apache.phoenix.exception.DataExceedsCapacityException;
@@ -60,6 +61,8 @@ import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableImpl;
 import org.apache.phoenix.schema.tuple.MultiKeyValueTuple;
 import org.apache.phoenix.util.ByteUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
 
@@ -67,12 +70,15 @@ import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
  * Index builder for covered-columns index that ties into phoenix for faster use.
  */
 public class PhoenixIndexBuilder extends NonTxIndexBuilder {
+  private static final Logger LOGGER = LoggerFactory.getLogger(PhoenixIndexBuilder.class);
   private PhoenixIndexMetaDataBuilder indexMetaDataBuilder;
 
   @Override
   public void setup(RegionCoprocessorEnvironment env) throws IOException {
     super.setup(env);
     this.indexMetaDataBuilder = new PhoenixIndexMetaDataBuilder(env);
+    VectorCentroidCache cache = VectorCentroidCache.getInstance(env.getConfiguration());
+    cache.setConfiguration(env.getConfiguration());
   }
 
   private static List<Cell> flattenCells(Mutation m, int estimatedSize) throws IOException {
