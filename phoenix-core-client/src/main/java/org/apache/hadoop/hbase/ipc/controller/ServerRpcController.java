@@ -42,6 +42,7 @@ class ServerRpcController extends DelegatingHBaseRpcController {
     .add(PhoenixDatabaseMetaData.SYSTEM_SEQUENCE_NAME)
     .add(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME)
     .add(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME)
+    .add(PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_NAME)
     .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME_BYTES, true)
       .getNameAsString())
     .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_STATS_NAME_BYTES, true)
@@ -51,6 +52,9 @@ class ServerRpcController extends DelegatingHBaseRpcController {
     .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_FUNCTION_NAME_BYTES, true)
       .getNameAsString())
     .add(SchemaUtil.getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_CHILD_LINK_NAME_BYTES, true)
+      .getNameAsString())
+    .add(SchemaUtil
+      .getPhysicalTableName(PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_NAME_BYTES, true)
       .getNameAsString())
     .build();
 

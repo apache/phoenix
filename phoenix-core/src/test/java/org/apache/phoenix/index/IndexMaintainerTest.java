@@ -19,6 +19,7 @@ package org.apache.phoenix.index;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -29,6 +30,8 @@ import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.Time;
 import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -36,12 +39,17 @@ import java.util.Properties;
 import java.util.Set;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.CellUtil;
+import org.apache.hadoop.hbase.HBaseConfiguration;
 import org.apache.hadoop.hbase.HConstants;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
+import org.apache.phoenix.cache.VectorCentroidCache;
+import org.apache.phoenix.cache.VectorCentroidCache.CachedCentroids;
+import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
 import org.apache.phoenix.hbase.index.AbstractValueGetter;
 import org.apache.phoenix.hbase.index.ValueGetter;
@@ -50,16 +58,22 @@ import org.apache.phoenix.hbase.index.util.GenericKeyValueBuilder;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.hbase.index.util.KeyValueBuilder;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.optimize.DistanceMetric;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.query.QueryConstants;
+import org.apache.phoenix.schema.DelegateTable;
+import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTableKey;
+import org.apache.phoenix.schema.types.PInteger;
+import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
 import org.apache.phoenix.util.IndexUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.apache.phoenix.util.ViewUtil;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
@@ -443,6 +457,237 @@ public class IndexMaintainerTest extends BaseConnectionlessQueryTest {
           }
         }
       }
+    }
+  }
+
+  /** Makes an IndexMaintainer for a 2D vector index whose centroids are already in the cache. */
+  private IndexMaintainer createVectorIndexMaintainer(PhoenixConnection pconn, String tableName,
+    String indexName, String elementType, long generation) throws Exception {
+    pconn.createStatement().execute("CREATE TABLE " + tableName
+      + " (ID VARCHAR PRIMARY KEY, V VECTOR(" + elementType + ", 2), LABEL VARCHAR)");
+    pconn.createStatement()
+      .execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+        + " (V) INCLUDE (LABEL) WITH (algorithm = 'IVF', metric = 'L2', lists = 2,"
+        + " sample_size = 10) ASYNC");
+    PTable dataTable = pconn.getTable(tableName);
+    PTable index = pconn.getTable(indexName);
+    // The client does not send a maintainer for an untrained ASYNC vector index
+    assertNull(index.getVectorCentroidGeneration());
+    assertFalse(IndexMaintainer.sendIndexMaintainer(index));
+    PTable trained = new DelegateTable(index) {
+      @Override
+      public Long getVectorCentroidGeneration() {
+        return generation;
+      }
+    };
+    assertTrue(IndexMaintainer.sendIndexMaintainer(trained));
+    VectorCentroidCache.getInstance(HBaseConfiguration.create()).put(index.getName().getString(),
+      generation, new CachedCentroids(Arrays.asList(new float[] { 0, 0 }, new float[] { 10, 10 }),
+        DistanceMetric.L2));
+    return IndexMaintainer.create(dataTable, trained, pconn);
+  }
+
+  private static Put dataRow(PhoenixConnection pconn, String sql) throws Exception {
+    pconn.createStatement().execute(sql);
+    Iterator<Pair<byte[], List<Mutation>>> iterator = pconn.getMutationState().toMutations();
+    Put put = (Put) iterator.next().getSecond().get(0);
+    pconn.rollback();
+    return put;
+  }
+
+  @Test
+  public void testVectorIndexRowKey() throws Exception {
+    testVectorIndexRowKey("FLOAT");
+  }
+
+  @Test
+  public void testDoubleVectorIndexRowKey() throws Exception {
+    testVectorIndexRowKey("DOUBLE");
+  }
+
+  private void testVectorIndexRowKey(String elementType) throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      IndexMaintainer im =
+        createVectorIndexMaintainer(pconn, tableName, indexName, elementType, 7L);
+      assertTrue(im.isVectorIndex());
+      assertEquals(DistanceMetric.L2, im.getDistanceMetric());
+      assertEquals(Long.valueOf(7L), im.getCentroidGeneration());
+      // The first row key slot is the centroid ID, a non-null INTEGER
+      assertEquals(PInteger.INSTANCE, im.getIndexRowKeySchema().getField(0).getDataType());
+
+      Put near = dataRow(pconn, "UPSERT INTO " + tableName + " VALUES ('a', ARRAY[9, 8], 'x')");
+      assertTrue(im.shouldPrepareIndexMutations(near));
+      long ts = EnvironmentEdgeManager.currentTimeMillis();
+      ImmutableBytesPtr rowKey = new ImmutableBytesPtr(near.getRow());
+      Put indexPut = im.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+        new IndexUtil.SimpleValueGetter(near), rowKey, ts, null, null, false, null);
+      assertArrayEquals(ByteUtil.concat(PInteger.INSTANCE.toBytes(1), Bytes.toBytes("a")),
+        indexPut.getRow());
+      // The index row also keeps the indexed vector value
+      PColumn vecCol = pconn.getTable(indexName).getColumnForColumnName("0:V");
+      assertEquals(1,
+        indexPut.get(vecCol.getFamilyName().getBytes(), vecCol.getColumnQualifierBytes()).size());
+
+      // The maintainer attributes stay the same after serialization and deserialization
+      IndexMaintainer fromProto = IndexMaintainer.fromProto(IndexMaintainer.toProto(im),
+        pconn.getTable(tableName).getRowKeySchema(), false);
+      assertTrue(fromProto.isVectorIndex());
+      assertEquals(Long.valueOf(7L), fromProto.getCentroidGeneration());
+      assertArrayEquals(indexPut.getRow(),
+        fromProto.buildRowKey(new IndexUtil.SimpleValueGetter(near), rowKey, null, null, ts));
+
+      // A row without a vector has no index row and gets no index mutations
+      Put noVector = dataRow(pconn, "UPSERT INTO " + tableName + " (ID, LABEL) VALUES ('b', 'y')");
+      assertFalse(im.shouldPrepareIndexMutations(noVector));
+      assertNull(im.buildRowKey(new IndexUtil.SimpleValueGetter(noVector),
+        new ImmutableBytesPtr(noVector.getRow()), null, null, ts));
+
+      Put same = dataRow(pconn, "UPSERT INTO " + tableName + " VALUES ('a', ARRAY[9, 8], 'z')");
+      Put moved = dataRow(pconn, "UPSERT INTO " + tableName + " VALUES ('a', ARRAY[1, 0], 'x')");
+      assertTrue(im.isVectorUnchanged(near, same));
+      assertFalse(im.isVectorUnchanged(near, moved));
+      assertFalse(im.isVectorUnchanged(noVector, near));
+    }
+  }
+
+  @Test
+  public void testNonVectorIndexMaintainerHasNoVectorFields() throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement()
+        .execute("CREATE TABLE " + tableName + " (ID VARCHAR PRIMARY KEY, C VARCHAR)");
+      conn.createStatement().execute("CREATE INDEX I_" + tableName + " ON " + tableName + " (C)");
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable table = pconn.getTable(tableName);
+      IndexMaintainer im = table.getIndexes().get(0).getIndexMaintainer(table, pconn);
+      ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(im);
+      assertFalse(proto.hasVectorAlgorithm());
+      assertFalse(IndexMaintainer.fromProto(proto, table.getRowKeySchema(), false).isVectorIndex());
+    }
+  }
+
+  /**
+   * Verifies that the maintainer of an untrained vector index loads no centroids and makes no index
+   * row. A client makes this maintainer for a delete from an immutable table.
+   */
+  @Test
+  public void testUntrainedVectorIndexKeepsNoIndexRows() throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      pconn.createStatement().execute(
+        "CREATE IMMUTABLE TABLE " + tableName + " (ID VARCHAR PRIMARY KEY, V VECTOR(FLOAT, 2))");
+      pconn.createStatement().execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+        + " (V) WITH (algorithm = 'IVF', metric = 'L2', lists = 2, sample_size = 10) ASYNC");
+      PTable index = pconn.getTable(indexName);
+      assertNull(index.getVectorCentroidGeneration());
+      IndexMaintainer im = IndexMaintainer.create(pconn.getTable(tableName), index, pconn);
+      im.loadCentroids(pconn);
+      Put row = dataRow(pconn, "UPSERT INTO " + tableName + " VALUES ('a', ARRAY[9, 8])");
+      ValueGetter getter = new IndexUtil.SimpleValueGetter(row);
+      ImmutableBytesPtr rowKey = new ImmutableBytesPtr(row.getRow());
+      long ts = EnvironmentEdgeManager.currentTimeMillis();
+      assertNull(im.buildRowKey(getter, rowKey, null, null, ts));
+      assertNull(im.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE, getter, rowKey, ts, null,
+        null, false));
+    }
+  }
+
+  /**
+   * Verifies that a client keeps the centroids that it loaded before a write. The client has no
+   * server connection, so it cannot reload centroids that the cache evicts.
+   */
+  @Test
+  public void testClientHoldsLoadedCentroids() throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      IndexMaintainer im = createVectorIndexMaintainer(pconn, tableName, indexName, "FLOAT", 7L);
+      im.loadCentroids(pconn);
+      VectorCentroidCache.getInstance(HBaseConfiguration.create()).invalidate(indexName);
+      Put near = dataRow(pconn, "UPSERT INTO " + tableName + " VALUES ('a', ARRAY[9, 8], 'x')");
+      Put indexPut = im.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+        new IndexUtil.SimpleValueGetter(near), new ImmutableBytesPtr(near.getRow()),
+        EnvironmentEdgeManager.currentTimeMillis(), null, null, false, null);
+      assertArrayEquals(ByteUtil.concat(PInteger.INSTANCE.toBytes(1), Bytes.toBytes("a")),
+        indexPut.getRow());
+    }
+  }
+
+  /**
+   * Verifies that a maintainer keeps the centroids that it resolved for its first row. A model that
+   * the cache evicts, or a model larger than the cache, must not reload for each later row.
+   */
+  @Test
+  public void testMaintainerHoldsResolvedCentroids() throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      IndexMaintainer im = createVectorIndexMaintainer(pconn, tableName, indexName, "FLOAT", 7L);
+      Put near = dataRow(pconn, "UPSERT INTO " + tableName + " VALUES ('a', ARRAY[9, 8], 'x')");
+      Put far = dataRow(pconn, "UPSERT INTO " + tableName + " VALUES ('b', ARRAY[1, 0], 'x')");
+      long ts = EnvironmentEdgeManager.currentTimeMillis();
+      assertArrayEquals(ByteUtil.concat(PInteger.INSTANCE.toBytes(1), Bytes.toBytes("a")),
+        im.buildRowKey(new IndexUtil.SimpleValueGetter(near), new ImmutableBytesPtr(near.getRow()),
+          null, null, ts));
+      // This process has no server connection, so a reload fails
+      VectorCentroidCache.getInstance(HBaseConfiguration.create()).invalidate(indexName);
+      assertArrayEquals(ByteUtil.concat(PInteger.INSTANCE.toBytes(0), Bytes.toBytes("b")),
+        im.buildRowKey(new IndexUtil.SimpleValueGetter(far), new ImmutableBytesPtr(far.getRow()),
+          null, null, ts));
+    }
+  }
+
+  /**
+   * Verifies that a view with a WHERE clause inherits a vector index with a name that has a view
+   * prefix. The inherited index must assign rows with the centroids of the parent index.
+   */
+  @Test
+  public void testViewInheritedVectorIndexUsesIndexCentroids() throws Exception {
+    String tableName = "T_" + generateUniqueName();
+    String indexName = "I_" + generateUniqueName();
+    String viewName = "V_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      pconn.createStatement().execute(
+        "CREATE TABLE " + tableName + " (ID VARCHAR PRIMARY KEY, K VARCHAR, V VECTOR(FLOAT, 2))");
+      // A view inherits an index only if the index covers the WHERE columns of the view
+      pconn.createStatement()
+        .execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+          + " (V) INCLUDE (K) WITH (algorithm = 'IVF', metric = 'L2', lists = 2, sample_size = 10)"
+          + " ASYNC");
+      pconn.createStatement()
+        .execute("CREATE VIEW " + viewName + " AS SELECT * FROM " + tableName + " WHERE K = 'k'");
+      // Inherit the index in the same way as the view resolution from SYSTEM.CATALOG
+      PTable view = pconn.getTable(viewName);
+      List<PTable> inheritedIndexes = new ArrayList<>();
+      ViewUtil.addIndexesFromParent(pconn, view, pconn.getTable(tableName), inheritedIndexes);
+      PTable inherited = inheritedIndexes.get(0);
+      assertEquals(viewName + QueryConstants.CHILD_VIEW_INDEX_NAME_SEPARATOR + indexName,
+        inherited.getName().getString());
+      PTable trained = new DelegateTable(inherited) {
+        @Override
+        public Long getVectorCentroidGeneration() {
+          return 5L;
+        }
+      };
+      VectorCentroidCache.getInstance(HBaseConfiguration.create()).put(indexName, 5L,
+        new CachedCentroids(Arrays.asList(new float[] { 0, 0 }, new float[] { 10, 10 }),
+          DistanceMetric.L2));
+      IndexMaintainer im = IndexMaintainer.create(view, trained, pconn);
+      im.loadCentroids(pconn);
+      Put near = dataRow(pconn, "UPSERT INTO " + viewName + " (ID, V) VALUES ('a', ARRAY[9, 8])");
+      Put indexPut = im.buildUpdateMutation(GenericKeyValueBuilder.INSTANCE,
+        new IndexUtil.SimpleValueGetter(near), new ImmutableBytesPtr(near.getRow()),
+        EnvironmentEdgeManager.currentTimeMillis(), null, null, false, null);
+      assertArrayEquals(ByteUtil.concat(PInteger.INSTANCE.toBytes(1), Bytes.toBytes("a")),
+        indexPut.getRow());
     }
   }
 }

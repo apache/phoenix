@@ -299,8 +299,10 @@ public class CreateIndexCompiler {
   }
 
   /**
-   * Validates vector index constraints including base table type, indexed expression type and
-   * dimensionality, distance metric, and algorithm parameters.
+   * Validates a vector index definition. The data table must not be a view or a transactional
+   * table. The index must have one ascending vector expression with a dimension known at compile
+   * time. The metric must be supported. The algorithm must be IVF, with {@code lists > 0} and
+   * {@code sample_size >= lists}. The index consistency must not be eventual.
    */
   private void verifyVectorIndex(CreateIndexStatement create, StatementContext context)
     throws SQLException {
@@ -308,6 +310,11 @@ public class CreateIndexCompiler {
     if (dataTable.getType() == PTableType.VIEW) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
         .setMessage("Vector indexes are not supported on views").build().buildException();
+    }
+    if (dataTable.isTransactional()) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.VECTOR_INDEX_ON_TRANSACTIONAL_TABLE)
+        .setSchemaName(dataTable.getSchemaName().getString())
+        .setTableName(dataTable.getTableName().getString()).build().buildException();
     }
 
     List<Pair<ParseNode, SortOrder>> pairs =
