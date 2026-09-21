@@ -91,8 +91,10 @@ public abstract class PDataType<T> implements DataType<T>, Comparable<PDataType<
   }
 
   public boolean isBytesComparableWith(PDataType otherType) {
-    return equalsAny(this, otherType, PVarbinary.INSTANCE, PBinary.INSTANCE,
-      PVarbinaryEncoded.INSTANCE);
+    if (this == PVarbinaryEncoded.INSTANCE || otherType == PVarbinaryEncoded.INSTANCE) {
+      return this.equals(otherType);
+    }
+    return equalsAny(this, otherType, PVarbinary.INSTANCE, PBinary.INSTANCE);
   }
 
   /** Returns true if {@link PDataType} can be declared as primary key otherwise false. */

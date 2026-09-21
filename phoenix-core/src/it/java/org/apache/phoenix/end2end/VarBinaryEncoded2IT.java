@@ -18,7 +18,6 @@
 package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_RETRY_PAUSE_MS;
-import static org.apache.phoenix.hbase.index.IndexCDCConsumer.INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS;
 import static org.apache.phoenix.hbase.index.IndexRegionObserver.PHOENIX_INDEX_CDC_MUTATION_SERIALIZE;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 
@@ -75,7 +74,6 @@ public class VarBinaryEncoded2IT extends ParallelStatsDisabledIT {
     props.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
       Integer.toString(60 * 60));
     props.put(QueryServices.USE_STATS_FOR_PARALLELIZATION, Boolean.toString(false));
-    props.put(INDEX_CDC_CONSUMER_TIMESTAMP_BUFFER_MS, Integer.toString(2000));
     props.put(INDEX_CDC_CONSUMER_RETRY_PAUSE_MS, Integer.toString(5));
     props.put(PHOENIX_INDEX_CDC_MUTATION_SERIALIZE, Boolean.FALSE.toString());
     setUpTestDriver(new ReadOnlyProps(props.entrySet().iterator()));

@@ -332,8 +332,12 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
       for (int j = 0; j < nRows; ++j) {
         if (rand.nextInt(nRows) % 2 == 0) {
           boolean isDelete;
-          if (i > nBatches / 2 && !gotDelete) {
-            // Force a delete if there was none so far.
+          // Only force a delete on rows that have already been upserted in this run; deleting a
+          // never-inserted row produces a no-op tombstone on the data table while CDC still
+          // surfaces a later upsert for the same key, deterministically tripping the
+          // delete-vs-upsert assertion in verifyChangesViaSCN. If no candidate exists yet, defer
+          // the forced delete to a later batch (the loop will reconsider on the next iteration).
+          if (i > nBatches / 2 && !gotDelete && mutatedRows.contains(rows.get(j))) {
             isDelete = true;
           } else {
             isDelete = mutatedRows.contains(rows.get(j)) && rand.nextInt(5) == 0;
@@ -396,15 +400,25 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
     String datatableName, String tid, List<Set<ChangeRow>> batches, String cdcName)
     throws Exception {
     EnvironmentEdgeManager.injectEdge(injectEdge);
+    long latestChangeTS = injectEdge.currentTime();
     try (Connection conn = committer.getConnection(tid)) {
       for (Set<ChangeRow> batch : batches) {
         for (ChangeRow changeRow : batch) {
           addChange(conn, tableName, changeRow);
+          if (changeRow.changeTS > latestChangeTS) {
+            latestChangeTS = changeRow.changeTS;
+          }
         }
         committer.commit(conn);
       }
     }
-    committer.reset();
+    // Keep the manual edge installed for the remainder of the test so
+    // EnvironmentEdgeManager.currentTimeMillis() does not silently revert
+    // to the wall clock and trip QueryCompiler.verifySCN against the
+    // configured max-lookback age. Pin to the latest changeTS so SCN-bounded
+    // reads of the just-applied mutations remain in-window. Per-test
+    // cleanup is the responsibility of the suite's @After hook.
+    injectEdge.setValue(latestChangeTS);
 
     // For debug: uncomment to see the exact HBase cells.
     dumpCells(schemaName, tableName, datatableName, cdcName);
@@ -1116,6 +1130,13 @@ public class CDCBaseIT extends ParallelStatsDisabledIT {
       EnvironmentEdgeManager.injectEdge(injectEdge);
     }
 
+    /**
+     * Uninstall the manual time edge. Callers should NOT invoke this from inside test bodies that
+     * still need to issue SCN-bounded reads of the just-applied mutations: doing so reverts
+     * {@link EnvironmentEdgeManager#currentTimeMillis()} to the wall clock and may push the SCN
+     * outside the configured max-lookback window. Per-test cleanup belongs in an {@code @After}
+     * hook instead (see {@code CDCQueryIT#afterTest}).
+     */
     public void reset() {
       EnvironmentEdgeManager.reset();
     }

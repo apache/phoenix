@@ -73,7 +73,7 @@
     <hbase.suffix>hbase-${hbase.profile}</hbase.suffix>
 
     <!-- This is used by the release script only -->
-    <hbase.profile.list>2.5.0 2.5 2.6</hbase.profile.list>
+    <hbase.profile.list>2.5.0 2.5 2.6.0 2.6</hbase.profile.list>
     <!-- The default hbase versions to build with (override with hbase.version) -->
     <hbase-2.5.0.runtime.version>2.5.3-hadoop3</hbase-2.5.0.runtime.version>
     <hbase-2.5.4.runtime.version>2.5.10-hadoop3</hbase-2.5.4.runtime.version>
@@ -1647,6 +1647,7 @@
               </goals>
               <configuration>
                 <reuseForks>false</reuseForks>
+                <forkedProcessTimeoutInSeconds>1800</forkedProcessTimeoutInSeconds>
                 <skip>${skipNeedsOwnMiniClusterTests}</skip>
                 <groups>org.apache.phoenix.end2end.NeedsOwnMiniClusterTest</groups>
               </configuration>
@@ -1663,6 +1664,10 @@
               <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-core</ignoredUnusedDeclaredDependency>
               <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-slf4j-impl</ignoredUnusedDeclaredDependency>
               <ignoredUnusedDeclaredDependency>org.apache.logging.log4j:log4j-1.2-api</ignoredUnusedDeclaredDependency>
+              <!-- The bouncycastle artifact name/version differs across HBase profiles: we declare
+                   jdk18on:1.79, but the 2.6.0 profile's HBase pulls jdk15on:1.68 transitively. The
+                   analyzer then flags jdk18on as unused for that profile. -->
+              <ignoredUnusedDeclaredDependency>org.bouncycastle:bcprov-jdk18on</ignoredUnusedDeclaredDependency>
             </ignoredUnusedDeclaredDependencies>
             <ignoredUsedUndeclaredDependencies>
               <ignoredUsedUndeclaredDependency>
@@ -1679,6 +1684,11 @@
                   without having to also declare a dependency on commons-text dependency
                   (which we do not use directly at all)-->
                 org.apache.commons:commons-configuration2
+              </ignoredUsedUndeclaredDependency>
+              <ignoredUsedUndeclaredDependency>
+                <!-- The 2.6.0 profile's HBase (2.6.1-hadoop3) pulls bcprov-jdk15on:1.68
+                  transitively for tests, while we declare jdk18on (see note above). -->
+                org.bouncycastle:bcprov-jdk15on
               </ignoredUsedUndeclaredDependency>
             </ignoredUsedUndeclaredDependencies>
           </configuration>
@@ -1868,6 +1878,8 @@
           <forkCount>${numForkedUT}</forkCount>
           <reuseForks>true</reuseForks>
           <redirectTestOutputToFile>${test.output.tofile}</redirectTestOutputToFile>
+          <forkedProcessTimeoutInSeconds>1800</forkedProcessTimeoutInSeconds>
+          <forkedProcessExitTimeoutInSeconds>180</forkedProcessExitTimeoutInSeconds>
           <shutdown>exit</shutdown>
           <trimStackTrace>false</trimStackTrace>
           <forkNode implementation="org.apache.maven.plugin.surefire.extensions.SurefireForkNodeFactory"/>

@@ -145,6 +145,7 @@ public class TenantViewOperationWorkloadIT extends ParallelStatsDisabledIT {
         settings.tenantGroups = scenario.getLoadProfile().getTenantDistribution();
         settings.expectedOpGroups = scenario.getLoadProfile().getOpDistribution().size();
         settings.expectedTenantGroups = scenario.getLoadProfile().getTenantDistribution().size();
+        break;
       default:
         List<TenantGroup> tenantGroups = new ArrayList<>();
         TenantGroup tg1 = new TenantGroup();

@@ -88,6 +88,9 @@ public class PVarbinary extends PBinaryBase {
 
   @Override
   public Object toObject(Object object, PDataType actualType) {
+    if (actualType == PVarbinaryEncoded.INSTANCE) {
+      return object;
+    }
     return actualType.toBytes(object);
   }
 
@@ -121,7 +124,7 @@ public class PVarbinary extends PBinaryBase {
     } else if (rhs == null) {
       return 1;
     }
-    if (equalsAny(rhsType, this, PBinary.INSTANCE)) {
+    if (equalsAny(rhsType, this, PBinary.INSTANCE, PVarbinaryEncoded.INSTANCE)) {
       return Bytes.compareTo((byte[]) lhs, (byte[]) rhs);
     } else {
       byte[] rhsBytes = rhsType.toBytes(rhs);
