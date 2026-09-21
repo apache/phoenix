@@ -1487,7 +1487,10 @@ public class ScanUtil {
           phoenixConnection);
         scan.setAttribute(PhoenixIndexCodec.INDEX_PROTO_MD, ByteUtil.copyKeyBytesIfNecessary(ptr));
       }
-      if (IndexUtil.isCoveredGlobalIndex(indexTable)) {
+      if (
+        IndexUtil.isCoveredGlobalIndex(indexTable)
+          && (context == null || !context.isUncoveredIndex())
+      ) {
         if (!isIndexRebuild(scan)) {
           scan.setAttribute(BaseScannerRegionObserverConstants.CHECK_VERIFY_COLUMN, TRUE_BYTES);
         }

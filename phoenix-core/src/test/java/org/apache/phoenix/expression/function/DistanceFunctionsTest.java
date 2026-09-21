@@ -36,12 +36,15 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Random;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.io.WritableUtils;
 import org.apache.phoenix.compile.QueryPlan;
+import org.apache.phoenix.expression.BaseTerminalExpression;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.ExpressionType;
 import org.apache.phoenix.expression.LiteralExpression;
+import org.apache.phoenix.expression.visitor.ExpressionVisitor;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.CosineDistanceParseNode;
@@ -56,6 +59,8 @@ import org.apache.phoenix.parse.SQLParser;
 import org.apache.phoenix.parse.SelectStatement;
 import org.apache.phoenix.query.BaseConnectionlessQueryTest;
 import org.apache.phoenix.schema.SortOrder;
+import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDataType;
 import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.schema.types.PVectorDouble;
 import org.apache.phoenix.schema.types.PVectorFloat;
@@ -630,6 +635,143 @@ public class DistanceFunctionsTest extends BaseConnectionlessQueryTest {
       } catch (SQLException e) {
         // Unregistered function names trigger resolution failure
         assertNotNull(e.getMessage());
+      }
+    }
+  }
+
+  /**
+   * Terminal expression that emits successive vector values across evaluations to simulate
+   * row-by-row column scanning.
+   */
+  private static class VectorSequenceExpression extends BaseTerminalExpression {
+    private final List<float[]> vectors;
+    private int next = 0;
+
+    VectorSequenceExpression(List<float[]> vectors) {
+      this.vectors = vectors;
+    }
+
+    @Override
+    public boolean evaluate(Tuple tuple, ImmutableBytesWritable ptr) {
+      ptr.set(PVectorFloat.INSTANCE.toBytes(vectors.get(next++)));
+      return true;
+    }
+
+    @Override
+    public PDataType getDataType() {
+      return PVectorFloat.INSTANCE;
+    }
+
+    @Override
+    public Integer getMaxLength() {
+      return vectors.get(0).length;
+    }
+
+    @Override
+    public <T> T accept(ExpressionVisitor<T> visitor) {
+      return null;
+    }
+  }
+
+  /**
+   * Execution iterators such as OrderedResultIterator and MergeSortTopNResultIterator retain the
+   * ImmutableBytesWritable instances produced by evaluate() across rows. Consecutive evaluations
+   * must therefore produce independent byte buffers to preserve comparator correctness.
+   */
+  @Test
+  public void testEvaluateDoesNotAliasOutputBufferAcrossCalls() throws Exception {
+    Expression query =
+      LiteralExpression.newConstant(new float[] { 0.0f, 0.0f }, PVectorFloat.INSTANCE);
+    Expression rows = new VectorSequenceExpression(
+      Arrays.asList(new float[] { 3.0f, 4.0f }, new float[] { 6.0f, 8.0f }));
+    L2DistanceFunction func = new L2DistanceFunction(Arrays.asList(rows, query));
+
+    ImmutableBytesWritable ptr1 = new ImmutableBytesWritable();
+    ImmutableBytesWritable ptr2 = new ImmutableBytesWritable();
+    assertTrue(func.evaluate(null, ptr1));
+    assertTrue(func.evaluate(null, ptr2));
+
+    assertEquals(5.0, ((Number) PDouble.INSTANCE.toObject(ptr1)).doubleValue(), DELTA);
+    assertEquals(10.0, ((Number) PDouble.INSTANCE.toObject(ptr2)).doubleValue(), DELTA);
+    assertFalse("Successive evaluations must not share an output buffer", ptr1.get() == ptr2.get());
+  }
+
+  @Test
+  public void testDistanceFunctionsWithDim128RandomAgainstBruteForce() throws Exception {
+    Random rng = new Random(12345);
+    int[] dimensions = new int[] { 128, 129 };
+    int numPairs = 20;
+
+    for (int dim : dimensions) {
+      for (int pair = 0; pair < numPairs; pair++) {
+        float[] a = new float[dim];
+        float[] b = new float[dim];
+        for (int i = 0; i < dim; i++) {
+          a[i] = (rng.nextFloat() - 0.5f) * 20.0f;
+          b[i] = (rng.nextFloat() - 0.5f) * 20.0f;
+        }
+
+        // Compute reference distances using double precision
+        double sumSq = 0.0;
+        double dot = 0.0;
+        double normA = 0.0;
+        double normB = 0.0;
+        for (int i = 0; i < dim; i++) {
+          double ai = (double) a[i];
+          double bi = (double) b[i];
+          double diff = ai - bi;
+          sumSq += diff * diff;
+          dot += ai * bi;
+          normA += ai * ai;
+          normB += bi * bi;
+        }
+        double expectedL2Sq = sumSq;
+        double expectedL2 = Math.sqrt(sumSq);
+        double denom = Math.sqrt(normA) * Math.sqrt(normB);
+        double cosSim = (denom == 0.0) ? 1.0 : (dot / denom);
+        if (cosSim > 1.0) {
+          cosSim = 1.0;
+        } else if (cosSim < -1.0) {
+          cosSim = -1.0;
+        }
+        double expectedCos = 1.0 - cosSim;
+        double expectedIp = -dot;
+
+        Expression exprA = LiteralExpression.newConstant(a, PVectorFloat.INSTANCE, dim, null);
+        Expression exprB = LiteralExpression.newConstant(b, PVectorFloat.INSTANCE, dim, null);
+
+        // L2DistanceFunction
+        L2DistanceFunction l2 = new L2DistanceFunction(Arrays.asList(exprA, exprB));
+        ImmutableBytesWritable ptr = new ImmutableBytesWritable();
+        assertTrue(l2.evaluate(null, ptr));
+        double actualL2 = ((Number) PDouble.INSTANCE.toObject(ptr)).doubleValue();
+        assertEquals("L2 mismatch at dim " + dim + " pair " + pair, expectedL2, actualL2,
+          1e-4 * Math.max(1.0, Math.abs(expectedL2)));
+
+        // L2DistanceSquaredFunction
+        L2DistanceSquaredFunction l2Sq = new L2DistanceSquaredFunction(Arrays.asList(exprA, exprB));
+        ptr = new ImmutableBytesWritable();
+        assertTrue(l2Sq.evaluate(null, ptr));
+        double actualL2Sq = ((Number) PDouble.INSTANCE.toObject(ptr)).doubleValue();
+        assertEquals("L2Sq mismatch at dim " + dim + " pair " + pair, expectedL2Sq, actualL2Sq,
+          1e-4 * Math.max(1.0, Math.abs(expectedL2Sq)));
+
+        // CosineDistanceFunction
+        CosineDistanceFunction cos = new CosineDistanceFunction(Arrays.asList(exprA, exprB));
+        ptr = new ImmutableBytesWritable();
+        assertTrue(cos.evaluate(null, ptr));
+        double actualCos = ((Number) PDouble.INSTANCE.toObject(ptr)).doubleValue();
+        assertEquals("Cosine mismatch at dim " + dim + " pair " + pair, expectedCos, actualCos,
+          1e-4 * Math.max(1.0, Math.abs(expectedCos)));
+
+        // InnerProductDistanceFunction
+        InnerProductDistanceFunction ip =
+          new InnerProductDistanceFunction(Arrays.asList(exprA, exprB));
+        ptr = new ImmutableBytesWritable();
+        assertTrue(ip.evaluate(null, ptr));
+        double actualIp = ((Number) PDouble.INSTANCE.toObject(ptr)).doubleValue();
+        assertEquals("IP mismatch at dim " + dim + " pair " + pair, expectedIp, actualIp,
+          1e-4 * Math.max(1.0, Math.abs(expectedIp)));
       }
     }
   }

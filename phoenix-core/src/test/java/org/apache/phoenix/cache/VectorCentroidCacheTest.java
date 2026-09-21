@@ -27,8 +27,10 @@ import static org.junit.Assert.fail;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Random;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -226,6 +228,24 @@ public class VectorCentroidCacheTest {
 
     float[] queryIp = new float[] { 1.0f, 0.0f };
     assertEquals(0, cache.findNearestCentroid("METRIC_IDX", 2L, queryIp, "INNER_PRODUCT"));
+
+    // Top-2 nearest centroids using cosine distance
+    List<float[]> cosineCentroids3 = Arrays.asList(new float[] { 1.0f, 0.0f }, // ID 0: 0 deg
+      new float[] { 0.707f, 0.707f }, // ID 1: 45 deg
+      new float[] { 0.0f, 1.0f } // ID 2: 90 deg
+    );
+    cache.putFloatCentroids("METRIC_COS_TOPN", 1L, cosineCentroids3);
+    assertEquals(Arrays.asList(0, 1),
+      cache.findNearestCentroids("METRIC_COS_TOPN", 1L, queryCosine, "COSINE", 2));
+
+    // Top-2 nearest centroids using inner product
+    List<float[]> ipCentroids3 = Arrays.asList(new float[] { 10.0f, 0.0f }, // ID 0: dot product 10
+      new float[] { 5.0f, 0.0f }, // ID 1: dot product 5
+      new float[] { 1.0f, 0.0f } // ID 2: dot product 1
+    );
+    cache.putFloatCentroids("METRIC_IP_TOPN", 1L, ipCentroids3);
+    assertEquals(Arrays.asList(0, 1),
+      cache.findNearestCentroids("METRIC_IP_TOPN", 1L, queryIp, "INNER_PRODUCT", 2));
   }
 
   /**
@@ -377,16 +397,12 @@ public class VectorCentroidCacheTest {
       + matches + "/" + queryCount + " (" + (matchRate * 100) + "%)", matchRate >= 0.95);
   }
 
-  /**
-   * Step 6.6 Hierarchical performance test: Measure the wall-clock time for 1000
-   * findNearestCentroid calls with 4096 centroids, comparing brute-force vs. hierarchical. Assert
-   * the hierarchical path is faster.
-   */
+  /** Hierarchical lookup evaluates fewer than 25% of total centroids per query. */
   @Test
   public void testHierarchicalPerformance() {
     int centroidCount = 4096;
     int dimension = 4;
-    int numCalls = 1000;
+    int numCalls = 50;
     Random rng = new Random(42L);
 
     List<float[]> centroids = new ArrayList<>(centroidCount);
@@ -400,47 +416,30 @@ public class VectorCentroidCacheTest {
 
     VectorCentroidCache cache = new VectorCentroidCache("PERF_IDX");
     cache.putFloatCentroids("PERF_IDX", 1L, centroids);
+    VectorCentroidCache.CachedCentroids cached = cache.getCentroids("PERF_IDX", 1L);
 
-    List<float[]> queries = new ArrayList<>(numCalls);
     for (int i = 0; i < numCalls; i++) {
       float[] q = new float[dimension];
       for (int d = 0; d < dimension; d++) {
         q[d] = rng.nextFloat();
       }
-      queries.add(q);
-    }
-
-    for (int i = 0; i < 50; i++) {
-      float[] q = queries.get(i);
-      cache.findNearestCentroidBruteForce(q, "L2");
       cache.findNearestCentroidHierarchical(q, "L2");
+      int evals = cached.getLastDistanceEvaluationCount();
+      assertTrue(
+        "Hierarchical lookup must evaluate fewer than 25% of 4096 centroids, got: " + evals,
+        evals < 0.25 * centroidCount);
     }
-
-    long startBf = System.nanoTime();
-    for (int i = 0; i < numCalls; i++) {
-      cache.findNearestCentroidBruteForce(queries.get(i), "L2");
-    }
-    long elapsedBfNanos = System.nanoTime() - startBf;
-
-    long startHier = System.nanoTime();
-    for (int i = 0; i < numCalls; i++) {
-      cache.findNearestCentroidHierarchical(queries.get(i), "L2");
-    }
-    long elapsedHierNanos = System.nanoTime() - startHier;
-
-    assertTrue(
-      "Hierarchical lookup (" + (elapsedHierNanos / 1_000_000.0)
-        + " ms) must be faster than brute force (" + (elapsedBfNanos / 1_000_000.0) + " ms)",
-      elapsedHierNanos < elapsedBfNanos);
   }
 
   /**
-   * Tests top-N nearest centroids search with hierarchical lookup.
+   * Evaluates top-N nearest centroids search recall and accuracy using hierarchical lookup against
+   * brute-force baseline across random queries.
    */
   @Test
   public void testHierarchicalTopNProbing() {
     int centroidCount = 4096;
     int dimension = 4;
+    int queryCount = 100;
     Random rng = new Random(99L);
 
     List<float[]> centroids = new ArrayList<>(centroidCount);
@@ -455,13 +454,53 @@ public class VectorCentroidCacheTest {
     VectorCentroidCache cache = new VectorCentroidCache("TOPN_IDX");
     cache.putFloatCentroids("TOPN_IDX", 1L, centroids);
 
-    float[] query = new float[] { 0.5f, 0.5f, 0.5f, 0.5f };
+    int totalMatches = 0;
+    int top1Matches = 0;
 
-    List<Integer> top5Hier = cache.findNearestCentroidsHierarchical(query, "L2", 5);
-    assertEquals(5, top5Hier.size());
+    for (int q = 0; q < queryCount; q++) {
+      float[] query = new float[dimension];
+      for (int d = 0; d < dimension; d++) {
+        query[d] = rng.nextFloat();
+      }
 
-    List<Integer> top200Hier = cache.findNearestCentroidsHierarchical(query, "L2", 200);
-    assertEquals(200, top200Hier.size());
+      List<Integer> hier5 = cache.findNearestCentroidsHierarchical(query, "L2", 5);
+      List<Integer> bf5 = cache.findNearestCentroidsBruteForce(query, "L2", 5);
+
+      assertEquals(5, hier5.size());
+      assertEquals(5, bf5.size());
+
+      if (hier5.get(0).equals(bf5.get(0))) {
+        top1Matches++;
+      }
+
+      // Verify candidates are sorted by ascending distance
+      for (int i = 0; i < hier5.size() - 1; i++) {
+        float d1 = computeL2(query, centroids.get(hier5.get(i)));
+        float d2 = computeL2(query, centroids.get(hier5.get(i + 1)));
+        assertTrue("Results must be sorted by ascending distance: " + d1 + " <= " + d2,
+          d1 <= d2 + 1e-6f);
+      }
+
+      // Calculate recall against brute force nearest centroids
+      Set<Integer> hierSet = new HashSet<>(hier5);
+      hierSet.retainAll(bf5);
+      totalMatches += hierSet.size();
+    }
+
+    double avgRecall = (double) totalMatches / (queryCount * 5);
+    assertTrue("Average set recall must be >= 0.95, got: " + avgRecall, avgRecall >= 0.95);
+
+    double top1Rate = (double) top1Matches / queryCount;
+    assertTrue("Top-1 match rate must be >= 0.95, got: " + top1Rate, top1Rate >= 0.95);
+  }
+
+  private static float computeL2(float[] a, float[] b) {
+    float sum = 0.0f;
+    for (int i = 0; i < a.length; i++) {
+      float diff = a[i] - b[i];
+      sum += diff * diff;
+    }
+    return sum;
   }
 
   /**
@@ -487,4 +526,5 @@ public class VectorCentroidCacheTest {
     cache.putFloatCentroids("LARGE_IDX", 1L, c15);
     assertTrue(cache.getCentroids("LARGE_IDX", 1L).hasHierarchicalIndex());
   }
+
 }

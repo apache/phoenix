@@ -64,4 +64,31 @@ public class CentroidWritableTest {
     assertEquals(15.0, wf1.getDistance(), 1e-6);
     assertArrayEquals(new double[] { 2.0, 2.0 }, wf1.getPartialSum(), 1e-6);
   }
+
+  @Test
+  public void testWritableRoundTrip() throws Exception {
+    CentroidWritable[] testCases =
+      new CentroidWritable[] { new CentroidWritable(0, new double[] { 1.0, 2.5, -3.2 }, 15L, 4.75),
+        new CentroidWritable(42, new double[] { 0.0, 100.1, -50.5, 3.14159 }, 500L, 123.456),
+        new CentroidWritable(-1, new double[] { 5.5, 6.6, 7.7, 8.8 }, 1L, 99.9), // worst-fit
+        new CentroidWritable(3, new double[0], 0L, 0.0) // empty partialSum
+      };
+
+    for (CentroidWritable original : testCases) {
+      org.apache.hadoop.io.DataOutputBuffer dob = new org.apache.hadoop.io.DataOutputBuffer();
+      original.write(dob);
+
+      org.apache.hadoop.io.DataInputBuffer dib = new org.apache.hadoop.io.DataInputBuffer();
+      dib.reset(dob.getData(), dob.getLength());
+
+      CentroidWritable deserialized = new CentroidWritable();
+      deserialized.readFields(dib);
+
+      assertEquals(original.getCentroidId(), deserialized.getCentroidId());
+      assertEquals(original.getCount(), deserialized.getCount());
+      assertEquals(original.getDistance(), deserialized.getDistance(), 1e-6);
+      assertArrayEquals(original.getPartialSum(), deserialized.getPartialSum(), 1e-6);
+      assertEquals(original, deserialized);
+    }
+  }
 }

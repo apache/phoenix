@@ -583,4 +583,207 @@ public class VectorSearchUtilTest extends BaseConnectionlessQueryTest {
       assertFalse(VectorSearchUtil.isVectorSearch(orderBy, 10));
     }
   }
+
+  @Test
+  public void testGetDistanceMetricFromOrderBy() throws Exception {
+    String ddl =
+      "CREATE TABLE t_metric_dist (pk INTEGER PRIMARY KEY, v1 VECTOR(FLOAT, 3), v2 VECTOR(FLOAT, 3), ts INTEGER)";
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(ddl);
+
+      // Null / empty
+      assertNull(VectorSearchUtil.getDistanceMetric(null));
+      assertNull(VectorSearchUtil.getDistanceMetric(OrderBy.EMPTY_ORDER_BY));
+
+      // Each of the 4 functions
+      String[] sqls = { "SELECT pk FROM t_metric_dist ORDER BY L2_DISTANCE(v1, v2) LIMIT 5",
+        "SELECT pk FROM t_metric_dist ORDER BY L2_DISTANCE_SQUARED(v1, v2) LIMIT 5",
+        "SELECT pk FROM t_metric_dist ORDER BY COSINE_DISTANCE(v1, v2) LIMIT 5",
+        "SELECT pk FROM t_metric_dist ORDER BY INNER_PRODUCT(v1, v2) LIMIT 5" };
+      DistanceMetric[] expected = { DistanceMetric.L2, DistanceMetric.L2, DistanceMetric.COSINE,
+        DistanceMetric.INNER_PRODUCT };
+
+      for (int i = 0; i < sqls.length; i++) {
+        SelectStatement select = parse(sqls[i]);
+        PhoenixStatement stmt = new PhoenixStatement(conn);
+        ColumnResolver resolver = FromCompiler.getResolverForQuery(select, conn);
+        StatementContext context = new StatementContext(stmt, resolver);
+        OrderBy orderBy = OrderByCompiler.compile(context, select, GroupBy.EMPTY_GROUP_BY, 5,
+          org.apache.phoenix.compile.CompiledOffset.EMPTY_COMPILED_OFFSET,
+          RowProjector.EMPTY_PROJECTOR, null, null);
+        assertEquals("Metric mismatch for " + sqls[i], expected[i],
+          VectorSearchUtil.getDistanceMetric(orderBy));
+      }
+
+      // Non-distance order by
+      SelectStatement nonDistSelect = parse("SELECT pk FROM t_metric_dist ORDER BY ts LIMIT 5");
+      PhoenixStatement stmt1 = new PhoenixStatement(conn);
+      ColumnResolver resolver1 = FromCompiler.getResolverForQuery(nonDistSelect, conn);
+      StatementContext context1 = new StatementContext(stmt1, resolver1);
+      OrderBy nonDistOrderBy = OrderByCompiler.compile(context1, nonDistSelect,
+        GroupBy.EMPTY_GROUP_BY, 5, org.apache.phoenix.compile.CompiledOffset.EMPTY_COMPILED_OFFSET,
+        RowProjector.EMPTY_PROJECTOR, null, null);
+      assertNull("Non-distance expression must return null metric",
+        VectorSearchUtil.getDistanceMetric(nonDistOrderBy));
+
+      // Multiple order by expressions
+      SelectStatement multiSelect =
+        parse("SELECT pk FROM t_metric_dist ORDER BY L2_DISTANCE(v1, v2), ts LIMIT 5");
+      PhoenixStatement stmt2 = new PhoenixStatement(conn);
+      ColumnResolver resolver2 = FromCompiler.getResolverForQuery(multiSelect, conn);
+      StatementContext context2 = new StatementContext(stmt2, resolver2);
+      OrderBy multiOrderBy = OrderByCompiler.compile(context2, multiSelect, GroupBy.EMPTY_GROUP_BY,
+        5, org.apache.phoenix.compile.CompiledOffset.EMPTY_COMPILED_OFFSET,
+        RowProjector.EMPTY_PROJECTOR, null, null);
+      assertNull("Multiple order by expressions must return null metric",
+        VectorSearchUtil.getDistanceMetric(multiOrderBy));
+    }
+  }
+
+  @Test
+  public void testIsMetricCompatible() {
+    // 3x3 combinations
+    assertTrue(VectorSearchUtil.isMetricCompatible(DistanceMetric.L2, "L2"));
+    assertFalse(VectorSearchUtil.isMetricCompatible(DistanceMetric.L2, "COSINE"));
+    assertFalse(VectorSearchUtil.isMetricCompatible(DistanceMetric.L2, "INNER_PRODUCT"));
+
+    assertFalse(VectorSearchUtil.isMetricCompatible(DistanceMetric.COSINE, "L2"));
+    assertTrue(VectorSearchUtil.isMetricCompatible(DistanceMetric.COSINE, "COSINE"));
+    assertFalse(VectorSearchUtil.isMetricCompatible(DistanceMetric.COSINE, "INNER_PRODUCT"));
+
+    assertFalse(VectorSearchUtil.isMetricCompatible(DistanceMetric.INNER_PRODUCT, "L2"));
+    assertFalse(VectorSearchUtil.isMetricCompatible(DistanceMetric.INNER_PRODUCT, "COSINE"));
+    assertTrue(VectorSearchUtil.isMetricCompatible(DistanceMetric.INNER_PRODUCT, "INNER_PRODUCT"));
+
+    // Whitespace and case tolerance
+    assertTrue(VectorSearchUtil.isMetricCompatible(DistanceMetric.L2, " l2 "));
+    assertTrue(VectorSearchUtil.isMetricCompatible(DistanceMetric.COSINE, " cosine\t"));
+    assertTrue(VectorSearchUtil.isMetricCompatible(DistanceMetric.INNER_PRODUCT, "Inner_Product "));
+
+    // Null checks
+    assertFalse(VectorSearchUtil.isMetricCompatible(null, "L2"));
+    assertFalse(VectorSearchUtil.isMetricCompatible(DistanceMetric.L2, null));
+    assertFalse(VectorSearchUtil.isMetricCompatible(null, null));
+    assertFalse(VectorSearchUtil.isMetricCompatible(DistanceMetric.L2, "UNKNOWN"));
+  }
+
+  @Test
+  public void testIsColumnCoveredAndGetDataColumn() throws Exception {
+    String dataTableDdl = "CREATE TABLE T_COVERED_TEST (" + "ID VARCHAR NOT NULL PRIMARY KEY, "
+      + "V1 VECTOR(FLOAT, 3), " + "V2 VECTOR(FLOAT, 3), " + "CATEGORY VARCHAR, "
+      + "UNCOVERED_COL VARCHAR)";
+    String indexDdl =
+      "CREATE VECTOR INDEX IDX_COVERED_TEST ON T_COVERED_TEST (V1) INCLUDE (CATEGORY) "
+        + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)";
+
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(dataTableDdl);
+      conn.createStatement().execute(indexDdl);
+
+      org.apache.phoenix.schema.PTable dataTable = conn.getTableNoCache("T_COVERED_TEST");
+      org.apache.phoenix.schema.PTable indexTable = conn.getTableNoCache("IDX_COVERED_TEST");
+
+      org.apache.phoenix.schema.PColumn pkCol = dataTable.getColumnForColumnName("ID");
+      org.apache.phoenix.schema.PColumn v1Col = dataTable.getColumnForColumnName("V1");
+      org.apache.phoenix.schema.PColumn v2Col = dataTable.getColumnForColumnName("V2");
+      org.apache.phoenix.schema.PColumn catCol = dataTable.getColumnForColumnName("CATEGORY");
+      org.apache.phoenix.schema.PColumn uncCol = dataTable.getColumnForColumnName("UNCOVERED_COL");
+
+      // Primary key column is covered by index row key
+      assertTrue("PK column must be covered",
+        VectorSearchUtil.isColumnCovered(indexTable, dataTable, pkCol));
+
+      // Indexed vector column is covered
+      assertTrue("Indexed vector V1 must be covered",
+        VectorSearchUtil.isColumnCovered(indexTable, dataTable, v1Col));
+
+      // Included column is covered
+      assertTrue("Included column CATEGORY must be covered",
+        VectorSearchUtil.isColumnCovered(indexTable, dataTable, catCol));
+
+      // Uncovered data column is not covered
+      assertFalse("UNCOVERED_COL must not be covered",
+        VectorSearchUtil.isColumnCovered(indexTable, dataTable, uncCol));
+
+      // Vector column not included in index definition is not covered
+      assertFalse("Second vector column V2 not included must not be covered",
+        VectorSearchUtil.isColumnCovered(indexTable, dataTable, v2Col));
+
+      // Null handling
+      assertFalse(VectorSearchUtil.isColumnCovered(null, dataTable, pkCol));
+      assertFalse(VectorSearchUtil.isColumnCovered(indexTable, dataTable, null));
+
+      // getDataColumn tests
+      assertEquals(catCol, VectorSearchUtil.getDataColumn(dataTable, "CATEGORY"));
+      assertEquals(catCol, VectorSearchUtil.getDataColumn(dataTable, "0:CATEGORY"));
+      assertEquals(pkCol, VectorSearchUtil.getDataColumn(dataTable, ":ID"));
+      assertEquals(pkCol, VectorSearchUtil.getDataColumn(dataTable, "ID"));
+      assertNull(VectorSearchUtil.getDataColumn(dataTable, "NOPE"));
+      assertNull(VectorSearchUtil.getDataColumn(dataTable, null));
+      assertNull(VectorSearchUtil.getDataColumn(null, "CATEGORY"));
+    }
+  }
+
+  @Test
+  public void testHasUncoveredFilterAndProjectionColumns() throws Exception {
+    String dataTableDdl = "CREATE TABLE T_UNCOV_FILTER_TEST (" + "ID VARCHAR NOT NULL PRIMARY KEY, "
+      + "V1 VECTOR(FLOAT, 3), " + "CATEGORY VARCHAR, " + "DESCRIPTION VARCHAR)";
+    String indexDdl =
+      "CREATE VECTOR INDEX IDX_UNCOV_FILTER_TEST ON T_UNCOV_FILTER_TEST (V1) INCLUDE (CATEGORY) "
+        + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)";
+
+    try (PhoenixConnection conn = (PhoenixConnection) DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(dataTableDdl);
+      conn.createStatement().execute(indexDdl);
+
+      org.apache.phoenix.schema.PTable dataTable = conn.getTableNoCache("T_UNCOV_FILTER_TEST");
+      org.apache.phoenix.schema.PTable indexTable = conn.getTableNoCache("IDX_UNCOV_FILTER_TEST");
+
+      // Filter referencing only covered columns does not require data table scan
+      SelectStatement s1 = parse("SELECT ID FROM T_UNCOV_FILTER_TEST WHERE CATEGORY = 'A' LIMIT 5");
+      assertFalse(VectorSearchUtil.hasUncoveredFilterColumns(indexTable, dataTable, s1));
+
+      // Filter referencing an uncovered column requires data table access
+      SelectStatement s2 =
+        parse("SELECT ID FROM T_UNCOV_FILTER_TEST WHERE DESCRIPTION = 'B' LIMIT 5");
+      assertTrue(VectorSearchUtil.hasUncoveredFilterColumns(indexTable, dataTable, s2));
+
+      // Conjunction containing both covered and uncovered column references
+      SelectStatement s3 = parse(
+        "SELECT ID FROM T_UNCOV_FILTER_TEST WHERE CATEGORY = 'A' AND DESCRIPTION = 'B' LIMIT 5");
+      assertTrue(VectorSearchUtil.hasUncoveredFilterColumns(indexTable, dataTable, s3));
+
+      // Filter containing constant expressions without column references
+      SelectStatement s4 = parse("SELECT ID FROM T_UNCOV_FILTER_TEST WHERE 1 = 1 LIMIT 5");
+      assertFalse(VectorSearchUtil.hasUncoveredFilterColumns(indexTable, dataTable, s4));
+
+      // Query without a WHERE clause
+      SelectStatement s5 = parse("SELECT ID FROM T_UNCOV_FILTER_TEST LIMIT 5");
+      assertFalse(VectorSearchUtil.hasUncoveredFilterColumns(indexTable, dataTable, s5));
+
+      // Projection referencing only covered columns
+      SelectStatement p1 = parse("SELECT ID, CATEGORY FROM T_UNCOV_FILTER_TEST LIMIT 5");
+      assertFalse(VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, dataTable, p1));
+
+      // Projection referencing an uncovered column
+      SelectStatement p2 = parse("SELECT ID, DESCRIPTION FROM T_UNCOV_FILTER_TEST LIMIT 5");
+      assertTrue(VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, dataTable, p2));
+
+      // Wildcard projection over entire data table
+      SelectStatement p3 = parse("SELECT * FROM T_UNCOV_FILTER_TEST LIMIT 5");
+      assertTrue(VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, dataTable, p3));
+
+      // Table-qualified wildcard projection
+      SelectStatement p4 = parse("SELECT t.* FROM T_UNCOV_FILTER_TEST t LIMIT 5");
+      assertTrue(VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, dataTable, p4));
+
+      // Expression evaluating uncovered column
+      SelectStatement p5 = parse("SELECT UPPER(DESCRIPTION) FROM T_UNCOV_FILTER_TEST LIMIT 5");
+      assertTrue(VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, dataTable, p5));
+
+      // Expression evaluating covered column
+      SelectStatement p6 = parse("SELECT UPPER(CATEGORY) FROM T_UNCOV_FILTER_TEST LIMIT 5");
+      assertFalse(VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, dataTable, p6));
+    }
+  }
 }

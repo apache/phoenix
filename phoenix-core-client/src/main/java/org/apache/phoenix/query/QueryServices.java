@@ -156,6 +156,8 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.vector.centroid.bruteforce.limit";
   public static final String VECTOR_CENTROID_PROBE_BUCKETS_ATTRIB =
     "phoenix.vector.centroid.probe.buckets";
+  public static final String VECTOR_PROBE_COUNT_ATTRIB = "phoenix.vector.probe.count";
+  public static final String VECTOR_OVERSAMPLE_FACTOR_ATTRIB = "phoenix.vector.oversample.factor";
   public static final String VECTOR_KMEANS_LOCAL_ATTRIB = "phoenix.vector.kmeans.local";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";

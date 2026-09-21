@@ -51,6 +51,7 @@ import org.apache.phoenix.execute.SortMergeJoinPlan;
 import org.apache.phoenix.execute.TupleProjectionPlan;
 import org.apache.phoenix.execute.TupleProjector;
 import org.apache.phoenix.execute.UnionPlan;
+import org.apache.phoenix.execute.VectorIndexScanPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.LiteralExpression;
 import org.apache.phoenix.expression.RowValueConstructorExpression;
@@ -915,8 +916,16 @@ public class QueryCompiler {
         : (select.isAggregate() || select.isDistinct()
           ? new AggregatePlan(context, select, tableRef, projector, limit, offset, orderBy,
             parallelIteratorFactory, groupBy, having, dataPlan)
-          : new ScanPlan(context, select, tableRef, projector, limit, offset, orderBy,
-            parallelIteratorFactory, allowPageFilter, dataPlan, compiledOffset.getByteOffset()));
+          : (tableRef.getTable() != null && tableRef.getTable().isVectorIndex()
+            && VectorSearchUtil.isVectorSearch(orderBy, limit)
+              ? new VectorIndexScanPlan(context, select, tableRef, projector, limit, offset,
+                orderBy, parallelIteratorFactory, allowPageFilter, dataPlan,
+                compiledOffset.getByteOffset())
+              // Non-vector-search queries against a vector index perform a standard scan
+              // across all centroid posting lists.
+              : new ScanPlan(context, select, tableRef, projector, limit, offset, orderBy,
+                parallelIteratorFactory, allowPageFilter, dataPlan,
+                compiledOffset.getByteOffset())));
     }
     SelectStatement planSelect = asSubquery ? select : this.select;
     if (!subqueries.isEmpty()) {

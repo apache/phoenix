@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedList;
 import java.util.List;
 import org.apache.hadoop.hbase.KeyValue;
 import org.apache.hadoop.hbase.client.RegionInfo;
@@ -38,9 +39,11 @@ import org.apache.phoenix.exception.PhoenixIOException;
 import org.apache.phoenix.execute.DescVarLengthFastByteComparisons;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.expression.function.DistanceFunction;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.SortOrder;
 import org.apache.phoenix.schema.tuple.Tuple;
+import org.apache.phoenix.schema.types.PDouble;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.ClientUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
@@ -53,7 +56,10 @@ import org.slf4j.LoggerFactory;
 import org.apache.phoenix.thirdparty.com.google.common.base.Function;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Collections2;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
+import org.apache.phoenix.thirdparty.com.google.common.collect.MinMaxPriorityQueue;
 import org.apache.phoenix.thirdparty.com.google.common.collect.Ordering;
+
+import org.apache.hbase.thirdparty.com.google.common.annotations.VisibleForTesting;
 
 /**
  * Result scanner that sorts aggregated rows by columns specified in the ORDER BY clause.
@@ -168,6 +174,11 @@ public class OrderedResultIterator implements PeekingResultIterator {
   private boolean serverSideIterator = false;
   private boolean firstScan = true;
   private boolean skipValidRowsSent = false;
+  private boolean twoPhaseVectorScoring = false;
+  private double oversampleFactor = 1.0;
+  private Integer coarseLimit = null;
+  private MinMaxPriorityQueue<ResultEntry> coarseQueue = null;
+  private long coarsePhaseCandidatesConsidered = 0;
 
   protected ResultIterator getDelegate() {
     return delegate;
@@ -211,6 +222,62 @@ public class OrderedResultIterator implements PeekingResultIterator {
     this.includeStartRowKey = scan.includeStartRow();
     this.serverSideIterator = true;
     this.regionInfo = regionInfo;
+  }
+
+  public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
+    boolean spoolingEnabled, long thresholdBytes, Integer limit, Integer offset,
+    int estimatedRowSize, long pageSizeMs, boolean twoPhaseVectorScoring, double oversampleFactor) {
+    this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset,
+      estimatedRowSize, pageSizeMs);
+    this.twoPhaseVectorScoring = twoPhaseVectorScoring && this.limit != null;
+    this.oversampleFactor = oversampleFactor;
+    this.coarseLimit = this.twoPhaseVectorScoring
+      ? clampCoarseLimitToByteBudget(Math.max(1, (int) Math.ceil(this.limit * oversampleFactor)),
+        estimatedRowSize)
+      : null;
+  }
+
+  public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
+    boolean spoolingEnabled, long thresholdBytes, Integer limit, Integer offset,
+    int estimatedRowSize, long pageSizeMs, Scan scan, RegionInfo regionInfo,
+    boolean twoPhaseVectorScoring, double oversampleFactor) {
+    this(delegate, orderByExpressions, spoolingEnabled, thresholdBytes, limit, offset,
+      estimatedRowSize, pageSizeMs, scan, regionInfo);
+    this.twoPhaseVectorScoring = twoPhaseVectorScoring && this.limit != null;
+    this.oversampleFactor = oversampleFactor;
+    this.coarseLimit = this.twoPhaseVectorScoring
+      ? clampCoarseLimitToByteBudget(Math.max(1, (int) Math.ceil(this.limit * oversampleFactor)),
+        estimatedRowSize)
+      : null;
+  }
+
+  /**
+   * Restricts the coarse candidate limit based on the configured byte memory budget
+   * ({@code thresholdBytes}). Because coarse candidate tracking uses an in-memory
+   * {@link MinMaxPriorityQueue} to support {@code peekLast()} upper-bound pruning without spooling,
+   * the capacity is bounded by memory constraints, with a floor equal to the final requested
+   * {@code limit}.
+   */
+  private int clampCoarseLimitToByteBudget(int rawCoarseLimit, int estimatedRowSize) {
+    if (thresholdBytes <= 0 || thresholdBytes == Long.MAX_VALUE) {
+      return rawCoarseLimit;
+    }
+    long estimatedEntrySize = SizedUtil.OBJECT_SIZE + SizedUtil.ARRAY_SIZE
+      + orderByExpressions.size() * SizedUtil.IMMUTABLE_BYTES_WRITABLE_SIZE + SizedUtil.OBJECT_SIZE
+      + estimatedRowSize;
+    if (estimatedEntrySize <= 0) {
+      return rawCoarseLimit;
+    }
+    long maxByBytes = thresholdBytes / estimatedEntrySize;
+    int floor = limit == null ? 1 : limit;
+    return (int) Math.max(floor, Math.min(rawCoarseLimit, maxByBytes));
+  }
+
+  @VisibleForTesting
+  public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
+    Integer limit, boolean twoPhaseVectorScoring, double oversampleFactor) {
+    this(delegate, orderByExpressions, true, Long.MAX_VALUE, limit, null, 0, Long.MAX_VALUE,
+      twoPhaseVectorScoring, oversampleFactor);
   }
 
   public OrderedResultIterator(ResultIterator delegate, List<OrderByExpression> orderByExpressions,
@@ -415,6 +482,69 @@ public class OrderedResultIterator implements PeekingResultIterator {
     List<Expression> expressions =
       Lists.newArrayList(Collections2.transform(orderByExpressions, TO_EXPRESSION));
     final Comparator<ResultEntry> comparator = buildComparator(orderByExpressions);
+
+    if (twoPhaseVectorScoring) {
+      DistanceFunction distanceExpr = (DistanceFunction) expressions.get(0);
+      try {
+        if (coarseQueue == null) {
+          coarseQueue = MinMaxPriorityQueue.<ResultEntry> orderedBy(comparator)
+            .maximumSize(coarseLimit).create();
+        }
+        long startTime = EnvironmentEdgeManager.currentTimeMillis();
+        for (Tuple result = delegate.next(); result != null; result = delegate.next()) {
+          if (result.size() == 0) {
+            continue;
+          }
+          if (isDummy(result)) {
+            getDummyResult();
+            return resultIterator != null ? resultIterator : PeekingResultIterator.EMPTY_ITERATOR;
+          }
+          double bound = coarseQueue.size() >= coarseLimit
+            ? decodeDistance(coarseQueue.peekLast().getSortKey(0))
+            : Double.MAX_VALUE;
+          distanceExpr.setDistanceUpperBound(bound);
+
+          ImmutableBytesWritable sortKey = new ImmutableBytesWritable();
+          boolean evaluated = distanceExpr.evaluate(result, sortKey);
+          coarsePhaseCandidatesConsidered++;
+          if (!evaluated || sortKey.getLength() == 0) {
+            continue;
+          }
+
+          double distance = decodeDistance(sortKey);
+          if (distance == Double.MAX_VALUE && bound != Double.MAX_VALUE) {
+            // Exceeds the current coarse queue upper bound.
+            // Skip insertion into the priority queue.
+            continue;
+          }
+          coarseQueue.add(new ResultEntry(new ImmutableBytesWritable[] { sortKey }, result));
+
+          if (EnvironmentEdgeManager.currentTimeMillis() - startTime >= pageSizeMs) {
+            getDummyResult();
+            return resultIterator != null ? resultIterator : PeekingResultIterator.EMPTY_ITERATOR;
+          }
+        }
+        distanceExpr.setDistanceUpperBound(Double.MAX_VALUE);
+        List<ResultEntry> rescored = rescoreAndTruncate(coarseQueue, distanceExpr, limit);
+        SizeAwareQueue<ResultEntry> queueEntries = createRescoredQueue(rescored);
+        resultIterator = new RecordPeekingResultIterator(queueEntries);
+        resultIteratorReady = true;
+        this.byteSize = queueEntries.getByteSize();
+      } catch (Exception e) {
+        LOGGER.error(
+          "Error while getting result iterator from OrderedResultIterator in two-phase mode.", e);
+        if (e instanceof SQLException) {
+          throw (SQLException) e;
+        }
+        throw new SQLException(e);
+      } finally {
+        if (resultIteratorReady) {
+          delegate.close();
+        }
+      }
+      return resultIterator;
+    }
+
     try {
       if (resultIterator == null) {
         resultIterator = new RecordPeekingResultIterator(PhoenixQueues
@@ -527,6 +657,65 @@ public class OrderedResultIterator implements PeekingResultIterator {
       + ", offset=" + offset + ", delegate=" + delegate + ", orderByExpressions="
       + orderByExpressions + ", estimatedByteSize=" + estimatedByteSize + ", resultIterator="
       + resultIterator + ", byteSize=" + byteSize + "]";
+  }
+
+  private double decodeDistance(ImmutableBytesWritable ptr) {
+    if (ptr == null || ptr.get() == null || ptr.getLength() == 0) {
+      return Double.MAX_VALUE;
+    }
+    return PDouble.INSTANCE.getCodec().decodeDouble(ptr.get(), ptr.getOffset(),
+      SortOrder.getDefault());
+  }
+
+  private List<ResultEntry> rescoreAndTruncate(MinMaxPriorityQueue<ResultEntry> coarseQueue,
+    DistanceFunction distanceExpr, Integer trueLimit) {
+    List<ResultEntry> all = new ArrayList<>(coarseQueue.size());
+    ImmutableBytesWritable scratch = new ImmutableBytesWritable();
+    while (!coarseQueue.isEmpty()) {
+      ResultEntry entry = coarseQueue.poll();
+      distanceExpr.evaluate(entry.getResult(), scratch);
+      all.add(new ResultEntry(
+        new ImmutableBytesWritable[] { new ImmutableBytesWritable(scratch.copyBytes()) },
+        entry.getResult()));
+    }
+    all.sort(Comparator.comparingDouble(e -> decodeDistance(e.getSortKey(0))));
+    int maxResults = trueLimit == null ? all.size() : Math.min(trueLimit, all.size());
+    return all.subList(0, maxResults);
+  }
+
+  private SizeAwareQueue<ResultEntry> createRescoredQueue(List<ResultEntry> rescored) {
+    long maxBytes = thresholdBytes > 0 ? thresholdBytes : Long.MAX_VALUE;
+    LinkedList<ResultEntry> queue = Lists.newLinkedList();
+    SizeBoundQueue<ResultEntry> sizeBoundQueue = new SizeBoundQueue<ResultEntry>(maxBytes, queue) {
+      @Override
+      public long sizeOf(ResultEntry e) {
+        return ResultEntry.sizeOf(e);
+      }
+    };
+    for (ResultEntry entry : rescored) {
+      sizeBoundQueue.add(entry);
+    }
+    return sizeBoundQueue;
+  }
+
+  @VisibleForTesting
+  public boolean isTwoPhaseVectorScoring() {
+    return twoPhaseVectorScoring;
+  }
+
+  @VisibleForTesting
+  public double getOversampleFactor() {
+    return oversampleFactor;
+  }
+
+  @VisibleForTesting
+  public Integer getCoarseLimit() {
+    return coarseLimit;
+  }
+
+  @VisibleForTesting
+  public long getCoarsePhaseCandidatesConsidered() {
+    return coarsePhaseCandidatesConsidered;
   }
 
   private class RecordPeekingResultIterator implements PeekingResultIterator {

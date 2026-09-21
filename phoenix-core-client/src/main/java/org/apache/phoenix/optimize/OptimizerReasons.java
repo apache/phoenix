@@ -50,6 +50,9 @@ public final class OptimizerReasons {
   public static final String REASON_NOT_APPLICABLE_TO_JOIN = "not applicable to join";
   public static final String REASON_PATH_EXPRESSION_DOES_NOT_MATCH =
     "path expression does not match";
+  public static final String REASON_NOT_A_VECTOR_SEARCH = "not a nearest-neighbor search";
+  public static final String REASON_VECTOR_METRIC_MISMATCH = "distance metric does not match index";
+  public static final String REASON_VECTOR_COLUMN_MISMATCH = "indexes a different vector column";
 
   /** Builds the functional index rule label of the form {@code "matches <expr>"}. */
   public static String matches(String expression) {

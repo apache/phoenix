@@ -172,6 +172,11 @@ public class VectorCentroidCache {
     private final HierarchicalIndex hierarchicalIndex;
     private final Cache<ImmutableBytesPtr, Integer> centroidAssignmentCache =
       CacheBuilder.newBuilder().maximumSize(10000).build();
+    private volatile int lastDistanceEvaluationCount;
+
+    public int getLastDistanceEvaluationCount() {
+      return lastDistanceEvaluationCount;
+    }
 
     public CachedCentroids(String indexName, long generation, List<byte[]> byteCentroids,
       int bruteforceLimit, int probeBuckets) {
@@ -516,6 +521,7 @@ public class VectorCentroidCache {
         return findNearestCentroidBruteForce(queryVector, metric);
       }
       int res = hIndex.findNearestCentroid(queryVector, metric, floatCentroids, probeBucketsToUse);
+      this.lastDistanceEvaluationCount = hIndex.getLastEvaluationsCount();
       return res != -1 ? res : findNearestCentroidBruteForce(queryVector, metric);
     }
 
@@ -621,8 +627,10 @@ public class VectorCentroidCache {
       if (hIndex == null) {
         return findNearestCentroidsBruteForce(queryVector, metric, probeCount);
       }
-      return hIndex.findNearestCentroids(queryVector, metric, floatCentroids, probeCount,
-        probeBucketsToUse);
+      List<Integer> res = hIndex.findNearestCentroids(queryVector, metric, floatCentroids,
+        probeCount, probeBucketsToUse);
+      this.lastDistanceEvaluationCount = hIndex.getLastEvaluationsCount();
+      return res;
     }
 
     /** Finds top-N closest centroid IDs using hierarchical lookup for packed byte vector. */
@@ -650,6 +658,11 @@ public class VectorCentroidCache {
     private final int[][] bucketMembers;
     private final int dimension;
     private final int probeBuckets;
+    private volatile int lastEvaluationsCount;
+
+    public int getLastEvaluationsCount() {
+      return lastEvaluationsCount;
+    }
 
     public HierarchicalIndex(int numBuckets, float[][] bucketCentroids, int[][] bucketMembers,
       int dimension, int probeBuckets) {
@@ -816,12 +829,14 @@ public class VectorCentroidCache {
 
       int bestId = -1;
       double minDistance = Double.MAX_VALUE;
+      int evals = numBuckets;
       for (CentroidDistance cd : topBuckets) {
         int b = cd.getId();
         int[] members = bucketMembers[b];
         if (members == null) {
           continue;
         }
+        evals += members.length;
         for (int i = 0; i < members.length; i++) {
           int cId = members[i];
           double dist = CachedCentroids.computeDistance(queryVector, floatCentroids[cId], dimension,
@@ -832,6 +847,7 @@ public class VectorCentroidCache {
           }
         }
       }
+      this.lastEvaluationsCount = evals;
       return bestId;
     }
 
@@ -869,9 +885,11 @@ public class VectorCentroidCache {
       PriorityQueue<CentroidDistance> maxHeap =
         new PriorityQueue<>(effectiveProbeCount, (a, b) -> b.compareTo(a));
 
+      int evalsTopN = numBuckets;
       for (int i = 0; i < probedBucketCount; i++) {
         int b = bucketDists[i].getId();
         int[] members = bucketMembers[b];
+        evalsTopN += members.length;
         for (int j = 0; j < members.length; j++) {
           int cId = members[j];
           double dist = CachedCentroids.computeDistance(queryVector, floatCentroids[cId], dimension,
@@ -885,6 +903,7 @@ public class VectorCentroidCache {
           }
         }
       }
+      this.lastEvaluationsCount = evalsTopN;
 
       List<CentroidDistance> topList = new ArrayList<>(maxHeap);
       Collections.sort(topList);
@@ -1137,6 +1156,68 @@ public class VectorCentroidCache {
       }
     }
     return null;
+  }
+
+  public CachedCentroids loadCentroids(String indexName, Connection conn) throws SQLException {
+    if (conn == null) {
+      throw new IllegalStateException("No Connection available to load centroids for " + indexName);
+    }
+    String normalized = SchemaUtil.normalizeFullTableName(indexName);
+    long gen = 1L;
+    long catalogGen = CentroidManager.getGeneration(conn, normalized);
+    if (catalogGen > 0) {
+      gen = catalogGen;
+    }
+    return loadCentroids(normalized, gen, conn);
+  }
+
+  public CachedCentroids getCentroids(String indexName, Connection conn) {
+    if (conn != null) {
+      String normalized = SchemaUtil.normalizeFullTableName(indexName);
+      Long activeGen = activeGenerations.get(normalized);
+      if (activeGen != null) {
+        CacheKey key = new CacheKey(normalized, activeGen);
+        CachedCentroids cached = cache.getIfPresent(key);
+        if (cached != null) {
+          return cached;
+        }
+        try {
+          return loadCentroids(normalized, activeGen, conn);
+        } catch (SQLException e) {
+          LOG.debug("Could not load centroids for {} gen {} via connection: {}", normalized,
+            activeGen, e.getMessage());
+        }
+      }
+      try {
+        return loadCentroids(normalized, conn);
+      } catch (SQLException e) {
+        LOG.debug("Could not load centroids for {} via connection: {}", normalized, e.getMessage());
+      }
+    }
+    return getCentroids(indexName);
+  }
+
+  /**
+   * Returns the centroids for the given index at exactly the given generation, using the connection
+   * to load them on a cache miss.
+   */
+  public CachedCentroids getCentroids(String indexName, long generation, Connection conn) {
+    String normalized = SchemaUtil.normalizeFullTableName(indexName);
+    CacheKey key = new CacheKey(normalized, generation);
+    CachedCentroids cached = cache.getIfPresent(key);
+    if (cached != null) {
+      activeGenerations.put(normalized, generation);
+      return cached;
+    }
+    if (conn != null) {
+      try {
+        return loadCentroids(normalized, generation, conn);
+      } catch (SQLException e) {
+        LOG.debug("Could not load centroids for {} gen {} via connection: {}", normalized,
+          generation, e.getMessage());
+      }
+    }
+    return getCentroids(indexName, generation);
   }
 
   public CachedCentroids getCentroids(String indexName, long generation) {
