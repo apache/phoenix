@@ -172,6 +172,14 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
    */
   public static boolean sendIndexMaintainer(PTable index) {
     PIndexState indexState = index.getIndexState();
+    if (index.getIndexType() == IndexType.VECTOR_GLOBAL || index.isVectorIndex()) {
+      if (indexState.isDisabled() || indexState == PIndexState.PENDING_ACTIVE) {
+        return false;
+      }
+      // Vector index row keys require trained centroids to determine cluster assignment.
+      // Once centroids exist, index maintenance proceeds normally to capture concurrent writes.
+      return index.getVectorCentroidGeneration() != null;
+    }
     return !(indexState.isDisabled() || PIndexState.PENDING_ACTIVE == indexState);
   }
 
@@ -2883,6 +2891,32 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         && Bytes.compareTo(ref.getQualifier(), kve.getColumnQualifier()) == 0;
     }
     return false;
+  }
+
+  /** Returns the name of the data column that is the indexed vector column. */
+  public String getIndexedVectorColumnName(PTable dataTable) {
+    if (
+      dataTable != null && vectorExpressionOrdinal >= 0
+        && vectorExpressionOrdinal < indexedExpressions.size()
+    ) {
+      Expression expr = indexedExpressions.get(vectorExpressionOrdinal);
+      if (expr instanceof KeyValueColumnExpression) {
+        KeyValueColumnExpression kve = (KeyValueColumnExpression) expr;
+        byte[] cf = kve.getColumnFamily();
+        byte[] cq = kve.getColumnQualifier();
+        try {
+          PColumn col = (cf == null || cf.length == 0)
+            ? dataTable.getColumnForColumnQualifier(null, cq)
+            : dataTable.getColumnFamily(cf).getPColumnForColumnQualifier(cq);
+          if (col != null) {
+            return col.getName().getString();
+          }
+        } catch (SQLException e) {
+          // fallback
+        }
+      }
+    }
+    return null;
   }
 
   /**

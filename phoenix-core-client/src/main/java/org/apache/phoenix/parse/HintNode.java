@@ -38,9 +38,8 @@ public class HintNode {
   public static final char SEPARATOR = ' ';
   public static final String PREFIX = "(";
   public static final String SUFFIX = ")";
-  // Each hint is of the generic syntax hintWord(hintArgs) where hintArgs in parent are optional.
-  private static final Pattern HINT_PATTERN =
-    Pattern.compile("(?<hintWord>\\w+)\\s*(?:\\s*\\(\\s*(?<hintArgs>[^)]+)\\s*\\))?");
+  private static final Pattern HINT_PATTERN = Pattern.compile(
+    "(?<hintWord>\\w+)(?:\\s*\\(\\s*(?<hintArgs>[^)]+)\\s*\\)|\\s*=\\s*(?<eqArg>\\S+)|\\s+(?<valArg>\\d+))?");
   private static final Pattern HINT_ARG_PATTERN = Pattern.compile("(?<hintArg>\"[^\"]+\"|\\S+)");
 
   public enum Hint {
@@ -125,7 +124,17 @@ public class HintNode {
     /**
      * Override the default CDC include scopes.
      */
-    CDC_INCLUDE,;
+    CDC_INCLUDE,
+
+    /**
+     * Override the default probe count for IVF vector index search.
+     */
+    VECTOR_PROBE_COUNT,
+
+    /**
+     * Override the default oversample factor for two-phase IVF vector index search.
+     */
+    OVERSAMPLE;
   };
 
   private final Map<Hint, String> hints;
@@ -169,6 +178,12 @@ public class HintNode {
       try {
         Hint hintWord = Hint.valueOf(hintMatcher.group("hintWord").toUpperCase());
         String hintArgsStr = hintMatcher.group("hintArgs");
+        if (hintArgsStr == null) {
+          hintArgsStr = hintMatcher.group("eqArg");
+        }
+        if (hintArgsStr == null) {
+          hintArgsStr = hintMatcher.group("valArg");
+        }
         List<String> hintArgs = new ArrayList<>();
         if (hintArgsStr != null) {
           Matcher hintArgMatcher = HINT_ARG_PATTERN.matcher(hintArgsStr);

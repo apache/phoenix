@@ -129,6 +129,8 @@ import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATI
 import static org.apache.phoenix.query.QueryServices.VECTOR_CENTROID_BRUTEFORCE_LIMIT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.VECTOR_CENTROID_CACHE_MAX_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.VECTOR_CENTROID_PROBE_BUCKETS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.VECTOR_OVERSAMPLE_FACTOR_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.VECTOR_PROBE_COUNT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
 
 import java.util.Map.Entry;
@@ -184,6 +186,14 @@ public class QueryServicesOptions {
 
   public QueryServicesOptions setVectorCentroidProbeBuckets(int probeBuckets) {
     return set(VECTOR_CENTROID_PROBE_BUCKETS_ATTRIB, probeBuckets);
+  }
+
+  public QueryServicesOptions setVectorProbeCount(int probeCount) {
+    return set(VECTOR_PROBE_COUNT_ATTRIB, probeCount);
+  }
+
+  public QueryServicesOptions setVectorOversampleFactor(double oversampleFactor) {
+    return set(VECTOR_OVERSAMPLE_FACTOR_ATTRIB, oversampleFactor);
   }
 
   public static final String DEFAULT_DATE_FORMAT_TIMEZONE = DateUtil.DEFAULT_TIME_ZONE_ID;
@@ -251,6 +261,14 @@ public class QueryServicesOptions {
   public static final long DEFAULT_VECTOR_CENTROID_CACHE_MAX_SIZE = 1000L;
   public static final int DEFAULT_VECTOR_CENTROID_BRUTEFORCE_LIMIT = 1024;
   public static final int DEFAULT_VECTOR_CENTROID_PROBE_BUCKETS = 3;
+  public static final int DEFAULT_VECTOR_PROBE_COUNT = 0;
+  /**
+   * Default oversampling factor for two-phase vector scoring. In two-phase scoring, the initial
+   * coarse pass retains (limit * factor) candidates, using early-termination upper bounds during
+   * distance evaluation, and then rescores the surviving candidate set to yield the final top-k
+   * results. A factor of 1.0 disables two-phase scoring.
+   */
+  public static final double DEFAULT_VECTOR_OVERSAMPLE_FACTOR = 3.0;
   public static final boolean DEFAULT_VECTOR_KMEANS_LOCAL = false;
   public static final int DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES = 1000;
   public static final int DEFAULT_CLOCK_SKEW_INTERVAL = 2000;
@@ -796,6 +814,11 @@ public class QueryServicesOptions {
 
   QueryServicesOptions set(String name, long value) {
     config.set(name, Long.toString(value));
+    return this;
+  }
+
+  QueryServicesOptions set(String name, double value) {
+    config.set(name, Double.toString(value));
     return this;
   }
 

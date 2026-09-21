@@ -778,11 +778,15 @@ public class IndexTool extends Configured implements Tool {
           ? pIndexTable.getVectorDistanceMetric()
           : "L2";
 
-        String vectorColName = null;
-        for (PColumn col : pDataTable.getColumns()) {
-          if (col.getDataType() != null && col.getDataType().isVectorType()) {
-            vectorColName = col.getName().getString();
-            break;
+        IndexMaintainer maintainer = pIndexTable.getIndexMaintainer(pDataTable, pConnection);
+        String vectorColName =
+          maintainer != null ? maintainer.getIndexedVectorColumnName(pDataTable) : null;
+        if (vectorColName == null) {
+          for (PColumn col : pDataTable.getColumns()) {
+            if (col.getDataType() != null && col.getDataType().isVectorType()) {
+              vectorColName = col.getName().getString();
+              break;
+            }
           }
         }
         if (vectorColName != null) {
@@ -812,6 +816,10 @@ public class IndexTool extends Configured implements Tool {
         QueryUtil.constructUpsertStatement(indexTableWithSchema, indexColumns, Hint.NO_INDEX);
 
       // Determine vector column index in select query
+      IndexMaintainer maintainer = pIndexTable.getIndexMaintainer(pDataTable, pConnection);
+      String indexedVectorColName =
+        maintainer != null ? maintainer.getIndexedVectorColumnName(pDataTable) : null;
+
       boolean isSalted = pIndexTable.getBucketNum() != null;
       boolean isMultiTenant = pConnection.getTenantId() != null && pIndexTable.isMultiTenant();
       boolean isViewIndex = pIndexTable.getViewIndexId() != null;
@@ -837,7 +845,10 @@ public class IndexTool extends Configured implements Tool {
         for (PColumn col : family.getColumns()) {
           if (col.getViewConstant() == null) {
             if (col.getDataType() != null && col.getDataType().isVectorType()) {
-              vectorIndexInSelected = colIdx;
+              String colDataName = IndexUtil.getDataColumnName(col.getName().getString());
+              if (indexedVectorColName == null || indexedVectorColName.equals(colDataName)) {
+                vectorIndexInSelected = colIdx;
+              }
             }
             colIdx++;
           }

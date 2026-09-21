@@ -49,13 +49,13 @@ import org.apache.phoenix.schema.PColumn;
   "serverDistinctFilter", "serverMergeColumns", "serverParsedProjections", "serverProject",
   "serverFilters", "ignoredHints", "serverFirstKeyOnlyProjection",
   "serverEmptyColumnOnlyProjection", "serverAggregate", "serverGroupByLimit", "serverSortedBy",
-  "serverSortAlgo", "vectorSearch",
-  "serverOffset", "serverRowLimit", "clientFilterBy", "clientFilters", "clientAggregate",
-  "clientDistinctFilter", "clientAfterAggregate", "clientSortAlgo", "clientSortedBy",
-  "clientOffset", "clientRowLimit", "clientSequenceCount", "clientCursorName", "clientSteps",
-  "lhsJoinQueryExplainPlan", "rhsJoinQueryExplainPlan", "subPlans", "dynamicServerFilter",
-  "afterJoinFilter", "joinScannerLimit", "sortMergeSkipMerge", "regionLocations",
-  "regionLocationsTotalSize", "numRegionLocationLookups" })
+  "serverSortAlgo", "vectorSearch", "serverRescoreInfo", "serverOffset", "serverRowLimit",
+  "clientFilterBy", "clientFilters", "clientAggregate", "clientDistinctFilter",
+  "clientAfterAggregate", "clientSortAlgo", "clientSortedBy", "clientOffset", "clientRowLimit",
+  "clientSequenceCount", "clientCursorName", "clientSteps", "lhsJoinQueryExplainPlan",
+  "rhsJoinQueryExplainPlan", "subPlans", "dynamicServerFilter", "afterJoinFilter",
+  "joinScannerLimit", "sortMergeSkipMerge", "regionLocations", "regionLocationsTotalSize",
+  "numRegionLocationLookups" })
 public class ExplainPlanAttributes {
 
   // Top-of-plan disclosures (populated only on the root plan)
@@ -115,6 +115,7 @@ public class ExplainPlanAttributes {
   // Server-side sort algorithm label, and whether this plan is a vector top-K search.
   private final String serverSortAlgo;
   private final boolean isVectorSearch;
+  private final String serverRescoreInfo;
   private final Integer serverOffset;
   private final Long serverRowLimit;
 
@@ -214,6 +215,7 @@ public class ExplainPlanAttributes {
     this.serverSortedBy = b.serverSortedBy;
     this.serverSortAlgo = b.serverSortAlgo;
     this.isVectorSearch = b.isVectorSearch;
+    this.serverRescoreInfo = b.serverRescoreInfo;
     this.serverOffset = b.serverOffset;
     this.serverRowLimit = b.serverRowLimit;
     this.clientFilterBy = b.clientFilterBy;
@@ -455,6 +457,10 @@ public class ExplainPlanAttributes {
     return isVectorSearch;
   }
 
+  public String getServerRescoreInfo() {
+    return serverRescoreInfo;
+  }
+
   public Integer getServerOffset() {
     return serverOffset;
   }
@@ -658,6 +664,7 @@ public class ExplainPlanAttributes {
     private String serverSortedBy;
     private String serverSortAlgo;
     private boolean isVectorSearch;
+    private String serverRescoreInfo;
     private Integer serverOffset;
     private Long serverRowLimit;
     private String clientFilterBy;
@@ -747,6 +754,7 @@ public class ExplainPlanAttributes {
       this.serverSortedBy = explainPlanAttributes.getServerSortedBy();
       this.serverSortAlgo = explainPlanAttributes.getServerSortAlgo();
       this.isVectorSearch = explainPlanAttributes.isVectorSearch();
+      this.serverRescoreInfo = explainPlanAttributes.getServerRescoreInfo();
       this.serverOffset = explainPlanAttributes.getServerOffset();
       this.serverRowLimit = explainPlanAttributes.getServerRowLimit();
       this.clientFilterBy = explainPlanAttributes.getClientFilterBy();
@@ -1051,6 +1059,11 @@ public class ExplainPlanAttributes {
 
     public ExplainPlanAttributesBuilder setVectorSearch(boolean isVectorSearch) {
       this.isVectorSearch = isVectorSearch;
+      return this;
+    }
+
+    public ExplainPlanAttributesBuilder setServerRescoreInfo(String serverRescoreInfo) {
+      this.serverRescoreInfo = serverRescoreInfo;
       return this;
     }
 

@@ -368,6 +368,9 @@ public abstract class ExplainTable {
         case UNCOVERED_GLOBAL:
           indexKind = "UNCOVERED GLOBAL";
           break;
+        case VECTOR_GLOBAL:
+          indexKind = "VECTOR GLOBAL";
+          break;
         default:
           indexKind = null;
       }
@@ -531,6 +534,22 @@ public abstract class ExplainTable {
         } else {
           explainPlanAttributesBuilder
             .setServerSortedBy(orderBy.getOrderByExpressions().toString());
+        }
+      }
+      if (isVectorSearch) {
+        byte[] oversampleBytes =
+          scan.getAttribute(BaseScannerRegionObserverConstants.VECTOR_OVERSAMPLE_FACTOR);
+        if (oversampleBytes != null) {
+          double oversampleFactor = Bytes.toDouble(oversampleBytes);
+          if (oversampleFactor > 1.0 && limit != null) {
+            int coarseLimit = (int) Math.ceil(limit * oversampleFactor);
+            String rescoreLine =
+              "SERVER RESCORE TOP-" + limit + " OF " + coarseLimit + " CANDIDATES";
+            planSteps.add("    " + rescoreLine);
+            if (explainPlanAttributesBuilder != null) {
+              explainPlanAttributesBuilder.setServerRescoreInfo(rescoreLine);
+            }
+          }
         }
       }
     } else {

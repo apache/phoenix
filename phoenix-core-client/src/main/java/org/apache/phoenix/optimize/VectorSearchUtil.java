@@ -17,6 +17,8 @@
  */
 package org.apache.phoenix.optimize;
 
+import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.List;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.expression.Expression;
@@ -26,10 +28,12 @@ import org.apache.phoenix.expression.function.DistanceFunction;
 import org.apache.phoenix.expression.function.InnerProductDistanceFunction;
 import org.apache.phoenix.expression.function.L2DistanceFunction;
 import org.apache.phoenix.expression.function.L2DistanceSquaredFunction;
+import org.apache.phoenix.parse.AliasedNode;
 import org.apache.phoenix.parse.BindParseNode;
 import org.apache.phoenix.parse.ColumnParseNode;
 import org.apache.phoenix.parse.CosineDistanceParseNode;
 import org.apache.phoenix.parse.DistanceFunctionParseNode;
+import org.apache.phoenix.parse.FamilyWildcardParseNode;
 import org.apache.phoenix.parse.FunctionParseNode;
 import org.apache.phoenix.parse.InnerProductDistanceParseNode;
 import org.apache.phoenix.parse.L2DistanceParseNode;
@@ -39,9 +43,16 @@ import org.apache.phoenix.parse.LiteralParseNode;
 import org.apache.phoenix.parse.OrderByNode;
 import org.apache.phoenix.parse.ParseNode;
 import org.apache.phoenix.parse.SelectStatement;
+import org.apache.phoenix.parse.StatelessTraverseAllParseNodeVisitor;
+import org.apache.phoenix.parse.TableWildcardParseNode;
+import org.apache.phoenix.parse.WildcardParseNode;
+import org.apache.phoenix.schema.PColumn;
+import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.util.IndexUtil;
+import org.apache.phoenix.util.SchemaUtil;
 
 /**
- * Static analysis utilities for detecting and extracting vector similarity search queries.
+ * Analysis utilities for detecting and extracting vector similarity search queries.
  * <p>
  * A vector search query is recognized when:
  * <ol>
@@ -289,5 +300,168 @@ public final class VectorSearchUtil {
     }
     Expression expr = orderByExpression.getExpression();
     return expr instanceof DistanceFunction;
+  }
+
+  /**
+   * Extracts the distance metric from a compiled ORDER BY clause, or returns null if not a distance
+   * ordering.
+   */
+  public static DistanceMetric getDistanceMetric(OrderBy orderBy) {
+    if (orderBy == null || orderBy.isEmpty()) {
+      return null;
+    }
+    List<OrderByExpression> expressions = orderBy.getOrderByExpressions();
+    if (expressions.size() != 1) {
+      return null;
+    }
+    Expression expr = expressions.get(0).getExpression();
+    if (expr instanceof L2DistanceFunction || expr instanceof L2DistanceSquaredFunction) {
+      return DistanceMetric.L2;
+    }
+    if (expr instanceof CosineDistanceFunction) {
+      return DistanceMetric.COSINE;
+    }
+    if (expr instanceof InnerProductDistanceFunction) {
+      return DistanceMetric.INNER_PRODUCT;
+    }
+    return null;
+  }
+
+  /**
+   * Checks whether the distance metric in the query is compatible with the vector index's
+   * configured metric.
+   */
+  public static boolean isMetricCompatible(DistanceMetric queryMetric, String indexMetric) {
+    if (queryMetric == null || indexMetric == null) {
+      return false;
+    }
+    String cleanIndexMetric = indexMetric.trim().toUpperCase();
+    switch (queryMetric) {
+      case L2:
+        return "L2".equals(cleanIndexMetric);
+      case COSINE:
+        return "COSINE".equals(cleanIndexMetric);
+      case INNER_PRODUCT:
+        return "INNER_PRODUCT".equals(cleanIndexMetric);
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * Returns true if the given data table column is covered by the vector index table. Primary key
+   * columns and the vector column itself are always covered.
+   */
+  public static boolean isColumnCovered(PTable indexTable, PTable dataTable, PColumn dataColumn) {
+    if (indexTable == null || dataColumn == null) {
+      return false;
+    }
+    if (SchemaUtil.isPKColumn(dataColumn)) {
+      return true;
+    }
+    String indexColName = IndexUtil.getIndexColumnName(dataColumn);
+    try {
+      indexTable.getColumnForColumnName(indexColName);
+      return true;
+    } catch (SQLException e) {
+      return false;
+    }
+  }
+
+  /**
+   * Resolves a column name against the data table, handling translated index column prefixes (e.g.
+   * "0:COL" or ":ID").
+   */
+  public static PColumn getDataColumn(PTable dataTable, String colName) {
+    if (dataTable == null || colName == null) {
+      return null;
+    }
+    try {
+      return dataTable.getColumnForColumnName(colName);
+    } catch (SQLException e) {
+      if (colName.contains(IndexUtil.INDEX_COLUMN_NAME_SEP)) {
+        try {
+          String dataColName = IndexUtil.getDataColumnName(colName);
+          return dataTable.getColumnForColumnName(dataColName);
+        } catch (SQLException e2) {
+          return null;
+        }
+      }
+      return null;
+    }
+  }
+
+  /**
+   * Returns true if the query statement has filter (WHERE clause) columns that are not covered by
+   * the vector index table.
+   */
+  public static boolean hasUncoveredFilterColumns(PTable indexTable, PTable dataTable,
+    SelectStatement select) {
+    if (select == null || select.getWhere() == null || indexTable == null || dataTable == null) {
+      return false;
+    }
+    final List<ColumnParseNode> colNodes = new ArrayList<>();
+    try {
+      select.getWhere().accept(new StatelessTraverseAllParseNodeVisitor() {
+        @Override
+        public Void visit(ColumnParseNode node) throws SQLException {
+          colNodes.add(node);
+          return null;
+        }
+      });
+    } catch (SQLException e) {
+      return false;
+    }
+    for (ColumnParseNode node : colNodes) {
+      PColumn dataCol = getDataColumn(dataTable, node.getName());
+      if (dataCol != null && !isColumnCovered(indexTable, dataTable, dataCol)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Returns true if the query statement has projection (SELECT clause) columns that are not covered
+   * by the vector index table.
+   */
+  public static boolean hasUncoveredProjectionColumns(PTable indexTable, PTable dataTable,
+    SelectStatement select) {
+    if (select == null || select.getSelect() == null || indexTable == null || dataTable == null) {
+      return false;
+    }
+    final List<ColumnParseNode> colNodes = new ArrayList<>();
+    for (AliasedNode aliasedNode : select.getSelect()) {
+      ParseNode node = aliasedNode.getNode();
+      if (
+        node instanceof WildcardParseNode || node instanceof TableWildcardParseNode
+          || node instanceof FamilyWildcardParseNode
+      ) {
+        for (PColumn dataCol : dataTable.getColumns()) {
+          if (!isColumnCovered(indexTable, dataTable, dataCol)) {
+            return true;
+          }
+        }
+        continue;
+      }
+      try {
+        node.accept(new StatelessTraverseAllParseNodeVisitor() {
+          @Override
+          public Void visit(ColumnParseNode cNode) throws SQLException {
+            colNodes.add(cNode);
+            return null;
+          }
+        });
+      } catch (SQLException e) {
+        // Ignored
+      }
+    }
+    for (ColumnParseNode node : colNodes) {
+      PColumn dataCol = getDataColumn(dataTable, node.getName());
+      if (dataCol != null && !isColumnCovered(indexTable, dataTable, dataCol)) {
+        return true;
+      }
+    }
+    return false;
   }
 }

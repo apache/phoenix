@@ -1838,6 +1838,7 @@ public class ExplainPlanTest extends BaseConnectionlessQueryTest {
     n.putNull("serverSortedBy");
     n.putNull("serverSortAlgo");
     n.put("vectorSearch", false);
+    n.putNull("serverRescoreInfo");
     n.putNull("explainScanType");
     n.putNull("tableName");
     n.putNull("keyRanges");

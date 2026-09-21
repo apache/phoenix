@@ -39,6 +39,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
+import org.apache.phoenix.execute.VectorIndexScanPlan;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -295,7 +296,16 @@ public class QueryOptimizer {
 
     List<PTable> indexes = Lists.newArrayList();
     for (PTable idx : dataPlan.getTableRef().getTable().getIndexes()) {
-      if (!idx.isVectorIndex()) {
+      if (idx.isVectorIndex()) {
+        // A vector index is only usable by a nearest-neighbor search, so don't consider it
+        // otherwise unless the query explicitly hints it.
+        if (
+          select.getHint().hasHint(Hint.INDEX)
+            || VectorSearchUtil.isVectorSearch(dataPlan.getOrderBy(), dataPlan.getLimit())
+        ) {
+          indexes.add(idx);
+        }
+      } else {
         indexes.add(idx);
       }
     }
@@ -532,9 +542,11 @@ public class QueryOptimizer {
     QueryPlan dataPlan, boolean isHinted, SelectStatement indexSelect, ColumnResolver resolver)
     throws SQLException {
     int nColumns = dataPlan.getProjector().getColumnCount();
-    // We will or will not do tuple projection according to the data plan.
-    boolean isProjected =
-      dataPlan.getContext().getResolver().getTables().get(0).getTable().getType()
+    // We will or will not do tuple projection according to the data plan. Vector indexes are
+    // excluded: projecting tuples resolves the ORDER BY parse nodes against the data table column
+    // names, which do not exist on the index table.
+    boolean isProjected = !index.isVectorIndex()
+      && dataPlan.getContext().getResolver().getTables().get(0).getTable().getType()
           == PTableType.PROJECTED;
     // Check index state of now potentially updated index table to make sure it's active
     TableRef indexTableRef = resolver.getTables().get(0);
@@ -545,21 +557,84 @@ public class QueryOptimizer {
     boolean isServerMergeForUncoveredIndexEnabled = statement.getConnection().getQueryServices()
       .getProps().getBoolean(QueryServices.SERVER_MERGE_FOR_UNCOVERED_INDEX,
         QueryServicesOptions.DEFAULT_SERVER_MERGE_FOR_UNCOVERED_INDEX);
+    if (index.isVectorIndex()) {
+      if (!VectorSearchUtil.isVectorSearch(dataPlan.getOrderBy(), dataPlan.getLimit())) {
+        return AddPlanResult.rejected(index, OptimizerReasons.REASON_NOT_A_VECTOR_SEARCH);
+      }
+      DistanceMetric queryMetric = VectorSearchUtil.getDistanceMetric(dataPlan.getOrderBy());
+      String indexMetric = index.getVectorDistanceMetric();
+      if (
+        indexMetric != null && queryMetric != null
+          && !VectorSearchUtil.isMetricCompatible(queryMetric, indexMetric)
+      ) {
+        return AddPlanResult.rejected(index, OptimizerReasons.REASON_VECTOR_METRIC_MISMATCH);
+      }
+      // When multiple vector indexes exist, verify that the index targets the specific vector
+      // column referenced in the query ORDER BY distance expression.
+      PTable orderByCheckDataTable = dataPlan.getTableRef().getTable();
+      VectorSearchDescriptor descriptor = VectorSearchUtil.getVectorSearchDescriptor(select);
+      if (descriptor != null && descriptor.isSourceColumn()) {
+        PColumn orderByVectorColumn =
+          VectorSearchUtil.getDataColumn(orderByCheckDataTable, descriptor.getSourceColumnName());
+        if (orderByVectorColumn != null) {
+          IndexMaintainer orderByCheckMaintainer =
+            index.getIndexMaintainer(orderByCheckDataTable, statement.getConnection());
+          String indexedVectorColumnName =
+            orderByCheckMaintainer.getIndexedVectorColumnName(orderByCheckDataTable);
+          if (
+            indexedVectorColumnName != null
+              && !orderByVectorColumn.getName().getString().equals(indexedVectorColumnName)
+          ) {
+            return AddPlanResult.rejected(index, OptimizerReasons.REASON_VECTOR_COLUMN_MISMATCH);
+          }
+        }
+      }
+    }
     if (
       indexState == PIndexState.ACTIVE || indexState == PIndexState.PENDING_ACTIVE
         || (indexState == PIndexState.PENDING_DISABLE && isUnderPendingDisableThreshold(
           indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))
     ) {
       try {
+        // Uncovered vector indexes use client side deferred projection or filter lookups rather
+        // than coprocessor merge scans.
         if (
-          !isServerMergeForUncoveredIndexEnabled
-            || select.getHint().hasHint(HintNode.Hint.NO_INDEX_SERVER_MERGE)
+          !index.isVectorIndex() && (!isServerMergeForUncoveredIndexEnabled
+            || select.getHint().hasHint(HintNode.Hint.NO_INDEX_SERVER_MERGE))
         ) {
           String schemaNameStr =
             index.getSchemaName() == null ? null : index.getSchemaName().getString();
           String tableNameStr =
             index.getTableName() == null ? null : index.getTableName().getString();
           throw new ColumnNotFoundException(schemaNameStr, tableNameStr, null, "*");
+        }
+        PTable baseDataTable = dataPlan.getTableRef().getTable();
+        boolean hasUncoveredFilter = index.isVectorIndex()
+          && VectorSearchUtil.hasUncoveredFilterColumns(indexTable, baseDataTable, select);
+        boolean hasUncoveredProjection = index.isVectorIndex()
+          && VectorSearchUtil.hasUncoveredProjectionColumns(indexTable, baseDataTable, select);
+
+        List<? extends PDatum> compilerTargetColumns = targetColumns;
+        if (index.isVectorIndex() && !hasUncoveredFilter && hasUncoveredProjection) {
+          List<PColumn> pkColumns = baseDataTable.getPKColumns();
+          List<AliasedNode> aliasedNodes = Lists.newArrayListWithExpectedSize(pkColumns.size());
+          boolean isSalted = baseDataTable.getBucketNum() != null;
+          boolean isTenantSpecific =
+            baseDataTable.isMultiTenant() && statement.getConnection().getTenantId() != null;
+          int posOffset = (isSalted ? 1 : 0) + (isTenantSpecific ? 1 : 0);
+          for (int i = posOffset; i < pkColumns.size(); i++) {
+            PColumn column = pkColumns.get(i);
+            String indexColName = IndexUtil.getIndexColumnName(column);
+            ParseNode indexColNode =
+              new ColumnParseNode(null, '"' + indexColName + '"', indexColName);
+            aliasedNodes.add(FACTORY.aliasedNode(null, indexColNode));
+          }
+          indexSelect = FACTORY.select(indexSelect.getFrom(), indexSelect.getHint(), false,
+            aliasedNodes, indexSelect.getWhere(), indexSelect.getGroupBy(), indexSelect.getHaving(),
+            indexSelect.getOrderBy(), indexSelect.getLimit(), indexSelect.getOffset(),
+            indexSelect.getBindCount(), indexSelect.isAggregate(), indexSelect.hasSequence(),
+            Collections.<SelectStatement> emptyList(), indexSelect.getUdfParseNodes());
+          compilerTargetColumns = Collections.emptyList();
         }
         // translate nodes that match expressions that are indexed to the
         // associated column parse node
@@ -580,9 +655,10 @@ public class QueryOptimizer {
           dataPlan.getContext().recordAppliedIndexExpressionPairs(index.getTableName().getString(),
             indexExpressionRewriter.getAppliedFunctionalSubstitutions());
         }
-        QueryCompiler compiler = new QueryCompiler(statement, rewrittenIndexSelect, resolver,
-          targetColumns, parallelIteratorFactory, dataPlan.getContext().getSequenceManager(),
-          isProjected, true, dataPlans).withRewriteContext(dataPlan.getContext());
+        QueryCompiler compiler =
+          new QueryCompiler(statement, rewrittenIndexSelect, resolver, compilerTargetColumns,
+            parallelIteratorFactory, dataPlan.getContext().getSequenceManager(), isProjected, true,
+            dataPlans).withRewriteContext(dataPlan.getContext());
 
         QueryPlan plan = compiler.compile();
         if (indexTable.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
@@ -648,7 +724,18 @@ public class QueryOptimizer {
             || (indexState == PIndexState.PENDING_DISABLE && isUnderPendingDisableThreshold(
               indexTableRef.getCurrentTime(), indexTable.getIndexDisableTimestamp()))
         ) {
-          if (plan.getProjector().getColumnCount() == nColumns) {
+          // Vector index plans handle uncovered projections independently, bypassing the data table
+          // column count match requirement.
+          if (index.isVectorIndex() || plan.getProjector().getColumnCount() == nColumns) {
+            if (plan instanceof VectorIndexScanPlan) {
+              VectorIndexScanPlan vPlan = (VectorIndexScanPlan) plan;
+              if (hasUncoveredFilter) {
+                vPlan.setFilterTimeUncoveredLookup(true);
+              } else if (hasUncoveredProjection) {
+                vPlan.setProjectionTimeUncoveredLookup(true);
+                vPlan.setDataPlan(dataPlan);
+              }
+            }
             return AddPlanResult.success(plan);
           } else {
             String schemaNameStr =
@@ -840,6 +927,11 @@ public class QueryOptimizer {
       public int compare(QueryPlan plan1, QueryPlan plan2) {
         PTable table1 = plan1.getTableRef().getTable();
         PTable table2 = plan2.getTableRef().getTable();
+        if (table1.isVectorIndex() != table2.isVectorIndex()) {
+          return table1.isVectorIndex()
+            ? -comparisonOfDataVersusIndexTable
+            : comparisonOfDataVersusIndexTable;
+        }
         int boundCount1 = plan1.getContext().getScanRanges().getBoundPkColumnCount();
         int boundCount2 = plan2.getContext().getScanRanges().getBoundPkColumnCount();
         // For shared indexes (i.e. indexes on views and local indexes),
