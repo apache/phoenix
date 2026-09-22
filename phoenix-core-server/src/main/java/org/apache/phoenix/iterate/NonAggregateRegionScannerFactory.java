@@ -57,6 +57,7 @@ import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.ArrayIndexFunction;
 import org.apache.phoenix.expression.function.BsonValueFunction;
+import org.apache.phoenix.expression.function.BsonVectorValueFunction;
 import org.apache.phoenix.expression.function.DistanceFunction;
 import org.apache.phoenix.expression.function.JsonQueryFunction;
 import org.apache.phoenix.expression.function.JsonValueFunction;
@@ -232,6 +233,9 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
     if (serverParsedJsonQueryFuncRefs != null) {
       Collections.addAll(resultList, serverParsedJsonQueryFuncRefs);
     }
+    deserializeAndAddComplexDataTypeFunctions(scan,
+      BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION, serverParsedKVRefs,
+      resultList);
     return resultList;
   }
 
@@ -365,7 +369,10 @@ public class NonAggregateRegionScannerFactory extends RegionScannerFactory {
           func = new JsonQueryFunction();
         } else if (scanAttribute.equals(BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION)) {
           func = new BsonValueFunction();
-        }
+        } else
+          if (scanAttribute.equals(BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION)) {
+            func = new BsonVectorValueFunction();
+          }
         if (func != null) {
           func.readFields(input);
           funcRefs[i] = func;

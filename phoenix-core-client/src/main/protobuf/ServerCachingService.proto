@@ -80,6 +80,7 @@ message IndexMaintainer {
   repeated int32 coveredVectorColumnTypeOrdinal = 37;
   optional int32 vectorDimension = 38;
   optional int64 centroidGeneration = 39;
+  optional ColumnReference functionalVectorColRef = 40;
 }
 
 message TransformMaintainer {

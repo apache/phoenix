@@ -328,4 +328,19 @@ public class VectorColumnParseTest {
     assertNull(indexStmt.getVectorLists());
     assertNull(indexStmt.getVectorSampleSize());
   }
+
+  @Test
+  public void testParseBsonVectorValueFunctionInSelect() throws Exception {
+    String sql = "SELECT BSON_VECTOR_VALUE(doc, 'path', 128) FROM t";
+    SQLParser parser = new SQLParser(sql);
+    BindableStatement stmt = parser.parseStatement();
+    assertTrue("Expected SelectStatement", stmt instanceof SelectStatement);
+    SelectStatement selectStmt = (SelectStatement) stmt;
+    assertEquals(1, selectStmt.getSelect().size());
+    ParseNode node = selectStmt.getSelect().get(0).getNode();
+    assertTrue("Expected BsonVectorValueParseNode", node instanceof BsonVectorValueParseNode);
+    BsonVectorValueParseNode funcNode = (BsonVectorValueParseNode) node;
+    assertEquals("BSON_VECTOR_VALUE", funcNode.getName());
+    assertEquals(3, funcNode.getChildren().size());
+  }
 }

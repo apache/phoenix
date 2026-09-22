@@ -23,9 +23,13 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.expression.Expression;
+import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.OrderByExpression;
+import org.apache.phoenix.expression.ProjectedColumnExpression;
+import org.apache.phoenix.expression.SingleCellColumnExpression;
 import org.apache.phoenix.expression.function.CosineDistanceFunction;
 import org.apache.phoenix.expression.function.DistanceFunction;
 import org.apache.phoenix.expression.function.InnerProductDistanceFunction;
@@ -349,6 +353,64 @@ public final class VectorSearchUtil {
       default:
         return false;
     }
+  }
+
+  /**
+   * Returns the row dependent vector expression from a distance based ORDER BY clause, or null if
+   * the ordering does not contain exactly one such expression.
+   */
+  public static Expression getSourceVectorExpression(OrderBy orderBy) {
+    if (orderBy == null || orderBy.isEmpty()) {
+      return null;
+    }
+    List<OrderByExpression> expressions = orderBy.getOrderByExpressions();
+    if (expressions.size() != 1) {
+      return null;
+    }
+    Expression expr = expressions.get(0).getExpression();
+    if (!(expr instanceof DistanceFunction)) {
+      return null;
+    }
+    Expression source = null;
+    for (Expression child : expr.getChildren()) {
+      if (!child.isStateless()) {
+        if (source != null) {
+          return null;
+        }
+        source = child;
+      }
+    }
+    return source;
+  }
+
+  /**
+   * Returns true if the compiled ORDER BY over a vector index table references the index's target
+   * vector column. Returns false if the ordering targets an unindexed expression or a different
+   * vector column.
+   */
+  public static boolean orderByRanksIndexedVector(OrderBy orderBy, PTable indexTable) {
+    if (indexTable == null) {
+      return false;
+    }
+    Expression source = getSourceVectorExpression(orderBy);
+    PColumn vectorCol = IndexUtil.findVectorColumn(indexTable);
+    if (source == null || vectorCol == null) {
+      return false;
+    }
+    if (source instanceof ProjectedColumnExpression) {
+      PColumn col = ((ProjectedColumnExpression) source).getColumn();
+      return col != null && col.getName().equals(vectorCol.getName());
+    }
+    KeyValueColumnExpression kv;
+    if (source instanceof SingleCellColumnExpression) {
+      kv = ((SingleCellColumnExpression) source).getKeyValueExpression();
+    } else if (source instanceof KeyValueColumnExpression) {
+      kv = (KeyValueColumnExpression) source;
+    } else {
+      return false;
+    }
+    return Bytes.equals(kv.getColumnFamily(), vectorCol.getFamilyName().getBytes())
+      && Bytes.equals(kv.getColumnQualifier(), vectorCol.getColumnQualifierBytes());
   }
 
   /**
