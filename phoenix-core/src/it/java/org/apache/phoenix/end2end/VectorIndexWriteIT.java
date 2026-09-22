@@ -28,8 +28,10 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.List;
 import org.apache.hadoop.hbase.client.Delete;
 import org.apache.hadoop.hbase.client.Get;
@@ -40,28 +42,86 @@ import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.end2end.index.IndexTestUtil;
+import org.apache.phoenix.expression.SingleCellColumnExpression;
+import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.query.QueryConstants;
 import org.apache.phoenix.schema.PColumn;
 import org.apache.phoenix.schema.PTable;
+import org.apache.phoenix.schema.PTable.ImmutableStorageScheme;
+import org.apache.phoenix.schema.tuple.ResultTuple;
 import org.apache.phoenix.schema.types.PInteger;
 import org.apache.phoenix.schema.types.PVectorFloat;
 import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.EncodedColumnsUtil;
 import org.apache.phoenix.util.EnvironmentEdgeManager;
+import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.SchemaUtil;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 /** Write pipeline integration tests for vector indexes. */
 @Category(ParallelStatsDisabledTest.class)
+@RunWith(Parameterized.class)
 public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
+
+  private final ImmutableStorageScheme storageScheme;
+
+  public VectorIndexWriteIT(ImmutableStorageScheme storageScheme) {
+    this.storageScheme = storageScheme;
+  }
+
+  @Parameterized.Parameters(name = "VectorIndexWriteIT_storageScheme={0}")
+  public static synchronized Collection<ImmutableStorageScheme> data() {
+    return Arrays.asList(ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+      ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS);
+  }
+
+  /**
+   * Replaces a row by primary key across the configured storage schemes.
+   * <p>
+   * On immutable tables using single cell storage, deletes precede upserts so that index
+   * maintenance observes row replacement rather than appended cell versions.
+   */
+  private void replaceRow(Connection conn, String tableName, String id, Float[] vector,
+    String label) throws SQLException {
+    if (storageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+      try (PreparedStatement ps =
+        conn.prepareStatement("DELETE FROM " + tableName + " WHERE ID = ?")) {
+        ps.setString(1, id);
+        ps.executeUpdate();
+      }
+      conn.commit();
+    }
+    try (PreparedStatement ps =
+      conn.prepareStatement("UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)")) {
+      ps.setString(1, id);
+      if (vector == null) {
+        ps.setNull(2, java.sql.Types.ARRAY);
+      } else {
+        ps.setArray(2, conn.createArrayOf("FLOAT", vector));
+      }
+      ps.setString(3, label);
+      ps.executeUpdate();
+    }
+    conn.commit();
+  }
+
+  private String getTableDdlProps() {
+    if (storageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+      return " IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2";
+    }
+    return " IMMUTABLE_STORAGE_SCHEME=ONE_CELL_PER_COLUMN, COLUMN_ENCODED_BYTES=0";
+  }
 
   private void setupTableAndKnownCentroids(Connection conn, String tableName, String indexName)
     throws Exception {
     try (Statement stmt = conn.createStatement()) {
       stmt.execute("CREATE TABLE " + tableName
-        + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+        + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)"
+        + getTableDdlProps());
       stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
         + "INCLUDE (LABEL) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
     }
@@ -109,7 +169,18 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
       byte[] vecCQ = vectorCol.getColumnQualifierBytes();
       try (Table hIndexTable = pconn.getQueryServices().getTable(physicalIndexName)) {
         Result r = hIndexTable.get(new Get(rowKeys.get(0)));
-        byte[] actualVecBytes = r.getValue(vecCF, vecCQ);
+        byte[] actualVecBytes;
+        if (storageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+          SingleCellColumnExpression colExpr =
+            new SingleCellColumnExpression(vectorCol, vectorCol.getName().getString(),
+              indexTable.getEncodingScheme(), indexTable.getImmutableStorageScheme());
+          ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+          assertTrue("Single-cell expression must evaluate to a non-null vector",
+            colExpr.evaluate(new ResultTuple(r), ptr));
+          actualVecBytes = ptr.copyBytesIfNecessary();
+        } else {
+          actualVecBytes = r.getValue(vecCF, vecCQ);
+        }
         assertNotNull("Vector column 0:V must be present in index table", actualVecBytes);
         byte[] expectedVecBytes = PVectorFloat.INSTANCE.toBytes(vectorFloats);
         assertTrue("Stored vector payload must match expected bytes",
@@ -154,13 +225,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
       assertEquals(2, VectorIndexTestUtil.extractCentroidId(rowKeysBefore.get(0), false));
 
       // Update vector to [0,0,0,1] -> nearest centroid ID 0
-      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
-        ps.setString(1, "row_1");
-        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 0.0f, 0.0f, 0.0f, 1.0f }));
-        ps.setString(3, "lbl_updated");
-        ps.executeUpdate();
-      }
-      conn.commit();
+      replaceRow(conn, tableName, "row_1", new Float[] { 0.0f, 0.0f, 0.0f, 1.0f }, "lbl_updated");
 
       // Verify old row (centroid 2) is deleted and new row (centroid 0) exists
       List<byte[]> rowKeysAfter = VectorIndexTestUtil.getHBaseRowKeys(pconn, indexTable);
@@ -206,14 +271,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
       assertEquals(2, VectorIndexTestUtil.extractCentroidId(rowKeysBefore.get(0), false));
 
       // Update ONLY covered column (same vector, new label)
-      try (PreparedStatement ps =
-        conn.prepareStatement("UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)")) {
-        ps.setString(1, "row_1");
-        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
-        ps.setString(3, "updated_label");
-        ps.executeUpdate();
-      }
-      conn.commit();
+      replaceRow(conn, tableName, "row_1", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }, "updated_label");
 
       // Verify row key (and centroid prefix) is unchanged
       List<byte[]> rowKeysAfter = VectorIndexTestUtil.getHBaseRowKeys(pconn, indexTable);
@@ -310,13 +368,8 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
       }
 
       // Update the row from null to a populated vector.
-      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
-        ps.setString(1, "row_null");
-        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
-        ps.setString(3, "now_has_vector");
-        ps.executeUpdate();
-      }
-      conn.commit();
+      replaceRow(conn, tableName, "row_null", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f },
+        "now_has_vector");
 
       List<byte[]> rowKeysAfterRealVec = VectorIndexTestUtil.getHBaseRowKeys(pconn, indexTable);
       assertEquals("Index row must exist after transition from NULL to real vector", 1,
@@ -325,13 +378,7 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
         VectorIndexTestUtil.extractCentroidId(rowKeysAfterRealVec.get(0), false));
 
       // Update back to null and verify removal from the index.
-      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
-        ps.setString(1, "row_null");
-        ps.setNull(2, java.sql.Types.ARRAY);
-        ps.setString(3, "back_to_null");
-        ps.executeUpdate();
-      }
-      conn.commit();
+      replaceRow(conn, tableName, "row_null", null, "back_to_null");
 
       List<byte[]> rowKeysAfterNullAgain = VectorIndexTestUtil.getHBaseRowKeys(pconn, indexTable);
       assertEquals("Index row must be removed after transition back to NULL", 0,
@@ -366,11 +413,16 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
       assertEquals(2, VectorIndexTestUtil.extractCentroidId(rowKeysBefore.get(0), false));
 
       // Partial update modifying only the covered non-vector column.
-      try (Statement stmt = conn.createStatement()) {
-        stmt.execute(
-          "UPSERT INTO " + tableName + " (ID, LABEL) VALUES ('row_alloc_u', 'lbl_updated')");
+      if (storageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+        replaceRow(conn, tableName, "row_alloc_u", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f },
+          "lbl_updated");
+      } else {
+        try (Statement stmt = conn.createStatement()) {
+          stmt.execute(
+            "UPSERT INTO " + tableName + " (ID, LABEL) VALUES ('row_alloc_u', 'lbl_updated')");
+        }
+        conn.commit();
       }
-      conn.commit();
 
       // Verify row key is maintained in place (not deleted or recreated)
       List<byte[]> rowKeysAfterPartial = VectorIndexTestUtil.getHBaseRowKeys(pconn, indexTable);
@@ -384,8 +436,18 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
       try (
         Table hTable = pconn.getQueryServices().getTable(indexTable.getPhysicalName().getBytes())) {
         Result r = hTable.get(new Get(rowKeysAfterPartial.get(0)));
-        byte[] storedVec =
-          r.getValue(indexVecCol.getFamilyName().getBytes(), indexVecCol.getColumnQualifierBytes());
+        byte[] storedVec;
+        if (storageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+          SingleCellColumnExpression colExpr =
+            new SingleCellColumnExpression(indexVecCol, indexVecCol.getName().getString(),
+              indexTable.getEncodingScheme(), indexTable.getImmutableStorageScheme());
+          ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+          assertTrue(colExpr.evaluate(new ResultTuple(r), ptr));
+          storedVec = ptr.copyBytesIfNecessary();
+        } else {
+          storedVec = r.getValue(indexVecCol.getFamilyName().getBytes(),
+            indexVecCol.getColumnQualifierBytes());
+        }
         assertNotNull("index row must still carry the vector after a covered-only update",
           storedVec);
         assertArrayEquals(PVectorFloat.INSTANCE.toBytes(new float[] { 1.0f, 0.0f, 0.0f, 0.0f }),
@@ -393,13 +455,8 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
       }
 
       // Full update with identical vector values.
-      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
-        ps.setString(1, "row_alloc_u");
-        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
-        ps.setString(3, "lbl_updated_again");
-        ps.executeUpdate();
-      }
-      conn.commit();
+      replaceRow(conn, tableName, "row_alloc_u", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f },
+        "lbl_updated_again");
 
       // Verify row in index table is maintained with centroid prefix 2
       List<byte[]> rowKeys = VectorIndexTestUtil.getHBaseRowKeys(pconn, indexTable);
@@ -419,6 +476,108 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
   }
 
   @Test
+  public void testUnchangedVectorCoveredUpdateOnSingleCellIndex() throws Exception {
+    String tableName = "T_VEC_SC_" + generateUniqueName();
+    String indexName = "IDX_VEC_SC_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), LABEL VARCHAR)");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
+          + "INCLUDE (LABEL) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100, "
+          + "IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2)");
+      }
+
+      List<float[]> knownCentroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 1.0f }, // ID 0
+        new float[] { 0.0f, 0.0f, 1.0f, 0.0f }, // ID 1
+        new float[] { 1.0f, 0.0f, 0.0f, 0.0f }, // ID 2
+        new float[] { 0.0f, 1.0f, 0.0f, 0.0f } // ID 3
+      );
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, knownCentroids,
+        1L);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable dataTable = pconn.getTableNoCache(tableName);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+      assertEquals(ImmutableStorageScheme.ONE_CELL_PER_COLUMN,
+        dataTable.getImmutableStorageScheme());
+      assertEquals(ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
+        indexTable.getImmutableStorageScheme());
+
+      float[] initialVector = new float[] { 1.0f, 0.0f, 0.0f, 0.0f };
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, LABEL) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "row_sc_1");
+        ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { 1.0f, 0.0f, 0.0f, 0.0f }));
+        ps.setString(3, "lbl_initial");
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      // Verify initial index row exists with centroid 2
+      List<byte[]> rowKeysBefore = VectorIndexTestUtil.getHBaseRowKeys(pconn, indexTable);
+      assertEquals(1, rowKeysBefore.size());
+      assertEquals(2, VectorIndexTestUtil.extractCentroidId(rowKeysBefore.get(0), false));
+
+      // Update only the covered non-vector column (unchanged vector)
+      try (Statement stmt = conn.createStatement()) {
+        stmt
+          .execute("UPSERT INTO " + tableName + " (ID, LABEL) VALUES ('row_sc_1', 'lbl_updated')");
+      }
+      conn.commit();
+
+      // Verify index row key is maintained in place
+      List<byte[]> rowKeysAfter = VectorIndexTestUtil.getHBaseRowKeys(pconn, indexTable);
+      assertEquals("Expected exactly 1 index row after covered-only update", 1,
+        rowKeysAfter.size());
+      assertEquals(2, VectorIndexTestUtil.extractCentroidId(rowKeysAfter.get(0), false));
+
+      // Verify the single cell array retains the vector column after covered column update
+      PColumn indexVecCol = indexTable.getColumnForColumnName("0:V");
+      try (
+        Table hTable = pconn.getQueryServices().getTable(indexTable.getPhysicalName().getBytes())) {
+        Result r = hTable.get(new Get(rowKeysAfter.get(0)));
+        byte[] singleCellBytes = r.getValue(indexVecCol.getFamilyName().getBytes(),
+          QueryConstants.SINGLE_KEYVALUE_COLUMN_QUALIFIER_BYTES);
+        assertNotNull("Index row must have the single-cell array in HBase", singleCellBytes);
+
+        SingleCellColumnExpression colExpr =
+          new SingleCellColumnExpression(indexVecCol, indexVecCol.getName().getString(),
+            indexTable.getEncodingScheme(), indexTable.getImmutableStorageScheme());
+        ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+        assertTrue("Single-cell expression must evaluate to a non-null vector",
+          colExpr.evaluate(new ResultTuple(r), ptr));
+        assertArrayEquals(
+          "Index row must still carry the original vector after covered-only update",
+          PVectorFloat.INSTANCE.toBytes(initialVector), ptr.copyBytesIfNecessary());
+      }
+
+      // Assert top-k query over the index returns the row
+      String querySql =
+        "SELECT ID, LABEL FROM " + tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT 1";
+      try (PreparedStatement ps = conn.prepareStatement("EXPLAIN " + querySql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 0.9f, 0.0f, 0.0f, 0.0f }));
+        try (ResultSet rs = ps.executeQuery()) {
+          String plan = QueryUtil.getExplainPlan(rs);
+          assertTrue("EXPLAIN plan must reference index " + indexName + ": " + plan,
+            plan.contains(indexName));
+        }
+      }
+
+      try (PreparedStatement ps = conn.prepareStatement(querySql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", new Float[] { 0.9f, 0.0f, 0.0f, 0.0f }));
+        try (ResultSet rs = ps.executeQuery()) {
+          assertTrue("Top-k query must return the row", rs.next());
+          assertEquals("row_sc_1", rs.getString(1));
+          assertEquals("lbl_updated", rs.getString(2));
+          assertFalse(rs.next());
+        }
+      }
+    }
+  }
+
+  @Test
   public void testVectorCoveredColumnTranscoding() throws Exception {
     String tableName = "T_VEC_COV_TR_" + generateUniqueName();
     String indexName = "IDX_VEC_COV_TR_" + generateUniqueName();
@@ -426,7 +585,8 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       try (Statement stmt = conn.createStatement()) {
         stmt.execute("CREATE TABLE " + tableName
-          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), COV_V VECTOR(FLOAT, 3))");
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), COV_V VECTOR(FLOAT, 3))"
+          + getTableDdlProps());
         stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
           + "INCLUDE (COV_V) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
       }
@@ -504,7 +664,8 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       try (Statement stmt = conn.createStatement()) {
         stmt.execute("CREATE TABLE " + tableName
-          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), COV_D VECTOR(DOUBLE, 3))");
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), COV_D VECTOR(DOUBLE, 3))"
+          + getTableDdlProps());
         stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
           + "INCLUDE (COV_D) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
       }
@@ -670,7 +831,9 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
         long staleTs = deleteTs + 1;
         Put stalePut = new Put(centroid0RowKey);
         stalePut.addColumn(emptyCF, emptyCQ, staleTs, QueryConstants.UNVERIFIED_BYTES);
-        stalePut.addColumn(labelCF, labelCQ, staleTs, Bytes.toBytes("stale_label"));
+        if (storageScheme != ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+          stalePut.addColumn(labelCF, labelCQ, staleTs, Bytes.toBytes("stale_label"));
+        }
         hIndexTable.put(stalePut);
 
         // Verify pre-repair HBase state
@@ -702,8 +865,18 @@ public class VectorIndexWriteIT extends ParallelStatsDisabledIT {
         assertFalse("Repaired Centroid 2 row must exist after read repair", r2After.isEmpty());
         assertTrue("Repaired Centroid 2 row must have VERIFIED marker",
           Bytes.equals(QueryConstants.VERIFIED_BYTES, r2After.getValue(emptyCF, emptyCQ)));
-        assertEquals("Repaired row must have correct label", "correct_label",
-          Bytes.toString(r2After.getValue(labelCF, labelCQ)));
+        String repairedLabel;
+        if (storageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+          SingleCellColumnExpression labelExpr =
+            new SingleCellColumnExpression(labelCol, labelCol.getName().getString(),
+              indexTable.getEncodingScheme(), indexTable.getImmutableStorageScheme());
+          ImmutableBytesPtr ptr = new ImmutableBytesPtr();
+          assertTrue(labelExpr.evaluate(new ResultTuple(r2After), ptr));
+          repairedLabel = Bytes.toString(ptr.copyBytesIfNecessary());
+        } else {
+          repairedLabel = Bytes.toString(r2After.getValue(labelCF, labelCQ));
+        }
+        assertEquals("Repaired row must have correct label", "correct_label", repairedLabel);
       }
     }
   }

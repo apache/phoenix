@@ -2036,4 +2036,143 @@ public class VectorIvfQueryIT extends ParallelStatsDisabledIT {
         litExpr.toString().contains("77.125"));
     }
   }
+
+  @Test
+  public void testSingleCellVectorIndexUsed() throws Exception {
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4)) "
+          + "IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
+          + "WITH (algorithm = 'IVF', metric = 'L2', lists = 2, sample_size = 100)");
+      }
+
+      List<float[]> centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 10.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, centroids, 1L);
+
+      Map<String, float[]> rows = new LinkedHashMap<>();
+      rows.put("A1", new float[] { 1.0f, 0.0f, 0.0f, 0.0f });
+      rows.put("A2", new float[] { 2.0f, 0.0f, 0.0f, 0.0f });
+      rows.put("B1", new float[] { 9.0f, 0.0f, 0.0f, 0.0f });
+      rows.put("B2", new float[] { 10.0f, 0.0f, 0.0f, 0.0f });
+
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V) VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (Map.Entry<String, float[]> entry : rows.entrySet()) {
+          ps.setString(1, entry.getKey());
+          float[] v = entry.getValue();
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+        conn.commit();
+      }
+
+      float[] queryVec = new float[] { 0.5f, 0.0f, 0.0f, 0.0f };
+      Float[] boxedQ = new Float[] { queryVec[0], queryVec[1], queryVec[2], queryVec[3] };
+      int k = 2;
+      List<String> expectedTopK = VectorIndexTestUtil.bruteForceTopK(rows, queryVec, "L2", k);
+
+      String querySql = "SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT " + k;
+      try (PreparedStatement ps = conn.prepareStatement("EXPLAIN " + querySql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = ps.executeQuery()) {
+          String plan = QueryUtil.getExplainPlan(rs);
+          assertTrue("EXPLAIN plan must reference index " + indexName + ": " + plan,
+            plan.contains(indexName));
+          assertTrue("EXPLAIN plan must contain CLIENT PROBING: " + plan,
+            plan.contains("CLIENT PROBING"));
+        }
+      }
+
+      List<String> actualIds = new ArrayList<>();
+      try (PreparedStatement ps = conn.prepareStatement(querySql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = ps.executeQuery()) {
+          while (rs.next()) {
+            actualIds.add(rs.getString(1));
+          }
+        }
+      }
+      assertEquals("Returned IDs must match brute-force top-k", expectedTopK, actualIds);
+    }
+  }
+
+  @Test
+  public void testSingleCellVectorIndexWithCoveredVectorColumn() throws Exception {
+    String tableName = generateUniqueName();
+    String indexName = generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), COV_V VECTOR(FLOAT, 4)) "
+          + "IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+        stmt
+          .execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) INCLUDE (COV_V) "
+            + "WITH (algorithm = 'IVF', metric = 'L2', lists = 2, sample_size = 100)");
+      }
+
+      List<float[]> centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 10.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, centroids, 1L);
+
+      Map<String, float[]> rowsV = new LinkedHashMap<>();
+      rowsV.put("A1", new float[] { 1.0f, 0.0f, 0.0f, 0.0f });
+      rowsV.put("A2", new float[] { 2.0f, 0.0f, 0.0f, 0.0f });
+      rowsV.put("B1", new float[] { 9.0f, 0.0f, 0.0f, 0.0f });
+      rowsV.put("B2", new float[] { 10.0f, 0.0f, 0.0f, 0.0f });
+
+      Map<String, float[]> rowsCovV = new LinkedHashMap<>();
+      rowsCovV.put("A1", new float[] { 100.0f, 0.0f, 0.0f, 0.0f });
+      rowsCovV.put("A2", new float[] { 90.0f, 0.0f, 0.0f, 0.0f });
+      rowsCovV.put("B1", new float[] { 20.0f, 0.0f, 0.0f, 0.0f });
+      rowsCovV.put("B2", new float[] { 10.0f, 0.0f, 0.0f, 0.0f });
+
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, COV_V) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (String id : rowsV.keySet()) {
+          ps.setString(1, id);
+          float[] v = rowsV.get(id);
+          float[] covV = rowsCovV.get(id);
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.setArray(3,
+            conn.createArrayOf("FLOAT", new Float[] { covV[0], covV[1], covV[2], covV[3] }));
+          ps.executeUpdate();
+        }
+        conn.commit();
+      }
+
+      float[] queryVec = new float[] { 0.5f, 0.0f, 0.0f, 0.0f };
+      Float[] boxedQ = new Float[] { queryVec[0], queryVec[1], queryVec[2], queryVec[3] };
+      int k = 2;
+      List<String> expectedTopKOverV = VectorIndexTestUtil.bruteForceTopK(rowsV, queryVec, "L2", k);
+
+      String querySql = "SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT " + k;
+      try (PreparedStatement ps = conn.prepareStatement("EXPLAIN " + querySql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = ps.executeQuery()) {
+          String plan = QueryUtil.getExplainPlan(rs);
+          assertTrue("EXPLAIN plan must reference index " + indexName + ": " + plan,
+            plan.contains(indexName));
+          assertTrue("EXPLAIN plan must contain CLIENT PROBING: " + plan,
+            plan.contains("CLIENT PROBING"));
+        }
+      }
+
+      List<String> actualIds = new ArrayList<>();
+      try (PreparedStatement ps = conn.prepareStatement(querySql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = ps.executeQuery()) {
+          while (rs.next()) {
+            actualIds.add(rs.getString(1));
+          }
+        }
+      }
+      assertEquals("Returned IDs must match brute force over indexed column V", expectedTopKOverV,
+        actualIds);
+    }
+  }
 }

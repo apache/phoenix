@@ -1359,4 +1359,74 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
       }
     }
   }
+
+  @Test
+  public void testSingleCellVectorIndexAdmissionAndQuery() throws Exception {
+    String tableName = "T_VEC_SC_ADM_" + generateUniqueName();
+    String indexName = "IDX_VEC_SC_ADM_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4)) "
+          + "IMMUTABLE_ROWS=true, IMMUTABLE_STORAGE_SCHEME=SINGLE_CELL_ARRAY_WITH_OFFSETS, COLUMN_ENCODED_BYTES=2");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
+          + "WITH (algorithm = 'IVF', metric = 'L2', lists = 2, sample_size = 100)");
+      }
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+      assertEquals("Index table must inherit SINGLE_CELL_ARRAY_WITH_OFFSETS",
+        PTable.ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS,
+        indexTable.getImmutableStorageScheme());
+
+      List<float[]> centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 10.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, centroids, 1L);
+
+      Map<String, float[]> rows = new LinkedHashMap<>();
+      rows.put("row_A1", new float[] { 1.0f, 0.0f, 0.0f, 0.0f });
+      rows.put("row_A2", new float[] { 2.0f, 0.0f, 0.0f, 0.0f });
+      rows.put("row_B1", new float[] { 9.0f, 0.0f, 0.0f, 0.0f });
+      rows.put("row_B2", new float[] { 10.0f, 0.0f, 0.0f, 0.0f });
+
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V) VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (Map.Entry<String, float[]> entry : rows.entrySet()) {
+          ps.setString(1, entry.getKey());
+          float[] v = entry.getValue();
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+        conn.commit();
+      }
+
+      float[] queryVec = new float[] { 0.5f, 0.0f, 0.0f, 0.0f };
+      Float[] boxedQ = new Float[] { queryVec[0], queryVec[1], queryVec[2], queryVec[3] };
+      int k = 2;
+      List<String> expectedTopK = VectorIndexTestUtil.bruteForceTopK(rows, queryVec, "L2", k);
+
+      String querySql = "SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT " + k;
+      try (PreparedStatement ps = conn.prepareStatement("EXPLAIN " + querySql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = ps.executeQuery()) {
+          String plan = QueryUtil.getExplainPlan(rs);
+          assertTrue("EXPLAIN plan must reference index " + indexName + ": " + plan,
+            plan.contains(indexName));
+          assertTrue("EXPLAIN plan must contain CLIENT PROBING: " + plan,
+            plan.contains("CLIENT PROBING"));
+        }
+      }
+
+      List<String> actualIds = new ArrayList<>();
+      try (PreparedStatement ps = conn.prepareStatement(querySql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = ps.executeQuery()) {
+          while (rs.next()) {
+            actualIds.add(rs.getString(1));
+          }
+        }
+      }
+      assertEquals("Returned IDs must match brute-force top-k", expectedTopK, actualIds);
+    }
+  }
 }

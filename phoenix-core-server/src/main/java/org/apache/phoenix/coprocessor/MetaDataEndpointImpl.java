@@ -3264,6 +3264,9 @@ public class MetaDataEndpointImpl extends MetaDataProtocol implements RegionCopr
       return;
     }
 
+    // Vector indexes support both ONE_CELL_PER_COLUMN and SINGLE_CELL_ARRAY_WITH_OFFSETS
+    // schemes, inheriting the storage scheme of the parent table by default.
+
     if (tableType != PTableType.INDEX) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.UNSUPPORTED_VECTOR_INDEX_ALGORITHM)
         .setMessage("Vector index metadata can only be applied to INDEX table type").build()
