@@ -1733,6 +1733,8 @@ public class MetaDataClient {
           col.getName().getString(), col.isRowTimestamp()));
       }
 
+      // Vector indexes support both ONE_CELL_PER_COLUMN and SINGLE_CELL_ARRAY_WITH_OFFSETS
+      // schemes, inheriting the storage scheme of the data table by default.
       boolean isVectorIndex = statement.getIndexType() == IndexType.VECTOR_GLOBAL;
       if (isVectorIndex) {
         ColumnName centroidColName =

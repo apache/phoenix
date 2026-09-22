@@ -1485,10 +1485,6 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
       srcEncodingScheme, verified, maintainer, isVectorUnchanged, null);
   }
 
-  /**
-   * @param vectorValue precomputed vector expression value, or null if evaluation is required when
-   *                    maintaining a functional vector column.
-   */
   public static Put buildUpdateMutation(KeyValueBuilder kvBuilder, ValueGetter valueGetter,
     ImmutableBytesWritable dataRowKeyPtr, long ts, byte[] regionStartKey, byte[] regionEndKey,
     byte[] destRowKey, ImmutableBytesPtr emptyKeyValueCFPtr,
@@ -1569,7 +1565,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
           ColumnReference indexColRef = colRefPair.getFirst();
           ColumnReference dataColRef = colRefPair.getSecond();
           byte[] value = null;
-          if (srcImmutableStorageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS) {
+          if (maintainer != null && maintainer.isIndexedVectorColumn(dataColRef)) {
+            value = getIndexedVectorBytes(maintainer, dataColRef, valueGetter, ts, vectorValue);
+          } else if (
+            srcImmutableStorageScheme == ImmutableStorageScheme.SINGLE_CELL_ARRAY_WITH_OFFSETS
+          ) {
             Expression expression = new SingleCellColumnExpression(new PDatum() {
               @Override
               public boolean isNullable() {
@@ -1600,14 +1600,24 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
             ImmutableBytesPtr ptr = new ImmutableBytesPtr();
             expression.evaluate(new ValueGetterTuple(valueGetter, ts), ptr);
             value = ptr.copyBytesIfNecessary();
+            if (
+              value != null && maintainer != null && maintainer.isCoveredVectorColumn(dataColRef)
+            ) {
+              byte[] transcoded = new byte[value.length];
+              if (maintainer.isDoubleVector(dataColRef)) {
+                PVectorDouble.transcodeBytes(value, 0, value.length,
+                  maintainer.getVectorSortOrder(dataColRef), transcoded, 0, SortOrder.ASC);
+              } else {
+                PVectorFloat.transcodeBytes(value, 0, value.length,
+                  maintainer.getVectorSortOrder(dataColRef), transcoded, 0, SortOrder.ASC);
+              }
+              value = transcoded;
+            }
           } else {
             // Data table is ONE_CELL_PER_COLUMN. Get the col value.
             ImmutableBytesWritable dataValue = valueGetter.getLatestValue(dataColRef, ts);
             if (dataValue != null && dataValue != ValueGetter.HIDDEN_BY_DELETE) {
               if (maintainer != null && maintainer.isCoveredVectorColumn(dataColRef)) {
-                if (isVectorUnchanged && maintainer.isIndexedVectorColumn(dataColRef)) {
-                  continue;
-                }
                 byte[] transcoded = new byte[dataValue.getLength()];
                 if (maintainer.isDoubleVector(dataColRef)) {
                   PVectorDouble.transcodeBytes(dataValue.get(), dataValue.getOffset(),
@@ -2976,17 +2986,31 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     return coveredVectorColumnTypes != null && coveredVectorColumnTypes.containsKey(ref);
   }
 
-  /** Returns true if the given column reference is the indexed vector column. */
-  public boolean isIndexedVectorColumn(ColumnReference ref) {
-    if (
-      ref == null || vectorExpressionOrdinal < 0
-        || vectorExpressionOrdinal >= indexedExpressions.size()
-    ) {
-      return false;
+  /**
+   * Returns the column expression for the indexed vector column, unwrapping any single cell
+   * container to expose the underlying data column coordinates.
+   */
+  private KeyValueColumnExpression getIndexedVectorKeyValueExpression() {
+    if (vectorExpressionOrdinal < 0 || vectorExpressionOrdinal >= indexedExpressions.size()) {
+      return null;
     }
     Expression expr = indexedExpressions.get(vectorExpressionOrdinal);
+    if (expr instanceof SingleCellColumnExpression) {
+      return ((SingleCellColumnExpression) expr).getKeyValueExpression();
+    }
     if (expr instanceof KeyValueColumnExpression) {
-      KeyValueColumnExpression kve = (KeyValueColumnExpression) expr;
+      return (KeyValueColumnExpression) expr;
+    }
+    return null;
+  }
+
+  /** Returns true if the given column reference is the indexed vector column. */
+  public boolean isIndexedVectorColumn(ColumnReference ref) {
+    if (ref == null) {
+      return false;
+    }
+    KeyValueColumnExpression kve = getIndexedVectorKeyValueExpression();
+    if (kve != null) {
       return Bytes.compareTo(ref.getFamily(), kve.getColumnFamily()) == 0
         && Bytes.compareTo(ref.getQualifier(), kve.getColumnQualifier()) == 0;
     }
@@ -2995,13 +3019,9 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
   /** Returns the name of the data column that is the indexed vector column. */
   public String getIndexedVectorColumnName(PTable dataTable) {
-    if (
-      dataTable != null && vectorExpressionOrdinal >= 0
-        && vectorExpressionOrdinal < indexedExpressions.size()
-    ) {
-      Expression expr = indexedExpressions.get(vectorExpressionOrdinal);
-      if (expr instanceof KeyValueColumnExpression) {
-        KeyValueColumnExpression kve = (KeyValueColumnExpression) expr;
+    if (dataTable != null) {
+      KeyValueColumnExpression kve = getIndexedVectorKeyValueExpression();
+      if (kve != null) {
         byte[] cf = kve.getColumnFamily();
         byte[] cq = kve.getColumnQualifier();
         try {
@@ -3029,6 +3049,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
         return type instanceof PVectorDouble;
       }
     }
+    KeyValueColumnExpression kve = getIndexedVectorKeyValueExpression();
+    if (kve != null) {
+      return kve.getDataType() instanceof PVectorDouble;
+    }
     if (vectorExpressionOrdinal >= 0 && vectorExpressionOrdinal < indexedExpressions.size()) {
       return indexedExpressions.get(vectorExpressionOrdinal).getDataType() instanceof PVectorDouble;
     }
@@ -3042,6 +3066,10 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
   /** Returns the sort order of the vector column expression. */
   public SortOrder getVectorSortOrder() {
+    KeyValueColumnExpression kve = getIndexedVectorKeyValueExpression();
+    if (kve != null) {
+      return kve.getSortOrder();
+    }
     if (vectorExpressionOrdinal >= 0 && vectorExpressionOrdinal < indexedExpressions.size()) {
       return indexedExpressions.get(vectorExpressionOrdinal).getSortOrder();
     }
@@ -3090,8 +3118,36 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
   }
 
   /**
-   * Evaluates and returns the vector expression value for the current row state.
+   * Returns ASC encoded bytes for the indexed vector column, transcoding from the column's sort
+   * order when necessary.
    */
+  private static byte[] getIndexedVectorBytes(IndexMaintainer maintainer,
+    ColumnReference dataColRef, ValueGetter valueGetter, long ts,
+    ImmutableBytesWritable vectorValue) {
+    if (maintainer == null) {
+      return null;
+    }
+    ImmutableBytesWritable vecVal =
+      vectorValue != null ? vectorValue : maintainer.getVectorValue(valueGetter, ts);
+    if (vecVal == null || vecVal.get() == null || vecVal.getLength() == 0) {
+      return null;
+    }
+    SortOrder sortOrder = maintainer.getVectorSortOrder(dataColRef);
+    if (sortOrder != SortOrder.ASC) {
+      byte[] valueBytes = new byte[vecVal.getLength()];
+      if (maintainer.isDoubleVector(dataColRef)) {
+        PVectorDouble.transcodeBytes(vecVal.get(), vecVal.getOffset(), vecVal.getLength(),
+          sortOrder, valueBytes, 0, SortOrder.ASC);
+      } else {
+        PVectorFloat.transcodeBytes(vecVal.get(), vecVal.getOffset(), vecVal.getLength(), sortOrder,
+          valueBytes, 0, SortOrder.ASC);
+      }
+      return valueBytes;
+    }
+    return vecVal.copyBytes();
+  }
+
+  /** Evaluates and returns the vector column value for the current row state. */
   public ImmutableBytesWritable getVectorValue(ValueGetter valueGetter, long ts) {
     if (
       valueGetter == null || vectorExpressionOrdinal < 0
@@ -3108,9 +3164,7 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     return ptr;
   }
 
-  /**
-   * Evaluates whether the indexed vector value is unchanged between two row mutation states.
-   */
+  /** Evaluates whether the indexed vector value is unchanged between two row mutation states. */
   public boolean isVectorUnchanged(Put currentDataRowState, Put nextDataRowState) {
     if (currentDataRowState == null || nextDataRowState == null || !isVectorIndex()) {
       return false;
