@@ -779,20 +779,28 @@ public class IndexTool extends Configured implements Tool {
           : "L2";
 
         IndexMaintainer maintainer = pIndexTable.getIndexMaintainer(pDataTable, pConnection);
-        String vectorColName =
+        // Resolve the vector expression to sample, either the indexed data table column
+        // or the functional expression recorded in the index definition.
+        String vectorColSqlExpr =
           maintainer != null ? maintainer.getIndexedVectorColumnName(pDataTable) : null;
-        if (vectorColName == null) {
-          for (PColumn col : pDataTable.getColumns()) {
-            if (col.getDataType() != null && col.getDataType().isVectorType()) {
-              vectorColName = col.getName().getString();
-              break;
-            }
+        if (vectorColSqlExpr != null) {
+          vectorColSqlExpr = '"' + vectorColSqlExpr + '"';
+        } else {
+          PColumn indexVectorCol = IndexUtil.findVectorColumn(pIndexTable);
+          String expressionStr = indexVectorCol == null ? null : indexVectorCol.getExpressionStr();
+          if (expressionStr != null && !expressionStr.trim().isEmpty()) {
+            vectorColSqlExpr = expressionStr;
           }
         }
-        if (vectorColName != null) {
-          int sampleSize = Math.min(256 * k, 10000);
+        if (vectorColSqlExpr != null) {
+          // Use declared sample size if specified, otherwise fall back to the default sample size
+          // heuristic.
+          int sampleSize =
+            pIndexTable.getVectorIvfSampleSize() != null && pIndexTable.getVectorIvfSampleSize() > 0
+              ? pIndexTable.getVectorIvfSampleSize()
+              : Math.min(256 * k, 10000);
           List<float[]> samples =
-            KMeansTrainer.sampleVectors(pConnection, qDataTable, vectorColName, sampleSize);
+            KMeansTrainer.sampleVectors(pConnection, qDataTable, vectorColSqlExpr, sampleSize);
           if (samples != null && !samples.isEmpty()) {
             int actualK = Math.min(k, samples.size());
             KMeansConfig kMeansConfig =

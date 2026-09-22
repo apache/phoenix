@@ -597,7 +597,8 @@ public abstract class ExplainTable {
       Arrays.asList(BaseScannerRegionObserverConstants.JSON_VALUE_FUNCTION,
         BaseScannerRegionObserverConstants.JSON_QUERY_FUNCTION));
     emitServerProjection(planSteps, explainPlanAttributesBuilder, "BSON",
-      Collections.singletonList(BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION));
+      Arrays.asList(BaseScannerRegionObserverConstants.BSON_VALUE_FUNCTION,
+        BaseScannerRegionObserverConstants.BSON_VECTOR_VALUE_FUNCTION));
   }
 
   /**

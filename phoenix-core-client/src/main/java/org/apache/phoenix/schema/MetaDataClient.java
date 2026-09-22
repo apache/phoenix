@@ -1826,7 +1826,7 @@ public class MetaDataClient {
           } else {
             String name = expressionStr.replaceAll("\"", "'");
             vectorColDefName = ColumnName.caseSensitiveColumnName(defaultFamily,
-              IndexUtil.getIndexColumnName(null, name));
+              IndexUtil.getIndexColumnName(defaultFamily, name));
           }
           vectorColDefs
             .add(FACTORY.columnDef(vectorColDefName, expression.getDataType().getSqlTypeName(),
@@ -2089,27 +2089,35 @@ public class MetaDataClient {
       } catch (ColumnNotFoundException ignored) {
       }
     }
-    if (vectorCol == null) {
-      for (PColumn col : dataTable.getColumns()) {
-        if (col.getDataType() != null && col.getDataType().isVectorType()) {
-          vectorCol = col;
-          break;
+    // Resolve the source vector expression for centroid sampling. Column indexes resolve to
+    // the qualified data table column, while functional indexes use the recorded expression string.
+    String vectorColSqlExpr = null;
+    String distributedTrainingColName = null;
+    if (vectorCol != null) {
+      distributedTrainingColName = vectorCol.getName().getString();
+      vectorColSqlExpr =
+        (vectorCol.getFamilyName() != null && vectorCol.getFamilyName().getString().length() > 0)
+          ? ('"' + vectorCol.getFamilyName().getString() + "\".\"" + vectorCol.getName().getString()
+            + '"')
+          : ('"' + vectorCol.getName().getString() + '"');
+      if (dimension == 0 && vectorCol.getMaxLength() != null) {
+        dimension = vectorCol.getMaxLength();
+      }
+    } else {
+      PColumn indexVectorCol = IndexUtil.findVectorColumn(index);
+      String expressionStr = indexVectorCol == null ? null : indexVectorCol.getExpressionStr();
+      if (expressionStr != null && !expressionStr.trim().isEmpty()) {
+        vectorColSqlExpr = expressionStr;
+        if (dimension == 0 && indexVectorCol.getMaxLength() != null) {
+          dimension = indexVectorCol.getMaxLength();
         }
       }
     }
-    if (vectorCol == null) {
+    if (vectorColSqlExpr == null) {
       throw new SQLExceptionInfo.Builder(SQLExceptionCode.INVALID_VECTOR_INDEX_PARAMS)
-        .setMessage("Vector column not found for index " + fullIndexName).build().buildException();
+        .setMessage("Vector column or expression not found for index " + fullIndexName).build()
+        .buildException();
     }
-    if (dimension == 0 && vectorCol.getMaxLength() != null) {
-      dimension = vectorCol.getMaxLength();
-    }
-
-    String vectorColSqlExpr =
-      (vectorCol.getFamilyName() != null && vectorCol.getFamilyName().getString().length() > 0)
-        ? ('"' + vectorCol.getFamilyName().getString() + "\".\"" + vectorCol.getName().getString()
-          + '"')
-        : ('"' + vectorCol.getName().getString() + '"');
     String baseTableSqlName = SchemaUtil.getEscapedFullTableName(dataTable.getName().getString());
 
     // Defer centroid training when the base table has fewer populated vector rows than requested
@@ -2133,14 +2141,16 @@ public class MetaDataClient {
     KMeansConfig config =
       KMeansConfig.newBuilder().distanceMetric(metric).sampleSize(sampleSize).build();
 
-    if (!localKMeans) {
+    // Distributed KMeans training requires a physical table column. Expression based vector
+    // indexes fall back to client side sampling.
+    if (!localKMeans && distributedTrainingColName != null) {
       try {
         Class<?> toolClass = Class.forName("org.apache.phoenix.mapreduce.vector.KMeansTool");
         Method trainMethod = toolClass.getMethod("trainDistributed", Configuration.class,
           String.class, String.class, int.class, int.class, KMeansConfig.class);
-        kmeansResult = (KMeansResult) trainMethod.invoke(null,
-          connection.getQueryServices().getConfiguration(), dataTable.getName().getString(),
-          vectorCol.getName().getString(), dimension, lists, config);
+        kmeansResult =
+          (KMeansResult) trainMethod.invoke(null, connection.getQueryServices().getConfiguration(),
+            dataTable.getName().getString(), distributedTrainingColName, dimension, lists, config);
       } catch (Throwable t) {
         LOGGER.warn(
           "Distributed KMeansTool training failed or unavailable, falling back to client-side trainer: {}",

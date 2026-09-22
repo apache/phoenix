@@ -107,6 +107,7 @@ public class BaseScannerRegionObserverConstants {
   public static final String JSON_VALUE_FUNCTION = "_JsonValueFunction";
   public static final String JSON_QUERY_FUNCTION = "_JsonQueryFunction";
   public static final String BSON_VALUE_FUNCTION = "_BsonValueFunction";
+  public static final String BSON_VECTOR_VALUE_FUNCTION = "_BsonVectorValueFunction";
 
   /*
    * Attribute to denote that the index maintainer has been serialized using its proto-buf

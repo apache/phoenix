@@ -40,6 +40,7 @@ import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
 import org.apache.phoenix.execute.VectorIndexScanPlan;
+import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
 import org.apache.phoenix.jdbc.PhoenixConnection;
@@ -569,23 +570,41 @@ public class QueryOptimizer {
       ) {
         return AddPlanResult.rejected(index, OptimizerReasons.REASON_VECTOR_METRIC_MISMATCH);
       }
-      // When multiple vector indexes exist, verify that the index targets the specific vector
-      // column referenced in the query ORDER BY distance expression.
+      // Reject candidate indexes whose configured vector dimension does not match the query vector
+      // dimension.
+      Expression sourceVector = VectorSearchUtil.getSourceVectorExpression(dataPlan.getOrderBy());
+      Integer queryDimension = sourceVector == null ? null : sourceVector.getMaxLength();
+      if (
+        queryDimension != null && index.getVectorDimension() != null
+          && !queryDimension.equals(index.getVectorDimension())
+      ) {
+        return AddPlanResult.rejected(index, OptimizerReasons.REASON_VECTOR_DIMENSION_MISMATCH);
+      }
+      // Ensure the candidate index matches the specific vector column referenced in the query
+      // ordering.
       PTable orderByCheckDataTable = dataPlan.getTableRef().getTable();
       VectorSearchDescriptor descriptor = VectorSearchUtil.getVectorSearchDescriptor(select);
-      if (descriptor != null && descriptor.isSourceColumn()) {
-        PColumn orderByVectorColumn =
-          VectorSearchUtil.getDataColumn(orderByCheckDataTable, descriptor.getSourceColumnName());
-        if (orderByVectorColumn != null) {
-          IndexMaintainer orderByCheckMaintainer =
-            index.getIndexMaintainer(orderByCheckDataTable, statement.getConnection());
-          String indexedVectorColumnName =
-            orderByCheckMaintainer.getIndexedVectorColumnName(orderByCheckDataTable);
-          if (
-            indexedVectorColumnName != null
-              && !orderByVectorColumn.getName().getString().equals(indexedVectorColumnName)
-          ) {
-            return AddPlanResult.rejected(index, OptimizerReasons.REASON_VECTOR_COLUMN_MISMATCH);
+      if (descriptor != null) {
+        IndexMaintainer orderByCheckMaintainer =
+          index.getIndexMaintainer(orderByCheckDataTable, statement.getConnection());
+        String indexedVectorColumnName =
+          orderByCheckMaintainer.getIndexedVectorColumnName(orderByCheckDataTable);
+        if (descriptor.isSourceColumn()) {
+          PColumn orderByVectorColumn =
+            VectorSearchUtil.getDataColumn(orderByCheckDataTable, descriptor.getSourceColumnName());
+          if (orderByVectorColumn != null) {
+            if (
+              indexedVectorColumnName == null
+                || !orderByVectorColumn.getName().getString().equals(indexedVectorColumnName)
+            ) {
+              return AddPlanResult.rejected(index, OptimizerReasons.REASON_VECTOR_COLUMN_MISMATCH);
+            }
+          }
+        } else {
+          // Column vector indexes cannot satisfy expression-based vector queries.
+          if (indexedVectorColumnName != null) {
+            return AddPlanResult.rejected(index,
+              OptimizerReasons.REASON_VECTOR_EXPRESSION_NOT_INDEXED);
           }
         }
       }
@@ -661,6 +680,13 @@ public class QueryOptimizer {
             dataPlans).withRewriteContext(dataPlan.getContext());
 
         QueryPlan plan = compiler.compile();
+        if (
+          index.isVectorIndex()
+            && !VectorSearchUtil.orderByRanksIndexedVector(plan.getOrderBy(), indexTable)
+        ) {
+          // Verify that the query ORDER BY expression was rewritten to the indexed vector column.
+          return AddPlanResult.rejected(index, OptimizerReasons.REASON_VECTOR_COLUMN_MISMATCH);
+        }
         if (indexTable.getIndexType() == IndexType.UNCOVERED_GLOBAL) {
           // Indexed columns should also be added to the data columns to join for
           // uncovered global indexes. This is required to verify index rows against

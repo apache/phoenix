@@ -117,6 +117,25 @@ public class IndexExpressionParseNodeRewriter extends ParseNodeRewriter {
           new String[] { colName, expressionStr.trim() });
       }
     }
+    if (index.isVectorIndex()) {
+      PColumn vectorCol = IndexUtil.findVectorColumn(index);
+      if (vectorCol != null && vectorCol.getExpressionStr() != null) {
+        String expressionStr = IndexUtil.getIndexColumnExpressionStr(vectorCol);
+        ParseNode expressionParseNode = SQLParser.parseCondition(expressionStr);
+        String colName = "\"" + vectorCol.getName().getString() + "\"";
+        Expression dataExpression = expressionParseNode.accept(expressionCompiler);
+        PDataType expressionDataType = dataExpression.getDataType();
+        ParseNode indexedParseNode = expressionParseNode.accept(rewriter);
+        PDataType indexColType =
+          IndexUtil.getIndexColumnDataType(dataExpression.isNullable(), expressionDataType);
+        ParseNode columnParseNode =
+          new ColumnParseNode(alias != null ? TableName.create(null, alias) : null, colName, null);
+        if (indexColType != expressionDataType) {
+          columnParseNode = NODE_FACTORY.cast(columnParseNode, expressionDataType, null, null);
+        }
+        indexedParseNodeToColumnParseNodeMap.put(indexedParseNode, columnParseNode);
+      }
+    }
   }
 
   @Override

@@ -37,9 +37,11 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_DISTANCE_ME
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_LISTS_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.VECTOR_IVF_SAMPLE_SIZE_BYTES;
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -52,12 +54,17 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import org.apache.hadoop.hbase.client.Admin;
+import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
@@ -69,7 +76,9 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
+import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.protobuf.ProtobufUtil;
@@ -99,6 +108,12 @@ import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.StringUtil;
 import org.apache.phoenix.util.TestUtil;
+import org.bson.BinaryVector;
+import org.bson.BsonBinary;
+import org.bson.BsonBinarySubType;
+import org.bson.BsonDocument;
+import org.bson.BsonNull;
+import org.bson.BsonString;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.experimental.categories.Category;
@@ -880,6 +895,467 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
       // Dropping a non-existent index should complete cleanly when IF EXISTS is specified.
       try (Statement stmt = conn.createStatement()) {
         stmt.execute("DROP INDEX IF EXISTS " + indexName + " ON " + tableName);
+      }
+    }
+  }
+
+  // --- Phase 10: BSON vector extraction ---
+
+  private static final int BSON_DIM = 8;
+
+  /** Constructs a BSON binary vector payload of subtype 9, FLOAT32, little-endian. */
+  private static BsonBinary bsonVector(float[] v) {
+    return new BsonBinary(BinaryVector.floatVector(v));
+  }
+
+  /** Generates a test vector with the specified first component. */
+  private static float[] vecX(float x) {
+    float[] v = new float[BSON_DIM];
+    v[0] = x;
+    return v;
+  }
+
+  private static BsonDocument embeddingDoc(float[] v, String category) {
+    BsonDocument doc = new BsonDocument("embedding", bsonVector(v));
+    doc.put("category", new BsonString(category));
+    return doc;
+  }
+
+  private static void upsertDoc(Connection conn, String table, String id, BsonDocument doc)
+    throws SQLException {
+    try (PreparedStatement ps = conn.prepareStatement("UPSERT INTO " + table + " VALUES (?, ?)")) {
+      ps.setString(1, id);
+      ps.setObject(2, doc);
+      ps.executeUpdate();
+    }
+    conn.commit();
+  }
+
+  private static int countRows(Connection conn, String table) throws SQLException {
+    try (Statement stmt = conn.createStatement();
+      ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM " + table)) {
+      assertTrue(rs.next());
+      return rs.getInt(1);
+    }
+  }
+
+  private static Float[] boxed(float[] v) {
+    Float[] b = new Float[v.length];
+    for (int i = 0; i < v.length; i++) {
+      b[i] = v[i];
+    }
+    return b;
+  }
+
+  private static List<String> runSearch(Connection conn, String sql, float[] q)
+    throws SQLException {
+    List<String> ids = new ArrayList<>();
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setArray(1, conn.createArrayOf("FLOAT", boxed(q)));
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          ids.add(rs.getString(1));
+        }
+      }
+    }
+    return ids;
+  }
+
+  private static String explain(Connection conn, String sql, float[] q) throws SQLException {
+    try (PreparedStatement ps = conn.prepareStatement("EXPLAIN " + sql)) {
+      ps.setArray(1, conn.createArrayOf("FLOAT", boxed(q)));
+      return QueryUtil.getExplainPlan(ps.executeQuery());
+    }
+  }
+
+  /**
+   * Defines four test centroids spaced along the primary dimension for deterministic partitioning.
+   */
+  private static List<float[]> fourCentroids() {
+    List<float[]> centroids = new ArrayList<>();
+    for (int c = 0; c < 4; c++) {
+      centroids.add(vecX(c * 10.0f));
+    }
+    return centroids;
+  }
+
+  /** Maps index row keys to centroid identifiers and row keys for validation. */
+  private static Map<String, Integer> indexCentroidById(PhoenixConnection pconn, String indexName)
+    throws Exception {
+    PTable indexTable = pconn.getTableNoCache(indexName);
+    Map<String, Integer> byId = new HashMap<>();
+    for (byte[] rk : VectorIndexTestUtil.getHBaseRowKeys(pconn, indexTable)) {
+      int cid = VectorIndexTestUtil.extractCentroidId(rk, false);
+      String id =
+        (String) PVarchar.INSTANCE.toObject(rk, Bytes.SIZEOF_INT, rk.length - Bytes.SIZEOF_INT);
+      byId.put(id, cid);
+    }
+    return byId;
+  }
+
+  @Test
+  public void testBsonFunctionalVectorIndexWriteLifecycle() throws Exception {
+    String tableName = "T_BSON_FUNC_" + generateUniqueName();
+    String indexName = "IDX_BSON_FUNC_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, DOC BSON)");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+          + " (BSON_VECTOR_VALUE(doc, 'embedding', " + BSON_DIM
+          + ")) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+      List<float[]> centroids = fourCentroids();
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, centroids, 1L);
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+
+      // Verify that functional vector indexes configure a functional vector column reference,
+      // while standard column indexes do not.
+      PTable dataTable = pconn.getTableNoCache(tableName);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+      IndexMaintainer maintainer = indexTable.getIndexMaintainer(dataTable, pconn);
+      assertNotNull("BSON functional index must carry a functional vector column ref",
+        maintainer.getFunctionalVectorColRef());
+      String colTable = "T_COL_VEC_" + generateUniqueName();
+      String colIndex = "IDX_COL_VEC_" + generateUniqueName();
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + colTable
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, " + BSON_DIM + "))");
+        stmt.execute("CREATE VECTOR INDEX " + colIndex + " ON " + colTable
+          + " (V) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+      PTable colDataTable = pconn.getTableNoCache(colTable);
+      assertNull("column vector index must not carry a functional vector column ref",
+        pconn.getTableNoCache(colIndex).getIndexMaintainer(colDataTable, pconn)
+          .getFunctionalVectorColRef());
+
+      // Upsert rows across centroids along with documents containing missing or null vectors.
+      Map<String, float[]> vectors = new LinkedHashMap<>();
+      for (int i = 0; i < 40; i++) {
+        float[] v = vecX(i);
+        vectors.put("id_" + i, v);
+        upsertDoc(conn, tableName, "id_" + i, embeddingDoc(v, "c" + (i % 3)));
+      }
+      for (int i = 0; i < 5; i++) {
+        upsertDoc(conn, tableName, "noemb_" + i,
+          new BsonDocument("category", new BsonString("none")));
+      }
+      upsertDoc(conn, tableName, "nullemb", new BsonDocument("embedding", BsonNull.VALUE));
+      assertEquals(46, countRows(conn, tableName));
+      assertEquals(40, countRows(conn, indexName));
+
+      // Verify rows are partitioned under their nearest centroid.
+      Map<String, Integer> byId = indexCentroidById(pconn, indexName);
+      assertEquals(40, byId.size());
+      for (Map.Entry<String, float[]> e : vectors.entrySet()) {
+        int expected = VectorIndexTestUtil.nearestCentroid(e.getValue(), centroids, "L2");
+        assertEquals("centroid of " + e.getKey(), Integer.valueOf(expected), byId.get(e.getKey()));
+      }
+
+      // Verify the stored index cell contains the transcoded PVectorFloat big-endian
+      // representation.
+      ColumnReference vecRef = maintainer.getFunctionalVectorColRef();
+      byte[] physical = indexTable.getPhysicalName().getBytes();
+      byte[] rowKeyOf7 = null;
+      for (byte[] rk : VectorIndexTestUtil.getHBaseRowKeys(pconn, indexTable)) {
+        String id =
+          (String) PVarchar.INSTANCE.toObject(rk, Bytes.SIZEOF_INT, rk.length - Bytes.SIZEOF_INT);
+        if ("id_7".equals(id)) {
+          rowKeyOf7 = rk;
+        }
+      }
+      assertNotNull(rowKeyOf7);
+      try (Table hTable = pconn.getQueryServices().getTable(physical)) {
+        Result r = hTable.get(new Get(rowKeyOf7));
+        byte[] stored = r.getValue(vecRef.getFamily(), vecRef.getQualifier());
+        assertNotNull("index row must carry the functional vector cell", stored);
+        assertArrayEquals(PVectorFloat.INSTANCE.toBytes(vecX(7)), stored);
+      }
+
+      // Verify updates to non-vector fields do not reassign or mutate the index row.
+      upsertDoc(conn, tableName, "id_7", embeddingDoc(vecX(7), "renamed"));
+      assertEquals(40, countRows(conn, indexName));
+      assertEquals(byId.get("id_7"), indexCentroidById(pconn, indexName).get("id_7"));
+
+      // Verify vector updates correctly re-partition the index row to a new centroid.
+      assertEquals(Integer.valueOf(1), byId.get("id_7"));
+      upsertDoc(conn, tableName, "id_7", embeddingDoc(vecX(35.5f), "renamed"));
+      vectors.put("id_7", vecX(35.5f));
+      assertEquals(40, countRows(conn, indexName));
+      assertEquals(Integer.valueOf(3), indexCentroidById(pconn, indexName).get("id_7"));
+
+      // Verify removing the vector field removes the entry from the index.
+      upsertDoc(conn, tableName, "id_8", new BsonDocument("category", new BsonString("gone")));
+      vectors.remove("id_8");
+      assertEquals(46, countRows(conn, tableName));
+      assertEquals(39, countRows(conn, indexName));
+      assertFalse(indexCentroidById(pconn, indexName).containsKey("id_8"));
+
+      // Validate that malformed vector payloads fail mutation processing.
+      BsonBinary[] malformed = new BsonBinary[] { bsonVector(new float[BSON_DIM + 1]),
+        new BsonBinary(BinaryVector.int8Vector(new byte[BSON_DIM])),
+        new BsonBinary(BsonBinarySubType.BINARY, bsonVector(vecX(1)).getData()) };
+      for (BsonBinary bad : malformed) {
+        try {
+          upsertDoc(conn, tableName, "bad", new BsonDocument("embedding", bad));
+          fail("Malformed embedding " + bad + " must be rejected at write time");
+        } catch (SQLException expected) {
+          conn.rollback();
+        }
+      }
+      assertEquals(46, countRows(conn, tableName));
+      assertEquals(39, countRows(conn, indexName));
+
+      // Verify index scan results reflect all prior updates, removals, and centroid assignments.
+      float[] q = vecX(35.3f);
+      String sql = "SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(BSON_VECTOR_VALUE(doc, "
+        + "'embedding', " + BSON_DIM + "), ?) LIMIT 3";
+      assertTrue(explain(conn, sql, q).contains(indexName));
+      assertEquals(VectorIndexTestUtil.bruteForceTopK(vectors, q, "L2", 3),
+        runSearch(conn, sql, q));
+    }
+  }
+
+  @Test
+  public void testBsonFunctionalVectorIndexSearch() throws Exception {
+    String tableName = "T_BSON_QUERY_" + generateUniqueName();
+    String indexName = "IDX_BSON_QUERY_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, DOC BSON)");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+          + " (BSON_VECTOR_VALUE(doc, 'embedding', " + BSON_DIM
+          + ")) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, fourCentroids(),
+        1L);
+
+      // Upsert test vectors spanning centroid boundaries to validate multi-centroid probing and
+      // distance ordering.
+      Map<String, float[]> vectors = new LinkedHashMap<>();
+      float[] xs = { 1f, 4f, 6f, 9f, 11f, 14f, 16f, 19f, 21f, 24f, 26f, 29f };
+      for (int i = 0; i < xs.length; i++) {
+        float[] v = vecX(xs[i]);
+        v[1] = 0.1f * i;
+        vectors.put("r" + i, v);
+        upsertDoc(conn, tableName, "r" + i, embeddingDoc(v, "c" + (i % 2)));
+      }
+
+      String sql = "SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(BSON_VECTOR_VALUE(doc, "
+        + "'embedding', " + BSON_DIM + "), ?) LIMIT 3";
+      for (float qx : new float[] { 5f, 15f, 25f, 0f }) {
+        float[] q = vecX(qx);
+        String plan = explain(conn, sql, q);
+        assertTrue("Plan must use the BSON functional vector index: " + plan,
+          plan.contains(indexName) && plan.contains("CLIENT PROBING"));
+        assertEquals("query x=" + qx, VectorIndexTestUtil.bruteForceTopK(vectors, q, "L2", 3),
+          runSearch(conn, sql, q));
+      }
+
+      // Verify distance function operand commutativity.
+      String flipped = "SELECT ID FROM " + tableName
+        + " ORDER BY L2_DISTANCE(?, BSON_VECTOR_VALUE(doc, 'embedding', " + BSON_DIM + ")) LIMIT 3";
+      float[] q = vecX(15f);
+      assertTrue(explain(conn, flipped, q).contains(indexName));
+      assertEquals(VectorIndexTestUtil.bruteForceTopK(vectors, q, "L2", 3),
+        runSearch(conn, flipped, q));
+    }
+  }
+
+  @Test
+  public void testBsonVectorIndexWithCoveredVectorColumnOfAnotherDimension() throws Exception {
+    // Verify that index dimension validation targets the indexed expression rather than
+    // unrelated covered vector columns.
+    String tableName = "T_BSON_COV_" + generateUniqueName();
+    String indexName = "IDX_BSON_COV_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, DOC BSON, V4 VECTOR(FLOAT, 4))");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+          + " (BSON_VECTOR_VALUE(doc, 'embedding', " + BSON_DIM + ")) INCLUDE (V4)"
+          + " WITH (algorithm = 'IVF', metric = 'L2', lists = 2, sample_size = 100)");
+      }
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable indexTable = pconn.getTableNoCache(indexName);
+      assertEquals(Integer.valueOf(BSON_DIM), indexTable.getVectorDimension());
+      // Ensure the maintainer indexes the functional expression rather than covered vector columns.
+      IndexMaintainer maintainer =
+        indexTable.getIndexMaintainer(pconn.getTableNoCache(tableName), pconn);
+      assertNotNull("BSON functional index must carry a functional vector column ref",
+        maintainer.getFunctionalVectorColRef());
+
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName,
+        Arrays.asList(vecX(0f), vecX(10f)), 1L);
+
+      try (PreparedStatement ps =
+        conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?)")) {
+        ps.setString(1, "r1");
+        ps.setObject(2, new BsonDocument("embedding", bsonVector(vecX(11f))));
+        ps.setArray(3, conn.createArrayOf("FLOAT", new Float[] { 1f, 2f, 3f, 4f }));
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      assertEquals(1, countRows(conn, indexName));
+      assertEquals(Integer.valueOf(1), indexCentroidById(pconn, indexName).get("r1"));
+    }
+  }
+
+  @Test
+  public void testBsonVectorIndexNotUsedForDifferentExpression() throws Exception {
+    // Ensure queries ordering by different paths, dimensions, or unindexed vector columns
+    // do not route to this index.
+    String tableName = "T_BSON_OTHER_" + generateUniqueName();
+    String indexName = "IDX_BSON_OTHER_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, DOC BSON, V VECTOR(FLOAT, " + BSON_DIM + "))");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+          + " (BSON_VECTOR_VALUE(doc, 'embedding', " + BSON_DIM + ")) INCLUDE (DOC, V)"
+          + " WITH (algorithm = 'IVF', metric = 'L2', lists = 2, sample_size = 100)");
+      }
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName,
+        Arrays.asList(vecX(0f), vecX(10f)), 1L);
+
+      // Upsert test vectors with distinct distributions across paths to verify query plan
+      // isolation.
+      String[] ids = { "A1", "A2", "A3", "B1", "B2", "B3" };
+      float[] embX = { 2f, 3f, 4f, 6f, 7f, 8f };
+      float[] otherX = { 100f, 101f, 102f, 0f, 1f, 2f };
+      Map<String, float[]> otherRows = new LinkedHashMap<>();
+      try (PreparedStatement ps =
+        conn.prepareStatement("UPSERT INTO " + tableName + " VALUES (?, ?, ?)")) {
+        for (int i = 0; i < ids.length; i++) {
+          BsonDocument doc = new BsonDocument("embedding", bsonVector(vecX(embX[i])));
+          doc.put("other", bsonVector(vecX(otherX[i])));
+          ps.setString(1, ids[i]);
+          ps.setObject(2, doc);
+          ps.setArray(3, conn.createArrayOf("FLOAT", boxed(vecX(otherX[i]))));
+          ps.executeUpdate();
+          otherRows.put(ids[i], vecX(otherX[i]));
+        }
+        conn.commit();
+      }
+
+      float[] q = vecX(0f);
+      List<String> expected = VectorIndexTestUtil.bruteForceTopK(otherRows, q, "L2", 2);
+      String[] sqls = {
+        "SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(BSON_VECTOR_VALUE(doc, 'other', "
+          + BSON_DIM + "), ?) LIMIT 2",
+        "SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT 2" };
+      for (String sql : sqls) {
+        String plan = explain(conn, sql, q);
+        assertFalse("Index on 'embedding' must not serve: " + sql + "\n" + plan,
+          plan.contains(indexName));
+        assertEquals(sql, expected, runSearch(conn, sql, q));
+      }
+
+      // Verify that queries with mismatched vector dimensions bypass the index.
+      String dimSql =
+        "SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(BSON_VECTOR_VALUE(doc, 'embedding', "
+          + (BSON_DIM + 1) + "), ?) LIMIT 2";
+      assertFalse(explain(conn, dimSql, new float[BSON_DIM + 1]).contains(indexName));
+
+      // Verify matching vector expression queries successfully utilize the index.
+      Map<String, float[]> embRows = new LinkedHashMap<>();
+      for (int i = 0; i < ids.length; i++) {
+        embRows.put(ids[i], vecX(embX[i]));
+      }
+      String embSql = "SELECT ID FROM " + tableName
+        + " ORDER BY L2_DISTANCE(BSON_VECTOR_VALUE(doc, 'embedding', " + BSON_DIM + "), ?) LIMIT 2";
+      assertTrue(explain(conn, embSql, q).contains(indexName));
+      assertEquals(VectorIndexTestUtil.bruteForceTopK(embRows, q, "L2", 2),
+        runSearch(conn, embSql, q));
+    }
+  }
+
+  @Test
+  public void testServerSideBsonVectorProjection() throws Exception {
+    String tableName = "T_BSON_PROJ_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, DOC BSON)");
+      }
+
+      float[] v1 = new float[] { 1.5f, -2.5f, 3.0e-3f };
+      float[] v2 = new float[] { 4.0f, 5.0f, 6.0f };
+      upsertDoc(conn, tableName, "row1",
+        new BsonDocument("data", new BsonDocument("vec", bsonVector(v1))));
+      upsertDoc(conn, tableName, "row2",
+        new BsonDocument("data", new BsonDocument("vec", bsonVector(v2))));
+      upsertDoc(conn, tableName, "row3",
+        new BsonDocument("data", new BsonDocument("other", new BsonString("hello"))));
+
+      // Verify projection pushdown evaluates the extraction server-side.
+      String projSql =
+        "SELECT ID, BSON_VECTOR_VALUE(doc, 'data.vec', 3) FROM " + tableName + " ORDER BY ID";
+      try (Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("EXPLAIN " + projSql)) {
+        String plan = QueryUtil.getExplainPlan(rs);
+        assertTrue("Expected server-side BSON projection: " + plan,
+          plan.contains("SERVER BSON PROJECTION 1"));
+        assertTrue("Expected the pushed down extraction to be disclosed: " + plan,
+          plan.contains("BSON_VECTOR_VALUE(DOC, 'data.vec', 3)"));
+      }
+      try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(projSql)) {
+        assertTrue(rs.next());
+        assertEquals("row1", rs.getString(1));
+        assertArrayEquals(v1, (float[]) rs.getObject(2), 1e-6f);
+        assertTrue(rs.next());
+        assertEquals("row2", rs.getString(1));
+        assertArrayEquals(v2, (float[]) rs.getObject(2), 1e-6f);
+        assertTrue(rs.next());
+        assertEquals("row3", rs.getString(1));
+        assertNull(rs.getObject(2));
+        assertTrue(rs.wasNull());
+        assertFalse(rs.next());
+      }
+
+      // Verify server-side projection evaluation combined with filter predicates and distance
+      // functions.
+      String distSql = "SELECT L2_DISTANCE(BSON_VECTOR_VALUE(doc, 'data.vec', 3), ARRAY[1.5, -2.5,"
+        + " 0.003]) FROM " + tableName + " WHERE ID = 'row1'";
+      try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(distSql)) {
+        assertTrue(rs.next());
+        assertEquals(0.0, rs.getDouble(1), 1e-6);
+        assertFalse(rs.next());
+      }
+
+      // Verify client-side fallback behavior when the full document column is also projected.
+      String fullDocSql = "SELECT doc, BSON_VECTOR_VALUE(doc, 'data.vec', 3) FROM " + tableName
+        + " WHERE ID = 'row1'";
+      try (Statement stmt = conn.createStatement();
+        ResultSet rs = stmt.executeQuery("EXPLAIN " + fullDocSql)) {
+        String plan = QueryUtil.getExplainPlan(rs);
+        assertFalse("No server-side projection when the document is selected: " + plan,
+          plan.contains("SERVER BSON PROJECTION"));
+      }
+      try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(fullDocSql)) {
+        assertTrue(rs.next());
+        BsonDocument returnedDoc = (BsonDocument) rs.getObject(1);
+        assertArrayEquals(v1,
+          returnedDoc.getDocument("data").getBinary("vec").asVector().asFloat32Vector().getData(),
+          0f);
+        assertArrayEquals(v1, (float[]) rs.getObject(2), 1e-6f);
+        assertFalse(rs.next());
+      }
+
+      // Verify server-side evaluation raises an exception on dimension mismatch.
+      String badDim = "SELECT BSON_VECTOR_VALUE(doc, 'data.vec', 2) FROM " + tableName;
+      try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(badDim)) {
+        while (rs.next()) {
+          rs.getObject(1);
+        }
+        fail("Expected evaluation exception on dimension mismatch");
+      } catch (SQLException e) {
+        assertTrue("Unexpected message: " + e.getMessage(),
+          e.getMessage().contains("dimension mismatch"));
       }
     }
   }
