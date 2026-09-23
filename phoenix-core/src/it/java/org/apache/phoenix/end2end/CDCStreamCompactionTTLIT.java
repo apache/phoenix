@@ -116,7 +116,8 @@ public class CDCStreamCompactionTTLIT extends CDCBaseIT {
     // Flush SYSTEM.CDC_STREAM to disk at the REAL clock, BEFORE advancing the edge. On HBase 2.6
     // Admin.flush is procedure-based (FlushTableProcedure); issuing it while the injected clock is
     // jumped ~30h ahead of wall-clock strands the flush op in the RSProcedureDispatcher and hangs
-    // the test. (Same flush-then-jump ordering as AdhocViewCompactionsIT / MaxLookbackIT / TableTTLIT.)
+    // the test. (Same flush-then-jump ordering as AdhocViewCompactionsIT / MaxLookbackIT /
+    // TableTTLIT.)
     getUtility().getAdmin().flush(physicalCdcStreamTable);
 
     try {
