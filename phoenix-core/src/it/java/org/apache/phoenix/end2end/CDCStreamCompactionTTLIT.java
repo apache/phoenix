@@ -113,6 +113,13 @@ public class CDCStreamCompactionTTLIT extends CDCBaseIT {
     // Before advancing the clock, every partition row is still present on disk.
     assertEquals("baseline: all 3 partition rows present on disk before compaction", 3, rawBefore);
 
+    // Flush SYSTEM.CDC_STREAM to disk at the REAL clock, BEFORE advancing the edge. On HBase 2.6
+    // Admin.flush is procedure-based (FlushTableProcedure); issuing it while the injected clock is
+    // jumped ~30h ahead of wall-clock strands the flush op in the RSProcedureDispatcher and hangs
+    // the test. (Same flush-then-jump ordering as AdhocViewCompactionsIT / MaxLookbackIT /
+    // TableTTLIT.)
+    getUtility().getAdmin().flush(physicalCdcStreamTable);
+
     try {
       // Advance the clock past the partition-expiry window so the closed-partition rows expire.
       ManualEnvironmentEdge injectEdge = new ManualEnvironmentEdge();
@@ -123,8 +130,10 @@ public class CDCStreamCompactionTTLIT extends CDCBaseIT {
       injectEdge.setValue(t);
 
       // Major compact SYSTEM.CDC_STREAM. With the conditional TTL compiled, the expired
-      // closed-partition rows must be physically removed here.
-      TestUtil.doMajorCompaction(conn, SYSTEM_CDC_STREAM_NAME);
+      // closed-partition rows must be physically removed here. Use the state-based major-compaction
+      // helper (bounded wait on the compaction state) rather than doMajorCompaction's marker-row
+      // completion protocol, which does not terminate for a conditional-TTL table.
+      TestUtil.majorCompact(getUtility(), physicalCdcStreamTable);
 
       long rawAfter = TestUtil.getRawRowCount(conn, physicalCdcStreamTable);
       assertEquals("closed partition physically purged; only the 2 open partitions remain", 2,
