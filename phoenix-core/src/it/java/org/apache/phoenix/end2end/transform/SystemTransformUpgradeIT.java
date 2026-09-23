@@ -77,16 +77,32 @@ public class SystemTransformUpgradeIT extends ParallelStatsDisabledIT {
    */
   @Test
   public void testUpgradeIsIdempotentWhenColumnsAlreadyPresent() throws Exception {
+    Map<String, String> snapshotMap = new HashMap<>();
     try (PhoenixConnection conn =
       (PhoenixConnection) DriverManager.getConnection(getUrl(), testProps)) {
       conn.setAutoCommit(true);
       ConnectionQueryServicesImpl cqs = (ConnectionQueryServicesImpl) conn.getQueryServices();
 
-      Map<String, String> snapshotMap = new HashMap<>();
-      // The columns are already present on a fresh cluster, so this must not throw.
-      cqs.upgradeSystemTransform(conn, snapshotMap);
-      assertSnapshotTakenForTransform(snapshotMap);
+      // upgradeSystemTransform closes the connection it is handed (its addColumnsIfNotExists ->
+      // addColumn path closes the old meta-connection per that method's contract) and returns a
+      // fresh one, so the return must be captured -- reusing the passed-in connection throws
+      // CONNECTION_CLOSED. The returned connection is pinned to the system-table upgrade SCN
+      // (MIN_SYSTEM_TABLE_TIMESTAMP_5_4_0); it must be closed but must NOT be reused for the
+      // round-trip below, since a current-time write/read through it fails the max-lookback-age
+      // check. The columns are already present on a fresh cluster, so this must not throw.
+      PhoenixConnection upgraded = cqs.upgradeSystemTransform(conn, snapshotMap);
+      if (upgraded != conn) {
+        upgraded.close();
+      }
+    }
+    assertSnapshotTakenForTransform(snapshotMap);
 
+    // Round-trip on a fresh, current-time connection: the passed-in connection was closed by the
+    // upgrade and the returned one is SCN-pinned to the upgrade timestamp, so neither can serve a
+    // current-time write/read of SYSTEM.TRANSFORM.
+    try (PhoenixConnection conn =
+      (PhoenixConnection) DriverManager.getConnection(getUrl(), testProps)) {
+      conn.setAutoCommit(true);
       conn.getQueryServices().clearCache();
       assertColumnsRoundTrip(conn);
     }

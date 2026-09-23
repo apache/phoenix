@@ -224,9 +224,13 @@ public class TransformMonitorTask extends BaseTask {
         if (partialTransform != null) {
           // After the pointer swap, wait for clients to refresh their cached physical-table pointer
           // before running the partial pass. Persist the earliest time the wait may end and move to
-          // PENDING_PARTIAL_PASS; the partial pass is NOT kicked here.
+          // PENDING_PARTIAL_PASS; the partial pass is NOT kicked here. The minimum wait defaults to
+          // MIN_PARTIAL_PASS_WAIT_MS but is configurable so integration tests can disable the
+          // deferral floor and observe the transform reach a terminal state within a short poll.
+          long minPartialPassWaitMs = configuration.getLong(
+            QueryServices.TRANSFORM_PARTIAL_PASS_MIN_WAIT_MS_ATTRIB, MIN_PARTIAL_PASS_WAIT_MS);
           long waitUntilTs = EnvironmentEdgeManager.currentTimeMillis()
-            + computePartialPassWaitMs(conn, systemTransformRecord);
+            + computePartialPassWaitMs(conn, systemTransformRecord, minPartialPassWaitMs);
           // One INFO per transform recording the deferral deadline; the per-scan "still waiting"
           // line is logged at DEBUG (the wait spans 30 min to 24 h at ~60 s scans) so the wait
           // window is observable without flooding the log.
@@ -492,14 +496,17 @@ public class TransformMonitorTask extends BaseTask {
   /**
    * Computes how long to wait after cutover before running the partial pass. The wait is the
    * logical (parent) table's update-cache-frequency scaled by a safety margin, clamped to
-   * [{@link #MIN_PARTIAL_PASS_WAIT_MS}, {@link #MAX_PARTIAL_PASS_WAIT_MS}] so a small or zero cache
-   * frequency still yields a meaningful wait and a table that never refreshes its cache (whose
-   * update-cache-frequency resolves to Long.MAX_VALUE) does not produce an unbounded wait that
-   * would overflow the deadline arithmetic in the caller. The returned value is always a small,
-   * positive number of milliseconds, so adding it to the current time cannot overflow.
+   * [{@code minPartialPassWaitMs}, {@link #MAX_PARTIAL_PASS_WAIT_MS}] so a small or zero cache
+   * frequency still yields at least the caller-supplied floor and a table that never refreshes its
+   * cache (whose update-cache-frequency resolves to Long.MAX_VALUE) does not produce an unbounded
+   * wait that would overflow the deadline arithmetic in the caller. Production passes
+   * {@link #MIN_PARTIAL_PASS_WAIT_MS}; the returned value is always a small, non-negative number of
+   * milliseconds, so adding it to the current time cannot overflow.
+   * @param minPartialPassWaitMs floor the scaled wait is clamped up to -- 30 minutes in production,
+   *                             0 in tests that must observe a terminal state within a short poll
    */
   private long computePartialPassWaitMs(PhoenixConnection conn,
-    SystemTransformRecord systemTransformRecord) {
+    SystemTransformRecord systemTransformRecord, long minPartialPassWaitMs) {
     long updateCacheFrequency = 0;
     try {
       String logicalTableName = SchemaUtil.getTableName(systemTransformRecord.getSchemaName(),
@@ -514,7 +521,7 @@ public class TransformMonitorTask extends BaseTask {
       LOGGER.warn("Could not resolve update cache frequency for the logical table; "
         + "falling back to the minimum partial-pass wait", e);
     }
-    return boundedPartialPassWaitMs(updateCacheFrequency);
+    return boundedPartialPassWaitMs(updateCacheFrequency, minPartialPassWaitMs);
   }
 
   /**
@@ -549,9 +556,23 @@ public class TransformMonitorTask extends BaseTask {
    */
   @VisibleForTesting
   static long boundedPartialPassWaitMs(long updateCacheFrequency) {
+    return boundedPartialPassWaitMs(updateCacheFrequency, MIN_PARTIAL_PASS_WAIT_MS);
+  }
+
+  /**
+   * Clamps and scales a raw update-cache-frequency into a bounded partial-pass wait using a
+   * caller-supplied minimum. Behaves exactly like {@link #boundedPartialPassWaitMs(long)} but with
+   * a configurable floor: production passes {@link #MIN_PARTIAL_PASS_WAIT_MS} (30 minutes) while an
+   * integration test can pass 0 to disable the deferral floor and observe the transform reach a
+   * terminal state within a short poll. The raw frequency is still clamped to the ceiling BEFORE
+   * scaling so the multiplication cannot saturate, and the scaled result is clamped to
+   * [{@code minPartialPassWaitMs}, {@link #MAX_PARTIAL_PASS_WAIT_MS}].
+   */
+  @VisibleForTesting
+  static long boundedPartialPassWaitMs(long updateCacheFrequency, long minPartialPassWaitMs) {
     long bounded = Math.min(updateCacheFrequency, MAX_PARTIAL_PASS_WAIT_MS);
     long scaled = (long) (bounded * CACHE_FREQUENCY_SAFETY_MULTIPLIER);
-    return Math.min(Math.max(scaled, MIN_PARTIAL_PASS_WAIT_MS), MAX_PARTIAL_PASS_WAIT_MS);
+    return Math.min(Math.max(scaled, minPartialPassWaitMs), MAX_PARTIAL_PASS_WAIT_MS);
   }
 
   /**
