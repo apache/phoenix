@@ -1349,6 +1349,14 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       if (baseTableMaxLookbackVal != null) {
         tableProps.put(PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, baseTableMaxLookbackVal);
       }
+      // PHOENIX-6868: Inherit configured custom table descriptor properties from base table
+      for (String inheritableProp :
+          MetaDataUtil.getInheritableTableDescriptorProperties(this.config)) {
+        String val = baseTableDesc.getValue(inheritableProp);
+        if (val != null) {
+          tableProps.put(inheritableProp, val);
+        }
+      }
       dataTableColDescForIndexTablePropSyncing = baseTableDesc.getColumnFamily(defaultFamilyBytes);
       // It's possible that the table has specific column families and none of them are declared
       // to be the DEFAULT_COLUMN_FAMILY, so we choose the first column family for syncing
@@ -3358,6 +3366,13 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
               }
               newMaxLookback = (Integer) propValue;
             }
+            // PHOENIX-6868: Disallow setting inheritable properties directly on index
+            if (table.getType() == PTableType.INDEX
+                && MetaDataUtil.isInheritableTableDescriptorProperty(this.config, propName)) {
+              throw new SQLExceptionInfo.Builder(
+                SQLExceptionCode.CANNOT_SET_OR_ALTER_PROPERTY_FOR_INDEX)
+                  .setMessage("Property: " + propName).build().buildException();
+            }
             tableProps.put(propName, propValue);
           } else {
             if (TableProperty.isPhoenixTableProperty(propName)) {
@@ -3691,8 +3706,10 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     // Copy properties that need to be synced from the default column family of the base table to
     // the column families of each of its indexes (including indexes on this base table's views)
     // and store those table descriptor mappings as well
+    Map<String, Object> syncedTableDescProps = getNewSyncedPropsMapForTableDescriptor(
+      newMaxLookback, tableProps);
     setSyncedPropertiesForTableIndexes(table, tableAndIndexDescriptorMappings,
-      applyPropsToAllIndexColFams, getNewSyncedPropsMapForTableDescriptor(newMaxLookback));
+      applyPropsToAllIndexColFams, syncedTableDescProps);
     return tableAndIndexDescriptorMappings;
   }
 
@@ -3797,13 +3814,21 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
     return newSyncedProps;
   }
 
-  private Map<String, Object> getNewSyncedPropsMapForTableDescriptor(Integer newMaxLookback) {
-    if (newMaxLookback == null) {
-      return null;
-    }
-    Map<String, Object> newSyncedProps = new HashMap<>(1);
+  private Map<String, Object> getNewSyncedPropsMapForTableDescriptor(Integer newMaxLookback,
+      Map<String, Object> tableProps) {
+    Map<String, Object> newSyncedProps = new HashMap<>();
     setPropIfNotNull(newSyncedProps, PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY, newMaxLookback);
-    return newSyncedProps;
+    // PHOENIX-6868: Include any inheritable table descriptor properties that are being modified
+    List<String> inheritableProps =
+      MetaDataUtil.getInheritableTableDescriptorProperties(this.config);
+    if (tableProps != null) {
+      for (String prop : inheritableProps) {
+        if (tableProps.containsKey(prop)) {
+          newSyncedProps.put(prop, tableProps.get(prop));
+        }
+      }
+    }
+    return newSyncedProps.isEmpty() ? null : newSyncedProps;
   }
 
   /**
@@ -3877,6 +3902,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
           this.getTableDescriptor(Bytes.toBytes(viewIndexName));
         TableDescriptorBuilder newViewIndexDescriptorBuilder =
           TableDescriptorBuilder.newBuilder(origViewIndexTableDescriptor);
+        modifyTableDescriptor(newViewIndexDescriptorBuilder, applyPropsToAllIndexesTd);
         for (ColumnFamilyDescriptor cfd : origViewIndexTableDescriptor.getColumnFamilies()) {
           ColumnFamilyDescriptorBuilder newCfd = ColumnFamilyDescriptorBuilder.newBuilder(cfd);
           modifyColumnFamilyDescriptor(newCfd, applyPropsToAllIndexesDefaultCF);
