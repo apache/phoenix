@@ -25,7 +25,6 @@ import java.sql.Connection;
 import java.sql.Driver;
 import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -279,7 +278,8 @@ public class HighAvailabilityGroup {
     }
     HAURLInfo haurlInfo = new HAURLInfo(name, principal, additionalJDBCParams);
     HAGroupInfo info = getHAGroupInfo(url, properties);
-    URLS.computeIfAbsent(info, haGroupInfo -> new HashSet<>()).add(haurlInfo);
+    // Multiple threads can concurrently call this code path with the same HAGroupInfo.
+    URLS.computeIfAbsent(info, haGroupInfo -> ConcurrentHashMap.newKeySet()).add(haurlInfo);
     return haurlInfo;
   }
 
