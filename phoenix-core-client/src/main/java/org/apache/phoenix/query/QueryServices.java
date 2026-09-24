@@ -391,6 +391,13 @@ public interface QueryServices extends SQLCloseable {
   public static final String UPDATE_CACHE_FREQUENCY_FOR_PENDING_DISABLED_INDEX =
     "phoenix.update.cache.frequency.pending.disable.index";
 
+  // Minimum time the transform monitor defers the post-cutover partial pass so clients can refresh
+  // their cached physical-table pointer. Defaults to 30 minutes in production; tests that must
+  // observe the transform reach a terminal state within a short poll set this to 0 to disable the
+  // deferral floor.
+  public static final String TRANSFORM_PARTIAL_PASS_MIN_WAIT_MS_ATTRIB =
+    "phoenix.transform.partial.pass.min.wait.ms";
+
   // whether to validate last ddl timestamps during client operations
   public static final String LAST_DDL_TIMESTAMP_VALIDATION_ENABLED =
     "phoenix.ddl.timestamp.validation.enabled";

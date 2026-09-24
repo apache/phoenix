@@ -70,10 +70,14 @@ public class TransformMonitorExtendedIT extends BaseTest {
 
   @BeforeClass
   public static synchronized void doSetup() throws Exception {
-    Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(2);
+    Map<String, String> serverProps = Maps.newHashMapWithExpectedSize(3);
     serverProps.put(BaseScannerRegionObserverConstants.PHOENIX_MAX_LOOKBACK_AGE_CONF_KEY,
       Integer.toString(60 * 60)); // An hour
     serverProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
+    // Disable the post-cutover partial-pass deferral floor so a transform reaches its terminal
+    // state within this test's short poll instead of parking in PENDING_PARTIAL_PASS for the
+    // 30-minute production default.
+    serverProps.put(QueryServices.TRANSFORM_PARTIAL_PASS_MIN_WAIT_MS_ATTRIB, "0");
 
     Map<String, String> clientProps = Maps.newHashMapWithExpectedSize(1);
     clientProps.put(QueryServices.IS_NAMESPACE_MAPPING_ENABLED, Boolean.TRUE.toString());
