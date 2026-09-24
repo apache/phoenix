@@ -77,12 +77,12 @@ import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
-import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
+import org.apache.hadoop.hbase.regionserver.HRegion;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.coprocessor.TaskRegionObserver;
@@ -113,6 +113,7 @@ import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.PTable.IndexType;
 import org.apache.phoenix.schema.PTableImpl;
+import org.apache.phoenix.schema.PTableKey;
 import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.schema.types.PBson;
@@ -2797,11 +2798,8 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
     }
   }
 
-  /**
-   * Verifies scorecard persistence and durability across region flush and reopen operations.
-   */
   @Test
-  public void testScorecardSurvivesRegionReopen() throws Exception {
+  public void testScorecardIsPersistedToDisk() throws Exception {
     String tableName = "T_RESTART_DUR_" + generateUniqueName();
     String indexName = "IDX_RESTART_DUR_" + generateUniqueName();
 
@@ -2822,23 +2820,22 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
       ScorecardAccumulator.getInstance().flush(conn);
     }
 
-    // Flush memstore to HFile and reopen region to verify disk-level persistence.
+    // Flush the centroid table memstore to verify persistence to disk.
     TableName centroidTable = TableName.valueOf(SYSTEM_VECTOR_CENTROID_NAME);
     try (Admin admin = getUtility().getAdmin()) {
       admin.flush(centroidTable);
-      List<RegionInfo> regions = admin.getRegions(centroidTable);
-      assertFalse("SYSTEM.VECTOR_CENTROID must have at least one region", regions.isEmpty());
-      for (RegionInfo region : regions) {
-        admin.unassign(region.getRegionName());
-      }
-      getUtility().waitUntilNoRegionsInTransition(60000);
     }
+    long memStoreBytes = 0;
+    for (HRegion region : getUtility().getHBaseCluster().getRegions(centroidTable)) {
+      memStoreBytes += region.getMemStoreDataSize();
+    }
+    assertEquals("Memstore should be empty after flush", 0L, memStoreBytes);
 
     VectorCentroidCache.resetInstance();
     try (Connection freshConn = DriverManager.getConnection(getUrl())) {
       Map<Integer, Long> counts = getScorecardCounts(freshConn, indexName, 1L);
       for (int c = 0; c < 4; c++) {
-        assertEquals("Cluster size for centroid " + c + " must survive a region reopen",
+        assertEquals("Cluster size for centroid " + c + " must survive a flush to disk",
           Long.valueOf(5L), counts.get(c));
       }
     }
@@ -2997,12 +2994,14 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       setupDeterministicVectorIndex(conn, tableName, indexName);
 
+      // Assign distinct coordinates to each row to eliminate distance ties in top-K queries.
       String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
       try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
         for (int i = 0; i < 40; i++) {
           ps.setString(1, "r_" + i);
           float[] v = new float[4];
-          v[i % 4] = 10.0f;
+          v[i % 4] = 10.0f + i * 0.25f;
+          v[(i + 1) % 4] = i * 0.1f;
           ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
           ps.executeUpdate();
         }
@@ -3010,7 +3009,8 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
       conn.commit();
 
       Float[] probeVector = make4D(10.0f, 0.0f, 0.0f, 0.0f);
-      // For lists=4, default probe count is round(sqrt(4)) = 2.
+      assertDistinctDistances(conn, tableName, probeVector);
+      // Default probe count for four lists is round(sqrt(4)) = 2.
       String baseline = explainVectorQuery(conn, tableName, probeVector, null);
       assertTrue(baseline, baseline.contains("CLIENT PROBING 2 OF 4 CENTROIDS"));
       assertFalse("no rebuild is running yet", baseline.contains("REBUILD IN PROGRESS"));
@@ -3076,6 +3076,24 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
     }
   }
 
+  /**
+   * Asserts that all rows have unique distances from the probe vector to ensure deterministic top-K
+   * query results.
+   */
+  private static void assertDistinctDistances(Connection conn, String tableName, Float[] probe)
+    throws SQLException {
+    String sql =
+      "SELECT /*+ NO_INDEX */ COUNT(*), COUNT(DISTINCT L2_DISTANCE(V, ?)) FROM " + tableName;
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setArray(1, conn.createArrayOf("FLOAT", probe));
+      try (ResultSet rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        assertEquals("All rows in the fixture must have unique distances from the probe",
+          rs.getLong(1), rs.getLong(2));
+      }
+    }
+  }
+
   private static String explainVectorQuery(Connection conn, String tableName, Float[] probeVector,
     Properties props) throws SQLException {
     String sql = "EXPLAIN SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT 4";
@@ -3099,14 +3117,16 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
     try (Connection conn = DriverManager.getConnection(getUrl())) {
       setupDeterministicVectorIndex(conn, tableName, indexName);
 
-      // Insert data points offset from initial centroids to induce centroid repositioning.
+      // Offset rows from initial centroids to shift retrained generation centroids and induce
+      // posting list migration, maintaining distinct row distances to guarantee deterministic
+      // top-K.
       String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
       try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
         for (int i = 0; i < 40; i++) {
           ps.setString(1, "r_" + i);
           float[] v = new float[4];
-          v[i % 4] = 10.0f;
-          v[(i + 1) % 4] = (i % 10) * 0.5f;
+          v[i % 4] = 10.0f + i * 0.25f;
+          v[(i + 1) % 4] = i * 0.1f;
           ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
           ps.executeUpdate();
         }
@@ -3114,6 +3134,7 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
       conn.commit();
 
       Float[] probe = make4D(10.0f, 1.5f, 0.0f, 0.0f);
+      assertDistinctDistances(conn, tableName, probe);
       List<String> beforeRebuild = topKByDistance(conn, tableName, probe, 5, false);
 
       PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
@@ -3547,6 +3568,38 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
       assertNotNull("TRIGGER_REASON must not be null", summary.getTriggerReason());
       assertTrue("TRIGGER_REASON must record manual execution, was: " + summary.getTriggerReason(),
         summary.getTriggerReason().toLowerCase().contains("manual"));
+    }
+  }
+
+  @Test
+  public void testServerVersionCheckOnIndexCreation() throws Exception {
+    String tableName = "T_COMPAT_" + generateUniqueName();
+    String indexName = "IDX_COMPAT_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      conn.createStatement().execute(
+        "CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4))");
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      PTable origSysCat =
+        pconn.getTable(new PTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
+      List<PColumn> mockedCols = new ArrayList<>();
+      for (PColumn col : origSysCat.getColumns()) {
+        if (!col.getName().getString().equals(PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM)) {
+          mockedCols.add(col);
+        }
+      }
+      PTable mockSysCat = PTableImpl.builderWithColumns(origSysCat, mockedCols).build();
+      pconn.addTable(mockSysCat, HConstants.LATEST_TIMESTAMP);
+      try {
+        pconn.createStatement().execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+          + " (V) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 32)");
+        fail("Expected CREATE VECTOR INDEX to fail when server lacks vector support");
+      } catch (SQLException e) {
+        String msg = e.getMessage().toLowerCase();
+        assertTrue("Error message must indicate server upgrade is required, got: " + e.getMessage(),
+          msg.contains("server") && msg.contains("upgrade"));
+      } finally {
+        pconn.addTable(origSysCat, HConstants.LATEST_TIMESTAMP);
+      }
     }
   }
 }

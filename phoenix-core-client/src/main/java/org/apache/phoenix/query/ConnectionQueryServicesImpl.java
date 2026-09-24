@@ -460,6 +460,19 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
         int hbaseVersion = services.getLowestClusterHBaseVersion();
         return hbaseVersion >= MetaDataProtocol.MIN_RENEW_LEASE_VERSION;
       }
+    }, Feature.VECTOR_INDEX, new FeatureSupported() {
+      @Override
+      public boolean isSupported(ConnectionQueryServices services) {
+        try {
+          PTable sysCatalog = services.getMetaDataCache()
+            .getTableRef(new PTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME))
+            .getTable();
+          return sysCatalog.getColumnForColumnName(PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM)
+              != null;
+        } catch (Exception e) {
+          return false;
+        }
+      }
     });
   private QueryLoggerDisruptor queryDisruptor;
 

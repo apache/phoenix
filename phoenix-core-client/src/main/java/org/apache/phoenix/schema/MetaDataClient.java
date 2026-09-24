@@ -1648,6 +1648,10 @@ public class MetaDataClient {
           .setTableName(indexTableName.getTableName()).build().buildException();
       }
     }
+    boolean isVectorIndex = statement.getIndexType() == IndexType.VECTOR_GLOBAL;
+    if (isVectorIndex) {
+      validateServerVectorSupport();
+    }
     Set<String> acquiredColumnMutexSet = Sets.newHashSetWithExpectedSize(3);
     String physicalSchemaName = null;
     String physicalTableName = null;
@@ -1742,9 +1746,8 @@ public class MetaDataClient {
           col.getName().getString(), col.isRowTimestamp()));
       }
 
-      // Vector indexes support both ONE_CELL_PER_COLUMN and SINGLE_CELL_ARRAY_WITH_OFFSETS
-      // schemes, inheriting the storage scheme of the data table by default.
-      boolean isVectorIndex = statement.getIndexType() == IndexType.VECTOR_GLOBAL;
+      // Vector indexes inherit the data table storage scheme and prepend the centroid ID
+      // column to the primary key constraint.
       if (isVectorIndex) {
         ColumnName centroidColName =
           ColumnName.caseSensitiveColumnName(IndexUtil.getIndexColumnName(null, CENTROID_ID));
@@ -2059,6 +2062,34 @@ public class MetaDataClient {
         dataTable.getTimeStamp());
     }
     return state;
+  }
+
+  private void validateServerVectorSupport() throws SQLException {
+    try {
+      PTable sysCatalog = null;
+      try {
+        sysCatalog =
+          connection.getTable(new PTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME));
+      } catch (TableNotFoundException e) {
+        sysCatalog = connection.getTable(PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME);
+      }
+      if (sysCatalog != null) {
+        sysCatalog.getColumnForColumnName(PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM);
+      }
+    } catch (ColumnNotFoundException | TableNotFoundException e) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR)
+        .setMessage(
+          "Cannot create vector index: the connected server does not support vector indexes. "
+            + "The system catalog lacks required vector index metadata columns. A server upgrade is required.")
+        .setRootCause(e).build().buildException();
+    }
+    if (!connection.getQueryServices().supportsFeature(Feature.VECTOR_INDEX)) {
+      throw new SQLExceptionInfo.Builder(SQLExceptionCode.INCOMPATIBLE_CLIENT_SERVER_JAR)
+        .setMessage(
+          "Cannot create vector index: the connected server does not support vector indexes. "
+            + "A server upgrade is required.")
+        .build().buildException();
+    }
   }
 
   private MutationState buildVectorIndex(PTable index, TableRef dataTableRef,
@@ -3882,6 +3913,7 @@ public class MetaDataClient {
         }
       }
       if (indexType == IndexType.VECTOR_GLOBAL) {
+        validateServerVectorSupport();
         defaultCreateState = PIndexState.BUILDING;
       }
       PIndexState indexState =
