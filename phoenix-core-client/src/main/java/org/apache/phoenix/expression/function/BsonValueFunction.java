@@ -59,16 +59,18 @@ import org.apache.phoenix.thirdparty.com.google.common.base.Preconditions;
  * function performs scan. 2. The second argument represents the field key. The field key can
  * represent any top level or nested fields within the document. The caller should use "." notation
  * for accessing nested document elements and "[n]" notation for accessing nested array elements.
- * Top level fields do not require any additional character. 3. The third argument represents the
- * data type that the client expects the value of the field to be converted to while returning the
- * value.
+ * Top level fields do not require any additional character. 3. The third argument is optional and
+ * represents the data type that the client expects the value of the field to be converted to while
+ * returning the value; it defaults to VARCHAR. 4. The fourth argument is optional and represents
+ * the value to return when the field is absent from the document; it defaults to null.
  */
 @FunctionParseNode.BuiltInFunction(name = BsonValueFunction.NAME,
     nodeClass = BsonValueParseNode.class,
     args = {
       @FunctionParseNode.Argument(allowedTypes = { PJson.class, PBson.class, PVarbinary.class }),
       @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }, isConstant = true),
-      @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }, isConstant = true),
+      @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }, isConstant = true,
+          defaultValue = "'VARCHAR'"),
       @FunctionParseNode.Argument(allowedTypes = { PVarchar.class }, isConstant = true,
           defaultValue = BsonValueFunction.DEFAULT_VALUE), })
 public class BsonValueFunction extends ScalarFunction {

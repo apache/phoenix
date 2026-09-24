@@ -22,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.sql.Array;
@@ -40,7 +41,9 @@ import java.util.Set;
 import org.apache.hadoop.hbase.Cell;
 import org.apache.hadoop.hbase.KeyValueUtil;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.hadoop.hbase.filter.Filter;
 import org.apache.hadoop.hbase.filter.Filter.ReturnCode;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.cache.VectorCentroidCache.CachedCentroids;
@@ -231,6 +234,98 @@ public class VectorIndexScanPlanTest extends BaseConnectionlessQueryTest {
       // Explicit overrides hint and property
       assertEquals(2.5, VectorIndexScanPlan.resolveOversampleFactor(2.5, hint5, pConn4), 1e-6);
     }
+  }
+
+  @Test
+  public void testResolveMaxProbeLimit() throws SQLException {
+    // Default maximum probe limit when unconfigured
+    assertEquals(Integer.MAX_VALUE, VectorIndexScanPlan.resolveMaxProbeLimit(null, null, null));
+
+    // Query hint overrides default
+    HintNode hint3 = new HintNode("/*+ MAX_PROBE_LIMIT(3) */");
+    assertTrue(hint3.hasHint(Hint.MAX_PROBE_LIMIT));
+    assertEquals(3, VectorIndexScanPlan.resolveMaxProbeLimit(null, hint3, null));
+
+    HintNode hint3Eq = new HintNode("/*+ MAX_PROBE_LIMIT = 3 */");
+    assertTrue(hint3Eq.hasHint(Hint.MAX_PROBE_LIMIT));
+    assertEquals(3, VectorIndexScanPlan.resolveMaxProbeLimit(null, hint3Eq, null));
+
+    HintNode hint3Plain = new HintNode("/*+ MAX_PROBE_LIMIT 3 */");
+    assertTrue(hint3Plain.hasHint(Hint.MAX_PROBE_LIMIT));
+    assertEquals(3, VectorIndexScanPlan.resolveMaxProbeLimit(null, hint3Plain, null));
+
+    // Explicit parameter takes precedence over hint
+    assertEquals(2, VectorIndexScanPlan.resolveMaxProbeLimit(2, hint3, null));
+
+    // Invalid query hint falls back to default
+    HintNode hintInvalid = new HintNode("/*+ MAX_PROBE_LIMIT(abc) */");
+    assertEquals(Integer.MAX_VALUE,
+      VectorIndexScanPlan.resolveMaxProbeLimit(null, hintInvalid, null));
+
+    // Session and connection property resolution
+    Properties props1 = new Properties();
+    props1.setProperty(QueryServices.VECTOR_MAX_PROBE_LIMIT_ATTRIB, "4");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props1)) {
+      PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+      assertEquals(4, VectorIndexScanPlan.resolveMaxProbeLimit(null, null, pConn));
+      // Hint overrides property
+      assertEquals(3, VectorIndexScanPlan.resolveMaxProbeLimit(null, hint3, pConn));
+      // Explicit parameter overrides hint and property
+      assertEquals(1, VectorIndexScanPlan.resolveMaxProbeLimit(1, hint3, pConn));
+    }
+
+    Properties props2 = new Properties();
+    props2.setProperty("max_probe_limit", "5");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props2)) {
+      PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+      assertEquals(5, VectorIndexScanPlan.resolveMaxProbeLimit(null, null, pConn));
+    }
+
+    Properties props3 = new Properties();
+    props3.setProperty("MAX_PROBE_LIMIT", "6");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props3)) {
+      PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+      assertEquals(6, VectorIndexScanPlan.resolveMaxProbeLimit(null, null, pConn));
+    }
+
+    Properties props4 = new Properties();
+    props4.setProperty("VECTOR_MAX_PROBE_LIMIT", "7");
+    try (Connection conn = DriverManager.getConnection(getUrl(), props4)) {
+      PhoenixConnection pConn = conn.unwrap(PhoenixConnection.class);
+      assertEquals(7, VectorIndexScanPlan.resolveMaxProbeLimit(null, null, pConn));
+    }
+  }
+
+  @Test
+  public void testRemoveFilter() {
+    SkipScanFilter centroidFilter = new SkipScanFilter();
+    Filter other = new org.apache.hadoop.hbase.filter.FirstKeyOnlyFilter();
+
+    assertNull(VectorIndexScanPlan.removeFilter(null, centroidFilter));
+    assertSame(other, VectorIndexScanPlan.removeFilter(other, null));
+    assertNull(VectorIndexScanPlan.removeFilter(centroidFilter, centroidFilter));
+    assertSame(other, VectorIndexScanPlan.removeFilter(other, centroidFilter));
+
+    FilterList list = new FilterList(FilterList.Operator.MUST_PASS_ALL, centroidFilter, other);
+    assertSame(other, VectorIndexScanPlan.removeFilter(list, centroidFilter));
+
+    // Filter matching identity is removed when multiple SkipScanFilter instances exist
+    SkipScanFilter whereFilter = new SkipScanFilter();
+    FilterList twoSkipScans =
+      new FilterList(FilterList.Operator.MUST_PASS_ALL, centroidFilter, whereFilter, other);
+    Filter stripped = VectorIndexScanPlan.removeFilter(twoSkipScans, centroidFilter);
+    assertTrue("Expected remaining filters to remain a FilterList", stripped instanceof FilterList);
+    List<Filter> remaining = ((FilterList) stripped).getFilters();
+    assertEquals(2, remaining.size());
+    assertSame(whereFilter, remaining.get(0));
+    assertSame(other, remaining.get(1));
+
+    // Removal within nested filter lists
+    FilterList nested = new FilterList(FilterList.Operator.MUST_PASS_ALL, centroidFilter,
+      new FilterList(FilterList.Operator.MUST_PASS_ONE, whereFilter, other));
+    assertTrue(VectorIndexScanPlan.removeFilter(nested, centroidFilter) instanceof FilterList);
+    FilterList noTarget = new FilterList(FilterList.Operator.MUST_PASS_ALL, whereFilter, other);
+    assertSame(noTarget, VectorIndexScanPlan.removeFilter(noTarget, centroidFilter));
   }
 
   @Test

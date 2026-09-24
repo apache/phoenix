@@ -22,6 +22,7 @@ import java.sql.Array;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -30,6 +31,8 @@ import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
+import org.apache.hadoop.hbase.filter.Filter;
+import org.apache.hadoop.hbase.filter.FilterList;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
@@ -54,11 +57,19 @@ import org.apache.phoenix.expression.function.DistanceFunction;
 import org.apache.phoenix.expression.function.InnerProductDistanceFunction;
 import org.apache.phoenix.expression.function.L2DistanceFunction;
 import org.apache.phoenix.expression.function.L2DistanceSquaredFunction;
+import org.apache.phoenix.filter.SkipScanFilter;
 import org.apache.phoenix.hbase.index.util.ImmutableBytesPtr;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.iterate.BaseResultIterators;
+import org.apache.phoenix.iterate.ConcatResultIterator;
+import org.apache.phoenix.iterate.LimitingResultIterator;
+import org.apache.phoenix.iterate.MergeSortTopNResultIterator;
 import org.apache.phoenix.iterate.ParallelIteratorFactory;
+import org.apache.phoenix.iterate.ParallelIterators;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
+import org.apache.phoenix.iterate.PeekingResultIterator;
 import org.apache.phoenix.iterate.ResultIterator;
+import org.apache.phoenix.iterate.SerialIterators;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.optimize.Cost;
 import org.apache.phoenix.optimize.VectorSearchUtil;
@@ -109,17 +120,21 @@ public class VectorIndexScanPlan extends ScanPlan {
   private final boolean probing;
   private final double oversampleFactor;
   private final Integer coarseLimit;
+  private final int maxProbeLimit;
+  private final SkipScanFilter centroidSkipScanFilter;
   private boolean filterTimeUncoveredLookup;
   private boolean projectionTimeUncoveredLookup;
   private QueryPlan overrideDataPlan;
   private int lastDeferredLookupCount;
+  private int lastProbedBatchCount;
+  private int lastProbedCentroidCount;
 
   public VectorIndexScanPlan(StatementContext context, FilterableStatement statement,
     TableRef table, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
     ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, QueryPlan dataPlan,
     Optional<byte[]> rowOffset, CachedCentroids cachedCentroids, float[] queryVector,
-    String distanceMetric, Integer explicitProbeCount, Double explicitOversampleFactor)
-    throws SQLException {
+    String distanceMetric, Integer explicitProbeCount, Double explicitOversampleFactor,
+    Integer explicitMaxProbeLimit) throws SQLException {
     super(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory,
       allowPageFilter, dataPlan, rowOffset);
 
@@ -186,13 +201,17 @@ public class VectorIndexScanPlan extends ScanPlan {
     // Configure centroid ranges on the statement context. Initial split and concurrency
     // calculations in the superclass use pre-centroid ranges, while the executable scan
     // is built using these restricted centroid ranges.
+    SkipScanFilter appliedCentroidFilter = null;
     if (this.probing && context != null) {
       ScanRanges scanRanges = ScanRanges.createCentroidScanRanges(this.keyRanges);
       context.setScanRanges(scanRanges);
       if (scanRanges.useSkipScanFilter()) {
-        ScanUtil.andFilterAtBeginning(context.getScan(), scanRanges.getSkipScanFilter());
+        // Retain the centroid skip scan filter for replacement during adaptive probe expansion.
+        appliedCentroidFilter = scanRanges.getSkipScanFilter();
+        ScanUtil.andFilterAtBeginning(context.getScan(), appliedCentroidFilter);
       }
     }
+    this.centroidSkipScanFilter = appliedCentroidFilter;
 
     this.oversampleFactor = resolveOversampleFactor(explicitOversampleFactor, hintNode, connection);
     this.coarseLimit = (limit != null && this.oversampleFactor > 1.0)
@@ -205,6 +224,21 @@ public class VectorIndexScanPlan extends ScanPlan {
       context.getScan().setAttribute(BaseScannerRegionObserverConstants.VECTOR_OVERSAMPLE_FACTOR,
         Bytes.toBytes(this.oversampleFactor));
     }
+
+    this.maxProbeLimit = resolveMaxProbeLimit(explicitMaxProbeLimit, hintNode, connection);
+    this.lastProbedBatchCount = 0;
+    this.lastProbedCentroidCount = 0;
+  }
+
+  public VectorIndexScanPlan(StatementContext context, FilterableStatement statement,
+    TableRef table, RowProjector projector, Integer limit, Integer offset, OrderBy orderBy,
+    ParallelIteratorFactory parallelIteratorFactory, boolean allowPageFilter, QueryPlan dataPlan,
+    Optional<byte[]> rowOffset, CachedCentroids cachedCentroids, float[] queryVector,
+    String distanceMetric, Integer explicitProbeCount, Double explicitOversampleFactor)
+    throws SQLException {
+    this(context, statement, table, projector, limit, offset, orderBy, parallelIteratorFactory,
+      allowPageFilter, dataPlan, rowOffset, cachedCentroids, queryVector, distanceMetric,
+      explicitProbeCount, explicitOversampleFactor, null);
   }
 
   public VectorIndexScanPlan(StatementContext context, FilterableStatement statement,
@@ -562,6 +596,89 @@ public class VectorIndexScanPlan extends ScanPlan {
   }
 
   /**
+   * Resolves the maximum batch limit for adaptive probe expansion, evaluating explicit parameters,
+   * query hints, connection attributes, and query services defaults in order of precedence.
+   */
+  public static int resolveMaxProbeLimit(Integer explicitMaxProbeLimit, HintNode hintNode,
+    PhoenixConnection connection) {
+    if (explicitMaxProbeLimit != null && explicitMaxProbeLimit > 0) {
+      return explicitMaxProbeLimit;
+    }
+
+    if (hintNode != null) {
+      String hintVal = null;
+      if (hintNode.hasHint(HintNode.Hint.MAX_PROBE_LIMIT)) {
+        hintVal = hintNode.getHint(HintNode.Hint.MAX_PROBE_LIMIT);
+      }
+      if (hintVal != null) {
+        String clean = hintVal.replaceAll("[()=\\s]", "");
+        if (!clean.isEmpty()) {
+          try {
+            int p = Integer.parseInt(clean);
+            if (p > 0) {
+              return p;
+            }
+          } catch (NumberFormatException e) {
+            LOGGER.warn("Invalid numeric MAX_PROBE_LIMIT hint: {}", hintVal);
+          }
+        }
+      }
+    }
+
+    if (connection != null) {
+      String propVal = null;
+      try {
+        propVal = connection.getClientInfo(QueryServices.VECTOR_MAX_PROBE_LIMIT_ATTRIB);
+        if (propVal == null) {
+          propVal = connection.getClientInfo("VECTOR_MAX_PROBE_LIMIT");
+        }
+        if (propVal == null) {
+          propVal = connection.getClientInfo("MAX_PROBE_LIMIT");
+        }
+        if (propVal == null) {
+          propVal = connection.getClientInfo("max_probe_limit");
+        }
+      } catch (Exception e) {
+        // ignore
+      }
+      if (propVal != null && !propVal.trim().isEmpty()) {
+        try {
+          int p = Integer.parseInt(propVal.trim());
+          if (p > 0) {
+            return p;
+          }
+        } catch (NumberFormatException e) {
+          LOGGER.warn("Invalid VECTOR_MAX_PROBE_LIMIT client property: {}", propVal);
+        }
+      }
+      if (connection.getQueryServices() != null) {
+        ReadOnlyProps props = connection.getQueryServices().getProps();
+        if (props != null) {
+          int candidate = props.getInt(QueryServices.VECTOR_MAX_PROBE_LIMIT_ATTRIB,
+            QueryServicesOptions.DEFAULT_VECTOR_MAX_PROBE_LIMIT);
+          if (candidate > 0) {
+            return candidate;
+          }
+        }
+      }
+    }
+
+    return QueryServicesOptions.DEFAULT_VECTOR_MAX_PROBE_LIMIT;
+  }
+
+  public int getMaxProbeLimit() {
+    return maxProbeLimit;
+  }
+
+  public int getLastProbedBatchCount() {
+    return lastProbedBatchCount;
+  }
+
+  public int getLastProbedCentroidCount() {
+    return lastProbedCentroidCount;
+  }
+
+  /**
    * Selects the top-P probe centroids from the cache based on distance to the query vector. If no
    * query vector is provided, selects the first P centroids.
    */
@@ -883,10 +1000,269 @@ public class VectorIndexScanPlan extends ScanPlan {
     return super.getProjector();
   }
 
+  /**
+   * Removes a specific filter instance by reference identity from a filter hierarchy.
+   * @param filter   the root filter or filter list
+   * @param toRemove the filter instance to remove
+   * @return the resulting filter hierarchy, or null if empty
+   */
+  public static Filter removeFilter(Filter filter, Filter toRemove) {
+    if (filter == null || toRemove == null) {
+      return filter;
+    }
+    if (filter == toRemove) {
+      return null;
+    }
+    if (filter instanceof FilterList) {
+      FilterList filterList = (FilterList) filter;
+      List<Filter> remaining = new ArrayList<>(filterList.getFilters().size());
+      boolean changed = false;
+      for (Filter f : filterList.getFilters()) {
+        Filter stripped = removeFilter(f, toRemove);
+        if (stripped == null) {
+          changed = true;
+        } else {
+          changed |= stripped != f;
+          remaining.add(stripped);
+        }
+      }
+      if (!changed) {
+        return filter;
+      }
+      if (remaining.isEmpty()) {
+        return null;
+      }
+      if (remaining.size() == 1) {
+        return remaining.get(0);
+      }
+      return new FilterList(filterList.getOperator(), remaining);
+    }
+    return filter;
+  }
+
+  /**
+   * Constructs an iterator for a single probe batch, optionally recording iterator statistics and
+   * scan split metadata on the plan.
+   */
+  protected ResultIterator createBatchIterator(ParallelScanGrouper scanGrouper, Scan batchScan,
+    Map<ImmutableBytesPtr, ServerCache> caches, int batchLimit, boolean recordStats)
+    throws SQLException {
+    batchScan.setAttribute(BaseScannerRegionObserverConstants.NON_AGGREGATE_QUERY,
+      QueryConstants.TRUE);
+    BaseResultIterators iterators;
+    if (isSerial) {
+      iterators = new SerialIterators(this, null, null, parallelIteratorFactory, scanGrouper,
+        batchScan, caches, dataPlan);
+    } else {
+      iterators = new ParallelIterators(this, null, parallelIteratorFactory, scanGrouper, batchScan,
+        false, caches, dataPlan);
+    }
+    if (recordStats) {
+      recordIteratorStats(iterators);
+    }
+    if (orderBy != null && !orderBy.getOrderByExpressions().isEmpty()) {
+      return new MergeSortTopNResultIterator(iterators, batchLimit, null,
+        orderBy.getOrderByExpressions());
+    } else {
+      return new LimitingResultIterator(new ConcatResultIterator(iterators), batchLimit);
+    }
+  }
+
+  private class AdaptiveProbeResultIterator implements PeekingResultIterator {
+    private final ParallelScanGrouper scanGrouper;
+    private final Scan initialScan;
+    private final Map<ImmutableBytesPtr, ServerCache> caches;
+    private final int effectiveLimit;
+    private List<Tuple> resultTuples = null;
+    private int cursor = 0;
+    private ResultIterator explainIterator = null;
+
+    AdaptiveProbeResultIterator(ParallelScanGrouper scanGrouper, Scan initialScan,
+      Map<ImmutableBytesPtr, ServerCache> caches) {
+      this.scanGrouper = scanGrouper;
+      this.initialScan = initialScan;
+      this.caches = caches;
+      this.effectiveLimit = (limit != null ? limit : 0) + (offset != null ? offset : 0);
+    }
+
+    private void init() throws SQLException {
+      if (resultTuples != null) {
+        return;
+      }
+      resultTuples = new ArrayList<>();
+      List<Tuple> survivingTuples = new ArrayList<>();
+
+      int totalCentroids = cachedCentroids != null ? cachedCentroids.getCentroidCount() : 0;
+      // Centroid ranking is deferred until probe expansion is required.
+      List<Integer> allRankedCentroids = null;
+      Set<Integer> probedCentroidIds = new LinkedHashSet<>(probeCentroids);
+
+      Integer saltBuckets = (getTableRef() != null && getTableRef().getTable() != null)
+        ? getTableRef().getTable().getBucketNum()
+        : null;
+      PhoenixConnection conn = getContext() != null ? getContext().getConnection() : null;
+      byte[] tenantIdBytes = extractTenantIdBytes(getTableRef(), conn);
+
+      int batchesProbed = 0;
+      int maxBatches = maxProbeLimit > 0 ? maxProbeLimit : Integer.MAX_VALUE;
+      ScanRanges originalScanRanges = getContext() != null ? getContext().getScanRanges() : null;
+
+      try {
+        while (true) {
+          ResultIterator batchIter;
+          if (batchesProbed == 0) {
+            batchIter = createBatchIterator(scanGrouper, initialScan, caches, effectiveLimit, true);
+          } else {
+            if (allRankedCentroids == null) {
+              allRankedCentroids =
+                selectProbes(cachedCentroids, queryVector, distanceMetric, totalCentroids);
+            }
+            // Collect unprobed centroids for the next batch in proximity order.
+            List<Integer> batchCentroids = new ArrayList<>(probeCount);
+            for (int centroidId : allRankedCentroids) {
+              if (batchCentroids.size() >= probeCount) {
+                break;
+              }
+              if (probedCentroidIds.add(centroidId)) {
+                batchCentroids.add(centroidId);
+              }
+            }
+            if (batchCentroids.isEmpty()) {
+              break;
+            }
+            List<KeyRange> batchKeyRanges =
+              buildCentroidKeyRanges(batchCentroids, saltBuckets, tenantIdBytes);
+            ScanRanges batchScanRanges = ScanRanges.createCentroidScanRanges(batchKeyRanges);
+            getContext().setScanRanges(batchScanRanges);
+
+            Scan batchScan;
+            try {
+              batchScan = new Scan(initialScan);
+            } catch (IOException e) {
+              throw ClientUtil.parseServerException(e);
+            }
+            Filter baseFilter = removeFilter(initialScan.getFilter(), centroidSkipScanFilter);
+            batchScan.setFilter(baseFilter);
+            batchScanRanges.initializeScan(batchScan);
+            if (batchScanRanges.useSkipScanFilter()) {
+              ScanUtil.andFilterAtBeginning(batchScan, batchScanRanges.getSkipScanFilter());
+            }
+            batchIter = createBatchIterator(scanGrouper, batchScan, caches, effectiveLimit, false);
+          }
+
+          try {
+            Tuple t;
+            while ((t = batchIter.next()) != null) {
+              survivingTuples.add(t);
+            }
+          } finally {
+            batchIter.close();
+          }
+
+          batchesProbed++;
+          if (
+            survivingTuples.size() >= effectiveLimit || probedCentroidIds.size() >= totalCentroids
+              || batchesProbed >= maxBatches
+          ) {
+            break;
+          }
+        }
+      } finally {
+        if (getContext() != null && originalScanRanges != null) {
+          getContext().setScanRanges(originalScanRanges);
+        }
+      }
+
+      lastProbedBatchCount = batchesProbed;
+      lastProbedCentroidCount = probedCentroidIds.size();
+
+      if (
+        orderBy != null && orderBy.getOrderByExpressions() != null
+          && !orderBy.getOrderByExpressions().isEmpty() && survivingTuples.size() > 1
+      ) {
+        survivingTuples
+          .sort(MergeSortTopNResultIterator.newComparator(orderBy.getOrderByExpressions()));
+      }
+
+      int start = (offset != null && offset > 0) ? Math.min(offset, survivingTuples.size()) : 0;
+      int end = (limit != null && limit > 0)
+        ? Math.min(start + limit, survivingTuples.size())
+        : survivingTuples.size();
+      resultTuples = new ArrayList<>(survivingTuples.subList(start, end));
+    }
+
+    @Override
+    public Tuple next() throws SQLException {
+      init();
+      if (cursor < resultTuples.size()) {
+        return resultTuples.get(cursor++);
+      }
+      return null;
+    }
+
+    @Override
+    public Tuple peek() throws SQLException {
+      init();
+      if (cursor < resultTuples.size()) {
+        return resultTuples.get(cursor);
+      }
+      return null;
+    }
+
+    @Override
+    public void close() throws SQLException {
+      if (explainIterator != null) {
+        explainIterator.close();
+      }
+    }
+
+    @Override
+    public void explain(List<String> planSteps) {
+      try {
+        if (explainIterator == null) {
+          explainIterator =
+            createBatchIterator(scanGrouper, initialScan, caches, effectiveLimit, true);
+        }
+        explainIterator.explain(planSteps);
+      } catch (SQLException e) {
+        LOGGER.warn("Failed to create explain iterator", e);
+      }
+    }
+
+    @Override
+    public void explain(List<String> planSteps,
+      ExplainPlanAttributesBuilder explainPlanAttributesBuilder) {
+      try {
+        if (explainIterator == null) {
+          explainIterator =
+            createBatchIterator(scanGrouper, initialScan, caches, effectiveLimit, true);
+        }
+        explainIterator.explain(planSteps, explainPlanAttributesBuilder);
+      } catch (SQLException e) {
+        LOGGER.warn("Failed to create explain iterator", e);
+      }
+    }
+  }
+
+  /**
+   * Determines whether adaptive probe expansion should be used to satisfy the query limit when a
+   * relational filter is present.
+   */
+  public boolean isAdaptiveProbingApplicable() {
+    return this.probing && limit != null && limit > 0 && queryVector != null
+      && cachedCentroids != null && cachedCentroids.getCentroidCount() > 0 && statement != null
+      && statement.getWhere() != null;
+  }
+
   @Override
   protected ResultIterator newIterator(ParallelScanGrouper scanGrouper, Scan scan,
     Map<ImmutableBytesPtr, ServerCache> caches) throws SQLException {
-    ResultIterator inner = super.newIterator(scanGrouper, scan, caches);
+    ResultIterator inner;
+    if (isAdaptiveProbingApplicable()) {
+      inner = new AdaptiveProbeResultIterator(scanGrouper, scan, caches);
+    } else {
+      inner = super.newIterator(scanGrouper, scan, caches);
+    }
     if (!projectionTimeUncoveredLookup || getDataPlan() == null) {
       return inner;
     }

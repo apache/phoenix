@@ -18,6 +18,7 @@
 package org.apache.phoenix.iterate;
 
 import java.sql.SQLException;
+import java.util.Comparator;
 import java.util.List;
 import org.apache.hadoop.hbase.io.ImmutableBytesWritable;
 import org.apache.phoenix.compile.ExplainPlanAttributes.ExplainPlanAttributesBuilder;
@@ -36,8 +37,7 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
   private int count = 0;
   private int offsetCount = 0;
   private final List<OrderByExpression> orderByColumns;
-  private final ImmutableBytesWritable ptr1 = new ImmutableBytesWritable();
-  private final ImmutableBytesWritable ptr2 = new ImmutableBytesWritable();
+  private final Comparator<Tuple> comparator;
   private final int offset;
 
   public MergeSortTopNResultIterator(ResultIterators iterators, Integer limit, Integer offset,
@@ -46,29 +46,53 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
     this.limit = limit == null ? -1 : limit;
     this.offset = offset == null ? -1 : offset;
     this.orderByColumns = orderByColumns;
+    this.comparator = newComparator(orderByColumns);
+  }
+
+  /**
+   * Returns a comparator that orders tuples according to the given ORDER BY expressions. Scratch
+   * buffers are reused across comparisons, so instances are not thread safe.
+   */
+  public static Comparator<Tuple> newComparator(List<OrderByExpression> orderByColumns) {
+    return new OrderByComparator(orderByColumns);
   }
 
   @Override
   protected int compare(Tuple t1, Tuple t2) {
-    for (int i = 0; i < orderByColumns.size(); i++) {
-      OrderByExpression order = orderByColumns.get(i);
-      Expression orderExpr = order.getExpression();
-      boolean isNull1 = !orderExpr.evaluate(t1, ptr1) || ptr1.getLength() == 0;
-      boolean isNull2 = !orderExpr.evaluate(t2, ptr2) || ptr2.getLength() == 0;
-      if (isNull1 && isNull2) {
-        continue;
-      } else if (isNull1) {
-        return order.isNullsLast() ? 1 : -1;
-      } else if (isNull2) {
-        return order.isNullsLast() ? -1 : 1;
-      }
-      int cmp = ptr1.compareTo(ptr2);
-      if (cmp == 0) {
-        continue;
-      }
-      return order.isAscending() ? cmp : -cmp;
+    return comparator.compare(t1, t2);
+  }
+
+  private static final class OrderByComparator implements Comparator<Tuple> {
+    private final List<OrderByExpression> orderByColumns;
+    private final ImmutableBytesWritable ptr1 = new ImmutableBytesWritable();
+    private final ImmutableBytesWritable ptr2 = new ImmutableBytesWritable();
+
+    private OrderByComparator(List<OrderByExpression> orderByColumns) {
+      this.orderByColumns = orderByColumns;
     }
-    return 0;
+
+    @Override
+    public int compare(Tuple t1, Tuple t2) {
+      for (int i = 0; i < orderByColumns.size(); i++) {
+        OrderByExpression order = orderByColumns.get(i);
+        Expression orderExpr = order.getExpression();
+        boolean isNull1 = !orderExpr.evaluate(t1, ptr1) || ptr1.getLength() == 0;
+        boolean isNull2 = !orderExpr.evaluate(t2, ptr2) || ptr2.getLength() == 0;
+        if (isNull1 && isNull2) {
+          continue;
+        } else if (isNull1) {
+          return order.isNullsLast() ? 1 : -1;
+        } else if (isNull2) {
+          return order.isNullsLast() ? -1 : 1;
+        }
+        int cmp = ptr1.compareTo(ptr2);
+        if (cmp == 0) {
+          continue;
+        }
+        return order.isAscending() ? cmp : -cmp;
+      }
+      return 0;
+    }
   }
 
   @Override
@@ -170,6 +194,6 @@ public class MergeSortTopNResultIterator extends MergeSortResultIterator {
   @Override
   public String toString() {
     return "MergeSortTopNResultIterator [limit=" + limit + ", count=" + count + ", orderByColumns="
-      + orderByColumns + ", ptr1=" + ptr1 + ", ptr2=" + ptr2 + ",offset=" + offset + "]";
+      + orderByColumns + ",offset=" + offset + "]";
   }
 }

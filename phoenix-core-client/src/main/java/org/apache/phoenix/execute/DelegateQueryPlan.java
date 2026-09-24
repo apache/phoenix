@@ -22,11 +22,13 @@ import java.sql.SQLException;
 import java.util.List;
 import java.util.Set;
 import org.apache.hadoop.hbase.client.Scan;
+import org.apache.phoenix.compile.ExplainPlan;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
 import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.execute.visitor.QueryPlanVisitor;
 import org.apache.phoenix.iterate.DefaultParallelScanGrouper;
 import org.apache.phoenix.iterate.ParallelScanGrouper;
 import org.apache.phoenix.iterate.ResultIterator;
@@ -56,6 +58,11 @@ public abstract class DelegateQueryPlan implements QueryPlan {
   @Override
   public ParameterMetaData getParameterMetaData() {
     return delegate.getParameterMetaData();
+  }
+
+  @Override
+  public ExplainPlan getExplainPlan() throws SQLException {
+    return delegate.getExplainPlan();
   }
 
   @Override
@@ -148,6 +155,11 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     return iterator(scanGrouper, null);
   }
 
+  @Override
+  public ResultIterator iterator(ParallelScanGrouper scanGrouper, Scan scan) throws SQLException {
+    return delegate.iterator(scanGrouper, scan);
+  }
+
   public QueryPlan getDelegate() {
     return delegate;
   }
@@ -189,5 +201,10 @@ public abstract class DelegateQueryPlan implements QueryPlan {
     } else {
       this.optimizerDecision = decision;
     }
+  }
+
+  @Override
+  public <T> T accept(QueryPlanVisitor<T> visitor) {
+    return delegate.accept(visitor);
   }
 }

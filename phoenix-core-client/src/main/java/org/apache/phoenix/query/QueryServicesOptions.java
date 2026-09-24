@@ -129,6 +129,7 @@ import static org.apache.phoenix.query.QueryServices.USE_STATS_FOR_PARALLELIZATI
 import static org.apache.phoenix.query.QueryServices.VECTOR_CENTROID_BRUTEFORCE_LIMIT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.VECTOR_CENTROID_CACHE_MAX_SIZE_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.VECTOR_CENTROID_PROBE_BUCKETS_ATTRIB;
+import static org.apache.phoenix.query.QueryServices.VECTOR_MAX_PROBE_LIMIT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.VECTOR_OVERSAMPLE_FACTOR_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.VECTOR_PROBE_COUNT_ATTRIB;
 import static org.apache.phoenix.query.QueryServices.WAL_EDIT_CODEC_ATTRIB;
@@ -190,6 +191,10 @@ public class QueryServicesOptions {
 
   public QueryServicesOptions setVectorProbeCount(int probeCount) {
     return set(VECTOR_PROBE_COUNT_ATTRIB, probeCount);
+  }
+
+  public QueryServicesOptions setVectorMaxProbeLimit(int maxProbeLimit) {
+    return set(VECTOR_MAX_PROBE_LIMIT_ATTRIB, maxProbeLimit);
   }
 
   public QueryServicesOptions setVectorOversampleFactor(double oversampleFactor) {
@@ -262,12 +267,7 @@ public class QueryServicesOptions {
   public static final int DEFAULT_VECTOR_CENTROID_BRUTEFORCE_LIMIT = 1024;
   public static final int DEFAULT_VECTOR_CENTROID_PROBE_BUCKETS = 3;
   public static final int DEFAULT_VECTOR_PROBE_COUNT = 0;
-  /**
-   * Default oversampling factor for two-phase vector scoring. In two-phase scoring, the initial
-   * coarse pass retains (limit * factor) candidates, using early-termination upper bounds during
-   * distance evaluation, and then rescores the surviving candidate set to yield the final top-k
-   * results. A factor of 1.0 disables two-phase scoring.
-   */
+  public static final int DEFAULT_VECTOR_MAX_PROBE_LIMIT = Integer.MAX_VALUE;
   public static final double DEFAULT_VECTOR_OVERSAMPLE_FACTOR = 3.0;
   public static final boolean DEFAULT_VECTOR_KMEANS_LOCAL = false;
   public static final int DEFAULT_GROUPBY_ESTIMATED_DISTINCT_VALUES = 1000;

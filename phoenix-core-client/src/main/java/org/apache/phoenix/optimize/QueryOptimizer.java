@@ -24,6 +24,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -39,6 +40,7 @@ import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.SequenceManager;
 import org.apache.phoenix.compile.StatementContext;
 import org.apache.phoenix.compile.WhereCompiler;
+import org.apache.phoenix.execute.FilterFirstIndexPlan;
 import org.apache.phoenix.execute.VectorIndexScanPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.index.IndexMaintainer;
@@ -784,7 +786,9 @@ public class QueryOptimizer {
 
         SelectStatement dataSelect = (SelectStatement) dataPlan.getStatement();
         ParseNode where = dataSelect.getWhere();
-        if (isHinted && where != null) {
+        boolean isVectorSearch =
+          VectorSearchUtil.isVectorSearch(dataPlan.getOrderBy(), dataPlan.getLimit());
+        if ((isHinted || isVectorSearch) && where != null) {
           StatementContext context = new StatementContext(statement, resolver);
           WhereConditionRewriter whereRewriter =
             new WhereConditionRewriter(FromCompiler.getResolver(dataPlan.getTableRef()), context);
@@ -835,6 +839,10 @@ public class QueryOptimizer {
                 rewriteResult.getColumnResolver(), targetColumns, parallelIteratorFactory,
                 dataPlan.getContext().getSequenceManager(), isProjected, true, dataPlans)
                   .withRewriteContext(dataPlan.getContext()).compile();
+            if (!isHinted && isVectorSearch) {
+              // Preserve the driving index reference for candidate plan ranking.
+              return AddPlanResult.success(new FilterFirstIndexPlan(plan, indexTableRef));
+            }
             return AddPlanResult.success(plan);
           }
         }
@@ -888,12 +896,37 @@ public class QueryOptimizer {
     final boolean useDataOverIndexHint = select.getHint().hasHint(Hint.USE_DATA_OVER_INDEX_TABLE);
     final int comparisonOfDataVersusIndexTable = useDataOverIndexHint ? -1 : 1;
 
+    // Precompute filter-first candidate plans ahead of sorting to maintain comparator
+    // transitivity and avoid redundant estimate calculations.
+    final Set<QueryPlan> filterFirstPlans =
+      Collections.newSetFromMap(new IdentityHashMap<QueryPlan, Boolean>());
+    for (QueryPlan plan : plans) {
+      if (plan == dataPlan) {
+        continue;
+      }
+      PTable planTable = getPlanIndexTable(plan);
+      if (
+        planTable.getType() == PTableType.INDEX && !planTable.isVectorIndex()
+          && VectorSearchUtil.isHighlySelectiveFilter(plan, dataPlan)
+      ) {
+        filterFirstPlans.add(plan);
+      }
+    }
+
     final Comparator<QueryPlan> staticComparator = new Comparator<QueryPlan>() {
 
       @Override
       public int compare(QueryPlan plan1, QueryPlan plan2) {
-        PTable table1 = plan1.getTableRef().getTable();
-        PTable table2 = plan2.getTableRef().getTable();
+        PTable table1 = getPlanIndexTable(plan1);
+        PTable table2 = getPlanIndexTable(plan2);
+
+        // Filter-first plans take precedence over other candidate plans.
+        boolean isFilterFirst1 = filterFirstPlans.contains(plan1);
+        boolean isFilterFirst2 = filterFirstPlans.contains(plan2);
+        if (isFilterFirst1 != isFilterFirst2) {
+          return isFilterFirst1 ? -1 : 1;
+        }
+
         boolean isVector1 = table1.isVectorIndex();
         boolean isVector2 = table2.isVectorIndex();
 
@@ -1287,6 +1320,17 @@ public class QueryOptimizer {
           OptimizerReasons.REASON_LOCAL_INDEX_LOSES_TO_GLOBAL_BY_RULE, winner.getContext()));
       }
     }
+  }
+
+  /**
+   * Returns the table used for ranking the candidate plan, resolving the driving secondary index
+   * table when evaluating a {@link FilterFirstIndexPlan}.
+   */
+  private static PTable getPlanIndexTable(QueryPlan plan) {
+    if (plan instanceof FilterFirstIndexPlan) {
+      return ((FilterFirstIndexPlan) plan).getIndexTableRef().getTable();
+    }
+    return plan.getTableRef().getTable();
   }
 
   /**
