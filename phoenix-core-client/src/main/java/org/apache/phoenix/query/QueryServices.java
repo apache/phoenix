@@ -154,12 +154,26 @@ public interface QueryServices extends SQLCloseable {
     "phoenix.vector.centroid.cache.maxSize";
   public static final String VECTOR_CENTROID_BRUTEFORCE_LIMIT_ATTRIB =
     "phoenix.vector.centroid.bruteforce.limit";
-  public static final String VECTOR_CENTROID_PROBE_BUCKETS_ATTRIB =
-    "phoenix.vector.centroid.probe.buckets";
   public static final String VECTOR_PROBE_COUNT_ATTRIB = "phoenix.vector.probe.count";
   public static final String VECTOR_MAX_PROBE_LIMIT_ATTRIB = "phoenix.vector.max.probe.limit";
   public static final String VECTOR_OVERSAMPLE_FACTOR_ATTRIB = "phoenix.vector.oversample.factor";
   public static final String VECTOR_KMEANS_LOCAL_ATTRIB = "phoenix.vector.kmeans.local";
+  public static final String VECTOR_INDEX_SCORECARD_FLUSH_INTERVAL_MS_ATTRIB =
+    "phoenix.vector.index.scorecard.flush.interval.ms";
+  public static final String VECTOR_INDEX_SCORECARD_RECONCILE_INTERVAL_MS_ATTRIB =
+    "phoenix.vector.index.scorecard.reconcile.interval.ms";
+  public static final String VECTOR_INDEX_DRIFT_SKEW_RATIO_THRESHOLD_ATTRIB =
+    "phoenix.vector.index.drift.skew.ratio.threshold";
+  public static final String VECTOR_INDEX_DRIFT_MIN_CLUSTER_SIZE_ATTRIB =
+    "phoenix.vector.index.drift.min.cluster.size";
+  public static final String VECTOR_INDEX_REBUILD_AUTO_ENABLED_ATTRIB =
+    "phoenix.vector.index.rebuild.auto.enabled";
+  public static final String VECTOR_INDEX_REBUILD_MIN_INTERVAL_MS_ATTRIB =
+    "phoenix.vector.index.rebuild.min.interval.ms";
+  public static final String VECTOR_INDEX_REBUILD_PROBE_POLICY_ATTRIB =
+    "phoenix.vector.index.rebuild.probe.policy";
+  public static final String VECTOR_INDEX_REBUILD_PROBE_FACTOR_ATTRIB =
+    "phoenix.vector.index.rebuild.probe.factor";
   public static final String HA_GROUP_NAME_ATTRIB = "phoenix.ha.group";
   public static final String AUTO_UPGRADE_WHITELIST_ATTRIB = "phoenix.client.autoUpgradeWhiteList";
   // Mainly for testing to force spilling

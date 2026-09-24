@@ -817,7 +817,7 @@ drop_cdc_node returns [DropCDCStatement ret]
 
 // Parse a alter index statement
 alter_index_node returns [AlterIndexStatement ret]
-    : ALTER INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name
+    : ALTER (VECTOR)? INDEX (IF ex=EXISTS)? i=index_name ON t=from_table_name
       ((s=(USABLE | UNUSABLE | REBUILD (isRebuildAll=ALL)? | DISABLE | ACTIVE)) (async=ASYNC)? ((SET?)p=fam_properties)? | (CONSISTENCY EQ c=(STRONG | EVENTUAL)))
       {ret = factory.alterIndex(factory.namedTable(null, TableName.create(t.getSchemaName(), i.getName())), t.getTableName(), ex!=null, s!=null ? PIndexState.valueOf(SchemaUtil.normalizeIdentifier(s.getText())) : null, isRebuildAll!=null, async!=null, p, c!=null ? IndexConsistency.valueOf(SchemaUtil.normalizeIdentifier(c.getText())) : null); }
     ;

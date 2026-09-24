@@ -3172,12 +3172,18 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     ValueGetter currentVG = new IndexUtil.SimpleValueGetter(currentDataRowState);
     ValueGetter nextVG = new IndexUtil.SimpleValueGetter(nextDataRowState);
     ImmutableBytesWritable currentPtr = getVectorValue(currentVG, HConstants.LATEST_TIMESTAMP);
-    ImmutableBytesWritable nextPtr = getVectorValue(nextVG, HConstants.LATEST_TIMESTAMP);
-    if (currentPtr == null || nextPtr == null) {
+    if (currentPtr == null) {
       return false;
     }
-    return Bytes.equals(currentPtr.get(), currentPtr.getOffset(), currentPtr.getLength(),
-      nextPtr.get(), nextPtr.getOffset(), nextPtr.getLength());
+    // Copy before evaluating the second image because expressions may reuse internal decoding
+    // buffers.
+    byte[] currentVector = currentPtr.copyBytes();
+    ImmutableBytesWritable nextPtr = getVectorValue(nextVG, HConstants.LATEST_TIMESTAMP);
+    if (nextPtr == null) {
+      return false;
+    }
+    return Bytes.equals(currentVector, 0, currentVector.length, nextPtr.get(), nextPtr.getOffset(),
+      nextPtr.getLength());
   }
 
   /** Returns the distance metric name, or null if this is not a vector index. */
@@ -3227,6 +3233,57 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
   public void setCentroidGeneration(long centroidGeneration) {
     this.centroidGeneration = centroidGeneration;
+  }
+
+  /**
+   * Computes the nearest centroid ID for the vector evaluated from the given value getter, or
+   * returns null if this is not a vector index or the vector value is absent.
+   */
+  public Integer getCentroidId(ValueGetter valueGetter, long ts) {
+    if (!isVectorIndex() || valueGetter == null) {
+      return null;
+    }
+    ImmutableBytesWritable vectorValue = getVectorValue(valueGetter, ts);
+    if (vectorValue == null || vectorValue.get() == null || vectorValue.getLength() == 0) {
+      return null;
+    }
+    return VectorCentroidCache.getInstance().getCentroids(logicalIndexName).findNearestCentroid(
+      vectorValue.get(), vectorValue.getOffset(), vectorValue.getLength(), distanceMetric);
+  }
+
+  /**
+   * Extracts the centroid ID directly from an already built vector index row key. Returns null if
+   * this is not a vector index or the key cannot be decoded.
+   */
+  public Integer extractCentroidId(byte[] indexRowKey) {
+    if (indexRowKey == null || !isVectorIndex()) {
+      return null;
+    }
+    int offset = 0;
+    if (nIndexSaltBuckets > 0) {
+      offset += SaltingUtil.NUM_SALTING_BYTES;
+    }
+    if (viewIndexId != null) {
+      offset += viewIndexId.length;
+    }
+    if (isMultiTenant) {
+      int dataPosOffset = isDataTableSalted ? 1 : 0;
+      Field tenantField = dataRowKeySchema.getField(dataPosOffset);
+      if (tenantField.getDataType().isFixedWidth()) {
+        offset += tenantField.getByteSize();
+      } else {
+        while (
+          offset < indexRowKey.length && indexRowKey[offset] != QueryConstants.SEPARATOR_BYTE
+        ) {
+          offset++;
+        }
+        offset++; // skip separator
+      }
+    }
+    if (offset + Bytes.SIZEOF_INT <= indexRowKey.length) {
+      return (Integer) PInteger.INSTANCE.toObject(indexRowKey, offset, Bytes.SIZEOF_INT);
+    }
+    return null;
   }
 
   private byte[] buildVectorRowKey(ValueGetter valueGetter, ImmutableBytesWritable rowKeyPtr,

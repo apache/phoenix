@@ -25,6 +25,7 @@ public class MetricsIndexerSourceFactory {
   private volatile MetricsIndexerSource indexerSource;
   private GlobalIndexCheckerSource globalIndexCheckerSource;
   private MetricsIndexCDCConsumerSource indexCDCConsumerSource;
+  private volatile MetricsVectorIndexSource vectorIndexSource;
 
   private MetricsIndexerSourceFactory() {
   }
@@ -52,5 +53,23 @@ public class MetricsIndexerSourceFactory {
       INSTANCE.indexCDCConsumerSource = new MetricsIndexCDCConsumerSourceImpl();
     }
     return INSTANCE.indexCDCConsumerSource;
+  }
+
+  /**
+   * Unlike the other sources here, this one is read from the index write path once per mutated row,
+   * so the common case must not take a monitor.
+   */
+  public MetricsVectorIndexSource getMetricsVectorIndexSource() {
+    MetricsVectorIndexSource source = INSTANCE.vectorIndexSource;
+    if (source == null) {
+      synchronized (MetricsIndexerSourceFactory.class) {
+        source = INSTANCE.vectorIndexSource;
+        if (source == null) {
+          source = new MetricsVectorIndexSourceImpl();
+          INSTANCE.vectorIndexSource = source;
+        }
+      }
+    }
+    return source;
   }
 }

@@ -24,6 +24,7 @@ import java.sql.Statement;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,6 +38,7 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.cache.VectorCentroidCache;
 import org.apache.phoenix.index.vector.CentroidManager;
 import org.apache.phoenix.jdbc.PhoenixConnection;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PIndexState;
 import org.apache.phoenix.schema.PTable;
 import org.apache.phoenix.schema.SortOrder;
@@ -45,6 +47,29 @@ import org.apache.phoenix.util.IndexUtil;
 
 /** Shared test utilities and fixture builders for vector index integration tests. */
 class VectorIndexTestUtil {
+
+  /**
+   * Clears shared vector state between tests, including default index name and centroid-manager
+   * connections.
+   */
+  static void resetSharedVectorState() {
+    VectorCentroidCache.getInstance().setDefaultIndexName(null);
+    CentroidManager.clearThreadLocalConnection();
+    CentroidManager.setDefaultConnection(null);
+  }
+
+  /** Removes {@code SYSTEM.VECTOR_CENTROID} rows for the specified indexes. */
+  static void deleteCentroidRows(Connection conn, Collection<String> indexNames)
+    throws SQLException {
+    try (PreparedStatement ps = conn.prepareStatement("DELETE FROM "
+      + PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_NAME + " WHERE INDEX_NAME = ?")) {
+      for (String indexName : indexNames) {
+        ps.setString(1, indexName);
+        ps.executeUpdate();
+      }
+    }
+    conn.commit();
+  }
 
   static void activateWithKnownCentroids(Connection conn, String tableName, String indexName,
     List<float[]> centroids, long generation) throws SQLException {

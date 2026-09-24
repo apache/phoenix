@@ -19,6 +19,7 @@ package org.apache.phoenix.end2end;
 
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CENTROID_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CENTROID_VECTOR;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.CLUSTER_SIZE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_COUNT_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.COLUMN_SIZE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TABLE_NAME_BYTES;
@@ -26,8 +27,10 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.DATA_TYPE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.GENERATION_ID;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.INDEX_TYPE_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.LAST_SCORECARD_UPDATE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.NULLABLE_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.ORDINAL_POSITION_BYTES;
+import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.REASSIGN_COUNT;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.SYSTEM_VECTOR_CENTROID_NAME;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_FAMILY_BYTES;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TABLE_SEQ_NUM_BYTES;
@@ -56,30 +59,50 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.hbase.HBaseConfiguration;
+import org.apache.hadoop.hbase.HConstants;
+import org.apache.hadoop.hbase.TableName;
 import org.apache.hadoop.hbase.client.Admin;
 import org.apache.hadoop.hbase.client.Get;
 import org.apache.hadoop.hbase.client.Mutation;
 import org.apache.hadoop.hbase.client.Put;
+import org.apache.hadoop.hbase.client.RegionInfo;
 import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.Table;
 import org.apache.hadoop.hbase.client.coprocessor.Batch;
 import org.apache.hadoop.hbase.ipc.CoprocessorRpcUtils.BlockingRpcCallback;
 import org.apache.hadoop.hbase.ipc.ServerRpcController;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.cache.VectorCentroidCache;
+import org.apache.phoenix.coprocessor.TaskRegionObserver;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.CreateTableRequest;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
+import org.apache.phoenix.coprocessor.tasks.VectorIndexRebuildTask;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.execute.VectorIndexScanPlan;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.index.vector.CentroidManager;
+import org.apache.phoenix.index.vector.GenerationSummary;
+import org.apache.phoenix.index.vector.ScorecardAccumulator;
+import org.apache.phoenix.index.vector.ScorecardRow;
+import org.apache.phoenix.index.vector.VectorIndexScorecard;
+import org.apache.phoenix.index.vector.VectorIndexScorecard.DriftEvaluationResult;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
@@ -2163,6 +2186,1367 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
         VectorIndexTestUtil.bruteForceTopK(scienceOrMathRows, q, "L2", 4);
       List<String> actualMathTop4 = runSearch(conn, inSql, q);
       assertEquals(expectedMathTop4, actualMathTop4);
+    }
+  }
+
+  private void setupDeterministicVectorIndex(Connection conn, String tableName, String indexName)
+    throws Exception {
+    try (Statement stmt = conn.createStatement()) {
+      stmt.execute(
+        "CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4))");
+      stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
+        + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100) ASYNC");
+    }
+
+    List<float[]> knownCentroids = Arrays.asList(new float[] { 10.0f, 0.0f, 0.0f, 0.0f }, // centroid
+                                                                                          // 0
+      new float[] { 0.0f, 10.0f, 0.0f, 0.0f }, // centroid 1
+      new float[] { 0.0f, 0.0f, 10.0f, 0.0f }, // centroid 2
+      new float[] { 0.0f, 0.0f, 0.0f, 10.0f } // centroid 3
+    );
+    VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, knownCentroids, 1L);
+    ScorecardAccumulator.getInstance().clear();
+  }
+
+  private static Float[] make4D(float a, float b, float c, float d) {
+    return new Float[] { a, b, c, d };
+  }
+
+  private Map<Integer, Long> getScorecardCounts(Connection conn, String indexName, long generation)
+    throws Exception {
+    Map<Integer, Long> map = new HashMap<>();
+    String sql = "SELECT " + CENTROID_ID + ", " + CLUSTER_SIZE + " FROM "
+      + SYSTEM_VECTOR_CENTROID_NAME + " WHERE " + INDEX_NAME + " = ? AND " + GENERATION_ID
+      + " = ? AND " + CENTROID_ID + " >= 0 ORDER BY " + CENTROID_ID;
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setString(1, SchemaUtil.normalizeFullTableName(indexName));
+      ps.setLong(2, generation);
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          map.put(rs.getInt(1), rs.getLong(2));
+        }
+      }
+    }
+    return map;
+  }
+
+  private Map<Integer, Long> getPhysicalIndexCounts(Connection conn, String indexName)
+    throws Exception {
+    Map<Integer, Long> map = new HashMap<>();
+    String escapedIndex =
+      SchemaUtil.getEscapedFullTableName(SchemaUtil.normalizeFullTableName(indexName));
+    String centroidCol = IndexUtil.getIndexColumnName(null, CENTROID_ID);
+    String sql = "SELECT \"" + centroidCol + "\", COUNT(*) FROM " + escapedIndex + " GROUP BY \""
+      + centroidCol + "\"";
+    try (Statement stmt = conn.createStatement(); ResultSet rs = stmt.executeQuery(sql)) {
+      while (rs.next()) {
+        map.put(rs.getInt(1), rs.getLong(2));
+      }
+    }
+    return map;
+  }
+
+  @Test
+  public void testInlineCountsExactWithoutScan() throws Exception {
+    String tableName = "T_INLINE_EXACT_" + generateUniqueName();
+    String indexName = "IDX_INLINE_EXACT_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // 1. Apply 100 inserts (25 to each centroid)
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 25; i++) {
+          ps.setString(1, "row_c0_" + i);
+          ps.setArray(2, conn.createArrayOf("FLOAT", make4D(10f, 0f, 0f, 0f)));
+          ps.executeUpdate();
+
+          ps.setString(1, "row_c1_" + i);
+          ps.setArray(2, conn.createArrayOf("FLOAT", make4D(0f, 10f, 0f, 0f)));
+          ps.executeUpdate();
+
+          ps.setString(1, "row_c2_" + i);
+          ps.setArray(2, conn.createArrayOf("FLOAT", make4D(0f, 0f, 10f, 0f)));
+          ps.executeUpdate();
+
+          ps.setString(1, "row_c3_" + i);
+          ps.setArray(2, conn.createArrayOf("FLOAT", make4D(0f, 0f, 0f, 10f)));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      // 2. Apply 20 deletes (5 from each centroid)
+      String deleteSql = "DELETE FROM " + tableName + " WHERE ID = ?";
+      try (PreparedStatement ps = conn.prepareStatement(deleteSql)) {
+        for (int i = 0; i < 5; i++) {
+          ps.setString(1, "row_c0_" + i);
+          ps.executeUpdate();
+          ps.setString(1, "row_c1_" + i);
+          ps.executeUpdate();
+          ps.setString(1, "row_c2_" + i);
+          ps.executeUpdate();
+          ps.setString(1, "row_c3_" + i);
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      // 3. Apply 15 inter-centroid updates: rows 5..19 move from centroid 0 to centroid 1
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 5; i < 20; i++) {
+          ps.setString(1, "row_c0_" + i);
+          ps.setArray(2, conn.createArrayOf("FLOAT", make4D(0f, 10f, 0f, 0f)));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      // 4. Apply 15 intra-centroid updates: rows 5..19 in centroid 2 stay in centroid 2
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 5; i < 20; i++) {
+          ps.setString(1, "row_c2_" + i);
+          ps.setArray(2, conn.createArrayOf("FLOAT", make4D(0f, 0f, 9.8f, 0.1f)));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      // Flush accumulator directly
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      // Verify scorecard counts match physical index table counts without reconciliation
+      Map<Integer, Long> scorecardCounts = getScorecardCounts(conn, indexName, 1L);
+      Map<Integer, Long> physicalCounts = getPhysicalIndexCounts(conn, indexName);
+
+      // Expected centroid counts derived from applied insert, delete, and repartition operations:
+      // c0: 25 inserted - 5 deleted - 15 moved out = 5
+      // c1: 25 inserted - 5 deleted + 15 moved in = 35
+      // c2: 25 inserted - 5 deleted = 20 (intra-centroid updates unchanged)
+      // c3: 25 inserted - 5 deleted = 20
+      Map<Integer, Long> expected = new HashMap<>();
+      expected.put(0, 5L);
+      expected.put(1, 35L);
+      expected.put(2, 20L);
+      expected.put(3, 20L);
+
+      for (int c = 0; c < 4; c++) {
+        assertEquals("Scorecard cluster size for centroid " + c, expected.get(c),
+          scorecardCounts.get(c));
+        assertEquals("Index table row count for centroid " + c, expected.get(c),
+          physicalCounts.getOrDefault(c, 0L));
+      }
+    }
+  }
+
+  @Test
+  public void testReplayNeutrality() throws Exception {
+    String tableName = "T_REPLAY_" + generateUniqueName();
+    String indexName = "IDX_REPLAY_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 10; i++) {
+          ps.setString(1, "r_" + i);
+          ps.setArray(2, conn.createArrayOf("FLOAT", make4D(10f, 0f, 0f, 0f)));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      Map<Integer, Long> initialCounts = getScorecardCounts(conn, indexName, 1L);
+      assertEquals(Long.valueOf(10L), initialCounts.get(0));
+
+      // Re-apply unchanged vectors
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 10; i++) {
+          ps.setString(1, "r_" + i);
+          ps.setArray(2, conn.createArrayOf("FLOAT", make4D(10f, 0f, 0f, 0f)));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      Map<Integer, Long> replayedCounts = getScorecardCounts(conn, indexName, 1L);
+      assertEquals("Replay must not duplicate cluster sizes", initialCounts, replayedCounts);
+    }
+  }
+
+  @Test
+  public void testDeletesDecrement() throws Exception {
+    String tableName = "T_DEL_DEC_" + generateUniqueName();
+    String indexName = "IDX_DEL_DEC_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 40; i++) {
+          ps.setString(1, "r_" + i);
+          int c = i % 4;
+          float[] v = new float[4];
+          v[c] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      Map<Integer, Long> initialCounts = getScorecardCounts(conn, indexName, 1L);
+      for (int c = 0; c < 4; c++) {
+        assertEquals(Long.valueOf(10L), initialCounts.get(c));
+      }
+
+      // Delete 10 rows belonging to centroid 0 (i = 0, 4, 8, ...)
+      String delSql = "DELETE FROM " + tableName + " WHERE ID = ?";
+      try (PreparedStatement ps = conn.prepareStatement(delSql)) {
+        for (int i = 0; i < 40; i += 4) {
+          ps.setString(1, "r_" + i);
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      Map<Integer, Long> afterDeleteCounts = getScorecardCounts(conn, indexName, 1L);
+      assertEquals(Long.valueOf(0L), afterDeleteCounts.get(0));
+      assertEquals(Long.valueOf(10L), afterDeleteCounts.get(1));
+      assertEquals(Long.valueOf(10L), afterDeleteCounts.get(2));
+      assertEquals(Long.valueOf(10L), afterDeleteCounts.get(3));
+    }
+  }
+
+  @Test
+  public void testReassignmentMovesTheCount() throws Exception {
+    String tableName = "T_REASSIGN_" + generateUniqueName();
+    String indexName = "IDX_REASSIGN_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "move_row");
+        ps.setArray(2, conn.createArrayOf("FLOAT", make4D(10f, 0f, 0f, 0f))); // centroid 0
+        ps.executeUpdate();
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      Map<Integer, Long> step1Counts = getScorecardCounts(conn, indexName, 1L);
+      assertEquals(Long.valueOf(1L), step1Counts.get(0));
+      assertEquals(Long.valueOf(0L), step1Counts.get(2));
+
+      // Update vector to move from centroid 0 to centroid 2
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "move_row");
+        ps.setArray(2, conn.createArrayOf("FLOAT", make4D(0f, 0f, 10f, 0f))); // centroid 2
+        ps.executeUpdate();
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      Map<Integer, Long> step2Counts = getScorecardCounts(conn, indexName, 1L);
+      assertEquals("Centroid 0 count must decrement by 1", Long.valueOf(0L), step2Counts.get(0));
+      assertEquals("Centroid 2 count must increment by 1", Long.valueOf(1L), step2Counts.get(2));
+
+      // Check reassign count on arriving centroid 2
+      String reassignSql = "SELECT " + REASSIGN_COUNT + " FROM " + SYSTEM_VECTOR_CENTROID_NAME
+        + " WHERE " + INDEX_NAME + " = ? AND " + GENERATION_ID + " = ? AND " + CENTROID_ID + " = 2";
+      try (PreparedStatement ps = conn.prepareStatement(reassignSql)) {
+        ps.setString(1, SchemaUtil.normalizeFullTableName(indexName));
+        ps.setLong(2, 1L);
+        try (ResultSet rs = ps.executeQuery()) {
+          assertTrue(rs.next());
+          assertEquals("Centroid 2 REASSIGN_COUNT must increment to 1", 1L, rs.getLong(1));
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testSameCentroidUpdateDoesNotMoveCount() throws Exception {
+    String tableName = "T_SAME_C_" + generateUniqueName();
+    String indexName = "IDX_SAME_C_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "same_c_row");
+        ps.setArray(2, conn.createArrayOf("FLOAT", make4D(10f, 0f, 0f, 0f))); // centroid 0
+        ps.executeUpdate();
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      Map<Integer, Long> initial = getScorecardCounts(conn, indexName, 1L);
+      assertEquals(Long.valueOf(1L), initial.get(0));
+
+      // Update to new vector that is still closest to centroid 0
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        ps.setString(1, "same_c_row");
+        ps.setArray(2, conn.createArrayOf("FLOAT", make4D(9.8f, 0.1f, 0f, 0f)));
+        ps.executeUpdate();
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      Map<Integer, Long> afterSameUpdate = getScorecardCounts(conn, indexName, 1L);
+      assertEquals("Cluster sizes must remain unchanged", initial, afterSameUpdate);
+    }
+  }
+
+  @Test
+  public void testBaselineSeededAtIndexBuild() throws Exception {
+    String tableName = "T_SEED_BL_" + generateUniqueName();
+    String indexName = "IDX_SEED_BL_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute(
+          "CREATE TABLE " + tableName + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4))");
+      }
+
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, "seed_row_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      // Create vector index synchronously: training + population + baseline seeding
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) "
+          + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+
+      // Assert initial scorecard rows exist with CLUSTER_SIZE summing to 100 before any mutations
+      Map<Integer, Long> scorecardCounts = getScorecardCounts(conn, indexName, 1L);
+      assertFalse("Scorecard rows must exist", scorecardCounts.isEmpty());
+      long sum = 0;
+      for (long count : scorecardCounts.values()) {
+        sum += count;
+      }
+      assertEquals("Baseline scorecard cluster sizes must sum to 100", 100L, sum);
+    }
+  }
+
+  @Test
+  public void testConcurrentFlushAccumulation() throws Exception {
+    String tableName = "T_CONC_FLUSH_" + generateUniqueName();
+    String indexName = "IDX_CONC_FLUSH_" + generateUniqueName();
+
+    try (Connection conn1 = DriverManager.getConnection(getUrl());
+      Connection conn2 = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn1, tableName, indexName);
+
+      // Verify atomic accumulation under concurrent flushes from distinct connections.
+      ScorecardAccumulator acc1 = new ScorecardAccumulator(null);
+      ScorecardAccumulator acc2 = new ScorecardAccumulator(null);
+      acc1.accumulate(indexName, 1L, 0, 5L, 2L);
+      acc2.accumulate(indexName, 1L, 0, 7L, 3L);
+
+      final CyclicBarrier barrier = new CyclicBarrier(2);
+      ExecutorService pool = Executors.newFixedThreadPool(2);
+      try {
+        List<Future<?>> futures = new ArrayList<>();
+        for (final Object[] work : new Object[][] { { acc1, conn1 }, { acc2, conn2 } }) {
+          futures.add(pool.submit(() -> {
+            barrier.await(30, TimeUnit.SECONDS);
+            ((ScorecardAccumulator) work[0]).flush((Connection) work[1]);
+            return null;
+          }));
+        }
+        for (Future<?> f : futures) {
+          f.get(60, TimeUnit.SECONDS);
+        }
+      } finally {
+        pool.shutdownNow();
+        acc1.close();
+        acc2.close();
+      }
+
+      Map<Integer, Long> counts = getScorecardCounts(conn1, indexName, 1L);
+      assertEquals("Concurrent flushes must both land", Long.valueOf(12L), counts.get(0));
+      assertEquals("Reassign counts accumulate the same way", Long.valueOf(5L),
+        reassignCountOf(conn1, indexName, 1L, 0));
+    }
+  }
+
+  private Long reassignCountOf(Connection conn, String indexName, long generation, int centroidId)
+    throws Exception {
+    String sql = "SELECT " + REASSIGN_COUNT + " FROM " + SYSTEM_VECTOR_CENTROID_NAME + " WHERE "
+      + INDEX_NAME + " = ? AND " + GENERATION_ID + " = ? AND " + CENTROID_ID + " = ?";
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setString(1, SchemaUtil.normalizeFullTableName(indexName));
+      ps.setLong(2, generation);
+      ps.setInt(3, centroidId);
+      try (ResultSet rs = ps.executeQuery()) {
+        assertTrue(rs.next());
+        long v = rs.getLong(1);
+        return rs.wasNull() ? null : v;
+      }
+    }
+  }
+
+  @Test
+  public void testReconciliationRepairsDivergence() throws Exception {
+    String tableName = "T_RECON_REP_" + generateUniqueName();
+    String indexName = "IDX_RECON_REP_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // Insert 20 rows (5 per centroid)
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 20; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      // Modify centroid 1 counts to simulate divergence
+      String corruptSql = "UPSERT INTO " + SYSTEM_VECTOR_CENTROID_NAME + " (" + INDEX_NAME + ", "
+        + GENERATION_ID + ", " + CENTROID_ID + ", " + CLUSTER_SIZE + ", " + REASSIGN_COUNT
+        + ") VALUES (?, 1, 1, 999, 88)";
+      try (PreparedStatement ps = conn.prepareStatement(corruptSql)) {
+        ps.setString(1, SchemaUtil.normalizeFullTableName(indexName));
+        ps.executeUpdate();
+      }
+      conn.commit();
+
+      long beforeReconcile = System.currentTimeMillis();
+      VectorIndexScorecard.reconcile(conn, indexName, 1L);
+
+      Map<Integer, Long> restored = getScorecardCounts(conn, indexName, 1L);
+      assertEquals("CLUSTER_SIZE must be restored to physical count 5", Long.valueOf(5L),
+        restored.get(1));
+
+      String checkSql = "SELECT " + REASSIGN_COUNT + ", " + LAST_SCORECARD_UPDATE + " FROM "
+        + SYSTEM_VECTOR_CENTROID_NAME + " WHERE " + INDEX_NAME + " = ? AND " + GENERATION_ID
+        + " = 1 AND " + CENTROID_ID + " = 1";
+      try (PreparedStatement ps = conn.prepareStatement(checkSql)) {
+        ps.setString(1, SchemaUtil.normalizeFullTableName(indexName));
+        try (ResultSet rs = ps.executeQuery()) {
+          assertTrue(rs.next());
+          assertEquals("REASSIGN_COUNT must reset to 0", 0L, rs.getLong(1));
+          assertTrue("LAST_SCORECARD_UPDATE must advance", rs.getLong(2) >= beforeReconcile);
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testEmptyPostingListRecordedAsZero() throws Exception {
+    String tableName = "T_EMPTY_PL_" + generateUniqueName();
+    String indexName = "IDX_EMPTY_PL_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // Insert rows only to centroids 0, 1, 2. Centroid 3 receives no rows.
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 9; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[4];
+          v[i % 3] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      VectorIndexScorecard.reconcile(conn, indexName, 1L);
+
+      Map<Integer, Long> counts = getScorecardCounts(conn, indexName, 1L);
+      assertTrue("Row for empty centroid 3 must exist", counts.containsKey(3));
+      assertEquals("Empty centroid 3 must have cluster size 0", Long.valueOf(0L), counts.get(3));
+    }
+  }
+
+  @Test
+  public void testSkewTriggersAndBalancedDoesNot() throws Exception {
+    String skewTable = "T_SKEW_EVAL_" + generateUniqueName();
+    String skewIndex = "IDX_SKEW_EVAL_" + generateUniqueName();
+
+    String balTable = "T_BAL_EVAL_" + generateUniqueName();
+    String balIndex = "IDX_BAL_EVAL_" + generateUniqueName();
+
+    Configuration conf = HBaseConfiguration.create();
+    conf.setLong(QueryServices.VECTOR_INDEX_DRIFT_MIN_CLUSTER_SIZE_ATTRIB, 50L);
+    conf.setDouble(QueryServices.VECTOR_INDEX_DRIFT_SKEW_RATIO_THRESHOLD_ATTRIB, 3.5);
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      // 1. Skewed index: 100 rows all assigned to centroid 0
+      setupDeterministicVectorIndex(conn, skewTable, skewIndex);
+      String upsertSql = "UPSERT INTO " + skewTable + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, "s_" + i);
+          ps.setArray(2, conn.createArrayOf("FLOAT", make4D(10f, 0f, 0f, 0f)));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      VectorIndexScorecard.reconcile(conn, skewIndex, 1L);
+      DriftEvaluationResult skewResult = VectorIndexScorecard.evaluate(conn, skewIndex, 1L, conf);
+      assertTrue("Skewed data must trigger rebuild", skewResult.shouldRebuild());
+      assertNotNull(skewResult.getTriggerReason());
+      assertTrue(skewResult.getTriggerReason().contains("SKEW_RATIO_EXCEEDED"));
+
+      // 2. Balanced index: 100 rows evenly spread across 4 centroids (25 each)
+      setupDeterministicVectorIndex(conn, balTable, balIndex);
+      upsertSql = "UPSERT INTO " + balTable + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, "b_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      VectorIndexScorecard.reconcile(conn, balIndex, 1L);
+      DriftEvaluationResult balResult = VectorIndexScorecard.evaluate(conn, balIndex, 1L, conf);
+      assertFalse("Balanced data must not trigger rebuild", balResult.shouldRebuild());
+      assertNull(balResult.getTriggerReason());
+    }
+  }
+
+  @Test
+  public void testSmallIndexSuppression() throws Exception {
+    String tableName = "T_SMALL_SUPP_" + generateUniqueName();
+    String indexName = "IDX_SMALL_SUPP_" + generateUniqueName();
+
+    Configuration conf = HBaseConfiguration.create(); // default min.cluster.size is 1000
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // Insert 10 rows all assigned to centroid 0 (total 10 < min.cluster.size 1000)
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 10; i++) {
+          ps.setString(1, "sm_" + i);
+          ps.setArray(2, conn.createArrayOf("FLOAT", make4D(10f, 0f, 0f, 0f)));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      VectorIndexScorecard.reconcile(conn, indexName, 1L);
+
+      DriftEvaluationResult result = VectorIndexScorecard.evaluate(conn, indexName, 1L, conf);
+      assertFalse("Index below min.cluster.size must suppress rebuild", result.shouldRebuild());
+      assertNull(result.getTriggerReason());
+    }
+  }
+
+  @Test
+  public void testScorecardIsGenerationScoped() throws Exception {
+    String indexName = "IDX_GEN_SCOPE_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      // Seed scorecard rows for generation 1 and generation 2 directly
+      long ts1 = 1000L;
+      long ts2 = 2000L;
+      List<ScorecardRow> gen1Rows = Arrays.asList(new ScorecardRow(indexName, 1L, 0, 50L, 2L, ts1),
+        new ScorecardRow(indexName, 1L, 1, 60L, 3L, ts1));
+      List<ScorecardRow> gen2Rows = Arrays.asList(new ScorecardRow(indexName, 2L, 0, 100L, 5L, ts2),
+        new ScorecardRow(indexName, 2L, 1, 120L, 6L, ts2));
+      CentroidManager.persistScorecard(conn, gen1Rows);
+      CentroidManager.persistScorecard(conn, gen2Rows);
+
+      // Reconcile or update generation 2
+      List<ScorecardRow> updatedGen2 =
+        Arrays.asList(new ScorecardRow(indexName, 2L, 0, 300L, 0L, 5000L),
+          new ScorecardRow(indexName, 2L, 1, 400L, 0L, 5000L));
+      CentroidManager.persistScorecard(conn, updatedGen2);
+
+      // Verify generation 1 rows are completely unchanged
+      List<ScorecardRow> loadedGen1 = CentroidManager.loadScorecard(conn, indexName, 1L);
+      assertEquals(2, loadedGen1.size());
+      assertEquals(Long.valueOf(50L), loadedGen1.get(0).getClusterSize());
+      assertEquals(Long.valueOf(2L), loadedGen1.get(0).getReassignCount());
+      assertEquals(Long.valueOf(ts1), loadedGen1.get(0).getLastScorecardUpdate());
+      assertEquals(Long.valueOf(60L), loadedGen1.get(1).getClusterSize());
+      assertEquals(Long.valueOf(3L), loadedGen1.get(1).getReassignCount());
+      assertEquals(Long.valueOf(ts1), loadedGen1.get(1).getLastScorecardUpdate());
+    }
+  }
+
+  /**
+   * Verifies scorecard persistence and durability across region flush and reopen operations.
+   */
+  @Test
+  public void testScorecardSurvivesRegionReopen() throws Exception {
+    String tableName = "T_RESTART_DUR_" + generateUniqueName();
+    String indexName = "IDX_RESTART_DUR_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 20; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+    }
+
+    // Flush memstore to HFile and reopen region to verify disk-level persistence.
+    TableName centroidTable = TableName.valueOf(SYSTEM_VECTOR_CENTROID_NAME);
+    try (Admin admin = getUtility().getAdmin()) {
+      admin.flush(centroidTable);
+      List<RegionInfo> regions = admin.getRegions(centroidTable);
+      assertFalse("SYSTEM.VECTOR_CENTROID must have at least one region", regions.isEmpty());
+      for (RegionInfo region : regions) {
+        admin.unassign(region.getRegionName());
+      }
+      getUtility().waitUntilNoRegionsInTransition(60000);
+    }
+
+    VectorCentroidCache.resetInstance();
+    try (Connection freshConn = DriverManager.getConnection(getUrl())) {
+      Map<Integer, Long> counts = getScorecardCounts(freshConn, indexName, 1L);
+      for (int c = 0; c < 4; c++) {
+        assertEquals("Cluster size for centroid " + c + " must survive a region reopen",
+          Long.valueOf(5L), counts.get(c));
+      }
+    }
+  }
+
+  @Test
+  public void testGenerationalRebuild() throws Exception {
+    String tableName = "T_GEN_REB_" + generateUniqueName();
+    String indexName = "IDX_GEN_REB_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // Insert 100 rows (25 for each centroid)
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, "row_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      // Trigger asynchronous rebuild
+      Configuration conf = HBaseConfiguration.create();
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      VectorIndexRebuildTask.rebuild(pconn, conf, indexName, true, "MANUAL_REBUILD");
+
+      // Assert SYSTEM.VECTOR_CENTROID contains generation 2 centroids and generation 1 rows are
+      // deleted
+      List<Long> gens = CentroidManager.listGenerations(conn, indexName);
+      assertEquals(1, gens.size());
+      assertEquals(Long.valueOf(2L), gens.get(0));
+
+      List<byte[]> gen2Centroids = CentroidManager.loadCentroids(conn, indexName, 2L);
+      assertFalse("Generation 2 centroids must exist", gen2Centroids.isEmpty());
+
+      List<byte[]> gen1Centroids = CentroidManager.loadCentroids(conn, indexName, 1L);
+      assertTrue("Generation 1 centroids must be deleted", gen1Centroids.isEmpty());
+
+      // Assert SYSTEM.CATALOG records active generation as 2
+      assertEquals(2L, CentroidManager.getGeneration(conn, indexName));
+      pconn.removeTable(pconn.getTenantId(), indexName, null, HConstants.LATEST_TIMESTAMP);
+      PTable pIndex = pconn.getTableNoCache(indexName);
+      assertEquals(Long.valueOf(2L), pIndex.getVectorCentroidGeneration());
+    }
+  }
+
+  @Test
+  public void testGenerationsCoexistMidRebuild() throws Exception {
+    String tableName = "T_MID_REB_" + generateUniqueName();
+    String indexName = "IDX_MID_REB_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 40; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      boolean[] hookRan = new boolean[] { false };
+      VectorIndexRebuildTask.setTestHook((idx, buildingGen) -> {
+        hookRan[0] = true;
+        try (Connection hookConn = DriverManager.getConnection(getUrl())) {
+          // Assert SELECT DISTINCT GENERATION_ID returns both 1 and 2
+          List<Long> gens = CentroidManager.listGenerations(hookConn, idx);
+          assertTrue("Must contain generation 1", gens.contains(1L));
+          assertTrue("Must contain generation 2", gens.contains(2L));
+
+          // Assert system catalog reports generation 1 as active
+          assertEquals("Catalog must report gen 1 as active mid-rebuild", 1L,
+            CentroidManager.getGeneration(hookConn, idx));
+        }
+      });
+
+      try {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        VectorIndexRebuildTask.rebuild(pconn, HBaseConfiguration.create(), indexName, true, "TEST");
+        assertTrue("Test hook must have executed mid-rebuild", hookRan[0]);
+      } finally {
+        VectorIndexRebuildTask.clearTestHook();
+      }
+    }
+  }
+
+  @Test
+  public void testQueryContinuityDuringRebuild() throws Exception {
+    String tableName = "T_QUERY_CONT_" + generateUniqueName();
+    String indexName = "IDX_QUERY_CONT_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 20; i++) {
+          ps.setString(1, "row_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      boolean[] hookRan = new boolean[] { false };
+      VectorIndexRebuildTask.setTestHook((idx, buildingGen) -> {
+        hookRan[0] = true;
+        try (Connection hookConn = DriverManager.getConnection(getUrl())) {
+          // While rebuild is paused mid-execution, execute vector search query
+          String querySql = "SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT 2";
+          try (PreparedStatement ps = hookConn.prepareStatement(querySql)) {
+            ps.setArray(1,
+              hookConn.createArrayOf("FLOAT", new Float[] { 10.0f, 0.0f, 0.0f, 0.0f }));
+            try (ResultSet rs = ps.executeQuery()) {
+              assertTrue(rs.next());
+              String id = rs.getString(1);
+              assertTrue("Must serve rows from centroid 0 of gen 1",
+                id.equals("row_0") || id.equals("row_4") || id.equals("row_8")
+                  || id.equals("row_12") || id.equals("row_16"));
+            }
+          }
+        }
+      });
+
+      try {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        VectorIndexRebuildTask.rebuild(pconn, HBaseConfiguration.create(), indexName, true, "TEST");
+        assertTrue("Hook must have run", hookRan[0]);
+      } finally {
+        VectorIndexRebuildTask.clearTestHook();
+      }
+    }
+  }
+
+  /**
+   * Verifies query execution and probe policy behaviors (EXPAND and EXACT) while an index rebuild
+   * is in progress.
+   */
+  @Test
+  public void testProbeAdjustmentWhileRebuildInProgress() throws Exception {
+    String tableName = "T_REB_PROBE_" + generateUniqueName();
+    String indexName = "IDX_REB_PROBE_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 40; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      Float[] probeVector = make4D(10.0f, 0.0f, 0.0f, 0.0f);
+      // For lists=4, default probe count is round(sqrt(4)) = 2.
+      String baseline = explainVectorQuery(conn, tableName, probeVector, null);
+      assertTrue(baseline, baseline.contains("CLIENT PROBING 2 OF 4 CENTROIDS"));
+      assertFalse("no rebuild is running yet", baseline.contains("REBUILD IN PROGRESS"));
+      List<String> expected = topKByDistance(conn, tableName, probeVector, 4, true);
+
+      final List<String> failures = new ArrayList<>();
+      final boolean[] hookRan = new boolean[] { false };
+      VectorIndexRebuildTask.setTestHook((idx, buildingGen) -> {
+        hookRan[0] = true;
+        try {
+          // Invalidate cached centroids so the subsequent query reloads state and detects the
+          // active rebuild.
+          VectorCentroidCache.getInstance().invalidate(idx);
+          try (Connection expandConn = DriverManager.getConnection(getUrl())) {
+            String plan = explainVectorQuery(expandConn, tableName, probeVector, null);
+            if (!plan.contains("CLIENT PROBING 4 OF 4 CENTROIDS")) {
+              failures.add("EXPAND should have widened 2 probes to 4, plan was: " + plan);
+            }
+            if (!plan.contains("REBUILD IN PROGRESS: EXPANDED FROM 2")) {
+              failures.add("EXPAND should say why it widened, plan was: " + plan);
+            }
+            if (!topKByDistance(expandConn, tableName, probeVector, 4, false).equals(expected)) {
+              failures.add("EXPAND returned the wrong rows mid-rebuild");
+            }
+          }
+
+          VectorCentroidCache.getInstance().invalidate(idx);
+          Properties exactProps = new Properties();
+          exactProps.setProperty(QueryServices.VECTOR_INDEX_REBUILD_PROBE_POLICY_ATTRIB, "EXACT");
+          try (Connection exactConn = DriverManager.getConnection(getUrl(), exactProps)) {
+            String plan = explainVectorQuery(exactConn, tableName, probeVector, exactProps);
+            if (!plan.contains("CLIENT EXACT VECTOR EVALUATION")) {
+              failures.add("EXACT should stop probing, plan was: " + plan);
+            }
+            if (plan.contains("CLIENT PROBING")) {
+              failures.add("EXACT must not also probe, plan was: " + plan);
+            }
+            if (!topKByDistance(exactConn, tableName, probeVector, 4, false).equals(expected)) {
+              failures.add("EXACT returned the wrong rows mid-rebuild");
+            }
+          }
+        } catch (SQLException e) {
+          failures.add("mid-rebuild query failed: " + e);
+        }
+      });
+
+      try {
+        PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+        VectorIndexRebuildTask.rebuild(pconn, HBaseConfiguration.create(), indexName, true, "TEST");
+      } finally {
+        VectorIndexRebuildTask.clearTestHook();
+      }
+      assertTrue("the rebuild hook must have run", hookRan[0]);
+      assertTrue(failures.toString(), failures.isEmpty());
+
+      // Verify probe expansion ceases after rebuild completion.
+      VectorCentroidCache.getInstance().invalidate(indexName);
+      try (Connection after = DriverManager.getConnection(getUrl())) {
+        String plan = explainVectorQuery(after, tableName, probeVector, null);
+        assertFalse("a completed rebuild must not keep widening probes: " + plan,
+          plan.contains("REBUILD IN PROGRESS"));
+      }
+    }
+  }
+
+  private static String explainVectorQuery(Connection conn, String tableName, Float[] probeVector,
+    Properties props) throws SQLException {
+    String sql = "EXPLAIN SELECT ID FROM " + tableName + " ORDER BY L2_DISTANCE(V, ?) LIMIT 4";
+    StringBuilder plan = new StringBuilder();
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setArray(1, conn.createArrayOf("FLOAT", probeVector));
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          plan.append(rs.getString(1)).append('\n');
+        }
+      }
+    }
+    return plan.toString();
+  }
+
+  @Test
+  public void testPostRebuildQueryCorrectness() throws Exception {
+    String tableName = "T_POST_REB_Q_" + generateUniqueName();
+    String indexName = "IDX_POST_REB_Q_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // Insert data points offset from initial centroids to induce centroid repositioning.
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 40; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          v[(i + 1) % 4] = (i % 10) * 0.5f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      Float[] probe = make4D(10.0f, 1.5f, 0.0f, 0.0f);
+      List<String> beforeRebuild = topKByDistance(conn, tableName, probe, 5, false);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      VectorIndexRebuildTask.rebuild(pconn, HBaseConfiguration.create(), indexName, true, "MANUAL");
+
+      // Verify post-rebuild index scan results match a brute-force data table scan without
+      // duplicates.
+      List<String> indexed = topKByDistance(conn, tableName, probe, 5, false);
+      List<String> bruteForce = topKByDistance(conn, tableName, probe, 5, true);
+      assertEquals("post-rebuild results must match a brute-force scan", bruteForce, indexed);
+      assertEquals("no row may appear twice after the generation switch", indexed.size(),
+        new HashSet<>(indexed).size());
+      assertEquals("rebuilding must not change which rows are nearest", beforeRebuild, indexed);
+    }
+  }
+
+  /** Runs the nearest-neighbour query, optionally forcing a full data table scan. */
+  private List<String> topKByDistance(Connection conn, String tableName, Float[] probe, int k,
+    boolean noIndex) throws SQLException {
+    String sql = "SELECT " + (noIndex ? "/*+ NO_INDEX */ " : "") + "ID FROM " + tableName
+      + " ORDER BY L2_DISTANCE(V, ?) LIMIT " + k;
+    List<String> ids = new ArrayList<>();
+    try (PreparedStatement ps = conn.prepareStatement(sql)) {
+      ps.setArray(1, conn.createArrayOf("FLOAT", probe));
+      try (ResultSet rs = ps.executeQuery()) {
+        while (rs.next()) {
+          ids.add(rs.getString(1));
+        }
+      }
+    }
+    return ids;
+  }
+
+  @Test
+  public void testScorecardReseededOnSwitch() throws Exception {
+    String tableName = "T_RESEED_" + generateUniqueName();
+    String indexName = "IDX_RESEED_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      VectorIndexRebuildTask.rebuild(pconn, HBaseConfiguration.create(), indexName, true, "MANUAL");
+
+      // Assert generation 2 scorecard reports non-null CLUSTER_SIZE summing to row count
+      List<ScorecardRow> gen2Scorecard = CentroidManager.loadScorecard(conn, indexName, 2L);
+      assertFalse("Generation 2 scorecard must exist", gen2Scorecard.isEmpty());
+      long totalClusterSize = 0L;
+      for (ScorecardRow row : gen2Scorecard) {
+        assertNotNull("CLUSTER_SIZE must be non-null", row.getClusterSize());
+        totalClusterSize += row.getClusterSize();
+      }
+      assertEquals("Generation 2 cluster size must sum to row count", 100L, totalClusterSize);
+
+      // Assert generation 1 scorecard rows are removed
+      List<ScorecardRow> gen1Scorecard = CentroidManager.loadScorecard(conn, indexName, 1L);
+      assertTrue("Generation 1 scorecard rows must be removed", gen1Scorecard.isEmpty());
+    }
+  }
+
+  @Test
+  public void testRetirementDeletesInRegion() throws Exception {
+    String indexName = "IDX_RETIRE_EXPLAIN_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      String plan = CentroidManager.getDeleteGenerationExplainPlan(conn, indexName, 1L);
+      assertTrue("Plan must report DELETE ROWS SERVER SELECT, was: " + plan,
+        plan.contains("DELETE ROWS SERVER SELECT"));
+      assertTrue("Plan must include SYSTEM.VECTOR_CENTROID, was: " + plan,
+        plan.contains(SYSTEM_VECTOR_CENTROID_NAME));
+    }
+  }
+
+  @Test
+  public void testRetirementDoesNotCommitUnrelatedWork() throws Exception {
+    String unrelatedTable = "T_UNRELATED_" + generateUniqueName();
+    String indexName = "IDX_RETIRE_NO_COMMIT_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + unrelatedTable + " (ID VARCHAR PRIMARY KEY, VAL VARCHAR)");
+      }
+
+      // Seed dummy generation 1 rows
+      List<float[]> centroids = Arrays.asList(new float[] { 1.0f, 0.0f, 0.0f, 0.0f });
+      CentroidManager.persistCentroidsFromFloatList(conn, indexName, 1L, centroids);
+
+      // On a connection with autoCommit off, issue an unrelated uncommitted upsert
+      conn.setAutoCommit(false);
+      try (PreparedStatement ps =
+        conn.prepareStatement("UPSERT INTO " + unrelatedTable + " VALUES (?, ?)")) {
+        ps.setString(1, "k1");
+        ps.setString(2, "v1");
+        ps.executeUpdate();
+      }
+
+      // Call deleteGeneration
+      CentroidManager.deleteGeneration(conn, indexName, 1L);
+
+      // Assert generation 1 rows are gone
+      assertTrue(CentroidManager.loadCentroids(conn, indexName, 1L).isEmpty());
+
+      // Assert unrelated upsert remains uncommitted (not visible to separate connection)
+      try (Connection conn2 = DriverManager.getConnection(getUrl())) {
+        try (Statement s = conn2.createStatement();
+          ResultSet rs = s.executeQuery("SELECT * FROM " + unrelatedTable + " WHERE ID = 'k1'")) {
+          assertFalse("Unrelated upsert must remain uncommitted", rs.next());
+        }
+      }
+
+      // Commit the unrelated upsert and verify it is now visible
+      conn.commit();
+      try (Connection conn2 = DriverManager.getConnection(getUrl())) {
+        try (Statement s = conn2.createStatement();
+          ResultSet rs = s.executeQuery("SELECT * FROM " + unrelatedTable + " WHERE ID = 'k1'")) {
+          assertTrue("Unrelated upsert visible after commit", rs.next());
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testAutomaticTriggerFromDrift() throws Exception {
+    String tableName = "T_AUTO_DRIFT_" + generateUniqueName();
+    String indexName = "IDX_AUTO_DRIFT_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // Insert 100 rows all assigned to centroid 0 (skewed data)
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[] { 10.0f, 0.0f, 0.0f, 0.0f };
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      Configuration conf = HBaseConfiguration.create();
+      conf.setBoolean(QueryServices.VECTOR_INDEX_REBUILD_AUTO_ENABLED_ATTRIB, true);
+      conf.setLong(QueryServices.VECTOR_INDEX_DRIFT_MIN_CLUSTER_SIZE_ATTRIB, 50L);
+      conf.setDouble(QueryServices.VECTOR_INDEX_DRIFT_SKEW_RATIO_THRESHOLD_ATTRIB, 3.5);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      TaskRegionObserver.TaskResult result =
+        VectorIndexRebuildTask.rebuild(pconn, conf, indexName, false, null);
+
+      assertEquals(TaskRegionObserver.TaskResultCode.SUCCESS, result.getResultCode());
+      assertEquals(2L, CentroidManager.getGeneration(conn, indexName));
+
+      GenerationSummary summary = CentroidManager.loadGenerationSummary(conn, indexName, 2L);
+      assertNotNull("Generation 2 summary must exist", summary);
+      assertNotNull("TRIGGER_REASON must record skew", summary.getTriggerReason());
+      assertTrue("Trigger reason must mention skew",
+        summary.getTriggerReason().toLowerCase().contains("skew"));
+    }
+  }
+
+  @Test
+  public void testReconciliationGatesTheRebuild() throws Exception {
+    String tableName = "T_RECON_GATE_" + generateUniqueName();
+    String indexName = "IDX_RECON_GATE_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // Insert balanced data (25 rows in each of the 4 centroids = 100 rows)
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      // Manually corrupt the inline scorecard to simulate severe skew
+      CentroidManager.persistScorecardRow(conn, indexName, 1L, 0, 999999L, 0L, null);
+
+      Configuration conf = HBaseConfiguration.create();
+      conf.setBoolean(QueryServices.VECTOR_INDEX_REBUILD_AUTO_ENABLED_ATTRIB, true);
+      conf.setLong(QueryServices.VECTOR_INDEX_DRIFT_MIN_CLUSTER_SIZE_ATTRIB, 50L);
+      conf.setDouble(QueryServices.VECTOR_INDEX_DRIFT_SKEW_RATIO_THRESHOLD_ATTRIB, 3.5);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      TaskRegionObserver.TaskResult result =
+        VectorIndexRebuildTask.rebuild(pconn, conf, indexName, false, null);
+
+      // Generation remains unchanged because reconciliation corrected the scorecard before
+      // evaluation.
+      assertEquals(TaskRegionObserver.TaskResultCode.SKIPPED, result.getResultCode());
+      assertEquals(1L, CentroidManager.getGeneration(conn, indexName));
+
+      // Assert scorecard was reconciled to accurate values (25 per centroid)
+      List<ScorecardRow> scorecard = CentroidManager.loadScorecard(conn, indexName, 1L);
+      for (ScorecardRow row : scorecard) {
+        assertEquals("Cluster size must be restored to accurate value 25", Long.valueOf(25L),
+          row.getClusterSize());
+      }
+    }
+  }
+
+  @Test
+  public void testRebuildStormGuard() throws Exception {
+    String tableName = "T_STORM_GUARD_" + generateUniqueName();
+    String indexName = "IDX_STORM_GUARD_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // Stamp a recent LAST_REBUILD_TIME on generation 1 summary
+      long now = System.currentTimeMillis();
+      CentroidManager.persistGenerationSummary(conn, indexName, 1L, null, null, null, now, now);
+
+      // Insert skewed data
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[] { 10.0f, 0.0f, 0.0f, 0.0f };
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      Configuration conf = HBaseConfiguration.create();
+      conf.setBoolean(QueryServices.VECTOR_INDEX_REBUILD_AUTO_ENABLED_ATTRIB, true);
+      conf.setLong(QueryServices.VECTOR_INDEX_DRIFT_MIN_CLUSTER_SIZE_ATTRIB, 50L);
+      conf.setDouble(QueryServices.VECTOR_INDEX_DRIFT_SKEW_RATIO_THRESHOLD_ATTRIB, 3.5);
+      conf.setLong(QueryServices.VECTOR_INDEX_REBUILD_MIN_INTERVAL_MS_ATTRIB, 86400000L);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      TaskRegionObserver.TaskResult result =
+        VectorIndexRebuildTask.rebuild(pconn, conf, indexName, false, null);
+
+      // Generation must not advance due to storm guard
+      assertEquals(TaskRegionObserver.TaskResultCode.SKIPPED, result.getResultCode());
+      assertEquals(1L, CentroidManager.getGeneration(conn, indexName));
+    }
+  }
+
+  @Test
+  public void testAutomaticRebuildOffByDefault() throws Exception {
+    String tableName = "T_AUTO_OFF_" + generateUniqueName();
+    String indexName = "IDX_AUTO_OFF_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // Insert skewed data
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[] { 10.0f, 0.0f, 0.0f, 0.0f };
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+      ScorecardAccumulator.getInstance().flush(conn);
+
+      Configuration conf = HBaseConfiguration.create();
+      // rebuild.auto.enabled = false (default)
+      conf.setBoolean(QueryServices.VECTOR_INDEX_REBUILD_AUTO_ENABLED_ATTRIB, false);
+      conf.setLong(QueryServices.VECTOR_INDEX_DRIFT_MIN_CLUSTER_SIZE_ATTRIB, 50L);
+      conf.setDouble(QueryServices.VECTOR_INDEX_DRIFT_SKEW_RATIO_THRESHOLD_ATTRIB, 3.5);
+
+      PhoenixConnection pconn = conn.unwrap(PhoenixConnection.class);
+      TaskRegionObserver.TaskResult result =
+        VectorIndexRebuildTask.rebuild(pconn, conf, indexName, false, null);
+
+      // Generation must not advance
+      assertEquals(TaskRegionObserver.TaskResultCode.SKIPPED, result.getResultCode());
+      assertEquals(1L, CentroidManager.getGeneration(conn, indexName));
+
+      // Assessment must be recorded on the summary row
+      GenerationSummary summary = CentroidManager.loadGenerationSummary(conn, indexName, 1L);
+      assertNotNull("Summary row must exist", summary);
+      assertNotNull("Assessment must be recorded in TRIGGER_REASON", summary.getTriggerReason());
+      assertTrue("Trigger reason must mention skew",
+        summary.getTriggerReason().toLowerCase().contains("skew"));
+    }
+  }
+
+  @Test
+  public void testAlterIndexRebuildSucceeds() throws Exception {
+    String tableName = "T_ALT_REBUILD_" + generateUniqueName();
+    String indexName = "IDX_ALT_REBUILD_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // Insert 100 rows across 4 centroids
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      assertEquals(1L, CentroidManager.getGeneration(conn, indexName));
+
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("ALTER INDEX " + indexName + " ON " + tableName + " REBUILD");
+      }
+      assertEquals(2L, CentroidManager.getGeneration(conn, indexName));
+
+      // Verify subsequent rebuild using the optional VECTOR keyword increments the generation.
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("ALTER VECTOR INDEX " + indexName + " ON " + tableName + " REBUILD");
+      }
+      assertEquals(3L, CentroidManager.getGeneration(conn, indexName));
+      assertEquals("only the live generation survives a rebuild", Arrays.asList(3L),
+        CentroidManager.listGenerations(conn, indexName));
+    }
+  }
+
+  @Test
+  public void testNewCentroidsTrained() throws Exception {
+    String tableName = "T_NEW_CENTROIDS_" + generateUniqueName();
+    String indexName = "IDX_NEW_CENTROIDS_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // Insert sample data offset from baseline unit-axis centroids to prompt retraining.
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 2.0f;
+          v[(i + 2) % 4] = 1.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      List<float[]> gen1 = CentroidManager.loadCentroidsAsFloatVectors(conn, indexName, 1L);
+      assertEquals(4, gen1.size());
+
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("ALTER INDEX " + indexName + " ON " + tableName + " REBUILD");
+      }
+
+      List<float[]> gen2 = CentroidManager.loadCentroidsAsFloatVectors(conn, indexName, 2L);
+      assertEquals(4, gen2.size());
+
+      // Verify retrained centroids converge near sample data distribution.
+      for (float[] centroid : gen2) {
+        double norm = 0.0;
+        for (float c : centroid) {
+          norm += c * c;
+        }
+        assertTrue(
+          "retrained centroid " + Arrays.toString(centroid)
+            + " must sit near the data, not on the seeded magnitude-10 axes",
+          Math.sqrt(norm) < 5.0);
+      }
+
+      assertTrue("Generation 1 centroids must be retired",
+        CentroidManager.loadCentroids(conn, indexName, 1L).isEmpty());
+    }
+  }
+
+  @Test
+  public void testManualTriggerBypassesGuards() throws Exception {
+    String tableName = "T_MANUAL_BYPASS_" + generateUniqueName();
+    String indexName = "IDX_MANUAL_BYPASS_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      setupDeterministicVectorIndex(conn, tableName, indexName);
+
+      // Stamp LAST_REBUILD_TIME within the minimum rebuild interval.
+      long now = System.currentTimeMillis();
+      CentroidManager.persistGenerationSummary(conn, indexName, 1L, null, null, null, now, now);
+
+      // Insert 100 rows
+      String upsertSql = "UPSERT INTO " + tableName + " VALUES (?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 100; i++) {
+          ps.setString(1, "r_" + i);
+          float[] v = new float[4];
+          v[i % 4] = 10.0f;
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.executeUpdate();
+        }
+      }
+      conn.commit();
+
+      // Ensure rebuild.auto.enabled is false (default) and execute ALTER INDEX ... REBUILD
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("ALTER INDEX " + indexName + " ON " + tableName + " REBUILD");
+      }
+
+      // Assert generation advances despite guards
+      assertEquals(2L, CentroidManager.getGeneration(conn, indexName));
+
+      // Assert TRIGGER_REASON records manual execution
+      GenerationSummary summary = CentroidManager.loadGenerationSummary(conn, indexName, 2L);
+      assertNotNull("Summary row must exist for generation 2", summary);
+      assertNotNull("TRIGGER_REASON must not be null", summary.getTriggerReason());
+      assertTrue("TRIGGER_REASON must record manual execution, was: " + summary.getTriggerReason(),
+        summary.getTriggerReason().toLowerCase().contains("manual"));
     }
   }
 }

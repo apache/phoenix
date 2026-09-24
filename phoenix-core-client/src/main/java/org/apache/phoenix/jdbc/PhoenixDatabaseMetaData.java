@@ -544,6 +544,27 @@ public class PhoenixDatabaseMetaData implements DatabaseMetaData {
   public static final byte[] CENTROID_VECTOR_BYTES = Bytes.toBytes(CENTROID_VECTOR);
   public static final String GENERATION_ID = "GENERATION_ID";
   public static final byte[] GENERATION_ID_BYTES = Bytes.toBytes(GENERATION_ID);
+  public static final String CLUSTER_SIZE = "CLUSTER_SIZE";
+  public static final byte[] CLUSTER_SIZE_BYTES = Bytes.toBytes(CLUSTER_SIZE);
+  public static final String REASSIGN_COUNT = "REASSIGN_COUNT";
+  public static final byte[] REASSIGN_COUNT_BYTES = Bytes.toBytes(REASSIGN_COUNT);
+  public static final String SKEW_METRICS = "SKEW_METRICS";
+  public static final byte[] SKEW_METRICS_BYTES = Bytes.toBytes(SKEW_METRICS);
+  public static final String REBUILD_STATE = "REBUILD_STATE";
+  public static final byte[] REBUILD_STATE_BYTES = Bytes.toBytes(REBUILD_STATE);
+  public static final String TRIGGER_REASON = "TRIGGER_REASON";
+  public static final byte[] TRIGGER_REASON_BYTES = Bytes.toBytes(TRIGGER_REASON);
+  public static final String LAST_REBUILD_TIME = "LAST_REBUILD_TIME";
+  public static final byte[] LAST_REBUILD_TIME_BYTES = Bytes.toBytes(LAST_REBUILD_TIME);
+  public static final String LAST_SCORECARD_UPDATE = "LAST_SCORECARD_UPDATE";
+  public static final byte[] LAST_SCORECARD_UPDATE_BYTES = Bytes.toBytes(LAST_SCORECARD_UPDATE);
+
+  public static final int SENTINEL_CENTROID_ID = -1;
+  public static final String REBUILD_STATE_ACTIVE = "A";
+  public static final String REBUILD_STATE_BUILDING = "B";
+  public static final String REBUILD_STATE_RETIRED = "R";
+  public static final String TRIGGER_REASON_CREATE_INDEX = "CREATE_INDEX";
+  public static final String TRIGGER_REASON_INDEX_TOOL = "INDEX_TOOL";
 
   public static final String QUERY_ID = "QUERY_ID";
   public static final String USER = "USER";

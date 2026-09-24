@@ -208,7 +208,9 @@ public interface PTable extends PMetaDataEntity {
     DROP_CHILD_VIEWS((byte) 1),
     INDEX_REBUILD((byte) 2),
     TRANSFORM_MONITOR((byte) 3),
-    CDC_STREAM_PARTITION((byte) 4);
+    CDC_STREAM_PARTITION((byte) 4),
+    VECTOR_SCORECARD_RECONCILE((byte) 5),
+    VECTOR_INDEX_REBUILD((byte) 6);
 
     private final byte[] byteValue;
     private final byte serializedValue;
