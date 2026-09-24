@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Set;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.expression.Expression;
 import org.apache.phoenix.expression.KeyValueColumnExpression;
 import org.apache.phoenix.expression.OrderByExpression;
@@ -538,5 +539,62 @@ public final class VectorSearchUtil {
   public static boolean hasUncoveredProjectionColumns(PTable indexTable, PTable dataTable,
     SelectStatement select) {
     return !getUncoveredProjectionColumns(indexTable, dataTable, select).isEmpty();
+  }
+
+  /**
+   * Selectivity threshold for filter-first plan selection. When a relational filter backed by a
+   * secondary index reduces estimated rows or bytes by at least this fraction, the filter-first
+   * plan is preferred over vector index scans.
+   */
+  public static final double FILTER_FIRST_SELECTIVITY_THRESHOLD = 0.95;
+
+  /**
+   * Evaluates whether a secondary index candidate plan provides sufficient filter selectivity
+   * relative to the base table data plan to justify a filter-first execution strategy.
+   * @param regularPlan secondary index candidate plan
+   * @param dataPlan    base table data plan
+   * @return true if available table statistics indicate filter selectivity meets or exceeds
+   *         {@link #FILTER_FIRST_SELECTIVITY_THRESHOLD}; false otherwise or if statistics are
+   *         unavailable
+   */
+  public static boolean isHighlySelectiveFilter(QueryPlan regularPlan, QueryPlan dataPlan) {
+    if (regularPlan == null || dataPlan == null) {
+      return false;
+    }
+    if (!isVectorSearch(dataPlan.getOrderBy(), dataPlan.getLimit())) {
+      return false;
+    }
+
+    Long regularRows = null;
+    Long totalRows = null;
+    try {
+      regularRows = regularPlan.getEstimatedRowsToScan();
+      totalRows = dataPlan.getEstimatedRowsToScan();
+    } catch (SQLException e) {
+      // ignore and fall through
+    }
+
+    if (regularRows != null && totalRows != null && totalRows > 0) {
+      double fraction = (double) regularRows / (double) totalRows;
+      double filterOutFraction = 1.0 - fraction;
+      return filterOutFraction >= FILTER_FIRST_SELECTIVITY_THRESHOLD;
+    }
+
+    Long regularBytes = null;
+    Long totalBytes = null;
+    try {
+      regularBytes = regularPlan.getEstimatedBytesToScan();
+      totalBytes = dataPlan.getEstimatedBytesToScan();
+    } catch (SQLException e) {
+      // ignore and fall through
+    }
+
+    if (regularBytes != null && totalBytes != null && totalBytes > 0) {
+      double fraction = (double) regularBytes / (double) totalBytes;
+      double filterOutFraction = 1.0 - fraction;
+      return filterOutFraction >= FILTER_FIRST_SELECTIVITY_THRESHOLD;
+    }
+
+    return false;
   }
 }

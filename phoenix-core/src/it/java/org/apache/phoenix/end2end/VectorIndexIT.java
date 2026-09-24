@@ -76,11 +76,13 @@ import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataResponse;
 import org.apache.phoenix.coprocessor.generated.MetaDataProtos.MetaDataService;
 import org.apache.phoenix.coprocessorclient.MetaDataProtocol;
 import org.apache.phoenix.exception.SQLExceptionCode;
+import org.apache.phoenix.execute.VectorIndexScanPlan;
 import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.hbase.index.util.VersionUtil;
 import org.apache.phoenix.index.IndexMaintainer;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
+import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.protobuf.ProtobufUtil;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.schema.PColumn;
@@ -1427,6 +1429,740 @@ public class VectorIndexIT extends ParallelStatsDisabledIT {
         }
       }
       assertEquals("Returned IDs must match brute-force top-k", expectedTopK, actualIds);
+    }
+  }
+
+  @Test
+  public void testAdaptiveProbeExpansionSatisfiesLimit() throws Exception {
+    String tableName = "T_ADAPT_SAT_" + generateUniqueName();
+    String indexName = "IDX_ADAPT_SAT_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), CATEGORY VARCHAR) "
+          + "IMMUTABLE_ROWS=true");
+        stmt.execute(
+          "CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) INCLUDE (CATEGORY) "
+            + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+
+      List<float[]> centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 10.0f, 0.0f, 0.0f, 0.0f }, new float[] { 20.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 30.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, centroids, 1L);
+
+      Map<String, float[]> rows = new LinkedHashMap<>();
+      Map<String, String> categories = new LinkedHashMap<>();
+      for (int c = 0; c < 4; c++) {
+        float base = c * 10.0f;
+        for (int a = 1; a <= 4; a++) {
+          String id = "c" + c + "_a" + a;
+          rows.put(id, new float[] { base + a * 0.1f, 0.0f, 0.0f, 0.0f });
+          categories.put(id, "A");
+        }
+        String idB = "c" + c + "_b1";
+        rows.put(idB, new float[] { base + 0.5f, 0.0f, 0.0f, 0.0f });
+        categories.put(idB, "B");
+      }
+
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, CATEGORY) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (Map.Entry<String, float[]> entry : rows.entrySet()) {
+          ps.setString(1, entry.getKey());
+          float[] v = entry.getValue();
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.setString(3, categories.get(entry.getKey()));
+          ps.executeUpdate();
+        }
+        conn.commit();
+      }
+
+      float[] queryVec = new float[] { 0.0f, 0.0f, 0.0f, 0.0f };
+      Float[] boxedQ = new Float[] { queryVec[0], queryVec[1], queryVec[2], queryVec[3] };
+
+      // Adaptive probe expansion continues across centroids until query limit is satisfied.
+      String querySql = "SELECT /*+ VECTOR_PROBE_COUNT(1) */ ID, CATEGORY FROM " + tableName
+        + " WHERE CATEGORY = 'B' ORDER BY L2_DISTANCE(V, ?) LIMIT 3";
+
+      List<String> actualIds = new ArrayList<>();
+      try (PhoenixPreparedStatement pps =
+        conn.prepareStatement(querySql).unwrap(PhoenixPreparedStatement.class)) {
+        pps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = pps.executeQuery()) {
+          while (rs.next()) {
+            actualIds.add(rs.getString(1));
+            assertEquals("B", rs.getString(2));
+          }
+        }
+        VectorIndexScanPlan plan = (VectorIndexScanPlan) pps.getQueryPlan();
+        assertEquals("Should probe 3 batches to satisfy LIMIT 3", 3,
+          plan.getLastProbedBatchCount());
+        assertEquals("Should probe 3 centroids", 3, plan.getLastProbedCentroidCount());
+      }
+      assertEquals("Expected top 3 B rows from c0, c1, c2",
+        Arrays.asList("c0_b1", "c1_b1", "c2_b1"), actualIds);
+    }
+  }
+
+  @Test
+  public void testAdaptiveProbeExpansionMaxProbeLimit() throws Exception {
+    String tableName = "T_ADAPT_MAX_" + generateUniqueName();
+    String indexName = "IDX_ADAPT_MAX_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), CATEGORY VARCHAR) "
+          + "IMMUTABLE_ROWS=true");
+        stmt.execute(
+          "CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) INCLUDE (CATEGORY) "
+            + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+
+      List<float[]> centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 10.0f, 0.0f, 0.0f, 0.0f }, new float[] { 20.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 30.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, centroids, 1L);
+
+      Map<String, float[]> rows = new LinkedHashMap<>();
+      Map<String, String> categories = new LinkedHashMap<>();
+      for (int c = 0; c < 4; c++) {
+        float base = c * 10.0f;
+        for (int a = 1; a <= 4; a++) {
+          String id = "c" + c + "_a" + a;
+          rows.put(id, new float[] { base + a * 0.1f, 0.0f, 0.0f, 0.0f });
+          categories.put(id, "A");
+        }
+        String idB = "c" + c + "_b1";
+        rows.put(idB, new float[] { base + 0.5f, 0.0f, 0.0f, 0.0f });
+        categories.put(idB, "B");
+      }
+
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, CATEGORY) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (Map.Entry<String, float[]> entry : rows.entrySet()) {
+          ps.setString(1, entry.getKey());
+          float[] v = entry.getValue();
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.setString(3, categories.get(entry.getKey()));
+          ps.executeUpdate();
+        }
+        conn.commit();
+      }
+
+      float[] queryVec = new float[] { 0.0f, 0.0f, 0.0f, 0.0f };
+      Float[] boxedQ = new Float[] { queryVec[0], queryVec[1], queryVec[2], queryVec[3] };
+
+      // Query hint bounds probe expansion batches.
+      String hintSql = "SELECT /*+ VECTOR_PROBE_COUNT(1) MAX_PROBE_LIMIT(2) */ ID, CATEGORY FROM "
+        + tableName + " WHERE CATEGORY = 'B' ORDER BY L2_DISTANCE(V, ?) LIMIT 3";
+      List<String> actualHintIds = new ArrayList<>();
+      try (PhoenixPreparedStatement pps =
+        conn.prepareStatement(hintSql).unwrap(PhoenixPreparedStatement.class)) {
+        pps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = pps.executeQuery()) {
+          while (rs.next()) {
+            actualHintIds.add(rs.getString(1));
+          }
+        }
+        VectorIndexScanPlan plan = (VectorIndexScanPlan) pps.getQueryPlan();
+        assertEquals(2, plan.getMaxProbeLimit());
+        assertEquals("Max probe limit 2 must stop probing at 2 batches", 2,
+          plan.getLastProbedBatchCount());
+        assertEquals(2, plan.getLastProbedCentroidCount());
+      }
+      assertEquals("Partial result should contain first 2 candidates",
+        Arrays.asList("c0_b1", "c1_b1"), actualHintIds);
+
+      // Connection property bounds probe expansion batches.
+      Properties sessionProps = new Properties();
+      sessionProps.setProperty(QueryServices.VECTOR_MAX_PROBE_LIMIT_ATTRIB, "2");
+      try (Connection conn2 = DriverManager.getConnection(getUrl(), sessionProps)) {
+        String sessionSql = "SELECT /*+ VECTOR_PROBE_COUNT(1) */ ID, CATEGORY FROM " + tableName
+          + " WHERE CATEGORY = 'B' ORDER BY L2_DISTANCE(V, ?) LIMIT 3";
+        List<String> actualSessionIds = new ArrayList<>();
+        try (PhoenixPreparedStatement pps =
+          conn2.prepareStatement(sessionSql).unwrap(PhoenixPreparedStatement.class)) {
+          pps.setArray(1, conn2.createArrayOf("FLOAT", boxedQ));
+          try (ResultSet rs = pps.executeQuery()) {
+            while (rs.next()) {
+              actualSessionIds.add(rs.getString(1));
+            }
+          }
+          VectorIndexScanPlan plan = (VectorIndexScanPlan) pps.getQueryPlan();
+          assertEquals(2, plan.getMaxProbeLimit());
+          assertEquals(2, plan.getLastProbedBatchCount());
+          assertEquals(2, plan.getLastProbedCentroidCount());
+        }
+        assertEquals(Arrays.asList("c0_b1", "c1_b1"), actualSessionIds);
+      }
+    }
+  }
+
+  @Test
+  public void testAdaptiveProbeExpansionAllCentroidsProbed() throws Exception {
+    String tableName = "T_ADAPT_ALL_" + generateUniqueName();
+    String indexName = "IDX_ADAPT_ALL_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), CATEGORY VARCHAR) "
+          + "IMMUTABLE_ROWS=true");
+        stmt.execute(
+          "CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) INCLUDE (CATEGORY) "
+            + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+
+      List<float[]> centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 10.0f, 0.0f, 0.0f, 0.0f }, new float[] { 20.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 30.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, centroids, 1L);
+
+      Map<String, float[]> rows = new LinkedHashMap<>();
+      Map<String, String> categories = new LinkedHashMap<>();
+      for (int c = 0; c < 4; c++) {
+        float base = c * 10.0f;
+        for (int a = 1; a <= 4; a++) {
+          String id = "c" + c + "_a" + a;
+          rows.put(id, new float[] { base + a * 0.1f, 0.0f, 0.0f, 0.0f });
+          categories.put(id, "A");
+        }
+        String idB = "c" + c + "_b1";
+        rows.put(idB, new float[] { base + 0.5f, 0.0f, 0.0f, 0.0f });
+        categories.put(idB, "B");
+      }
+
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, CATEGORY) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (Map.Entry<String, float[]> entry : rows.entrySet()) {
+          ps.setString(1, entry.getKey());
+          float[] v = entry.getValue();
+          ps.setArray(2, conn.createArrayOf("FLOAT", new Float[] { v[0], v[1], v[2], v[3] }));
+          ps.setString(3, categories.get(entry.getKey()));
+          ps.executeUpdate();
+        }
+        conn.commit();
+      }
+
+      float[] queryVec = new float[] { 0.0f, 0.0f, 0.0f, 0.0f };
+      Float[] boxedQ = new Float[] { queryVec[0], queryVec[1], queryVec[2], queryVec[3] };
+
+      // Adaptive probing exhausts all centroids when candidate count remains below limit.
+      String querySql = "SELECT /*+ VECTOR_PROBE_COUNT(1) */ ID, CATEGORY FROM " + tableName
+        + " WHERE CATEGORY = 'B' ORDER BY L2_DISTANCE(V, ?) LIMIT 10";
+
+      List<String> actualIds = new ArrayList<>();
+      try (PhoenixPreparedStatement pps =
+        conn.prepareStatement(querySql).unwrap(PhoenixPreparedStatement.class)) {
+        pps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = pps.executeQuery()) {
+          while (rs.next()) {
+            actualIds.add(rs.getString(1));
+          }
+        }
+        VectorIndexScanPlan plan = (VectorIndexScanPlan) pps.getQueryPlan();
+        assertEquals("Should probe all 4 centroid batches", 4, plan.getLastProbedBatchCount());
+        assertEquals("Should probe all 4 centroids", 4, plan.getLastProbedCentroidCount());
+      }
+      assertEquals("Should return all 4 B rows", Arrays.asList("c0_b1", "c1_b1", "c2_b1", "c3_b1"),
+        actualIds);
+    }
+  }
+
+  @Test
+  public void testFilterFirstPlanSelectionHighSelectivity() throws Exception {
+    String tableName = "T_FF_HIGH_" + generateUniqueName();
+    String regularIdx = "IDX_AUTHOR_" + generateUniqueName();
+    String vectorIdx = "IDX_VEC_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), AUTHOR VARCHAR) "
+          + "IMMUTABLE_ROWS=true, GUIDE_POSTS_WIDTH=100");
+        stmt.execute("CREATE INDEX " + regularIdx + " ON " + tableName + " (AUTHOR) INCLUDE (V)");
+        stmt.execute("CREATE VECTOR INDEX " + vectorIdx + " ON " + tableName + " (V) "
+          + "INCLUDE (AUTHOR) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+
+      List<float[]> centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 10.0f, 0.0f, 0.0f, 0.0f }, new float[] { 20.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 30.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, vectorIdx, centroids, 1L);
+
+      // Highly selective predicate distribution.
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, AUTHOR) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 1000; i++) {
+          String id = "row_" + i;
+          float[] v = new float[] { (float) (i % 4) * 10.0f, 0.0f, 0.0f, 0.0f };
+          String author = (i < 10) ? "Alice" : "Bob";
+          ps.setString(1, id);
+          ps.setArray(2, conn.createArrayOf("FLOAT", boxed(v)));
+          ps.setString(3, author);
+          ps.addBatch();
+          if (i % 250 == 0) {
+            ps.executeBatch();
+          }
+        }
+        ps.executeBatch();
+        conn.commit();
+      }
+
+      // Collect table and index statistics for selectivity estimation.
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("UPDATE STATISTICS " + tableName);
+      }
+
+      String querySql = "SELECT ID FROM " + tableName
+        + " WHERE AUTHOR = 'Alice' ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      float[] q = new float[] { 0.0f, 0.0f, 0.0f, 0.0f };
+      String plan = explain(conn, querySql, q);
+
+      // Highly selective relational filter favors secondary index over vector index.
+      assertTrue("Plan must use secondary index " + regularIdx + ": " + plan,
+        plan.contains(regularIdx));
+      assertFalse("Plan should not use CLIENT PROBING from vector index: " + plan,
+        plan.contains("CLIENT PROBING"));
+      assertFalse("Plan should not use vector index " + vectorIdx + ": " + plan,
+        plan.contains(vectorIdx));
+
+      try (PreparedStatement ps = conn.prepareStatement(querySql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxed(q)));
+        try (ResultSet rs = ps.executeQuery()) {
+          int count = 0;
+          while (rs.next()) {
+            count++;
+          }
+          assertEquals(5, count);
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testLowSelectivityUsesVectorIndex() throws Exception {
+    String tableName = "T_FF_LOW_" + generateUniqueName();
+    String regularIdx = "IDX_AUTHOR_" + generateUniqueName();
+    String vectorIdx = "IDX_VEC_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), AUTHOR VARCHAR) "
+          + "IMMUTABLE_ROWS=true, GUIDE_POSTS_WIDTH=100");
+        stmt.execute("CREATE INDEX " + regularIdx + " ON " + tableName + " (AUTHOR) INCLUDE (V)");
+        stmt.execute("CREATE VECTOR INDEX " + vectorIdx + " ON " + tableName + " (V) "
+          + "INCLUDE (AUTHOR) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+
+      List<float[]> centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 10.0f, 0.0f, 0.0f, 0.0f }, new float[] { 20.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 30.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, vectorIdx, centroids, 1L);
+
+      // Unselective predicate distribution.
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, AUTHOR) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 1000; i++) {
+          String id = "row_" + i;
+          float[] v = new float[] { (float) (i % 4) * 10.0f, 0.0f, 0.0f, 0.0f };
+          String author = (i < 900) ? "Alice" : "Bob";
+          ps.setString(1, id);
+          ps.setArray(2, conn.createArrayOf("FLOAT", boxed(v)));
+          ps.setString(3, author);
+          ps.addBatch();
+          if (i % 250 == 0) {
+            ps.executeBatch();
+          }
+        }
+        ps.executeBatch();
+        conn.commit();
+      }
+
+      // Collect table and index statistics for selectivity estimation.
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("UPDATE STATISTICS " + tableName);
+      }
+
+      String querySql = "SELECT ID FROM " + tableName
+        + " WHERE AUTHOR = 'Alice' ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      float[] q = new float[] { 0.0f, 0.0f, 0.0f, 0.0f };
+      String plan = explain(conn, querySql, q);
+
+      // Unselective relational filter favors vector index scan over secondary index lookup.
+      assertTrue("Plan must use vector index " + vectorIdx + ": " + plan, plan.contains(vectorIdx));
+      assertTrue("Plan must contain CLIENT PROBING: " + plan, plan.contains("CLIENT PROBING"));
+      assertFalse("Plan should not use secondary index " + regularIdx + ": " + plan,
+        plan.contains(regularIdx));
+    }
+  }
+
+  /**
+   * Verifies that unfiltered vector queries bypass adaptive probe expansion.
+   */
+  @Test
+  public void testUnfilteredQueryDoesNotAdaptivelyProbe() throws Exception {
+    String tableName = "T_NO_ADAPT_" + generateUniqueName();
+    String indexName = "IDX_NO_ADAPT_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), CATEGORY VARCHAR) "
+          + "IMMUTABLE_ROWS=true");
+        stmt.execute(
+          "CREATE VECTOR INDEX " + indexName + " ON " + tableName + " (V) INCLUDE (CATEGORY) "
+            + "WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+
+      List<float[]> centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 10.0f, 0.0f, 0.0f, 0.0f }, new float[] { 20.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 30.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, centroids, 1L);
+
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, CATEGORY) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int c = 0; c < 4; c++) {
+          for (int a = 1; a <= 2; a++) {
+            float[] v = new float[] { c * 10.0f + a * 0.1f, 0.0f, 0.0f, 0.0f };
+            ps.setString(1, "c" + c + "_" + a);
+            ps.setArray(2, conn.createArrayOf("FLOAT", boxed(v)));
+            ps.setString(3, "A");
+            ps.executeUpdate();
+          }
+        }
+        conn.commit();
+      }
+
+      Float[] boxedQ = boxed(new float[] { 0.0f, 0.0f, 0.0f, 0.0f });
+      String sql = "SELECT /*+ VECTOR_PROBE_COUNT(1) */ ID FROM " + tableName
+        + " ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+
+      List<String> actualIds = new ArrayList<>();
+      try (PhoenixPreparedStatement pps =
+        conn.prepareStatement(sql).unwrap(PhoenixPreparedStatement.class)) {
+        pps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        try (ResultSet rs = pps.executeQuery()) {
+          while (rs.next()) {
+            actualIds.add(rs.getString(1));
+          }
+        }
+        VectorIndexScanPlan plan = (VectorIndexScanPlan) pps.getQueryPlan();
+        assertFalse("Unfiltered query must not use the adaptive probe iterator",
+          plan.isAdaptiveProbingApplicable());
+        assertEquals("Unfiltered query must not expand its probe set", 0,
+          plan.getLastProbedBatchCount());
+      }
+      assertEquals("Probing one centroid must return only that posting list",
+        Arrays.asList("c0_1", "c0_2"), actualIds);
+    }
+  }
+
+  /**
+   * Evaluates plan ranking when both selective and unselective secondary indexes compete with a
+   * vector index.
+   */
+  @Test
+  public void testFilterFirstAmongMultipleSecondaryIndexes() throws Exception {
+    String tableName = "T_FF_MULTI_" + generateUniqueName();
+    String selectiveIdx = "IDX_AUTHOR_" + generateUniqueName();
+    String unselectiveIdx = "IDX_STATUS_" + generateUniqueName();
+    String vectorIdx = "IDX_VEC_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), AUTHOR VARCHAR, "
+          + "STATUS VARCHAR) IMMUTABLE_ROWS=true, GUIDE_POSTS_WIDTH=100");
+        stmt.execute(
+          "CREATE INDEX " + selectiveIdx + " ON " + tableName + " (AUTHOR) INCLUDE (V, STATUS)");
+        stmt.execute(
+          "CREATE INDEX " + unselectiveIdx + " ON " + tableName + " (STATUS) INCLUDE (V, AUTHOR)");
+        stmt.execute("CREATE VECTOR INDEX " + vectorIdx + " ON " + tableName + " (V) "
+          + "INCLUDE (AUTHOR, STATUS) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, "
+          + "sample_size = 100)");
+      }
+
+      List<float[]> centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 10.0f, 0.0f, 0.0f, 0.0f }, new float[] { 20.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 30.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, vectorIdx, centroids, 1L);
+
+      // Establish contrasting selectivity between AUTHOR (selective) and STATUS (unselective).
+      String upsertSql =
+        "UPSERT INTO " + tableName + " (ID, V, AUTHOR, STATUS) VALUES (?, ?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 1000; i++) {
+          float[] v = new float[] { (float) (i % 4) * 10.0f, 0.0f, 0.0f, 0.0f };
+          ps.setString(1, "row_" + i);
+          ps.setArray(2, conn.createArrayOf("FLOAT", boxed(v)));
+          ps.setString(3, (i < 10) ? "Alice" : "Bob");
+          ps.setString(4, (i < 900) ? "OK" : "GONE");
+          ps.addBatch();
+          if (i % 250 == 0) {
+            ps.executeBatch();
+          }
+        }
+        ps.executeBatch();
+        conn.commit();
+      }
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("UPDATE STATISTICS " + tableName);
+      }
+
+      String querySql = "SELECT ID FROM " + tableName
+        + " WHERE AUTHOR = 'Alice' AND STATUS = 'OK' ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      float[] q = new float[] { 0.0f, 0.0f, 0.0f, 0.0f };
+      String plan = explain(conn, querySql, q);
+
+      assertTrue("Plan must use the selective index " + selectiveIdx + ": " + plan,
+        plan.contains(selectiveIdx));
+      assertFalse("Plan must not use the unselective index " + unselectiveIdx + ": " + plan,
+        plan.contains(unselectiveIdx));
+      assertFalse("Plan must not use the vector index " + vectorIdx + ": " + plan,
+        plan.contains(vectorIdx));
+
+      try (PreparedStatement ps = conn.prepareStatement(querySql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxed(q)));
+        try (ResultSet rs = ps.executeQuery()) {
+          int count = 0;
+          while (rs.next()) {
+            count++;
+          }
+          assertEquals(5, count);
+        }
+      }
+    }
+  }
+
+  /**
+   * Evaluates filter-first plan selection when an uncovered secondary index evaluates the
+   * relational predicate and joins back to the data table for vector scoring.
+   */
+  @Test
+  public void testFilterFirstUncoveredSecondaryIndex() throws Exception {
+    String tableName = "T_FF_UNCOV_" + generateUniqueName();
+    String regularIdx = "IDX_AUTHOR_" + generateUniqueName();
+    String vectorIdx = "IDX_VEC_" + generateUniqueName();
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (ID VARCHAR NOT NULL PRIMARY KEY, V VECTOR(FLOAT, 4), AUTHOR VARCHAR) "
+          + "IMMUTABLE_ROWS=true, GUIDE_POSTS_WIDTH=100");
+        // Uncovered secondary index on relational predicate column.
+        stmt.execute("CREATE INDEX " + regularIdx + " ON " + tableName + " (AUTHOR)");
+        stmt.execute("CREATE VECTOR INDEX " + vectorIdx + " ON " + tableName + " (V) "
+          + "INCLUDE (AUTHOR) WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+
+      List<float[]> centroids = Arrays.asList(new float[] { 0.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 10.0f, 0.0f, 0.0f, 0.0f }, new float[] { 20.0f, 0.0f, 0.0f, 0.0f },
+        new float[] { 30.0f, 0.0f, 0.0f, 0.0f });
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, vectorIdx, centroids, 1L);
+
+      // Highly selective predicate distribution.
+      String upsertSql = "UPSERT INTO " + tableName + " (ID, V, AUTHOR) VALUES (?, ?, ?)";
+      try (PreparedStatement ps = conn.prepareStatement(upsertSql)) {
+        for (int i = 0; i < 1000; i++) {
+          float[] v = new float[] { (float) (i % 4) * 10.0f, 0.0f, 0.0f, 0.0f };
+          ps.setString(1, "row_" + i);
+          ps.setArray(2, conn.createArrayOf("FLOAT", boxed(v)));
+          ps.setString(3, (i < 10) ? "Alice" : "Bob");
+          ps.addBatch();
+          if (i % 250 == 0) {
+            ps.executeBatch();
+          }
+        }
+        ps.executeBatch();
+        conn.commit();
+      }
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("UPDATE STATISTICS " + tableName);
+      }
+
+      String querySql = "SELECT ID FROM " + tableName
+        + " WHERE AUTHOR = 'Alice' ORDER BY L2_DISTANCE(V, ?) LIMIT 5";
+      float[] q = new float[] { 0.0f, 0.0f, 0.0f, 0.0f };
+      String plan = explain(conn, querySql, q);
+
+      assertTrue("Plan must use secondary index " + regularIdx + ": " + plan,
+        plan.contains(regularIdx));
+      assertFalse("Plan should not use the vector index " + vectorIdx + ": " + plan,
+        plan.contains(vectorIdx));
+
+      try (PreparedStatement ps = conn.prepareStatement(querySql)) {
+        ps.setArray(1, conn.createArrayOf("FLOAT", boxed(q)));
+        try (ResultSet rs = ps.executeQuery()) {
+          int count = 0;
+          while (rs.next()) {
+            count++;
+          }
+          assertEquals(5, count);
+        }
+      }
+    }
+  }
+
+  @Test
+  public void testCoveredBsonFilter() throws Exception {
+    String tableName = "T_BSON_COV_FILT_" + generateUniqueName();
+    String indexName = "IDX_BSON_COV_FILT_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (PK VARCHAR NOT NULL PRIMARY KEY, DOC BSON) IMMUTABLE_ROWS=true");
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+          + " (BSON_VECTOR_VALUE(doc, 'embedding', " + BSON_DIM + ")) INCLUDE (DOC)"
+          + " WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, fourCentroids(),
+        1L);
+
+      Map<String, float[]> scienceRows = new LinkedHashMap<>();
+      Map<String, float[]> scienceOrMathRows = new LinkedHashMap<>();
+
+      // Seed rows across known centroid partitions.
+      float[] xs = { 1f, 3f, 4f, 9f, 11f, 13f, 19f, 21f, 23f, 28f, 29f, 31f };
+      String[] cats = { "science", "art", "science", "art", "math", "science", "art", "math",
+        "science", "art", "math", "science" };
+      for (int i = 0; i < xs.length; i++) {
+        String id = "r" + i;
+        float[] v = vecX(xs[i]);
+        v[1] = 0.1f * i;
+        if ("science".equals(cats[i])) {
+          scienceRows.put(id, v);
+          scienceOrMathRows.put(id, v);
+        } else if ("math".equals(cats[i])) {
+          scienceOrMathRows.put(id, v);
+        }
+        upsertDoc(conn, tableName, id, embeddingDoc(v, cats[i]));
+      }
+
+      float[] q = vecX(5f);
+      Float[] boxedQ = boxed(q);
+
+      // Covered equality predicate on BSON document field.
+      String eqSql = "SELECT PK FROM " + tableName
+        + " WHERE BSON_VALUE(doc, 'category') = 'science' ORDER BY L2_DISTANCE(BSON_VECTOR_VALUE(doc, 'embedding', "
+        + BSON_DIM + "), ?) LIMIT 3";
+
+      String plan = explain(conn, eqSql, q);
+      assertTrue("Plan must use the vector index: " + plan, plan.contains(indexName));
+      assertTrue("Plan must use CLIENT PROBING: " + plan, plan.contains("CLIENT PROBING"));
+      assertFalse("Covered plan must NOT contain SERVER MERGE: " + plan,
+        plan.contains("SERVER MERGE"));
+
+      try (PhoenixPreparedStatement pps =
+        conn.prepareStatement(eqSql).unwrap(PhoenixPreparedStatement.class)) {
+        pps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        VectorIndexScanPlan vPlan = (VectorIndexScanPlan) pps.optimizeQuery();
+        assertFalse("Covered filter must not set filterTimeUncoveredLookup",
+          vPlan.isFilterTimeUncoveredLookup());
+        assertFalse("Covered filter must not set projectionTimeUncoveredLookup",
+          vPlan.isProjectionTimeUncoveredLookup());
+      }
+
+      List<String> expectedScienceTop3 =
+        VectorIndexTestUtil.bruteForceTopK(scienceRows, q, "L2", 3);
+      List<String> actualScienceTop3 = runSearch(conn, eqSql, q);
+      assertEquals(expectedScienceTop3, actualScienceTop3);
+
+      // Covered IN predicate on BSON document field.
+      String inSql = "SELECT PK FROM " + tableName
+        + " WHERE BSON_VALUE(doc, 'category') IN ('science', 'math') ORDER BY L2_DISTANCE(BSON_VECTOR_VALUE(doc, 'embedding', "
+        + BSON_DIM + "), ?) LIMIT 4";
+
+      String inPlan = explain(conn, inSql, q);
+      assertTrue("Plan must use the vector index: " + inPlan, inPlan.contains(indexName));
+      assertTrue("Plan must use CLIENT PROBING: " + inPlan, inPlan.contains("CLIENT PROBING"));
+      assertFalse("Covered plan must NOT contain SERVER MERGE: " + inPlan,
+        inPlan.contains("SERVER MERGE"));
+
+      List<String> expectedMathTop4 =
+        VectorIndexTestUtil.bruteForceTopK(scienceOrMathRows, q, "L2", 4);
+      List<String> actualMathTop4 = runSearch(conn, inSql, q);
+      assertEquals(expectedMathTop4, actualMathTop4);
+    }
+  }
+
+  @Test
+  public void testUncoveredBsonFilter() throws Exception {
+    String tableName = "T_BSON_UNCOV_FILT_" + generateUniqueName();
+    String indexName = "IDX_BSON_UNCOV_FILT_" + generateUniqueName();
+
+    try (Connection conn = DriverManager.getConnection(getUrl())) {
+      try (Statement stmt = conn.createStatement()) {
+        stmt.execute("CREATE TABLE " + tableName
+          + " (PK VARCHAR NOT NULL PRIMARY KEY, DOC BSON) IMMUTABLE_ROWS=true");
+        // Uncovered vector index requiring base table projection for document content.
+        stmt.execute("CREATE VECTOR INDEX " + indexName + " ON " + tableName
+          + " (BSON_VECTOR_VALUE(doc, 'embedding', " + BSON_DIM + "))"
+          + " WITH (algorithm = 'IVF', metric = 'L2', lists = 4, sample_size = 100)");
+      }
+      VectorIndexTestUtil.activateWithKnownCentroids(conn, tableName, indexName, fourCentroids(),
+        1L);
+
+      Map<String, float[]> scienceRows = new LinkedHashMap<>();
+      Map<String, float[]> scienceOrMathRows = new LinkedHashMap<>();
+
+      // Seed rows across known centroid partitions.
+      float[] xs = { 1f, 3f, 4f, 9f, 11f, 13f, 19f, 21f, 23f, 28f, 29f, 31f };
+      String[] cats = { "science", "art", "science", "art", "math", "science", "art", "math",
+        "science", "art", "math", "science" };
+      for (int i = 0; i < xs.length; i++) {
+        String id = "r" + i;
+        float[] v = vecX(xs[i]);
+        v[1] = 0.1f * i;
+        if ("science".equals(cats[i])) {
+          scienceRows.put(id, v);
+          scienceOrMathRows.put(id, v);
+        } else if ("math".equals(cats[i])) {
+          scienceOrMathRows.put(id, v);
+        }
+        upsertDoc(conn, tableName, id, embeddingDoc(v, cats[i]));
+      }
+
+      float[] q = vecX(5f);
+      Float[] boxedQ = boxed(q);
+
+      // Uncovered equality predicate requiring base table lookup.
+      String eqSql = "SELECT PK FROM " + tableName
+        + " WHERE BSON_VALUE(doc, 'category') = 'science' ORDER BY L2_DISTANCE(BSON_VECTOR_VALUE(doc, 'embedding', "
+        + BSON_DIM + "), ?) LIMIT 3";
+
+      String plan = explain(conn, eqSql, q);
+      assertTrue("Plan must use the vector index: " + plan, plan.contains(indexName));
+      assertTrue("Plan must use CLIENT PROBING: " + plan, plan.contains("CLIENT PROBING"));
+      assertTrue("Uncovered filter must show SERVER MERGE for base table lookup: " + plan,
+        plan.contains("SERVER MERGE"));
+
+      try (PhoenixPreparedStatement pps =
+        conn.prepareStatement(eqSql).unwrap(PhoenixPreparedStatement.class)) {
+        pps.setArray(1, conn.createArrayOf("FLOAT", boxedQ));
+        VectorIndexScanPlan vPlan = (VectorIndexScanPlan) pps.optimizeQuery();
+        assertTrue("Uncovered filter must set filterTimeUncoveredLookup",
+          vPlan.isFilterTimeUncoveredLookup());
+        assertFalse("Uncovered filter must not set projectionTimeUncoveredLookup",
+          vPlan.isProjectionTimeUncoveredLookup());
+      }
+
+      List<String> expectedScienceTop3 =
+        VectorIndexTestUtil.bruteForceTopK(scienceRows, q, "L2", 3);
+      List<String> actualScienceTop3 = runSearch(conn, eqSql, q);
+      assertEquals(expectedScienceTop3, actualScienceTop3);
+
+      // Uncovered IN predicate requiring base table lookup.
+      String inSql = "SELECT PK FROM " + tableName
+        + " WHERE BSON_VALUE(doc, 'category') IN ('science', 'math') ORDER BY L2_DISTANCE(BSON_VECTOR_VALUE(doc, 'embedding', "
+        + BSON_DIM + "), ?) LIMIT 4";
+
+      String inPlan = explain(conn, inSql, q);
+      assertTrue("Plan must use the vector index: " + inPlan, inPlan.contains(indexName));
+      assertTrue("Plan must use CLIENT PROBING: " + inPlan, inPlan.contains("CLIENT PROBING"));
+      assertTrue("Uncovered filter must show SERVER MERGE for base table lookup: " + inPlan,
+        inPlan.contains("SERVER MERGE"));
+
+      List<String> expectedMathTop4 =
+        VectorIndexTestUtil.bruteForceTopK(scienceOrMathRows, q, "L2", 4);
+      List<String> actualMathTop4 = runSearch(conn, inSql, q);
+      assertEquals(expectedMathTop4, actualMathTop4);
     }
   }
 }

@@ -23,16 +23,23 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Collections;
 import org.apache.phoenix.compile.ColumnResolver;
 import org.apache.phoenix.compile.FromCompiler;
 import org.apache.phoenix.compile.GroupByCompiler.GroupBy;
 import org.apache.phoenix.compile.OrderByCompiler;
 import org.apache.phoenix.compile.OrderByCompiler.OrderBy;
+import org.apache.phoenix.compile.QueryPlan;
 import org.apache.phoenix.compile.RowProjector;
 import org.apache.phoenix.compile.StatementContext;
+import org.apache.phoenix.expression.OrderByExpression;
 import org.apache.phoenix.expression.function.CosineDistanceFunction;
+import org.apache.phoenix.expression.function.DistanceFunction;
 import org.apache.phoenix.expression.function.InnerProductDistanceFunction;
 import org.apache.phoenix.expression.function.L2DistanceFunction;
 import org.apache.phoenix.expression.function.L2DistanceSquaredFunction;
@@ -800,5 +807,117 @@ public class VectorSearchUtilTest extends BaseConnectionlessQueryTest {
       assertTrue(
         VectorSearchUtil.getUncoveredProjectionColumns(indexTable, dataTable, p6).isEmpty());
     }
+  }
+
+  @Test
+  public void testIsHighlySelectiveFilter_nullPlans() {
+    assertFalse(VectorSearchUtil.isHighlySelectiveFilter(null, null));
+    assertFalse(VectorSearchUtil.isHighlySelectiveFilter(mock(QueryPlan.class), null));
+    assertFalse(VectorSearchUtil.isHighlySelectiveFilter(null, mock(QueryPlan.class)));
+  }
+
+  @Test
+  public void testIsHighlySelectiveFilter_nonVectorSearchDataPlan() {
+    QueryPlan regularPlan = mock(QueryPlan.class);
+    QueryPlan dataPlan = mock(QueryPlan.class);
+    // Unordered or unconstrained plan does not qualify for filter-first vector optimization
+    when(dataPlan.getOrderBy()).thenReturn(OrderBy.EMPTY_ORDER_BY);
+    when(dataPlan.getLimit()).thenReturn(10);
+    assertFalse(VectorSearchUtil.isHighlySelectiveFilter(regularPlan, dataPlan));
+  }
+
+  @Test
+  public void testIsHighlySelectiveFilter_rowEstimates() throws Exception {
+    QueryPlan regularPlan = mock(QueryPlan.class);
+    QueryPlan dataPlan = mock(QueryPlan.class);
+
+    OrderByExpression obe = mock(OrderByExpression.class);
+    when(obe.isAscending()).thenReturn(true);
+    when(obe.getExpression()).thenReturn(mock(DistanceFunction.class));
+    OrderBy vectorOrderBy = new OrderBy(Collections.singletonList(obe));
+
+    when(dataPlan.getOrderBy()).thenReturn(vectorOrderBy);
+    when(dataPlan.getLimit()).thenReturn(5);
+
+    // Estimated row reduction meets the selectivity threshold
+    when(regularPlan.getEstimatedRowsToScan()).thenReturn(10L);
+    when(dataPlan.getEstimatedRowsToScan()).thenReturn(10000L);
+    assertTrue(VectorSearchUtil.isHighlySelectiveFilter(regularPlan, dataPlan));
+
+    // Exact selectivity threshold boundary
+    when(regularPlan.getEstimatedRowsToScan()).thenReturn(500L);
+    when(dataPlan.getEstimatedRowsToScan()).thenReturn(10000L);
+    assertTrue(VectorSearchUtil.isHighlySelectiveFilter(regularPlan, dataPlan));
+
+    // Filter selectivity below required threshold
+    when(regularPlan.getEstimatedRowsToScan()).thenReturn(501L);
+    when(dataPlan.getEstimatedRowsToScan()).thenReturn(10000L);
+    assertFalse(VectorSearchUtil.isHighlySelectiveFilter(regularPlan, dataPlan));
+
+    // Unselective relational filter
+    when(regularPlan.getEstimatedRowsToScan()).thenReturn(9000L);
+    when(dataPlan.getEstimatedRowsToScan()).thenReturn(10000L);
+    assertFalse(VectorSearchUtil.isHighlySelectiveFilter(regularPlan, dataPlan));
+
+    // Zero surviving rows
+    when(regularPlan.getEstimatedRowsToScan()).thenReturn(0L);
+    when(dataPlan.getEstimatedRowsToScan()).thenReturn(10000L);
+    assertTrue(VectorSearchUtil.isHighlySelectiveFilter(regularPlan, dataPlan));
+  }
+
+  @Test
+  public void testIsHighlySelectiveFilter_byteEstimatesFallback() throws Exception {
+    QueryPlan regularPlan = mock(QueryPlan.class);
+    QueryPlan dataPlan = mock(QueryPlan.class);
+
+    OrderByExpression obe = mock(OrderByExpression.class);
+    when(obe.isAscending()).thenReturn(true);
+    when(obe.getExpression()).thenReturn(mock(DistanceFunction.class));
+    OrderBy vectorOrderBy = new OrderBy(Collections.singletonList(obe));
+
+    when(dataPlan.getOrderBy()).thenReturn(vectorOrderBy);
+    when(dataPlan.getLimit()).thenReturn(5);
+
+    // Byte estimates serve as fallback when row estimates are unavailable
+    when(regularPlan.getEstimatedRowsToScan()).thenReturn(null);
+    when(dataPlan.getEstimatedRowsToScan()).thenReturn(null);
+
+    // Byte estimates meet selectivity threshold
+    when(regularPlan.getEstimatedBytesToScan()).thenReturn(20L);
+    when(dataPlan.getEstimatedBytesToScan()).thenReturn(1000L);
+    assertTrue(VectorSearchUtil.isHighlySelectiveFilter(regularPlan, dataPlan));
+
+    // Byte estimates below selectivity threshold
+    when(regularPlan.getEstimatedBytesToScan()).thenReturn(800L);
+    when(dataPlan.getEstimatedBytesToScan()).thenReturn(1000L);
+    assertFalse(VectorSearchUtil.isHighlySelectiveFilter(regularPlan, dataPlan));
+  }
+
+  @Test
+  public void testIsHighlySelectiveFilter_statsUnavailableReturnsFalse() throws Exception {
+    QueryPlan regularPlan = mock(QueryPlan.class);
+    QueryPlan dataPlan = mock(QueryPlan.class);
+
+    OrderByExpression obe = mock(OrderByExpression.class);
+    when(obe.isAscending()).thenReturn(true);
+    when(obe.getExpression()).thenReturn(mock(DistanceFunction.class));
+    OrderBy vectorOrderBy = new OrderBy(Collections.singletonList(obe));
+
+    when(dataPlan.getOrderBy()).thenReturn(vectorOrderBy);
+    when(dataPlan.getLimit()).thenReturn(5);
+
+    // Missing estimates return false
+    when(regularPlan.getEstimatedRowsToScan()).thenReturn(null);
+    when(dataPlan.getEstimatedRowsToScan()).thenReturn(null);
+    when(regularPlan.getEstimatedBytesToScan()).thenReturn(null);
+    when(dataPlan.getEstimatedBytesToScan()).thenReturn(null);
+    assertFalse(VectorSearchUtil.isHighlySelectiveFilter(regularPlan, dataPlan));
+
+    // Exception during statistics lookup falls back to false
+    when(regularPlan.getEstimatedRowsToScan()).thenThrow(new SQLException("No stats"));
+    when(dataPlan.getEstimatedRowsToScan()).thenThrow(new SQLException("No stats"));
+    when(regularPlan.getEstimatedBytesToScan()).thenThrow(new SQLException("No stats"));
+    when(dataPlan.getEstimatedBytesToScan()).thenThrow(new SQLException("No stats"));
+    assertFalse(VectorSearchUtil.isHighlySelectiveFilter(regularPlan, dataPlan));
   }
 }

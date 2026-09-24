@@ -134,7 +134,12 @@ public class HintNode {
     /**
      * Override the default oversample factor for two-phase IVF vector index search.
      */
-    OVERSAMPLE;
+    OVERSAMPLE,
+
+    /**
+     * Override the maximum probe limit (batches) for adaptive probing in IVF vector index search.
+     */
+    MAX_PROBE_LIMIT;
   };
 
   private final Map<Hint, String> hints;
