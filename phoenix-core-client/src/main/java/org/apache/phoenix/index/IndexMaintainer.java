@@ -2369,6 +2369,11 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     } else {
       maintainer.functionalVectorColRef = null;
     }
+    if (maintainer.hasCentroidColumn() && !maintainer.isVectorIndex()) {
+      throw new DoNotRetryIOException(
+        "Server upgrade is required: vector maintainer fields not recognized for index "
+          + maintainer.getIndexDisplayName());
+    }
     maintainer.initCachedState();
     return maintainer;
   }
@@ -2981,6 +2986,16 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
     return vectorAlgorithm != null;
   }
 
+  public void setIndexedColumnsForTesting(Set<ColumnReference> cols) {
+    this.indexedColumns = cols;
+    if (cols != null) {
+      this.indexedColumnTypes = new ArrayList<>();
+      for (int i = 0; i < cols.size(); i++) {
+        this.indexedColumnTypes.add(org.apache.phoenix.schema.types.PInteger.INSTANCE);
+      }
+    }
+  }
+
   /** Returns true if the given data column reference is a covered vector column. */
   public boolean isCoveredVectorColumn(ColumnReference ref) {
     return coveredVectorColumnTypes != null && coveredVectorColumnTypes.containsKey(ref);
@@ -3506,5 +3521,41 @@ public class IndexMaintainer implements Writable, Iterable<ColumnReference> {
 
   public byte[] getViewIndexId() {
     return viewIndexId;
+  }
+
+  public boolean hasCentroidColumn() {
+    String centroidColName =
+      IndexUtil.getIndexColumnName(null, PhoenixDatabaseMetaData.CENTROID_ID);
+    if (indexedColumnsInfo != null) {
+      for (Pair<String, String> colInfo : indexedColumnsInfo) {
+        if (
+          centroidColName.equals(colInfo.getSecond())
+            || PhoenixDatabaseMetaData.CENTROID_ID.equals(colInfo.getSecond())
+        ) {
+          return true;
+        }
+      }
+    }
+    if (indexedColumns != null) {
+      for (ColumnReference colRef : indexedColumns) {
+        String colName = Bytes.toString(colRef.getQualifier());
+        if (
+          centroidColName.equals(colName) || PhoenixDatabaseMetaData.CENTROID_ID.equals(colName)
+        ) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  public String getIndexDisplayName() {
+    if (logicalIndexName != null) {
+      return logicalIndexName;
+    }
+    if (indexTableName != null) {
+      return Bytes.toString(indexTableName);
+    }
+    return "unknown";
   }
 }

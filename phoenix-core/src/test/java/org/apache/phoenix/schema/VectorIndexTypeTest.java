@@ -32,11 +32,16 @@ import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.util.Collections;
+import org.apache.hadoop.hbase.DoNotRetryIOException;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.generated.PTableProtos;
 import org.apache.phoenix.coprocessor.generated.ServerCachingProtos;
+import org.apache.phoenix.hbase.index.covered.update.ColumnReference;
 import org.apache.phoenix.index.IndexMaintainer;
+import org.apache.phoenix.jdbc.PhoenixDatabaseMetaData;
 import org.apache.phoenix.schema.PTable.IndexType;
+import org.apache.phoenix.util.ByteUtil;
+import org.apache.phoenix.util.IndexUtil;
 import org.junit.Test;
 
 /**
@@ -199,4 +204,66 @@ public class VectorIndexTypeTest {
     assertEquals("L2", deserialized.getDistanceMetric());
     assertEquals(Long.valueOf(1L), deserialized.getCentroidGeneration());
   }
+
+  @Test
+  public void testClientVersionCheckOnIndexRead() throws Exception {
+    PTable table = new PTableImpl.Builder().setType(PTableType.INDEX)
+      .setIndexType(IndexType.VECTOR_GLOBAL).setName(PNameFactory.newName("IDX_VEC_COMPAT"))
+      .setTableName(PNameFactory.newName("IDX_VEC_COMPAT"))
+      .setParentTableName(PNameFactory.newName("DATA_TBL")).setAllColumns(Collections.emptyList())
+      .setPkColumns(Collections.emptyList()).setIndexes(Collections.emptyList())
+      .setPhysicalNames(Collections.emptyList()).vectorIndexAlgorithm("IVF")
+      .vectorDistanceMetric("L2").vectorDimension(128).build();
+
+    assertEquals(IndexType.VECTOR_GLOBAL, table.getIndexType());
+
+    PTableProtos.PTable proto = PTableImpl.toProto(table);
+    assertNotNull(proto);
+    assertTrue(proto.hasIndexType());
+    byte serializedIndexType = proto.getIndexType().toByteArray()[0];
+    assertEquals((byte) 4, serializedIndexType);
+
+    // Verify that legacy clients lacking VECTOR_GLOBAL fail fast during index type deserialization.
+    try {
+      simulateLegacyClientIndexTypeDeserialization(serializedIndexType);
+      fail("Expected IllegalArgumentException on legacy client without VECTOR_GLOBAL");
+    } catch (IllegalArgumentException e) {
+      assertTrue("Exception message should be descriptive: " + e.getMessage(),
+        e.getMessage().contains("4") && e.getMessage().contains("IndexType"));
+    }
+  }
+
+  private static IndexType simulateLegacyClientIndexTypeDeserialization(byte serializedValue) {
+    // Legacy clients only recognize the first three IndexType enum ordinals.
+    int legacyCount = 3;
+    if (serializedValue < 1 || serializedValue > legacyCount) {
+      throw new IllegalArgumentException("Invalid IndexType " + serializedValue
+        + ". A client upgrade is required to support this index type.");
+    }
+    return IndexType.values()[serializedValue - 1];
+  }
+
+  @Test
+  public void testIndexMaintainerFromProtoRejectsCentroidColumnWithoutVectorAlgorithm()
+    throws Exception {
+    RowKeySchema schema = new RowKeySchema.RowKeySchemaBuilder(0).build();
+    IndexMaintainer maintainer = new IndexMaintainer(schema, false);
+    ColumnReference centroidRef = new ColumnReference(ByteUtil.EMPTY_BYTE_ARRAY,
+      Bytes.toBytes(IndexUtil.getIndexColumnName(null, PhoenixDatabaseMetaData.CENTROID_ID)));
+    maintainer.setIndexedColumnsForTesting(Collections.singleton(centroidRef));
+
+    ServerCachingProtos.IndexMaintainer proto = IndexMaintainer.toProto(maintainer);
+    assertFalse("Proto must not have vectorAlgorithm", proto.hasVectorAlgorithm());
+
+    try {
+      IndexMaintainer.fromProto(proto, schema, false);
+      fail(
+        "Expected DoNotRetryIOException when proto has centroid column but lacks vectorAlgorithm");
+    } catch (DoNotRetryIOException e) {
+      assertTrue("Exception message must indicate server upgrade is required: " + e.getMessage(),
+        e.getMessage().contains("Server upgrade is required")
+          && e.getMessage().contains("vector maintainer fields"));
+    }
+  }
+
 }

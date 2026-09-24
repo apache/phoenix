@@ -378,6 +378,7 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   // Lowest HBase version on the cluster.
   private int lowestClusterHBaseVersion = Integer.MAX_VALUE;
   private boolean hasIndexWALCodec = true;
+  private boolean hasVectorIndexSupport = true;
 
   @GuardedBy("connectionCountLock")
   private int connectionCount = 0;
@@ -459,6 +460,29 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
       public boolean isSupported(ConnectionQueryServices services) {
         int hbaseVersion = services.getLowestClusterHBaseVersion();
         return hbaseVersion >= MetaDataProtocol.MIN_RENEW_LEASE_VERSION;
+      }
+    }, Feature.VECTOR_INDEX, new FeatureSupported() {
+      @Override
+      public boolean isSupported(ConnectionQueryServices services) {
+        // The schema check confirms SYSTEM.CATALOG has been migrated; the live check confirms
+        // the servers that have actually responded to a version handshake so far are running
+        // coprocessor code that recognizes the vector index write-path guard. Both are required
+        // because, during a rolling upgrade, the schema can be migrated while some region
+        // servers are still serving old coprocessor code with no vector-aware guard at all.
+        try {
+          PTable sysCatalog = services.getMetaDataCache()
+            .getTableRef(new PTableKey(null, PhoenixDatabaseMetaData.SYSTEM_CATALOG_NAME))
+            .getTable();
+          if (
+            sysCatalog.getColumnForColumnName(PhoenixDatabaseMetaData.VECTOR_INDEX_ALGORITHM)
+                == null
+          ) {
+            return false;
+          }
+        } catch (Exception e) {
+          return false;
+        }
+        return services.hasVectorIndexSupport();
       }
     });
   private QueryLoggerDisruptor queryDisruptor;
@@ -2232,6 +2256,8 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
           }
         }
         hasIndexWALCodec = hasIndexWALCodec && hasIndexWALCodec(serverJarVersion);
+        hasVectorIndexSupport =
+          hasVectorIndexSupport && MetaDataUtil.decodeHasVectorIndexSupport(serverJarVersion);
         if (minHBaseVersion > MetaDataUtil.decodeHBaseVersion(serverJarVersion)) {
           minHBaseVersion = MetaDataUtil.decodeHBaseVersion(serverJarVersion);
         }
@@ -5988,6 +6014,11 @@ public class ConnectionQueryServicesImpl extends DelegateQueryServices
   @Override
   public boolean hasIndexWALCodec() {
     return hasIndexWALCodec;
+  }
+
+  @Override
+  public boolean hasVectorIndexSupport() {
+    return hasVectorIndexSupport;
   }
 
   /**

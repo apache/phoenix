@@ -1396,6 +1396,19 @@ public class IndexRegionObserver implements RegionCoprocessor, RegionObserver {
     for (Pair<IndexMaintainer, HTableInterfaceReference> pair : indexTables) {
       IndexMaintainer indexMaintainer = pair.getFirst();
       HTableInterfaceReference hTableInterfaceReference = pair.getSecond();
+      if (!indexMaintainer.isVectorIndex() && indexMaintainer.hasCentroidColumn()) {
+        throw new DoNotRetryIOException(
+          "Server upgrade is required: vector maintainer fields not recognized for index "
+            + indexMaintainer.getIndexDisplayName());
+      }
+      if (
+        indexMaintainer.isVectorIndex() && (indexMaintainer.getVectorDistanceMetric() == null
+          || indexMaintainer.getVectorDimension() == null)
+      ) {
+        throw new DoNotRetryIOException(
+          "Server upgrade is required: vector maintainer fields not recognized for index "
+            + indexMaintainer.getIndexDisplayName());
+      }
       if (
         nextDataRowState != null && indexMaintainer.shouldPrepareIndexMutations(nextDataRowState)
       ) {

@@ -250,6 +250,11 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices
   }
 
   @Override
+  public boolean hasVectorIndexSupport() {
+    return getDelegate().hasVectorIndexSupport();
+  }
+
+  @Override
   public long createSequence(String tenantId, String schemaName, String sequenceName,
     long startWith, long incrementBy, long cacheSize, long minValue, long maxValue, boolean cycle,
     long timestamp) throws SQLException {
