@@ -40,6 +40,11 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
   private List<Scan> scans;
   private List<KeyRange> keyRanges;
   private String regionLocation = null;
+  // RegionServer identity (host:port) hosting this split's region — unlike regionLocation (the bare
+  // hostname used for data-locality scheduling), the port distinguishes RegionServers sharing a
+  // host, so split coalescing groups on it. Null if the server was unknown at split-generation time
+  // (e.g. a region-in-transition).
+  private String regionServerName = null;
   private long splitSize = 0;
 
   /**
@@ -56,16 +61,32 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
   }
 
   public PhoenixInputSplit(final List<Scan> scans, long splitSize, String regionLocation) {
+    this(scans, splitSize, regionLocation, null);
+  }
+
+  public PhoenixInputSplit(final List<Scan> scans, long splitSize, String regionLocation,
+    String regionServerName) {
     Preconditions.checkNotNull(scans);
     Preconditions.checkState(!scans.isEmpty());
     this.scans = scans;
     this.splitSize = splitSize;
     this.regionLocation = regionLocation;
+    this.regionServerName = regionServerName;
     init();
   }
 
   public List<Scan> getScans() {
     return scans;
+  }
+
+  /**
+   * The full RegionServer identity (host:port) hosting this split's region, or {@code null} if it
+   * was unknown at split-generation time. Unlike {@link #getLocations()} (which returns the bare
+   * hostname for MapReduce data-locality scheduling), this distinguishes multiple RegionServer
+   * processes running on the same host, so split coalescing groups on it.
+   */
+  public String getRegionServerName() {
+    return regionServerName;
   }
 
   /**
@@ -110,6 +131,7 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
   @Override
   public void readFields(DataInput input) throws IOException {
     regionLocation = WritableUtils.readString(input);
+    regionServerName = WritableUtils.readString(input);
     splitSize = WritableUtils.readVLong(input);
     int count = WritableUtils.readVInt(input);
     scans = Lists.newArrayListWithExpectedSize(count);
@@ -126,6 +148,7 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
   @Override
   public void write(DataOutput output) throws IOException {
     WritableUtils.writeString(output, regionLocation);
+    WritableUtils.writeString(output, regionServerName);
     WritableUtils.writeVLong(output, splitSize);
 
     Preconditions.checkNotNull(scans);
@@ -152,6 +175,10 @@ public class PhoenixInputSplit extends InputSplit implements Writable {
     }
   }
 
+  // Note: equality/hashCode are based on the overall getKeyRange() span, not the per-region
+  // keyRanges. For a coalesced split this identifies it only by its outer bounds, so two coalesced
+  // splits with the same span but different region membership compare equal. No runtime path
+  // hashes or equals-compares splits; keep this in mind before relying on it for coalesced splits.
   @Override
   public int hashCode() {
     final int prime = 31;
