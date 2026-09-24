@@ -32,6 +32,7 @@ import org.apache.hadoop.hbase.client.ColumnFamilyDescriptor;
 import org.apache.hadoop.hbase.client.TableDescriptor;
 import org.apache.hadoop.hbase.io.compress.Compression;
 import org.apache.hadoop.hbase.util.Bytes;
+import org.apache.phoenix.end2end.NeedsOwnMiniClusterTest;
 import org.apache.phoenix.jdbc.PhoenixConnection;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Status;
 import org.apache.phoenix.mapreduce.PhoenixSyncTableCheckpointOutputRow.Type;
@@ -44,14 +45,20 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.experimental.categories.Category;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Maps;
 
 /**
- * Unit tests for PhoenixSyncTableOutputRepository and PhoenixSyncTableCheckpointOutputRow. Tests
- * checkpoint table operations and data model functionality.
+ * Tests for PhoenixSyncTableOutputRepository and PhoenixSyncTableCheckpointOutputRow. Exercises
+ * checkpoint table operations and data model functionality against a real mini-cluster, so it runs
+ * under failsafe in its own fork (see {@link NeedsOwnMiniClusterTest}). Previously lived under
+ * src/test/java as a *Test, where bringing up an HBase + HDFS + ZK mini-cluster mid-life in a
+ * long-running, reuseForks=true surefire JVM was unreliable and produced 200s
+ * "Master not initialized" timeouts.
  */
-public class PhoenixSyncTableOutputRepositoryTest extends BaseTest {
+@Category(NeedsOwnMiniClusterTest.class)
+public class PhoenixSyncTableOutputRepositoryIT extends BaseTest {
 
   private Connection connection;
   private PhoenixSyncTableOutputRepository repository;
