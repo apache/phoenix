@@ -58,7 +58,7 @@ import org.slf4j.LoggerFactory;
  */
 @Category(NeedsOwnMiniClusterTest.class)
 public class FailoverPhoenixConnection2IT {
-  private static final Logger LOG = LoggerFactory.getLogger(FailoverPhoenixConnectionIT.class);
+  private static final Logger LOG = LoggerFactory.getLogger(FailoverPhoenixConnection2IT.class);
   private static final HighAvailabilityTestingUtility.HBaseTestingUtilityPair CLUSTERS =
     new HighAvailabilityTestingUtility.HBaseTestingUtilityPair();
   private static final long ZK_CURATOR_EVENT_PROPAGATION_TIMEOUT_MS = 1000L;

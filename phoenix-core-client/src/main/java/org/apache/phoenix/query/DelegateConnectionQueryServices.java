@@ -164,10 +164,10 @@ public class DelegateConnectionQueryServices extends DelegateQueryServices
   public MetaDataMutationResult createTable(List<Mutation> tableMetaData, byte[] physicalName,
     PTableType tableType, Map<String, Object> tableProps,
     List<Pair<byte[], Map<String, Object>>> families, byte[][] splits, boolean isNamespaceMapped,
-    boolean allocateIndexId, boolean isDoNotUpgradePropSet, PTable parentTable)
+    boolean allocateIndexId, boolean isDoNotUpgradePropSet, PTable parentTable, boolean createIfNotExists)
     throws SQLException {
     return getDelegate().createTable(tableMetaData, physicalName, tableType, tableProps, families,
-      splits, isNamespaceMapped, allocateIndexId, isDoNotUpgradePropSet, parentTable);
+      splits, isNamespaceMapped, allocateIndexId, isDoNotUpgradePropSet, parentTable, createIfNotExists);
   }
 
   @Override

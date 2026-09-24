@@ -117,7 +117,7 @@ public class AppendOnlySchemaIT extends ParallelStatsDisabledIT {
       // verify no create table rpcs
       verify(connectionQueryServices, never()).createTable(anyList(), any(byte[].class),
         any(PTableType.class), anyMap(), anyList(), any(byte[][].class), eq(false), eq(false),
-        eq(false), any(PTable.class));
+        eq(false), any(PTable.class), eq(false));
       reset(connectionQueryServices);
 
       // execute alter table ddl that adds the same column
