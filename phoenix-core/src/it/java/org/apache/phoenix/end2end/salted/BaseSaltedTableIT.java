@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end.salted;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TABLE_WITH_SALTING;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
@@ -31,7 +32,6 @@ import java.util.Properties;
 import org.apache.phoenix.end2end.ParallelStatsDisabledIT;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.apache.phoenix.util.QueryBuilder;
-import org.apache.phoenix.util.QueryUtil;
 import org.junit.Test;
 
 import org.apache.phoenix.thirdparty.com.google.common.collect.Lists;
@@ -183,7 +183,6 @@ public abstract class BaseSaltedTableIT extends ParallelStatsDisabledIT {
     Connection conn = DriverManager.getConnection(getUrl(), props);
     try {
       String tableName = initTableValues(null);
-      PreparedStatement stmt;
       ResultSet rs;
 
       // Variable length slot with bounded ranges.
@@ -418,10 +417,9 @@ public abstract class BaseSaltedTableIT extends ParallelStatsDisabledIT {
 
       String query = "SELECT * FROM " + tableName + " ORDER  BY  a_integer, a_string, a_id";
       PreparedStatement statement = conn.prepareStatement(query);
-      ResultSet explainPlan = statement.executeQuery("EXPLAIN " + query);
       // Confirm that ORDER BY in row key order will be optimized out for salted table
-      assertEquals("CLIENT PARALLEL 4-WAY FULL SCAN OVER " + tableName + "\n" + "CLIENT MERGE SORT",
-        QueryUtil.getExplainPlan(explainPlan));
+      assertPlan(conn, query).iteratorType("PARALLEL").scanType("FULL SCAN").table(tableName)
+        .clientSortAlgo("CLIENT MERGE SORT");
       ResultSet rs = statement.executeQuery();
 
       assertTrue(rs.next());

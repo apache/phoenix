@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
@@ -43,7 +44,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.hadoop.hbase.util.Pair;
 import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.exception.SQLExceptionCode;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSource;
 import org.apache.phoenix.hbase.index.metrics.GlobalIndexCheckerSourceImpl;
@@ -1188,21 +1188,15 @@ public class Bson4IT extends ParallelStatsDisabledIT {
 
   private static void validateExplainPlan(PreparedStatement ps, String tableName, String scanType)
     throws SQLException {
-    ExplainPlan plan = ps.unwrap(PhoenixPreparedStatement.class).optimizeQuery().getExplainPlan();
-    validatePlan(tableName, scanType, plan);
+    assertPlan(ps.unwrap(PhoenixPreparedStatement.class)).table(tableName)
+      .iteratorType("PARALLEL 1-WAY").scanType(scanType);
   }
 
   private static void validateExplainPlan(Statement stmt, String query, String tableName,
     String scanType) throws SQLException {
     ExplainPlan plan = stmt.unwrap(PhoenixStatement.class).optimizeQuery(query).getExplainPlan();
-    validatePlan(tableName, scanType, plan);
-  }
-
-  private static void validatePlan(String tableName, String scanType, ExplainPlan plan) {
-    ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-    assertEquals(tableName, explainPlanAttributes.getTableName());
-    assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-    assertEquals(scanType, explainPlanAttributes.getExplainScanType());
+    assertPlan(plan.getPlanStepsAsAttributes()).table(tableName).iteratorType("PARALLEL 1-WAY")
+      .scanType(scanType);
   }
 
 }

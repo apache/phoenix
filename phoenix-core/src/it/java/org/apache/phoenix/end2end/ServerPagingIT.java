@@ -17,11 +17,11 @@
  */
 package org.apache.phoenix.end2end;
 
-import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlan;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.assertExplainPlanWithLimit;
 import static org.apache.phoenix.end2end.index.GlobalIndexCheckerIT.commitWithException;
 import static org.apache.phoenix.monitoring.GlobalClientMetrics.GLOBAL_PAGED_ROWS_COUNTER;
 import static org.apache.phoenix.query.QueryServices.USE_BLOOMFILTER_FOR_MULTIKEY_POINTLOOKUP;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -46,7 +46,6 @@ import org.apache.hadoop.hbase.util.Bytes;
 import org.apache.phoenix.coprocessor.PagingRegionScanner;
 import org.apache.phoenix.hbase.index.IndexRegionObserver;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixResultSet;
 import org.apache.phoenix.jdbc.PhoenixStatement;
 import org.apache.phoenix.monitoring.MetricType;
 import org.apache.phoenix.query.QueryServices;
@@ -55,7 +54,6 @@ import org.apache.phoenix.util.ByteUtil;
 import org.apache.phoenix.util.DateUtil;
 import org.apache.phoenix.util.PhoenixRuntime;
 import org.apache.phoenix.util.PropertiesUtil;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -146,11 +144,9 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
       conn.createStatement().execute(ddl);
       conn.commit();
 
+      assertPlan(conn, "select * from " + tablename + " limit " + limit).tableContains(indexName);
       stmt = conn.prepareStatement("select * from " + tablename + " limit " + limit);
       try (ResultSet rs = stmt.executeQuery()) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(explainPlan.contains(indexName));
         int expectedRowCount = 0;
         int expectedId1 = 4;
         int expectedId2 = 0;
@@ -434,10 +430,8 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
       }
       conn.commit();
       String dql = String.format("SELECT count(*) from %s where k3 = 5", tablename);
+      assertPlan(conn, dql).tableContains(indexname);
       try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(explainPlan.contains(indexname));
         assertTrue(rs.next());
         assertEquals(totalRows / 10, rs.getInt(1));
         assertFalse(rs.next());
@@ -462,10 +456,8 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
       } finally {
         IndexRegionObserver.setFailDataTableUpdatesForTesting(false);
       }
+      assertPlan(conn, dql).tableContains(indexname);
       try (ResultSet rs = conn.createStatement().executeQuery(dql)) {
-        PhoenixResultSet prs = rs.unwrap(PhoenixResultSet.class);
-        String explainPlan = QueryUtil.getExplainPlan(prs.getUnderlyingIterator());
-        assertTrue(explainPlan.contains(indexname));
         assertTrue(rs.next());
         assertEquals(totalRows / 10, rs.getInt(1));
         assertFalse(rs.next());
@@ -658,7 +650,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
 
       selectSql = "SELECT count(val3) from " + dataTableName + " where val1 > '0' GROUP BY val1";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertPlan(conn, selectSql).scanType("RANGE SCAN").tableContains(indexTableName);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(2, rs.getInt(1));
@@ -668,7 +660,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
 
       selectSql = "SELECT count(val3) from " + dataTableName + " where val1 > '0'";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertPlan(conn, selectSql).scanType("RANGE SCAN").tableContains(indexTableName);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals(3, rs.getInt(1));
@@ -676,7 +668,7 @@ public class ServerPagingIT extends ParallelStatsDisabledIT {
       // Run an order by query where the uncovered index should be used
       selectSql = "SELECT val3 from " + dataTableName + " where val1 > '0' ORDER BY val1";
       // Verify that we will read from the index table
-      assertExplainPlan(conn, selectSql, dataTableName, indexTableName);
+      assertPlan(conn, selectSql).scanType("RANGE SCAN").tableContains(indexTableName);
       rs = conn.createStatement().executeQuery(selectSql);
       assertTrue(rs.next());
       assertEquals("abcd", rs.getString(1));

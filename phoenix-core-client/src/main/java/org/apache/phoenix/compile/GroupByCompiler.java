@@ -164,6 +164,7 @@ public class GroupByCompiler {
       return orderPreservingTrackInfos;
     }
 
+    @SuppressWarnings("rawtypes")
     public GroupBy compile(StatementContext context, QueryPlan innerQueryPlan,
       Expression whereExpression) throws SQLException {
       boolean isOrderPreserving = this.isOrderPreserving;
@@ -365,6 +366,9 @@ public class GroupByCompiler {
       planSteps.add("    " + serverAggregate);
       if (explainPlanAttributesBuilder != null) {
         explainPlanAttributesBuilder.setServerAggregate(serverAggregate);
+        if (!isUngroupedAggregate && limit != null) {
+          explainPlanAttributesBuilder.setServerGroupByLimit(limit);
+        }
       }
     }
 
@@ -448,6 +452,7 @@ public class GroupByCompiler {
     return groupBy;
   }
 
+  @SuppressWarnings("rawtypes")
   private static boolean onlyAtEndType(Expression expression) {
     // Due to the encoding schema of these types, they may only be
     // used once in a group by and are located at the end of the
@@ -456,6 +461,7 @@ public class GroupByCompiler {
     return type.isArrayType() || type == PVarbinary.INSTANCE;
   }
 
+  @SuppressWarnings("rawtypes")
   private static PDataType getGroupByDataType(Expression expression) {
     return IndexUtil.getIndexColumnDataType(expression.isNullable(), expression.getDataType());
   }

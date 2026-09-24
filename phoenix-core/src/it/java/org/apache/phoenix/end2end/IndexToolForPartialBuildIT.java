@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.TEST_PROPERTIES;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -39,10 +40,7 @@ import org.apache.hadoop.hbase.client.Result;
 import org.apache.hadoop.hbase.client.ResultScanner;
 import org.apache.hadoop.hbase.client.Scan;
 import org.apache.hadoop.hbase.client.Table;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixConnection;
-import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.mapreduce.index.IndexTool;
 import org.apache.phoenix.query.QueryServices;
 import org.apache.phoenix.query.QueryServicesOptions;
@@ -165,15 +163,10 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
       String selectSql =
         String.format("SELECT LPAD(UPPER(NAME),11,'x')||'_xyz',ID FROM %s", fullTableName);
 
-      ExplainPlan plan = conn.prepareStatement(selectSql).unwrap(PhoenixPreparedStatement.class)
-        .optimizeQuery().getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
       // assert we are pulling from data table.
-      assertEquals(SchemaUtil
-        .getPhysicalHBaseTableName(schemaName, dataTableName, isNamespaceEnabled).toString(),
-        explainPlanAttributes.getTableName());
+      assertPlan(conn, selectSql).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN")
+        .table(SchemaUtil.getPhysicalHBaseTableName(schemaName, dataTableName, isNamespaceEnabled)
+          .toString());
 
       rs = stmt1.executeQuery(selectSql);
       for (int i = 1; i <= 7; i++) {
@@ -208,15 +201,9 @@ public class IndexToolForPartialBuildIT extends BaseOwnClusterIT {
       upsertRow(stmt1, 9000);
       conn.commit();
 
-      plan = conn.prepareStatement(selectSql).unwrap(PhoenixPreparedStatement.class).optimizeQuery()
-        .getExplainPlan();
-      explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("FULL SCAN ", explainPlanAttributes.getExplainScanType());
       // assert we are pulling from index table.
-      assertEquals(
-        SchemaUtil.getPhysicalHBaseTableName(schemaName, indxTable, isNamespaceEnabled).toString(),
-        explainPlanAttributes.getTableName());
+      assertPlan(conn, selectSql).iteratorType("PARALLEL 1-WAY").scanType("FULL SCAN").table(
+        SchemaUtil.getPhysicalHBaseTableName(schemaName, indxTable, isNamespaceEnabled).toString());
 
       rs = stmt.executeQuery(selectSql);
 

@@ -32,6 +32,8 @@ import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TASK_TYPE;
 import static org.apache.phoenix.jdbc.PhoenixDatabaseMetaData.TENANT_ID;
 import static org.apache.phoenix.query.QueryServices.DROP_METADATA_ATTRIB;
 import static org.apache.phoenix.query.QueryServicesOptions.DEFAULT_TASK_HANDLING_MAX_INTERVAL_MS;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.getPlanSteps;
 import static org.apache.phoenix.schema.PTable.TaskType.DROP_CHILD_VIEWS;
 import static org.apache.phoenix.thirdparty.com.google.common.collect.Lists.newArrayListWithExpectedSize;
 import static org.apache.phoenix.util.ByteUtil.EMPTY_BYTE_ARRAY;
@@ -80,7 +82,6 @@ import org.apache.phoenix.schema.PTableType;
 import org.apache.phoenix.schema.TableAlreadyExistsException;
 import org.apache.phoenix.schema.TableNotFoundException;
 import org.apache.phoenix.util.PhoenixRuntime;
-import org.apache.phoenix.util.QueryUtil;
 import org.apache.phoenix.util.ReadOnlyProps;
 import org.apache.phoenix.util.SchemaUtil;
 import org.apache.phoenix.util.ViewUtil;
@@ -235,9 +236,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         conn.createStatement()
           .execute("CREATE VIEW " + view1 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-        assertTrue(QueryUtil
-          .getExplainPlan(conn.createStatement().executeQuery("explain select * from " + view1))
-          .contains(NS + ":" + TBL));
+        assertPlan(conn, "select * from " + view1).tableContains(NS + ":" + TBL);
 
         conn.createStatement().execute("DROP VIEW " + view1);
         admin.disableTable(tableName);
@@ -256,9 +255,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         conn.createStatement()
           .execute("CREATE VIEW " + view2 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-        assertTrue(QueryUtil
-          .getExplainPlan(conn.createStatement().executeQuery("explain select * from " + view2))
-          .contains(NS + "." + TBL));
+        assertPlan(conn, "select * from " + view2).tableContains(NS + "." + TBL);
 
         conn.createStatement().execute("DROP VIEW " + view2);
         admin.disableTable(tableName);
@@ -277,9 +274,7 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
         conn.createStatement()
           .execute("CREATE VIEW " + view3 + " (PK VARCHAR PRIMARY KEY, " + CF + ".COL VARCHAR)");
 
-        assertTrue(QueryUtil
-          .getExplainPlan(conn.createStatement().executeQuery("explain select * from " + view3))
-          .contains(NS + ":" + NS + "." + TBL));
+        assertPlan(conn, "select * from " + view3).tableContains(NS + ":" + NS + "." + TBL);
 
         conn.createStatement().execute("DROP VIEW " + view3);
         admin.disableTable(tableName);
@@ -947,13 +942,13 @@ public class ViewMetadataIT extends SplitSystemCatalogIT {
     // Create a index on the table
     s1.execute("create index " + indexName + " ON " + tableName + " (col2)");
 
-    try (ResultSet rs = s2.executeQuery("explain select /*+ INDEX(" + viewName + " " + indexName
-      + ") */ * from " + viewName + " where col2 = 'aaa'")) {
-      String explainPlan = QueryUtil.getExplainPlan(rs);
-
-      // check if the query uses the index
-      assertTrue(explainPlan.contains(indexName));
-    }
+    String sql = "select /*+ INDEX(" + viewName + " " + indexName + ") */ * from " + viewName
+      + " where col2 = 'aaa'";
+    // This query produces a SKIP-SCAN-JOIN where the index is scanned in a sub-plan. Assert that
+    // the index name appears in the plan steps.
+    List<String> planSteps = getPlanSteps(s2.getConnection(), sql);
+    assertTrue("Expected plan to use index " + indexName + " but was: " + planSteps,
+      planSteps.toString().contains(indexName));
   }
 
   @Test

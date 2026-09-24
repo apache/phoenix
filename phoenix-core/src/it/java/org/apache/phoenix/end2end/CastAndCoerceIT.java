@@ -17,6 +17,7 @@
  */
 package org.apache.phoenix.end2end;
 
+import static org.apache.phoenix.query.explain.ExplainPlanTestUtil.assertPlan;
 import static org.apache.phoenix.util.TestUtil.ROW1;
 import static org.apache.phoenix.util.TestUtil.ROW7;
 import static org.apache.phoenix.util.TestUtil.ROW9;
@@ -32,8 +33,6 @@ import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.Collection;
 import java.util.Properties;
-import org.apache.phoenix.compile.ExplainPlan;
-import org.apache.phoenix.compile.ExplainPlanAttributes;
 import org.apache.phoenix.jdbc.PhoenixPreparedStatement;
 import org.apache.phoenix.util.PropertiesUtil;
 import org.junit.Test;
@@ -164,12 +163,8 @@ public class CastAndCoerceIT extends BaseQueryIT {
       assertEquals(ROW9, rs.getString(1));
       assertFalse(rs.next());
 
-      ExplainPlan plan =
-        statement.unwrap(PhoenixPreparedStatement.class).optimizeQuery(query).getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals(tableName, explainPlanAttributes.getTableName());
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+      assertPlan(statement.unwrap(PhoenixPreparedStatement.class)).table(tableName)
+        .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN");
     }
   }
 
@@ -187,12 +182,8 @@ public class CastAndCoerceIT extends BaseQueryIT {
       assertEquals(ROW9, rs.getString(1));
       assertFalse(rs.next());
 
-      ExplainPlan plan =
-        statement.unwrap(PhoenixPreparedStatement.class).optimizeQuery(query).getExplainPlan();
-      ExplainPlanAttributes explainPlanAttributes = plan.getPlanStepsAsAttributes();
-      assertEquals(tableName, explainPlanAttributes.getTableName());
-      assertEquals("PARALLEL 1-WAY", explainPlanAttributes.getIteratorTypeAndScanSize());
-      assertEquals("RANGE SCAN ", explainPlanAttributes.getExplainScanType());
+      assertPlan(statement.unwrap(PhoenixPreparedStatement.class)).table(tableName)
+        .iteratorType("PARALLEL 1-WAY").scanType("RANGE SCAN");
     }
   }
 
